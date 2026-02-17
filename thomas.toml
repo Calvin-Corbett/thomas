@@ -1,0 +1,268 @@
+# Thomas Configuration
+# See: README.md for quick start and configuration notes.
+
+# Default model profile to use.
+# Tip: set to "codex" to route through your ChatGPT plan via the Codex app-server.
+default_model = "codex"
+
+# Maximum agent loop iterations per query
+max_agent_iterations = 10
+
+# -----------------------------------------------------------------------------
+# Model Profiles
+# -----------------------------------------------------------------------------
+
+[models.local]
+provider = "openai_compat"           # Works with: Ollama, vLLM, LM Studio, OpenAI
+base_url = "http://localhost:11434/v1"
+model = "qwen2.5-coder:7b"
+max_tokens = 4096
+context_window = 8192
+temperature = 0.1
+timeout_s = 120.0
+
+# Codex (ChatGPT plan, no API key required)
+#
+# Routes through the local `codex app-server` (installed by @openai/codex).
+# First use opens a browser for ChatGPT sign-in.
+#
+# Switch to this with: /model codex (in REPL) or the web UI selector.
+#
+# Note: model ids and context windows can change over time; run:
+#   thomas models list
+# to confirm what's available.
+
+[models.codex]
+provider = "codex"
+model = "gpt-5.2-codex"             # or gpt-5.1-codex-max, gpt-5.2, gpt-5.1-codex-mini
+max_tokens = 16384
+context_window = 200000
+temperature = 0.1
+
+# -----------------------------------------------------------------------------
+# Cloud Profiles (Templates)
+# -----------------------------------------------------------------------------
+#
+# Tip: env overrides work like:
+#   THOMAS_MODELS_OPENAI_API_KEY=...
+#   THOMAS_MODELS_ANTHROPIC_API_KEY=...
+#   THOMAS_MODELS_GROQ_API_KEY=...
+#
+# Telegram integration env vars:
+#   THOMAS_TELEGRAM_BOT_TOKEN=...
+#   THOMAS_TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321
+#   THOMAS_TELEGRAM_SESSIONS_FILE=./runtime/.thomas/telegram_sessions.json
+# Memory runtime toggle:
+#   THOMAS_MEMORY_V2_ENABLED=1
+# Library runtime toggles:
+#   THOMAS_LIBRARY_ENABLED=1
+#   THOMAS_LIBRARY_AUTO_CAPTURE_RESEARCH=1
+# Memory curator toggles:
+#   THOMAS_MEMORY_CURATOR_ENABLED=1
+#   THOMAS_MEMORY_CURATOR_MIN_INTERVAL_SECONDS=180
+#   THOMAS_MEMORY_CURATOR_MAX_EPISODE_SCAN=120
+#   THOMAS_MEMORY_CURATOR_MAX_LIBRARY_SCAN=40
+#   THOMAS_MEMORY_CURATOR_MAX_PROMOTIONS_PER_RUN=120
+#
+# OpenAI
+[models.openai]
+provider = "openai_compat"
+base_url = "https://api.openai.com/v1"
+api_key = ""
+model = "gpt-4o-mini"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Anthropic
+[models.anthropic]
+provider = "anthropic"
+base_url = "https://api.anthropic.com/v1"
+api_key = ""
+model = "claude-3-5-sonnet-latest"
+max_tokens = 4096
+context_window = 200000
+temperature = 0.1
+
+# Mistral (OpenAI-compatible)
+[models.mistral]
+provider = "openai_compat"
+base_url = "https://api.mistral.ai/v1"
+api_key = ""
+model = "mistral-large-latest"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Groq (OpenAI-compatible)
+[models.groq]
+provider = "openai_compat"
+base_url = "https://api.groq.com/openai/v1"
+api_key = ""
+model = "llama-3.3-70b-versatile"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Together (OpenAI-compatible)
+[models.together]
+provider = "openai_compat"
+base_url = "https://api.together.xyz/v1"
+api_key = ""
+model = "meta-llama/Llama-3.1-70B-Instruct-Turbo"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# OpenRouter (OpenAI-compatible, access many vendors via one key)
+[models.openrouter]
+provider = "openai_compat"
+base_url = "https://openrouter.ai/api/v1"
+api_key = ""
+model = "openai/gpt-4o-mini"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# DeepInfra (OpenAI-compatible)
+[models.deepinfra]
+provider = "openai_compat"
+base_url = "https://api.deepinfra.com/v1/openai"
+api_key = ""
+model = "meta-llama/Meta-Llama-3.1-70B-Instruct"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Fireworks (OpenAI-compatible)
+[models.fireworks]
+provider = "openai_compat"
+base_url = "https://api.fireworks.ai/inference/v1"
+api_key = ""
+model = "accounts/fireworks/models/llama-v3p1-70b-instruct"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Perplexity (OpenAI-compatible)
+[models.perplexity]
+provider = "openai_compat"
+base_url = "https://api.perplexity.ai"
+api_key = ""
+model = "sonar-pro"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# xAI (OpenAI-compatible)
+[models.xai]
+provider = "openai_compat"
+base_url = "https://api.x.ai/v1"
+api_key = ""
+model = "grok-2-latest"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Cerebras (OpenAI-compatible)
+[models.cerebras]
+provider = "openai_compat"
+base_url = "https://api.cerebras.ai/v1"
+api_key = ""
+model = "llama3.1-70b"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# LiteLLM proxy (OpenAI-compatible). Useful to route to many providers with one endpoint.
+[models.litellm]
+provider = "openai_compat"
+base_url = "http://127.0.0.1:4000/v1"
+api_key = ""
+model = "gpt-4o-mini"
+max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Azure OpenAI (OpenAI-compatible-ish)
+# Note: Azure uses deployments and an api-version query param.
+# [models.azure]
+# provider = "openai_compat"
+# base_url = "https://YOUR_RESOURCE.openai.azure.com"
+# api_key = ""
+# api_key_header = "api-key"
+# api_key_prefix = ""
+# chat_path = "/openai/deployments/YOUR_DEPLOYMENT/chat/completions"
+# query = { "api-version" = "2024-02-15-preview" }
+# model = "YOUR_DEPLOYMENT"
+# max_tokens = 4096
+# context_window = 128000
+# temperature = 0.1
+
+# -----------------------------------------------------------------------------
+# Local Model Shortcuts (Optional)
+# -----------------------------------------------------------------------------
+# These are placeholders for the models you mentioned. Install via:
+#   thomas models pull <model_id>
+# Then switch with /model in the REPL (or the web UI Model selector).
+#
+# [models.qwen3_coder_30b]
+# provider = "openai_compat"
+# base_url = "http://localhost:11434/v1"
+# model = "qwen3-coder:30b-instruct"
+#
+# [models.devstral_small_2512]
+# provider = "openai_compat"
+# base_url = "http://localhost:11434/v1"
+# model = "devstral-small:2512"
+#
+# [models.nemotron_3_nano]
+# provider = "openai_compat"
+# base_url = "http://localhost:11434/v1"
+# model = "nemotron-3:nano"
+#
+# [models.gpt_oss_20b]
+# provider = "openai_compat"
+# base_url = "http://localhost:11434/v1"
+# model = "gpt-oss:20b"
+#
+# [models.glm_4_7_flash]
+# provider = "openai_compat"
+# base_url = "http://localhost:11434/v1"
+# model = "glm-4.7:flash"
+
+# -----------------------------------------------------------------------------
+# Embedding Model
+# -----------------------------------------------------------------------------
+
+[embed]
+provider = "local"
+model = "all-MiniLM-L6-v2"          # Lightweight default, upgrade to BAAI/bge-m3
+device = "auto"                      # auto|cpu|cuda. "auto" falls back to CPU when CUDA isn't available.
+load_on_demand = true                # Load only when needed (saves VRAM)
+batch_size = 64
+
+# -----------------------------------------------------------------------------
+# Memory Engine
+# -----------------------------------------------------------------------------
+
+[memory]
+root = "./runtime"
+context_budget = 12000               # Approx token budget for memory context per query
+mode = "auto"                        # auto, fast, thorough
+
+# -----------------------------------------------------------------------------
+# Tools
+# -----------------------------------------------------------------------------
+
+[tools]
+sandbox_root = "."                   # File operations rooted here
+allow_shell = true                   # Execute-first setup/integration behavior depends on shell availability.
+shell_timeout = 30                   # Default shell command timeout (seconds)
+max_file_size = 5000000              # Max file size for fs.read_file (bytes)
+
+[failover]
+enabled = true
+profiles = []                        # Optional ordered fallback model profiles (e.g. ["codex","openai","local"])
+cooldown_seconds = 300               # Failed profile cooldown before retry
+fallback_on_auth_error = false       # Usually keep false; true enables fallback on 401/403

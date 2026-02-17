@@ -1,0 +1,272 @@
+<!doctype html>
+<html lang="en" data-theme="light">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Thomas</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231f2937'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial,sans-serif'%3ET%3C/text%3E%3C/svg%3E" />
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Markdown + Syntax Highlighting (CDN) -->
+    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" id="hljs-light" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" id="hljs-dark" disabled />
+    <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
+
+    <!-- Thomas CSS -->
+    <link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__" />
+    <link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__" />
+    <link rel="stylesheet" href="/static/css/layout.css?v=__THOMAS_VERSION__" />
+    <link rel="stylesheet" href="/static/guardrails.css?v=__THOMAS_VERSION__" />
+    <link rel="stylesheet" href="/static/swarm_board.css?v=__THOMAS_VERSION__" />
+  </head>
+  <body>
+    <div id="app">
+      <!-- ====== SIDEBAR ====== -->
+      <aside class="sidebar" id="sidebar" role="navigation" aria-label="Chat sidebar">
+        <div class="sidebar-header">
+          <div class="sidebar-brand">
+            <span class="sidebar-logo">Thomas</span>
+          </div>
+          <button class="btn-icon" id="newChatBtn" type="button" aria-label="New chat"
+            style="color: var(--sidebar-text);"></button>
+        </div>
+
+        <button class="sidebar-new-chat" id="newChatBtnFull" type="button">+ New Chat</button>
+
+        <div class="sidebar-search">
+          <input class="sidebar-search-input" id="chatSearchInput" type="text"
+            placeholder="Search chats..." aria-label="Search chats" />
+        </div>
+
+        <div class="sidebar-chats" id="chatList" role="listbox" aria-label="Chat list"></div>
+
+        <div class="sidebar-section" id="agentsSection">
+          <div class="sidebar-section-header" id="agentsToggle">
+            Agents <span style="font-size: 10px;">&#9656;</span>
+          </div>
+          <div id="agentsContent" style="display: none;">
+            <button class="sidebar-link" id="openSwarmBoardBtn" type="button">Swarm Board</button>
+            <a class="sidebar-link" href="/autonomy" target="_blank" rel="noopener">Autonomy Jobs</a>
+          </div>
+        </div>
+
+        <div class="sidebar-section" id="projectsSection">
+          <div class="sidebar-section-header" id="projectsToggle">
+            Projects <span style="font-size: 10px;">&#9656;</span>
+          </div>
+          <div id="projectsContent" style="display: none;">
+            <div class="empty-state" style="padding: var(--space-4);">
+              <div class="empty-state-text">Coming soon</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="sidebar-footer">
+          <button class="sidebar-footer-btn" id="settingsBtn" type="button">
+            <span class="icon" aria-hidden="true"></span> Settings
+          </button>
+          <button class="sidebar-footer-btn" id="helpBtn" type="button">
+            <span class="icon" aria-hidden="true"></span> Help &amp; About
+          </button>
+        </div>
+      </aside>
+
+      <div class="sidebar-overlay" id="sidebarOverlay"></div>
+
+      <!-- ====== MAIN ====== -->
+      <main class="main" role="main">
+        <header class="chat-header" id="chatHeader">
+          <div class="chat-header-left">
+            <button class="btn-icon sidebar-toggle" id="sidebarToggle" type="button"
+              aria-label="Toggle sidebar"></button>
+            <div class="chat-title" id="chatTitle" contenteditable="true" spellcheck="false"
+              role="textbox" aria-label="Chat title">New Chat</div>
+          </div>
+          <div class="chat-header-right">
+            <button class="model-indicator" id="modelIndicator" type="button"
+              aria-label="Open model picker">
+              <span id="modelIndicatorText">local</span>
+              <span id="modelIndicatorChevron"></span>
+            </button>
+            <div class="segmented" id="modeToggle">
+              <button class="segmented-btn active tooltip tooltip-below" data-mode="fast" data-tooltip="Quick responses, skip deep reasoning">fast</button>
+              <button class="segmented-btn tooltip tooltip-below" data-mode="auto" data-tooltip="Auto-decide when to reason deeper">auto</button>
+              <button class="segmented-btn tooltip tooltip-below" data-mode="thinking" data-tooltip="Extended reasoning, slower but thorough">think</button>
+              <button class="segmented-btn tooltip tooltip-below" data-mode="swarm" data-tooltip="Multi-agent swarm with live board">swarm</button>
+            </div>
+            <div class="status-chip connected" id="statusChip">
+              <span class="status-dot"></span>
+              <span id="statusText">ready</span>
+            </div>
+            <button class="btn-icon" id="inspectorToggle" type="button"
+              aria-label="Toggle inspector panel"></button>
+          </div>
+        </header>
+
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-messages-inner" id="chatMessagesInner"></div>
+        </div>
+
+        <div class="composer" id="composer">
+          <div class="composer-inner">
+            <div class="composer-attachments" id="composerAttachments"></div>
+            <div class="composer-row">
+              <div class="composer-input-wrap">
+                <textarea class="composer-textarea" id="composerTextarea"
+                  placeholder="Message Thomas... (Enter to send, Shift+Enter for newline)"
+                  rows="1" aria-label="Message input"></textarea>
+              </div>
+              <button class="composer-send" id="sendBtn" type="button" disabled
+                aria-label="Send message"></button>
+            </div>
+            <div class="composer-actions">
+              <div class="composer-actions-left">
+                <button class="btn-icon tooltip tooltip-below" id="attachDocBtn" type="button" aria-label="Attach document" data-tooltip="Attach file"></button>
+                <button class="btn-icon tooltip tooltip-below" id="attachImageBtn" type="button" aria-label="Attach image" data-tooltip="Attach image"></button>
+                <button class="btn-icon tooltip tooltip-below" id="micBtn" type="button" aria-label="Push to talk" data-tooltip="Push to talk. Double-click or long-press for voice mode"></button>
+              </div>
+              <div class="composer-actions-right">
+                <span class="composer-hint" id="composerHint"></span>
+              </div>
+            </div>
+            <input class="composer-file-input" id="docFileInput" type="file" multiple />
+            <input class="composer-file-input" id="imageFileInput" type="file" accept="image/*" multiple />
+          </div>
+        </div>
+      </main>
+
+      <!-- ====== INSPECTOR ====== -->
+      <aside class="inspector" id="inspector" role="complementary" aria-label="Inspector panel">
+        <div class="inspector-header" id="inspectorTabs"></div>
+        <div class="inspector-body" id="inspectorBody"></div>
+      </aside>
+    </div>
+
+    <div id="modals"></div>
+    <script>
+      (function () {
+        window.__THOMAS_UI_BOOTED = false;
+        window.__THOMAS_UI_BOOT_ERRORS = [];
+
+        function pushErr(kind, err) {
+          try {
+            var msg = '';
+            if (err && err.message) msg = String(err.message);
+            else if (typeof err === 'string') msg = err;
+            else msg = String(err || '');
+            if (!msg) msg = '(unknown error)';
+            window.__THOMAS_UI_BOOT_ERRORS.push(kind + ': ' + msg);
+          } catch (_) { /* ignore */ }
+        }
+
+        window.addEventListener('error', function (e) {
+          pushErr('error', e && e.error ? e.error : (e && e.message ? e.message : e));
+        });
+        window.addEventListener('unhandledrejection', function (e) {
+          pushErr('promise', e && e.reason ? e.reason : e);
+        });
+
+        function showOverlay() {
+          if (document.getElementById('bootFailOverlay')) return;
+          var overlay = document.createElement('div');
+          overlay.id = 'bootFailOverlay';
+          overlay.style.position = 'fixed';
+          overlay.style.inset = '0';
+          overlay.style.zIndex = '99999';
+          overlay.style.background = 'rgba(0,0,0,0.6)';
+          overlay.style.display = 'flex';
+          overlay.style.alignItems = 'center';
+          overlay.style.justifyContent = 'center';
+          overlay.style.padding = '24px';
+
+          var card = document.createElement('div');
+          card.style.maxWidth = '720px';
+          card.style.width = '100%';
+          card.style.background = '#111827';
+          card.style.color = '#e5e7eb';
+          card.style.border = '1px solid rgba(255,255,255,0.12)';
+          card.style.borderRadius = '14px';
+          card.style.boxShadow = '0 18px 60px rgba(0,0,0,0.5)';
+          card.style.padding = '18px';
+
+          var title = document.createElement('div');
+          title.textContent = 'Thomas UI failed to start';
+          title.style.fontSize = '16px';
+          title.style.fontWeight = '700';
+          title.style.marginBottom = '8px';
+
+          var hint = document.createElement('div');
+          hint.style.fontSize = '13px';
+          hint.style.lineHeight = '1.6';
+          hint.style.opacity = '0.95';
+          hint.innerHTML =
+            'The page loaded, but the JavaScript app did not boot. Try:<br/>' +
+            '1) Hard refresh: <b>Ctrl+F5</b><br/>' +
+            '2) Open a new tab: <code>http://127.0.0.1:8899/</code><br/>' +
+            '3) If it still fails, check DevTools Console for the first error.';
+
+          var pre = document.createElement('pre');
+          pre.style.marginTop = '12px';
+          pre.style.padding = '10px 12px';
+          pre.style.background = 'rgba(0,0,0,0.35)';
+          pre.style.border = '1px solid rgba(255,255,255,0.12)';
+          pre.style.borderRadius = '10px';
+          pre.style.fontSize = '12px';
+          pre.style.whiteSpace = 'pre-wrap';
+          pre.style.wordBreak = 'break-word';
+          pre.textContent = (window.__THOMAS_UI_BOOT_ERRORS || []).slice(0, 12).join('\n') || '(no errors captured)';
+
+          var row = document.createElement('div');
+          row.style.display = 'flex';
+          row.style.gap = '10px';
+          row.style.marginTop = '14px';
+
+          var reload = document.createElement('button');
+          reload.textContent = 'Reload';
+          reload.style.background = '#10b981';
+          reload.style.color = '#062316';
+          reload.style.border = 'none';
+          reload.style.borderRadius = '10px';
+          reload.style.padding = '10px 12px';
+          reload.style.cursor = 'pointer';
+          reload.onclick = function () { location.reload(); };
+
+          var dismiss = document.createElement('button');
+          dismiss.textContent = 'Dismiss';
+          dismiss.style.background = 'transparent';
+          dismiss.style.color = '#e5e7eb';
+          dismiss.style.border = '1px solid rgba(255,255,255,0.25)';
+          dismiss.style.borderRadius = '10px';
+          dismiss.style.padding = '10px 12px';
+          dismiss.style.cursor = 'pointer';
+          dismiss.onclick = function () { overlay.remove(); };
+
+          row.appendChild(reload);
+          row.appendChild(dismiss);
+
+          card.appendChild(title);
+          card.appendChild(hint);
+          card.appendChild(pre);
+          card.appendChild(row);
+          overlay.appendChild(card);
+          document.body.appendChild(overlay);
+        }
+
+        setTimeout(function () {
+          if (!window.__THOMAS_UI_BOOTED) showOverlay();
+        }, 2200);
+      })();
+    </script>
+    <script src="/static/guardrails.js?v=__THOMAS_VERSION__"></script>
+    <script src="/static/swarm_board.js?v=__THOMAS_VERSION__"></script>
+    <script type="module" src="/static/js/app.js?v=__THOMAS_VERSION__"></script>
+  </body>
+</html>

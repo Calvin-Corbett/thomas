@@ -1,0 +1,92 @@
+{
+  "qwen2.5-coder:7b": {
+    "displayName": "Qwen 2.5 Coder 7B",
+    "provider": "local",
+    "tags": ["coding", "tool-use"],
+    "vramEstimateGB": 8,
+    "contextLength": 8192,
+    "speedTier": "fast",
+    "qualityTier": "decent",
+    "bestAt": "Fast local coding model for everyday tasks.",
+    "better": ["qwen3-coder:30b-instruct", "gpt-oss:20b"],
+    "smaller": ["qwen2.5-coder:3b"]
+  },
+  "qwen3-coder:30b-instruct": {
+    "displayName": "Qwen 3 Coder 30B Instruct",
+    "provider": "local",
+    "tags": ["coding", "reasoning", "tool-use"],
+    "vramEstimateGB": 24,
+    "contextLength": 32768,
+    "speedTier": "slow",
+    "qualityTier": "excellent",
+    "bestAt": "High quality local coding and refactors (bigger, slower).",
+    "smaller": ["qwen2.5-coder:7b", "devstral-small:2512"]
+  },
+  "devstral-small:2512": {
+    "displayName": "Devstral Small (2512)",
+    "provider": "local",
+    "tags": ["coding", "tool-use"],
+    "vramEstimateGB": 10,
+    "contextLength": 16384,
+    "speedTier": "medium",
+    "qualityTier": "good",
+    "bestAt": "Balanced local coding model with solid tool-use behavior.",
+    "better": ["qwen3-coder:30b-instruct"],
+    "smaller": ["qwen2.5-coder:7b", "nemotron-3:nano"]
+  },
+  "nemotron-3:nano": {
+    "displayName": "Nemotron 3 Nano",
+    "provider": "local",
+    "tags": ["chat", "tool-use"],
+    "vramEstimateGB": 4,
+    "contextLength": 8192,
+    "speedTier": "fast",
+    "qualityTier": "basic",
+    "bestAt": "Ultra fast local assistant for lightweight tasks.",
+    "better": ["qwen2.5-coder:7b"],
+    "smaller": []
+  },
+  "gpt-oss:20b": {
+    "displayName": "GPT-OSS 20B",
+    "provider": "local",
+    "tags": ["coding", "reasoning", "tool-use"],
+    "vramEstimateGB": 16,
+    "contextLength": 32768,
+    "speedTier": "slow",
+    "qualityTier": "good",
+    "bestAt": "Strong open model for longer reasoning and coding sessions.",
+    "better": ["qwen3-coder:30b-instruct"],
+    "smaller": ["qwen2.5-coder:7b"]
+  },
+  "glm-4.7:flash": {
+    "displayName": "GLM 4.7 Flash",
+    "provider": "local",
+    "tags": ["chat", "reasoning"],
+    "vramEstimateGB": 10,
+    "contextLength": 16384,
+    "speedTier": "fast",
+    "qualityTier": "good",
+    "bestAt": "Fast general assistant, good for Q&A and drafting.",
+    "better": ["gpt-oss:20b"],
+    "smaller": ["nemotron-3:nano"]
+  },
+  "gpt-4o-mini": {
+    "displayName": "GPT-4o mini",
+    "provider": "openai",
+    "tags": ["chat", "vision", "tool-use"],
+    "contextLength": 128000,
+    "speedTier": "fast",
+    "qualityTier": "good",
+    "bestAt": "Fast, cheap cloud model for most tasks."
+  },
+  "claude-3-5-sonnet-latest": {
+    "displayName": "Claude 3.5 Sonnet",
+    "provider": "anthropic",
+    "tags": ["reasoning", "tool-use"],
+    "contextLength": 200000,
+    "speedTier": "medium",
+    "qualityTier": "excellent",
+    "bestAt": "High quality reasoning and writing."
+  }
+}
+

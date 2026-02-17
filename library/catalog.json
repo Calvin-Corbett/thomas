@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id",
+      "title": "REDACTED-TELEGRAM-TOKEN WHERE DO I FIND MY ID",
+      "category": "research-notes",
+      "summary": "If that string is your Telegram bot token, **don’t share it publicly**—it can be used to control your bot. Regenerate it in BotFather if needed. For “my ID,” it depends on which ID you need: **Telegram user ID** 1. Open Telegram and message `@userinfobot`. 2.",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md",
+      "created_ts_utc": 1770848144,
+      "updated_ts_utc": 1770848144,
+      "fingerprint": "3d7471d4f1ac5bc03560153d11e76e1f7e2db4c2a2658c34b921e486c38ae1c5",
+      "query": "REDACTED-TELEGRAM-TOKEN WHERE DO I FIND MY ID",
+      "auto_captured": true
+    },
+    {
+      "id": "1771276712-well-currently-you-re-not-set-up-to-be-the-best-like-you-know-if-you-look-in-you",
+      "title": "well currently you're not set up to be the best like you know if you look in you read your thing you're supposed to be l",
+      "category": "research-notes",
+      "summary": "Version is `0.11.7` (matches `pyproject.toml` and `thomas/__init__.py`). If you want to keep “adding pieces,” what capability should we tackle first (memory, tools, UI, or something else)?",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771276712-well-currently-you-re-not-set-up-to-be-the-best-like-you-know-if-you-look-in-you.md",
+      "created_ts_utc": 1771276712,
+      "updated_ts_utc": 1771276712,
+      "fingerprint": "02a961d0b6de13d1e6c07d7a3a5511e053657f9a11191a15c588eca426a85a48",
+      "query": "well currently you're not set up to be the best like you know if you look in you read your thing you're supposed to be like a super AI assistant you know maybe we just need to keep adding all the pieces to you you know also wait what version are we on right now",
+      "auto_captured": true
+    },
+    {
+      "id": "1771278725-i-don-t-know-how-long-the-video-should-be-but-it-should-be-about-5-minutes-or-we",
+      "title": "I don't know how long the video should be but it should be about 5 minutes or we should be capable of making something a",
+      "category": "research-notes",
+      "summary": "I hear you. I’m here in the chat and ready to plan this with you. I also confirmed your local research library exists (`library/INDEX.md`, `library/catalog.json`, `library/entries/...`) and I can query it directly so we don’t have to rely on the internet. If w",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771278725-i-don-t-know-how-long-the-video-should-be-but-it-should-be-about-5-minutes-or-we.md",
+      "created_ts_utc": 1771278725,
+      "updated_ts_utc": 1771278725,
+      "fingerprint": "add2d744062a5971f60971c35ffc85bfe78e3976604044c1bab578be111ed327",
+      "query": "I don't know how long the video should be but it should be about 5 minutes or we should be capable of making something at 5 minutes also you added a dog's lunch but I'm trying to talk to you about this so I need you to actually you know input the text into this chat so we need to talk about it because right now you're not in self-evolution Loop right now right I need to actually help you plan stuff once you get the groundwork done you're going to go beyond your own and do your thing I'm going to love it yeah I'm talking about I do have a resources in there from Uncle Paul and stuff any research conducted I do have a research Library too if you noticed that so anytime you just hear information that AIS don't know or something I just put in those files in it and they're in there index so you can quickly like go through there and find keywords and stuff they might need information about stuff I'm trying to make my own Library so you don't have to go to the internet and search things so you can take so any good information about autonomous AI agents and stuff I like to add since it's always updating I don't think the AI agents themselves are going to be up to date as much as the internet so I've been adding that stuff into there I don't know if you're aware of that if you're not aware of that then I'm also want to be some way down like if you have new contacts or a new window opens up or AI can get this project and it knows like the key features of this thing actually use it like it's important to know that there's a library that you need to update with research and and the other features and that stuff that the AI that you know he needs to know those things are there and utilize them and why she didn't realize them so I don't know if that's there or I don't know if you already knew this if you already do this this is perfect the read me works perfectly I don't know what to read me as a solution you know we got to think outside the box here we don't always have to do what everyone else is doing if that's actually not the best solution like if there's no issues with what people are doing and we think about doing something a little bit different to fix the issue and be better right",
+      "auto_captured": true
+    },
+    {
+      "id": "1771278867-okay-so-already-have-an-issue-you-re-focusing-on-like-literally-the-video-thing-",
+      "title": "okay so already have an issue you're focusing on like literally the video thing when I said a whole bunch of stuff you s",
+      "category": "research-notes",
+      "summary": "Found it. The launch doc is `docs/LAUNCH_V1.md`. It’s dated **2026-02-16** and includes the “Launch-Quality Demo Video (Must‑Have)” section, which is why I zeroed in on video. Do you want me to open the file and edit it, or are you looking for a different laun",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771278867-okay-so-already-have-an-issue-you-re-focusing-on-like-literally-the-video-thing-.md",
+      "created_ts_utc": 1771278867,
+      "updated_ts_utc": 1771278867,
+      "fingerprint": "0940957037885fc701bf59e3c4b9120cf2ae3b8fd7478fb28e07dfefe6001976",
+      "query": "okay so already have an issue you're focusing on like literally the video thing when I said a whole bunch of stuff you said okay I'll talk to you in this chat okay then talk to me in this chat where's the where's the the docs about the launching you said you made a launch MD that has a bunch of like Steps of stuff we need for the lunch I don't see any of that you're just talking about a video",
+      "auto_captured": true
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+from __future__ import annotations
+
+from dataclasses import dataclass, field
+from typing import Any, Dict, List
+
+
+@dataclass
+class RetrievalItem:
+    kind: str
+    ref_id: str
+    score: float
+    snippet: str
+    meta: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class RetrievalResult:
+    pack_text: str
+    trace_id: str
+    items: List[RetrievalItem]
+    latency_ms: int
+    pack_tokens_est: int
+
