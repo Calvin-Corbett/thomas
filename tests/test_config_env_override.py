@@ -39,9 +39,40 @@ class TestEnvOverride(unittest.TestCase):
 
     def test_failover_section_override(self) -> None:
         os.environ["THOMAS_FAILOVER_ENABLED"] = "true"
+        os.environ["THOMAS_FAILOVER_CHAT_AUTO_FAILOVER"] = "true"
         os.environ["THOMAS_FAILOVER_PROFILES"] = "openai,anthropic"
         os.environ["THOMAS_FAILOVER_COOLDOWN_SECONDS"] = "45"
         cfg = load_config(Path("__does_not_exist__.toml"))
         self.assertEqual(cfg.failover.enabled, True)
+        self.assertEqual(cfg.failover.chat_auto_failover, True)
         self.assertEqual(cfg.failover.profiles, ["openai", "anthropic"])
         self.assertEqual(cfg.failover.cooldown_seconds, 45)
+
+    def test_server_section_override(self) -> None:
+        os.environ["THOMAS_SERVER_ACCESS_MODE"] = "remote"
+        os.environ["THOMAS_SERVER_API_TOKEN"] = "secret-token"
+        os.environ["THOMAS_SERVER_ALLOW_UNAUTHENTICATED_VERSION"] = "false"
+        os.environ["THOMAS_SERVER_RATE_LIMIT_ENABLED"] = "false"
+        os.environ["THOMAS_SERVER_RATE_LIMIT_MAX_REQUESTS"] = "55"
+        os.environ["THOMAS_SERVER_RATE_LIMIT_WINDOW_SECONDS"] = "22"
+        cfg = load_config(Path("__does_not_exist__.toml"))
+        self.assertEqual(cfg.server.access_mode, "remote")
+        self.assertEqual(cfg.server.api_token, "secret-token")
+        self.assertEqual(cfg.server.allow_unauthenticated_version, False)
+        self.assertEqual(cfg.server.rate_limit_enabled, False)
+        self.assertEqual(cfg.server.rate_limit_max_requests, 55)
+        self.assertEqual(cfg.server.rate_limit_window_seconds, 22)
+
+    def test_remote_mode_requires_api_token(self) -> None:
+        os.environ["THOMAS_SERVER_ACCESS_MODE"] = "remote"
+        cfg = load_config(Path("__does_not_exist__.toml"))
+        errs = cfg.validate()
+        self.assertTrue(any("server.api_token is required" in e for e in errs))
+
+    def test_server_rate_limit_validation(self) -> None:
+        os.environ["THOMAS_SERVER_RATE_LIMIT_MAX_REQUESTS"] = "0"
+        os.environ["THOMAS_SERVER_RATE_LIMIT_WINDOW_SECONDS"] = "0"
+        cfg = load_config(Path("__does_not_exist__.toml"))
+        errs = cfg.validate()
+        self.assertTrue(any("server.rate_limit_max_requests must be >= 1" in e for e in errs))
+        self.assertTrue(any("server.rate_limit_window_seconds must be >= 1" in e for e in errs))

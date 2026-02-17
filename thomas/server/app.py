@@ -14,12 +14,16 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import hmac
 import ipaddress
 import json
 import logging
+import math
 import os
 import secrets
 import time
+from collections import deque
 from urllib.parse import urlparse
 from dataclasses import dataclass, replace
 from pathlib import Path
@@ -29,10 +33,14 @@ import httpx
 
 from thomas import __version__ as THOMAS_VERSION
 from thomas.agent.loop import AgentLoop
+from thomas.core.autonomy import clamp_autonomy_level, autonomy_level_name
 from thomas.core.config import AppConfig
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
+from thomas.models.chat_controls import resolve_ui_control_request
 from thomas.models.discovery import discover_models_async, handshake_models_async
+from thomas.models.protocol import validate_model_profile_async
+from thomas.models.switching import infer_profile_candidates, is_model_switch_request, resolve_model_switch_request
 from thomas.server.secrets import SecretStore
 from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
@@ -40,6 +48,7 @@ from thomas.tools.filesystem import register_filesystem_tools
 from thomas.tools.git import register_git_tools
 from thomas.tools.registry import ToolRegistry
 from thomas.tools.shell import register_shell_tools
+from thomas.observability.journal import TaskJournal, should_create_journal
 
 log = logging.getLogger(__name__)
 
@@ -55,6 +64,7 @@ class ChatSession:
     conversation: List[Dict[str, Any]]
     profile: str
     model_id: Optional[str] = None
+    autonomy_level: int = 3
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -236,6 +246,9 @@ def create_app(config: AppConfig):
     app[APP_GUARDED_TOOL_RUNNER] = None
 
     web_dir = _web_dir()
+    chat_store_dir = config.memory.root_path / ".thomas" / "chats"
+    chat_store_dir.mkdir(parents=True, exist_ok=True)
+    chat_store_lock = asyncio.Lock()
 
     # Optional: time-travel run store endpoints
     try:
@@ -330,10 +343,111 @@ def create_app(config: AppConfig):
         except ValueError:
             return False
 
+    def _extract_request_token(request: web.Request) -> str:
+        auth = str(request.headers.get("Authorization") or "")
+        if auth.lower().startswith("bearer "):
+            return auth.split(" ", 1)[1].strip()
+        return str(request.headers.get("X-Api-Token") or "").strip()
+
+    rate_limit_state: Dict[str, deque[float]] = {}
+    rate_limit_lock = asyncio.Lock()
+    rate_limit_gc_at = 0.0
+
+    def _parse_server_int(raw: Any, default: int, minimum: int = 1) -> int:
+        try:
+            val = int(raw)
+        except Exception:
+            val = default
+        return max(minimum, val)
+
+    def _remote_rate_limit_key(request: web.Request) -> str:
+        token = _extract_request_token(request)
+        if token:
+            digest = hashlib.sha256(token.encode("utf-8")).hexdigest()[:16]
+            return f"token:{digest}"
+        remote = str(request.remote or "").strip() or "unknown"
+        return f"ip:{remote}"
+
+    async def _consume_remote_rate_limit(request: web.Request) -> tuple[bool, int]:
+        """Best-effort fixed-window limiter for remote-mode API traffic."""
+        nonlocal rate_limit_gc_at
+        cfg: AppConfig = app[APP_CONFIG]
+        srv = getattr(cfg, "server", None)
+        max_requests = _parse_server_int(getattr(srv, "rate_limit_max_requests", 120), 120)
+        window_s = _parse_server_int(getattr(srv, "rate_limit_window_seconds", 60), 60)
+
+        key = _remote_rate_limit_key(request)
+        now = time.monotonic()
+        cutoff = now - float(window_s)
+
+        async with rate_limit_lock:
+            bucket = rate_limit_state.get(key)
+            if bucket is None:
+                bucket = deque()
+                rate_limit_state[key] = bucket
+
+            while bucket and bucket[0] <= cutoff:
+                bucket.popleft()
+
+            if len(bucket) >= max_requests:
+                oldest = bucket[0] if bucket else now
+                retry_after = max(1, int(math.ceil(float(window_s) - (now - oldest))))
+                return False, retry_after
+
+            bucket.append(now)
+
+            # Opportunistic cleanup to keep state bounded.
+            gc_interval = min(max(float(window_s), 5.0), 60.0)
+            if (now - rate_limit_gc_at) >= gc_interval:
+                stale_before = now - float(window_s)
+                stale_keys = [k for k, b in rate_limit_state.items() if (not b) or b[-1] <= stale_before]
+                for stale_key in stale_keys:
+                    rate_limit_state.pop(stale_key, None)
+                rate_limit_gc_at = now
+
+        return True, 0
+
+    @web.middleware
+    async def remote_api_rate_limit(request: web.Request, handler):  # type: ignore[no-untyped-def]
+        if request.path.startswith("/api/"):
+            cfg: AppConfig = app[APP_CONFIG]
+            srv = getattr(cfg, "server", None)
+            mode = str(getattr(srv, "access_mode", "local") or "local").strip().lower()
+            enabled = bool(getattr(srv, "rate_limit_enabled", True))
+            if mode == "remote" and enabled:
+                allowed, retry_after = await _consume_remote_rate_limit(request)
+                if not allowed:
+                    raise web.HTTPTooManyRequests(
+                        text="remote api rate limit exceeded",
+                        headers={"Retry-After": str(retry_after)},
+                    )
+        return await handler(request)
+
+    app.middlewares.append(remote_api_rate_limit)
+
+    def _require_api_token(request: web.Request) -> None:
+        cfg: AppConfig = app[APP_CONFIG]
+        expected = str(getattr(getattr(cfg, "server", None), "api_token", "") or "").strip()
+        if not expected:
+            raise web.HTTPUnauthorized(text="server api token is not configured")
+        incoming = _extract_request_token(request)
+        if not incoming:
+            raise web.HTTPUnauthorized(text="missing api token")
+        if not hmac.compare_digest(incoming.encode("utf-8"), expected.encode("utf-8")):
+            raise web.HTTPUnauthorized(text="invalid api token")
+
     def _require_loopback(request: web.Request) -> None:
         if not _is_loopback_request(request):
             raise web.HTTPForbidden(text="This endpoint is only available from localhost.")
         _require_same_origin_browser_request(request)
+
+    def _require_api_access(request: web.Request) -> None:
+        cfg: AppConfig = app[APP_CONFIG]
+        mode = str(getattr(getattr(cfg, "server", None), "access_mode", "local") or "local").strip().lower()
+        if mode == "remote":
+            _require_api_token(request)
+            return
+        _require_loopback(request)
 
     def _require_same_origin_browser_request(request: web.Request) -> None:
         """Reject cross-origin browser requests to localhost-only endpoints.
@@ -457,6 +571,201 @@ def create_app(config: AppConfig):
                 log.debug("Skipping failover profile %s: %s", getattr(fb, "name", "?"), e)
         return out
 
+    async def _resolve_natural_model_switch_request(
+        text: str,
+        *,
+        current_profile: str,
+    ):
+        if not is_model_switch_request(text):
+            return None
+
+        cfg: AppConfig = app[APP_CONFIG]
+        default_models = {
+            str(name): str(getattr(model_cfg, "model", "") or "").strip()
+            for name, model_cfg in cfg.models.items()
+        }
+        candidate_profiles = infer_profile_candidates(
+            text,
+            current_profile=current_profile,
+            available_profiles=default_models.keys(),
+        )
+        discovered: Dict[str, List[str]] = {}
+        for profile_name in candidate_profiles[:6]:
+            profile_name = str(profile_name or "").strip()
+            if not profile_name or profile_name not in cfg.models:
+                continue
+            ids: List[str] = []
+            default_id = default_models.get(profile_name, "")
+            if default_id:
+                ids.append(default_id)
+            try:
+                hs = await handshake_models_async(_model_cfg_with_secrets(profile_name), timeout_s=2.5)
+                for mid in list(hs.models or []):
+                    m = str(mid or "").strip()
+                    if m and m not in ids:
+                        ids.append(m)
+            except Exception as e:
+                log.debug("Model switch discovery failed for profile %s: %s", profile_name, e)
+            discovered[profile_name] = ids
+
+        return resolve_model_switch_request(
+            text,
+            current_profile=current_profile,
+            default_models=default_models,
+            discovered_models=discovered,
+        )
+
+    def _safe_int(value: Any, default: int) -> int:
+        try:
+            return int(value)
+        except Exception:
+            return int(default)
+
+    def _clone_json(value: Any) -> Any:
+        return json.loads(json.dumps(value, ensure_ascii=False))
+
+    def _chat_file_for(chat_id: str) -> Path:
+        digest = hashlib.sha256(chat_id.encode("utf-8")).hexdigest()
+        return chat_store_dir / f"{digest}.json"
+
+    def _sanitize_chat_payload(payload: Any, *, chat_id: Optional[str] = None) -> Dict[str, Any]:
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="chat payload must be a JSON object")
+
+        requested_id = str(payload.get("id") or "").strip()
+        resolved_id = str(chat_id or requested_id).strip()
+        if not resolved_id:
+            raise web.HTTPBadRequest(text="missing chat id")
+        if len(resolved_id) > 160:
+            raise web.HTTPBadRequest(text="chat id is too long")
+        if requested_id and requested_id != resolved_id:
+            raise web.HTTPBadRequest(text="chat id mismatch")
+
+        now_ms = int(time.time() * 1000)
+        created_at = _safe_int(payload.get("createdAt"), now_ms)
+        updated_at = _safe_int(payload.get("updatedAt"), now_ms)
+        updated_at = max(updated_at, created_at)
+
+        title = str(payload.get("title") or "New Chat").strip() or "New Chat"
+        if len(title) > 200:
+            title = title[:200]
+
+        raw_messages = payload.get("messages")
+        if not isinstance(raw_messages, list):
+            raise web.HTTPBadRequest(text="messages must be a list")
+
+        messages: List[Dict[str, Any]] = []
+        for msg in raw_messages[:2000]:
+            if not isinstance(msg, dict):
+                continue
+            role = str(msg.get("role") or "").strip()
+            if role not in ("user", "assistant"):
+                continue
+
+            entry: Dict[str, Any] = {
+                "id": str(msg.get("id") or secrets.token_urlsafe(8)),
+                "role": role,
+                "createdAt": _safe_int(msg.get("createdAt"), now_ms),
+                "status": str(msg.get("status") or "complete").strip() or "complete",
+            }
+
+            content = msg.get("content", "")
+            if isinstance(content, str):
+                entry["content"] = content[:200_000]
+            else:
+                try:
+                    entry["content"] = _clone_json(content)
+                except Exception:
+                    entry["content"] = ""
+
+            tool_calls = msg.get("toolCalls")
+            if isinstance(tool_calls, list):
+                tc_out: List[Dict[str, Any]] = []
+                for tc in tool_calls[:200]:
+                    if not isinstance(tc, dict):
+                        continue
+                    try:
+                        tc_out.append(_clone_json(tc))
+                    except Exception:
+                        continue
+                entry["toolCalls"] = tc_out
+            else:
+                entry["toolCalls"] = []
+
+            meta = msg.get("meta")
+            if isinstance(meta, dict):
+                try:
+                    entry["meta"] = _clone_json(meta)
+                except Exception:
+                    pass
+
+            messages.append(entry)
+
+        session_id = payload.get("sessionId")
+        if session_id is None:
+            safe_session_id = None
+        else:
+            safe_session_id = str(session_id).strip() or None
+            if safe_session_id and len(safe_session_id) > 512:
+                safe_session_id = safe_session_id[:512]
+
+        chat = {
+            "id": resolved_id,
+            "title": title,
+            "messages": messages,
+            "createdAt": created_at,
+            "updatedAt": updated_at,
+            "pinned": bool(payload.get("pinned", False)),
+            "sessionId": safe_session_id,
+        }
+
+        encoded = json.dumps(chat, ensure_ascii=False)
+        if len(encoded.encode("utf-8")) > 10_000_000:
+            raise web.HTTPBadRequest(text="chat payload too large")
+        return chat
+
+    def _read_chat_from_disk(path: Path) -> Optional[Dict[str, Any]]:
+        try:
+            raw = path.read_text(encoding="utf-8")
+            payload = json.loads(raw)
+            if not isinstance(payload, dict):
+                return None
+            raw_id = str(payload.get("id") or "").strip()
+            if not raw_id:
+                return None
+            return _sanitize_chat_payload(payload, chat_id=raw_id)
+        except Exception as e:
+            log.debug("Skipping unreadable chat file %s: %s", path, e)
+            return None
+
+    async def _save_chat_to_disk(chat: Dict[str, Any]) -> None:
+        payload = json.dumps(chat, ensure_ascii=False, separators=(",", ":"))
+        path = _chat_file_for(str(chat.get("id") or ""))
+        tmp_path = Path(str(path) + ".tmp")
+        async with chat_store_lock:
+            chat_store_dir.mkdir(parents=True, exist_ok=True)
+            tmp_path.write_text(payload, encoding="utf-8")
+            tmp_path.replace(path)
+
+    async def _delete_chat_from_disk(chat_id: str) -> bool:
+        path = _chat_file_for(chat_id)
+        async with chat_store_lock:
+            if not path.exists():
+                return False
+            path.unlink(missing_ok=True)
+        return True
+
+    async def _load_all_chats_from_disk() -> List[Dict[str, Any]]:
+        chats: List[Dict[str, Any]] = []
+        async with chat_store_lock:
+            paths = list(chat_store_dir.glob("*.json"))
+        for path in paths:
+            chat = _read_chat_from_disk(path)
+            if chat is not None:
+                chats.append(chat)
+        chats.sort(key=lambda c: _safe_int(c.get("updatedAt"), 0), reverse=True)
+        return chats
+
     async def index(request: web.Request) -> web.StreamResponse:
         try:
             html = (web_dir / "index.html").read_text(encoding="utf-8", errors="replace")
@@ -470,6 +779,7 @@ def create_app(config: AppConfig):
             return web.FileResponse(web_dir / "index.html")
 
     async def api_models(request: web.Request) -> web.Response:
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         secrets: SecretStore = app[APP_SECRETS]
         profiles = []
@@ -494,6 +804,7 @@ def create_app(config: AppConfig):
         )
 
     async def api_profile_models(request: web.Request) -> web.Response:
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         profile = request.match_info["profile"]
         if profile not in cfg.models:
@@ -508,9 +819,9 @@ def create_app(config: AppConfig):
     async def api_profile_handshake(request: web.Request) -> web.Response:
         """Probe whether a profile is usable (auth/offline/unsupported), and optionally return model ids.
 
-        Note: restricted to loopback requests because it can generate outbound traffic using stored keys.
+        Note: restricted by server access policy because it can generate outbound traffic using stored keys.
         """
-        _require_loopback(request)
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         profile = request.match_info["profile"]
         if profile not in cfg.models:
@@ -520,10 +831,56 @@ def create_app(config: AppConfig):
         payload = {"profile": profile, **result.to_dict()}
         return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
+    async def api_profile_validate(request: web.Request) -> web.Response:
+        """Validate profile readiness (handshake + optional tool smoke)."""
+        _require_api_access(request)
+        cfg: AppConfig = app[APP_CONFIG]
+        profile = request.match_info["profile"]
+        if profile not in cfg.models:
+            raise web.HTTPNotFound(text="unknown profile")
+
+        raw_tool_smoke = str(request.query.get("tool_smoke", "1")).strip().lower()
+        run_tool_smoke = raw_tool_smoke not in ("0", "false", "no", "off")
+
+        try:
+            handshake_timeout_s = float(request.query.get("timeout", "3.0"))
+        except Exception:
+            handshake_timeout_s = 3.0
+        try:
+            tool_timeout_s = float(request.query.get("tool_timeout", "20.0"))
+        except Exception:
+            tool_timeout_s = 20.0
+
+        report = await validate_model_profile_async(
+            _model_cfg_with_secrets(profile),
+            handshake_timeout_s=max(0.5, min(30.0, handshake_timeout_s)),
+            tool_timeout_s=max(2.0, min(120.0, tool_timeout_s)),
+            run_tool_smoke=run_tool_smoke,
+        )
+
+        # Keep handshake-compatible top-level fields for the web UI, plus tool_smoke details.
+        hs = report.handshake
+        payload = {
+            "profile": profile,
+            "provider": report.provider,
+            "ok": report.ok,
+            "status": hs.status,
+            "url": hs.url,
+            "http_status": hs.http_status,
+            "models": list(hs.models or []),
+            "error": hs.error,
+            "tool_smoke": report.tool_smoke.to_dict(),
+        }
+        return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
+
     async def api_version(request: web.Request) -> web.Response:
+        cfg: AppConfig = app[APP_CONFIG]
+        if not bool(getattr(getattr(cfg, "server", None), "allow_unauthenticated_version", True)):
+            _require_api_access(request)
         return web.json_response({"version": THOMAS_VERSION})
 
     async def api_tools(request: web.Request) -> web.Response:
+        _require_api_access(request)
         registry: ToolRegistry = app[APP_TOOLS]
         tools = [
             {"name": t.name, "category": t.category, "description": t.description}
@@ -531,8 +888,34 @@ def create_app(config: AppConfig):
         ]
         return web.json_response({"tools": tools})
 
+    async def api_chats(request: web.Request) -> web.Response:
+        _require_api_access(request)
+        chats = await _load_all_chats_from_disk()
+        return web.json_response({"chats": chats}, dumps=lambda x: json.dumps(x, ensure_ascii=False))
+
+    async def api_chat_put(request: web.Request) -> web.Response:
+        _require_api_access(request)
+        chat_id = str(request.match_info.get("chat_id") or "").strip()
+        if not chat_id:
+            raise web.HTTPBadRequest(text="missing chat id")
+        payload = await _read_json(request)
+        chat = _sanitize_chat_payload(payload, chat_id=chat_id)
+        await _save_chat_to_disk(chat)
+        return web.json_response(
+            {"ok": True, "chat": chat},
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_chat_delete(request: web.Request) -> web.Response:
+        _require_api_access(request)
+        chat_id = str(request.match_info.get("chat_id") or "").strip()
+        if not chat_id:
+            raise web.HTTPBadRequest(text="missing chat id")
+        deleted = await _delete_chat_from_disk(chat_id)
+        return web.json_response({"ok": True, "id": chat_id, "deleted": bool(deleted)})
+
     async def api_memory(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         mem = app.get(APP_MEMORY)
         if mem is None:
             return web.json_response({"enabled": False, "error": "memory engine unavailable"})
@@ -556,7 +939,7 @@ def create_app(config: AppConfig):
         })
 
     async def api_memory_pin_set(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         mem = app.get(APP_MEMORY)
         if mem is None:
             return web.json_response({"ok": False, "error": "memory engine unavailable"}, status=503)
@@ -573,7 +956,7 @@ def create_app(config: AppConfig):
         return web.json_response({"ok": True, "key": key})
 
     async def api_memory_pin_clear(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         mem = app.get(APP_MEMORY)
         if mem is None:
             return web.json_response({"ok": False, "error": "memory engine unavailable"}, status=503)
@@ -585,7 +968,7 @@ def create_app(config: AppConfig):
         return web.json_response({"ok": True, "key": key})
 
     async def api_memory_contradictions(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         mem = app.get(APP_MEMORY)
         if mem is None:
             return web.json_response(
@@ -626,7 +1009,7 @@ def create_app(config: AppConfig):
         )
 
     async def api_memory_contradiction_resolve(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         mem = app.get(APP_MEMORY)
         if mem is None:
             return web.json_response(
@@ -674,7 +1057,7 @@ def create_app(config: AppConfig):
         return web.json_response({"ok": True, "id": cid, "resolved": bool(resolved)})
 
     async def api_secrets(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         secrets: SecretStore = app[APP_SECRETS]
         profiles = []
@@ -694,7 +1077,7 @@ def create_app(config: AppConfig):
         return web.json_response({"storage": secrets.storage_info.__dict__, "profiles": profiles})
 
     async def api_secret_set(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         secrets: SecretStore = app[APP_SECRETS]
         profile = request.match_info["profile"]
@@ -711,7 +1094,7 @@ def create_app(config: AppConfig):
         return web.json_response({"ok": True, "profile": profile, "persisted": persist})
 
     async def api_secret_clear(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         secrets: SecretStore = app[APP_SECRETS]
         profile = request.match_info["profile"]
@@ -723,9 +1106,9 @@ def create_app(config: AppConfig):
     async def api_local_pull(request: web.Request) -> web.StreamResponse:
         """Pull a local model via Ollama's HTTP API.
 
-        Note: restricted to loopback requests and loopback endpoints.
+        Note: restricted by server access policy and loopback local-model endpoints.
         """
-        _require_loopback(request)
+        _require_api_access(request)
         payload = await _read_json(request)
         model_id = str(payload.get("model_id") or payload.get("name") or "").strip()
         if not model_id:
@@ -791,16 +1174,16 @@ def create_app(config: AppConfig):
         return resp
 
     async def api_session_new(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         sid = secrets.token_urlsafe(18)
         app[APP_SESSIONS][sid] = ChatSession(
-            id=sid, conversation=[], profile=cfg.default_model, model_id=None
+            id=sid, conversation=[], profile=cfg.default_model, model_id=None, autonomy_level=3
         )
         return web.json_response({"session_id": sid})
 
     async def api_session_fork(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         payload = await _read_json(request)
         src = str(payload.get("session_id") or "").strip()
         if not src or src not in app[APP_SESSIONS]:
@@ -815,11 +1198,12 @@ def create_app(config: AppConfig):
             conversation=cloned,
             profile=base.profile,
             model_id=base.model_id,
+            autonomy_level=clamp_autonomy_level(getattr(base, "autonomy_level", 3), default=3),
         )
         return web.json_response({"session_id": sid, "forked_from": src})
 
     async def api_session_import(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         cfg: AppConfig = app[APP_CONFIG]
         payload = await _read_json(request)
 
@@ -832,6 +1216,7 @@ def create_app(config: AppConfig):
             model_id = None
         else:
             model_id = model_id.strip()
+        autonomy_level = clamp_autonomy_level(payload.get("autonomy_level", 3), default=3)
 
         raw_conv = payload.get("conversation") or []
         if not isinstance(raw_conv, list):
@@ -856,14 +1241,18 @@ def create_app(config: AppConfig):
 
         sid = secrets.token_urlsafe(18)
         app[APP_SESSIONS][sid] = ChatSession(
-            id=sid, conversation=conversation, profile=profile, model_id=model_id
+            id=sid,
+            conversation=conversation,
+            profile=profile,
+            model_id=model_id,
+            autonomy_level=autonomy_level,
         )
         return web.json_response({"session_id": sid})
 
     async def api_chat(request: web.Request) -> web.StreamResponse:
         # This endpoint can execute tool-calling flows, including file writes.
-        # Keep it localhost-only for safe-by-default behavior.
-        _require_loopback(request)
+        # Keep it access-controlled (local loopback or remote token auth).
+        _require_api_access(request)
         start_t = time.monotonic()
         payload = await _read_json(request)
         sid = str(payload.get("session_id", "")).strip()
@@ -875,7 +1264,7 @@ def create_app(config: AppConfig):
         # stale session_id persisted locally; recover by recreating the session.
         if sid not in app[APP_SESSIONS]:
             app[APP_SESSIONS][sid] = ChatSession(
-                id=sid, conversation=[], profile=cfg.default_model, model_id=None
+                id=sid, conversation=[], profile=cfg.default_model, model_id=None, autonomy_level=3
             )
 
         session: ChatSession = app[APP_SESSIONS][sid]
@@ -888,6 +1277,11 @@ def create_app(config: AppConfig):
         model_id = payload.get("model_id")
         if isinstance(model_id, str) and model_id.strip():
             session.model_id = model_id.strip()
+        if "autonomy_level" in payload:
+            session.autonomy_level = clamp_autonomy_level(
+                payload.get("autonomy_level"),
+                default=getattr(session, "autonomy_level", 3),
+            )
 
         mode = str(payload.get("mode") or "auto").strip().lower()
         if mode not in ("auto", "fast", "thinking", "swarm"):
@@ -911,6 +1305,7 @@ def create_app(config: AppConfig):
                         "profile": profile,
                         "model_id": session.model_id,
                         "mode": run_mode,
+                        "autonomy_level": int(getattr(session, "autonomy_level", 3) or 3),
                         "thomas_version": THOMAS_VERSION,
                     }
                 )
@@ -920,6 +1315,169 @@ def create_app(config: AppConfig):
             except Exception as e:
                 log.warning("Run store start failed: %s", e)
                 return None
+
+        switch_req = await _resolve_natural_model_switch_request(text, current_profile=session.profile)
+        control_req = resolve_ui_control_request(text, model_switch=switch_req)
+        if control_req is not None:
+            patch: Dict[str, Any] = dict(control_req.patch or {})
+            ops_payload = [dict(op) for op in list(control_req.operations or [])]
+
+            settings_patch = patch.get("settings")
+            if settings_patch is not None:
+                if isinstance(settings_patch, dict):
+                    clean_settings_patch = dict(settings_patch)
+                    if "autonomyLevel" in clean_settings_patch:
+                        session.autonomy_level = clamp_autonomy_level(
+                            clean_settings_patch.get("autonomyLevel"),
+                            default=getattr(session, "autonomy_level", 3),
+                        )
+                        clean_settings_patch["autonomyLevel"] = int(session.autonomy_level)
+                    patch["settings"] = clean_settings_patch
+                else:
+                    patch.pop("settings", None)
+
+            requested_profile = str(patch.get("activeProfile") or session.profile or profile).strip()
+            if requested_profile in cfg.models:
+                session.profile = requested_profile
+                profile = requested_profile
+            elif session.profile not in cfg.models:
+                session.profile = cfg.default_model
+                profile = cfg.default_model
+            else:
+                profile = session.profile
+
+            if "activeModelId" in patch:
+                requested_model_id = str(patch.get("activeModelId") or "").strip()
+                session.model_id = requested_model_id or None
+                patch["activeModelId"] = str(session.model_id or "")
+            if "activeProfile" in patch:
+                patch["activeProfile"] = session.profile
+
+            active_model_id = str(session.model_id or cfg.models[profile].model or "").strip()
+            if not active_model_id:
+                active_model_id = str(cfg.models[profile].model or "")
+
+            mode_for_run = str(patch.get("mode") or mode).strip().lower()
+            if mode_for_run not in ("auto", "fast", "thinking", "swarm"):
+                mode_for_run = mode
+
+            model_changed = bool("activeProfile" in patch or "activeModelId" in patch)
+            runtime_model: Optional[Dict[str, Any]] = None
+            if model_changed:
+                chat_auto_failover = bool(getattr(cfg.failover, "chat_auto_failover", False))
+                failover_enabled_for_chat = bool(cfg.failover.enabled and chat_auto_failover)
+                runtime_model = {
+                    "requested": {
+                        "profile": profile,
+                        "provider": str(cfg.models[profile].provider or ""),
+                        "model": active_model_id,
+                        "base_url": str(cfg.models[profile].base_url or ""),
+                    },
+                    "active": {
+                        "profile": profile,
+                        "provider": str(cfg.models[profile].provider or ""),
+                        "model": active_model_id,
+                        "base_url": str(cfg.models[profile].base_url or ""),
+                    },
+                    "failover_enabled": bool(failover_enabled_for_chat),
+                    "failover_used": False,
+                    "attempts": [],
+                    "strict_primary_chat": bool(not failover_enabled_for_chat and cfg.failover.enabled),
+                }
+
+            run_id = secrets.token_urlsafe(10)
+            writer = _start_run_writer(run_id, mode_for_run)
+
+            resp = web.StreamResponse(
+                status=200,
+                headers={
+                    "Content-Type": "application/x-ndjson; charset=utf-8",
+                    "Cache-Control": "no-cache",
+                },
+            )
+            await resp.prepare(request)
+            send_lock = asyncio.Lock()
+
+            async def send(obj: Dict[str, Any]) -> None:
+                async with send_lock:
+                    out = dict(obj)
+                    out.setdefault("run_id", run_id)
+                    if writer is not None:
+                        try:
+                            writer.record(out)
+                        except Exception as e:
+                            log.debug("Run writer record failed: %s", e)
+                    line = json.dumps(out, ensure_ascii=False)
+                    await resp.write(line.encode("utf-8") + b"\n")
+
+            try:
+                text_clean = str(text or "").strip()
+                if text_clean:
+                    session.conversation.append({"role": "user", "content": text_clean})
+
+                confirm_text = str(control_req.confirmation or "").strip() or "Updated requested settings."
+                session.conversation.append({"role": "assistant", "content": confirm_text})
+
+                if switch_req is not None:
+                    await send(
+                        {
+                            "type": "model_switch",
+                            "profile": profile,
+                            "model_id": str(session.model_id or ""),
+                            "active_model": active_model_id,
+                            "source": "conversation",
+                            "confidence": float(getattr(switch_req, "confidence", 0.0) or 0.0),
+                            "explanation": str(getattr(switch_req, "explanation", "") or ""),
+                        }
+                    )
+
+                await send(
+                    {
+                        "type": "ui_state_patch",
+                        "patch": patch,
+                        "operations": ops_payload,
+                        "source": "conversation",
+                        "summary": confirm_text,
+                    }
+                )
+                if runtime_model is not None:
+                    await send({"type": "model_runtime", "runtime": runtime_model})
+
+                await send({"type": "text", "text": confirm_text})
+                await send(
+                    {
+                        "type": "done",
+                        "iterations": 1,
+                        "tool_calls": 0,
+                        "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                        "token_report": {},
+                        "runtime_model": runtime_model,
+                        "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
+                    }
+                )
+                if run_store_enabled:
+                    try:
+                        run_store_mod.finalize_run(
+                            run_id,
+                            ok=True,
+                            error=None,
+                            iterations=1,
+                            tool_calls=0,
+                            usage={"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
+                        )
+                    except Exception as e:
+                        log.warning("Run store finalize failed (ui control): %s", e)
+            finally:
+                if writer is not None:
+                    try:
+                        writer.close()
+                    except Exception as e:
+                        log.debug("Run writer close failed (ui control): %s", e)
+                try:
+                    await resp.write_eof()
+                except Exception as eof_err:
+                    log.debug("Failed to close chat stream cleanly: %s", eof_err)
+            return resp
 
         # Attach docs as plain text blocks.
         if isinstance(docs, list) and docs:
@@ -1094,10 +1652,13 @@ def create_app(config: AppConfig):
             "usage": None,
         }
 
+        chat_auto_failover = bool(getattr(cfg.failover, "chat_auto_failover", False))
+        failover_enabled_for_chat = bool(cfg.failover.enabled and chat_auto_failover)
+
         llm = LLMClient(
             model_cfg,
             fallback_configs=fallback_cfgs,
-            failover_enabled=cfg.failover.enabled,
+            failover_enabled=failover_enabled_for_chat,
             failover_cooldown_s=cfg.failover.cooldown_seconds,
             failover_on_auth_error=cfg.failover.fallback_on_auth_error,
         )
@@ -1130,6 +1691,27 @@ def create_app(config: AppConfig):
         async def _emit_guardrails_event(evt_type: str, payload_obj: Dict[str, Any]) -> None:
             await send({"type": "guardrails", "event": str(evt_type), "payload": payload_obj})
 
+        requested_runtime = {
+            "profile": str(model_cfg.name or profile or ""),
+            "provider": str(model_cfg.provider or ""),
+            "model": str(model_cfg.model or ""),
+            "base_url": str(model_cfg.base_url or ""),
+        }
+
+        await send(
+            {
+                "type": "model_runtime",
+                "runtime": {
+                    "requested": requested_runtime,
+                    "active": requested_runtime,
+                    "failover_enabled": bool(failover_enabled_for_chat),
+                    "failover_used": False,
+                    "attempts": [],
+                    "strict_primary_chat": bool(not failover_enabled_for_chat and cfg.failover.enabled),
+                },
+            }
+        )
+
         agent = AgentLoop(
             cfg,
             llm,
@@ -1141,30 +1723,60 @@ def create_app(config: AppConfig):
             run_id=run_id,
             session_id=sid,
             guardrails_event_cb=_emit_guardrails_event if guarded_runner is not None else None,
+            autonomy_level=int(getattr(session, "autonomy_level", 3) or 3),
         )
+
+        journal: Optional[TaskJournal] = None
 
         try:
             async for event in agent.run(prompt, mode=mode, tools_policy="auto"):
                 if event.type == EventType.AGENT_START:
+                    route_data = event.data.get("route", {})
                     await send(
                         {
                             "type": "route",
-                            "route": event.data.get("route", {}),
+                            "route": route_data,
                             "mode": event.data.get("mode", "auto"),
                             "tools_policy": event.data.get("tools_policy", "auto"),
+                            "autonomy_level": int(
+                                event.data.get("autonomy_level", getattr(session, "autonomy_level", 3)) or 3
+                            ),
+                            "autonomy_name": str(
+                                event.data.get("autonomy_name")
+                                or autonomy_level_name(getattr(session, "autonomy_level", 3))
+                            ),
                         }
                     )
+                    # Task journal: create file if this is a real task
+                    if should_create_journal(prompt, route_data, enabled=cfg.journal.enabled):
+                        try:
+                            journal = TaskJournal(
+                                journal_dir=cfg.journal.dir_path,
+                                run_id=run_id,
+                                prompt=prompt,
+                                route=route_data,
+                                model_info={"model": model_cfg.model, "provider": model_cfg.provider},
+                            )
+                        except Exception as je:
+                            log.debug("Failed to init task journal: %s", je)
                 elif event.type == EventType.TEXT_DELTA:
                     await send({"type": "text", "text": event.data.get("text", "")})
                 elif event.type == EventType.AGENT_ITERATION:
+                    iter_num = int(event.data.get("iteration", event.iteration))
+                    iter_tokens = int(event.data.get("token_estimate", 0))
                     await send(
                         {
                             "type": "iteration",
-                            "iteration": int(event.data.get("iteration", event.iteration)),
-                            "token_estimate": int(event.data.get("token_estimate", 0)),
+                            "iteration": iter_num,
+                            "token_estimate": iter_tokens,
                             "context_window": int(event.data.get("context_window", 0)),
                         }
                     )
+                    if journal is not None:
+                        try:
+                            journal.log_iteration(iter_num, iter_tokens)
+                        except Exception:
+                            pass
                 elif event.type == EventType.TOOL_CALL_START:
                     await send(
                         {
@@ -1182,21 +1794,34 @@ def create_app(config: AppConfig):
                         }
                     )
                 elif event.type == EventType.TOOL_RESULT:
+                    tool_ok = bool(event.data.get("ok", False))
+                    tool_ms = float(event.data.get("duration_ms", 0.0))
+                    tool_name = event.data.get("tool_name", "")
                     await send(
                         {
                             "type": "tool_result",
                             "id": event.data.get("tool_id", ""),
-                            "name": event.data.get("tool_name", ""),
-                            "ok": bool(event.data.get("ok", False)),
-                            "ms": float(event.data.get("duration_ms", 0.0)),
+                            "name": tool_name,
+                            "ok": tool_ok,
+                            "ms": tool_ms,
                             "result": event.data.get("result", ""),
                         }
                     )
+                    if journal is not None:
+                        try:
+                            journal.log_tool_result(tool_name, tool_ok, tool_ms)
+                        except Exception:
+                            pass
                 elif event.type == EventType.AGENT_ERROR:
                     err = str(event.data.get("error", "unknown error"))
                     run_done["ok"] = False
                     run_done["error"] = err
                     await send({"type": "error", "error": err})
+                    if journal is not None:
+                        try:
+                            journal.finalize(ok=False, iterations=0, tool_calls=0, error=err)
+                        except Exception:
+                            pass
                 elif event.type == EventType.AGENT_DONE:
                     usage_obj: Dict[str, Any] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
                     usage = event.data.get("usage")
@@ -1219,19 +1844,79 @@ def create_app(config: AppConfig):
                     if not isinstance(token_report, dict):
                         token_report = {}
 
+                    runtime_trace_fn = getattr(llm, "runtime_trace", None)
+                    if callable(runtime_trace_fn):
+                        try:
+                            runtime_model = runtime_trace_fn()
+                        except Exception:
+                            runtime_model = {
+                                "requested": requested_runtime,
+                                "active": {
+                                    "profile": str(getattr(llm.config, "name", "") or ""),
+                                    "provider": str(getattr(llm.config, "provider", "") or ""),
+                                    "model": str(getattr(llm.config, "model", "") or ""),
+                                    "base_url": str(getattr(llm.config, "base_url", "") or ""),
+                                },
+                                "failover_enabled": bool(failover_enabled_for_chat),
+                                "failover_used": False,
+                                "attempts": [],
+                            }
+                    else:
+                        runtime_model = {
+                            "requested": requested_runtime,
+                            "active": {
+                                "profile": str(getattr(llm.config, "name", "") or ""),
+                                "provider": str(getattr(llm.config, "provider", "") or ""),
+                                "model": str(getattr(llm.config, "model", "") or ""),
+                                "base_url": str(getattr(llm.config, "base_url", "") or ""),
+                            },
+                            "failover_enabled": bool(failover_enabled_for_chat),
+                            "failover_used": False,
+                            "attempts": [],
+                        }
+                    if not isinstance(runtime_model, dict):
+                        runtime_model = {
+                            "requested": requested_runtime,
+                            "active": requested_runtime,
+                            "failover_enabled": bool(failover_enabled_for_chat),
+                            "failover_used": False,
+                            "attempts": [],
+                        }
+                    runtime_model["strict_primary_chat"] = bool(
+                        not bool(runtime_model.get("failover_enabled")) and cfg.failover.enabled
+                    )
+
+                    done_iterations = int(event.data.get("iterations", 1))
+                    done_tool_calls = int(event.data.get("tool_calls", 0))
+                    done_total_tokens = int(usage_obj.get("total_tokens", 0))
+
                     run_done["ok"] = True
                     run_done["error"] = None
-                    run_done["iterations"] = int(event.data.get("iterations", 1))
-                    run_done["tool_calls"] = int(event.data.get("tool_calls", 0))
+                    run_done["iterations"] = done_iterations
+                    run_done["tool_calls"] = done_tool_calls
                     run_done["usage"] = usage_obj
+
+                    if journal is not None:
+                        try:
+                            journal.finalize(
+                                ok=True,
+                                iterations=done_iterations,
+                                tool_calls=done_tool_calls,
+                                total_tokens=done_total_tokens,
+                            )
+                        except Exception:
+                            pass
+
+                    await send({"type": "model_runtime", "runtime": runtime_model})
 
                     await send(
                         {
                             "type": "done",
-                            "iterations": int(event.data.get("iterations", 1)),
-                            "tool_calls": int(event.data.get("tool_calls", 0)),
+                            "iterations": done_iterations,
+                            "tool_calls": done_tool_calls,
                             "usage": usage_obj,
                             "token_report": token_report,
+                            "runtime_model": runtime_model,
                             "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
                         }
                     )
@@ -1243,6 +1928,17 @@ def create_app(config: AppConfig):
             except Exception as send_err:
                 log.debug("Failed to stream chat error payload: %s", send_err)
         finally:
+            # Safety-finalize journal if it wasn't already finalized
+            if journal is not None:
+                try:
+                    journal.finalize(
+                        ok=bool(run_done.get("ok")),
+                        iterations=int(run_done.get("iterations") or 0),
+                        tool_calls=int(run_done.get("tool_calls") or 0),
+                        error=run_done.get("error"),
+                    )
+                except Exception:
+                    pass
             await llm.close()
             if run_store_enabled:
                 try:
@@ -1280,7 +1976,7 @@ def create_app(config: AppConfig):
     # ── Codex (ChatGPT OAuth) endpoints ─────────────────────
 
     async def api_codex_status(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         try:
             from thomas.codex.bridge import CodexBridge
             bridge: CodexBridge = app.get(APP_CODEX_BRIDGE)  # type: ignore
@@ -1299,7 +1995,7 @@ def create_app(config: AppConfig):
             return web.json_response({"logged_in": False, "error": str(e)})
 
     async def api_codex_login(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         try:
             from thomas.codex.bridge import CodexBridge
             bridge: CodexBridge = app.get(APP_CODEX_BRIDGE)  # type: ignore
@@ -1322,7 +2018,7 @@ def create_app(config: AppConfig):
             return web.json_response({"ok": False, "error": str(e)}, status=500)
 
     async def api_codex_logout(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         try:
             bridge = app.get(APP_CODEX_BRIDGE)
             if bridge is not None:
@@ -1332,7 +2028,7 @@ def create_app(config: AppConfig):
             return web.json_response({"ok": False, "error": str(e)}, status=500)
 
     async def api_codex_models(request: web.Request) -> web.Response:
-        _require_loopback(request)
+        _require_api_access(request)
         try:
             from thomas.codex.bridge import CodexBridge
             bridge: CodexBridge = app.get(APP_CODEX_BRIDGE)  # type: ignore
@@ -1367,8 +2063,12 @@ def create_app(config: AppConfig):
     app.router.add_get("/api/models", api_models)
     app.router.add_get("/api/models/{profile}/ids", api_profile_models)
     app.router.add_get("/api/models/{profile}/handshake", api_profile_handshake)
+    app.router.add_get("/api/models/{profile}/validate", api_profile_validate)
     app.router.add_get("/api/version", api_version)
     app.router.add_get("/api/tools", api_tools)
+    app.router.add_get("/api/chats", api_chats)
+    app.router.add_put("/api/chats/{chat_id}", api_chat_put)
+    app.router.add_delete("/api/chats/{chat_id}", api_chat_delete)
     app.router.add_get("/api/memory", api_memory)
     app.router.add_post("/api/memory/pins", api_memory_pin_set)
     app.router.add_delete("/api/memory/pins/{key}", api_memory_pin_clear)

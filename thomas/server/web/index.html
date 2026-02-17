@@ -102,10 +102,19 @@
               <button class="segmented-btn tooltip tooltip-below" data-mode="thinking" data-tooltip="Extended reasoning, slower but thorough">think</button>
               <button class="segmented-btn tooltip tooltip-below" data-mode="swarm" data-tooltip="Multi-agent swarm with live board">swarm</button>
             </div>
+            <div class="segmented" id="autonomyToggle">
+              <button class="segmented-btn tooltip tooltip-below" data-autonomy-level="1" data-tooltip="Manual Review: asks before each action">L1 manual</button>
+              <button class="segmented-btn tooltip tooltip-below" data-autonomy-level="2" data-tooltip="Guarded Assist: safe/approved tasks first">L2 guarded</button>
+              <button class="segmented-btn active tooltip tooltip-below" data-autonomy-level="3" data-tooltip="Tool-Bounded Auto: autonomous until blocked">L3 auto</button>
+              <button class="segmented-btn tooltip tooltip-below" data-autonomy-level="4" data-tooltip="Full Auto: self-unblocks and proceeds">L4 full</button>
+            </div>
             <div class="status-chip connected" id="statusChip">
               <span class="status-dot"></span>
               <span id="statusText">ready</span>
             </div>
+            <button class="jobs-indicator" id="jobsBtn" type="button" aria-label="Open jobs panel">
+              <span id="jobsBtnText">jobs 0</span>
+            </button>
             <button class="btn-icon" id="inspectorToggle" type="button"
               aria-label="Toggle inspector panel"></button>
           </div>

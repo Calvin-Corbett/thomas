@@ -5,25 +5,286 @@
    autoscroll, tool call display.
    ============================================================ */
 
-import { getState, subscribe, getActiveChat, addMessage, updateChat, setState, startRun, addRunStep, updateRun, endRun, createChat } from './store.js';
-import { saveChat } from './db.js';
-import { streamChat, createSession, importSession } from './api.js';
+import { getState, subscribe, getActiveChat, addMessage, updateChat, setState, createChat } from './store.js';
+import { saveChat, saveSetting } from './db.js';
+import { streamChat, createSession, importSession, forkSession } from './api.js';
 import { setComposerText, focusComposer } from './composer.js';
-import { el, icon, escapeHtml, formatDuration, truncate, formatNumber } from './utils.js';
+import { el, icon, escapeHtml, formatDuration, truncate, formatNumber, applyTheme } from './utils.js';
 import { createButton, createModal, showToast } from './components.js';
 import { ingestSwarmEvent, isSwarmEvent, openSwarmInspector } from './swarm.js';
 
 let _messagesEl = null;
 let _messagesInnerEl = null;
 let _userScrolledUp = false;
-let _currentStreamEl = null;
-let _currentStreamText = '';
 let _selectionBarEl = null;
 let _activeUtterance = null;
 let _speakingMsgId = null;
 let _ttsQueue = [];
 let _ttsSeq = 0;
 let _swarmOpened = false;
+let _jobs = new Map();
+let _pendingStarts = [];
+let _startLoopRunning = false;
+let _statusBaseText = 'ready';
+let _statusOk = true;
+
+const MAX_CONCURRENT_RUNS = 4;
+const LOADING_PHRASES = [
+  'Untangling wires...',
+  'Reading the room...',
+  'Warming up tools...',
+  'Sharpening context...',
+  'Spinning up tiny robots...',
+  'Connecting dots...',
+  'Tracing the problem...',
+  'Drafting a plan...',
+  'Cooking a clean answer...',
+];
+let _workingTicker = null;
+
+function resolvedIsDarkTheme(theme) {
+  const t = String(theme || '').toLowerCase();
+  if (t === 'dark') return true;
+  if (t === 'light') return false;
+  return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+}
+
+function normalizeAutonomyLevel(raw) {
+  const n = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(n)) return 3;
+  if (n < 1) return 1;
+  if (n > 4) return 4;
+  return n;
+}
+
+function applyUiStatePatch(patch) {
+  if (!patch || typeof patch !== 'object' || Array.isArray(patch)) return;
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'activeProfile')) {
+    const profile = String(patch.activeProfile || '').trim();
+    if (profile) setState('activeProfile', profile);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'activeModelId')) {
+    const modelId = String(patch.activeModelId || '').trim();
+    setState('activeModelId', modelId);
+  }
+
+  if (Object.prototype.hasOwnProperty.call(patch, 'mode')) {
+    const mode = String(patch.mode || '').trim().toLowerCase();
+    if (mode === 'auto' || mode === 'fast' || mode === 'thinking' || mode === 'swarm') {
+      setState('mode', mode);
+    }
+  }
+
+  const settingsPatch = patch.settings;
+  if (settingsPatch && typeof settingsPatch === 'object' && !Array.isArray(settingsPatch)) {
+    const normalizedSettingsPatch = { ...settingsPatch };
+    if (Object.prototype.hasOwnProperty.call(normalizedSettingsPatch, 'autonomyLevel')) {
+      normalizedSettingsPatch.autonomyLevel = normalizeAutonomyLevel(normalizedSettingsPatch.autonomyLevel);
+    }
+
+    setState('settings', normalizedSettingsPatch);
+    for (const [key, value] of Object.entries(normalizedSettingsPatch)) {
+      void saveSetting(String(key || ''), value);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(normalizedSettingsPatch, 'theme')) {
+      const nextTheme = String(normalizedSettingsPatch.theme || 'system').trim() || 'system';
+      applyTheme(nextTheme);
+      updateCodeTheme(resolvedIsDarkTheme(nextTheme));
+    }
+
+    if (Object.prototype.hasOwnProperty.call(normalizedSettingsPatch, 'showInspector')) {
+      const nextInspector = !!normalizedSettingsPatch.showInspector;
+      document.getElementById('app')?.classList.toggle('inspector-open', nextInspector);
+    }
+  }
+}
+
+function _isAssistantWorkingMessage(msg) {
+  return !!msg && msg.role === 'assistant' && msg.status === 'streaming';
+}
+
+function _loadingPhraseFor(msg) {
+  const seed = Number(msg?.meta?.startedAt || msg?.createdAt || 0);
+  const tick = Math.floor(Date.now() / 2200);
+  const idx = Math.abs(seed + tick) % LOADING_PHRASES.length;
+  return LOADING_PHRASES[idx];
+}
+
+function _refreshWorkingPhraseEls() {
+  if (!_messagesInnerEl) return;
+  const els = _messagesInnerEl.querySelectorAll('.working-phrase');
+  for (const node of els) {
+    const mid = String(node.getAttribute('data-message-id') || '');
+    if (!mid) continue;
+    const chat = getActiveChat();
+    const msg = chat?.messages?.find((m) => m.id === mid);
+    if (!_isAssistantWorkingMessage(msg)) continue;
+    node.textContent = _loadingPhraseFor(msg);
+  }
+}
+
+function _cloneRunView(run) {
+  if (!run || typeof run !== 'object') return null;
+  return {
+    ...run,
+    steps: Array.isArray(run.steps) ? run.steps.map((s) => ({ ...s })) : [],
+    usage: run.usage ? { ...run.usage } : null,
+    tokenReport: run.tokenReport ? { ...run.tokenReport } : null,
+  };
+}
+
+function _isJobActive(job) {
+  return !!job && (job.status === 'starting' || job.status === 'running');
+}
+
+function _jobUpdatedAt(job) {
+  return Number(job?.updatedAt || job?.lastEventAt || job?.startedAt || job?.queuedAt || 0);
+}
+
+function _publishActiveRunForActiveChat() {
+  const activeChatId = getState().activeChatId || null;
+  if (!activeChatId) {
+    setState('activeRun', null);
+    return;
+  }
+  const candidates = Array.from(_jobs.values()).filter((j) => j.chatId === activeChatId && j.runView);
+  if (candidates.length === 0) {
+    setState('activeRun', null);
+    return;
+  }
+  candidates.sort((a, b) => {
+    const ar = _isJobActive(a) ? 1 : 0;
+    const br = _isJobActive(b) ? 1 : 0;
+    if (ar !== br) return br - ar;
+    return _jobUpdatedAt(b) - _jobUpdatedAt(a);
+  });
+  setState('activeRun', _cloneRunView(candidates[0].runView));
+}
+
+function _publishJobsState() {
+  const jobs = Array.from(_jobs.values()).sort((a, b) => _jobUpdatedAt(b) - _jobUpdatedAt(a));
+  const summaries = jobs.map((j) => ({
+    id: j.id,
+    chatId: j.chatId,
+    status: j.status,
+    queuedAt: j.queuedAt || 0,
+    startedAt: j.startedAt || 0,
+    endedAt: j.endedAt || 0,
+    updatedAt: _jobUpdatedAt(j),
+    profile: j.profile || '',
+    modelId: j.modelId || '',
+    mode: j.mode || '',
+    preview: j.preview || '',
+    runId: j.runId || '',
+    messageId: j.messageId || '',
+    error: j.error || null,
+    toolCalls: Number(j.toolCalls || 0),
+    usage: j.usage || null,
+    forked: !!j.forked,
+    runView: j.runView ? _cloneRunView(j.runView) : null,
+  }));
+  setState('jobs', summaries);
+
+  const activeChatId = getState().activeChatId || null;
+  const running = jobs.filter((j) => _isJobActive(j));
+  const activeRunning = running.filter((j) => j.chatId === activeChatId);
+  const newestActive = activeRunning.sort((a, b) => _jobUpdatedAt(b) - _jobUpdatedAt(a))[0] || null;
+
+  setState('ui', {
+    queuedMessages: _pendingStarts.length,
+    queuedForActiveChat: _pendingStarts.filter((j) => j.chatId === activeChatId).length,
+    concurrentRuns: running.length,
+    activeChatRuns: activeRunning.length,
+    streaming: activeRunning.length > 0,
+    abortController: newestActive?.abortController || null,
+  });
+
+  _publishActiveRunForActiveChat();
+}
+
+function _countActiveJobs() {
+  let n = 0;
+  for (const j of _jobs.values()) {
+    if (_isJobActive(j)) n += 1;
+  }
+  return n;
+}
+
+function _setJob(jobId, patch) {
+  const cur = _jobs.get(jobId);
+  if (!cur) return null;
+  const next = {
+    ...cur,
+    ...patch,
+    updatedAt: Date.now(),
+  };
+  _jobs.set(jobId, next);
+  _publishJobsState();
+  return next;
+}
+
+function _createJob(item) {
+  const job = {
+    id: `job_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    chatId: item.chatId,
+    profile: item.runProfile,
+    modelId: item.runModelId || '',
+    mode: item.runMode || 'auto',
+    preview: String(item.text || '').slice(0, 200),
+    status: 'queued',
+    queuedAt: Date.now(),
+    startedAt: 0,
+    endedAt: 0,
+    updatedAt: Date.now(),
+    runId: '',
+    messageId: '',
+    userMessageId: '',
+    error: null,
+    toolCalls: 0,
+    usage: null,
+    abortController: null,
+    forked: false,
+    runView: null,
+  };
+  _jobs.set(job.id, job);
+  _publishJobsState();
+  return job;
+}
+
+function _maybeTrimJobs() {
+  const MAX_JOBS = 120;
+  if (_jobs.size <= MAX_JOBS) return;
+  const finished = Array.from(_jobs.values())
+    .filter((j) => !_isJobActive(j) && j.status !== 'queued')
+    .sort((a, b) => _jobUpdatedAt(a) - _jobUpdatedAt(b));
+  while (_jobs.size > MAX_JOBS && finished.length > 0) {
+    const drop = finished.shift();
+    if (!drop) break;
+    _jobs.delete(drop.id);
+  }
+  _publishJobsState();
+}
+
+async function _pumpPendingStarts() {
+  if (_startLoopRunning) return;
+  _startLoopRunning = true;
+  try {
+    while (_pendingStarts.length > 0 && _countActiveJobs() < MAX_CONCURRENT_RUNS) {
+      const item = _pendingStarts.shift();
+      _publishJobsState();
+      if (!item) continue;
+      void _runQueuedMessage(item).catch((e) => {
+        showToast(`Background run failed: ${e?.message || String(e)}`, 'error');
+      });
+    }
+  } finally {
+    _startLoopRunning = false;
+    _publishJobsState();
+  }
+}
 
 export function initChat() {
   _messagesEl = document.getElementById('chatMessages');
@@ -37,17 +298,30 @@ export function initChat() {
     });
   }
 
-  subscribe('activeChatId', renderMessages);
+  subscribe('activeChatId', () => {
+    renderMessages();
+    _publishJobsState();
+  });
   subscribe('chats', () => {
     if (!getState().ui.streaming) renderMessages();
   });
   subscribe('ui', () => {
     renderSelectionBar();
+    renderStatus();
     if (!getState().ui.streaming) renderMessages();
   });
 
   renderSelectionBar();
   renderMessages();
+  _publishJobsState();
+  renderStatus();
+
+  if (!_workingTicker) {
+    _workingTicker = setInterval(() => {
+      if (!getState().ui.streaming) return;
+      _refreshWorkingPhraseEls();
+    }, 2200);
+  }
 }
 
 function scrollToBottom(force = false) {
@@ -395,12 +669,17 @@ function openMessageInfo(msg) {
     const profile = meta.profile || '';
     const modelId = meta.modelId || '(profile default)';
     const mode = meta.mode || '';
+    const runtimeModel = (meta.runtimeModel && typeof meta.runtimeModel === 'object') ? meta.runtimeModel : null;
+    const runtimeActive = (runtimeModel && typeof runtimeModel.active === 'object') ? runtimeModel.active : null;
     const elapsed = meta.elapsedMs ? formatDuration(meta.elapsedMs) : '';
     const toolCalls = typeof meta.toolCalls === 'number' ? meta.toolCalls : null;
 
     const lines = [];
     if (profile) lines.push(`Profile: ${profile}`);
     if (modelId) lines.push(`Model: ${modelId}`);
+    if (runtimeActive?.model && runtimeActive.model !== modelId) {
+      lines.push(`Runtime model: ${runtimeActive.model}`);
+    }
     if (mode) lines.push(`Mode: ${mode}`);
     if (elapsed) lines.push(`Elapsed: ${elapsed}`);
     if (toolCalls !== null) lines.push(`Tools: ${toolCalls}`);
@@ -492,6 +771,7 @@ export function renderMessages() {
   for (const msg of chat.messages) {
     _messagesInnerEl.appendChild(renderMessage(msg));
   }
+  _refreshWorkingPhraseEls();
   scrollToBottom(true);
 }
 
@@ -552,6 +832,53 @@ function renderEmptyState() {
   return c;
 }
 
+function renderWorkingPanel(msg) {
+  if (!_isAssistantWorkingMessage(msg)) return null;
+
+  const meta = msg.meta || {};
+  const expanded = !!meta.progressExpanded;
+  const lines = Array.isArray(meta.liveProgress) ? meta.liveProgress : [];
+  const liveStatus = typeof meta.liveStatus === 'string' && meta.liveStatus.trim()
+    ? meta.liveStatus.trim()
+    : (lines.length > 0 ? String(lines[lines.length - 1]) : '');
+
+  const wrap = el('div', { className: `working-wrap${expanded ? ' expanded' : ''}` });
+
+  const summary = el('button', {
+    className: 'working-summary',
+    type: 'button',
+    'aria-expanded': expanded ? 'true' : 'false',
+  });
+  summary.appendChild(el('span', { className: 'working-chevron' }, expanded ? '\u25BE' : '\u25B8'));
+  summary.appendChild(el('span', { className: 'working-spinner', 'aria-hidden': 'true' }, ''));
+  summary.appendChild(el('span', { className: 'working-label' }, 'Working...'));
+  summary.appendChild(el('span', { className: 'working-phrase', 'data-message-id': msg.id }, _loadingPhraseFor(msg)));
+  summary.appendChild(el('span', { className: 'working-stage', title: liveStatus }, liveStatus ? truncate(liveStatus, 72) : ''));
+
+  const toolCount = Array.isArray(msg.toolCalls) ? msg.toolCalls.length : 0;
+  summary.appendChild(el('span', { className: 'working-tools' }, toolCount > 0 ? `${toolCount} tools` : ''));
+
+  summary.addEventListener('click', () => {
+    msg.meta = { ...(msg.meta || {}), progressExpanded: !expanded };
+    renderMessages();
+  });
+  wrap.appendChild(summary);
+
+  const details = el('div', { className: 'working-details' });
+  if (lines.length > 0) {
+    const ul = el('ul', { className: 'working-steps' });
+    for (const line of lines) {
+      ul.appendChild(el('li', {}, String(line)));
+    }
+    details.appendChild(ul);
+  } else {
+    details.appendChild(el('div', { className: 'working-empty' }, 'No details yet.'));
+  }
+  wrap.appendChild(details);
+
+  return wrap;
+}
+
 function renderMessage(msg) {
   const container = el('div', { className: 'message', dataset: { messageId: msg.id }, id: `msg-${msg.id}` });
 
@@ -600,7 +927,11 @@ function renderMessage(msg) {
   }
   body.appendChild(contentEl);
 
-  if (msg.toolCalls && msg.toolCalls.length > 0) {
+  const workingPanel = renderWorkingPanel(msg);
+  if (workingPanel) body.appendChild(workingPanel);
+
+  const showTools = !workingPanel || !!msg?.meta?.progressExpanded;
+  if (showTools && msg.toolCalls && msg.toolCalls.length > 0) {
     const section = renderToolCallsSection(msg);
     if (section) body.appendChild(section);
   }
@@ -749,7 +1080,7 @@ function renderToolCallsSection(msg, { force = false } = {}) {
   if (!force && toolCalls.length === 0) return null;
 
   const wrap = el('div', { className: 'tool-call-wrap' });
-  if (getState().settings.showToolDetails) wrap.classList.add('expanded');
+  if (getState().settings.showToolDetails || !!msg?.meta?.progressExpanded) wrap.classList.add('expanded');
 
   const summary = el('div', { className: 'tool-call-summary' });
   summary.appendChild(el('span', { className: 'tool-call-summary-icon' }, '\u2699'));
@@ -868,40 +1199,123 @@ function renderToolCall(tc) {
 
 /* ---- Streaming ---- */
 
-export async function sendMessage(text, docs = [], images = []) {
+export function sendMessage(text, docs = [], images = []) {
   const state = getState();
   const chat = getActiveChat();
   if (!chat) return;
+
+  const runProfile = state.activeProfile || state.models.defaultProfile || 'local';
+  const runModelId = state.activeModelId || null;
+  const runMode = state.mode;
+
+  const item = {
+    chatId: chat.id,
+    text,
+    docs: Array.isArray(docs) ? docs.map(d => ({ name: d.name, text: d.text })) : [],
+    images: Array.isArray(images) ? images.map(img => ({ name: img.name, dataUrl: img.dataUrl })) : [],
+    runProfile,
+    runModelId,
+    runMode,
+    runAutonomyLevel: normalizeAutonomyLevel(getState().settings?.autonomyLevel),
+    queuedAt: Date.now(),
+  };
+  const job = _createJob(item);
+  item.jobId = job.id;
+  _pendingStarts.push(item);
+  _publishJobsState();
+
+  if (getState().ui.streaming || getState().ui.concurrentRuns > 0) {
+    showToast('Started background run', 'info');
+  }
+
+  void _pumpPendingStarts();
+}
+
+async function _runQueuedMessage(item) {
+  const jobId = String(item?.jobId || '');
+  if (!jobId || !_jobs.has(jobId)) return;
+  _setJob(jobId, { status: 'starting', startedAt: Date.now(), error: null });
+
+  const chat = getState().chats.get(item?.chatId || '');
+  if (!chat) {
+    _setJob(jobId, { status: 'error', error: 'Chat not found', endedAt: Date.now(), abortController: null });
+    _maybeTrimJobs();
+    void _pumpPendingStarts();
+    return;
+  }
+
+  const text = String(item?.text || '');
+  const docs = Array.isArray(item?.docs) ? item.docs : [];
+  const images = Array.isArray(item?.images) ? item.images : [];
+  const runProfile = item?.runProfile || getState().activeProfile || getState().models.defaultProfile || 'local';
+  const runModelId = item?.runModelId || null;
+  const runMode = item?.runMode || getState().mode;
+  const runAutonomyLevel = normalizeAutonomyLevel(
+    item?.runAutonomyLevel ?? getState().settings?.autonomyLevel ?? 3,
+  );
+  const isActiveChat = () => getState().activeChatId === chat.id;
   _swarmOpened = false;
+
+  const setActiveStatus = (textVal, okVal) => {
+    if (isActiveChat()) setStatus(textVal, okVal);
+  };
 
   if (!chat.sessionId) {
     try {
       const session = await createSession();
       updateChat(chat.id, { sessionId: session.session_id });
+      saveChat(getState().chats.get(chat.id));
     } catch (e) {
       showToast('Failed to create session: ' + e.message, 'error');
+      _setJob(jobId, { status: 'error', error: String(e?.message || e), endedAt: Date.now(), abortController: null });
+      _maybeTrimJobs();
+      void _pumpPendingStarts();
       return;
+    }
+  }
+
+  let runSessionId = String(getState().chats.get(chat.id)?.sessionId || '');
+  const hasSiblingRun = Array.from(_jobs.values()).some((j) => j.id !== jobId && j.chatId === chat.id && _isJobActive(j));
+  let forked = false;
+  if (hasSiblingRun && runSessionId) {
+    try {
+      const fork = await forkSession(runSessionId);
+      if (fork?.session_id) {
+        runSessionId = String(fork.session_id);
+        forked = true;
+      }
+    } catch {
+      try {
+        const fresh = await createSession();
+        runSessionId = String(fresh.session_id || runSessionId);
+        forked = true;
+      } catch {
+        // Keep base session as last resort.
+      }
     }
   }
 
   // New user input should interrupt any ongoing speech.
   stopSpeaking();
 
-  addMessage(chat.id, { role: 'user', content: text });
+  const userMsgId = `${jobId}_u`;
+  const asstMsgId = `${jobId}_a`;
+
+  addMessage(chat.id, { id: userMsgId, role: 'user', content: text });
   saveChat(getState().chats.get(chat.id));
-  renderMessages();
-  scrollToBottom(true);
+  if (isActiveChat()) {
+    renderMessages();
+    scrollToBottom(true);
+  }
 
   const abortController = new AbortController();
-  setState('ui', { streaming: true, abortController });
-
-  const asstMsgId = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
-  _currentStreamText = '';
-  _currentStreamEl = null;
-
-  const runProfile = state.activeProfile || state.models.defaultProfile || 'local';
-  const runModelId = state.activeModelId || null;
-  const runMode = state.mode;
+  _setJob(jobId, {
+    status: 'running',
+    abortController,
+    forked,
+    userMessageId: userMsgId,
+    messageId: asstMsgId,
+  });
 
   addMessage(chat.id, {
     id: asstMsgId,
@@ -913,43 +1327,188 @@ export async function sendMessage(text, docs = [], images = []) {
       profile: runProfile,
       modelId: runModelId,
       mode: runMode,
+      autonomyLevel: runAutonomyLevel,
       startedAt: Date.now(),
       usage: null,
       elapsedMs: 0,
     },
   });
-  const run = startRun();
-  updateRun({
+  const runView = {
+    id: jobId,
+    status: 'thinking',
+    steps: [],
+    startedAt: Date.now(),
+    tokenEstimate: 0,
+    contextWindow: 0,
+    tokenReport: null,
+    error: null,
     profile: runProfile,
     modelId: runModelId,
     mode: runMode,
-  });
+    autonomyLevel: runAutonomyLevel,
+    usage: null,
+    elapsedMs: 0,
+  };
+
+  const commitRunView = () => {
+    _setJob(jobId, {
+      runView: _cloneRunView(runView),
+      toolCalls: Number(runView.toolCalls || 0),
+      usage: runView.usage || null,
+      error: runView.error || null,
+    });
+  };
+
+  const pushRunStep = (step) => {
+    runView.steps.push({ timestamp: Date.now(), ...step });
+    if (runView.steps.length > 300) runView.steps.shift();
+    commitRunView();
+  };
 
   const updatedChat = getState().chats.get(chat.id);
   const payload = {
-    session_id: updatedChat.sessionId,
+    session_id: runSessionId || updatedChat.sessionId,
     profile: runProfile,
     model_id: runModelId,
     mode: runMode,
+    autonomy_level: runAutonomyLevel,
     text,
     docs: docs.map(d => ({ name: d.name, text: d.text })),
     images: images.map(img => ({ name: img.name, data_url: img.dataUrl })),
   };
 
-  renderMessages();
-  const lastMsgEl = _messagesInnerEl?.querySelector('.message:last-child .message-content');
-  if (lastMsgEl) {
-    _currentStreamEl = lastMsgEl;
-    lastMsgEl.classList.add('streaming-cursor');
+  let currentStreamText = '';
+  let currentStreamEl = null;
+  const streamSelector = `#msg-${asstMsgId} .message-content`;
+
+  function resolveStreamEl() {
+    if (!isActiveChat()) return null;
+    if (!_messagesInnerEl) return null;
+    const found = _messagesInnerEl.querySelector(streamSelector);
+    if (!found) return null;
+    if (currentStreamEl && currentStreamEl !== found) {
+      currentStreamEl.classList.remove('streaming-cursor');
+    }
+    currentStreamEl = found;
+    currentStreamEl.classList.add('streaming-cursor');
+    return currentStreamEl;
   }
 
-  setStatus('thinking', true);
+  if (isActiveChat()) {
+    renderMessages();
+    resolveStreamEl();
+  }
+
+  const progressState = {
+    hadText: false,
+    lines: [],
+  };
+
+  const ensureAssistantFinalText = (asstMsg, status, errorText = null) => {
+    if (!asstMsg || typeof asstMsg !== 'object') return false;
+    const existing = typeof asstMsg.content === 'string' ? asstMsg.content.trim() : '';
+    if (existing) return false;
+
+    const tools = Array.isArray(asstMsg.toolCalls) ? asstMsg.toolCalls.length : 0;
+    const lastStep = progressState.lines.length > 0
+      ? String(progressState.lines[progressState.lines.length - 1] || '').trim()
+      : '';
+    const safeLastStep = lastStep && !/^analyzing request$/i.test(lastStep) ? lastStep : '';
+
+    let fallback = '';
+    if (status === 'done') {
+      fallback = tools > 0
+        ? `Completed. I ran ${tools} tool${tools === 1 ? '' : 's'}.`
+        : 'Completed.';
+      if (safeLastStep) fallback += ` Last step: ${safeLastStep}.`;
+    } else if (status === 'error') {
+      const err = String(errorText || '').trim();
+      fallback = err
+        ? `I hit an error before returning a final answer: ${err}`
+        : 'I hit an error before returning a final answer.';
+    } else if (status === 'stopped') {
+      fallback = 'Stopped before completion.';
+    } else {
+      fallback = 'Run finished without a final response from the model.';
+    }
+
+    asstMsg.content = fallback;
+    return true;
+  };
+
+  const pushProgress = (label) => {
+    if (!label) return;
+    const line = String(label).trim();
+    if (!line) return;
+    const prev = progressState.lines[progressState.lines.length - 1];
+    if (prev === line) return;
+    progressState.lines.push(line);
+    if (progressState.lines.length > 12) progressState.lines.shift();
+
+    const currentChat = getState().chats.get(chat.id);
+    const asstMsg = currentChat?.messages?.find(m => m.id === asstMsgId);
+    if (asstMsg) {
+      asstMsg.meta = {
+        ...(asstMsg.meta || {}),
+        liveProgress: progressState.lines.slice(),
+        liveStatus: line,
+      };
+      if (!progressState.hadText) {
+        asstMsg.content = '';
+      }
+    }
+    if (isActiveChat()) {
+      if (!progressState.hadText) {
+        const el = resolveStreamEl();
+        if (el) {
+          el.innerHTML = '';
+          el.classList.add('streaming-cursor');
+        }
+      }
+      const shell = _messagesInnerEl?.querySelector(`#msg-${asstMsgId} .working-wrap`);
+      if (shell) {
+        const details = shell.querySelector('.working-details');
+        if (details) {
+          const expanded = !!(asstMsg?.meta?.progressExpanded);
+          if (expanded) {
+            details.innerHTML = '';
+            const ul = el('ul', { className: 'working-steps' });
+            for (const stepText of progressState.lines) {
+              ul.appendChild(el('li', {}, String(stepText)));
+            }
+            details.appendChild(ul);
+          }
+        }
+        const toolsEl = shell.querySelector('.working-tools');
+        if (toolsEl) {
+          const n = Array.isArray(asstMsg?.toolCalls) ? asstMsg.toolCalls.length : 0;
+          toolsEl.textContent = n > 0 ? `${n} tools` : '';
+        }
+        const stageEl = shell.querySelector('.working-stage');
+        if (stageEl) {
+          stageEl.textContent = truncate(line, 72);
+          stageEl.title = line;
+        }
+      }
+    }
+  };
+
+  commitRunView();
+  setActiveStatus('thinking', true);
+  pushProgress('analyzing request');
+
+  let finalStatus = 'error';
+  let finalError = null;
+  let assistantDoneEventEmitted = false;
 
   try {
     const onEvent = (event) => {
       const currentChat = getState().chats.get(chat.id);
       if (!currentChat) return;
       const asstMsg = currentChat.messages.find(m => m.id === asstMsgId);
+      if (event?.run_id) {
+        _setJob(jobId, { runId: String(event.run_id || '') });
+      }
 
       if (isSwarmEvent(event)) {
         ingestSwarmEvent(event);
@@ -960,8 +1519,10 @@ export async function sendMessage(text, docs = [], images = []) {
       }
 
       if (event.type === 'swarm_start') {
-        updateRun({ status: 'swarm' });
-        setStatus('swarm', true);
+        runView.status = 'swarm';
+        commitRunView();
+        pushProgress('starting swarm agents');
+        setActiveStatus('swarm', true);
         return;
       } else if (event.type === 'task_update' || event.type === 'agent_text' || event.type === 'agent_tool_start' || event.type === 'agent_tool_result') {
         // Swarm detail events are handled by the Swarm Board.
@@ -975,8 +1536,9 @@ export async function sendMessage(text, docs = [], images = []) {
         if (asstMsg) {
           asstMsg.content = finalText;
           asstMsg.status = ok ? 'complete' : 'error';
-          if (_currentStreamEl) {
-            _currentStreamEl.innerHTML = renderMarkdown(finalText);
+          const el = resolveStreamEl();
+          if (el) {
+            el.innerHTML = renderMarkdown(finalText);
           }
           asstMsg.meta = {
             ...(asstMsg.meta || {}),
@@ -985,39 +1547,111 @@ export async function sendMessage(text, docs = [], images = []) {
             elapsedMs: 0,
             toolCalls: Array.isArray(asstMsg.toolCalls) ? asstMsg.toolCalls.length : 0,
           };
-          if (ok) maybeAutoSpeak(asstMsg);
+          if (ok && isActiveChat()) maybeAutoSpeak(asstMsg);
         }
 
-        emitTtsEvent('thomas:assistant_done', {
-          messageId: asstMsg ? asstMsg.id : asstMsgId,
-          spoke: false,
-          error: !ok,
-        });
-        endRun(ok ? 'done' : 'error');
-        updateRun({ status: ok ? 'done' : 'error', error: event.error || null });
-        setStatus(ok ? 'swarm done' : 'swarm error', ok);
+        if (isActiveChat()) {
+          emitTtsEvent('thomas:assistant_done', {
+            messageId: asstMsg ? asstMsg.id : asstMsgId,
+            spoke: false,
+            error: !ok,
+          });
+          assistantDoneEventEmitted = true;
+        }
+        finalStatus = ok ? 'done' : 'error';
+        finalError = ok ? null : String(event.error || 'swarm failed');
+        runView.status = finalStatus;
+        runView.error = finalError;
+        commitRunView();
+        setActiveStatus(ok ? 'swarm done' : 'swarm error', ok);
         if (!ok) showToast(`Swarm error: ${event.error || 'unknown error'}`, 'error');
         return;
       }
 
-      if (event.type === 'text') {
-        _currentStreamText += event.text || '';
-        if (asstMsg) asstMsg.content = _currentStreamText;
-        if (_currentStreamEl) {
-          _currentStreamEl.innerHTML = renderMarkdown(_currentStreamText);
-          _currentStreamEl.classList.add('streaming-cursor');
-          requestAnimationFrame(() => enhanceCodeBlocks(_currentStreamEl));
+      if (event.type === 'ui_state_patch') {
+        const patch = event.patch && typeof event.patch === 'object' ? event.patch : {};
+        const operations = Array.isArray(event.operations) ? event.operations : [];
+        applyUiStatePatch(patch);
+        pushRunStep({
+          type: 'ui_state_patch',
+          operationCount: operations.length,
+          source: String(event.source || ''),
+          summary: String(event.summary || ''),
+        });
+        if (event.summary) {
+          pushProgress(String(event.summary));
+        } else if (operations.length > 0) {
+          pushProgress(`updated ${operations.length} setting${operations.length === 1 ? '' : 's'}`);
+        } else {
+          pushProgress('updated settings');
+        }
+        runView.status = 'settings updated';
+        commitRunView();
+        return;
+      }
+
+      if (event.type === 'model_switch') {
+        const nextProfile = String(event.profile || '').trim();
+        const nextModelId = String(event.model_id || '').trim();
+        const activeModel = String(event.active_model || '').trim();
+        if (nextProfile) setState('activeProfile', nextProfile);
+        // Keep explicit override only when server says there is one.
+        setState('activeModelId', nextModelId || '');
+        pushRunStep({
+          type: 'model_switch',
+          profile: nextProfile,
+          modelId: nextModelId,
+          activeModel,
+          source: String(event.source || ''),
+        });
+        pushProgress(activeModel ? `model switched: ${activeModel}` : 'model switched');
+        runView.status = 'model switched';
+        commitRunView();
+        return;
+      } else if (event.type === 'route') {
+        const route = event?.route || {};
+        const modeLabel = String(route?.mode || event?.mode || 'auto');
+        const autonomyLevel = normalizeAutonomyLevel(event?.autonomy_level ?? runAutonomyLevel);
+        const autonomyName = String(event?.autonomy_name || '').trim();
+        pushProgress(`routing: ${modeLabel}`);
+        pushRunStep({
+          type: 'route',
+          mode: modeLabel,
+          toolsPolicy: String(event?.tools_policy || ''),
+          autonomyLevel,
+          autonomyName,
+        });
+        runView.autonomyLevel = autonomyLevel;
+        if (autonomyName) runView.autonomyName = autonomyName;
+        runView.status = `route: ${modeLabel}`;
+        commitRunView();
+      } else if (event.type === 'text') {
+        if (!progressState.hadText) {
+          progressState.hadText = true;
+          currentStreamText = '';
+        }
+        currentStreamText += event.text || '';
+        if (asstMsg) asstMsg.content = currentStreamText;
+        const el = resolveStreamEl();
+        if (el) {
+          el.innerHTML = renderMarkdown(currentStreamText);
+          el.classList.add('streaming-cursor');
+          requestAnimationFrame(() => enhanceCodeBlocks(el));
         }
         scrollToBottom();
 
       } else if (event.type === 'tool_start') {
         const tc = { id: event.id || '', name: event.name, ok: null, ms: 0, argsText: '', result: '' };
         if (asstMsg) asstMsg.toolCalls.push(tc);
-        addRunStep({ type: 'tool_start', id: tc.id, name: event.name });
-        updateRun({ status: 'running tools' });
-        setStatus('running ' + event.name, true);
-        if (_currentStreamEl?.parentElement) {
-          const host = ensureToolCallSection(_currentStreamEl.parentElement, asstMsg);
+        pushProgress(`running tool: ${event.name || 'tool'}`);
+        pushRunStep({ type: 'tool_start', id: tc.id, name: event.name });
+        runView.status = 'running tools';
+        commitRunView();
+        setActiveStatus(`running ${event.name || 'tool'}`, true);
+        const hostParent = resolveStreamEl()?.parentElement;
+        const allowToolDetails = !!(asstMsg?.meta?.progressExpanded);
+        if (hostParent && allowToolDetails) {
+          const host = ensureToolCallSection(hostParent, asstMsg);
           const list = host?.querySelector('.tool-call-list');
           if (list) list.appendChild(renderToolCall(tc));
           if (host) updateToolCallSummary(host, asstMsg);
@@ -1034,15 +1668,17 @@ export async function sendMessage(text, docs = [], images = []) {
             found.argsText = (found.argsText || '') + delta;
           }
         }
-        addRunStep({ type: 'tool_args', id, deltaLen: (delta || '').length });
+        pushRunStep({ type: 'tool_args', id, deltaLen: (delta || '').length });
         // Update DOM if present
-        if (_currentStreamEl?.parentElement && id) {
-          const elTc = _currentStreamEl.parentElement.querySelector(`.tool-call[data-tool-id="${CSS.escape(id)}"] .tool-call-body pre`);
+        const hostParent = resolveStreamEl()?.parentElement;
+        if (hostParent && id) {
+          const elTc = hostParent.querySelector(`.tool-call[data-tool-id="${CSS.escape(id)}"] .tool-call-body pre`);
           if (elTc) elTc.textContent = (asstMsg?.toolCalls.find(x => x.id === id)?.argsText || '').slice(0, 8000);
         }
 
       } else if (event.type === 'tool_result') {
         const id = event.id || '';
+        pushProgress(`${event.ok ? 'finished' : 'failed'} tool: ${event.name || 'tool'}`);
         if (asstMsg?.toolCalls?.length > 0) {
           const tc = id
             ? asstMsg.toolCalls.find(x => x.id === id)
@@ -1053,9 +1689,9 @@ export async function sendMessage(text, docs = [], images = []) {
             tc.result = event.result || '';
           }
         }
-        addRunStep({ type: 'tool_result', id, name: event.name, ok: event.ok, ms: event.ms });
+        pushRunStep({ type: 'tool_result', id, name: event.name, ok: event.ok, ms: event.ms });
         // Update tool call status + result in DOM
-        const parent = _currentStreamEl?.parentElement;
+        const parent = resolveStreamEl()?.parentElement;
         if (parent) {
           const target = id
             ? parent.querySelector(`.tool-call[data-tool-id="${CSS.escape(id)}"]`)
@@ -1083,13 +1719,43 @@ export async function sendMessage(text, docs = [], images = []) {
         }
 
       } else if (event.type === 'iteration') {
-        updateRun({ tokenEstimate: event.token_estimate, contextWindow: event.context_window });
-        addRunStep({ type: 'iteration', iteration: event.iteration });
+        runView.tokenEstimate = event.token_estimate || 0;
+        runView.contextWindow = event.context_window || 0;
+        pushRunStep({ type: 'iteration', iteration: event.iteration });
+        pushProgress(`iteration ${event.iteration || 1}`);
+
+      } else if (event.type === 'model_runtime') {
+        const runtime = event.runtime && typeof event.runtime === 'object' ? event.runtime : {};
+        const requested = runtime.requested && typeof runtime.requested === 'object' ? runtime.requested : {};
+        const active = runtime.active && typeof runtime.active === 'object' ? runtime.active : {};
+        const failoverUsed = !!runtime.failover_used;
+        runView.runtimeModel = runtime;
+        pushRunStep({
+          type: 'model_runtime',
+          requestedProfile: requested.profile || '',
+          requestedModel: requested.model || '',
+          activeProfile: active.profile || '',
+          activeModel: active.model || '',
+          failoverUsed,
+        });
+        if (failoverUsed && requested.model && active.model && requested.model !== active.model) {
+          pushProgress(`model failover: ${requested.model} -> ${active.model}`);
+        }
+        if (asstMsg) {
+          asstMsg.meta = {
+            ...(asstMsg.meta || {}),
+            runtimeModel: runtime,
+          };
+        }
+        commitRunView();
 
       } else if (event.type === 'guardrails') {
         const evtName = String(event.event || '');
         const payloadObj = event.payload && typeof event.payload === 'object' ? event.payload : {};
-        addRunStep({ type: 'guardrails', event: evtName, tool: payloadObj.tool_name || '' });
+        pushRunStep({ type: 'guardrails', event: evtName, tool: payloadObj.tool_name || '' });
+        if (evtName === 'blocked' || evtName === 'approval_required') {
+          pushProgress(`guardrails: ${evtName}`);
+        }
         try {
           if (window.guardrailsHandleEvent) window.guardrailsHandleEvent(evtName, payloadObj);
         } catch {
@@ -1097,43 +1763,59 @@ export async function sendMessage(text, docs = [], images = []) {
         }
 
       } else if (event.type === 'error') {
-        if (asstMsg) asstMsg.status = 'error';
-        emitTtsEvent('thomas:assistant_done', {
-          messageId: asstMsg ? asstMsg.id : asstMsgId,
-          spoke: false,
-          error: true,
-        });
-        endRun('error');
-        updateRun({ error: event.error });
-        setStatus('error', false);
+        if (asstMsg) {
+          asstMsg.status = 'error';
+          ensureAssistantFinalText(asstMsg, 'error', event.error || 'unknown error');
+        }
+        if (isActiveChat()) {
+          emitTtsEvent('thomas:assistant_done', {
+            messageId: asstMsg ? asstMsg.id : asstMsgId,
+            spoke: false,
+            error: true,
+          });
+          assistantDoneEventEmitted = true;
+        }
+        finalStatus = 'error';
+        finalError = String(event.error || 'unknown error');
+        runView.error = finalError;
+        runView.status = 'error';
+        commitRunView();
+        setActiveStatus('error', false);
         showToast('Error: ' + event.error, 'error');
 
       } else if (event.type === 'done') {
         let didSpeak = false;
         if (asstMsg) {
           asstMsg.status = 'complete';
+          ensureAssistantFinalText(asstMsg, 'done', null);
           asstMsg.meta = {
             ...(asstMsg.meta || {}),
             usage: event.usage || null,
             tokenReport: event.token_report || null,
+            runtimeModel: event.runtime_model || null,
             elapsedMs: event.elapsed_ms || 0,
             toolCalls: Array.isArray(asstMsg.toolCalls) ? asstMsg.toolCalls.length : 0,
           };
-          didSpeak = maybeAutoSpeak(asstMsg);
+          if (isActiveChat()) didSpeak = maybeAutoSpeak(asstMsg);
         }
-        emitTtsEvent('thomas:assistant_done', {
-          messageId: asstMsg ? asstMsg.id : asstMsgId,
-          spoke: !!didSpeak,
-          error: false,
-        });
-        endRun('done');
-        updateRun({
-          status: 'done',
-          usage: event.usage || null,
-          tokenReport: event.token_report || null,
-          elapsedMs: event.elapsed_ms || 0,
-        });
-        setStatus(`done (${event.tool_calls || 0} tools)`, true);
+        if (isActiveChat()) {
+          emitTtsEvent('thomas:assistant_done', {
+            messageId: asstMsg ? asstMsg.id : asstMsgId,
+            spoke: !!didSpeak,
+            error: false,
+          });
+          assistantDoneEventEmitted = true;
+        }
+        finalStatus = 'done';
+        finalError = null;
+        runView.status = 'done';
+        runView.usage = event.usage || null;
+        runView.tokenReport = event.token_report || null;
+        runView.runtimeModel = event.runtime_model || runView.runtimeModel || null;
+        runView.elapsedMs = event.elapsed_ms || 0;
+        runView.toolCalls = event.tool_calls || (asstMsg?.toolCalls?.length || 0);
+        commitRunView();
+        setActiveStatus(`done (${event.tool_calls || 0} tools)`, true);
       }
     };
 
@@ -1167,11 +1849,11 @@ export async function sendMessage(text, docs = [], images = []) {
       // Best effort: preserve server-side conversation state by importing the UI history.
       try {
         const sess = await importSession(conversation, { profile: runProfile, model_id: runModelId });
-        updateChat(chat.id, { sessionId: sess.session_id });
+        if (!forked) updateChat(chat.id, { sessionId: sess.session_id });
         return sess.session_id;
       } catch (e) {
         const sess = await createSession();
-        updateChat(chat.id, { sessionId: sess.session_id });
+        if (!forked) updateChat(chat.id, { sessionId: sess.session_id });
         return sess.session_id;
       }
     }
@@ -1191,7 +1873,7 @@ export async function sendMessage(text, docs = [], images = []) {
 
         if (attempt === 1 && isInvalidSessionError(e)) {
           try {
-            setStatus('reconnecting...', false);
+            setActiveStatus('reconnecting...', false);
             showToast('Session expired. Restoring...', 'info');
 
             const sid = await recoverServerSessionId();
@@ -1204,7 +1886,15 @@ export async function sendMessage(text, docs = [], images = []) {
               asstMsg.content = '';
               asstMsg.toolCalls = [];
               asstMsg.status = 'streaming';
+              asstMsg.meta = {
+                ...(asstMsg.meta || {}),
+                liveProgress: [],
+                liveStatus: '',
+              };
             }
+            currentStreamText = '';
+            progressState.hadText = false;
+            progressState.lines = [];
 
             continue; // retry stream
           } catch (recoverErr) {
@@ -1222,37 +1912,121 @@ export async function sendMessage(text, docs = [], images = []) {
 
   } catch (e) {
     if (e.name === 'AbortError') {
-      setStatus('stopped', true);
+      finalStatus = 'stopped';
+      finalError = null;
+      setActiveStatus('stopped', true);
     } else {
-      setStatus('error', false);
+      finalStatus = 'error';
+      finalError = String(e?.message || e);
+      setActiveStatus('error', false);
       showToast('Stream error: ' + e.message, 'error');
     }
-    endRun('error');
   } finally {
-    setState('ui', { streaming: false, abortController: null });
-    if (_currentStreamEl) {
-      _currentStreamEl.classList.remove('streaming-cursor');
-      _currentStreamEl = null;
+    if (currentStreamEl) {
+      currentStreamEl.classList.remove('streaming-cursor');
+      currentStreamEl = null;
     }
     const finalChat = getState().chats.get(chat.id);
-    if (finalChat) saveChat(finalChat);
-    renderMessages();
+    if (finalChat) {
+      const finalMsg = Array.isArray(finalChat.messages)
+        ? finalChat.messages.find((m) => m?.id === asstMsgId)
+        : null;
+      if (finalMsg && finalMsg.status === 'streaming') {
+        finalMsg.status = finalStatus === 'done' ? 'complete' : finalStatus;
+      }
+      if (finalMsg) ensureAssistantFinalText(finalMsg, finalStatus, finalError);
+      saveChat(finalChat);
+    }
+    if (isActiveChat() && !assistantDoneEventEmitted) {
+      emitTtsEvent('thomas:assistant_done', {
+        messageId: asstMsgId,
+        spoke: false,
+        error: finalStatus !== 'done',
+      });
+      assistantDoneEventEmitted = true;
+    }
+    if (isActiveChat()) renderMessages();
+
+    const finalRunView = _cloneRunView(runView) || {
+      id: jobId,
+      status: finalStatus,
+      steps: [],
+      startedAt: Date.now(),
+      tokenEstimate: 0,
+      contextWindow: 0,
+      tokenReport: null,
+      error: finalError,
+      profile: runProfile,
+      modelId: runModelId,
+      mode: runMode,
+      usage: null,
+      elapsedMs: 0,
+    };
+    finalRunView.status = finalStatus;
+    finalRunView.error = finalError;
+
+    _setJob(jobId, {
+      status: finalStatus,
+      error: finalError,
+      endedAt: Date.now(),
+      abortController: null,
+      runView: finalRunView,
+      toolCalls: Number(finalRunView.toolCalls || 0),
+      usage: finalRunView.usage || null,
+    });
+    _maybeTrimJobs();
+    void _pumpPendingStarts();
   }
 }
 
 function setStatus(text, ok) {
+  _statusBaseText = String(text || 'ready');
+  _statusOk = !!ok;
+  renderStatus();
+}
+
+function renderStatus() {
   const statusText = document.getElementById('statusText');
   const statusChip = document.getElementById('statusChip');
+  const running = Number(getState().ui.concurrentRuns || 0);
+  const queued = Number(getState().ui.queuedMessages || 0);
+  const tail = [];
+  if (running > 0) tail.push(`${running} running`);
+  if (queued > 0) tail.push(`${queued} queued`);
+  const text = tail.length > 0 ? `${_statusBaseText} (${tail.join(', ')})` : _statusBaseText;
   if (statusText) statusText.textContent = text;
   if (statusChip) {
-    statusChip.classList.toggle('connected', ok);
-    statusChip.classList.toggle('disconnected', !ok);
+    statusChip.classList.toggle('connected', _statusOk);
+    statusChip.classList.toggle('disconnected', !_statusOk);
   }
 }
 
 export function stopStreaming() {
   const state = getState();
   if (state.ui.abortController) state.ui.abortController.abort();
+}
+
+export function cancelJob(jobId) {
+  const key = String(jobId || '');
+  if (!key) return false;
+  const job = _jobs.get(key);
+  if (!job) return false;
+
+  if (job.status === 'queued') {
+    _pendingStarts = _pendingStarts.filter((x) => x.jobId !== key);
+    _setJob(key, { status: 'stopped', endedAt: Date.now(), error: null });
+    return true;
+  }
+
+  if (job.abortController && _isJobActive(job)) {
+    try {
+      job.abortController.abort();
+      return true;
+    } catch {
+      return false;
+    }
+  }
+  return false;
 }
 
 export function stopSpeakingTts() {

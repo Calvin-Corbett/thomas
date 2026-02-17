@@ -7,6 +7,64 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.11.12] - 2026-02-17
+
+### Added
+- New CLI command: `thomas live-browser-smoke` for visible end-to-end UI testing against a real Chrome/Edge window via CDP.
+  - Types directly into `Message Thomas...`
+  - Clicks Send
+  - Waits for completion
+  - Verifies expected assistant text.
+
+### Changed
+- Updated README with live-browser smoke instructions and CDP startup example for user-visible browser validation.
+
+## [0.11.11] - 2026-02-17
+
+### Added
+- New server-only entrypoint: `python -m thomas.server` (and script alias `thomas-server`) so web UI runtime no longer depends on CLI bootstrap path.
+- New robustness CI workflow: `.github/workflows/robustness-gates.yml`.
+- New parity gate script: `scripts/check_surface_parity.py` (server stream events vs web handlers vs CLI EventType coverage).
+- New model onboarding gate script: `scripts/check_model_onboarding_gate.py` (blocks model-surface edits without required protocol artifacts).
+- New onboarding log artifact: `docs/MODEL_ONBOARDING_LOG.md`.
+- New project scope source-of-truth doc: `docs/PROJECT_SCOPE.md` (hybrid local+remote and hybrid local-model+cloud-model contract).
+
+### Changed
+- `run-ui.ps1` now launches `python -m thomas.server` directly and installs only server dependencies for UI startup.
+- Model onboarding protocol now explicitly requires updating onboarding log, changelog, and research note evidence for each model-surface change.
+- Replaced legacy local-first product wording in key entry surfaces (`README.md`, package metadata, CLI banner) with the new hybrid deployment scope.
+- Added hybrid server access policy (`server.access_mode = local|remote`):
+  - local mode keeps loopback-only API guardrails
+  - remote mode enforces API token auth (`Authorization: Bearer` or `X-Api-Token`) for protected endpoints.
+- Web UI API client now supports server token auth and stores a remote token in browser-local settings.
+
+## [0.11.10] - 2026-02-17
+
+### Changed
+- Web UI chat now supports concurrent background runs while a run is in progress (start additional prompts without waiting for current completion).
+- Web UI assistant bubble now shows live in-progress work updates (`routing`, `iteration`, `tool` activity) before first text tokens arrive.
+- Inspector now includes a `Jobs` tab to monitor run status and stop/cancel background jobs.
+- Header now includes a live jobs counter button that opens the `Jobs` inspector tab.
+- Active assistant runs now render a compact animated "Working..." panel with rotating status phrases, and keep detailed progress/tool output hidden by default behind a disclosure arrow.
+
+## [0.11.9] - 2026-02-17
+
+### Added
+- New model onboarding validation command: `thomas models validate` (handshake + synthetic tool-calling smoke test).
+- New onboarding protocol document: `docs/MODEL_ONBOARDING_PROTOCOL.md`.
+- New regression tests for:
+  - remote API profile tool-policy behavior in the agent loop
+  - OpenAI-compatible legacy/function-call stream parsing and dict argument handling
+  - tool registry alias resolution (`fs_read_file`, namespaced tool names)
+  - resilient tool-argument parsing (code-fenced JSON and Python-style dict args)
+
+### Changed
+- Agent loop now keeps tools available in `auto` mode for API/cloud profiles (not only Anthropic), preventing silent tool disablement on remote models.
+- OpenAI-compatible stream parser now supports legacy `delta.function_call` chunks and non-string tool argument fragments.
+- Agent loop tool execution now repairs common malformed argument payloads before failing (improves weaker-model autonomy).
+- Tool registry now resolves common tool name alias formats before returning unknown-tool errors.
+- `thomas doctor --full` now points to `thomas models validate` for full onboarding checks.
+
 ## [0.11.8] - 2026-02-16
 
 ### Added

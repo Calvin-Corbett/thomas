@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any, Dict, List, Optional
 
 from thomas.tools.base import Tool, ToolResult, ToolSpec
@@ -35,7 +36,76 @@ class ToolRegistry:
         self._tools.pop(name, None)
 
     def get(self, name: str) -> Optional[Tool]:
-        return self._tools.get(name)
+        tool = self._tools.get(name)
+        if tool is not None:
+            return tool
+        resolved = self._resolve_tool_name(name)
+        if resolved is None:
+            return None
+        return self._tools.get(resolved)
+
+    @staticmethod
+    def _canonical_name(name: str) -> str:
+        return re.sub(r"[^a-z0-9]+", ".", str(name or "").strip().lower()).strip(".")
+
+    def _resolve_tool_name(self, name: str) -> Optional[str]:
+        raw = str(name or "").strip()
+        if not raw or not self._tools:
+            return None
+
+        # Case-insensitive exact match.
+        lowered = raw.lower()
+        case_matches = [tool_name for tool_name in self._tools if tool_name.lower() == lowered]
+        if len(case_matches) == 1:
+            return case_matches[0]
+
+        # Common namespacing wrappers seen in model outputs.
+        for prefix in ("functions.", "function.", "tool.", "tools.", "mcp.", "mcp__"):
+            if lowered.startswith(prefix):
+                trimmed = raw[len(prefix):].strip()
+                if trimmed in self._tools:
+                    return trimmed
+                trimmed_matches = [tool_name for tool_name in self._tools if tool_name.lower() == trimmed.lower()]
+                if len(trimmed_matches) == 1:
+                    return trimmed_matches[0]
+
+        variants = {
+            raw,
+            raw.replace("_", "."),
+            raw.replace("-", "."),
+            raw.replace(".", "_"),
+            raw.replace("-", "_"),
+            raw.replace(".", "-"),
+            raw.replace("_", "-"),
+        }
+        for variant in variants:
+            if variant in self._tools:
+                return variant
+
+        target = self._canonical_name(raw)
+        canonical_matches = [
+            tool_name
+            for tool_name in self._tools
+            if self._canonical_name(tool_name) == target
+        ]
+        if len(canonical_matches) == 1:
+            return canonical_matches[0]
+
+        # Fallback: match by last 2-3 canonical segments, e.g. functions.fs.read_file.
+        segments = [seg for seg in target.split(".") if seg]
+        for tail_len in (3, 2):
+            if len(segments) < tail_len:
+                continue
+            tail = ".".join(segments[-tail_len:])
+            tail_matches = [
+                tool_name
+                for tool_name in self._tools
+                if self._canonical_name(tool_name) == tail
+            ]
+            if len(tail_matches) == 1:
+                return tail_matches[0]
+
+        return None
 
     def list_tools(self, category: Optional[str] = None) -> List[Tool]:
         tools = list(self._tools.values())
@@ -62,6 +132,8 @@ class ToolRegistry:
                 ok=False,
                 error=f"Unknown tool: {name}. Available: {', '.join(self._tools.keys())}",
             )
+        if tool.name != name:
+            log.debug("Resolved tool alias '%s' -> '%s'", name, tool.name)
         return await tool.safe_execute(args)
 
     def __len__(self) -> int:

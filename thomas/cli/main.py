@@ -15,7 +15,7 @@ import os
 import socket
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 try:
     import click
@@ -24,6 +24,7 @@ except ImportError:
     sys.exit(1)
 
 from thomas.core.config import load_config, AppConfig
+from thomas.core.autonomy import clamp_autonomy_level
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
 from thomas.tools.registry import ToolRegistry
@@ -141,35 +142,76 @@ def _build_library(config: AppConfig):
         return None
 
 
-async def _run_chat(config: AppConfig, prompt: str, model_name: Optional[str]) -> None:
+async def _run_chat(
+    config: AppConfig,
+    prompt: str,
+    model_name: Optional[str],
+    *,
+    autonomy_level: int = 3,
+) -> None:
     """Run a single chat interaction with streaming output."""
     active_profile = model_name or config.default_model
     model_config = config.get_model(active_profile)
     llm = LLMClient(
         model_config,
         fallback_configs=config.failover_chain(active_profile),
-        failover_enabled=config.failover.enabled,
+        failover_enabled=bool(config.failover.enabled and getattr(config.failover, "chat_auto_failover", False)),
         failover_cooldown_s=config.failover.cooldown_seconds,
         failover_on_auth_error=config.failover.fallback_on_auth_error,
     )
     tools = _build_tools(config)
     memory = _build_memory(config)
-    agent = AgentLoop(config, llm, tools, memory=memory, thread_id="cli")
+    agent = AgentLoop(
+        config,
+        llm,
+        tools,
+        memory=memory,
+        thread_id="cli",
+        autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+    )
 
     try:
         tool_active = False
+        tool_args: dict[str, str] = {}
         async for event in agent.run(prompt):
-            if event.type == EventType.TEXT_DELTA:
+            if event.type == EventType.AGENT_START:
+                route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
+                mode = route.get("mode") or event.data.get("mode") or "auto"
+                policy = event.data.get("tools_policy", "auto")
+                autonomy_lv = int(event.data.get("autonomy_level", clamp_autonomy_level(autonomy_level, default=3)) or 3)
+                autonomy_name = str(event.data.get("autonomy_name") or "")
+                autonomy_text = f", autonomy=L{autonomy_lv}"
+                if autonomy_name:
+                    autonomy_text += f" {autonomy_name}"
+                sys.stdout.write(f"\033[90m[route {mode}, tools={policy}{autonomy_text}]\033[0m\n")
+                sys.stdout.flush()
+
+            elif event.type == EventType.TEXT_DELTA:
                 sys.stdout.write(event.data["text"])
                 sys.stdout.flush()
 
+            elif event.type == EventType.AGENT_ITERATION:
+                it = int(event.data.get("iteration", event.iteration or 0))
+                if it > 0:
+                    sys.stdout.write(f"\n\033[90m[iteration {it}]\033[0m\n")
+                    sys.stdout.flush()
+
             elif event.type == EventType.TOOL_CALL_START:
                 name = event.data["tool_name"]
+                tool_id = str(event.data.get("tool_id", ""))
+                if tool_id:
+                    tool_args[tool_id] = ""
                 if not tool_active:
                     sys.stdout.write("\n")
                 sys.stdout.write(f"\033[90m[calling {name}...]\033[0m ")
                 sys.stdout.flush()
                 tool_active = True
+
+            elif event.type == EventType.TOOL_CALL_ARGS_DELTA:
+                tool_id = str(event.data.get("tool_id", ""))
+                delta = str(event.data.get("delta", ""))
+                if tool_id and delta:
+                    tool_args[tool_id] = tool_args.get(tool_id, "") + delta
 
             elif event.type == EventType.TOOL_RESULT:
                 ok = event.data["ok"]
@@ -179,6 +221,9 @@ async def _run_chat(config: AppConfig, prompt: str, model_name: Optional[str]) -
                 sys.stdout.write(f"\033[90m[{name}: {status} {ms:.0f}ms]\033[0m\n")
                 sys.stdout.flush()
                 tool_active = False
+                tool_id = str(event.data.get("tool_id", ""))
+                if tool_id and tool_id in tool_args:
+                    tool_args.pop(tool_id, None)
 
             elif event.type == EventType.AGENT_ERROR:
                 sys.stderr.write(f"\n\033[31mError: {event.data['error']}\033[0m\n")
@@ -200,6 +245,27 @@ async def _run_chat(config: AppConfig, prompt: str, model_name: Optional[str]) -
                 f"\033[90m[tokens: {usage.prompt_tokens} prompt + "
                 f"{usage.completion_tokens} completion = {usage.total_tokens} total]\033[0m\n"
             )
+        runtime_trace_fn = getattr(llm, "runtime_trace", None)
+        if callable(runtime_trace_fn):
+            try:
+                rt = runtime_trace_fn()
+                requested = rt.get("requested") if isinstance(rt, dict) else {}
+                active = rt.get("active") if isinstance(rt, dict) else {}
+                requested_profile = str((requested or {}).get("profile") or active_profile)
+                requested_model = str((requested or {}).get("model") or model_config.model)
+                active_profile_name = str((active or {}).get("profile") or requested_profile)
+                active_model = str((active or {}).get("model") or requested_model)
+                if requested_profile != active_profile_name or requested_model != active_model:
+                    sys.stdout.write(
+                        f"\033[90m[runtime model: {requested_profile}/{requested_model} "
+                        f"-> {active_profile_name}/{active_model}]\033[0m\n"
+                    )
+                else:
+                    sys.stdout.write(
+                        f"\033[90m[runtime model: {active_profile_name}/{active_model}]\033[0m\n"
+                    )
+            except Exception:
+                pass
     finally:
         await llm.close()
         if memory:
@@ -211,7 +277,7 @@ async def _run_chat(config: AppConfig, prompt: str, model_name: Optional[str]) -
 @click.option("-c", "--config", "config_path", type=click.Path(exists=False), help="Config file path")
 @click.pass_context
 def cli(ctx: click.Context, verbose: bool, config_path: Optional[str]) -> None:
-    """Thomas - cutting-edge local-first AI coding assistant."""
+    """Thomas - autonomous AI execution platform for local and remote deployments."""
     _setup_logging(verbose)
     path = Path(config_path) if config_path else None
     ctx.ensure_object(dict)
@@ -225,8 +291,20 @@ def cli(ctx: click.Context, verbose: bool, config_path: Optional[str]) -> None:
 @cli.command()
 @click.argument("prompt")
 @click.option("-m", "--model", "model_name", help="Model profile to use (e.g. 'local', 'cloud')")
+@click.option(
+    "--autonomy-level",
+    type=click.IntRange(1, 4),
+    default=3,
+    show_default=True,
+    help="Execution autonomy level (1=manual review, 4=full auto).",
+)
 @click.pass_context
-def chat(ctx: click.Context, prompt: str, model_name: Optional[str]) -> None:
+def chat(
+    ctx: click.Context,
+    prompt: str,
+    model_name: Optional[str],
+    autonomy_level: int,
+) -> None:
     """Send a single prompt and get a response."""
     config: AppConfig = ctx.obj["config"]
 
@@ -249,7 +327,14 @@ def chat(ctx: click.Context, prompt: str, model_name: Optional[str]) -> None:
                 return
             prompt = nl_prompt
 
-    asyncio.run(_run_chat(config, prompt, model_name))
+    asyncio.run(
+        _run_chat(
+            config,
+            prompt,
+            model_name,
+            autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
+        )
+    )
 
 
 @cli.command("config")
@@ -381,6 +466,132 @@ def doctor(ctx: click.Context, port: int, full: bool) -> None:
         click.echo("Run `thomas doctor --full` to test all provider API keys.")
 
 
+@cli.command("live-browser-smoke")
+@click.option(
+    "--url",
+    "app_url",
+    default="http://127.0.0.1:8899/",
+    show_default=True,
+    help="Thomas web UI URL to target.",
+)
+@click.option(
+    "--cdp-url",
+    default="http://127.0.0.1:9222",
+    show_default=True,
+    help="Chrome DevTools endpoint for your visible browser.",
+)
+@click.option(
+    "--prompt",
+    default="Reply with exactly LIVE_BROWSER_SMOKE_OK",
+    show_default=True,
+    help="Prompt to type into the composer.",
+)
+@click.option(
+    "--expect",
+    default="LIVE_BROWSER_SMOKE_OK",
+    show_default=True,
+    help="Substring that must appear in Thomas's final assistant reply.",
+)
+@click.option(
+    "--type-delay-ms",
+    default=35,
+    show_default=True,
+    type=int,
+    help="Per-character typing delay in ms (visible typing effect).",
+)
+@click.option(
+    "--reply-timeout",
+    default=50.0,
+    show_default=True,
+    type=float,
+    help="Max seconds to wait for assistant completion after send.",
+)
+@click.option(
+    "--launch-browser/--no-launch-browser",
+    default=True,
+    show_default=True,
+    help="Auto-launch browser with CDP if endpoint is not already running.",
+)
+@click.option(
+    "--browser",
+    type=click.Choice(["chrome", "edge"], case_sensitive=False),
+    default="chrome",
+    show_default=True,
+    help="Browser executable used when auto-launching CDP.",
+)
+@click.option(
+    "--show-driver-logs",
+    is_flag=True,
+    help="Print raw Playwright driver stdout/stderr for debugging.",
+)
+@click.pass_context
+def live_browser_smoke_cmd(
+    ctx: click.Context,
+    app_url: str,
+    cdp_url: str,
+    prompt: str,
+    expect: str,
+    type_delay_ms: int,
+    reply_timeout: float,
+    launch_browser: bool,
+    browser: str,
+    show_driver_logs: bool,
+) -> None:
+    """Drive your real browser tab and verify a visible end-to-end chat response."""
+    from thomas.cli.live_browser import LiveBrowserSmokeError, run_live_browser_smoke
+
+    config: AppConfig = ctx.obj["config"]
+    runtime_root = config.memory.root_path
+
+    click.echo("Live browser smoke test")
+    click.echo(f"  app_url: {app_url}")
+    click.echo(f"  cdp_url: {cdp_url}")
+    click.echo(f"  browser: {browser}")
+
+    try:
+        result = run_live_browser_smoke(
+            app_url=app_url,
+            cdp_url=cdp_url,
+            prompt=prompt,
+            expect=expect,
+            type_delay_ms=int(type_delay_ms),
+            wait_timeout_s=float(reply_timeout),
+            launch_browser=bool(launch_browser),
+            browser=str(browser).strip().lower(),
+            runtime_root=runtime_root,
+        )
+    except LiveBrowserSmokeError as e:
+        click.echo(f"Live browser smoke failed: {e}", err=True)
+        click.echo(
+            "Tip: Start your browser with remote debugging, for example:",
+            err=True,
+        )
+        click.echo(
+            '  chrome --remote-debugging-port=9222 --remote-allow-origins=* --new-window "http://127.0.0.1:8899/"',
+            err=True,
+        )
+        sys.exit(2)
+
+    click.echo("")
+    click.echo("Result:")
+    click.echo(f"  ok: {result.ok}")
+    click.echo(f"  launched_browser: {result.launched_browser}")
+    click.echo(f"  page_url: {result.page_url}")
+    click.echo(f"  expected: {result.expected}")
+    click.echo(f"  matched_expected: {result.matched_expected}")
+    click.echo(f"  final_text: {result.final_text}")
+
+    if show_driver_logs:
+        click.echo("")
+        click.echo("--- driver stdout ---")
+        click.echo(result.stdout.rstrip() or "(empty)")
+        click.echo("--- driver stderr ---")
+        click.echo(result.stderr.rstrip() or "(empty)")
+
+    if not result.ok:
+        sys.exit(2)
+
+
 def _run_provider_checks(config: AppConfig) -> None:
     """Test all cloud provider API keys by hitting their /models endpoint."""
     from thomas.models.discovery import handshake_models_async
@@ -437,6 +648,7 @@ def _run_provider_checks(config: AppConfig) -> None:
         skip = sum(1 for _, s, _ in results if s == "skip")
         fail = len(results) - ok - skip
         click.echo(f"\n  Summary: {ok} connected, {fail} failed, {skip} no key set")
+        click.echo("  Tip: run `thomas models validate` for handshake + tool-call smoke checks.")
 
     asyncio.run(_check_all())
 
@@ -444,7 +656,7 @@ def _run_provider_checks(config: AppConfig) -> None:
 @cli.group()
 @click.pass_context
 def models(ctx: click.Context) -> None:
-    """Model utilities: list profiles, discover endpoint models, pull local models."""
+    """Model utilities: list/discover/validate profiles and pull local models."""
 
 
 @models.command("list")
@@ -485,6 +697,87 @@ def models_discover(ctx: click.Context, model_name: Optional[str], timeout_s: fl
     click.echo(f"Models at {cfg.base_url}:")
     for i, dm in enumerate(found, start=1):
         click.echo(f"  {i:>2}. {dm.id}")
+
+
+@models.command("validate")
+@click.option("-m", "--model", "model_name", help="Validate one model profile (default: all profiles).")
+@click.option("--timeout", "timeout_s", type=float, default=3.0, show_default=True, help="Handshake timeout seconds.")
+@click.option("--tool-timeout", "tool_timeout_s", type=float, default=20.0, show_default=True, help="Tool-call smoke timeout seconds.")
+@click.option("--no-tool-smoke", is_flag=True, help="Skip the synthetic tool-calling smoke test.")
+@click.option(
+    "--strict/--no-strict",
+    default=True,
+    show_default=True,
+    help="Exit non-zero when any validated profile fails.",
+)
+@click.pass_context
+def models_validate(
+    ctx: click.Context,
+    model_name: Optional[str],
+    timeout_s: float,
+    tool_timeout_s: float,
+    no_tool_smoke: bool,
+    strict: bool,
+) -> None:
+    """Validate profile readiness for onboarding (connectivity + tool-calling)."""
+    from dataclasses import replace
+
+    from thomas.models.protocol import validate_model_profile_async
+    from thomas.server.secrets import SecretStore
+
+    config: AppConfig = ctx.obj["config"]
+    selected: list[str]
+    if model_name:
+        if model_name not in config.models:
+            click.echo(
+                f"Unknown model profile '{model_name}'. Available: {', '.join(config.models.keys())}",
+                err=True,
+            )
+            sys.exit(2)
+        selected = [model_name]
+    else:
+        selected = list(config.models.keys())
+
+    secret_store = SecretStore(config.memory.root_path / ".thomas")
+
+    async def _run() -> list[Any]:
+        out = []
+        for profile in selected:
+            cfg = config.get_model(profile)
+            stored_key = secret_store.get(profile)
+            if stored_key:
+                cfg = replace(cfg, api_key=stored_key)
+            report = await validate_model_profile_async(
+                cfg,
+                handshake_timeout_s=max(0.5, float(timeout_s)),
+                tool_timeout_s=max(2.0, float(tool_timeout_s)),
+                run_tool_smoke=not bool(no_tool_smoke),
+            )
+            out.append(report)
+        return out
+
+    reports = asyncio.run(_run())
+    failures = 0
+    click.echo("Model validation:")
+    for rep in reports:
+        status = "OK" if rep.ok else "FAIL"
+        click.echo(f"  {rep.profile}: {status}")
+        hs = rep.handshake
+        hs_http = f" ({hs.http_status})" if hs.http_status is not None else ""
+        click.echo(f"    handshake: {hs.status}{hs_http}")
+        if hs.error:
+            click.echo(f"      {hs.error}")
+        ts = rep.tool_smoke
+        click.echo(f"    tool_smoke: {ts.status}")
+        if ts.error:
+            click.echo(f"      {ts.error}")
+        if not rep.ok:
+            failures += 1
+
+    passed = len(reports) - failures
+    click.echo(f"\nSummary: {passed} passed, {failures} failed")
+    if failures > 0 and strict:
+        sys.exit(2)
 
 
 @models.command("pull")

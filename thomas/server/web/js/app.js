@@ -26,6 +26,70 @@ function resolvedIsDark(theme) {
   return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
 }
 
+function normalizePreferredModelMap(raw) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {};
+  const out = {};
+  for (const [k, v] of Object.entries(raw)) {
+    const key = String(k || '').trim();
+    const val = String(v || '').trim();
+    if (!key || !val) continue;
+    out[key] = val;
+  }
+  return out;
+}
+
+function normalizeAutonomyLevel(raw) {
+  const n = Number.parseInt(String(raw ?? ''), 10);
+  if (!Number.isFinite(n)) return 3;
+  if (n < 1) return 1;
+  if (n > 4) return 4;
+  return n;
+}
+
+function profileDefaultModelId(profileName) {
+  const profiles = Array.isArray(getState().models?.profiles) ? getState().models.profiles : [];
+  const profile = profiles.find((p) => String(p?.name || '') === String(profileName || ''));
+  return String(profile?.model || '').trim();
+}
+
+function applyProfileScopedModelSelection(profileName) {
+  const p = String(profileName || '').trim();
+  if (!p) return;
+
+  const map = normalizePreferredModelMap(getState().settings?.preferredModelByProfile);
+  const preferred = String(map[p] || '').trim();
+  const profileDefault = profileDefaultModelId(p);
+  const nextModelId = preferred && preferred !== profileDefault ? preferred : '';
+
+  if (String(getState().activeModelId || '') !== nextModelId) {
+    setState('activeModelId', nextModelId);
+  }
+}
+
+function persistProfileScopedModelSelection(profileName, modelId) {
+  const p = String(profileName || '').trim();
+  if (!p) return;
+
+  const currentMap = normalizePreferredModelMap(getState().settings?.preferredModelByProfile);
+  const nextMap = { ...currentMap };
+  const profileDefault = profileDefaultModelId(p);
+  const selected = String(modelId || '').trim();
+
+  if (!selected || (profileDefault && selected === profileDefault)) {
+    delete nextMap[p];
+  } else {
+    nextMap[p] = selected;
+  }
+
+  const same =
+    Object.keys(currentMap).length === Object.keys(nextMap).length
+    && Object.entries(nextMap).every(([k, v]) => currentMap[k] === v);
+  if (same) return;
+
+  setState('settings', { preferredModelByProfile: nextMap });
+  saveSetting('preferredModelByProfile', nextMap);
+}
+
 function setInspectorOpen(open) {
   const app = document.getElementById('app');
   if (app) app.classList.toggle('inspector-open', !!open);
@@ -63,6 +127,35 @@ function wireHeader() {
     });
   }
 
+  const jobsBtn = document.getElementById('jobsBtn');
+  const jobsBtnText = document.getElementById('jobsBtnText');
+  if (jobsBtn) {
+    const syncJobsButton = () => {
+      const ui = getState().ui || {};
+      const running = Number(ui.concurrentRuns || 0);
+      const queued = Number(ui.queuedMessages || 0);
+      const total = running + queued;
+      if (jobsBtnText) {
+        jobsBtnText.textContent = total > 0 ? `jobs ${running}+${queued}` : 'jobs 0';
+      }
+      jobsBtn.classList.toggle('active', total > 0);
+      jobsBtn.setAttribute(
+        'aria-label',
+        total > 0
+          ? `Open jobs panel (${running} running, ${queued} queued)`
+          : 'Open jobs panel',
+      );
+    };
+
+    jobsBtn.addEventListener('click', () => {
+      setState('ui', { inspectorTab: 'jobs' });
+      setInspectorOpen(true);
+    });
+
+    subscribe('ui', syncJobsButton);
+    syncJobsButton();
+  }
+
   // Mode segmented control
   const modeToggle = document.getElementById('modeToggle');
   if (modeToggle) {
@@ -82,7 +175,32 @@ function wireHeader() {
       });
     });
 
+    subscribe('mode', syncModeButtons);
     syncModeButtons();
+  }
+
+  // Autonomy segmented control
+  const autonomyToggle = document.getElementById('autonomyToggle');
+  if (autonomyToggle) {
+    const syncAutonomyButtons = () => {
+      const activeLevel = normalizeAutonomyLevel(getState().settings?.autonomyLevel);
+      autonomyToggle.querySelectorAll('.segmented-btn').forEach((b) => {
+        const lv = normalizeAutonomyLevel(b.dataset.autonomyLevel || 3);
+        b.classList.toggle('active', lv === activeLevel);
+      });
+    };
+
+    autonomyToggle.querySelectorAll('.segmented-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const level = normalizeAutonomyLevel(btn.dataset.autonomyLevel || 3);
+        setState('settings', { autonomyLevel: level });
+        saveSetting('autonomyLevel', level);
+        syncAutonomyButtons();
+      });
+    });
+
+    subscribe('settings', syncAutonomyButtons);
+    syncAutonomyButtons();
   }
 
   // Help/About modal
@@ -178,7 +296,11 @@ async function loadInitialState() {
   // Settings
   const loadedSettings = await loadSettings();
   if (loadedSettings && typeof loadedSettings === 'object') {
-    setState('settings', loadedSettings);
+    setState('settings', {
+      ...loadedSettings,
+      preferredModelByProfile: normalizePreferredModelMap(loadedSettings.preferredModelByProfile),
+      autonomyLevel: normalizeAutonomyLevel(loadedSettings.autonomyLevel),
+    });
   }
   applyTheme(getState().settings.theme);
   updateCodeTheme(resolvedIsDark(getState().settings.theme));
@@ -242,6 +364,7 @@ async function loadModels() {
         setState('activeProfile', defaultProfile);
       }
     }
+    applyProfileScopedModelSelection(getState().activeProfile);
   } catch (e) {
     showToast(`Failed to load models: ${e.message || String(e)}`, 'error');
   }
@@ -258,7 +381,16 @@ async function main() {
   // Persist last-used profile so restarts feel seamless.
   subscribe('activeProfile', () => {
     const p = getState().activeProfile;
-    if (p) saveSetting('preferredProfile', p);
+    if (!p) return;
+    saveSetting('preferredProfile', p);
+    applyProfileScopedModelSelection(p);
+  });
+
+  // Persist selected model per profile so each profile keeps its own override.
+  subscribe('activeModelId', () => {
+    const p = getState().activeProfile;
+    if (!p) return;
+    persistProfileScopedModelSelection(p, getState().activeModelId);
   });
 
   // Module init order matters a bit (state should be ready first)

@@ -79,14 +79,57 @@
     "qualityTier": "good",
     "bestAt": "Fast, cheap cloud model for most tasks."
   },
-  "claude-3-5-sonnet-latest": {
-    "displayName": "Claude 3.5 Sonnet",
+  "claude-sonnet-4-5-20250929": {
+    "displayName": "Claude Sonnet 4.5",
     "provider": "anthropic",
-    "tags": ["reasoning", "tool-use"],
+    "tags": ["reasoning", "coding", "tool-use"],
     "contextLength": 200000,
     "speedTier": "medium",
     "qualityTier": "excellent",
-    "bestAt": "High quality reasoning and writing."
+    "bestAt": "Top-tier reasoning, coding, and tool use."
+  },
+  "claude-sonnet-4-6": {
+    "displayName": "Claude Sonnet 4.6",
+    "provider": "anthropic",
+    "tags": ["reasoning", "coding", "tool-use"],
+    "contextLength": 200000,
+    "speedTier": "medium",
+    "qualityTier": "excellent",
+    "bestAt": "Balanced flagship model with strong coding and reasoning."
+  },
+  "claude-opus-4-6": {
+    "displayName": "Claude Opus 4.6",
+    "provider": "anthropic",
+    "tags": ["reasoning", "coding", "tool-use"],
+    "contextLength": 200000,
+    "speedTier": "slow",
+    "qualityTier": "excellent",
+    "bestAt": "Highest-quality deep reasoning and complex autonomous execution."
+  },
+  "grok-4": {
+    "displayName": "Grok 4",
+    "provider": "xai",
+    "tags": ["reasoning", "coding", "tool-use"],
+    "speedTier": "medium",
+    "qualityTier": "excellent",
+    "bestAt": "Best xAI flagship quality for complex planning and execution."
+  },
+  "grok-4-1-fast-reasoning": {
+    "displayName": "Grok 4.1 Fast Reasoning",
+    "provider": "xai",
+    "tags": ["reasoning", "coding", "tool-use"],
+    "speedTier": "fast",
+    "qualityTier": "excellent",
+    "bestAt": "Fast high-quality Grok profile for autonomous task loops.",
+    "better": ["grok-4"],
+    "smaller": ["grok-3-mini-fast"]
+  },
+  "grok-3-mini-fast": {
+    "displayName": "Grok 3 Mini Fast",
+    "provider": "xai",
+    "tags": ["chat", "reasoning"],
+    "speedTier": "fast",
+    "qualityTier": "good",
+    "bestAt": "Low-latency Grok option for lightweight assistant turns."
   }
 }
-

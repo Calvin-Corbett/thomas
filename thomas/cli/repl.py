@@ -37,6 +37,7 @@ except ImportError:
     raise ImportError("rich is required for the REPL. Install with: pip install rich>=13.0")
 
 from thomas.core.config import AppConfig
+from thomas.core.autonomy import clamp_autonomy_level, autonomy_level_name
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
 from thomas.tools.registry import ToolRegistry
@@ -55,6 +56,7 @@ except ImportError:
 _SLASH_COMMANDS = [
     "/help", "/clear", "/save", "/load",
     "/model", "/tools", "/memory", "/pin", "/unpin",
+    "/autonomy",
     "/exit", "/quit",
 ]
 
@@ -67,6 +69,7 @@ class ThomasREPL:
         self.tools = tools
         self._conversation: List[Dict[str, Any]] = []
         self._current_model: str = config.default_model
+        self._autonomy_level: int = 3
         self._last_model_choices: List[str] = []
         self._llm: Optional[LLMClient] = None
         self._memory: Optional[Any] = None
@@ -122,7 +125,10 @@ class ThomasREPL:
         return self._llm
 
     def _get_prompt(self) -> HTML:
-        return HTML(f"<prompt>thomas</prompt> <ansigray>[{self._current_model}]</ansigray> > ")
+        return HTML(
+            f"<prompt>thomas</prompt> "
+            f"<ansigray>[{self._current_model} | L{self._autonomy_level}]</ansigray> > "
+        )
 
     def _handle_nl_model(self, text: str) -> bool:
         """Handle natural-language model switches or listing. Returns True if handled."""
@@ -239,6 +245,7 @@ class ThomasREPL:
                     "[bold]/save [file][/bold]     Save conversation to JSON file",
                     "[bold]/load [file][/bold]     Load conversation from JSON file",
                     "[bold]/model [name][/bold]    Show or switch model profile",
+                    "[bold]/autonomy [1-4][/bold]  Show or set autonomy level",
                     "[bold]/tools[/bold]           List available tools",
                     "[bold]/memory[/bold]          Show memory stats, pins, and token usage",
                     "[bold]/pin key=val[/bold]     Pin context (always included in memory)",
@@ -401,6 +408,25 @@ class ThomasREPL:
                 f"Try /model (no args) to list profiles and endpoint models.[/red]"
             )
 
+        elif command == "/autonomy":
+            if not arg:
+                level = int(self._autonomy_level)
+                self._console.print(
+                    f"[dim]Autonomy: L{level} ({autonomy_level_name(level)})[/dim]"
+                )
+                return False
+
+            m = re.search(r"[1-4]", str(arg))
+            if not m:
+                self._console.print("[yellow]Usage: /autonomy <1|2|3|4>[/yellow]")
+                return False
+
+            level = clamp_autonomy_level(m.group(0), default=self._autonomy_level)
+            self._autonomy_level = int(level)
+            self._console.print(
+                f"[dim]Autonomy set to L{level} ({autonomy_level_name(level)})[/dim]"
+            )
+
         elif command == "/tools":
             for cat in self.tools.list_categories():
                 self._console.print(f"\n[bold]{cat}[/bold]")
@@ -474,6 +500,7 @@ class ThomasREPL:
             conversation=self._conversation,
             memory=self._memory,
             thread_id="repl",
+            autonomy_level=self._autonomy_level,
         )
 
         # State for managing the spinner + streaming output
@@ -481,10 +508,19 @@ class ThomasREPL:
         spinner_live: Optional[Live] = None
         text_buffer: list[str] = []
         usage_hint = ""
+        token_info = ""
 
         try:
             async for event in agent.run(prompt):
-                if event.type == EventType.AGENT_ITERATION:
+                if event.type == EventType.AGENT_START:
+                    route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
+                    mode = route.get("mode") or event.data.get("mode") or "auto"
+                    policy = event.data.get("tools_policy", "auto")
+                    level = int(event.data.get("autonomy_level", self._autonomy_level) or self._autonomy_level)
+                    name = str(event.data.get("autonomy_name") or autonomy_level_name(level))
+                    self._console.print(f"[dim][route {mode}, tools={policy}, autonomy=L{level} {name}][/dim]")
+
+                elif event.type == EventType.AGENT_ITERATION:
                     # Show thinking spinner
                     ctx_tokens = event.data.get("token_estimate", 0)
                     ctx_window = event.data.get("context_window", 0)
@@ -565,6 +601,16 @@ class ThomasREPL:
                         spinner_live.stop()
                         spinner_live = None
                     sys.stdout.write("\n")
+                    token_report = event.data.get("token_report")
+                    if isinstance(token_report, dict):
+                        try:
+                            prompt_tokens = int(token_report.get("prompt_tokens", 0) or 0)
+                            completion_tokens = int(token_report.get("completion_tokens", 0) or 0)
+                            total_tokens = int(token_report.get("total_tokens", 0) or 0)
+                            if total_tokens > 0:
+                                token_info = f"{prompt_tokens}+{completion_tokens}={total_tokens} tokens"
+                        except Exception:
+                            token_info = ""
                     iters = event.data["iterations"]
                     tc = event.data["tool_calls"]
                     parts = []

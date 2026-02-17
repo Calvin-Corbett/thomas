@@ -1,10 +1,10 @@
 /* ============================================================
    Thomas Inspector
    ============================================================
-   Right panel with tabs: Run, Trace, Tools, Memory, Artifacts, Files.
+   Right panel with tabs: Run, Jobs, Trace, Tools, Memory, Artifacts, Files.
    ============================================================ */
 
-import { getState, subscribe, setState } from './store.js';
+import { getState, subscribe, setState, setActiveChat } from './store.js';
 import {
   fetchTools,
   fetchMemory,
@@ -16,6 +16,7 @@ import {
 import { el, formatDuration, formatNumber } from './utils.js';
 import { createTabs, createEmptyState } from './components.js';
 import { setSwarmContainer } from './swarm.js';
+import { cancelJob, scrollToMessage } from './chat.js';
 
 let _tabsEl = null;
 let _bodyEl = null;
@@ -24,6 +25,7 @@ let _memoryLoadNonce = 0;
 
 const TABS = [
   { id: 'run', label: 'Run' },
+  { id: 'jobs', label: 'Jobs' },
   { id: 'trace', label: 'Trace' },
   { id: 'tools', label: 'Tools' },
   { id: 'memory', label: 'Memory' },
@@ -53,6 +55,9 @@ export function initInspector() {
   subscribe('activeRun', () => {
     const tab = getState().ui.inspectorTab;
     if (tab === 'run' || tab === 'trace') renderTabContent(tab);
+  });
+  subscribe('jobs', () => {
+    if (getState().ui.inspectorTab === 'jobs') renderTabContent('jobs');
   });
   subscribe('tools', () => {
     if (getState().ui.inspectorTab === 'tools') renderTabContent('tools');
@@ -85,6 +90,7 @@ function renderTabContent(tabId) {
 
   switch (tabId) {
     case 'run': renderRunTab(); break;
+    case 'jobs': renderJobsTab(); break;
     case 'trace': renderTraceTab(); break;
     case 'tools': renderToolsTab(); break;
     case 'memory': renderMemoryTab(); break;
@@ -92,6 +98,97 @@ function renderTabContent(tabId) {
     case 'artifacts': renderPlaceholder('Artifacts', 'Generated files, documents, images, and tables.'); break;
     case 'files': renderPlaceholder('Files', 'Workspace file browser for uploads and generated outputs.'); break;
   }
+}
+
+function renderJobsTab() {
+  const jobs = Array.isArray(getState().jobs) ? getState().jobs.slice() : [];
+  if (jobs.length === 0) {
+    _bodyEl.appendChild(createEmptyState({
+      icon: '\u23F1\uFE0F',
+      title: 'No jobs',
+      subtitle: 'Background runs will appear here.',
+    }));
+    return;
+  }
+
+  const panel = el('div', { style: { padding: 'var(--space-3)' } });
+  const runningCount = jobs.filter((j) => j.status === 'starting' || j.status === 'running').length;
+  panel.appendChild(el('div', {
+    style: { fontSize: 'var(--text-xs)', color: 'var(--text-muted)', marginBottom: 'var(--space-2)' },
+  }, `${runningCount} running | ${jobs.length} total`));
+
+  const chats = getState().chats;
+
+  for (const j of jobs) {
+    const status = String(j.status || 'unknown');
+    const tone = status === 'done'
+      ? 'var(--success-text)'
+      : (status === 'error' ? 'var(--danger-text)' : (status === 'stopped' ? 'var(--text-muted)' : 'var(--warning-text)'));
+    const chatTitle = chats.get(j.chatId)?.title || 'Chat';
+    const startedAt = Number(j.startedAt || 0);
+    const endedAt = Number(j.endedAt || 0);
+    const baseTs = startedAt || Number(j.queuedAt || 0);
+    const elapsedMs = baseTs > 0 ? Math.max(0, (endedAt || Date.now()) - baseTs) : 0;
+
+    const card = el('div', {
+      style: {
+        border: '1px solid var(--border-subtle)',
+        borderRadius: '10px',
+        padding: 'var(--space-3)',
+        marginBottom: 'var(--space-2)',
+        background: 'var(--bg-secondary)',
+      },
+    });
+
+    const top = el('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' } });
+    top.appendChild(el('div', { style: { fontSize: 'var(--text-xs)', color: 'var(--text-muted)' } }, chatTitle));
+    top.appendChild(el('div', { style: { fontSize: 'var(--text-xs)', fontWeight: 'var(--font-semibold)', color: tone, textTransform: 'uppercase' } }, status));
+    card.appendChild(top);
+
+    card.appendChild(el('div', {
+      style: {
+        marginTop: '6px',
+        fontSize: 'var(--text-sm)',
+        color: 'var(--text-primary)',
+        lineHeight: '1.45',
+        whiteSpace: 'pre-wrap',
+      },
+    }, String(j.preview || '').slice(0, 220)));
+
+    card.appendChild(el('div', {
+      style: { marginTop: '6px', fontSize: 'var(--text-xs)', color: 'var(--text-muted)' },
+    }, `Mode: ${j.mode || ''} | Profile: ${j.profile || ''} | Elapsed: ${formatDuration(elapsedMs)}`));
+
+    if (j.error) {
+      card.appendChild(el('div', {
+        style: { marginTop: '6px', fontSize: 'var(--text-xs)', color: 'var(--danger-text)', whiteSpace: 'pre-wrap' },
+      }, String(j.error)));
+    }
+
+    const actions = el('div', { style: { display: 'flex', gap: '6px', marginTop: '8px', flexWrap: 'wrap' } });
+    const openBtn = el('button', { className: 'btn btn-sm' }, 'Open chat');
+    openBtn.onclick = () => {
+      setActiveChat(j.chatId);
+      setState('ui', { inspectorTab: 'run' });
+      if (j.messageId) {
+        setTimeout(() => scrollToMessage(j.messageId), 80);
+      }
+    };
+    actions.appendChild(openBtn);
+
+    if (status === 'queued' || status === 'starting' || status === 'running') {
+      const stopBtn = el('button', { className: 'btn btn-sm btn-danger' }, status === 'queued' ? 'Cancel' : 'Stop');
+      stopBtn.onclick = () => {
+        cancelJob(j.id);
+      };
+      actions.appendChild(stopBtn);
+    }
+
+    card.appendChild(actions);
+    panel.appendChild(card);
+  }
+
+  _bodyEl.appendChild(panel);
 }
 
 function renderRunTab() {

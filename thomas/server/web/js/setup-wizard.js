@@ -431,7 +431,7 @@ export function openSetupWizard() {
     }
   }).catch(err => {
     cardsContainer.appendChild(el('div', { style: { color: 'var(--danger)', fontSize: 'var(--text-sm)' } },
-      `Failed to load secrets: ${err?.message || String(err)}. Is the server running on localhost?`
+      `Failed to load secrets: ${err?.message || String(err)}. Check server URL and access token settings.`
     ));
   });
 

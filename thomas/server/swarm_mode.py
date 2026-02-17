@@ -3,7 +3,7 @@ aiohttp integration for Swarm Mode.
 
 This module is intentionally small and dependency-free. It provides:
 - POST /api/chat integration handler for mode="swarm"
-- POST /api/runs/{run_id}/cancel endpoint (localhost-only)
+- POST /api/runs/{run_id}/cancel endpoint (localhost in local mode, token-auth in remote mode)
 
 Because Thomas' internal wiring may differ per repo version, this module exposes
 a couple of hooks so app.py can pass in the existing tool executor and agent
@@ -34,6 +34,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import hmac
 import json
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -63,8 +64,31 @@ def _is_localhost(request: web.Request) -> bool:
 
 
 async def handle_cancel(request: web.Request) -> web.Response:
-    if not _is_localhost(request):
-        raise web.HTTPForbidden(text="cancel endpoint is localhost-only")
+    cfg_obj = None
+    try:
+        for v in request.app.values():
+            if getattr(v, "server", None) is not None and hasattr(v.server, "access_mode"):
+                cfg_obj = v
+                break
+    except Exception:
+        cfg_obj = None
+
+    mode = str(getattr(getattr(cfg_obj, "server", None), "access_mode", "local") or "local").strip().lower()
+    if mode == "remote":
+        expected = str(getattr(getattr(cfg_obj, "server", None), "api_token", "") or "").strip()
+        auth = str(request.headers.get("Authorization") or "")
+        incoming = ""
+        if auth.lower().startswith("bearer "):
+            incoming = auth.split(" ", 1)[1].strip()
+        else:
+            incoming = str(request.headers.get("X-Api-Token") or "").strip()
+        if not expected:
+            raise web.HTTPUnauthorized(text="server api token is not configured")
+        if not incoming or not hmac.compare_digest(incoming.encode("utf-8"), expected.encode("utf-8")):
+            raise web.HTTPUnauthorized(text="missing or invalid api token")
+    else:
+        if not _is_localhost(request):
+            raise web.HTTPForbidden(text="cancel endpoint is localhost-only")
 
     run_id = request.match_info.get("run_id", "")
     if not run_id:

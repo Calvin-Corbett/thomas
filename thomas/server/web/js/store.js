@@ -34,6 +34,7 @@ const _state = {
     showInspector: false,
     fontSize: 'default',
     preferredProfile: null, // string | null
+    preferredModelByProfile: {}, // profileName -> modelId override
     promptLibrary: [],     // [{id, title, text}]
     ttsEnabled: false,
     ttsRate: 1.0,
@@ -44,15 +45,20 @@ const _state = {
     inspectorWidth: 380,    // px
     sidebarCollapsed: false,
     showToolDetails: false,
+    autonomyLevel: 3,       // 1..4
   },
 
   /* UI state */
   ui: {
     sidebarOpen: true,     // desktop: always true; mobile: toggle
     inspectorOpen: false,
-    inspectorTab: 'run',   // 'run' | 'trace' | 'tools' | 'memory' | 'artifacts' | 'files'
+    inspectorTab: 'run',   // 'run' | 'jobs' | 'trace' | 'tools' | 'memory' | 'artifacts' | 'files'
     streaming: false,
     abortController: null, // AbortController for current stream
+    queuedMessages: 0,
+    queuedForActiveChat: 0,
+    concurrentRuns: 0,
+    activeChatRuns: 0,
     commandPaletteOpen: false,
     modelPickerOpen: false,
     settingsOpen: false,
@@ -63,6 +69,9 @@ const _state = {
 
   /* Active run (inspector data) */
   activeRun: null,         // {id, status, steps[], startedAt, tokenEstimate, contextWindow, error} | null
+
+  /* Background job list */
+  jobs: [],                // [{id, chatId, status, ...}]
 
   /* Tools list (from /api/tools) */
   tools: [],               // [{name, category, description}]

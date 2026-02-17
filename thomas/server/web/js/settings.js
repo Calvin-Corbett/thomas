@@ -10,7 +10,15 @@ import { saveSettings, saveSetting } from './db.js';
 import { el, applyTheme } from './utils.js';
 import { createModal, createTabs, createButton, showToast } from './components.js';
 import { updateCodeTheme } from './chat.js';
-import { fetchSecrets, setProfileApiKey, clearProfileApiKey, fetchModelHandshake, fetchModels } from './api.js';
+import {
+  fetchSecrets,
+  setProfileApiKey,
+  clearProfileApiKey,
+  fetchModelHandshake,
+  fetchModels,
+  getServerApiToken,
+  setServerApiToken,
+} from './api.js';
 import { setComposerText } from './composer.js';
 import { openSetupWizard, createTestAllPanel } from './setup-wizard.js';
 
@@ -326,7 +334,7 @@ export function openSettings(initialTab = 'appearance') {
       row.appendChild(btns);
       keyBody.appendChild(row);
     } else {
-      keyBody.appendChild(el('div', { style: { fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: '1.6' } }, `Paste the API key for "${profileName}". This will be sent to the local Thomas server.`));
+    keyBody.appendChild(el('div', { style: { fontSize: 'var(--text-xs)', color: 'var(--text-muted)', lineHeight: '1.6' } }, `Paste the API key for "${profileName}". This will be sent to your Thomas server.`));
     }
 
     const input = el('input', { className: 'input', type: 'password', placeholder: 'API key', autocomplete: 'off', spellcheck: 'false' });
@@ -530,16 +538,37 @@ export function openSettings(initialTab = 'appearance') {
   //  TAB: About
   // ════════════════════════════════════════════════════════
   const aboutPanel = panels.about;
+  const savedServerToken = getServerApiToken();
   aboutPanel.innerHTML = `
     <div style="font-size: var(--text-sm); color: var(--text-secondary); line-height: 1.8;">
       <div style="font-size: var(--text-lg); font-weight: var(--font-bold); margin-bottom: var(--space-3);"><span id="aboutVersion">Thomas</span></div>
-      Local-first AI coding assistant<br/>
-      Built for developers who want control over their AI tools.<br/><br/>
+      Autonomous AI execution platform for local and remote deployments.<br/>
+      Built for teams and builders who want real execution, not just chat.<br/><br/>
+      <div style="font-size: var(--text-xs); color: var(--text-muted); margin-bottom: var(--space-2);">Server API token (for remote mode)</div>
+      <div style="display:flex; gap: var(--space-2); align-items:center; margin-bottom: var(--space-3);">
+        <input id="serverApiTokenInput" class="input" type="password" placeholder="Paste bearer token" style="flex:1; min-width: 220px;" />
+        <button id="serverApiTokenSaveBtn" class="btn btn-sm">Save</button>
+        <button id="serverApiTokenClearBtn" class="btn btn-sm btn-secondary">Clear</button>
+      </div>
       <div style="font-size: var(--text-xs); color: var(--text-muted);">
         Keyboard shortcut: <kbd style="padding: 1px 6px; background: var(--bg-tertiary); border: 1px solid var(--border); border-radius: var(--radius-xs); font-family: var(--font-mono); font-size: 11px;">Ctrl+K</kbd> opens the command palette
       </div>
     </div>
   `;
+  const tokenInput = aboutPanel.querySelector('#serverApiTokenInput');
+  const saveTokenBtn = aboutPanel.querySelector('#serverApiTokenSaveBtn');
+  const clearTokenBtn = aboutPanel.querySelector('#serverApiTokenClearBtn');
+  if (tokenInput) tokenInput.value = savedServerToken || '';
+  saveTokenBtn?.addEventListener('click', () => {
+    const v = String(tokenInput?.value || '').trim();
+    setServerApiToken(v);
+    showToast(v ? 'Server token saved (browser-local)' : 'Server token cleared', 'success');
+  });
+  clearTokenBtn?.addEventListener('click', () => {
+    if (tokenInput) tokenInput.value = '';
+    setServerApiToken('');
+    showToast('Server token cleared', 'success');
+  });
   fetch('/api/version').then(r => r.ok ? r.json() : null).then(j => {
     const v = j?.version ? `Thomas v${j.version}` : 'Thomas';
     aboutPanel.querySelector('#aboutVersion')?.replaceChildren(document.createTextNode(v));
