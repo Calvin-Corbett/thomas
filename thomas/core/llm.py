@@ -84,11 +84,13 @@ class LLMClient:
         self._primary_config = config
         self.session_usage = TokenUsage()
         self._client: Optional[httpx.AsyncClient] = None
+        self._anthropic_tool_name_map: Dict[str, str] = {}  # sanitized→original
         self._codex_provider: Optional[Any] = None  # lazy CodexProvider
         self._fallback_configs = list(fallback_configs or [])
         self._failover_enabled = bool(failover_enabled) and len(self._fallback_configs) > 0
         self._failover_cooldown_s = max(0, int(failover_cooldown_s))
         self._failover_on_auth_error = bool(failover_on_auth_error)
+        self._attempt_trace: List[Dict[str, Any]] = []
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -154,6 +156,33 @@ class LLMClient:
         rem = until - time.monotonic()
         return rem if rem > 0 else 0.0
 
+    @staticmethod
+    def _cfg_snapshot(cfg: ModelConfig) -> Dict[str, Any]:
+        return {
+            "profile": str(cfg.name or ""),
+            "provider": str(cfg.provider or ""),
+            "model": str(cfg.model or ""),
+            "base_url": str(cfg.base_url or ""),
+        }
+
+    def runtime_trace(self) -> Dict[str, Any]:
+        """Runtime model trace for the most recent stream_chat() call."""
+        primary = self._cfg_snapshot(self._primary_config)
+        active = self._cfg_snapshot(self.config)
+        attempts = [dict(a) for a in self._attempt_trace]
+        failover_used = any(
+            str(a.get("status") or "") == "success"
+            and str(a.get("profile") or "") != str(primary.get("profile") or "")
+            for a in attempts
+        )
+        return {
+            "requested": primary,
+            "active": active,
+            "failover_enabled": bool(self._failover_enabled),
+            "failover_used": bool(failover_used),
+            "attempts": attempts,
+        }
+
     def _build_openai_request(
         self,
         messages: List[Dict[str, Any]],
@@ -179,6 +208,9 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
         stream: bool = True,
     ) -> Dict[str, Any]:
+        # Reset per-request state
+        self._anthropic_tool_name_map = {}
+
         # Convert OpenAI message format to Anthropic format
         system_text = ""
         anthropic_messages: List[Dict[str, Any]] = []
@@ -201,11 +233,13 @@ class LLMClient:
                     try:
                         args = json.loads(args_str) if args_str else {}
                     except json.JSONDecodeError:
+                        log.warning("Malformed tool arguments for %s: %s",
+                                    func.get("name", "?"), args_str[:200])
                         args = {}
                     content_blocks.append({
                         "type": "tool_use",
                         "id": tc.get("id", ""),
-                        "name": func.get("name", ""),
+                        "name": func.get("name", "").replace(".", "_"),
                         "input": args,
                     })
                 if content_blocks:
@@ -272,16 +306,23 @@ class LLMClient:
         if system_text:
             body["system"] = system_text.strip()
         if tools:
-            # Convert OpenAI tool format to Anthropic tool format
+            # Convert OpenAI tool format to Anthropic tool format.
+            # Anthropic tool names must match [a-zA-Z0-9_-]; replace dots.
             anthropic_tools = []
+            name_map: Dict[str, str] = {}
             for t in tools:
                 func = t.get("function", {})
+                original_name = func.get("name", "")
+                safe_name = original_name.replace(".", "_")
+                name_map[safe_name] = original_name
                 anthropic_tools.append({
-                    "name": func.get("name", ""),
+                    "name": safe_name,
                     "description": func.get("description", ""),
                     "input_schema": func.get("parameters", {}),
                 })
             body["tools"] = anthropic_tools
+            body["tool_choice"] = {"type": "auto"}
+            self._anthropic_tool_name_map = name_map
         return body
 
     @staticmethod
@@ -328,16 +369,33 @@ class LLMClient:
         tools: Optional[List[Dict[str, Any]]] = None,
     ) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion, yielding events as they arrive."""
+        self._attempt_trace = []
         if not self._failover_enabled:
-            async for event in self._stream_current_provider(messages, tools):
-                yield event
-            return
+            attempt = {
+                **self._cfg_snapshot(self.config),
+                "status": "running",
+            }
+            self._attempt_trace.append(attempt)
+            try:
+                async for event in self._stream_current_provider(messages, tools):
+                    yield event
+                attempt["status"] = "success"
+                return
+            except Exception as e:
+                attempt["status"] = "error"
+                attempt["error"] = f"{type(e).__name__}: {e}"
+                raise
 
         primary_cfg = self._primary_config
         candidates = [primary_cfg] + [cfg for cfg in self._fallback_configs]
         last_error: Optional[Exception] = None
 
         for idx, cfg in enumerate(candidates):
+            attempt = {
+                **self._cfg_snapshot(cfg),
+                "status": "running",
+            }
+            self._attempt_trace.append(attempt)
             if idx > 0:
                 rem = self._cooldown_remaining(cfg)
                 if rem > 0:
@@ -346,6 +404,8 @@ class LLMClient:
                         cfg.name,
                         rem,
                     )
+                    attempt["status"] = "skipped_cooldown"
+                    attempt["cooldown_remaining_s"] = int(rem)
                     continue
 
             await self._switch_config(cfg)
@@ -353,9 +413,13 @@ class LLMClient:
             try:
                 async for event in self._stream_current_provider(messages, tools):
                     yield event
+                attempt["status"] = "success"
                 return
             except LLMError as e:
                 last_error = e
+                attempt["status"] = "error"
+                attempt["error"] = f"LLMError({int(getattr(e, 'status', 0) or 0)}): {e}"
+                attempt["retryable"] = bool(getattr(e, "retryable", False))
                 auth_error = e.status in (401, 403)
                 if auth_error and not self._failover_on_auth_error:
                     raise
@@ -370,6 +434,8 @@ class LLMClient:
                 raise
             except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException, OSError) as e:
                 last_error = e
+                attempt["status"] = "error"
+                attempt["error"] = f"{type(e).__name__}: {e}"
                 self._mark_cooldown(cfg)
                 if idx < len(candidates) - 1:
                     log.warning(
@@ -441,24 +507,43 @@ class LLMClient:
                         )
 
                     tool_calls: Dict[int, ToolCallAccumulator] = {}
+                    legacy_tool_idx = -1
+
+                    def _coerce_args_fragment(raw: Any) -> str:
+                        if raw is None:
+                            return ""
+                        if isinstance(raw, str):
+                            return raw
+                        try:
+                            return json.dumps(raw, ensure_ascii=False)
+                        except Exception:
+                            return str(raw)
+
+                    async def _emit_pending_tool_ends() -> None:
+                        for tc in tool_calls.values():
+                            if not tc.finished:
+                                tc.finished = True
+                                yield_event = StreamEvent(
+                                    type="tool_call_end",
+                                    data={"id": tc.id, "name": tc.name, "arguments": tc.arguments},
+                                )
+                                pending_events.append(yield_event)
+
                     # Avoid returning from inside the streaming iterator; letting the
                     # `async for` unwind cleanly prevents noisy asyncio/httpx shutdown
                     # errors on some platforms.
                     done_emitted = False
 
                     async for line in resp.aiter_lines():
+                        pending_events: List[StreamEvent] = []
                         if not line.startswith("data: "):
                             continue
                         data_str = line[6:]
                         if data_str.strip() == "[DONE]":
                             # Emit end events for any unfinished tool calls
-                            for tc in tool_calls.values():
-                                if not tc.finished:
-                                    tc.finished = True
-                                    yield StreamEvent(
-                                        type="tool_call_end",
-                                        data={"id": tc.id, "name": tc.name, "arguments": tc.arguments},
-                                    )
+                            await _emit_pending_tool_ends()
+                            for ev in pending_events:
+                                yield ev
                             yield StreamEvent(type="done")
                             done_emitted = True
                             break
@@ -490,46 +575,78 @@ class LLMClient:
 
                         # Tool calls
                         for tc_delta in delta.get("tool_calls", []):
-                            idx = tc_delta.get("index", 0)
+                            try:
+                                idx = int(tc_delta.get("index", 0))
+                            except Exception:
+                                idx = 0
                             if idx not in tool_calls:
                                 tc_id = tc_delta.get("id", f"call_{idx}")
                                 tc_name = tc_delta.get("function", {}).get("name", "")
                                 tool_calls[idx] = ToolCallAccumulator(id=tc_id, name=tc_name)
-                                yield StreamEvent(
+                                pending_events.append(StreamEvent(
                                     type="tool_call_start",
                                     data={"id": tc_id, "name": tc_name, "index": idx},
-                                )
+                                ))
 
-                            args_delta = tc_delta.get("function", {}).get("arguments", "")
+                            args_delta = _coerce_args_fragment(
+                                tc_delta.get("function", {}).get("arguments", "")
+                            )
                             if args_delta:
                                 tool_calls[idx].arguments += args_delta
-                                yield StreamEvent(
+                                pending_events.append(StreamEvent(
                                     type="tool_call_delta",
                                     data={"id": tool_calls[idx].id, "delta": args_delta},
-                                )
+                                ))
 
                             # Update name if it wasn't in the first chunk
                             name_delta = tc_delta.get("function", {}).get("name", "")
                             if name_delta and not tool_calls[idx].name:
                                 tool_calls[idx].name = name_delta
 
+                        # Legacy OpenAI function-calling stream format:
+                        # delta.function_call.{name,arguments}
+                        legacy_fc = delta.get("function_call", {})
+                        if isinstance(legacy_fc, dict) and legacy_fc:
+                            legacy_name = str(legacy_fc.get("name", "") or "")
+                            if legacy_tool_idx not in tool_calls:
+                                tc_id = "call_legacy_0"
+                                tool_calls[legacy_tool_idx] = ToolCallAccumulator(
+                                    id=tc_id,
+                                    name=legacy_name,
+                                )
+                                pending_events.append(StreamEvent(
+                                    type="tool_call_start",
+                                    data={"id": tc_id, "name": legacy_name, "index": legacy_tool_idx},
+                                ))
+
+                            if legacy_name and not tool_calls[legacy_tool_idx].name:
+                                tool_calls[legacy_tool_idx].name = legacy_name
+
+                            legacy_args = _coerce_args_fragment(legacy_fc.get("arguments", ""))
+                            if legacy_args:
+                                tool_calls[legacy_tool_idx].arguments += legacy_args
+                                pending_events.append(StreamEvent(
+                                    type="tool_call_delta",
+                                    data={"id": tool_calls[legacy_tool_idx].id, "delta": legacy_args},
+                                ))
+
                         # Finish reason
                         finish = choices[0].get("finish_reason")
-                        if finish == "tool_calls" or finish == "stop":
-                            for tc in tool_calls.values():
-                                if not tc.finished:
-                                    tc.finished = True
-                                    yield StreamEvent(
-                                        type="tool_call_end",
-                                        data={
-                                            "id": tc.id,
-                                            "name": tc.name,
-                                            "arguments": tc.arguments,
-                                        },
-                                    )
+                        if finish in ("tool_calls", "function_call", "stop"):
+                            await _emit_pending_tool_ends()
+
+                        for ev in pending_events:
+                            yield ev
 
                     # Stream completed without [DONE].
                     if not done_emitted:
+                        for tc in tool_calls.values():
+                            if not tc.finished:
+                                tc.finished = True
+                                yield StreamEvent(
+                                    type="tool_call_end",
+                                    data={"id": tc.id, "name": tc.name, "arguments": tc.arguments},
+                                )
                         yield StreamEvent(type="done")
                     return
 
@@ -557,6 +674,15 @@ class LLMClient:
     ) -> AsyncIterator[StreamEvent]:
         url = f"{self.config.base_url.rstrip('/')}/messages"
         body = self._build_anthropic_request(messages, tools, stream=True)
+
+        # Debug: log tool configuration sent to Anthropic
+        tool_names = [t["name"] for t in body.get("tools", [])]
+        if tool_names:
+            log.debug("Anthropic request: %d tools [%s], tool_choice=%s",
+                      len(tool_names), ", ".join(tool_names[:5]),
+                      body.get("tool_choice"))
+        else:
+            log.debug("Anthropic request: NO tools sent")
 
         client = await self._get_client()
         last_error: Optional[Exception] = None
@@ -602,6 +728,7 @@ class LLMClient:
                             continue
 
                         event_type = event_data.get("type", "")
+                        log.debug("Anthropic SSE event: %s", event_type)
                         usage_fields = self._extract_anthropic_usage(event_data)
                         if usage_fields:
                             prompt_candidate = (
@@ -617,7 +744,9 @@ class LLMClient:
                             block = event_data.get("content_block", {})
                             if block.get("type") == "tool_use":
                                 current_tool_id = block.get("id", "")
-                                current_tool_name = block.get("name", "")
+                                # Reverse-map sanitized name back to original dotted name
+                                raw_name = block.get("name", "")
+                                current_tool_name = self._anthropic_tool_name_map.get(raw_name, raw_name)
                                 current_tool_args = ""
                                 yield StreamEvent(
                                     type="tool_call_start",
@@ -647,6 +776,12 @@ class LLMClient:
                                     },
                                 )
                                 current_tool_id = ""
+
+                        elif event_type == "message_delta":
+                            delta = event_data.get("delta", {})
+                            stop = delta.get("stop_reason")
+                            if stop:
+                                log.debug("Anthropic stop_reason: %s", stop)
 
                         elif event_type == "message_stop":
                             if not usage_emitted and (prompt_tokens or completion_tokens):

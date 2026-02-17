@@ -108,9 +108,52 @@ class FailoverConfig:
     """Configuration for cross-profile model failover."""
 
     enabled: bool = True
+    # If false, primary chat runs stay pinned to the requested profile/model and
+    # do not silently fail over to other profiles.
+    chat_auto_failover: bool = False
     profiles: list[str] = field(default_factory=list)
     cooldown_seconds: int = 300
     fallback_on_auth_error: bool = False
+
+
+@dataclass
+class JournalConfig:
+    """Configuration for the task journal."""
+
+    enabled: bool = True
+    dir: str = "./tasks"
+
+    @property
+    def dir_path(self) -> Path:
+        return Path(self.dir).resolve()
+
+
+@dataclass
+class ServerConfig:
+    """Configuration for server access policy."""
+
+    # local: localhost-only API access
+    # remote: authenticated API access from non-local clients
+    access_mode: str = "local"
+    api_token: str = ""
+    allow_unauthenticated_version: bool = True
+    # Remote-mode API request limiting (best-effort in-memory limiter).
+    rate_limit_enabled: bool = True
+    rate_limit_max_requests: int = 120
+    rate_limit_window_seconds: int = 60
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        mode = str(self.access_mode or "").strip().lower()
+        if mode not in ("local", "remote"):
+            errors.append("server.access_mode must be 'local' or 'remote'")
+        if mode == "remote" and not str(self.api_token or "").strip():
+            errors.append("server.api_token is required when server.access_mode='remote'")
+        if int(self.rate_limit_max_requests) < 1:
+            errors.append("server.rate_limit_max_requests must be >= 1")
+        if int(self.rate_limit_window_seconds) < 1:
+            errors.append("server.rate_limit_window_seconds must be >= 1")
+        return errors
 
 
 @dataclass
@@ -122,6 +165,8 @@ class AppConfig:
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
     failover: FailoverConfig = field(default_factory=FailoverConfig)
+    server: ServerConfig = field(default_factory=ServerConfig)
+    journal: JournalConfig = field(default_factory=JournalConfig)
     default_model: str = "local"
     max_agent_iterations: int = 10
 
@@ -183,6 +228,7 @@ class AppConfig:
                     f"failover.profiles contains unknown model profile '{name}'. "
                     f"Available: {list(self.models.keys())}"
                 )
+        errors.extend(self.server.validate())
         return errors
 
 
@@ -226,7 +272,8 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
         # THOMAS_TOOLS_<field...> -> data["tools"][field]
         # THOMAS_EMBED_<field...> -> data["embed"][field]
         # THOMAS_FAILOVER_<field...> -> data["failover"][field]
-        if parts[0] in ("memory", "tools", "embed", "failover") and len(parts) >= 2:
+        # THOMAS_SERVER_<field...> -> data["server"][field]
+        if parts[0] in ("memory", "tools", "embed", "failover", "server", "journal") and len(parts) >= 2:
             section, *rest = parts
             field = "_".join(rest)
             data.setdefault(section, {})[field] = value
@@ -247,9 +294,18 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
 def _coerce_types(data: Dict[str, Any]) -> None:
     """Coerce string values from env vars to appropriate types."""
     int_fields = {"max_tokens", "context_window", "context_budget", "shell_timeout",
-                  "max_file_size", "max_agent_iterations", "batch_size", "cooldown_seconds"}
+                  "max_file_size", "max_agent_iterations", "batch_size", "cooldown_seconds",
+                  "rate_limit_max_requests", "rate_limit_window_seconds"}
     float_fields = {"temperature", "top_p", "timeout_s"}
-    bool_fields = {"allow_shell", "load_on_demand", "enabled", "fallback_on_auth_error"}
+    bool_fields = {
+        "allow_shell",
+        "load_on_demand",
+        "enabled",
+        "chat_auto_failover",
+        "fallback_on_auth_error",
+        "allow_unauthenticated_version",
+        "rate_limit_enabled",
+    }
 
     for key, val in list(data.items()):
         if isinstance(val, dict):
@@ -325,7 +381,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     embed = EmbedConfig(
         provider=embed_data.get("provider", "local"),
         model=embed_data.get("model", "all-MiniLM-L6-v2"),
-        device=embed_data.get("device", "cuda"),
+        device=embed_data.get("device", "auto"),
         load_on_demand=embed_data.get("load_on_demand", True),
         batch_size=embed_data.get("batch_size", 64),
     )
@@ -356,9 +412,28 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         fail_profiles = []
     failover = FailoverConfig(
         enabled=bool(fail_data.get("enabled", True)),
+        chat_auto_failover=bool(fail_data.get("chat_auto_failover", False)),
         profiles=[str(x).strip() for x in fail_profiles if str(x).strip()],
         cooldown_seconds=int(fail_data.get("cooldown_seconds", 300) or 300),
         fallback_on_auth_error=bool(fail_data.get("fallback_on_auth_error", False)),
+    )
+
+    # Build server config
+    srv_data = data.get("server", {})
+    server = ServerConfig(
+        access_mode=str(srv_data.get("access_mode", "local") or "local").strip().lower(),
+        api_token=str(srv_data.get("api_token", "") or ""),
+        allow_unauthenticated_version=bool(srv_data.get("allow_unauthenticated_version", True)),
+        rate_limit_enabled=bool(srv_data.get("rate_limit_enabled", True)),
+        rate_limit_max_requests=int(srv_data.get("rate_limit_max_requests", 120)),
+        rate_limit_window_seconds=int(srv_data.get("rate_limit_window_seconds", 60)),
+    )
+
+    # Build journal config
+    journal_data = data.get("journal", {})
+    journal = JournalConfig(
+        enabled=bool(journal_data.get("enabled", True)),
+        dir=str(journal_data.get("dir", "./tasks") or "./tasks"),
     )
 
     return AppConfig(
@@ -367,6 +442,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         memory=memory,
         tools=tools,
         failover=failover,
+        server=server,
+        journal=journal,
         default_model=data.get("default_model", "local"),
         max_agent_iterations=data.get("max_agent_iterations", 10),
     )

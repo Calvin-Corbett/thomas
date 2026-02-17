@@ -5,6 +5,61 @@
    streaming, error handling, and abort signals.
    ============================================================ */
 
+const SERVER_TOKEN_STORAGE_KEY = 'thomas.serverApiToken';
+
+function _normalizeToken(value) {
+  const token = String(value || '').trim();
+  return token;
+}
+
+function _readTokenFromStorage() {
+  try {
+    return _normalizeToken(window.localStorage.getItem(SERVER_TOKEN_STORAGE_KEY));
+  } catch {
+    return '';
+  }
+}
+
+function _writeTokenToStorage(token) {
+  try {
+    if (!token) window.localStorage.removeItem(SERVER_TOKEN_STORAGE_KEY);
+    else window.localStorage.setItem(SERVER_TOKEN_STORAGE_KEY, token);
+  } catch {
+    // Ignore storage access failures.
+  }
+}
+
+function _bootstrapTokenFromUrl() {
+  if (typeof window === 'undefined') return;
+  try {
+    const u = new URL(window.location.href);
+    const qToken = _normalizeToken(u.searchParams.get('token') || '');
+    if (!qToken) return;
+    _writeTokenToStorage(qToken);
+    u.searchParams.delete('token');
+    window.history.replaceState({}, '', `${u.pathname}${u.search}${u.hash}`);
+  } catch {
+    // Ignore URL parsing/history failures.
+  }
+}
+
+_bootstrapTokenFromUrl();
+
+export function getServerApiToken() {
+  return _readTokenFromStorage();
+}
+
+export function setServerApiToken(token) {
+  _writeTokenToStorage(_normalizeToken(token));
+}
+
+function withApiAuth(opts = {}) {
+  const headers = new Headers(opts.headers || {});
+  const token = getServerApiToken();
+  if (token) headers.set('Authorization', `Bearer ${token}`);
+  return { ...opts, headers };
+}
+
 /**
  * JSON fetch helper with error handling.
  * @param {string} url
@@ -12,7 +67,7 @@
  * @returns {Promise<any>}
  */
 async function apiFetch(url, opts = {}) {
-  const res = await fetch(url, opts);
+  const res = await fetch(url, withApiAuth(opts));
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`);
@@ -27,7 +82,7 @@ async function apiFetch(url, opts = {}) {
  * @param {(event: object) => void} onEvent
  */
 async function streamNdjson(url, opts, onEvent) {
-  const res = await fetch(url, opts);
+  const res = await fetch(url, withApiAuth(opts));
 
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -90,7 +145,7 @@ export async function fetchModelIds(profile) {
 }
 
 /**
- * Probe a profile for auth/offline/unsupported state (localhost-only endpoint).
+ * Probe a profile for auth/offline/unsupported state (access-controlled endpoint).
  * @param {string} profile
  * @returns {Promise<{profile: string, ok: boolean, status: string, http_status: number|null, url: string, models: string[], error: string|null}>}
  */
@@ -108,7 +163,7 @@ export async function createSession() {
 
 /**
  * Fork an existing server session (copies server-side conversation state).
- * Note: endpoint is restricted to localhost.
+ * Note: endpoint is access-controlled by server policy.
  * @param {string} sessionId
  * @returns {Promise<{session_id: string, forked_from: string}>}
  */
@@ -122,7 +177,7 @@ export async function forkSession(sessionId) {
 
 /**
  * Create a new server session from a client-provided conversation.
- * Note: endpoint is restricted to localhost.
+ * Note: endpoint is access-controlled by server policy.
  * @param {{role: 'user'|'assistant', content: string}[]} conversation
  * @param {{profile?: string, model_id?: string|null}} [opts]
  * @returns {Promise<{session_id: string}>}
@@ -145,6 +200,45 @@ export async function importSession(conversation, opts = {}) {
  */
 export async function fetchTools() {
   return apiFetch('/api/tools');
+}
+
+/**
+ * Fetch persisted chats from the server.
+ * @returns {Promise<{chats: object[]}>}
+ */
+export async function fetchChats() {
+  return apiFetch('/api/chats');
+}
+
+/**
+ * Persist a chat object on the server.
+ * @param {object} chat
+ * @returns {Promise<{ok: boolean, chat: object}>}
+ */
+export async function saveServerChat(chat) {
+  const chatId = encodeURIComponent(String(chat?.id || '').trim());
+  if (!chatId) throw new Error('missing chat id');
+  return apiFetch(`/api/chats/${chatId}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(chat || {}),
+  });
+}
+
+/**
+ * Delete a persisted chat from the server.
+ * @param {string} chatId
+ * @returns {Promise<{ok: boolean, id: string, deleted: boolean}>}
+ */
+export async function deleteServerChat(chatId) {
+  const id = encodeURIComponent(String(chatId || '').trim());
+  if (!id) throw new Error('missing chat id');
+  const res = await fetch(`/api/chats/${id}`, withApiAuth({ method: 'DELETE' }));
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`);
+  }
+  return res.json().catch(() => ({}));
 }
 
 /**
@@ -177,7 +271,7 @@ export async function setMemoryPin(key, text) {
  * @param {string} key
  */
 export async function clearMemoryPin(key) {
-  const res = await fetch(`/api/memory/pins/${encodeURIComponent(key)}`, { method: 'DELETE' });
+  const res = await fetch(`/api/memory/pins/${encodeURIComponent(key)}`, withApiAuth({ method: 'DELETE' }));
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`);
@@ -212,7 +306,7 @@ export async function resolveMemoryContradiction(id, resolved = true) {
 
 /**
  * Fetch secret/key status for model profiles.
- * Note: secrets endpoints are restricted to localhost.
+ * Note: secrets endpoints are access-controlled by server policy.
  * @returns {Promise<{storage: object, profiles: object[]}>}
  */
 export async function fetchSecrets() {
@@ -238,7 +332,7 @@ export async function setProfileApiKey(profile, apiKey, persist = true) {
  * @param {string} profile
  */
 export async function clearProfileApiKey(profile) {
-  const res = await fetch(`/api/secrets/${encodeURIComponent(profile)}`, { method: 'DELETE' });
+  const res = await fetch(`/api/secrets/${encodeURIComponent(profile)}`, withApiAuth({ method: 'DELETE' }));
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     throw new Error(`${res.status} ${res.statusText}${text ? ': ' + text : ''}`);
@@ -254,7 +348,7 @@ export async function clearProfileApiKey(profile) {
  *         {type: 'iteration', iteration, token_estimate, context_window},
  *         {type: 'error', error}, {type: 'done', iterations, tool_calls}
  *
- * @param {object} payload - {session_id, profile, model_id, mode, text, docs, images}
+ * @param {object} payload - {session_id, profile, model_id, mode, autonomy_level, text, docs, images}
  * @param {(event: object) => void} onEvent
  * @param {AbortSignal} [signal]
  * @returns {Promise<void>}
@@ -270,7 +364,7 @@ export async function streamChat(payload, onEvent, signal) {
 
 /**
  * Pull a local model via the server (Ollama proxy).
- * Note: endpoint is restricted to localhost.
+ * Note: endpoint is access-controlled by server policy.
  * @param {string} modelId
  * @param {(event: object) => void} onEvent
  * @param {AbortSignal} [signal]

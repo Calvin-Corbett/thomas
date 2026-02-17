@@ -2,11 +2,22 @@
 # See: README.md for quick start and configuration notes.
 
 # Default model profile to use.
-# Tip: set to "codex" to route through your ChatGPT plan via the Codex app-server.
-default_model = "codex"
+# Cloud model (anthropic/openai) for reasoning; local models handle delegated subtasks.
+default_model = "anthropic"
 
 # Maximum agent loop iterations per query
 max_agent_iterations = 10
+
+# Server access policy
+# local  -> localhost-only API access (default)
+# remote -> authenticated API access from non-local clients
+[server]
+access_mode = "local"
+api_token = ""                         # required when access_mode = "remote"
+allow_unauthenticated_version = true
+rate_limit_enabled = true              # remote mode only
+rate_limit_max_requests = 120          # requests per window per token/ip
+rate_limit_window_seconds = 60         # window size in seconds
 
 # -----------------------------------------------------------------------------
 # Model Profiles
@@ -79,8 +90,8 @@ temperature = 0.1
 provider = "anthropic"
 base_url = "https://api.anthropic.com/v1"
 api_key = ""
-model = "claude-3-5-sonnet-latest"
-max_tokens = 4096
+model = "claude-sonnet-4-5-20250929"
+max_tokens = 8192
 context_window = 200000
 temperature = 0.1
 
@@ -159,7 +170,7 @@ temperature = 0.1
 provider = "openai_compat"
 base_url = "https://api.x.ai/v1"
 api_key = ""
-model = "grok-2-latest"
+model = "grok-4-1-fast-reasoning"
 max_tokens = 4096
 context_window = 128000
 temperature = 0.1
@@ -261,8 +272,19 @@ allow_shell = true                   # Execute-first setup/integration behavior 
 shell_timeout = 30                   # Default shell command timeout (seconds)
 max_file_size = 5000000              # Max file size for fs.read_file (bytes)
 
+# -----------------------------------------------------------------------------
+# Task Journal
+# -----------------------------------------------------------------------------
+# Writes a markdown file per task in the journal dir so any agent or human
+# can pick up context later. Skips casual/trivial prompts automatically.
+
+[journal]
+enabled = true
+dir = "./tasks"
+
 [failover]
 enabled = true
+chat_auto_failover = false            # strict mode for primary chat runs: no silent profile switching
 profiles = []                        # Optional ordered fallback model profiles (e.g. ["codex","openai","local"])
 cooldown_seconds = 300               # Failed profile cooldown before retry
 fallback_on_auth_error = false       # Usually keep false; true enables fallback on 401/403

@@ -13,6 +13,7 @@ The core execution engine for Thomas. Handles:
 from __future__ import annotations
 
 import asyncio
+import ast
 import json
 import logging
 import os
@@ -23,6 +24,12 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, AsyncIterator, Awaitable, Callable, Dict, List, Optional
 
 from thomas.core.config import AppConfig
+from thomas.core.autonomy import (
+    autonomy_level_name,
+    autonomy_spec,
+    autonomy_system_directive,
+    clamp_autonomy_level,
+)
 from thomas.core.events import AgentEvent, EventType
 from thomas.core.llm import LLMClient, LLMError, StreamEvent
 from thomas.core.tokens import (
@@ -35,11 +42,14 @@ from thomas.core.tokens import (
 from thomas.agent.routing import IntentRouter, RouteDecision
 from thomas.agent.guidance import load_cached_purpose_brief
 from thomas.library import ResearchLibrary, default_library_root
+from thomas.models.protocol import profile_prefers_always_tools
+from thomas.policy.types import PolicyContext, PolicyDecisionType
 from thomas.tools.registry import ToolRegistry
 
 if TYPE_CHECKING:
     from thomas.memory import MemoryEngine
     from thomas.agent.guarded_tools import GuardedToolRunner
+    from thomas.policy.policy import PolicyEngine
 
 log = logging.getLogger(__name__)
 
@@ -249,6 +259,8 @@ class AgentLoop:
         session_id: Optional[str] = None,
         guardrails_event_cb: Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]] = None,
         memory_retrieval_scope: str = "thread",
+        automation_policy: Optional["PolicyEngine"] = None,
+        autonomy_level: int = 3,
     ):
         self.config = config
         self.llm = llm
@@ -262,6 +274,8 @@ class AgentLoop:
         self._session_id = session_id or self._thread_id
         self._guarded_tool_runner = guarded_tool_runner
         self._guardrails_event_cb = guardrails_event_cb
+        self._automation_policy = automation_policy
+        self._autonomy_level = clamp_autonomy_level(autonomy_level, default=3)
         self._context_window = llm.config.context_window
         self._router = IntentRouter()
         self._library_enabled = str(os.environ.get("THOMAS_LIBRARY_ENABLED", "1")).strip().lower() not in (
@@ -304,6 +318,17 @@ class AgentLoop:
                 + purpose
                 + "\n--- End Purpose Brief ---\n"
             )
+
+        autonomy_lv = self._autonomy_level
+        autonomy_name = autonomy_level_name(autonomy_lv)
+        autonomy_directive = autonomy_system_directive(autonomy_lv)
+        prompt = (
+            prompt.rstrip()
+            + "\n\n--- Autonomy Profile ---\n"
+            + f"Level {autonomy_lv}: {autonomy_name}\n"
+            + autonomy_directive
+            + "\n--- End Autonomy Profile ---\n"
+        )
 
         if memory_text:
             prompt += MEMORY_CONTEXT_TEMPLATE.format(memory_text=memory_text)
@@ -800,7 +825,35 @@ class AgentLoop:
         if policy == "always":
             return self.tools.get_openai_specs()
 
-        if route is not None and str(route.path) in ("coding_task", "debug_audit", "planning", "research"):
+        prompt_l = str(prompt or "").lower()
+        if self._autonomy_level == 2 and policy == "auto":
+            # Guarded mode: require explicit execution intent before exposing tools.
+            explicit_action = bool(
+                re.search(
+                    r"\b(run|execute|edit|write|create|delete|remove|install|apply|patch|commit|open|search|find|read)\b",
+                    prompt_l,
+                )
+            )
+            path_hint = bool(
+                re.search(
+                    r"[A-Za-z]:\\|/|\\\\|\\.(py|ts|js|go|rs|toml|json|md|txt|yaml|yml)\\b",
+                    str(prompt or ""),
+                    re.I,
+                )
+            )
+            if not (explicit_action or path_hint):
+                return None
+
+        # API/cloud profiles should keep tools available; users expect these
+        # profiles to remain fully capable in auto mode.
+        if profile_prefers_always_tools(self.llm.config):
+            return self.tools.get_openai_specs()
+
+        if (
+            route is not None
+            and str(route.path) in ("coding_task", "debug_audit", "planning", "research")
+            and self._autonomy_level >= 3
+        ):
             return self.tools.get_openai_specs()
 
         if self._is_project_related_prompt(prompt):
@@ -864,6 +917,8 @@ class AgentLoop:
             requested_mode=mode,
             requested_tools_policy=tools_policy,
         )
+        autonomy = autonomy_spec(self._autonomy_level)
+        autonomy_name = str(autonomy.name)
         effective_mode = route.mode
 
         # Mode presets (the caller can still override with max_iterations).
@@ -875,6 +930,8 @@ class AgentLoop:
             max_iter = min(self.config.max_agent_iterations * 2, 25)
         else:
             max_iter = self.config.max_agent_iterations
+        if max_iterations is None and autonomy.prefers_extended_iterations:
+            max_iter = max(max_iter, min(self.config.max_agent_iterations * 3, 32))
 
         effective_tools_policy = route.tools_policy
         if tools_policy == "auto" and route.tools_policy == "auto":
@@ -882,6 +939,18 @@ class AgentLoop:
                 effective_tools_policy = "never"
             elif effective_mode == "thinking":
                 effective_tools_policy = "always"
+
+        # API/cloud providers should always have tools available unless the
+        # user explicitly disabled them. The routing heuristic was originally
+        # tuned for local models where hiding tools saves context.
+        if (tools_policy == "auto"
+                and effective_tools_policy == "never"
+                and profile_prefers_always_tools(self.llm.config)):
+            effective_tools_policy = "auto"
+        if self._autonomy_level == 2 and effective_tools_policy == "always":
+            effective_tools_policy = "auto"
+        if autonomy.force_tools_policy in ("never", "auto", "always"):
+            effective_tools_policy = str(autonomy.force_tools_policy)
 
         tool_specs = self._select_tools(prompt_text, policy=effective_tools_policy, route=route)
         preserve_first, preserve_last = self._history_preserve_counts(route)
@@ -904,6 +973,8 @@ class AgentLoop:
                 "route_input_source": route_input_source,
                 "mode": effective_mode,
                 "tools_policy": effective_tools_policy,
+                "autonomy_level": int(self._autonomy_level),
+                "autonomy_name": autonomy_name,
                 "library_enabled": bool(self._library is not None),
                 "history_policy": {
                     "preserve_first": int(preserve_first),
@@ -1207,6 +1278,8 @@ class AgentLoop:
         )
         token_report["route"] = route.to_dict()
         token_report["effective_tools_policy"] = effective_tools_policy
+        token_report["autonomy_level"] = int(self._autonomy_level)
+        token_report["autonomy_name"] = autonomy_name
         token_report["continuity"] = {
             "route_input_source": route_input_source,
             "followup_suppressed_count": int(followup_suppressed_count),
@@ -1221,6 +1294,60 @@ class AgentLoop:
             token_report=token_report,
         )
 
+    def _parse_tool_args(self, raw_args: Any) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
+        """Parse tool arguments with repair heuristics for weak model outputs."""
+        if raw_args is None:
+            return {}, None
+        if isinstance(raw_args, dict):
+            return raw_args, None
+
+        text = str(raw_args).strip()
+        if not text:
+            return {}, None
+
+        # Common model output shape: fenced JSON blocks.
+        fenced = re.match(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", text, re.I | re.S)
+        if fenced:
+            text = fenced.group(1).strip()
+
+        # Strict JSON first.
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed, None
+            return None, f"Tool arguments must be a JSON object, got {type(parsed).__name__}"
+        except json.JSONDecodeError:
+            pass
+
+        # Repair common drift: smart quotes, trailing commas, unbalanced braces.
+        repaired = (
+            text.replace("\u201c", '"')
+            .replace("\u201d", '"')
+            .replace("\u2018", "'")
+            .replace("\u2019", "'")
+        )
+        repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+        brace_delta = repaired.count("{") - repaired.count("}")
+        if brace_delta > 0:
+            repaired = repaired + ("}" * brace_delta)
+
+        try:
+            parsed = json.loads(repaired)
+            if isinstance(parsed, dict):
+                return parsed, None
+            return None, f"Tool arguments must be a JSON object, got {type(parsed).__name__}"
+        except json.JSONDecodeError:
+            pass
+
+        # Python-style dict fallback (single quotes, etc).
+        try:
+            parsed = ast.literal_eval(repaired)
+            if isinstance(parsed, dict):
+                return parsed, None
+            return None, f"Tool arguments must be an object, got {type(parsed).__name__}"
+        except Exception as e:
+            return None, f"Could not parse tool arguments: {type(e).__name__}: {e}"
+
     async def _execute_tools(
         self,
         tool_calls: List[Dict[str, Any]],
@@ -1234,19 +1361,19 @@ class AgentLoop:
             raw_args = tc["arguments"]
 
             # Parse arguments
-            try:
-                args = json.loads(raw_args) if raw_args else {}
-            except json.JSONDecodeError:
+            args, parse_error = self._parse_tool_args(raw_args)
+            if parse_error is not None or args is None:
                 return AgentEvent(
                     type=EventType.TOOL_RESULT,
                     data={
                         "tool_id": tc_id,
                         "tool_name": name,
-                        "result": f"Invalid JSON arguments: {raw_args[:200]}",
+                        "result": f"Invalid tool arguments: {str(raw_args)[:200]}",
                         "result_text": (
-                            f"Error: Could not parse tool arguments as JSON.\n"
-                            f"Raw arguments: {raw_args[:500]}\n"
-                            f"Hint: Make sure the arguments are valid JSON."
+                            "Error: Could not parse tool arguments.\n"
+                            f"Raw arguments: {str(raw_args)[:500]}\n"
+                            f"Reason: {parse_error or 'unknown parse error'}\n"
+                            "Hint: return a JSON object for tool arguments."
                         ),
                         "ok": False,
                         "duration_ms": 0,
@@ -1353,4 +1480,3 @@ try:
     httpx_ConnectError = _httpx.ConnectError
 except ImportError:
     httpx_ConnectError = OSError  # type: ignore[misc,assignment]
-

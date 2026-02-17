@@ -18,6 +18,7 @@ _DEFAULT_GUIDANCE_FILES: Sequence[Tuple[str, int, bool]] = (
     ("SOUL.md", 8, False),
     ("definitions/autopoietic.md", 6, False),
     ("definitions/change-classification.md", 6, False),
+    ("docs/PROJECT_SCOPE.md", 8, False),
     ("docs/ROUTING_FLOWCHART.md", 6, False),
     # README is fallback-only to avoid prompt bloat when dedicated guidance exists.
     ("README.md", 4, True),

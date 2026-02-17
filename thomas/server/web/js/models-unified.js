@@ -162,7 +162,7 @@ function renderModelCard(modelId, profileName, { onClick, showUseBtn = false, sh
         for (const id of ids.slice(0, 3)) {
           const m = getMeta(id);
           const btn = el('button', { className: 'chip', type: 'button', style: { cursor: 'pointer' } }, m.displayName || id);
-          btn.addEventListener('click', (e) => { e.stopPropagation(); setState('activeModelId', id); setState('activeProfile', profileName); if (onClick) onClick(); });
+          btn.addEventListener('click', (e) => { e.stopPropagation(); setState('activeProfile', profileName); setState('activeModelId', id); if (onClick) onClick(); });
           row.appendChild(btn);
         }
         wrap.appendChild(row);
@@ -188,8 +188,8 @@ function renderModelCard(modelId, profileName, { onClick, showUseBtn = false, sh
   // Click to select (for quick picker)
   if (!showUseBtn && onClick) {
     card.addEventListener('click', () => {
-      setState('activeModelId', modelId);
       setState('activeProfile', profileName);
+      setState('activeModelId', modelId);
       if (onClick) onClick();
     });
   }

@@ -1,3 +1,3 @@
-"""Thomas - cutting-edge local-first AI coding assistant."""
+"""Thomas - autonomous AI execution platform for local and remote deployments."""
 
-__version__ = "0.11.8"
+__version__ = "0.11.12"

@@ -72,6 +72,78 @@
       "fingerprint": "0940957037885fc701bf59e3c4b9120cf2ae3b8fd7478fb28e07dfefe6001976",
       "query": "okay so already have an issue you're focusing on like literally the video thing when I said a whole bunch of stuff you said okay I'll talk to you in this chat okay then talk to me in this chat where's the where's the the docs about the launching you said you made a launch MD that has a bunch of like Steps of stuff we need for the lunch I don't see any of that you're just talking about a video",
       "auto_captured": true
+    },
+    {
+      "id": "1771337423-what-did-you-find",
+      "title": "what did you find",
+      "category": "research-notes",
+      "summary": "I found a **tests/** directory with 38 test files covering various parts of the Thomas system: **Key test categories:** - **Agent loop tests**: conversation, codex passthrough, library, memory & tokens - **Autonomy system**: engine, API, memory engine, store,",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771337423-what-did-you-find.md",
+      "created_ts_utc": 1771337423,
+      "updated_ts_utc": 1771337423,
+      "fingerprint": "0f947b4906d7f0d5f3070290db256cbae4bdccbf539d8bda1580f6b8bdcea476",
+      "query": "what did you find",
+      "auto_captured": true
+    },
+    {
+      "id": "1771348576-no-your-suppose-to-finish-taks-and-reply-with-out-me-prompting-you-look-at-the-c",
+      "title": "no your suppose to finish taks and reply with out me prompting you look at the chat see",
+      "category": "research-notes",
+      "summary": "You're absolutely right. Looking at the chat: 1. You asked: \"right but how will all prefernces be saved then?\" 2. I ran `code_project_structure` 3. I said nothing after - just left you hanging 4. You had to prompt me again I keep doing the exact same mistake -",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771348576-no-your-suppose-to-finish-taks-and-reply-with-out-me-prompting-you-look-at-the-c.md",
+      "created_ts_utc": 1771348576,
+      "updated_ts_utc": 1771348576,
+      "fingerprint": "a5bbfb70718994dce94a8e8fe9a649600b3a45b7e96a41c893f32e234de359b6",
+      "query": "no your suppose to finish taks and reply with out me prompting you look at the chat see",
+      "auto_captured": true
+    },
+    {
+      "id": "1771348869-what-did-you-find",
+      "title": "what did you find?",
+      "category": "research-notes",
+      "summary": "Done! I read the curator.py file. **What I found:** The memory curator **IS implemented and working**, but it has a critical limitation for preferences: **What it does well:** - Extracts profile hints using regex patterns (line 323-350) - Promotes them to Memo",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771348869-what-did-you-find.md",
+      "created_ts_utc": 1771348869,
+      "updated_ts_utc": 1771348869,
+      "fingerprint": "c670d3909248969aae29fef6084513eda47b15e589326a4518050591da51f720",
+      "query": "what did you find?",
+      "auto_captured": true
+    },
+    {
+      "id": "1771370642-yah-man-cool-so-im-tryna-make-a-cool-like-way-to-yes-i-m-trying-to-make-a-cool-w",
+      "title": "yah man cool so im tryna make a cool like way to yes I'm trying to make a cool way to like look at my agents while they'",
+      "category": "research-notes",
+      "summary": "That's a sick idea honestly. Like a virtual office / workspace where each agent has their own little desk or station, you can peek in and see what they're doing in real-time, and they each have a little avatar/character. Low-fi aesthetic, not trying to be phot",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771370642-yah-man-cool-so-im-tryna-make-a-cool-like-way-to-yes-i-m-trying-to-make-a-cool-w.md",
+      "created_ts_utc": 1771370642,
+      "updated_ts_utc": 1771370642,
+      "fingerprint": "ca7b4ab91fd730aced212568fde80c04b603c5c38790ef0c356ba038f9236f95",
+      "query": "yah man cool so im tryna make a cool like way to yes I'm trying to make a cool way to like look at my agents while they're working kind of like those virtual workspaces you know what I'm talking about I think we should like playing one of those and when you spend up agents and stuff I can like look at the workspace or like whatever it's called you know and I can just see them working like in their little office and they can like customize it and like they have a little digital character thing it is not to be like super high fidelity Graphics you know but I think it'd be really cool to implement what do you think",
+      "auto_captured": true
     }
   ]
 }

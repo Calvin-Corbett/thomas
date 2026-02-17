@@ -1,6 +1,7 @@
 param(
   [string]$BindHost = "127.0.0.1",
   [int]$Port = 8899,
+  [switch]$AutoPort,
   [switch]$NoBrowser,
   [switch]$NoInstall
 )
@@ -78,12 +79,12 @@ function Ensure-Installed {
   if ($NoInstall) { return }
 
   # Install only if missing deps (keeps repeat runs fast).
-  $probe = Invoke-NativeQuiet $VenvPy @("-c", "import aiohttp, click, httpx")
+  $probe = Invoke-NativeQuiet $VenvPy @("-c", "import aiohttp, httpx")
   if ($probe -ne 0) {
     Write-Host "[thomas] Installing dependencies (editable) ..."
     $code = Invoke-Native $VenvPy @("-m", "pip", "install", "--upgrade", "pip")
     if ($code -ne 0) { throw "[thomas] pip upgrade failed (exit $code)" }
-    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[repl,server]")
+    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]")
     if ($code -ne 0) { throw "[thomas] pip install failed (exit $code)" }
     return
   }
@@ -91,7 +92,7 @@ function Ensure-Installed {
   # Ensure the package entrypoints are present (optional but convenient).
   $show = Invoke-NativeQuiet $VenvPy @("-m", "pip", "show", "thomas")
   if ($show -ne 0) {
-    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[repl,server]")
+    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]")
     if ($code -ne 0) { throw "[thomas] pip install failed (exit $code)" }
   }
 }
@@ -120,7 +121,7 @@ function Stop-ThomasServerOnPort([int]$P) {
       $cmd = (Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
     } catch { }
 
-    if ($cmd -and $cmd -match '(?i)(\\b-m\\s+thomas\\s+serve\\b|\\bthomas(\\.exe)?\\s+serve\\b)') {
+    if ($cmd -and $cmd -match '(?i)(\\b-m\\s+thomas\\s+serve\\b|\\bthomas(\\.exe)?\\s+serve\\b|\\b-m\\s+thomas\\.server\\b)') {
       Write-Host ("[thomas] Port {0} is in use by an existing Thomas server (pid {1}); stopping it..." -f $P, $owningPid)
       try { Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue } catch { }
       Start-Sleep -Milliseconds 400
@@ -176,7 +177,12 @@ if ($FreePort -eq 0) {
 }
 
 if ($FreePort -ne $Port) {
-  Write-Host "[thomas] Port $Port is busy; using $FreePort instead."
+  if (-not $AutoPort) {
+    Write-Host "[thomas] ERROR: Port $Port is busy."
+    Write-Host "[thomas] Close the process on that port, or rerun with -AutoPort."
+    exit 2
+  }
+  Write-Host "[thomas] Port $Port is busy; using $FreePort because -AutoPort is enabled."
   $Port = $FreePort
 }
 
@@ -190,4 +196,4 @@ if (-not $NoBrowser) {
   try { Start-Process $Url | Out-Null } catch { }
 }
 
-& $VenvPy -m thomas serve --host $BindHost --port $Port 2>&1
+& $VenvPy -m thomas.server --host $BindHost --port $Port 2>&1

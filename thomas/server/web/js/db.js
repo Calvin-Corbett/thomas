@@ -6,6 +6,8 @@
    unavailable (e.g., private browsing in some browsers).
    ============================================================ */
 
+import { fetchChats, saveServerChat, deleteServerChat } from './api.js';
+
 const DB_NAME = 'thomas-ui';
 const DB_VERSION = 1;
 
@@ -54,6 +56,14 @@ function openDB() {
  * @param {object} chat
  */
 export async function saveChat(chat) {
+  // Source of truth: server-side chat store (shared across browsers).
+  try {
+    await saveServerChat(chat);
+  } catch (e) {
+    console.warn('[db] saveChat remote failed:', e);
+  }
+
+  // Local mirror for resilience (fallback if server is temporarily unavailable).
   try {
     const db = await openDB();
     const tx = db.transaction('chats', 'readwrite');
@@ -81,6 +91,46 @@ export async function saveChat(chat) {
  * @returns {Promise<object[]>}
  */
 export async function loadChats() {
+  // Prefer server-side chats so different browsers see the same history.
+  try {
+    const payload = await fetchChats();
+    const chats = Array.isArray(payload?.chats) ? payload.chats : [];
+    if (chats.length > 0) {
+      void cacheChatsLocally(chats);
+      return chats;
+    }
+
+    // Migration path: if server is empty but this browser has local history,
+    // upload local chats so users keep their previous conversations.
+    const localChats = await loadChatsFromIndexedDB();
+    if (localChats.length > 0) {
+      let migrated = 0;
+      for (const chat of localChats) {
+        try {
+          await saveServerChat(chat);
+          migrated += 1;
+        } catch (e) {
+          console.warn('[db] migrate local chat -> server failed:', chat?.id, e);
+        }
+      }
+      if (migrated > 0) {
+        const refreshed = await fetchChats();
+        const merged = Array.isArray(refreshed?.chats) ? refreshed.chats : localChats;
+        void cacheChatsLocally(merged);
+        return merged;
+      }
+      return localChats;
+    }
+
+    return [];
+  } catch (e) {
+    console.warn('[db] loadChats remote failed, falling back to IndexedDB:', e);
+  }
+
+  return loadChatsFromIndexedDB();
+}
+
+async function loadChatsFromIndexedDB() {
   try {
     const db = await openDB();
     const tx = db.transaction('chats', 'readonly');
@@ -103,6 +153,12 @@ export async function loadChats() {
  */
 export async function deleteChatDB(id) {
   try {
+    await deleteServerChat(id);
+  } catch (e) {
+    console.warn('[db] deleteChat remote failed:', e);
+  }
+
+  try {
     const db = await openDB();
     const tx = db.transaction('chats', 'readwrite');
     tx.objectStore('chats').delete(id);
@@ -112,6 +168,33 @@ export async function deleteChatDB(id) {
     });
   } catch (e) {
     console.warn('[db] deleteChat failed:', e);
+  }
+}
+
+async function cacheChatsLocally(chats) {
+  try {
+    const db = await openDB();
+    const tx = db.transaction('chats', 'readwrite');
+    const store = tx.objectStore('chats');
+    store.clear();
+    for (const chat of Array.isArray(chats) ? chats : []) {
+      if (!chat || !chat.id) continue;
+      store.put({
+        id: chat.id,
+        title: chat.title,
+        messages: Array.isArray(chat.messages) ? chat.messages : [],
+        createdAt: chat.createdAt,
+        updatedAt: chat.updatedAt,
+        pinned: !!chat.pinned,
+        sessionId: chat.sessionId || null,
+      });
+    }
+    return new Promise((resolve, reject) => {
+      tx.oncomplete = resolve;
+      tx.onerror = () => reject(tx.error);
+    });
+  } catch (e) {
+    console.warn('[db] cacheChatsLocally failed:', e);
   }
 }
 

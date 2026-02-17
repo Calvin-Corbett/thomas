@@ -15,6 +15,7 @@ let _textarea = null;
 let _sendBtn = null;
 let _micBtn = null;
 let _composerEl = null;
+let _hintEl = null;
 let _voiceOverlayEl = null;
 let _voiceCircleEl = null;
 let _voiceStatusEl = null;
@@ -44,6 +45,7 @@ export function initComposer() {
   _textarea = document.getElementById('composerTextarea');
   _sendBtn = document.getElementById('sendBtn');
   _composerEl = document.getElementById('composer');
+  _hintEl = document.getElementById('composerHint');
 
   if (_sendBtn) _sendBtn.appendChild(icon('send'));
   ensureVoiceOverlay();
@@ -62,8 +64,13 @@ export function initComposer() {
 
   if (_sendBtn) {
     _sendBtn.addEventListener('click', () => {
-      if (getState().ui.streaming) stopStreaming();
-      else handleSend();
+      const streaming = !!getState().ui.streaming;
+      const hasContent = ((_textarea?.value || '').trim().length > 0) || _attachments.length > 0;
+      if (streaming && !hasContent) {
+        stopStreaming();
+        return;
+      }
+      handleSend();
     });
   }
 
@@ -128,9 +135,13 @@ export function initComposer() {
     });
   }
 
-  subscribe('ui', updateSendButtonState);
+  subscribe('ui', () => {
+    updateSendButtonState();
+    updateComposerHint();
+  });
   syncVoiceUi();
   updateSendButton();
+  updateComposerHint();
 }
 
 function autoResize() {
@@ -140,17 +151,17 @@ function autoResize() {
 }
 
 function updateSendButton() {
-  if (!_sendBtn || !_textarea) return;
-  const hasContent = _textarea.value.trim().length > 0 || _attachments.length > 0;
-  const streaming = getState().ui.streaming;
-  _sendBtn.disabled = !streaming && !hasContent;
+  updateSendButtonState();
+  updateComposerHint();
 }
 
 function updateSendButtonState() {
-  if (!_sendBtn) return;
+  if (!_sendBtn || !_textarea) return;
   const streaming = getState().ui.streaming;
+  const hasContent = _textarea.value.trim().length > 0 || _attachments.length > 0;
   _sendBtn.innerHTML = '';
-  if (streaming) {
+  _sendBtn.classList.remove('queue');
+  if (streaming && !hasContent) {
     _sendBtn.appendChild(icon('stop'));
     _sendBtn.classList.add('stop');
     _sendBtn.disabled = false;
@@ -158,9 +169,43 @@ function updateSendButtonState() {
   } else {
     _sendBtn.appendChild(icon('send'));
     _sendBtn.classList.remove('stop');
-    _sendBtn.setAttribute('aria-label', 'Send message');
-    updateSendButton();
+    _sendBtn.disabled = !hasContent;
+    if (streaming && hasContent) {
+      _sendBtn.classList.add('queue');
+      _sendBtn.setAttribute('aria-label', 'Start background run');
+      _sendBtn.disabled = false;
+    } else {
+      _sendBtn.setAttribute('aria-label', 'Send message');
+    }
   }
+}
+
+function updateComposerHint() {
+  if (!_hintEl) return;
+  const ui = getState().ui || {};
+  const running = Number(ui.concurrentRuns || 0);
+  const queued = Number(ui.queuedMessages || 0);
+  const streaming = !!ui.streaming;
+  if (streaming && (running > 0 || queued > 0)) {
+    const parts = [];
+    if (running > 0) parts.push(`${running} running`);
+    if (queued > 0) parts.push(`${queued} queued`);
+    _hintEl.textContent = `Working (${parts.join(', ')})`;
+    return;
+  }
+  if (streaming) {
+    _hintEl.textContent = 'Working... press Enter to start another run';
+    return;
+  }
+  if (running > 0) {
+    _hintEl.textContent = `${running} running in background`;
+    return;
+  }
+  if (queued > 0) {
+    _hintEl.textContent = `${queued} queued`;
+    return;
+  }
+  _hintEl.textContent = 'Enter to send';
 }
 
 function ensureVoiceOverlay() {
@@ -304,7 +349,6 @@ function handleSend() {
   }
   const text = _textarea.value.trim();
   if (!text && _attachments.length === 0) return;
-  if (getState().ui.streaming) return;
 
   // Slash commands
   const lower = text.toLowerCase();

@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas"
-version = "0.11.8"
-description = "Cutting-edge local-first AI coding assistant"
+version = "0.11.12"
+description = "Autonomous AI execution platform for local and remote deployments"
 requires-python = ">=3.10"
 dependencies = [
     "httpx>=0.27",
@@ -25,6 +25,7 @@ all = ["thomas[repl,gpu,train,server,mcp,telegram]"]
 
 [project.scripts]
 thomas = "thomas.cli.main:main"
+thomas-server = "thomas.server.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
