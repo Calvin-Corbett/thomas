@@ -1,0 +1,24 @@
+diff --git a/thomas/server/web/js/sidebar.js b/thomas/server/web/js/sidebar.js
+index 0000000..1111111 100644
+--- a/thomas/server/web/js/sidebar.js
++++ b/thomas/server/web/js/sidebar.js
+@@
++import { mountRunsView } from "./runs.js";
+@@
+ function setupSidebar(){
+   // Existing sidebar items...
++  const runsBtn = document.getElementById("navRuns");
++  if (runsBtn){
++    runsBtn.addEventListener("click", () => {
++      const main = document.getElementById("main");
++      mountRunsView(main);
++    });
++  }
+ }
+diff --git a/thomas/server/web/index.html b/thomas/server/web/index.html
+index 0000000..1111111 100644
+--- a/thomas/server/web/index.html
++++ b/thomas/server/web/index.html
+@@
++<!-- Add somewhere in the sidebar -->
++<button id="navRuns" class="nav-item">Runs</button>

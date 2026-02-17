@@ -1,0 +1,185 @@
+You are a principal engineer integrating a full “Thomas Control Plane” into repo F:\DevHub\Thomas (Python 3.12 aiohttp server + vanilla JS UI). Build ALL of the following in ONE integrated change-set:
+
+1) Guardrails (Policy Engine + Approvals UI + Secret Redaction + Audit Log)
+2) Time-Travel Debugger (Run Recorder + Replay UI + Export Debug Pack)
+3) Autonomy Engine (Job Queue + Scheduler + Retries + Dead-letter + Approvals + Audit)
+4) Memory Fabric v2 (episodic+semantic+profile memory, salience/decay, contradictions, compaction, retrieval traces, pins, health metrics, token-pack optimizer)
+5) Swarm Mode (TaskGraph + parallel subagents + UI board with streaming status)
+6) Realtime Human Assistant Layer (full duplex voice UX, interruption handling, anti-duplicate STT, turn-taking control, latency/token telemetry, proactive next-action suggestions)
+
+HARD CONSTRAINTS
+- Windows compatible
+- NO NEW third-party dependencies (stdlib-only for new code; you may use existing deps already present in repo)
+- Must NOT break existing /api/chat behavior when features are disabled
+- Must include tests (pytest runs existing unittest suite)
+- Must include docs + integration notes
+- Must output a patch-ready ZIP containing changed/new files only + an integration report
+
+GLOBAL DESIGN REQUIREMENTS (no exceptions)
+A) SINGLE STORAGE SPINE:
+- Use sqlite3 as the operational DB for: approvals, audit log, run_store, jobs, memory indices/traces/metrics, swarm runs.
+- Keep append-only JSONL logs where appropriate for audit durability and recovery.
+- All schemas must have migrations (idempotent) and be safe on upgrade.
+
+B) SINGLE POLICY GATE:
+- All tool calls, autonomy actions, exports, and voice-triggered actions must go through PolicyEngine:
+  - decision: allow | deny | needs_approval
+  - redaction pass (secrets/PII)
+  - audit event emission (hash chained)
+- Policy is off by default and feature-flagged.
+
+C) SINGLE EVENT ENVELOPE:
+- Define a shared event schema used across chat streaming, run recorder, swarm, autonomy, memory traces, approvals.
+- UI consumes one stream format for updates.
+
+D) FEATURE FLAGS:
+- features.guardrails
+- features.run_store
+- features.autonomy
+- features.memory_fabric_v2
+- features.swarm
+- features.realtime_voice
+All default false. Existing behavior must remain identical when false.
+
+STEP 0 — REPO DISCOVERY (DO THIS FIRST, DON’T ASK USER)
+- Print repo tree summary
+- Locate aiohttp app creation and route registration
+- Locate existing /api/chat implementation and streaming event format
+- Locate existing config system (toml/json/env) and runtime root path
+- Locate existing UI static folder and routing
+
+STEP 1 — SHARED CORE PACKAGES
+Create:
+- thomas/controlplane/events.py
+  - EventEnvelope (dict schema + runtime validator)
+  - event helpers: emit_event(), event_id(), monotonic timestamps
+- thomas/controlplane/sqlite.py
+  - open_db(), migrations runner, busy_timeout, WAL mode, safe pragmas
+- thomas/controlplane/feature_flags.py
+  - flag resolution from config + env override
+
+STEP 2 — GUARDRails
+Create package thomas/policy/
+- policy.py: PolicyEngine, Decision, Rule interface
+- rules.py: built-in rules (risk classes, tool allow/deny lists, data export restrictions)
+- redact.py: secret + PII redaction utilities (regex + heuristic detectors)
+- audit.py: append-only audit log in sqlite + JSONL mirror; hash-chain each record
+- approvals.py: approvals store + state machine (pending/approved/denied/expired)
+Add API routes:
+- GET /api/policy/status
+- GET /api/approvals
+- POST /api/approvals/{id}/approve
+- POST /api/approvals/{id}/deny
+Add UI panel:
+- “Approvals Inbox” with details: what, why, risk, diff, allow-once/allow-always options
+
+STEP 3 — RUN STORE (TIME TRAVEL DEBUGGER)
+Create thomas/observability/run_store.py
+- Persist every /api/chat run:
+  - request metadata, model config snapshot, all streamed events, tool calls/results, final response
+- Provide:
+  - list runs
+  - fetch run
+  - replay stream (server re-emits stored events)
+  - export debug pack (zip: run.json, events.jsonl, policy/audit slices)
+Routes:
+- GET /api/runs
+- GET /api/runs/{id}
+- GET /api/runs/{id}/replay (SSE or websocket matching existing UI)
+- POST /api/runs/{id}/export
+
+STEP 4 — AUTONOMY ENGINE
+Create thomas/autonomy/
+- jobs.py: Job model, persistence, state machine
+- scheduler.py: recurring jobs + cron-like RRULE-lite (stdlib)
+- queue.py: worker loop, concurrency limits, retry policy, exponential backoff, dead-letter queue
+- actions.py: typed action requests that always go through PolicyEngine
+Routes:
+- GET /api/jobs
+- POST /api/jobs (create)
+- POST /api/jobs/{id}/run
+- POST /api/jobs/{id}/cancel
+- POST /api/jobs/{id}/retry
+- GET /api/jobs/{id}/logs
+UI:
+- “Jobs” panel: status, next run, last error, retry count, DLQ viewer
+
+STEP 5 — MEMORY FABRIC v2
+Create thomas/memory_v2/
+- log.py: append-only “immortal log” (JSONL) with receipts
+- models.py: EpisodicMemory, SemanticFact, ProfileHint, Pin
+- salience.py: scoring heuristics + decay model
+- contradictions.py: detect conflicts in facts/profile claims (rule-based + text normalization)
+- compact.py: compaction into packs + blue/green swap; pin protection
+- retrieve.py: retrieval pipeline producing RetrievalTrace with candidates + scores + why
+- metrics.py: health metrics + token efficiency optimizer (rewrite packs when waste high)
+Routes:
+- GET /api/memory/status
+- GET /api/memory/search?q=
+- GET /api/memory/pins
+- POST /api/memory/pins (pin/unpin)
+- GET /api/memory/traces?run_id=
+UI:
+- “Memory Inspector” panel showing traces, pins, contradictions, pack sizes, and “why used”
+
+STEP 6 — SWARM MODE
+Create thomas/agent/swarm.py (or thomas/agent/orchestrator.py)
+- TaskGraph schema: tasks, deps, risk class, required tools, acceptance checks
+- Planner subagent produces JSON task graph (strictly validated)
+- Executor runs tasks concurrently when deps satisfied (asyncio.TaskGroup)
+- Each task’s tool calls go through Guardrails
+Routes:
+- POST /api/swarm (start)
+- GET /api/swarm/{id}
+- GET /api/swarm/{id}/events (stream)
+UI:
+- “Swarm Board” with columns: queued/running/blocked/done/failed; per-task logs and outputs
+
+STEP 7 — REALTIME HUMAN ASSISTANT LAYER
+Integrate the existing RHAIL drop (if present) OR implement:
+- WS audio streaming endpoints
+- STT de-dup pipeline (audio chunk hash window + transcript similarity window)
+- turn-taking + interruption handling
+- latency/token telemetry panel
+- proactive “next action suggestions” (based on pinned goals + recent jobs + recent chat)
+All actions still must route through PolicyEngine when they trigger tools.
+
+STEP 8 — INTEGRATION WIRING
+- Add a single “controlplane_init(app, config)” call that registers all routes and shared services
+- Ensure /api/chat wraps:
+  - run recorder hooks (when enabled)
+  - policy gate hooks for tools (when enabled)
+  - memory trace emission (when enabled)
+- Minimal changes to existing code; no refactors unless necessary for correctness
+
+STEP 9 — TESTS
+Add unit + integration tests for:
+- Policy decisions + redaction
+- Approval workflow
+- Audit hash chain verification
+- Run store persistence + replay
+- Scheduler + retries + dead-letter
+- Memory contradictions + compaction + trace scoring
+- Swarm task graph validator + executor dependency logic
+
+STEP 10 — DOCS + OUTPUT
+- Add docs/CONTROLPLANE.md (architecture, threat model, ops)
+- Add per-module README with failure modes
+- Add ROLLOUT_CHECKLIST.md
+- Produce a PATCH ZIP with changed/new files only
+- Produce INTEGRATION_REPORT.md summarizing:
+  - what changed
+  - where to wire if necessary
+  - how to enable flags
+  - how to run tests
+  - known limitations
+
+IMPORTANT QUALITY RULES
+- No silent success. Every action returns typed results and logs.
+- All background loops must be stoppable cleanly.
+- Always handle Windows file locks.
+- Use WAL + busy_timeout on sqlite.
+- Do not store secrets in plaintext; redact aggressively in logs and UI.
+- Keep changes merge-friendly and minimal-change biased while still delivering the full stack.
+
+Now implement. Do not ask the user questions unless repo discovery genuinely cannot find an entrypoint.
