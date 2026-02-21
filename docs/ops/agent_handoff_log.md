@@ -112,3 +112,12 @@ ode_modules, 	asks, output.
 - HEAD: `ca7ddff`
 - Parent DevHub .git disabled
 - Thomas is standalone repo root
+
+## 2026-02-21T14:20:22-06:00
+
+### Active Folder Coordination Added
+
+- Branch: `master`
+- HEAD: `177eefa`
+- Added scripts/active_folders.py with claim/check/daemon/run/release
+- Added docs/ops/ACTIVE_FOLDERS_COORDINATION.md and updated NEXT_AGENT_HANDOFF

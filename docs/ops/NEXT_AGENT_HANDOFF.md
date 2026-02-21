@@ -27,3 +27,12 @@ Latest stability checkpoint commits: `3475aa2`, `36af455`
 - Before ending any agent session without final delivery, append a timestamped entry to `docs/ops/agent_handoff_log.md`.
 - Preferred command:
   - `python scripts/append_handoff.py --title "Checkpoint" --note "What was done" --note "What is next"`
+## Active Folder Coordination
+
+- Before editing, run:
+  - `python scripts/active_folders.py check --agent <agent-id> --path <target-folder>`
+- Claim folder ownership while working:
+  - `python scripts/active_folders.py claim --agent <agent-id> --path <target-folder> --note "<task>"`
+- Release after completion:
+  - `python scripts/active_folders.py release --agent <agent-id>`
+- Full guide: `docs/ops/ACTIVE_FOLDERS_COORDINATION.md`
