@@ -35,10 +35,16 @@ export default function DownloadPage() {
 
       <div className="advanced-box">
         <h2>For technical users</h2>
-        <p>Prefer release assets directly, checksums, and raw notes?</p>
-        <a className="text-link" href={releasesUrl} target="_blank" rel="noreferrer">
-          Open GitHub Releases
-        </a>
+        {releasesUrl ? (
+          <>
+            <p>Prefer release assets directly, checksums, and raw notes?</p>
+            <a className="text-link" href={releasesUrl} target="_blank" rel="noreferrer">
+              Open GitHub Releases
+            </a>
+          </>
+        ) : (
+          <p>GitHub release view will be enabled after repo integration is connected.</p>
+        )}
       </div>
     </section>
   );
