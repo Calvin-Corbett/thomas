@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-webhook-triage",
+  "name": "Security Webhook Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "webhook",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.webhook",
+    "security.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via webhook with triage mode policies."
+}

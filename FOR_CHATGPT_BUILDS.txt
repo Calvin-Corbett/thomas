@@ -1,0 +1,19 @@
+﻿THOMAS PROJECT - OPENCLAW CATCH-UP WORKBOARD
+============================================
+Source of truth for current gap baseline:
+- docs/OPENCLAW_GAP_CHANGELOG.md
+
+Parallel build prompt packs:
+- Starter (24): docs/OPENCLAW_CATCHUP_PROMPT_PACK_2026-02-20.md
+- Full (216): docs/OPENCLAW_CATCHUP_PROMPT_PACK_216_2026-02-20.md
+- Batch index CSV: docs/OPENCLAW_CATCHUP_PROMPT_BATCH_INDEX_216_2026-02-20.csv
+- Intake pipeline runbook: docs/CODE_INTAKE_PIPELINE.md
+- Intake CLI: python scripts/code_intake.py
+- Batch seeder: python scripts/code_intake_seed_batch.py --batch-id B01
+
+Rules:
+1) Do not copy OpenClaw naming/branding.
+2) Implement Thomas-native capability equivalents.
+3) Every feature PR must update docs/OPENCLAW_GAP_CHANGELOG.md.
+4) No merge without tests.
+============================================

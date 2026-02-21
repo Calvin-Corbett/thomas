@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-webhook-prevent",
+  "name": "Compliance Webhook Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "webhook",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.webhook",
+    "compliance.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via webhook with prevent mode policies."
+}

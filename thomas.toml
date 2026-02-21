@@ -3,8 +3,7 @@
 
 # Default model profile to use.
 # Cloud model (anthropic/openai) for reasoning; local models handle delegated subtasks.
-default_model = "anthropic"
-
+default_model = "gemini-3-1-pro"
 # Maximum agent loop iterations per query
 max_agent_iterations = 10
 
@@ -19,9 +18,27 @@ rate_limit_enabled = true              # remote mode only
 rate_limit_max_requests = 120          # requests per window per token/ip
 rate_limit_window_seconds = 60         # window size in seconds
 
+# Rules-of-the-road quality gate
+# Thomas evaluates required checks per task/job type before final completion.
+[quality]
+enabled = true
+enforce = true
+max_auto_retries = 1                # 0..3
+require_verification_for_coding = true
+require_tests_for_code_edits = false
+require_monolith_guard_for_coding = true
+
 # -----------------------------------------------------------------------------
 # Model Profiles
 # -----------------------------------------------------------------------------
+
+[models.gemini-3-1-pro]
+provider = "openai_compat"
+base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
+model = "gemini-1.5-pro-latest"
+max_tokens = 8192
+context_window = 128000
+temperature = 0.5
 
 [models.local]
 provider = "openai_compat"           # Works with: Ollama, vLLM, LM Studio, OpenAI
@@ -92,7 +109,7 @@ base_url = "https://api.anthropic.com/v1"
 api_key = ""
 model = "claude-sonnet-4-5-20250929"
 max_tokens = 8192
-context_window = 200000
+context_window = 20000                 # Cap at 20k to respect Tier 1 rate limits (30k TPM)
 temperature = 0.1
 
 # Mistral (OpenAI-compatible)
@@ -172,6 +189,27 @@ base_url = "https://api.x.ai/v1"
 api_key = ""
 model = "grok-4-1-fast-reasoning"
 max_tokens = 4096
+context_window = 128000
+temperature = 0.1
+
+# Zhipu AI GLM (OpenAI-compatible)
+# Get your API key at: https://open.bigmodel.cn/usercenter/apikeys
+# Env override: THOMAS_MODELS_GLM_API_KEY=your_key_here
+#
+# Available models (change model = below to switch):
+#   glm-5          Ã¢â‚¬â€ flagship, 744B MoE (40B active), released Feb 2026, best for coding/agents
+#   glm-4.5-air    Ã¢â‚¬â€ fast, low-cost, strong tool-calling
+#   glm-4.5        Ã¢â‚¬â€ previous full-power model
+#   glm-4.5-flash  Ã¢â‚¬â€ ultra-fast, cheapest
+#
+# For the dedicated GLM Coding Plan endpoint, change base_url to:
+#   https://api.z.ai/api/coding/paas/v4
+[models.glm]
+provider = "openai_compat"
+base_url = "https://open.bigmodel.cn/api/paas/v4"
+api_key = ""
+model = "glm-5"
+max_tokens = 8192
 context_window = 128000
 temperature = 0.1
 
@@ -259,7 +297,7 @@ batch_size = 64
 
 [memory]
 root = "./runtime"
-context_budget = 12000               # Approx token budget for memory context per query
+context_budget = 4000                # Safe budget for 8k models (leaves 4k for chat history)
 mode = "auto"                        # auto, fast, thorough
 
 # -----------------------------------------------------------------------------

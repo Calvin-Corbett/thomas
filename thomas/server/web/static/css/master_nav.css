@@ -1,0 +1,73 @@
+/* Master Navigation Component */
+.master-nav {
+    width: 64px;
+    background: var(--master-nav-bg, #0f172a);
+    border-right: 1px solid var(--master-border, rgba(255, 255, 255, 0.08));
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    padding: 16px 0;
+    z-index: 1000;
+    transition: width 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.master-nav-top {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    align-items: center;
+}
+
+.master-btn {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: transparent;
+    border: 1px solid transparent;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--master-icon-color, #94a3b8);
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+.master-btn:hover {
+    background: rgba(255, 255, 255, 0.05);
+    color: #fff;
+}
+
+.master-btn.active {
+    background: var(--master-active-bg, rgba(56, 189, 248, 0.1));
+    color: var(--master-active-color, #38bdf8);
+    border-color: var(--master-active-border, rgba(56, 189, 248, 0.2));
+}
+
+.master-btn.active::after {
+    content: '';
+    position: absolute;
+    left: -12px;
+    top: 12px;
+    bottom: 12px;
+    width: 4px;
+    background: var(--master-active-color, #38bdf8);
+    border-radius: 0 4px 4px 0;
+}
+
+/* Master Icons - Placeholder icons using CSS */
+.master-icon {
+    width: 20px;
+    height: 20px;
+    display: block;
+}
+
+/* Base Tokens for Premium Dark Theme */
+:root {
+    --master-nav-bg: #0b0f1a;
+    --master-border: rgba(255, 255, 255, 0.06);
+    --master-icon-color: #64748b;
+    --master-active-bg: rgba(30, 64, 175, 0.2);
+    --master-active-color: #60a5fa;
+    --master-active-border: rgba(96, 165, 250, 0.3);
+}

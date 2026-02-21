@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-teams-audit",
+  "name": "Security Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.teams",
+    "security.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via teams with audit mode policies."
+}

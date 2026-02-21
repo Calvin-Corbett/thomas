@@ -1,0 +1,14 @@
+{
+  "id": "pack-analytics-teams",
+  "name": "Analytics Teams Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "teams",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.teams",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via teams."
+}

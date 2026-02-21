@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-jira-remediate",
+  "name": "Fraud Jira Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "jira",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.jira",
+    "fraud.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via jira with remediate mode policies."
+}

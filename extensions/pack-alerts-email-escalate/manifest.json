@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-email-escalate",
+  "name": "Alerts Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.email",
+    "alerts.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via email with escalate mode policies."
+}

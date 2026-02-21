@@ -1,0 +1,37 @@
+{
+    "id":  "continue",
+    "name":  "Continue",
+    "vendor":  "Continue",
+    "category":  "developer_ai_platform",
+    "surfaces":  [
+                     "ide_extension",
+                     "cli",
+                     "hub"
+                 ],
+    "live_streaming":  "yes",
+    "settings_depth":  "high",
+    "benchmark_mode":  "self_host_scriptable",
+    "key_strengths":  [
+                          "Config-driven assistant platform",
+                          "Enterprise deployment flexibility",
+                          "Open ecosystem approach"
+                      ],
+    "source_urls":  [
+                        "https://continue.dev/",
+                        "https://docs.continue.dev/"
+                    ],
+    "confidence":  "medium",
+    "notes":  "Benchmark for configurable assistant platform capabilities.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  4,
+                                      "ux.live_streaming":  5,
+                                      "ux.settings_depth":  5,
+                                      "autonomy.supervision_modes":  3,
+                                      "integration.mcp_support":  3,
+                                      "integration.git_pr_workflows":  3,
+                                      "platform.self_hostability":  5,
+                                      "composite.provisional_mean":  4
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

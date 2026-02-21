@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-sms-escalate",
+  "name": "Payments Sms Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "sms",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.sms",
+    "payments.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via sms with escalate mode policies."
+}

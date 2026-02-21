@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-webhook-triage",
+  "name": "Incident Webhook Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "webhook",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.webhook",
+    "incident.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via webhook with triage mode policies."
+}

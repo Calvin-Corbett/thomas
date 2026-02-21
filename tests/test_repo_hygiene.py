@@ -1,0 +1,46 @@
+from __future__ import annotations
+
+from scripts.check_repo_hygiene import evaluate_hygiene
+
+
+def test_repo_hygiene_detects_unexpected_root_and_forbidden_prefix() -> None:
+    baseline = {
+        "max_tracked_root_files": 3,
+        "allowed_tracked_root_files": [".gitignore", "README.md"],
+        "forbidden_tracked_prefixes": ["runtime/", "tasks/"],
+        "blocked_tracked_suffixes": [".log"],
+    }
+    tracked = [
+        ".gitignore",
+        "README.md",
+        "surprise.txt",
+        "runtime/cache.db",
+        "thomas/server/app.py",
+        "notes.log",
+    ]
+
+    result = evaluate_hygiene(tracked, baseline)
+    assert result["ok"] is False
+    assert "surprise.txt" in result["unexpected_root_files"]
+    assert "runtime/cache.db" in result["forbidden_tracked_paths"]
+    assert "notes.log" in result["blocked_suffix_paths"]
+
+
+def test_repo_hygiene_passes_clean_layout() -> None:
+    baseline = {
+        "max_tracked_root_files": 5,
+        "allowed_tracked_root_files": [".gitignore", "README.md", "pyproject.toml"],
+        "forbidden_tracked_prefixes": ["runtime/"],
+        "blocked_tracked_suffixes": [".tmp"],
+    }
+    tracked = [
+        ".gitignore",
+        "README.md",
+        "pyproject.toml",
+        "thomas/core/config.py",
+        "tests/test_config.py",
+    ]
+
+    result = evaluate_hygiene(tracked, baseline)
+    assert result["ok"] is True
+    assert not result["violations"]

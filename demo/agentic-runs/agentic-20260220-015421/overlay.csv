@@ -1,0 +1,2 @@
+competitor,task_id,success,elapsed_seconds,follow_up_prompts,quality_score,evidence,notes
+thomas_os,artifact_probe_write,0,1.032,,1,transcripts/thomas_os/artifact_probe_write.md,required file not found: runtime/agentic_bench/agentic-20260220-015421/thomas_os/smoke_probe.txt; required file missing expected text: {{artifact_dir}}/smoke_probe.txt

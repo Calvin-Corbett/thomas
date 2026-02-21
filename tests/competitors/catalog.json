@@ -1,0 +1,493 @@
+{
+    "generated_at_utc":  "2026-02-21T19:39:34Z",
+    "metric_framework_path":  "tests/competitors/metric_framework.md",
+    "competitors":  [
+                        {
+                            "id":  "claude_code",
+                            "name":  "Claude Code",
+                            "vendor":  "Anthropic",
+                            "category":  "coding_agent",
+                            "surfaces":  [
+                                             "cli",
+                                             "desktop",
+                                             "web",
+                                             "api"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "high",
+                            "benchmark_mode":  "external_run_required",
+                            "key_strengths":  [
+                                                  "Strong coding-agent workflow",
+                                                  "Good tool-use UX",
+                                                  "Mature product ergonomics"
+                                              ],
+                            "source_urls":  [
+                                                "https://code.claude.com/docs/en/overview"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Closed product. Run in its own environment and compare exported artifacts.",
+                            "profile_path":  "tests/competitors/claude_code/profile.json",
+                            "readme_path":  "tests/competitors/claude_code/README.md"
+                        },
+                        {
+                            "id":  "openai_codex",
+                            "name":  "OpenAI Codex",
+                            "vendor":  "OpenAI",
+                            "category":  "coding_agent",
+                            "surfaces":  [
+                                             "cli",
+                                             "cloud_task",
+                                             "api"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "high",
+                            "benchmark_mode":  "cli_scriptable",
+                            "key_strengths":  [
+                                                  "Terminal-first agent workflow",
+                                                  "Parallel cloud task execution",
+                                                  "Open source CLI"
+                                              ],
+                            "source_urls":  [
+                                                "https://developers.openai.com/codex/cli",
+                                                "https://github.com/openai/codex"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Strong direct benchmark for terminal-centric coding loops.",
+                            "profile_path":  "tests/competitors/openai_codex/profile.json",
+                            "readme_path":  "tests/competitors/openai_codex/README.md"
+                        },
+                        {
+                            "id":  "github_copilot",
+                            "name":  "GitHub Copilot",
+                            "vendor":  "GitHub",
+                            "category":  "coding_agent",
+                            "surfaces":  [
+                                             "ide",
+                                             "github_web",
+                                             "cli"
+                                         ],
+                            "live_streaming":  "partial",
+                            "settings_depth":  "high",
+                            "benchmark_mode":  "mixed",
+                            "key_strengths":  [
+                                                  "Enterprise IDE footprint",
+                                                  "GitHub workflow integration",
+                                                  "Policy controls for orgs"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.github.com/en/copilot"
+                                            ],
+                            "confidence":  "medium",
+                            "notes":  "Large baseline for enterprise adoption and PR workflow integration.",
+                            "profile_path":  "tests/competitors/github_copilot/profile.json",
+                            "readme_path":  "tests/competitors/github_copilot/README.md"
+                        },
+                        {
+                            "id":  "cursor",
+                            "name":  "Cursor",
+                            "vendor":  "Cursor",
+                            "category":  "coding_agent",
+                            "surfaces":  [
+                                             "ide",
+                                             "background_agent",
+                                             "cli"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "high",
+                            "benchmark_mode":  "external_run_required",
+                            "key_strengths":  [
+                                                  "Strong IDE-native agent UX",
+                                                  "Background agent workflows",
+                                                  "Good coding velocity focus"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.cursor.com/en/chat/agent",
+                                                "https://docs.cursor.com/en/background-agents",
+                                                "https://docs.cursor.com/en/cli"
+                                            ],
+                            "confidence":  "medium",
+                            "notes":  "Important benchmark for day-to-day agentic IDE usage.",
+                            "profile_path":  "tests/competitors/cursor/profile.json",
+                            "readme_path":  "tests/competitors/cursor/README.md"
+                        },
+                        {
+                            "id":  "windsurf",
+                            "name":  "Windsurf",
+                            "vendor":  "Codeium",
+                            "category":  "coding_agent",
+                            "surfaces":  [
+                                             "ide"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "external_run_required",
+                            "key_strengths":  [
+                                                  "Integrated agentic coding flow",
+                                                  "Fast in-editor interactions",
+                                                  "Developer ergonomics focus"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.windsurf.com/windsurf/getting-started"
+                                            ],
+                            "confidence":  "medium",
+                            "notes":  "Good comparator for integrated IDE response quality and speed.",
+                            "profile_path":  "tests/competitors/windsurf/profile.json",
+                            "readme_path":  "tests/competitors/windsurf/README.md"
+                        },
+                        {
+                            "id":  "cline",
+                            "name":  "Cline",
+                            "vendor":  "Cline",
+                            "category":  "open_source_agent",
+                            "surfaces":  [
+                                             "ide_extension"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "partial",
+                            "key_strengths":  [
+                                                  "Open source extensibility",
+                                                  "Model/provider flexibility",
+                                                  "Local-first workflow control"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.cline.bot/home"
+                                            ],
+                            "confidence":  "medium",
+                            "notes":  "Relevant for open extension architecture and local control comparisons.",
+                            "profile_path":  "tests/competitors/cline/profile.json",
+                            "readme_path":  "tests/competitors/cline/README.md"
+                        },
+                        {
+                            "id":  "roo_code",
+                            "name":  "Roo Code",
+                            "vendor":  "Roo Code",
+                            "category":  "open_source_agent",
+                            "surfaces":  [
+                                             "ide_extension"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "partial",
+                            "key_strengths":  [
+                                                  "Open source editor integration",
+                                                  "Configurable behavior",
+                                                  "Broad model compatibility"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.roocode.com/"
+                                            ],
+                            "confidence":  "medium",
+                            "notes":  "Useful benchmark for community-driven IDE agent patterns.",
+                            "profile_path":  "tests/competitors/roo_code/profile.json",
+                            "readme_path":  "tests/competitors/roo_code/README.md"
+                        },
+                        {
+                            "id":  "aider",
+                            "name":  "Aider",
+                            "vendor":  "Aider",
+                            "category":  "open_source_cli_agent",
+                            "surfaces":  [
+                                             "cli"
+                                         ],
+                            "live_streaming":  "partial",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "cli_scriptable",
+                            "key_strengths":  [
+                                                  "Git-aware terminal coding",
+                                                  "Simple reproducible CLI workflows",
+                                                  "Mature OSS usage"
+                                              ],
+                            "source_urls":  [
+                                                "https://aider.chat/docs/usage/modes.html",
+                                                "https://github.com/Aider-AI/aider"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Already part of Thomas comparison suite.",
+                            "profile_path":  "tests/competitors/aider/profile.json",
+                            "readme_path":  "tests/competitors/aider/README.md"
+                        },
+                        {
+                            "id":  "open_interpreter",
+                            "name":  "Open Interpreter",
+                            "vendor":  "Open Interpreter",
+                            "category":  "open_source_agent",
+                            "surfaces":  [
+                                             "cli",
+                                             "desktop"
+                                         ],
+                            "live_streaming":  "partial",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "cli_scriptable",
+                            "key_strengths":  [
+                                                  "Computer automation orientation",
+                                                  "Local execution flexibility",
+                                                  "Open source extensibility"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.openinterpreter.com/getting-started/setup",
+                                                "https://www.openinterpreter.com/"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Already part of Thomas comparison suite.",
+                            "profile_path":  "tests/competitors/open_interpreter/profile.json",
+                            "readme_path":  "tests/competitors/open_interpreter/README.md"
+                        },
+                        {
+                            "id":  "openhands",
+                            "name":  "OpenHands",
+                            "vendor":  "OpenHands",
+                            "category":  "open_source_agent",
+                            "surfaces":  [
+                                             "web",
+                                             "sdk",
+                                             "api"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "high",
+                            "benchmark_mode":  "self_host_scriptable",
+                            "key_strengths":  [
+                                                  "Autonomous SWE workflows",
+                                                  "SDK and integration surface",
+                                                  "Self-host capable OSS"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.openhands.dev/sdk/index",
+                                                "https://openhands.dev/"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "High-priority benchmark for autonomous engineering tasks.",
+                            "profile_path":  "tests/competitors/openhands/profile.json",
+                            "readme_path":  "tests/competitors/openhands/README.md"
+                        },
+                        {
+                            "id":  "devin",
+                            "name":  "Devin",
+                            "vendor":  "Cognition",
+                            "category":  "autonomous_engineer",
+                            "surfaces":  [
+                                             "web"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "external_run_required",
+                            "key_strengths":  [
+                                                  "Autonomous engineering positioning",
+                                                  "Task-level orchestration",
+                                                  "Commercial product maturity"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.devin.ai/get-started/devin-intro",
+                                                "https://cognition.ai/"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Closed hosted system, compare by exported run artifacts.",
+                            "profile_path":  "tests/competitors/devin/profile.json",
+                            "readme_path":  "tests/competitors/devin/README.md"
+                        },
+                        {
+                            "id":  "continue",
+                            "name":  "Continue",
+                            "vendor":  "Continue",
+                            "category":  "developer_ai_platform",
+                            "surfaces":  [
+                                             "ide_extension",
+                                             "cli",
+                                             "hub"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "high",
+                            "benchmark_mode":  "self_host_scriptable",
+                            "key_strengths":  [
+                                                  "Config-driven assistant platform",
+                                                  "Enterprise deployment flexibility",
+                                                  "Open ecosystem approach"
+                                              ],
+                            "source_urls":  [
+                                                "https://continue.dev/",
+                                                "https://docs.continue.dev/"
+                                            ],
+                            "confidence":  "medium",
+                            "notes":  "Benchmark for configurable assistant platform capabilities.",
+                            "profile_path":  "tests/competitors/continue/profile.json",
+                            "readme_path":  "tests/competitors/continue/README.md"
+                        },
+                        {
+                            "id":  "replit_agent",
+                            "name":  "Replit Agent",
+                            "vendor":  "Replit",
+                            "category":  "cloud_dev_agent",
+                            "surfaces":  [
+                                             "web_ide"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "external_run_required",
+                            "key_strengths":  [
+                                                  "Prompt-to-app workflows",
+                                                  "Tight run/deploy loop",
+                                                  "Cloud IDE integration"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.replit.com/replitai/agent",
+                                                "https://replit.com/products/agent"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Good benchmark for rapid hosted app development flow.",
+                            "profile_path":  "tests/competitors/replit_agent/profile.json",
+                            "readme_path":  "tests/competitors/replit_agent/README.md"
+                        },
+                        {
+                            "id":  "v0",
+                            "name":  "v0",
+                            "vendor":  "Vercel",
+                            "category":  "app_builder_agent",
+                            "surfaces":  [
+                                             "web",
+                                             "api"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "api_scriptable",
+                            "key_strengths":  [
+                                                  "Prompt-driven UI/app generation",
+                                                  "Strong web app builder UX",
+                                                  "MCP adapter documentation"
+                                              ],
+                            "source_urls":  [
+                                                "https://v0.app/docs/api",
+                                                "https://v0.app/docs/api/platform/adapters/mcp-server"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Primary Vercel-side benchmark for agentic app generation.",
+                            "profile_path":  "tests/competitors/v0/profile.json",
+                            "readme_path":  "tests/competitors/v0/README.md"
+                        },
+                        {
+                            "id":  "lovable",
+                            "name":  "Lovable",
+                            "vendor":  "Lovable",
+                            "category":  "app_builder_agent",
+                            "surfaces":  [
+                                             "web"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "external_run_required",
+                            "key_strengths":  [
+                                                  "Fast prompt-to-product flow",
+                                                  "Product builder oriented UX",
+                                                  "Good iteration loop"
+                                              ],
+                            "source_urls":  [
+                                                "https://docs.lovable.dev/introduction/welcome",
+                                                "https://lovable.dev/"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Important comparison target for hosted app-builder experience.",
+                            "profile_path":  "tests/competitors/lovable/profile.json",
+                            "readme_path":  "tests/competitors/lovable/README.md"
+                        },
+                        {
+                            "id":  "bolt_new",
+                            "name":  "Bolt.new",
+                            "vendor":  "StackBlitz",
+                            "category":  "app_builder_agent",
+                            "surfaces":  [
+                                             "web"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "medium",
+                            "benchmark_mode":  "external_run_required",
+                            "key_strengths":  [
+                                                  "Browser-native coding surface",
+                                                  "Rapid generation to preview loop",
+                                                  "Lower setup friction"
+                                              ],
+                            "source_urls":  [
+                                                "https://bolt.new/",
+                                                "https://support.bolt.new/"
+                                            ],
+                            "confidence":  "medium",
+                            "notes":  "Useful for benchmarking web-only rapid build workflows.",
+                            "profile_path":  "tests/competitors/bolt_new/profile.json",
+                            "readme_path":  "tests/competitors/bolt_new/README.md"
+                        },
+                        {
+                            "id":  "nanoclaw",
+                            "name":  "NanoClaw",
+                            "vendor":  "NanoClaw",
+                            "category":  "agentic_tooling",
+                            "surfaces":  [
+                                             "web"
+                                         ],
+                            "live_streaming":  "unknown",
+                            "settings_depth":  "low",
+                            "benchmark_mode":  "watchlist",
+                            "key_strengths":  [
+                                                  "Emerging agentic positioning",
+                                                  "Developer audience targeting",
+                                                  "Potentially fast-moving product"
+                                              ],
+                            "source_urls":  [
+                                                "https://nanoclaw.dev/"
+                                            ],
+                            "confidence":  "low",
+                            "notes":  "Keep as watchlist until deeper technical docs and benchmarks are available.",
+                            "profile_path":  "tests/competitors/nanoclaw/profile.json",
+                            "readme_path":  "tests/competitors/nanoclaw/README.md"
+                        },
+                        {
+                            "id":  "antigravity",
+                            "name":  "Antigravity",
+                            "vendor":  "Antigravity",
+                            "category":  "agentic_platform",
+                            "surfaces":  [
+                                             "web"
+                                         ],
+                            "live_streaming":  "unknown",
+                            "settings_depth":  "low",
+                            "benchmark_mode":  "watchlist",
+                            "key_strengths":  [
+                                                  "Agentic platform claims",
+                                                  "Automation-oriented positioning",
+                                                  "Emerging ecosystem visibility"
+                                              ],
+                            "source_urls":  [
+                                                "https://www.antigravity.im/",
+                                                "https://www.webthatmatters.com/blog/all-about-antigravity-ai-platform"
+                                            ],
+                            "confidence":  "low",
+                            "notes":  "Low-confidence entry pending official technical docs with benchmark hooks.",
+                            "profile_path":  "tests/competitors/antigravity/profile.json",
+                            "readme_path":  "tests/competitors/antigravity/README.md"
+                        },
+                        {
+                            "id":  "openclaw",
+                            "name":  "OpenClaw",
+                            "vendor":  "OpenClaw",
+                            "category":  "open_source_agent",
+                            "surfaces":  [
+                                             "cli",
+                                             "web",
+                                             "api"
+                                         ],
+                            "live_streaming":  "yes",
+                            "settings_depth":  "high",
+                            "benchmark_mode":  "self_host_scriptable",
+                            "key_strengths":  [
+                                                  "Open source full-stack agent surface",
+                                                  "Good CLI and API breadth",
+                                                  "Fast iteration through OSS workflow"
+                                              ],
+                            "source_urls":  [
+                                                "https://github.com/openclaw/openclaw"
+                                            ],
+                            "confidence":  "high",
+                            "notes":  "Primary open-source comparator already wired into suite config.",
+                            "profile_path":  "tests/competitors/openclaw/profile.json",
+                            "readme_path":  "tests/competitors/openclaw/README.md"
+                        }
+                    ],
+    "competitor_count":  19
+}

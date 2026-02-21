@@ -1,0 +1,569 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0118",
+  "title": "Browser workflow case 0118 (notification_preferences)",
+  "category": "notification_preferences",
+  "risk_level": "medium",
+  "objective": "Validate notification_preferences journey under bandwidth_limited network conditions.",
+  "dimensions": {
+    "channel": "desktop_app",
+    "region": "ap-south",
+    "network_profile": "bandwidth_limited",
+    "build_variant": "stable",
+    "locale": "en-GB"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:notification_preferences",
+    "region:ap-south",
+    "channel:desktop_app",
+    "network:bandwidth_limited"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "check_a11y",
+      "target": "[data-test='notification_preferences-01']",
+      "input": "case-0118-value-01",
+      "expect": "notification_preferences-expected-01",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "open_url",
+      "target": "[data-test='notification_preferences-02']",
+      "input": "case-0118-value-02",
+      "expect": "notification_preferences-expected-02",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "wait_for_selector",
+      "target": "[data-test='notification_preferences-03']",
+      "input": "case-0118-value-03",
+      "expect": "notification_preferences-expected-03",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "click",
+      "target": "[data-test='notification_preferences-04']",
+      "input": "case-0118-value-04",
+      "expect": "notification_preferences-expected-04",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "type",
+      "target": "[data-test='notification_preferences-05']",
+      "input": "case-0118-value-05",
+      "expect": "notification_preferences-expected-05",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "press",
+      "target": "[data-test='notification_preferences-06']",
+      "input": "case-0118-value-06",
+      "expect": "notification_preferences-expected-06",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "scroll_into_view",
+      "target": "[data-test='notification_preferences-07']",
+      "input": "case-0118-value-07",
+      "expect": "notification_preferences-expected-07",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "capture_screenshot",
+      "target": "[data-test='notification_preferences-08']",
+      "input": "case-0118-value-08",
+      "expect": "notification_preferences-expected-08",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "snapshot_dom",
+      "target": "[data-test='notification_preferences-09']",
+      "input": "case-0118-value-09",
+      "expect": "notification_preferences-expected-09",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "collect_console",
+      "target": "[data-test='notification_preferences-10']",
+      "input": "case-0118-value-10",
+      "expect": "notification_preferences-expected-10",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "collect_network",
+      "target": "[data-test='notification_preferences-11']",
+      "input": "case-0118-value-11",
+      "expect": "notification_preferences-expected-11",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "assert_text",
+      "target": "[data-test='notification_preferences-12']",
+      "input": "case-0118-value-12",
+      "expect": "notification_preferences-expected-12",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "assert_visibility",
+      "target": "[data-test='notification_preferences-13']",
+      "input": "case-0118-value-13",
+      "expect": "notification_preferences-expected-13",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "download_file",
+      "target": "[data-test='notification_preferences-14']",
+      "input": "case-0118-value-14",
+      "expect": "notification_preferences-expected-14",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "upload_file",
+      "target": "[data-test='notification_preferences-15']",
+      "input": "case-0118-value-15",
+      "expect": "notification_preferences-expected-15",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "switch_tab",
+      "target": "[data-test='notification_preferences-16']",
+      "input": "case-0118-value-16",
+      "expect": "notification_preferences-expected-16",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "close_tab",
+      "target": "[data-test='notification_preferences-17']",
+      "input": "case-0118-value-17",
+      "expect": "notification_preferences-expected-17",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "start_trace",
+      "target": "[data-test='notification_preferences-18']",
+      "input": "case-0118-value-18",
+      "expect": "notification_preferences-expected-18",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "stop_trace",
+      "target": "[data-test='notification_preferences-19']",
+      "input": "case-0118-value-19",
+      "expect": "notification_preferences-expected-19",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "export_pdf",
+      "target": "[data-test='notification_preferences-20']",
+      "input": "case-0118-value-20",
+      "expect": "notification_preferences-expected-20",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "check_a11y",
+      "target": "[data-test='notification_preferences-21']",
+      "input": "case-0118-value-21",
+      "expect": "notification_preferences-expected-21",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "open_url",
+      "target": "[data-test='notification_preferences-22']",
+      "input": "case-0118-value-22",
+      "expect": "notification_preferences-expected-22",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "wait_for_selector",
+      "target": "[data-test='notification_preferences-23']",
+      "input": "case-0118-value-23",
+      "expect": "notification_preferences-expected-23",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "click",
+      "target": "[data-test='notification_preferences-24']",
+      "input": "case-0118-value-24",
+      "expect": "notification_preferences-expected-24",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "type",
+      "target": "[data-test='notification_preferences-25']",
+      "input": "case-0118-value-25",
+      "expect": "notification_preferences-expected-25",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "press",
+      "target": "[data-test='notification_preferences-26']",
+      "input": "case-0118-value-26",
+      "expect": "notification_preferences-expected-26",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 27,
+      "action": "scroll_into_view",
+      "target": "[data-test='notification_preferences-27']",
+      "input": "case-0118-value-27",
+      "expect": "notification_preferences-expected-27",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "console",
+      "query": "assert-notification_preferences-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "text",
+      "query": "assert-notification_preferences-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "visibility",
+      "query": "assert-notification_preferences-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "network",
+      "query": "assert-notification_preferences-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "console",
+      "query": "assert-notification_preferences-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "text",
+      "query": "assert-notification_preferences-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "visibility",
+      "query": "assert-notification_preferences-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "network",
+      "query": "assert-notification_preferences-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "console",
+      "query": "assert-notification_preferences-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "text",
+      "query": "assert-notification_preferences-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "visibility",
+      "query": "assert-notification_preferences-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "network",
+      "query": "assert-notification_preferences-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 1,
+    "max_warning_count": 4,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20500
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 2
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": true,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0118/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0118/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0118/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0118/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "notification_preferences",
+    "desktop_app",
+    "ap-south",
+    "bandwidth_limited",
+    "severity:medium"
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-jira-remediate",
+  "name": "Compliance Jira Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "jira",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.jira",
+    "compliance.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via jira with remediate mode policies."
+}

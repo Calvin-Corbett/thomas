@@ -1,0 +1,14 @@
+{
+  "id": "pack-security-sms",
+  "name": "Security Sms Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "sms",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.sms",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via sms."
+}

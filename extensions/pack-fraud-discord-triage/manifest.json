@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-discord-triage",
+  "name": "Fraud Discord Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "discord",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.discord",
+    "fraud.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via discord with triage mode policies."
+}

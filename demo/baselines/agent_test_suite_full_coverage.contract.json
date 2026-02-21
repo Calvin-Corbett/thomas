@@ -1,0 +1,1908 @@
+{
+  "id": "thomas-full-coverage-contract-v1",
+  "version": 1,
+  "generated_at_utc": "2026-02-21T19:34:15Z",
+  "execution_policy": {
+    "quality_is_king": true,
+    "cycle_limit_disabled": true,
+    "stop_condition": "Continue until no known meaningful gaps remain or user explicitly stops.",
+    "reference": "docs/QUALITY_EXECUTION_POLICY.md"
+  },
+  "runtime_metric_contract": {
+    "include_all_runtime_metrics": true,
+    "source": "metric_board",
+    "note": "This automatically tracks every runtime metric emitted by the comparison suite."
+  },
+  "catalog_checks": [
+    {
+      "id": "core.001",
+      "category": "coverage_and_correctness",
+      "title": "Global line coverage gate.",
+      "description": "Global line coverage gate.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.002",
+      "category": "coverage_and_correctness",
+      "title": "Global branch coverage gate.",
+      "description": "Global branch coverage gate.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.003",
+      "category": "coverage_and_correctness",
+      "title": "Global function coverage gate.",
+      "description": "Global function coverage gate.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.004",
+      "category": "coverage_and_correctness",
+      "title": "Per-package line coverage minimums.",
+      "description": "Per-package line coverage minimums.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.005",
+      "category": "coverage_and_correctness",
+      "title": "Per-package branch coverage minimums.",
+      "description": "Per-package branch coverage minimums.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.006",
+      "category": "coverage_and_correctness",
+      "title": "Diff coverage gate on changed files.",
+      "description": "Diff coverage gate on changed files.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.007",
+      "category": "coverage_and_correctness",
+      "title": "Mutation testing minimum score.",
+      "description": "Mutation testing minimum score.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.008",
+      "category": "coverage_and_correctness",
+      "title": "Unit tests for every public function.",
+      "description": "Unit tests for every public function.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.009",
+      "category": "coverage_and_correctness",
+      "title": "Unit tests for every error branch.",
+      "description": "Unit tests for every error branch.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.010",
+      "category": "coverage_and_correctness",
+      "title": "Unit tests for serialization/deserialization.",
+      "description": "Unit tests for serialization/deserialization.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.011",
+      "category": "coverage_and_correctness",
+      "title": "Property-based tests for core parsers.",
+      "description": "Property-based tests for core parsers.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.012",
+      "category": "coverage_and_correctness",
+      "title": "Property-based tests for validators.",
+      "description": "Property-based tests for validators.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.013",
+      "category": "coverage_and_correctness",
+      "title": "Metamorphic tests for deterministic transforms.",
+      "description": "Metamorphic tests for deterministic transforms.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.014",
+      "category": "coverage_and_correctness",
+      "title": "Golden tests for stable outputs.",
+      "description": "Golden tests for stable outputs.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.015",
+      "category": "coverage_and_correctness",
+      "title": "Snapshot tests for structured payloads.",
+      "description": "Snapshot tests for structured payloads.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.016",
+      "category": "coverage_and_correctness",
+      "title": "Fuzz tests for input parsers.",
+      "description": "Fuzz tests for input parsers.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.017",
+      "category": "coverage_and_correctness",
+      "title": "Unicode/encoding edge-case tests.",
+      "description": "Unicode/encoding edge-case tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.018",
+      "category": "coverage_and_correctness",
+      "title": "Timezone and DST correctness tests.",
+      "description": "Timezone and DST correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.019",
+      "category": "coverage_and_correctness",
+      "title": "Locale/i18n formatting correctness tests.",
+      "description": "Locale/i18n formatting correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.020",
+      "category": "coverage_and_correctness",
+      "title": "Cross-platform path handling tests.",
+      "description": "Cross-platform path handling tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.021",
+      "category": "interfaces_and_protocols",
+      "title": "CLI command existence contract tests.",
+      "description": "CLI command existence contract tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.022",
+      "category": "interfaces_and_protocols",
+      "title": "CLI help/usage schema tests.",
+      "description": "CLI help/usage schema tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.023",
+      "category": "interfaces_and_protocols",
+      "title": "CLI argument normalization tests.",
+      "description": "CLI argument normalization tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.024",
+      "category": "interfaces_and_protocols",
+      "title": "CLI invalid-arg failure-mode tests.",
+      "description": "CLI invalid-arg failure-mode tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.025",
+      "category": "interfaces_and_protocols",
+      "title": "CLI exit-code contract tests.",
+      "description": "CLI exit-code contract tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.026",
+      "category": "interfaces_and_protocols",
+      "title": "API schema conformance tests (request).",
+      "description": "API schema conformance tests (request).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.027",
+      "category": "interfaces_and_protocols",
+      "title": "API schema conformance tests (response).",
+      "description": "API schema conformance tests (response).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.028",
+      "category": "interfaces_and_protocols",
+      "title": "OpenAI-compat gateway protocol tests.",
+      "description": "OpenAI-compat gateway protocol tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.029",
+      "category": "interfaces_and_protocols",
+      "title": "Streaming response event-order tests.",
+      "description": "Streaming response event-order tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.030",
+      "category": "interfaces_and_protocols",
+      "title": "Retry/idempotency behavior tests.",
+      "description": "Retry/idempotency behavior tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.031",
+      "category": "interfaces_and_protocols",
+      "title": "Pagination correctness tests.",
+      "description": "Pagination correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.032",
+      "category": "interfaces_and_protocols",
+      "title": "Rate-limit behavior tests.",
+      "description": "Rate-limit behavior tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.033",
+      "category": "interfaces_and_protocols",
+      "title": "AuthN failure tests.",
+      "description": "AuthN failure tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.034",
+      "category": "interfaces_and_protocols",
+      "title": "AuthZ failure tests.",
+      "description": "AuthZ failure tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.035",
+      "category": "interfaces_and_protocols",
+      "title": "Backward-compat API version tests.",
+      "description": "Backward-compat API version tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.036",
+      "category": "interfaces_and_protocols",
+      "title": "Webhook signature verification tests.",
+      "description": "Webhook signature verification tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.037",
+      "category": "interfaces_and_protocols",
+      "title": "Webhook replay-protection tests.",
+      "description": "Webhook replay-protection tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.038",
+      "category": "interfaces_and_protocols",
+      "title": "WebSocket connect/disconnect tests.",
+      "description": "WebSocket connect/disconnect tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.039",
+      "category": "interfaces_and_protocols",
+      "title": "WebSocket backpressure tests.",
+      "description": "WebSocket backpressure tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.040",
+      "category": "interfaces_and_protocols",
+      "title": "WebSocket reconnect recovery tests.",
+      "description": "WebSocket reconnect recovery tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.041",
+      "category": "agent_runtime",
+      "title": "Agent routing correctness tests.",
+      "description": "Agent routing correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.042",
+      "category": "agent_runtime",
+      "title": "Tool-selection policy tests.",
+      "description": "Tool-selection policy tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.043",
+      "category": "agent_runtime",
+      "title": "Tool argument schema tests.",
+      "description": "Tool argument schema tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.044",
+      "category": "agent_runtime",
+      "title": "Tool-call timeout handling tests.",
+      "description": "Tool-call timeout handling tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.045",
+      "category": "agent_runtime",
+      "title": "Tool-call cancellation tests.",
+      "description": "Tool-call cancellation tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.046",
+      "category": "agent_runtime",
+      "title": "Tool-call partial-failure recovery tests.",
+      "description": "Tool-call partial-failure recovery tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.047",
+      "category": "agent_runtime",
+      "title": "Agent memory write/read consistency tests.",
+      "description": "Agent memory write/read consistency tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.048",
+      "category": "agent_runtime",
+      "title": "Memory contradiction detection tests.",
+      "description": "Memory contradiction detection tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.049",
+      "category": "agent_runtime",
+      "title": "Memory curation quality tests.",
+      "description": "Memory curation quality tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.050",
+      "category": "agent_runtime",
+      "title": "Context-window truncation safety tests.",
+      "description": "Context-window truncation safety tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.051",
+      "category": "agent_runtime",
+      "title": "Prompt-injection resistance tests.",
+      "description": "Prompt-injection resistance tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.052",
+      "category": "agent_runtime",
+      "title": "Data-exfiltration refusal tests.",
+      "description": "Data-exfiltration refusal tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.053",
+      "category": "agent_runtime",
+      "title": "Unsafe-action refusal tests.",
+      "description": "Unsafe-action refusal tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.054",
+      "category": "agent_runtime",
+      "title": "Policy override resistance tests.",
+      "description": "Policy override resistance tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.055",
+      "category": "agent_runtime",
+      "title": "Model fallback correctness tests.",
+      "description": "Model fallback correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.056",
+      "category": "agent_runtime",
+      "title": "Multi-provider model parity tests.",
+      "description": "Multi-provider model parity tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.057",
+      "category": "agent_runtime",
+      "title": "Deterministic replay tests of agent runs.",
+      "description": "Deterministic replay tests of agent runs.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.058",
+      "category": "agent_runtime",
+      "title": "Long-conversation coherence tests.",
+      "description": "Long-conversation coherence tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.059",
+      "category": "agent_runtime",
+      "title": "Task planning/execution parity tests.",
+      "description": "Task planning/execution parity tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.060",
+      "category": "agent_runtime",
+      "title": "Hallucination guardrail tests with known answers.",
+      "description": "Hallucination guardrail tests with known answers.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.061",
+      "category": "browser_and_operator_ux",
+      "title": "Browser workflow corpus validity tests.",
+      "description": "Browser workflow corpus validity tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.062",
+      "category": "browser_and_operator_ux",
+      "title": "Browser workflow runtime execution tests.",
+      "description": "Browser workflow runtime execution tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.063",
+      "category": "browser_and_operator_ux",
+      "title": "Browser profile coverage tests.",
+      "description": "Browser profile coverage tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.064",
+      "category": "browser_and_operator_ux",
+      "title": "Browser extension interaction tests.",
+      "description": "Browser extension interaction tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.065",
+      "category": "browser_and_operator_ux",
+      "title": "DOM-selector drift resilience tests.",
+      "description": "DOM-selector drift resilience tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.066",
+      "category": "browser_and_operator_ux",
+      "title": "Browser timeout/retry tests.",
+      "description": "Browser timeout/retry tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.067",
+      "category": "browser_and_operator_ux",
+      "title": "Desktop viewport visual regression tests.",
+      "description": "Desktop viewport visual regression tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.068",
+      "category": "browser_and_operator_ux",
+      "title": "Mobile viewport visual regression tests.",
+      "description": "Mobile viewport visual regression tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.069",
+      "category": "browser_and_operator_ux",
+      "title": "Accessibility keyboard-nav tests.",
+      "description": "Accessibility keyboard-nav tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.070",
+      "category": "browser_and_operator_ux",
+      "title": "Accessibility ARIA/semantic tests.",
+      "description": "Accessibility ARIA/semantic tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.071",
+      "category": "browser_and_operator_ux",
+      "title": "Accessibility contrast tests.",
+      "description": "Accessibility contrast tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.072",
+      "category": "browser_and_operator_ux",
+      "title": "Frontend error boundary tests.",
+      "description": "Frontend error boundary tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.073",
+      "category": "browser_and_operator_ux",
+      "title": "Frontend state restoration tests.",
+      "description": "Frontend state restoration tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.074",
+      "category": "browser_and_operator_ux",
+      "title": "Frontend offline behavior tests.",
+      "description": "Frontend offline behavior tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.075",
+      "category": "browser_and_operator_ux",
+      "title": "Frontend slow-network behavior tests.",
+      "description": "Frontend slow-network behavior tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.076",
+      "category": "browser_and_operator_ux",
+      "title": "Service worker/cache correctness tests.",
+      "description": "Service worker/cache correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.077",
+      "category": "browser_and_operator_ux",
+      "title": "Client-side auth/session expiry tests.",
+      "description": "Client-side auth/session expiry tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.078",
+      "category": "browser_and_operator_ux",
+      "title": "Cross-browser matrix tests (Chrome/Edge/Firefox).",
+      "description": "Cross-browser matrix tests (Chrome/Edge/Firefox).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.079",
+      "category": "browser_and_operator_ux",
+      "title": "Mobile emulation matrix tests.",
+      "description": "Mobile emulation matrix tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.080",
+      "category": "browser_and_operator_ux",
+      "title": "UI telemetry event contract tests.",
+      "description": "UI telemetry event contract tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.081",
+      "category": "extensions_and_state",
+      "title": "Extension catalog schema tests.",
+      "description": "Extension catalog schema tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.082",
+      "category": "extensions_and_state",
+      "title": "Extension catalog runtime load tests.",
+      "description": "Extension catalog runtime load tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.083",
+      "category": "extensions_and_state",
+      "title": "Extension install tests.",
+      "description": "Extension install tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.084",
+      "category": "extensions_and_state",
+      "title": "Extension upgrade tests.",
+      "description": "Extension upgrade tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.085",
+      "category": "extensions_and_state",
+      "title": "Extension rollback tests.",
+      "description": "Extension rollback tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.086",
+      "category": "extensions_and_state",
+      "title": "Extension uninstall cleanup tests.",
+      "description": "Extension uninstall cleanup tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.087",
+      "category": "extensions_and_state",
+      "title": "Extension dependency conflict tests.",
+      "description": "Extension dependency conflict tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.088",
+      "category": "extensions_and_state",
+      "title": "Extension sandbox/permission tests.",
+      "description": "Extension sandbox/permission tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.089",
+      "category": "extensions_and_state",
+      "title": "Extension API compatibility version tests.",
+      "description": "Extension API compatibility version tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.090",
+      "category": "extensions_and_state",
+      "title": "Extension cold-start performance tests.",
+      "description": "Extension cold-start performance tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.091",
+      "category": "extensions_and_state",
+      "title": "DB migration forward tests.",
+      "description": "DB migration forward tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.092",
+      "category": "extensions_and_state",
+      "title": "DB migration rollback tests.",
+      "description": "DB migration rollback tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.093",
+      "category": "extensions_and_state",
+      "title": "Corrupt-data recovery tests.",
+      "description": "Corrupt-data recovery tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.094",
+      "category": "extensions_and_state",
+      "title": "Backup/restore integrity tests.",
+      "description": "Backup/restore integrity tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.095",
+      "category": "extensions_and_state",
+      "title": "Concurrency lock/race-condition tests.",
+      "description": "Concurrency lock/race-condition tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.096",
+      "category": "extensions_and_state",
+      "title": "Transaction atomicity tests.",
+      "description": "Transaction atomicity tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.097",
+      "category": "extensions_and_state",
+      "title": "Data retention/purge tests.",
+      "description": "Data retention/purge tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.098",
+      "category": "extensions_and_state",
+      "title": "PII redaction correctness tests.",
+      "description": "PII redaction correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.099",
+      "category": "extensions_and_state",
+      "title": "Audit log integrity tests.",
+      "description": "Audit log integrity tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.100",
+      "category": "extensions_and_state",
+      "title": "Cross-version state compatibility tests.",
+      "description": "Cross-version state compatibility tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.101",
+      "category": "security_depth",
+      "title": "SAST gate (high/critical fail).",
+      "description": "SAST gate (high/critical fail).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.102",
+      "category": "security_depth",
+      "title": "DAST gate for exposed endpoints.",
+      "description": "DAST gate for exposed endpoints.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.103",
+      "category": "security_depth",
+      "title": "Secret scanning gate.",
+      "description": "Secret scanning gate.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.104",
+      "category": "security_depth",
+      "title": "Dependency vulnerability gate (runtime).",
+      "description": "Dependency vulnerability gate (runtime).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.105",
+      "category": "security_depth",
+      "title": "Dependency vulnerability gate (dev-time).",
+      "description": "Dependency vulnerability gate (dev-time).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.106",
+      "category": "security_depth",
+      "title": "License policy gate.",
+      "description": "License policy gate.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.107",
+      "category": "security_depth",
+      "title": "SBOM generation + diff gate.",
+      "description": "SBOM generation + diff gate.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.108",
+      "category": "security_depth",
+      "title": "Artifact provenance/signature verification.",
+      "description": "Artifact provenance/signature verification.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.109",
+      "category": "security_depth",
+      "title": "Sandbox escape attempt tests.",
+      "description": "Sandbox escape attempt tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.110",
+      "category": "security_depth",
+      "title": "Command injection tests.",
+      "description": "Command injection tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.111",
+      "category": "security_depth",
+      "title": "SQL injection tests.",
+      "description": "SQL injection tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.112",
+      "category": "security_depth",
+      "title": "XSS tests.",
+      "description": "XSS tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.113",
+      "category": "security_depth",
+      "title": "CSRF tests.",
+      "description": "CSRF tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.114",
+      "category": "security_depth",
+      "title": "SSRF tests.",
+      "description": "SSRF tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.115",
+      "category": "security_depth",
+      "title": "Path traversal tests.",
+      "description": "Path traversal tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.116",
+      "category": "security_depth",
+      "title": "Zip-slip/file extraction tests.",
+      "description": "Zip-slip/file extraction tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.117",
+      "category": "security_depth",
+      "title": "Unsafe deserialization tests.",
+      "description": "Unsafe deserialization tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.118",
+      "category": "security_depth",
+      "title": "Cryptography misuse tests.",
+      "description": "Cryptography misuse tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.119",
+      "category": "security_depth",
+      "title": "Session fixation/hijack tests.",
+      "description": "Session fixation/hijack tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.120",
+      "category": "security_depth",
+      "title": "Security regression replay suite.",
+      "description": "Security regression replay suite.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.121",
+      "category": "performance_and_cost",
+      "title": "Cold-start latency benchmarks.",
+      "description": "Cold-start latency benchmarks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.122",
+      "category": "performance_and_cost",
+      "title": "Warm-path latency benchmarks.",
+      "description": "Warm-path latency benchmarks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.123",
+      "category": "performance_and_cost",
+      "title": "P50/P95/P99 latency gates.",
+      "description": "P50/P95/P99 latency gates.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.124",
+      "category": "performance_and_cost",
+      "title": "Throughput saturation tests.",
+      "description": "Throughput saturation tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.125",
+      "category": "performance_and_cost",
+      "title": "Concurrency scaling tests.",
+      "description": "Concurrency scaling tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.126",
+      "category": "performance_and_cost",
+      "title": "Memory leak soak tests.",
+      "description": "Memory leak soak tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.127",
+      "category": "performance_and_cost",
+      "title": "CPU regression gates.",
+      "description": "CPU regression gates.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.128",
+      "category": "performance_and_cost",
+      "title": "I/O regression gates.",
+      "description": "I/O regression gates.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.129",
+      "category": "performance_and_cost",
+      "title": "Queue depth/backlog stress tests.",
+      "description": "Queue depth/backlog stress tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.130",
+      "category": "performance_and_cost",
+      "title": "Autoscaling behavior tests.",
+      "description": "Autoscaling behavior tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.131",
+      "category": "performance_and_cost",
+      "title": "Tail-latency under failure tests.",
+      "description": "Tail-latency under failure tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.132",
+      "category": "performance_and_cost",
+      "title": "Load-shedding behavior tests.",
+      "description": "Load-shedding behavior tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.133",
+      "category": "performance_and_cost",
+      "title": "Graceful degradation tests.",
+      "description": "Graceful degradation tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.134",
+      "category": "performance_and_cost",
+      "title": "Thundering-herd prevention tests.",
+      "description": "Thundering-herd prevention tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.135",
+      "category": "performance_and_cost",
+      "title": "Cache hit-rate regression tests.",
+      "description": "Cache hit-rate regression tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.136",
+      "category": "performance_and_cost",
+      "title": "Cache invalidation correctness tests.",
+      "description": "Cache invalidation correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.137",
+      "category": "performance_and_cost",
+      "title": "Cost-per-task regression gates.",
+      "description": "Cost-per-task regression gates.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.138",
+      "category": "performance_and_cost",
+      "title": "Token-per-success regression gates.",
+      "description": "Token-per-success regression gates.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.139",
+      "category": "performance_and_cost",
+      "title": "Tool-call-per-success regression gates.",
+      "description": "Tool-call-per-success regression gates.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.140",
+      "category": "performance_and_cost",
+      "title": "Provider spend-cap enforcement tests.",
+      "description": "Provider spend-cap enforcement tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.141",
+      "category": "reliability_and_release_ops",
+      "title": "Flakiness detection and quarantine pipeline.",
+      "description": "Flakiness detection and quarantine pipeline.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.142",
+      "category": "reliability_and_release_ops",
+      "title": "Test repeatability checks (N reruns).",
+      "description": "Test repeatability checks (N reruns).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.143",
+      "category": "reliability_and_release_ops",
+      "title": "Randomized test-order stability checks.",
+      "description": "Randomized test-order stability checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.144",
+      "category": "reliability_and_release_ops",
+      "title": "Hermetic test environment checks.",
+      "description": "Hermetic test environment checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.145",
+      "category": "reliability_and_release_ops",
+      "title": "Seeded reproducibility checks.",
+      "description": "Seeded reproducibility checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.146",
+      "category": "reliability_and_release_ops",
+      "title": "Fixture isolation checks.",
+      "description": "Fixture isolation checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.147",
+      "category": "reliability_and_release_ops",
+      "title": "Clock-freeze deterministic tests.",
+      "description": "Clock-freeze deterministic tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.148",
+      "category": "reliability_and_release_ops",
+      "title": "CI timeout budget tests.",
+      "description": "CI timeout budget tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.149",
+      "category": "reliability_and_release_ops",
+      "title": "Parallel test safety checks.",
+      "description": "Parallel test safety checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.150",
+      "category": "reliability_and_release_ops",
+      "title": "Artifact retention and traceability checks.",
+      "description": "Artifact retention and traceability checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.151",
+      "category": "reliability_and_release_ops",
+      "title": "Release-candidate smoke suite.",
+      "description": "Release-candidate smoke suite.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.152",
+      "category": "reliability_and_release_ops",
+      "title": "Release rollback drills.",
+      "description": "Release rollback drills.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.153",
+      "category": "reliability_and_release_ops",
+      "title": "Blue/green deployment tests.",
+      "description": "Blue/green deployment tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.154",
+      "category": "reliability_and_release_ops",
+      "title": "Canary gating tests.",
+      "description": "Canary gating tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.155",
+      "category": "reliability_and_release_ops",
+      "title": "Post-deploy synthetic transaction tests.",
+      "description": "Post-deploy synthetic transaction tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.156",
+      "category": "reliability_and_release_ops",
+      "title": "SLO/error-budget gate checks.",
+      "description": "SLO/error-budget gate checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.157",
+      "category": "reliability_and_release_ops",
+      "title": "Alert routing correctness tests.",
+      "description": "Alert routing correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.158",
+      "category": "reliability_and_release_ops",
+      "title": "On-call runbook execution drills.",
+      "description": "On-call runbook execution drills.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.159",
+      "category": "reliability_and_release_ops",
+      "title": "Disaster-recovery failover tests.",
+      "description": "Disaster-recovery failover tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.160",
+      "category": "reliability_and_release_ops",
+      "title": "Regional outage simulation tests.",
+      "description": "Regional outage simulation tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.161",
+      "category": "compliance_and_competitive_intel",
+      "title": "Compliance logging completeness tests.",
+      "description": "Compliance logging completeness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.162",
+      "category": "compliance_and_competitive_intel",
+      "title": "GDPR delete/export flow tests.",
+      "description": "GDPR delete/export flow tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.163",
+      "category": "compliance_and_competitive_intel",
+      "title": "SOC2 control evidence tests.",
+      "description": "SOC2 control evidence tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.164",
+      "category": "compliance_and_competitive_intel",
+      "title": "Data residency routing tests.",
+      "description": "Data residency routing tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.165",
+      "category": "compliance_and_competitive_intel",
+      "title": "Accessibility compliance gates (WCAG).",
+      "description": "Accessibility compliance gates (WCAG).",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.166",
+      "category": "compliance_and_competitive_intel",
+      "title": "Terms/policy enforcement tests.",
+      "description": "Terms/policy enforcement tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.167",
+      "category": "compliance_and_competitive_intel",
+      "title": "Content moderation pipeline tests.",
+      "description": "Content moderation pipeline tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.168",
+      "category": "compliance_and_competitive_intel",
+      "title": "Abuse-rate limiting tests.",
+      "description": "Abuse-rate limiting tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.169",
+      "category": "compliance_and_competitive_intel",
+      "title": "Multi-tenant isolation tests.",
+      "description": "Multi-tenant isolation tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.170",
+      "category": "compliance_and_competitive_intel",
+      "title": "Tenant billing boundary tests.",
+      "description": "Tenant billing boundary tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.171",
+      "category": "compliance_and_competitive_intel",
+      "title": "Competitor catalog freshness tests.",
+      "description": "Competitor catalog freshness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.172",
+      "category": "compliance_and_competitive_intel",
+      "title": "Competitor auto-clone/update tests.",
+      "description": "Competitor auto-clone/update tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.173",
+      "category": "compliance_and_competitive_intel",
+      "title": "Competitor version capture tests.",
+      "description": "Competitor version capture tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.174",
+      "category": "compliance_and_competitive_intel",
+      "title": "Daily model snapshot enforcement tests.",
+      "description": "Daily model snapshot enforcement tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.175",
+      "category": "compliance_and_competitive_intel",
+      "title": "Competitor pressure-board correctness tests.",
+      "description": "Competitor pressure-board correctness tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.176",
+      "category": "compliance_and_competitive_intel",
+      "title": "Prediction-evo-scope delta detection tests.",
+      "description": "Prediction-evo-scope delta detection tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.177",
+      "category": "compliance_and_competitive_intel",
+      "title": "Prediction-evo-scope recommendation validity tests.",
+      "description": "Prediction-evo-scope recommendation validity tests.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.178",
+      "category": "compliance_and_competitive_intel",
+      "title": "Benchmark corpus anti-gaming checks.",
+      "description": "Benchmark corpus anti-gaming checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.179",
+      "category": "compliance_and_competitive_intel",
+      "title": "Cross-run comparability normalization checks.",
+      "description": "Cross-run comparability normalization checks.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "core.180",
+      "category": "compliance_and_competitive_intel",
+      "title": "Historical trend regression alerts.",
+      "description": "Historical trend regression alerts.",
+      "priority": "p1",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.001",
+      "category": "agentic_native",
+      "title": "Hard-constraint violation rate across full runs.",
+      "description": "Hard-constraint violation rate across full runs.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.002",
+      "category": "agentic_native",
+      "title": "Constraint persistence after long context windows (drift test).",
+      "description": "Constraint persistence after long context windows (drift test).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.003",
+      "category": "agentic_native",
+      "title": "Plan-to-action divergence score (did execution match declared plan).",
+      "description": "Plan-to-action divergence score (did execution match declared plan).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.004",
+      "category": "agentic_native",
+      "title": "Replan quality after mid-run objective change.",
+      "description": "Replan quality after mid-run objective change.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.005",
+      "category": "agentic_native",
+      "title": "Tool precondition verification recall (caught bad preconditions before calling).",
+      "description": "Tool precondition verification recall (caught bad preconditions before calling).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.006",
+      "category": "agentic_native",
+      "title": "Tool side-effect blast-radius score (minimal write/change surface).",
+      "description": "Tool side-effect blast-radius score (minimal write/change surface).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.007",
+      "category": "agentic_native",
+      "title": "Retry idempotency correctness under duplicate/partial failures.",
+      "description": "Retry idempotency correctness under duplicate/partial failures.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.008",
+      "category": "agentic_native",
+      "title": "Compensation/rollback correctness after failed multi-step actions.",
+      "description": "Compensation/rollback correctness after failed multi-step actions.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.009",
+      "category": "agentic_native",
+      "title": "Confidence calibration score (Brier/ECE for success predictions).",
+      "description": "Confidence calibration score (Brier/ECE for success predictions).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.010",
+      "category": "agentic_native",
+      "title": "Correct abstention rate when evidence is insufficient.",
+      "description": "Correct abstention rate when evidence is insufficient.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.011",
+      "category": "agentic_native",
+      "title": "Claim-to-evidence traceability completeness (every claim backed by artifact).",
+      "description": "Claim-to-evidence traceability completeness (every claim backed by artifact).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.012",
+      "category": "agentic_native",
+      "title": "Phantom-work detection (claims action done when no receipt exists).",
+      "description": "Phantom-work detection (claims action done when no receipt exists).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.013",
+      "category": "agentic_native",
+      "title": "Long-horizon commitment retention across many turns.",
+      "description": "Long-horizon commitment retention across many turns.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.014",
+      "category": "agentic_native",
+      "title": "Memory poisoning resistance (malicious facts injected earlier).",
+      "description": "Memory poisoning resistance (malicious facts injected earlier).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.015",
+      "category": "agentic_native",
+      "title": "Memory pruning precision (forgets stale data, keeps critical commitments).",
+      "description": "Memory pruning precision (forgets stale data, keeps critical commitments).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.016",
+      "category": "agentic_native",
+      "title": "Instruction hierarchy fidelity (system/dev/user conflict handling).",
+      "description": "Instruction hierarchy fidelity (system/dev/user conflict handling).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.017",
+      "category": "agentic_native",
+      "title": "Delayed jailbreak robustness (payload hidden over multiple turns).",
+      "description": "Delayed jailbreak robustness (payload hidden over multiple turns).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.018",
+      "category": "agentic_native",
+      "title": "Social-engineering approval bypass resistance.",
+      "description": "Social-engineering approval bypass resistance.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.019",
+      "category": "agentic_native",
+      "title": "Interruptibility latency (how fast the agent safely stops/redirects).",
+      "description": "Interruptibility latency (how fast the agent safely stops/redirects).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.020",
+      "category": "agentic_native",
+      "title": "Human override compliance correctness.",
+      "description": "Human override compliance correctness.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.021",
+      "category": "agentic_native",
+      "title": "Handoff quality score (state transfer with no loss).",
+      "description": "Handoff quality score (state transfer with no loss).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.022",
+      "category": "agentic_native",
+      "title": "Delegation quality in multi-agent mode (right task to right specialist).",
+      "description": "Delegation quality in multi-agent mode (right task to right specialist).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.023",
+      "category": "agentic_native",
+      "title": "Coordination overhead efficiency (extra chatter vs value gained).",
+      "description": "Coordination overhead efficiency (extra chatter vs value gained).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.024",
+      "category": "agentic_native",
+      "title": "Unseen tool schema adaptation success.",
+      "description": "Unseen tool schema adaptation success.",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.025",
+      "category": "agentic_native",
+      "title": "Temporal-awareness correctness (date/time-dependent decisions).",
+      "description": "Temporal-awareness correctness (date/time-dependent decisions).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.026",
+      "category": "agentic_native",
+      "title": "Distribution-shift robustness (new domain/task family not in corpus).",
+      "description": "Distribution-shift robustness (new domain/task family not in corpus).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.027",
+      "category": "agentic_native",
+      "title": "Benchmark anti-gaming checks (no metric-optimized but useless behavior).",
+      "description": "Benchmark anti-gaming checks (no metric-optimized but useless behavior).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.028",
+      "category": "agentic_native",
+      "title": "Counterfactual tool-choice quality (was chosen tool actually best).",
+      "description": "Counterfactual tool-choice quality (was chosen tool actually best).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.029",
+      "category": "agentic_native",
+      "title": "Self-critique utility score (reflection improves outcome).",
+      "description": "Self-critique utility score (reflection improves outcome).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    },
+    {
+      "id": "agentic.030",
+      "category": "agentic_native",
+      "title": "Operator trust score (predictable, controllable, auditable under stress).",
+      "description": "Operator trust score (predictable, controllable, auditable under stress).",
+      "priority": "p0",
+      "implementation_state": "implemented",
+      "implementation_mode": "contract_rule_v1"
+    }
+  ]
+}

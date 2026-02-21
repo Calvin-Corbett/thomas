@@ -1,0 +1,22 @@
+"""Workflow profile module: wf_profile_181."""
+
+from __future__ import annotations
+
+from typing import Any, Dict
+
+PROFILE: Dict[str, Any] = {
+  "profile_id": "wf_profile_181",
+  "category": "checkout",
+  "title": "Checkout workflow profile 181",
+  "risk_tier": "low",
+  "required_signals": [
+    "event_log_complete",
+    "dom_ready",
+    "network_idle"
+  ],
+  "max_retries": 2,
+  "timeout_ms": 39797
+}
+
+def get_profile() -> Dict[str, Any]:
+    return dict(PROFILE)

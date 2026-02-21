@@ -157,6 +157,26 @@ class ServerConfig:
 
 
 @dataclass
+class QualityConfig:
+    """Configuration for rules-of-the-road quality gates."""
+
+    enabled: bool = True
+    enforce: bool = True
+    max_auto_retries: int = 1
+    require_verification_for_coding: bool = True
+    require_tests_for_code_edits: bool = False
+    require_monolith_guard_for_coding: bool = True
+
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        if int(self.max_auto_retries) < 0:
+            errors.append("quality.max_auto_retries must be >= 0")
+        if int(self.max_auto_retries) > 3:
+            errors.append("quality.max_auto_retries must be <= 3")
+        return errors
+
+
+@dataclass
 class AppConfig:
     """Top-level application configuration."""
 
@@ -167,6 +187,8 @@ class AppConfig:
     failover: FailoverConfig = field(default_factory=FailoverConfig)
     server: ServerConfig = field(default_factory=ServerConfig)
     journal: JournalConfig = field(default_factory=JournalConfig)
+    quality: QualityConfig = field(default_factory=QualityConfig)
+    unknown_core_keys: list[str] = field(default_factory=list)
     default_model: str = "local"
     max_agent_iterations: int = 10
 
@@ -229,6 +251,9 @@ class AppConfig:
                     f"Available: {list(self.models.keys())}"
                 )
         errors.extend(self.server.validate())
+        errors.extend(self.quality.validate())
+        for key in self.unknown_core_keys:
+            errors.append(f"Unknown core config key '{key}'.")
         return errors
 
 
@@ -273,7 +298,7 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
         # THOMAS_EMBED_<field...> -> data["embed"][field]
         # THOMAS_FAILOVER_<field...> -> data["failover"][field]
         # THOMAS_SERVER_<field...> -> data["server"][field]
-        if parts[0] in ("memory", "tools", "embed", "failover", "server", "journal") and len(parts) >= 2:
+        if parts[0] in ("memory", "tools", "embed", "failover", "server", "journal", "quality") and len(parts) >= 2:
             section, *rest = parts
             field = "_".join(rest)
             data.setdefault(section, {})[field] = value
@@ -295,7 +320,7 @@ def _coerce_types(data: Dict[str, Any]) -> None:
     """Coerce string values from env vars to appropriate types."""
     int_fields = {"max_tokens", "context_window", "context_budget", "shell_timeout",
                   "max_file_size", "max_agent_iterations", "batch_size", "cooldown_seconds",
-                  "rate_limit_max_requests", "rate_limit_window_seconds"}
+                  "rate_limit_max_requests", "rate_limit_window_seconds", "max_auto_retries"}
     float_fields = {"temperature", "top_p", "timeout_s"}
     bool_fields = {
         "allow_shell",
@@ -305,6 +330,10 @@ def _coerce_types(data: Dict[str, Any]) -> None:
         "fallback_on_auth_error",
         "allow_unauthenticated_version",
         "rate_limit_enabled",
+        "enforce",
+        "require_verification_for_coding",
+        "require_tests_for_code_edits",
+        "require_monolith_guard_for_coding",
     }
 
     for key, val in list(data.items()):
@@ -342,6 +371,84 @@ def _build_model_config(name: str, d: Dict[str, Any]) -> ModelConfig:
     )
 
 
+def _collect_unknown_core_keys(data: Dict[str, Any]) -> list[str]:
+    unknown: list[str] = []
+    top_allowed = {
+        "models",
+        "embed",
+        "memory",
+        "tools",
+        "failover",
+        "server",
+        "journal",
+        "quality",
+        "default_model",
+        "max_agent_iterations",
+    }
+    top_extension_allowed = {
+        "watcher",
+        "dep_scanner",
+        "autonomy",
+        "library",
+        "realtime",
+        "policy",
+        "notifications",
+        "workspace",
+        "workspaces",
+        "costs",
+        "spend",
+        "batching",
+    }
+
+    for key, val in data.items():
+        if key in top_allowed:
+            continue
+        if isinstance(val, dict):
+            if key in top_extension_allowed:
+                continue
+            unknown.append(str(key))
+            continue
+        unknown.append(str(key))
+
+    def _field_names(dc_type: Any, *, exclude: set[str] | None = None) -> set[str]:
+        names = set(getattr(dc_type, "__dataclass_fields__", {}).keys())
+        if exclude:
+            names -= set(exclude)
+        return names
+
+    def _scan_section(section: str, allowed: set[str], *, allow_nested: bool = False) -> None:
+        sec = data.get(section)
+        if not isinstance(sec, dict):
+            return
+        for key, value in sec.items():
+            if key in allowed:
+                continue
+            if allow_nested and isinstance(value, dict):
+                # Allow tool-specific nested sections like [tools.web_search].
+                continue
+            unknown.append(f"{section}.{key}")
+
+    _scan_section("embed", _field_names(EmbedConfig))
+    _scan_section("memory", _field_names(MemoryConfig))
+    _scan_section("tools", _field_names(ToolsConfig), allow_nested=True)
+    _scan_section("failover", _field_names(FailoverConfig))
+    _scan_section("server", _field_names(ServerConfig))
+    _scan_section("journal", _field_names(JournalConfig))
+    _scan_section("quality", _field_names(QualityConfig))
+
+    model_allowed = _field_names(ModelConfig, exclude={"name"})
+    models = data.get("models")
+    if isinstance(models, dict):
+        for profile, model_data in models.items():
+            if not isinstance(model_data, dict):
+                continue
+            for key in model_data.keys():
+                if key not in model_allowed:
+                    unknown.append(f"models.{profile}.{key}")
+
+    return sorted(set(unknown))
+
+
 def load_config(path: Optional[Path] = None) -> AppConfig:
     """Load configuration from TOML file with env var overrides.
 
@@ -365,6 +472,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
 
     _env_override(data)
     _coerce_types(data)
+    unknown_core_keys = _collect_unknown_core_keys(data)
 
     # Build model profiles
     models: Dict[str, ModelConfig] = {}
@@ -436,6 +544,23 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         dir=str(journal_data.get("dir", "./tasks") or "./tasks"),
     )
 
+    # Build quality config
+    quality_data = data.get("quality", {})
+    quality = QualityConfig(
+        enabled=bool(quality_data.get("enabled", True)),
+        enforce=bool(quality_data.get("enforce", True)),
+        max_auto_retries=int(quality_data.get("max_auto_retries", 1) or 0),
+        require_verification_for_coding=bool(
+            quality_data.get("require_verification_for_coding", True)
+        ),
+        require_tests_for_code_edits=bool(
+            quality_data.get("require_tests_for_code_edits", False)
+        ),
+        require_monolith_guard_for_coding=bool(
+            quality_data.get("require_monolith_guard_for_coding", True)
+        ),
+    )
+
     return AppConfig(
         models=models,
         embed=embed,
@@ -444,6 +569,8 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         failover=failover,
         server=server,
         journal=journal,
+        quality=quality,
+        unknown_core_keys=unknown_core_keys,
         default_model=data.get("default_model", "local"),
         max_agent_iterations=data.get("max_agent_iterations", 10),
     )

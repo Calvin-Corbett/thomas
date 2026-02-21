@@ -19,6 +19,8 @@ Expected events:
 - swarm_done: {ok, final, summary, error?}
 */
 (function () {
+  const SERVER_TOKEN_STORAGE_KEY = "thomas.serverApiToken";
+
   function esc(s) {
     return (s ?? "").toString()
       .replaceAll("&", "&amp;")
@@ -53,6 +55,21 @@ Expected events:
     cancelled: "swarm-status-cancelled",
     blocked: "swarm-status-blocked",
   };
+
+  function readServerToken() {
+    try {
+      return String(window.localStorage.getItem(SERVER_TOKEN_STORAGE_KEY) || "").trim();
+    } catch {
+      return "";
+    }
+  }
+
+  function withAuth(opts = {}) {
+    const headers = new Headers(opts.headers || {});
+    const token = readServerToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    return { ...opts, headers };
+  }
 
   class SwarmBoard {
     constructor(rootEl, opts = {}) {
@@ -128,7 +145,7 @@ Expected events:
         if (!runId) return;
         cancelBtn.disabled = true;
         try {
-          const r = await fetch(this.opts.cancelUrl(runId), { method: "POST" });
+          const r = await fetch(this.opts.cancelUrl(runId), withAuth({ method: "POST" }));
           // even if it fails, the orchestrator might still stop; re-enable so user can retry.
           await r.text();
         } catch (e) {}
@@ -158,7 +175,7 @@ Expected events:
       this.activeRunId = runId;
 
       byId("swarmCancelBtn").disabled = false;
-      byId("swarmRunMeta").textContent = `run ${runId} • seq ${evt.seq ?? "?"}`;
+      byId("swarmRunMeta").textContent = `run ${runId}  seq ${evt.seq ?? "?"}`;
 
       const agentId = evt.agent_id || "orchestrator";
       const taskId = evt.task_id || "__swarm__";
@@ -309,7 +326,7 @@ Expected events:
       if (task) {
         focus.innerHTML = `
           <div class="swarm-focus-inner">
-            <div class="swarm-focus-title">Focus: ${esc(task.id)} • ${esc(task.title || "")}</div>
+            <div class="swarm-focus-title">Focus: ${esc(task.id)}  ${esc(task.title || "")}</div>
             <div class="swarm-focus-meta">
               <span class="swarm-pill">${esc(task.agent || "?")}</span>
               <span class="swarm-pill">${esc(task.status || "")}</span>
@@ -339,16 +356,16 @@ Expected events:
       const titleEl = byId("swarmPanelTitle");
 
       if (this.activeTaskId) {
-        titleEl.textContent = `Output • ${this.activeAgentId} • task ${this.activeTaskId}`;
+        titleEl.textContent = `Output  ${this.activeAgentId}  task ${this.activeTaskId}`;
         logEl.textContent = agent.logByTask.get(this.activeTaskId) || "";
       } else {
-        titleEl.textContent = `Output • ${this.activeAgentId} • all tasks`;
+        titleEl.textContent = `Output  ${this.activeAgentId}  all tasks`;
         // concatenate per-task logs in a stable order
         const parts = [];
         const keys = Array.from(agent.logByTask.keys()).sort();
         for (const tid of keys) {
           const t = run.tasks.get(tid);
-          parts.push(`\n=== ${tid}${t && t.title ? " • " + t.title : ""} ===\n`);
+          parts.push(`\n=== ${tid}${t && t.title ? "  " + t.title : ""} ===\n`);
           parts.push(agent.logByTask.get(tid) || "");
         }
         logEl.textContent = parts.join("");
@@ -361,7 +378,7 @@ Expected events:
 
       toolsEl.innerHTML = filtered.slice(-200).map(c => {
         const ok = c.ok === true ? "ok" : (c.ok === false ? "err" : "start");
-        const head = `${esc(c.tool || "")} • ${esc(ok)} • ${esc(c.tool_call_id || "")}`;
+        const head = `${esc(c.tool || "")}  ${esc(ok)}  ${esc(c.tool_call_id || "")}`;
         const detailObj = (c.phase === "result")
           ? (c.ok ? c.result : { error: c.error })
           : { args: c.args, mutates_fs: c.mutates_fs };

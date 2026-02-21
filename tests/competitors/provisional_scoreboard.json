@@ -1,0 +1,410 @@
+{
+    "generated_at_utc":  "2026-02-21T19:39:12Z",
+    "method":  "heuristic_from_public_docs",
+    "caution":  "Use for planning and triage only. Replace with measured benchmark artifacts for hard decisions.",
+    "metrics":  [
+                    "surface.interface_coverage",
+                    "ux.live_streaming",
+                    "ux.settings_depth",
+                    "autonomy.supervision_modes",
+                    "integration.mcp_support",
+                    "integration.git_pr_workflows",
+                    "platform.self_hostability",
+                    "composite.provisional_mean"
+                ],
+    "competitors":  [
+                        {
+                            "id":  "claude_code",
+                            "name":  "Claude Code",
+                            "category":  "coding_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  5,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  5,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  4,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  4
+                                       },
+                            "benchmark_mode":  "external_run_required",
+                            "source_urls":  [
+                                                "https://code.claude.com/docs/en/overview"
+                                            ]
+                        },
+                        {
+                            "id":  "openai_codex",
+                            "name":  "OpenAI Codex",
+                            "category":  "coding_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  4,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  5,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  4,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  4,
+                                           "composite.provisional_mean":  4.29
+                                       },
+                            "benchmark_mode":  "cli_scriptable",
+                            "source_urls":  [
+                                                "https://developers.openai.com/codex/cli",
+                                                "https://github.com/openai/codex"
+                                            ]
+                        },
+                        {
+                            "id":  "github_copilot",
+                            "name":  "GitHub Copilot",
+                            "category":  "coding_agent",
+                            "confidence":  "medium",
+                            "scores":  {
+                                           "surface.interface_coverage":  4,
+                                           "ux.live_streaming":  3,
+                                           "ux.settings_depth":  5,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  3,
+                                           "integration.git_pr_workflows":  5,
+                                           "platform.self_hostability":  2,
+                                           "composite.provisional_mean":  3.71
+                                       },
+                            "benchmark_mode":  "mixed",
+                            "source_urls":  [
+                                                "https://docs.github.com/en/copilot"
+                                            ]
+                        },
+                        {
+                            "id":  "cursor",
+                            "name":  "Cursor",
+                            "category":  "coding_agent",
+                            "confidence":  "medium",
+                            "scores":  {
+                                           "surface.interface_coverage":  4,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  5,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  3,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  3.71
+                                       },
+                            "benchmark_mode":  "external_run_required",
+                            "source_urls":  [
+                                                "https://docs.cursor.com/en/chat/agent",
+                                                "https://docs.cursor.com/en/background-agents",
+                                                "https://docs.cursor.com/en/cli"
+                                            ]
+                        },
+                        {
+                            "id":  "windsurf",
+                            "name":  "Windsurf",
+                            "category":  "coding_agent",
+                            "confidence":  "medium",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  3,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  3.14
+                                       },
+                            "benchmark_mode":  "external_run_required",
+                            "source_urls":  [
+                                                "https://docs.windsurf.com/windsurf/getting-started"
+                                            ]
+                        },
+                        {
+                            "id":  "cline",
+                            "name":  "Cline",
+                            "category":  "open_source_agent",
+                            "confidence":  "medium",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  4,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  4,
+                                           "composite.provisional_mean":  3.71
+                                       },
+                            "benchmark_mode":  "partial",
+                            "source_urls":  [
+                                                "https://docs.cline.bot/home"
+                                            ]
+                        },
+                        {
+                            "id":  "roo_code",
+                            "name":  "Roo Code",
+                            "category":  "open_source_agent",
+                            "confidence":  "medium",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  4,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  4,
+                                           "composite.provisional_mean":  3.71
+                                       },
+                            "benchmark_mode":  "partial",
+                            "source_urls":  [
+                                                "https://docs.roocode.com/"
+                                            ]
+                        },
+                        {
+                            "id":  "aider",
+                            "name":  "Aider",
+                            "category":  "open_source_cli_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  3,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  3,
+                                           "integration.mcp_support":  1,
+                                           "integration.git_pr_workflows":  5,
+                                           "platform.self_hostability":  4,
+                                           "composite.provisional_mean":  3
+                                       },
+                            "benchmark_mode":  "cli_scriptable",
+                            "source_urls":  [
+                                                "https://aider.chat/docs/usage/modes.html",
+                                                "https://github.com/Aider-AI/aider"
+                                            ]
+                        },
+                        {
+                            "id":  "open_interpreter",
+                            "name":  "Open Interpreter",
+                            "category":  "open_source_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  3,
+                                           "ux.live_streaming":  3,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  3,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  4,
+                                           "composite.provisional_mean":  3.43
+                                       },
+                            "benchmark_mode":  "cli_scriptable",
+                            "source_urls":  [
+                                                "https://docs.openinterpreter.com/getting-started/setup",
+                                                "https://www.openinterpreter.com/"
+                                            ]
+                        },
+                        {
+                            "id":  "openhands",
+                            "name":  "OpenHands",
+                            "category":  "open_source_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  4,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  5,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  3,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  5,
+                                           "composite.provisional_mean":  4.29
+                                       },
+                            "benchmark_mode":  "self_host_scriptable",
+                            "source_urls":  [
+                                                "https://docs.openhands.dev/sdk/index",
+                                                "https://openhands.dev/"
+                                            ]
+                        },
+                        {
+                            "id":  "devin",
+                            "name":  "Devin",
+                            "category":  "autonomous_engineer",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  5,
+                                           "integration.mcp_support":  1,
+                                           "integration.git_pr_workflows":  3,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  2.86
+                                       },
+                            "benchmark_mode":  "external_run_required",
+                            "source_urls":  [
+                                                "https://docs.devin.ai/get-started/devin-intro",
+                                                "https://cognition.ai/"
+                                            ]
+                        },
+                        {
+                            "id":  "continue",
+                            "name":  "Continue",
+                            "category":  "developer_ai_platform",
+                            "confidence":  "medium",
+                            "scores":  {
+                                           "surface.interface_coverage":  4,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  5,
+                                           "autonomy.supervision_modes":  3,
+                                           "integration.mcp_support":  3,
+                                           "integration.git_pr_workflows":  3,
+                                           "platform.self_hostability":  5,
+                                           "composite.provisional_mean":  4
+                                       },
+                            "benchmark_mode":  "self_host_scriptable",
+                            "source_urls":  [
+                                                "https://continue.dev/",
+                                                "https://docs.continue.dev/"
+                                            ]
+                        },
+                        {
+                            "id":  "replit_agent",
+                            "name":  "Replit Agent",
+                            "category":  "cloud_dev_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  1,
+                                           "integration.git_pr_workflows":  3,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  2.71
+                                       },
+                            "benchmark_mode":  "external_run_required",
+                            "source_urls":  [
+                                                "https://docs.replit.com/replitai/agent",
+                                                "https://replit.com/products/agent"
+                                            ]
+                        },
+                        {
+                            "id":  "v0",
+                            "name":  "v0",
+                            "category":  "app_builder_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  3,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  2,
+                                           "integration.mcp_support":  4,
+                                           "integration.git_pr_workflows":  1,
+                                           "platform.self_hostability":  2,
+                                           "composite.provisional_mean":  2.86
+                                       },
+                            "benchmark_mode":  "api_scriptable",
+                            "source_urls":  [
+                                                "https://v0.app/docs/api",
+                                                "https://v0.app/docs/api/platform/adapters/mcp-server"
+                                            ]
+                        },
+                        {
+                            "id":  "lovable",
+                            "name":  "Lovable",
+                            "category":  "app_builder_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  2,
+                                           "integration.mcp_support":  2,
+                                           "integration.git_pr_workflows":  1,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  2.29
+                                       },
+                            "benchmark_mode":  "external_run_required",
+                            "source_urls":  [
+                                                "https://docs.lovable.dev/introduction/welcome",
+                                                "https://lovable.dev/"
+                                            ]
+                        },
+                        {
+                            "id":  "bolt_new",
+                            "name":  "Bolt.new",
+                            "category":  "app_builder_agent",
+                            "confidence":  "medium",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  3,
+                                           "autonomy.supervision_modes":  2,
+                                           "integration.mcp_support":  2,
+                                           "integration.git_pr_workflows":  1,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  2.29
+                                       },
+                            "benchmark_mode":  "external_run_required",
+                            "source_urls":  [
+                                                "https://bolt.new/",
+                                                "https://support.bolt.new/"
+                                            ]
+                        },
+                        {
+                            "id":  "nanoclaw",
+                            "name":  "NanoClaw",
+                            "category":  "agentic_tooling",
+                            "confidence":  "low",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  1,
+                                           "ux.settings_depth":  1,
+                                           "autonomy.supervision_modes":  2,
+                                           "integration.mcp_support":  1,
+                                           "integration.git_pr_workflows":  2,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  1.43
+                                       },
+                            "benchmark_mode":  "watchlist",
+                            "source_urls":  [
+                                                "https://nanoclaw.dev/"
+                                            ]
+                        },
+                        {
+                            "id":  "antigravity",
+                            "name":  "Antigravity",
+                            "category":  "agentic_platform",
+                            "confidence":  "low",
+                            "scores":  {
+                                           "surface.interface_coverage":  2,
+                                           "ux.live_streaming":  1,
+                                           "ux.settings_depth":  1,
+                                           "autonomy.supervision_modes":  3,
+                                           "integration.mcp_support":  1,
+                                           "integration.git_pr_workflows":  2,
+                                           "platform.self_hostability":  1,
+                                           "composite.provisional_mean":  1.57
+                                       },
+                            "benchmark_mode":  "watchlist",
+                            "source_urls":  [
+                                                "https://www.antigravity.im/",
+                                                "https://www.webthatmatters.com/blog/all-about-antigravity-ai-platform"
+                                            ]
+                        },
+                        {
+                            "id":  "openclaw",
+                            "name":  "OpenClaw",
+                            "category":  "open_source_agent",
+                            "confidence":  "high",
+                            "scores":  {
+                                           "surface.interface_coverage":  4,
+                                           "ux.live_streaming":  5,
+                                           "ux.settings_depth":  5,
+                                           "autonomy.supervision_modes":  4,
+                                           "integration.mcp_support":  3,
+                                           "integration.git_pr_workflows":  4,
+                                           "platform.self_hostability":  5,
+                                           "composite.provisional_mean":  4.29
+                                       },
+                            "benchmark_mode":  "self_host_scriptable",
+                            "source_urls":  [
+                                                "https://github.com/openclaw/openclaw"
+                                            ]
+                        }
+                    ]
+}

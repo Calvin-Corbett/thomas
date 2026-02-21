@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-teams-audit",
+  "name": "Qa Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.teams",
+    "qa.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via teams with audit mode policies."
+}

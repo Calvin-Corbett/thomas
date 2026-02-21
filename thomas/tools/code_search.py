@@ -122,13 +122,28 @@ class CodeSearchTool(Tool):
 
         stdout = stdout_b.decode("utf-8", errors="replace")
         stderr = stderr_b.decode("utf-8", errors="replace")
+        stdout_clean = stdout.rstrip()
+        stderr_clean = stderr.strip()
 
         if proc.returncode == 0:
-            return ToolResult(ok=True, data=stdout.rstrip() or "(no matches)")
+            return ToolResult(ok=True, data=stdout_clean or "(no matches)")
         elif proc.returncode == 1:
             return ToolResult(ok=True, data="No matches found")
         else:
-            return ToolResult(ok=False, error=stderr.strip() or "rg error")
+            # rg can return non-1 errors on Windows for special device paths
+            # (for example `nul`) while still producing useful match output.
+            if stdout_clean:
+                if stderr_clean:
+                    return ToolResult(ok=True, data=f"{stdout_clean}\n[rg warning] {stderr_clean}")
+                return ToolResult(ok=True, data=stdout_clean)
+
+            py_result = await self._search_python(args)
+            if py_result.ok and stderr_clean:
+                py_data = str(py_result.data or "").strip()
+                py_result.data = f"{py_data}\n[rg warning] {stderr_clean}" if py_data else f"[rg warning] {stderr_clean}"
+            if py_result.ok:
+                return py_result
+            return ToolResult(ok=False, error=stderr_clean or py_result.error or "rg error")
 
     async def _search_python(self, args: Dict[str, Any]) -> ToolResult:
         pattern_str = args["pattern"]

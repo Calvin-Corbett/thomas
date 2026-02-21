@@ -1,0 +1,298 @@
+{
+  "version": 1,
+  "foundation": [
+    {
+      "name": "Tool Factory",
+      "location": "thomas/core/tool_factory.py",
+      "notes": "Auto-generates tools from tasks",
+      "code_paths": [
+        "thomas/core/tool_factory.py"
+      ]
+    },
+    {
+      "name": "Initiative Engine",
+      "location": "thomas/core/initiative.py",
+      "notes": "Background agent loop",
+      "code_paths": [
+        "thomas/core/initiative.py"
+      ]
+    },
+    {
+      "name": "Testing Suite",
+      "location": "thomas/core/testing_suite.py",
+      "notes": "Self-correction and quality",
+      "code_paths": [
+        "thomas/core/testing_suite.py"
+      ]
+    },
+    {
+      "name": "Persistence",
+      "location": "thomas/core/persistence.py",
+      "notes": "Fact and memory storage",
+      "code_paths": [
+        "thomas/core/persistence.py"
+      ]
+    },
+    {
+      "name": "RBAC / Multi-User",
+      "location": "thomas/server/workspace/",
+      "notes": "Role-based access control",
+      "code_paths": [
+        "thomas/server/workspace"
+      ]
+    }
+  ],
+  "features": [
+    {
+      "id": 1,
+      "name": "Live Web Search",
+      "location": "thomas/tools/web_search.py",
+      "code_paths": [
+        "thomas/tools/web_search.py"
+      ]
+    },
+    {
+      "id": 2,
+      "name": "RAG Index",
+      "location": "thomas/core/rag_index.py",
+      "code_paths": [
+        "thomas/core/rag_index.py",
+        "thomas/memory/v2/fabric.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_memory_fabric_v2_patch_revB.zip"
+      ]
+    },
+    {
+      "id": 3,
+      "name": "Vision / Image Understanding",
+      "location": "thomas/vision/api.py",
+      "code_paths": [
+        "thomas/vision/api.py",
+        "thomas/vision/handler.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_feature_pack_multimodal_vision_v3.zip"
+      ]
+    },
+    {
+      "id": 4,
+      "name": "Audio Transcription",
+      "location": "thomas/realtime/stt.py",
+      "code_paths": [
+        "thomas/realtime/stt.py",
+        "thomas/realtime/ws_handler.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/*wake_word*.zip",
+        "Inbox/**/*human_assistant_layer*.zip"
+      ]
+    },
+    {
+      "id": 5,
+      "name": "Browser Automation",
+      "location": "thomas/tools/browser.py",
+      "code_paths": [
+        "thomas/tools/browser.py"
+      ]
+    },
+    {
+      "id": 6,
+      "name": "Cron Scheduler",
+      "location": "thomas/core/scheduler.py",
+      "code_paths": [
+        "thomas/core/scheduler.py"
+      ]
+    },
+    {
+      "id": 7,
+      "name": "Webhook Listener",
+      "location": "thomas/server/routes/webhooks.py",
+      "code_paths": [
+        "thomas/server/routes/webhooks.py"
+      ]
+    },
+    {
+      "id": 8,
+      "name": "Clipboard Monitor",
+      "location": "thomas/intake/clipboard_watcher.py",
+      "code_paths": [
+        "thomas/intake/clipboard_watcher.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/*clipboard*screenshot*intake*.zip"
+      ]
+    },
+    {
+      "id": 9,
+      "name": "Python Sandbox",
+      "location": "thomas/tools/sandbox.py",
+      "code_paths": [
+        "thomas/tools/sandbox.py"
+      ]
+    },
+    {
+      "id": 10,
+      "name": "Database Connector",
+      "location": "thomas/tools/database.py",
+      "code_paths": [
+        "thomas/tools/database.py"
+      ]
+    },
+    {
+      "id": 11,
+      "name": "OpenAPI Importer",
+      "location": "thomas/core/api_importer.py",
+      "code_paths": [
+        "thomas/core/api_importer.py"
+      ]
+    },
+    {
+      "id": 12,
+      "name": "Git Conflict Resolver",
+      "location": "thomas/tools/git_conflicts.py",
+      "code_paths": [
+        "thomas/tools/git_conflicts.py"
+      ]
+    },
+    {
+      "id": 13,
+      "name": "Dependency Scanner",
+      "location": "thomas/tools/dep_scanner.py",
+      "code_paths": [
+        "thomas/tools/dep_scanner.py"
+      ]
+    },
+    {
+      "id": 14,
+      "name": "Cost Dashboard",
+      "location": "thomas/core/cost_tracker.py",
+      "code_paths": [
+        "thomas/core/cost_tracker.py"
+      ]
+    },
+    {
+      "id": 15,
+      "name": "Conversation Search",
+      "location": "thomas/server/routes/search.py",
+      "code_paths": [
+        "thomas/server/routes/search.py",
+        "thomas/core/search_history.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_feature_pack_conversation_export_share_v3.zip"
+      ]
+    },
+    {
+      "id": 16,
+      "name": "Goal/Task Board UI",
+      "location": "thomas/server/web/goals.html",
+      "code_paths": [
+        "thomas/server/web/goals.html",
+        "thomas/server/routes/goals.py"
+      ]
+    },
+    {
+      "id": 17,
+      "name": "Push Notifications",
+      "location": "thomas/notifications/api.py",
+      "code_paths": [
+        "thomas/notifications/api.py",
+        "thomas/server/web/notifications.js"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_feature_pack_smart_notification_center_best.zip"
+      ]
+    },
+    {
+      "id": 18,
+      "name": "Email + Calendar",
+      "location": "thomas/tools/email_calendar.py",
+      "code_paths": [
+        "thomas/tools/email_calendar.py"
+      ]
+    },
+    {
+      "id": 19,
+      "name": "Anomaly Monitor",
+      "location": "thomas/watcher/watcher.py",
+      "code_paths": [
+        "thomas/watcher/watcher.py",
+        "thomas/watcher/api.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_feature_pack_watcher_ULTIMATE.zip"
+      ]
+    },
+    {
+      "id": 20,
+      "name": "RBAC / Multi-User",
+      "location": "thomas/server/workspace/",
+      "code_paths": [
+        "thomas/server/workspace"
+      ]
+    }
+  ],
+  "inbox_packs": [
+    {
+      "name": "Swarm Mode",
+      "location": "thomas/agent/swarm.py",
+      "code_paths": [
+        "thomas/agent/swarm.py",
+        "thomas/server/swarm_mode.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_swarm_mode.zip"
+      ],
+      "source_zip": "thomas_swarm_mode.zip"
+    },
+    {
+      "name": "Audit Log / Time Travel",
+      "location": "thomas/server/routes/replay_debugger.py",
+      "code_paths": [
+        "thomas/server/routes/replay_debugger.py",
+        "thomas/observability/run_store_replay.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_feature_run_replay_debugger.zip",
+        "Inbox/**/thomas_time_travel_debugger.zip"
+      ],
+      "source_zip": "thomas_feature_run_replay_debugger.zip + thomas_time_travel_debugger.zip"
+    },
+    {
+      "name": "Guardrails",
+      "location": "thomas/policy/policy.py",
+      "code_paths": [
+        "thomas/policy/policy.py",
+        "thomas/agent/guarded_tools.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_guardrails.zip"
+      ],
+      "source_zip": "thomas_guardrails.zip"
+    },
+    {
+      "name": "Plugin Loader",
+      "location": "thomas/autonomy/plugin.py",
+      "code_paths": [
+        "thomas/autonomy/plugin.py"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_plugin_loader_feature_pack_best.zip"
+      ],
+      "source_zip": "thomas_plugin_loader_feature_pack_best.zip"
+    },
+    {
+      "name": "User Preferences",
+      "location": "thomas/preferences/store.py",
+      "code_paths": [
+        "thomas/preferences/store.py",
+        "thomas/server/web/settings.html"
+      ],
+      "inbox_globs": [
+        "Inbox/**/thomas_feature_pack_user_preferences_best.zip"
+      ],
+      "source_zip": "thomas_feature_pack_user_preferences_best.zip"
+    }
+  ]
+}

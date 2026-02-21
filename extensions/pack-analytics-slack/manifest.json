@@ -1,0 +1,14 @@
+{
+  "id": "pack-analytics-slack",
+  "name": "Analytics Slack Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "slack",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.slack",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via slack."
+}

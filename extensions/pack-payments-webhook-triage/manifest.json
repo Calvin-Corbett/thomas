@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-webhook-triage",
+  "name": "Payments Webhook Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "webhook",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.webhook",
+    "payments.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via webhook with triage mode policies."
+}

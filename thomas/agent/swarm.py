@@ -41,7 +41,6 @@ import asyncio
 import dataclasses
 import enum
 import json
-import logging
 import re
 import time
 from datetime import datetime, timezone
@@ -54,7 +53,6 @@ from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Protocol,
 
 _TASK_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_\-]{0,63}$")
 _AGENT_ID_RE = re.compile(r"^[a-z][a-z0-9_\-]{0,31}$")
-log = logging.getLogger(__name__)
 
 
 def _utc_iso() -> str:
@@ -516,8 +514,8 @@ class SwarmOrchestrator:
             driver.cancel()
             try:
                 await driver
-            except Exception as e:
-                log.debug("Swarm driver shutdown raised: %s", e)
+            except Exception:
+                pass
             await SwarmRunRegistry.unregister(self.run_id)
 
     async def _emit(self, etype: str, agent_id: str, task_id: str, data: Dict[str, Any]) -> None:
@@ -644,8 +642,7 @@ class SwarmOrchestrator:
             self._done_evt.set()
 
     async def _execute_graph(self, *, subagents: Dict[str, Subagent]) -> None:
-        if self.graph is None:
-            raise RuntimeError("Swarm task graph is not initialized")
+        assert self.graph is not None
 
         # init statuses
         for tid, t in self.graph.tasks.items():
@@ -749,8 +746,7 @@ class SwarmOrchestrator:
                 self.task_status[tid] = TaskStatus.CANCELLED
                 await self._emit("task_update", "orchestrator", tid, {"status": TaskStatus.CANCELLED.value})
     async def _run_one_task(self, *, task_id: str, subagents: Dict[str, Subagent]) -> None:
-        if self.graph is None:
-            raise RuntimeError("Swarm task graph is not initialized")
+        assert self.graph is not None
         t = self.graph.tasks[task_id]
 
         if self._cancel.is_set():

@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-sms-audit",
+  "name": "Support Sms Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "sms",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.sms",
+    "support.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via sms with audit mode policies."
+}

@@ -1,0 +1,2115 @@
+{
+  "version": 1,
+  "updated_at_utc": "2026-02-21T20:02:15Z",
+  "runs": [
+    {
+      "computed_at_utc": "2026-02-21T18:30:24Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 99,
+        "tie_metrics": 37
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 122.05,
+          "composite_score": 99.187,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 61,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 99,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 50.0,
+          "composite_score": 40.634,
+          "coverage": 0.9,
+          "comparable_coverage": 1.0,
+          "wins": 1,
+          "metrics_with_data": 99,
+          "comparable_metrics_with_data": 99,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "computed_at_utc": "2026-02-21T18:31:54Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 99,
+        "tie_metrics": 37
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 122.05,
+          "composite_score": 99.187,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 61,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 99,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 50.0,
+          "composite_score": 40.634,
+          "coverage": 0.9,
+          "comparable_coverage": 1.0,
+          "wins": 1,
+          "metrics_with_data": 99,
+          "comparable_metrics_with_data": 99,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 2
+        }
+      ]
+    },
+    {
+      "computed_at_utc": "2026-02-21T18:51:12Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 99,
+        "tie_metrics": 38
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 120.618416,
+          "composite_score": 98.024,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 52,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 99,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 54.663997,
+          "composite_score": 44.424,
+          "coverage": 0.9,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 99,
+          "comparable_metrics_with_data": 99,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 36.397039,
+          "composite_score": 29.579,
+          "coverage": 0.545455,
+          "comparable_coverage": 0.606061,
+          "wins": 3,
+          "metrics_with_data": 60,
+          "comparable_metrics_with_data": 60,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 36.353422,
+          "composite_score": 29.544,
+          "coverage": 0.545455,
+          "comparable_coverage": 0.606061,
+          "wins": 6,
+          "metrics_with_data": 60,
+          "comparable_metrics_with_data": 60,
+          "metrics_total": 110,
+          "comparable_metrics_total": 99,
+          "rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [
+          {
+            "metric": "security.risky_construct_hits",
+            "category": "security",
+            "weight": 1.45,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 5,
+              "openclaw": 148,
+              "aider": 1,
+              "open_interpreter": 7
+            },
+            "winners": [
+              "aider"
+            ],
+            "gap_to_best": 4.0
+          },
+          {
+            "metric": "security.risky_construct_files",
+            "category": "security",
+            "weight": 1.45,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 3,
+              "openclaw": 48,
+              "aider": 1,
+              "open_interpreter": 5
+            },
+            "winners": [
+              "aider"
+            ],
+            "gap_to_best": 2.0
+          },
+          {
+            "metric": "security.probes.avg_elapsed_seconds",
+            "category": "security",
+            "weight": 1.45,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 0.516,
+              "openclaw": 6.031,
+              "aider": 0.437,
+              "open_interpreter": 0.219
+            },
+            "winners": [
+              "open_interpreter"
+            ],
+            "gap_to_best": 0.297
+          },
+          {
+            "metric": "resilience.probes.p95_elapsed_seconds",
+            "category": "resilience",
+            "weight": 1.35,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 0.6718,
+              "openclaw": 1.8559,
+              "aider": 0.1234,
+              "open_interpreter": 0.0765
+            },
+            "winners": [
+              "open_interpreter"
+            ],
+            "gap_to_best": 0.5953
+          },
+          {
+            "metric": "performance.load.p95_elapsed_seconds",
+            "category": "performance_load",
+            "weight": 1.35,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 0.4786,
+              "openclaw": 1.828,
+              "aider": 0.11,
+              "open_interpreter": 0.078
+            },
+            "winners": [
+              "open_interpreter"
+            ],
+            "gap_to_best": 0.4006
+          },
+          {
+            "metric": "resilience.probes.avg_elapsed_seconds",
+            "category": "resilience",
+            "weight": 1.35,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 0.4342,
+              "openclaw": 1.786333,
+              "aider": 0.114333,
+              "open_interpreter": 0.067667
+            },
+            "winners": [
+              "open_interpreter"
+            ],
+            "gap_to_best": 0.366533
+          },
+          {
+            "metric": "performance.load.avg_elapsed_seconds",
+            "category": "performance_load",
+            "weight": 1.35,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 0.4408,
+              "openclaw": 1.828,
+              "aider": 0.11,
+              "open_interpreter": 0.078
+            },
+            "winners": [
+              "open_interpreter"
+            ],
+            "gap_to_best": 0.3628
+          },
+          {
+            "metric": "scripts.files",
+            "category": "code_surface",
+            "weight": 1.0,
+            "preference": "higher_is_better",
+            "values": {
+              "thomas": 8,
+              "openclaw": 0,
+              "aider": 16,
+              "open_interpreter": 4
+            },
+            "winners": [
+              "aider"
+            ],
+            "gap_to_best": 8.0
+          },
+          {
+            "metric": "maintainability.large_code_files_over_800",
+            "category": "maintainability",
+            "weight": 0.9,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 31,
+              "openclaw": 63,
+              "aider": 17,
+              "open_interpreter": 2
+            },
+            "winners": [
+              "open_interpreter"
+            ],
+            "gap_to_best": 29.0
+          }
+        ],
+        "open_gap_count": 9,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 29.544,
+              "composite_delta_vs_focus": -68.48,
+              "metrics_beating_focus": 6,
+              "metrics_focus_beats": 35,
+              "metrics_tied": 19,
+              "comparable_metrics": 60,
+              "threat_level": "medium"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 29.579,
+              "composite_delta_vs_focus": -68.445,
+              "metrics_beating_focus": 3,
+              "metrics_focus_beats": 36,
+              "metrics_tied": 21,
+              "comparable_metrics": 60,
+              "threat_level": "medium"
+            },
+            {
+              "competitor": "openclaw",
+              "composite_score": 44.424,
+              "composite_delta_vs_focus": -53.6,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 52,
+              "metrics_tied": 47,
+              "comparable_metrics": 99,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": [
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 29.544,
+              "composite_delta_vs_focus": -68.48,
+              "metrics_beating_focus": 6,
+              "metrics_focus_beats": 35,
+              "metrics_tied": 19,
+              "comparable_metrics": 60,
+              "threat_level": "medium"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 29.579,
+              "composite_delta_vs_focus": -68.445,
+              "metrics_beating_focus": 3,
+              "metrics_focus_beats": 36,
+              "metrics_tied": 21,
+              "comparable_metrics": 60,
+              "threat_level": "medium"
+            }
+          ]
+        },
+        "competitors_beating_focus": [
+          {
+            "competitor": "open_interpreter",
+            "composite_score": 29.544,
+            "composite_delta_vs_focus": -68.48,
+            "metrics_beating_focus": 6,
+            "metrics_focus_beats": 35,
+            "metrics_tied": 19,
+            "comparable_metrics": 60,
+            "threat_level": "medium"
+          },
+          {
+            "competitor": "aider",
+            "composite_score": 29.579,
+            "composite_delta_vs_focus": -68.445,
+            "metrics_beating_focus": 3,
+            "metrics_focus_beats": 36,
+            "metrics_tied": 21,
+            "comparable_metrics": 60,
+            "threat_level": "medium"
+          }
+        ]
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "764b1f2932c3e3493d6c301469e5971464d4e76b",
+            "current_head": "09d5f508b1ddf279f153157da0c75a2316a934b6",
+            "status": "updated_since_last_run",
+            "changed_files_count": 21,
+            "hotspots": [
+              {
+                "path": "src/gateway",
+                "changed_files": 9
+              },
+              {
+                "path": "src/cron",
+                "changed_files": 5
+              },
+              {
+                "path": "src/infra",
+                "changed_files": 2
+              },
+              {
+                "path": "src/security",
+                "changed_files": 2
+              },
+              {
+                "path": "CHANGELOG.md",
+                "changed_files": 1
+              },
+              {
+                "path": "docs/channels",
+                "changed_files": 1
+              },
+              {
+                "path": "docs/cli",
+                "changed_files": 1
+              }
+            ],
+            "predicted_next_focus": [
+              "gateway_and_protocol_surface",
+              "security_policy_hardening"
+            ],
+            "recommended_thomas_counter_moves": [
+              "Add gateway compatibility probes for new provider/protocol edges and keep p95 latency regressions gated.",
+              "Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes."
+            ]
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_previous_baseline",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_previous_baseline",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [
+          {
+            "area": "gateway_and_protocol_surface",
+            "count": 1
+          },
+          {
+            "area": "security_policy_hardening",
+            "count": 1
+          }
+        ],
+        "aggregate_recommended_counter_moves": [
+          {
+            "move": "Add gateway compatibility probes for new provider/protocol edges and keep p95 latency regressions gated.",
+            "count": 1
+          },
+          {
+            "move": "Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes.",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T19:03:56Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 38
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.187376,
+          "composite_score": 99.989,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 54,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.745088,
+          "composite_score": 49.695,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.773789,
+          "composite_score": 24.762,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 2,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.341531,
+          "composite_score": 22.669,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [
+          {
+            "metric": "security.risky_construct_files",
+            "category": "security",
+            "weight": 1.45,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 0.189609,
+              "openclaw": 3.734559,
+              "aider": 0.0,
+              "open_interpreter": 30.674847
+            },
+            "winners": [
+              "aider"
+            ],
+            "gap_to_best": 0.189609
+          },
+          {
+            "metric": "security.risky_construct_hits",
+            "category": "security",
+            "weight": 1.45,
+            "preference": "lower_is_better",
+            "values": {
+              "thomas": 0.103058,
+              "openclaw": 6.70705,
+              "aider": 0.0,
+              "open_interpreter": 40.809188
+            },
+            "winners": [
+              "aider"
+            ],
+            "gap_to_best": 0.103058
+          }
+        ],
+        "open_gap_count": 2,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "aider",
+              "composite_score": 24.762,
+              "composite_delta_vs_focus": -75.227,
+              "metrics_beating_focus": 2,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 15,
+              "comparable_metrics": 55,
+              "threat_level": "medium"
+            },
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.695,
+              "composite_delta_vs_focus": -50.294,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 54,
+              "metrics_tied": 40,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.669,
+              "composite_delta_vs_focus": -77.32,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 37,
+              "metrics_tied": 18,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": [
+            {
+              "competitor": "aider",
+              "composite_score": 24.762,
+              "composite_delta_vs_focus": -75.227,
+              "metrics_beating_focus": 2,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 15,
+              "comparable_metrics": 55,
+              "threat_level": "medium"
+            }
+          ]
+        },
+        "competitors_beating_focus": [
+          {
+            "competitor": "aider",
+            "composite_score": 24.762,
+            "composite_delta_vs_focus": -75.227,
+            "metrics_beating_focus": 2,
+            "metrics_focus_beats": 38,
+            "metrics_tied": 15,
+            "comparable_metrics": 55,
+            "threat_level": "medium"
+          }
+        ]
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "09d5f508b1ddf279f153157da0c75a2316a934b6",
+            "current_head": "22940b7b98e5526d4cff4806502545094d35acd9",
+            "status": "updated_since_last_run",
+            "changed_files_count": 57,
+            "hotspots": [
+              {
+                "path": "src/config",
+                "changed_files": 10
+              },
+              {
+                "path": "src/infra",
+                "changed_files": 8
+              },
+              {
+                "path": "docs/channels",
+                "changed_files": 4
+              },
+              {
+                "path": "src/discord",
+                "changed_files": 4
+              },
+              {
+                "path": "src/slack",
+                "changed_files": 4
+              },
+              {
+                "path": "docs/tools",
+                "changed_files": 3
+              },
+              {
+                "path": "src/commands",
+                "changed_files": 3
+              },
+              {
+                "path": "apps/ios",
+                "changed_files": 2
+              }
+            ],
+            "predicted_next_focus": [
+              "ui_and_operator_experience"
+            ],
+            "recommended_thomas_counter_moves": [
+              "Add operator workflow smoke tests for mission control and browser surfaces to protect UX velocity."
+            ]
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [
+          {
+            "area": "ui_and_operator_experience",
+            "count": 1
+          }
+        ],
+        "aggregate_recommended_counter_moves": [
+          {
+            "move": "Add operator workflow smoke tests for mission control and browser surfaces to protect UX velocity.",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T19:05:13Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 40
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.2,
+          "composite_score": 100.0,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 54,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.746133,
+          "composite_score": 49.695,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.773844,
+          "composite_score": 24.762,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.342601,
+          "composite_score": 22.67,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [],
+        "open_gap_count": 0,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.695,
+              "composite_delta_vs_focus": -50.305,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 56,
+              "metrics_tied": 38,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 24.762,
+              "composite_delta_vs_focus": -75.238,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 17,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.67,
+              "composite_delta_vs_focus": -77.33,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 39,
+              "metrics_tied": 16,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": []
+        },
+        "competitors_beating_focus": []
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "22940b7b98e5526d4cff4806502545094d35acd9",
+            "current_head": "22940b7b98e5526d4cff4806502545094d35acd9",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [],
+        "aggregate_recommended_counter_moves": []
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T19:23:39Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 39
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.2,
+          "composite_score": 100.0,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 55,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.722773,
+          "composite_score": 49.675,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.771209,
+          "composite_score": 24.76,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.340341,
+          "composite_score": 22.668,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [],
+        "open_gap_count": 0,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.675,
+              "composite_delta_vs_focus": -50.325,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 57,
+              "metrics_tied": 37,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 24.76,
+              "composite_delta_vs_focus": -75.24,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 17,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.668,
+              "composite_delta_vs_focus": -77.332,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 39,
+              "metrics_tied": 16,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": []
+        },
+        "competitors_beating_focus": []
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "22940b7b98e5526d4cff4806502545094d35acd9",
+            "current_head": "549549f6a0e13ded31dee3b3a64496f82ae54100",
+            "status": "updated_since_last_run",
+            "changed_files_count": 133,
+            "hotspots": [
+              {
+                "path": "src/agents",
+                "changed_files": 33
+              },
+              {
+                "path": "src/gateway",
+                "changed_files": 10
+              },
+              {
+                "path": "src/infra",
+                "changed_files": 9
+              },
+              {
+                "path": "src/commands",
+                "changed_files": 8
+              },
+              {
+                "path": "src/cli",
+                "changed_files": 5
+              },
+              {
+                "path": "src/media-understanding",
+                "changed_files": 5
+              },
+              {
+                "path": "src/security",
+                "changed_files": 3
+              },
+              {
+                "path": "extensions/bluebubbles",
+                "changed_files": 2
+              }
+            ],
+            "predicted_next_focus": [
+              "plugin_ecosystem_expansion",
+              "gateway_and_protocol_surface",
+              "security_policy_hardening",
+              "agent_runtime_capability_growth"
+            ],
+            "recommended_thomas_counter_moves": [
+              "Expand Thomas plugin runtime contract tests and keep plugin command coverage at or above competitor levels.",
+              "Add gateway compatibility probes for new provider/protocol edges and keep p95 latency regressions gated.",
+              "Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes.",
+              "Benchmark new model/runtime pathways weekly and enforce non-regression budgets on tool-call and token efficiency."
+            ]
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [
+          {
+            "area": "plugin_ecosystem_expansion",
+            "count": 1
+          },
+          {
+            "area": "gateway_and_protocol_surface",
+            "count": 1
+          },
+          {
+            "area": "security_policy_hardening",
+            "count": 1
+          },
+          {
+            "area": "agent_runtime_capability_growth",
+            "count": 1
+          }
+        ],
+        "aggregate_recommended_counter_moves": [
+          {
+            "move": "Expand Thomas plugin runtime contract tests and keep plugin command coverage at or above competitor levels.",
+            "count": 1
+          },
+          {
+            "move": "Add gateway compatibility probes for new provider/protocol edges and keep p95 latency regressions gated.",
+            "count": 1
+          },
+          {
+            "move": "Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes.",
+            "count": 1
+          },
+          {
+            "move": "Benchmark new model/runtime pathways weekly and enforce non-regression budgets on tool-call and token efficiency.",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T19:27:44Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 39
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.2,
+          "composite_score": 100.0,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 55,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.718534,
+          "composite_score": 49.672,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.771798,
+          "composite_score": 24.761,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.340533,
+          "composite_score": 22.668,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [],
+        "open_gap_count": 0,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.672,
+              "composite_delta_vs_focus": -50.328,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 57,
+              "metrics_tied": 37,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 24.761,
+              "composite_delta_vs_focus": -75.239,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 17,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.668,
+              "composite_delta_vs_focus": -77.332,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 39,
+              "metrics_tied": 16,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": []
+        },
+        "competitors_beating_focus": []
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "549549f6a0e13ded31dee3b3a64496f82ae54100",
+            "current_head": "549549f6a0e13ded31dee3b3a64496f82ae54100",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [],
+        "aggregate_recommended_counter_moves": []
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T19:35:19Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 39
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.2,
+          "composite_score": 100.0,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 55,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.718287,
+          "composite_score": 49.672,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.771402,
+          "composite_score": 24.76,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.340737,
+          "composite_score": 22.668,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [],
+        "open_gap_count": 0,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.672,
+              "composite_delta_vs_focus": -50.328,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 57,
+              "metrics_tied": 37,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 24.76,
+              "composite_delta_vs_focus": -75.24,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 17,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.668,
+              "composite_delta_vs_focus": -77.332,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 39,
+              "metrics_tied": 16,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": []
+        },
+        "competitors_beating_focus": []
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "549549f6a0e13ded31dee3b3a64496f82ae54100",
+            "current_head": "549549f6a0e13ded31dee3b3a64496f82ae54100",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [],
+        "aggregate_recommended_counter_moves": []
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T19:46:23Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 39
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.2,
+          "composite_score": 100.0,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 55,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.709792,
+          "composite_score": 49.664,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.761387,
+          "composite_score": 24.752,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.345143,
+          "composite_score": 22.672,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [],
+        "open_gap_count": 0,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.664,
+              "composite_delta_vs_focus": -50.336,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 57,
+              "metrics_tied": 37,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 24.752,
+              "composite_delta_vs_focus": -75.248,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 17,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.672,
+              "composite_delta_vs_focus": -77.328,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 39,
+              "metrics_tied": 16,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": []
+        },
+        "competitors_beating_focus": []
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "549549f6a0e13ded31dee3b3a64496f82ae54100",
+            "current_head": "48ddb1cc81db5b4c3dc995f0772ef11baf0d49b9",
+            "status": "updated_since_last_run",
+            "changed_files_count": 3,
+            "hotspots": [
+              {
+                "path": "scripts/docker",
+                "changed_files": 2
+              },
+              {
+                "path": "scripts/test-install-sh-docker.sh",
+                "changed_files": 1
+              }
+            ],
+            "predicted_next_focus": [
+              "test_depth_and_regression_control"
+            ],
+            "recommended_thomas_counter_moves": [
+              "Raise test LOC and e2e breadth for touched subsystems before release gate pass."
+            ]
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [
+          {
+            "area": "test_depth_and_regression_control",
+            "count": 1
+          }
+        ],
+        "aggregate_recommended_counter_moves": [
+          {
+            "move": "Raise test LOC and e2e breadth for touched subsystems before release gate pass.",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T19:54:42Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 39
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.2,
+          "composite_score": 100.0,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 55,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1,
+          "head_to_head_score": 100.0,
+          "overall_suite_score": 100.0,
+          "overall_suite_rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.706545,
+          "composite_score": 49.661,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2,
+          "head_to_head_score": 49.661,
+          "overall_suite_score": 58.224,
+          "overall_suite_rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.76146,
+          "composite_score": 24.752,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3,
+          "head_to_head_score": 24.752,
+          "overall_suite_score": 13.962,
+          "overall_suite_rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.345164,
+          "composite_score": 22.672,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4,
+          "head_to_head_score": 22.672,
+          "overall_suite_score": 13.585,
+          "overall_suite_rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [],
+        "open_gap_count": 0,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.661,
+              "composite_delta_vs_focus": -50.339,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 57,
+              "metrics_tied": 37,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 24.752,
+              "composite_delta_vs_focus": -75.248,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 17,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.672,
+              "composite_delta_vs_focus": -77.328,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 39,
+              "metrics_tied": 16,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": []
+        },
+        "competitors_beating_focus": []
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "48ddb1cc81db5b4c3dc995f0772ef11baf0d49b9",
+            "current_head": "518dbbf4c6c3c3cc1dd010c5a95f3c0a036ca13c",
+            "status": "updated_since_last_run",
+            "changed_files_count": 2,
+            "hotspots": [
+              {
+                "path": "src/media-understanding",
+                "changed_files": 1
+              },
+              {
+                "path": "src/security",
+                "changed_files": 1
+              }
+            ],
+            "predicted_next_focus": [
+              "security_policy_hardening"
+            ],
+            "recommended_thomas_counter_moves": [
+              "Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes."
+            ]
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [
+          {
+            "area": "security_policy_hardening",
+            "count": 1
+          }
+        ],
+        "aggregate_recommended_counter_moves": [
+          {
+            "move": "Increase policy and secret-scan strict checks and add negative authz tests for newly exposed routes.",
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "computed_at_utc": "2026-02-21T20:02:15Z",
+      "suite_id": "thomas-full-agent-comparison-v1",
+      "result_json_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "result_md_path": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "scoreboard": {
+        "total_metrics": 110,
+        "measured_metrics": 94,
+        "tie_metrics": 39
+      },
+      "ranking": [
+        {
+          "agent": "thomas",
+          "weighted_points": 116.2,
+          "composite_score": 100.0,
+          "coverage": 0.981818,
+          "comparable_coverage": 1.0,
+          "wins": 55,
+          "metrics_with_data": 108,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 1,
+          "head_to_head_score": 89.198,
+          "overall_suite_score": 100.0,
+          "overall_suite_rank": 1
+        },
+        {
+          "agent": "openclaw",
+          "weighted_points": 57.703986,
+          "composite_score": 49.659,
+          "coverage": 0.854545,
+          "comparable_coverage": 1.0,
+          "wins": 0,
+          "metrics_with_data": 94,
+          "comparable_metrics_with_data": 94,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 2,
+          "head_to_head_score": 17.13,
+          "overall_suite_score": 58.224,
+          "overall_suite_rank": 2
+        },
+        {
+          "agent": "aider",
+          "weighted_points": 28.761091,
+          "composite_score": 24.751,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 3,
+          "head_to_head_score": 7.87,
+          "overall_suite_score": 13.962,
+          "overall_suite_rank": 3
+        },
+        {
+          "agent": "open_interpreter",
+          "weighted_points": 26.345148,
+          "composite_score": 22.672,
+          "coverage": 0.5,
+          "comparable_coverage": 0.585106,
+          "wins": 0,
+          "metrics_with_data": 55,
+          "comparable_metrics_with_data": 55,
+          "metrics_total": 110,
+          "comparable_metrics_total": 94,
+          "rank": 4,
+          "head_to_head_score": 7.407,
+          "overall_suite_score": 13.585,
+          "overall_suite_rank": 4
+        }
+      ],
+      "focus": {
+        "agent": "thomas",
+        "open_gaps": [],
+        "open_gap_count": 0,
+        "competitor_pressure": {
+          "focus_agent": "thomas",
+          "ranked_competitors": [
+            {
+              "competitor": "openclaw",
+              "composite_score": 49.659,
+              "composite_delta_vs_focus": -50.341,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 57,
+              "metrics_tied": 37,
+              "comparable_metrics": 94,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "aider",
+              "composite_score": 24.751,
+              "composite_delta_vs_focus": -75.249,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 38,
+              "metrics_tied": 17,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            },
+            {
+              "competitor": "open_interpreter",
+              "composite_score": 22.672,
+              "composite_delta_vs_focus": -77.328,
+              "metrics_beating_focus": 0,
+              "metrics_focus_beats": 39,
+              "metrics_tied": 16,
+              "comparable_metrics": 55,
+              "threat_level": "low"
+            }
+          ],
+          "top_threats": []
+        },
+        "competitors_beating_focus": []
+      },
+      "prediction_evo_scope": {
+        "focus_agent": "thomas",
+        "competitors": {
+          "openclaw": {
+            "competitor": "openclaw",
+            "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+            "previous_head": "518dbbf4c6c3c3cc1dd010c5a95f3c0a036ca13c",
+            "current_head": "ac633366ce1314253c9a2601aae86daed9c93054",
+            "status": "updated_since_last_run",
+            "changed_files_count": 1,
+            "hotspots": [
+              {
+                "path": "CONTRIBUTING.md",
+                "changed_files": 1
+              }
+            ],
+            "predicted_next_focus": [
+              "general_surface_growth"
+            ],
+            "recommended_thomas_counter_moves": [
+              "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories."
+            ]
+          },
+          "aider": {
+            "competitor": "aider",
+            "root": "F:\\DevHub\\_tmp_competitor_aider",
+            "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          },
+          "open_interpreter": {
+            "competitor": "open_interpreter",
+            "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+            "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+            "status": "no_change_since_last_run",
+            "changed_files_count": 0,
+            "hotspots": [],
+            "predicted_next_focus": [],
+            "recommended_thomas_counter_moves": []
+          }
+        },
+        "aggregate_predicted_focus": [
+          {
+            "area": "general_surface_growth",
+            "count": 1
+          }
+        ],
+        "aggregate_recommended_counter_moves": [
+          {
+            "move": "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories.",
+            "count": 1
+          }
+        ]
+      }
+    }
+  ],
+  "competitors": {
+    "thomas": {
+      "id": "thomas",
+      "label": "Thomas",
+      "root": "F:\\DevHub\\Thomas",
+      "last_tested_at_utc": "2026-02-21T20:02:15Z",
+      "last_suite_id": "thomas-full-agent-comparison-v1",
+      "last_composite_score": 100.0,
+      "last_rank": 1,
+      "last_wins": 55,
+      "version": {
+        "kind": "none",
+        "root": "F:\\DevHub\\Thomas",
+        "enabled": false,
+        "errors": []
+      },
+      "model_snapshot": {
+        "captured_at_utc": "2026-02-21T20:01:10Z",
+        "day_utc": "2026-02-21",
+        "required": true,
+        "ok": true,
+        "source": "thomas.core.config",
+        "profile": "gemini-3-1-pro",
+        "provider": "openai_compat",
+        "model": "gemini-1.5-pro-latest",
+        "context_window": 128000,
+        "max_tokens": 8192
+      },
+      "last_result_json": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+    },
+    "openclaw": {
+      "id": "openclaw",
+      "label": "OpenClaw",
+      "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+      "last_tested_at_utc": "2026-02-21T20:02:15Z",
+      "last_suite_id": "thomas-full-agent-comparison-v1",
+      "last_composite_score": 49.659,
+      "last_rank": 2,
+      "last_wins": 0,
+      "version": {
+        "kind": "git",
+        "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+        "enabled": true,
+        "remote": "origin",
+        "branch": "main",
+        "fetched": true,
+        "pulled": true,
+        "local_head": "ac633366ce1314253c9a2601aae86daed9c93054",
+        "remote_head": "ac633366ce1314253c9a2601aae86daed9c93054",
+        "local_branch": "main",
+        "ahead": 0,
+        "behind": 0,
+        "is_up_to_date": true,
+        "errors": [],
+        "local_head_before": "518dbbf4c6c3c3cc1dd010c5a95f3c0a036ca13c"
+      },
+      "model_snapshot": {
+        "captured_at_utc": "2026-02-21T20:01:54Z",
+        "day_utc": "2026-02-21",
+        "required": false,
+        "ok": true,
+        "source": "command",
+        "command": [
+          "node",
+          "-e",
+          "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'openclaw', version:p.version}));"
+        ],
+        "returncode": 0,
+        "stderr": "",
+        "payload": {
+          "model": "runtime-configured",
+          "provider": "multi-provider",
+          "profile": "openclaw",
+          "version": "2026.2.22"
+        },
+        "model": "runtime-configured",
+        "provider": "multi-provider",
+        "profile": "openclaw"
+      },
+      "last_result_json": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md",
+      "prediction_evo_scope": {
+        "competitor": "openclaw",
+        "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
+        "previous_head": "518dbbf4c6c3c3cc1dd010c5a95f3c0a036ca13c",
+        "current_head": "ac633366ce1314253c9a2601aae86daed9c93054",
+        "status": "updated_since_last_run",
+        "changed_files_count": 1,
+        "hotspots": [
+          {
+            "path": "CONTRIBUTING.md",
+            "changed_files": 1
+          }
+        ],
+        "predicted_next_focus": [
+          "general_surface_growth"
+        ],
+        "recommended_thomas_counter_moves": [
+          "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories."
+        ]
+      }
+    },
+    "aider": {
+      "id": "aider",
+      "label": "Aider",
+      "root": "F:\\DevHub\\_tmp_competitor_aider",
+      "last_tested_at_utc": "2026-02-21T20:02:15Z",
+      "last_suite_id": "thomas-full-agent-comparison-v1",
+      "last_composite_score": 24.751,
+      "last_rank": 3,
+      "last_wins": 0,
+      "version": {
+        "kind": "git",
+        "root": "F:\\DevHub\\_tmp_competitor_aider",
+        "enabled": true,
+        "remote": "origin",
+        "branch": "main",
+        "fetched": true,
+        "pulled": true,
+        "local_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+        "remote_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+        "local_branch": "main",
+        "ahead": 0,
+        "behind": 0,
+        "is_up_to_date": true,
+        "errors": [],
+        "local_head_before": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c"
+      },
+      "model_snapshot": {
+        "captured_at_utc": "2026-02-21T20:02:12Z",
+        "day_utc": "2026-02-21",
+        "required": false,
+        "ok": false,
+        "source": "none",
+        "error": "no model snapshot command configured"
+      },
+      "prediction_evo_scope": {
+        "competitor": "aider",
+        "root": "F:\\DevHub\\_tmp_competitor_aider",
+        "previous_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+        "current_head": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c",
+        "status": "no_change_since_last_run",
+        "changed_files_count": 0,
+        "hotspots": [],
+        "predicted_next_focus": [],
+        "recommended_thomas_counter_moves": []
+      },
+      "last_result_json": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+    },
+    "open_interpreter": {
+      "id": "open_interpreter",
+      "label": "Open Interpreter",
+      "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+      "last_tested_at_utc": "2026-02-21T20:02:15Z",
+      "last_suite_id": "thomas-full-agent-comparison-v1",
+      "last_composite_score": 22.672,
+      "last_rank": 4,
+      "last_wins": 0,
+      "version": {
+        "kind": "git",
+        "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+        "enabled": true,
+        "remote": "origin",
+        "branch": "main",
+        "fetched": true,
+        "pulled": true,
+        "local_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+        "remote_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+        "local_branch": "main",
+        "ahead": 0,
+        "behind": 0,
+        "is_up_to_date": true,
+        "errors": [],
+        "local_head_before": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0"
+      },
+      "model_snapshot": {
+        "captured_at_utc": "2026-02-21T20:02:15Z",
+        "day_utc": "2026-02-21",
+        "required": false,
+        "ok": false,
+        "source": "none",
+        "error": "no model snapshot command configured"
+      },
+      "prediction_evo_scope": {
+        "competitor": "open_interpreter",
+        "root": "F:\\DevHub\\_tmp_competitor_open_interpreter",
+        "previous_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+        "current_head": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0",
+        "status": "no_change_since_last_run",
+        "changed_files_count": 0,
+        "hotspots": [],
+        "predicted_next_focus": [],
+        "recommended_thomas_counter_moves": []
+      },
+      "last_result_json": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.json",
+      "last_result_markdown": "F:\\DevHub\\Thomas\\docs\\openclaw_gap_runs\\latest_full_suite_compare.md"
+    }
+  }
+}

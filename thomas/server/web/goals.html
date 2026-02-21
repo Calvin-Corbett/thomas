@@ -1,0 +1,913 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Thomas  Goals</title>
+
+  <style>
+    :root{
+      --bg0:#070A10;
+      --bg1:#0B1020;
+      --glass: rgba(255,255,255,.06);
+      --stroke: rgba(255,255,255,.12);
+      --text:#E9EEFF;
+      --muted: rgba(233,238,255,.65);
+      --muted2: rgba(233,238,255,.45);
+      --shadow: 0 18px 60px rgba(0,0,0,.55);
+      --blur: blur(14px);
+
+      --pri-high: #FF5D73;
+      --pri-med:  #FFD166;
+      --pri-low:  #62D2FF;
+
+      --ok: #4ADE80;
+      --warn:#FBBF24;
+      --bad:#FB7185;
+      --accent: rgba(105,71,255,.95);
+      --accent2: rgba(0,214,255,.9);
+      --focus: rgba(105,71,255,.30);
+    }
+
+    *{ box-sizing:border-box; }
+    body{
+      margin:0;
+      color:var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji","Segoe UI Emoji";
+      background:
+        radial-gradient(1200px 800px at 18% 20%, rgba(105,71,255,.22), transparent 60%),
+        radial-gradient(900px 700px at 78% 18%, rgba(0,214,255,.18), transparent 60%),
+        radial-gradient(900px 700px at 55% 85%, rgba(255,94,155,.14), transparent 60%),
+        linear-gradient(180deg, var(--bg0), var(--bg1));
+      min-height:100vh;
+      overflow-x:hidden;
+    }
+
+    .topbar{
+      position:sticky;
+      top:0;
+      z-index:50;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:12px;
+      padding:14px 18px;
+      background: rgba(10,14,25,.62);
+      backdrop-filter: var(--blur);
+      border-bottom:1px solid var(--stroke);
+    }
+
+    .brand{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      min-width: 220px;
+    }
+    .brand .dot{
+      width:12px;height:12px;border-radius:999px;
+      background: linear-gradient(135deg, rgba(105,71,255,1), rgba(0,214,255,1));
+      box-shadow: 0 0 0 4px rgba(255,255,255,.06);
+    }
+    .brand h1{
+      font-size:16px;
+      margin:0;
+      letter-spacing:.2px;
+      font-weight:900;
+    }
+    .brand .sub{
+      font-size:12px;
+      color:var(--muted);
+      margin-top:2px;
+    }
+
+    .controls{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      justify-content:flex-end;
+    }
+
+    .btn{
+      border:1px solid var(--stroke);
+      background: var(--glass);
+      color: var(--text);
+      padding:10px 12px;
+      border-radius: 12px;
+      cursor:pointer;
+      font-weight:900;
+      font-size:12px;
+      letter-spacing:.2px;
+      backdrop-filter: var(--blur);
+      display:inline-flex;
+      align-items:center;
+      gap:8px;
+      white-space:nowrap;
+    }
+    .btn:hover{ background: rgba(255,255,255,.10); }
+    .btn:disabled{ opacity:.6; cursor:not-allowed; }
+
+    .pillbar{
+      display:flex;
+      gap:8px;
+      padding:6px;
+      border:1px solid var(--stroke);
+      background: var(--glass);
+      border-radius: 999px;
+      backdrop-filter: var(--blur);
+    }
+    .pill{
+      border:0;
+      background: transparent;
+      color: var(--muted);
+      padding:8px 12px;
+      border-radius: 999px;
+      cursor:pointer;
+      font-size:12px;
+      font-weight:800;
+      letter-spacing:.2px;
+    }
+    .pill.active{
+      background: rgba(255,255,255,.10);
+      color: var(--text);
+    }
+
+    .searchwrap{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding: 6px 10px;
+      border:1px solid var(--stroke);
+      background: var(--glass);
+      border-radius: 14px;
+      backdrop-filter: var(--blur);
+      min-width: 280px;
+    }
+    .searchwrap input{
+      border:0;
+      outline:none;
+      background: transparent;
+      color: var(--text);
+      font-weight:750;
+      font-size:12px;
+      width: 220px;
+    }
+    .searchwrap .kbd{
+      color: var(--muted2);
+      font-size:11px;
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(0,0,0,.18);
+      padding: 4px 8px;
+      border-radius: 999px;
+      font-weight:900;
+    }
+
+    .quickadd{
+      display:flex;
+      align-items:center;
+      gap:8px;
+      padding: 6px 10px;
+      border:1px solid var(--stroke);
+      background: rgba(0,0,0,.20);
+      border-radius: 14px;
+      backdrop-filter: var(--blur);
+      min-width: 340px;
+    }
+    .quickadd input{
+      border:0;
+      outline:none;
+      background: transparent;
+      color: var(--text);
+      font-weight:900;
+      font-size:12px;
+      width: 100%;
+    }
+    .quickadd .hint{
+      font-size:11px;
+      color: var(--muted2);
+      border:1px solid rgba(255,255,255,.12);
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.18);
+      white-space:nowrap;
+    }
+
+    .statusline{
+      font-size:12px;
+      color: var(--muted);
+      min-width: 260px;
+      text-align:right;
+    }
+
+    .wrap{ padding:18px; }
+
+    .stats{
+      display:flex;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      margin: 0 0 14px 0;
+    }
+    .stat{
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.06);
+      border-radius: 14px;
+      padding: 10px 12px;
+      backdrop-filter: var(--blur);
+      box-shadow: 0 14px 40px rgba(0,0,0,.35);
+      display:flex;
+      align-items:baseline;
+      gap:10px;
+    }
+    .stat .k{
+      font-weight:950;
+      letter-spacing:.2px;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: var(--muted2);
+    }
+    .stat .v{
+      font-weight:1000;
+      font-size: 14px;
+    }
+
+    .board{
+      display:grid;
+      grid-template-columns: repeat(3, minmax(260px, 1fr));
+      gap:14px;
+      align-items:start;
+    }
+
+    .col{
+      border:1px solid var(--stroke);
+      background: var(--glass);
+      border-radius: 18px;
+      backdrop-filter: var(--blur);
+      box-shadow: var(--shadow);
+      overflow:hidden;
+      min-height: 68vh;
+      display:flex;
+      flex-direction:column;
+    }
+
+    .colhead{
+      padding:14px 14px 10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      border-bottom:1px solid var(--stroke);
+      background: rgba(255,255,255,.03);
+    }
+    .coltitle{
+      display:flex;
+      flex-direction:column;
+      gap:2px;
+    }
+    .coltitle .line1{
+      display:flex;
+      align-items:baseline;
+      gap:10px;
+    }
+    .coltitle h2{
+      margin:0;
+      font-size:13px;
+      letter-spacing:.3px;
+      text-transform: uppercase;
+      font-weight:950;
+    }
+    .count{
+      font-size:12px;
+      color: var(--muted);
+      font-weight:800;
+    }
+    .subhint{
+      font-size:11px;
+      color: var(--muted2);
+      font-weight:750;
+    }
+
+    .colbody{
+      padding:12px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      flex:1;
+    }
+
+    .dropzone{
+      flex:1;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      min-height: 120px;
+    }
+    .dropzone.dragover{
+      outline: 2px dashed rgba(255,255,255,.18);
+      outline-offset: 6px;
+      border-radius: 14px;
+    }
+
+    .placeholder{
+      height: 58px;
+      border-radius: 14px;
+      border: 1px dashed rgba(255,255,255,.18);
+      background: rgba(0,0,0,.16);
+    }
+
+    .addwrap{
+      display:none;
+      gap:8px;
+      align-items:center;
+      padding:10px;
+      border:1px solid var(--stroke);
+      border-radius: 14px;
+      background: rgba(0,0,0,.22);
+    }
+    .addwrap.show{ display:flex; }
+
+    .addwrap input{
+      flex:1;
+      border:0;
+      outline:none;
+      color: var(--text);
+      background: transparent;
+      font-size:13px;
+      font-weight:800;
+    }
+    .addwrap select{
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border-radius: 10px;
+      padding:8px 10px;
+      font-weight:950;
+      font-size:12px;
+      outline:none;
+    }
+    .addwrap .mini{
+      padding:10px 12px;
+      border-radius: 12px;
+      font-weight:950;
+      border:1px solid var(--stroke);
+      background: rgba(255,255,255,.08);
+      cursor:pointer;
+    }
+    .addwrap .mini:hover{ background: rgba(255,255,255,.12); }
+
+    .card{
+      border:1px solid rgba(255,255,255,.12);
+      background: rgba(255,255,255,.06);
+      border-radius: 16px;
+      padding:12px 12px 10px;
+      box-shadow: 0 14px 40px rgba(0,0,0,.40);
+      cursor:grab;
+      user-select:none;
+      transition: transform .08s ease, opacity .08s ease, border-color .12s ease, box-shadow .12s ease;
+      position: relative;
+    }
+    .card:hover{ border-color: rgba(255,255,255,.18); }
+    .card:active{ cursor:grabbing; }
+    .card.dragging{ opacity:.55; transform: scale(.99); }
+    .card.selected{
+      border-color: rgba(105,71,255,.55);
+      box-shadow: 0 18px 60px rgba(105,71,255,.12), 0 14px 40px rgba(0,0,0,.40);
+      background: rgba(105,71,255,.08);
+    }
+
+    .row{
+      display:flex;
+      align-items:flex-start;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .text{
+      font-size:13px;
+      line-height:1.35;
+      font-weight:900;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+
+    .badge{
+      padding:6px 10px;
+      border-radius: 999px;
+      font-size:11px;
+      font-weight:950;
+      letter-spacing:.2px;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(0,0,0,.18);
+      text-transform: uppercase;
+      flex: 0 0 auto;
+      margin-top: 1px;
+      cursor: pointer;
+    }
+    .badge.high{ color: var(--pri-high); }
+    .badge.medium{ color: var(--pri-med); }
+    .badge.low{ color: var(--pri-low); }
+    .badge:hover{ background: rgba(255,255,255,.10); }
+
+    .meta{
+      margin-top:10px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      color: var(--muted);
+      font-size:11px;
+    }
+    .meta .left{
+      display:flex;
+      flex-wrap:wrap;
+      gap:8px;
+      align-items:center;
+    }
+    .chip{
+      padding:5px 9px;
+      border-radius: 999px;
+      border:1px solid rgba(255,255,255,.10);
+      background: rgba(0,0,0,.18);
+      font-weight:900;
+    }
+    .chip.due-soon{ border-color: rgba(251,191,36,.35); color: rgba(251,191,36,.95); }
+    .chip.overdue{ border-color: rgba(255,93,115,.40); color: rgba(255,93,115,.95); }
+    .chip.tag{ border-color: rgba(98,210,255,.25); color: rgba(98,210,255,.95); }
+
+    .actions{
+      display:flex;
+      gap:8px;
+      align-items:center;
+    }
+    .linkbtn{
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.08);
+      color: var(--text);
+      padding:7px 9px;
+      border-radius: 10px;
+      cursor:pointer;
+      font-size:11px;
+      font-weight:950;
+    }
+    .linkbtn:hover{ background: rgba(255,255,255,.12); }
+    .linkbtn.danger{ border-color: rgba(255,120,150,.28); }
+
+    .hintbox{
+      color: rgba(233,238,255,.45);
+      font-size:12px;
+      padding:12px;
+      border:1px dashed rgba(255,255,255,.14);
+      border-radius: 14px;
+      text-align:center;
+    }
+
+    /* Toasts */
+    .toasts{
+      position: fixed;
+      right: 14px;
+      bottom: 14px;
+      display:flex;
+      flex-direction:column;
+      gap:10px;
+      z-index: 2000;
+      max-width: min(480px, calc(100vw - 28px));
+    }
+    .toast{
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(12,16,30,.88);
+      backdrop-filter: var(--blur);
+      border-radius: 14px;
+      padding: 10px 12px;
+      box-shadow: var(--shadow);
+      display:flex;
+      gap:10px;
+      align-items:flex-start;
+    }
+    .toast .icon{
+      width:10px;height:10px;border-radius:999px;
+      margin-top: 6px;
+      background: var(--ok);
+      flex: 0 0 auto;
+    }
+    .toast.warn .icon{ background: var(--warn); }
+    .toast.bad .icon{ background: var(--bad); }
+    .toast .t{
+      font-weight:950;
+      font-size: 12px;
+      letter-spacing:.2px;
+    }
+    .toast .m{
+      font-weight:750;
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 3px;
+      line-height: 1.25;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .toast .row3{
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      width: 100%;
+    }
+    .toast .action{
+      margin-left:auto;
+      border:1px solid rgba(255,255,255,.16);
+      background: rgba(255,255,255,.08);
+      color: var(--text);
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-weight:950;
+      font-size: 11px;
+      cursor:pointer;
+      white-space:nowrap;
+    }
+    .toast .action:hover{ background: rgba(255,255,255,.12); }
+
+    /* Command palette */
+    .palette{
+      position: fixed;
+      inset: 0;
+      display:none;
+      align-items:center;
+      justify-content:center;
+      padding: 18px;
+      z-index: 2200;
+    }
+    .palette.show{ display:flex; }
+    .palette .backdrop{
+      position:absolute;
+      inset:0;
+      background: rgba(0,0,0,.62);
+      backdrop-filter: blur(10px);
+    }
+    .palette .panel{
+      position:relative;
+      width: min(720px, 100%);
+      border:1px solid var(--stroke);
+      background: rgba(12,16,30,.92);
+      border-radius: 18px;
+      box-shadow: var(--shadow);
+      overflow:hidden;
+    }
+    .palette .head{
+      padding: 12px 12px 10px;
+      border-bottom: 1px solid rgba(255,255,255,.10);
+      display:flex;
+      gap:10px;
+      align-items:center;
+    }
+    .palette input{
+      width:100%;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 10px 12px;
+      outline:none;
+      font-weight:900;
+      font-size: 13px;
+    }
+    .palette .list{
+      max-height: 360px;
+      overflow:auto;
+    }
+    .palitem{
+      padding: 12px 12px;
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+      cursor:pointer;
+      border-top: 1px solid rgba(255,255,255,.06);
+    }
+    .palitem:hover{ background: rgba(255,255,255,.06); }
+    .palitem .l{
+      display:flex;
+      flex-direction:column;
+      gap:3px;
+    }
+    .palitem .t{
+      font-weight:950;
+      letter-spacing:.2px;
+      font-size: 12px;
+    }
+    .palitem .d{
+      color: var(--muted);
+      font-weight:800;
+      font-size: 12px;
+    }
+    .palitem .k{
+      color: var(--muted2);
+      font-weight:950;
+      font-size: 11px;
+      border:1px solid rgba(255,255,255,.12);
+      padding: 4px 8px;
+      border-radius: 999px;
+      background: rgba(0,0,0,.18);
+      white-space:nowrap;
+    }
+
+    /* Drawer */
+    .drawer{
+      position: fixed;
+      top:0; right:0; bottom:0;
+      width: min(520px, calc(100vw - 40px));
+      transform: translateX(110%);
+      transition: transform .18s ease;
+      z-index: 2100;
+      background: rgba(12,16,30,.94);
+      border-left:1px solid rgba(255,255,255,.12);
+      backdrop-filter: blur(16px);
+      box-shadow: 0 18px 60px rgba(0,0,0,.55);
+      display:flex;
+      flex-direction:column;
+    }
+    .drawer.show{ transform: translateX(0); }
+    .drawer .head{
+      padding: 14px 14px 10px;
+      border-bottom:1px solid rgba(255,255,255,.10);
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:10px;
+    }
+    .drawer .head .title{
+      font-weight:1000;
+      letter-spacing:.2px;
+      font-size: 12px;
+      text-transform: uppercase;
+    }
+    .drawer .body{
+      padding: 14px;
+      overflow:auto;
+      display:flex;
+      flex-direction:column;
+      gap:12px;
+    }
+    .drawer label{
+      font-weight:950;
+      letter-spacing:.2px;
+      font-size: 11px;
+      color: var(--muted2);
+      text-transform: uppercase;
+    }
+    .drawer textarea, .drawer input, .drawer select{
+      width:100%;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(255,255,255,.06);
+      color: var(--text);
+      border-radius: 14px;
+      padding: 10px 12px;
+      outline:none;
+      font-weight:900;
+      font-size: 13px;
+    }
+    .drawer textarea{ min-height: 120px; resize: vertical; font-weight:850; line-height: 1.35; }
+    .drawer .grid2{
+      display:grid;
+      grid-template-columns: 1fr 1fr;
+      gap:10px;
+    }
+    .drawer .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      justify-content:flex-end;
+      margin-top: 8px;
+      flex-wrap:wrap;
+    }
+
+    /* Bulk bar */
+    .bulkbar{
+      position: fixed;
+      left: 50%;
+      transform: translateX(-50%);
+      bottom: 14px;
+      z-index: 2050;
+      display:none;
+      align-items:center;
+      gap:10px;
+      flex-wrap:wrap;
+      border:1px solid rgba(255,255,255,.14);
+      background: rgba(12,16,30,.86);
+      backdrop-filter: var(--blur);
+      padding: 10px 12px;
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+      max-width: min(980px, calc(100vw - 28px));
+    }
+    .bulkbar.show{ display:flex; }
+    .bulkbar .count{
+      font-weight:1000;
+      letter-spacing:.2px;
+      text-transform: uppercase;
+      font-size: 11px;
+      color: var(--muted2);
+      margin-right: 6px;
+    }
+
+    @media (max-width: 1120px){
+      .board{ grid-template-columns: 1fr; }
+      .statusline{ display:none; }
+      .brand{ min-width: 0; }
+      .searchwrap{ min-width: 220px; }
+      .searchwrap input{ width: 160px; }
+      .quickadd{ min-width: 240px; }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <h1>Thomas</h1>
+        <div class="sub">Goal / Task Board</div>
+      </div>
+    </div>
+
+    <div class="controls">
+      <div class="quickadd" title="Quick add supports tokens like: #tag !high @2026-02-20 15:30 due:2026-02-20 tomorrow in 3 days">
+        <input id="quickAdd" placeholder="Quick add  e.g. 'Call broker #ops !high tomorrow 3pm' (Enter)" />
+        <span class="hint">Enter</span>
+        <span class="hint">Ctrl+K</span>
+      </div>
+
+      <div class="searchwrap" title="Search (press /)">
+        <input id="search" placeholder="Search" />
+        <span class="kbd">/</span>
+      </div>
+
+      <div class="pillbar" role="tablist" aria-label="Priority filter">
+        <button class="pill active" data-filter="all">All</button>
+        <button class="pill" data-filter="high">High</button>
+        <button class="pill" data-filter="medium">Medium</button>
+        <button class="pill" data-filter="low">Low</button>
+      </div>
+
+      <button class="btn" id="btnAddGoal" title="Inline add in Open (press N)">Add Goal <span style="opacity:.6">N</span></button>
+      <button class="btn" id="btnPalette" title="Command palette (Ctrl+K)">Commands <span style="opacity:.6">Ctrl+K</span></button>
+      <button class="btn" id="btnRefresh" title="Refresh (press R)">Refresh <span style="opacity:.6">R</span></button>
+      <div class="statusline" id="statusline">Loading</div>
+    </div>
+  </div>
+
+  <div class="wrap">
+    <div class="stats" id="stats">
+      <div class="stat"><div class="k">Open</div><div class="v" id="statOpen"></div></div>
+      <div class="stat"><div class="k">In Progress</div><div class="v" id="statIP"></div></div>
+      <div class="stat"><div class="k">Done</div><div class="v" id="statDone"></div></div>
+      <div class="stat"><div class="k">Done Today</div><div class="v" id="statDoneToday"></div></div>
+      <div class="stat"><div class="k">Avg Lead Time</div><div class="v" id="statLead"></div></div>
+    </div>
+
+    <div class="board" id="board">
+      <div class="col" data-status="open">
+        <div class="colhead">
+          <div class="coltitle">
+            <div class="line1">
+              <h2>Open</h2>
+              <div class="count" id="count-open">0</div>
+            </div>
+            <div class="subhint">Drag to reorder. Click priority to cycle. Click card to open details.</div>
+          </div>
+        </div>
+        <div class="colbody">
+          <div class="addwrap" id="addwrap">
+            <input id="addtext" placeholder="Write a goal, press Enter" />
+            <select id="addpriority" aria-label="Priority">
+              <option value="high">High</option>
+              <option value="medium" selected>Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <button class="mini" id="addsave">Save</button>
+          </div>
+          <div class="dropzone" id="zone-open" data-status="open"></div>
+        </div>
+      </div>
+
+      <div class="col" data-status="in_progress">
+        <div class="colhead">
+          <div class="coltitle">
+            <div class="line1">
+              <h2>In Progress</h2>
+              <div class="count" id="count-in_progress">0</div>
+            </div>
+            <div class="subhint">WIP loves limits. Keep it tight.</div>
+          </div>
+        </div>
+        <div class="colbody">
+          <div class="dropzone" id="zone-in_progress" data-status="in_progress"></div>
+        </div>
+      </div>
+
+      <div class="col" data-status="done">
+        <div class="colhead">
+          <div class="coltitle">
+            <div class="line1">
+              <h2>Done</h2>
+              <div class="count" id="count-done">0</div>
+            </div>
+            <div class="subhint">Click card  archive old wins.</div>
+          </div>
+        </div>
+        <div class="colbody">
+          <div class="dropzone" id="zone-done" data-status="done"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toasts -->
+  <div class="toasts" id="toasts" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Drawer -->
+  <div class="drawer" id="drawer" aria-hidden="true">
+    <div class="head">
+      <div class="title" id="drawerTitle">Goal</div>
+      <button class="btn" id="drawerClose">Close <span style="opacity:.6">Esc</span></button>
+    </div>
+    <div class="body">
+      <div>
+        <label>Text</label>
+        <textarea id="dText"></textarea>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label>Status</label>
+          <select id="dStatus">
+            <option value="open">Open</option>
+            <option value="in_progress">In Progress</option>
+            <option value="done">Done</option>
+          </select>
+        </div>
+        <div>
+          <label>Priority</label>
+          <select id="dPriority">
+            <option value="high">High</option>
+            <option value="medium">Medium</option>
+            <option value="low">Low</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="grid2">
+        <div>
+          <label>Due (local)</label>
+          <input id="dDue" placeholder="2026-02-20 15:30" />
+        </div>
+        <div>
+          <label>Estimate (min)</label>
+          <input id="dEst" placeholder="e.g. 30" />
+        </div>
+      </div>
+
+      <div>
+        <label>Tags</label>
+        <input id="dTags" placeholder="#ops, #billing" />
+      </div>
+
+      <div>
+        <label>Notes</label>
+        <textarea id="dNotes" placeholder="What 'done' looks like, links, steps"></textarea>
+      </div>
+
+      <div class="row">
+        <button class="btn" id="dRun">Run Now</button>
+        <button class="btn" id="dArchive">Archive</button>
+        <button class="btn" id="dDelete" style="border-color: rgba(255,120,150,.28)">Delete</button>
+        <button class="btn" id="dSave" style="border-color: rgba(105,71,255,.35)">Save <span style="opacity:.6">Ctrl+Enter</span></button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bulk bar -->
+  <div class="bulkbar" id="bulkbar" aria-hidden="true">
+    <div class="count" id="bulkcount">0 selected</div>
+    <button class="btn" id="bulkMoveOpen">Move  Open</button>
+    <button class="btn" id="bulkMoveIP">Move  In Progress</button>
+    <button class="btn" id="bulkMoveDone">Move  Done</button>
+    <button class="btn" id="bulkPriority">Cycle Priority</button>
+    <button class="btn" id="bulkRun">Run</button>
+    <button class="btn" id="bulkDelete" style="border-color: rgba(255,120,150,.28)">Delete</button>
+    <button class="btn" id="bulkClear">Clear</button>
+  </div>
+
+  <!-- Command palette -->
+  <div class="palette" id="palette" aria-hidden="true">
+    <div class="backdrop" id="palBackdrop"></div>
+    <div class="panel" role="dialog" aria-modal="true" aria-label="Command palette">
+      <div class="head">
+        <input id="palInput" placeholder="Type a command (export, import, focus, archive, refresh)" />
+      </div>
+      <div class="list" id="palList"></div>
+    </div>
+  </div>
+
+  <script src="goals.js" defer></script>
+</body>
+</html>

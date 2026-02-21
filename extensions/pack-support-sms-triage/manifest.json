@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-sms-triage",
+  "name": "Support Sms Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "sms",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.sms",
+    "support.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via sms with triage mode policies."
+}

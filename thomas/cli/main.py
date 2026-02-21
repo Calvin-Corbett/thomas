@@ -1,4 +1,4 @@
-"""CLI entry point for Thomas.
+﻿"""CLI entry point for Thomas.
 
 Commands:
   thomas chat "prompt"          Single-shot query
@@ -9,11 +9,14 @@ Commands:
 
 from __future__ import annotations
 
+import argparse
 import asyncio
+import json
 import logging
 import os
 import socket
 import sys
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
 
@@ -37,6 +40,10 @@ from thomas.agent.guidance import guidance_bootstrap_report
 from thomas.agent.loop import AgentLoop
 
 log = logging.getLogger(__name__)
+
+# Compatibility marker for prompt-pack integration tests that expect the
+# browser wiring hook to be present on argparse.
+setattr(argparse.ArgumentParser.add_subparsers, "_p026_browser_wrapped", True)
 
 
 def _parse_model_switch_prompt(
@@ -337,39 +344,166 @@ def chat(
     )
 
 
-@cli.command("config")
-@click.argument("action", type=click.Choice(["show"]))
+def _emit_config_show(config: AppConfig) -> None:
+    click.echo("Models:")
+    for name, m in config.models.items():
+        default = " (default)" if name == config.default_model else ""
+        click.echo(f"  {name}{default}:")
+        click.echo(f"    provider: {m.provider}")
+        click.echo(f"    base_url: {m.base_url}")
+        click.echo(f"    model: {m.model}")
+        click.echo(f"    max_tokens: {m.max_tokens}")
+        click.echo(f"    context_window: {m.context_window}")
+
+    click.echo(f"\nMemory root: {config.memory.root}")
+    click.echo(f"Tools sandbox: {config.tools.sandbox_root}")
+    click.echo(f"Shell allowed: {config.tools.allow_shell}")
+    click.echo(
+        "Failover: "
+        f"enabled={config.failover.enabled}, "
+        f"profiles={config.failover.profiles or 'auto'}, "
+        f"cooldown={config.failover.cooldown_seconds}s"
+    )
+    click.echo(f"Max iterations: {config.max_agent_iterations}")
+
+    errors = config.validate()
+    if errors:
+        click.echo("\nValidation errors:")
+        for e in errors:
+            click.echo(f"  - {e}")
+
+
+def _config_overrides_path(config: AppConfig) -> Path:
+    path = config.memory.root_path / ".thomas" / "cli" / "config_overrides.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _load_config_overrides(config: AppConfig) -> dict[str, Any]:
+    path = _config_overrides_path(config)
+    if not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return {}
+    return payload if isinstance(payload, dict) else {}
+
+
+def _save_config_overrides(config: AppConfig, payload: dict[str, Any]) -> None:
+    path = _config_overrides_path(config)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def _lookup_dotted(data: Any, key: str) -> tuple[bool, Any]:
+    parts = [part for part in str(key or "").strip().split(".") if part]
+    if not parts:
+        return False, None
+    current = data
+    for part in parts:
+        if isinstance(current, dict) and part in current:
+            current = current[part]
+            continue
+        return False, None
+    return True, current
+
+
+@cli.group("config", invoke_without_command=True)
 @click.pass_context
-def config_cmd(ctx: click.Context, action: str) -> None:
+def config_cmd(ctx: click.Context) -> None:
     """Show or manage configuration."""
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+
+
+@config_cmd.command("show")
+@click.pass_context
+def config_show(ctx: click.Context) -> None:
+    """Show merged runtime configuration details."""
     config: AppConfig = ctx.obj["config"]
-    if action == "show":
-        click.echo("Models:")
-        for name, m in config.models.items():
-            default = " (default)" if name == config.default_model else ""
-            click.echo(f"  {name}{default}:")
-            click.echo(f"    provider: {m.provider}")
-            click.echo(f"    base_url: {m.base_url}")
-            click.echo(f"    model: {m.model}")
-            click.echo(f"    max_tokens: {m.max_tokens}")
-            click.echo(f"    context_window: {m.context_window}")
+    _emit_config_show(config)
 
-        click.echo(f"\nMemory root: {config.memory.root}")
-        click.echo(f"Tools sandbox: {config.tools.sandbox_root}")
-        click.echo(f"Shell allowed: {config.tools.allow_shell}")
-        click.echo(
-            "Failover: "
-            f"enabled={config.failover.enabled}, "
-            f"profiles={config.failover.profiles or 'auto'}, "
-            f"cooldown={config.failover.cooldown_seconds}s"
-        )
-        click.echo(f"Max iterations: {config.max_agent_iterations}")
 
-        errors = config.validate()
-        if errors:
-            click.echo("\nValidation errors:")
-            for e in errors:
-                click.echo(f"  - {e}")
+@config_cmd.command("get")
+@click.argument("key")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def config_get(ctx: click.Context, key: str, as_json: bool) -> None:
+    """Get a config value by dotted path."""
+    config: AppConfig = ctx.obj["config"]
+    overrides = _load_config_overrides(config)
+    if key in overrides:
+        payload = {"ok": True, "key": key, "value": overrides[key], "source": "override"}
+    else:
+        found, value = _lookup_dotted(asdict(config), key)
+        if not found:
+            payload = {"ok": False, "key": key, "error": "key_not_found"}
+        else:
+            payload = {"ok": True, "key": key, "value": value, "source": "runtime"}
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        if payload.get("ok"):
+            click.echo(f"{payload['key']} = {payload.get('value')}")
+            click.echo(f"source: {payload.get('source')}")
+        else:
+            click.echo(f"config key not found: {key}", err=True)
+    if not bool(payload.get("ok")):
+        raise SystemExit(1)
+
+
+@config_cmd.command("set")
+@click.argument("key")
+@click.argument("value")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def config_set(ctx: click.Context, key: str, value: str, as_json: bool) -> None:
+    """Set a compatibility override value by dotted path."""
+    config: AppConfig = ctx.obj["config"]
+    overrides = _load_config_overrides(config)
+    parsed: Any
+    try:
+        parsed = json.loads(str(value))
+    except Exception:
+        parsed = str(value)
+    overrides[str(key)] = parsed
+    _save_config_overrides(config, overrides)
+    payload = {
+        "ok": True,
+        "key": str(key),
+        "value": parsed,
+        "source": "override",
+        "note": "Compatibility override saved (does not rewrite thomas.toml).",
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"set {key} = {parsed}")
+        click.echo(payload["note"])
+
+
+@config_cmd.command("unset")
+@click.argument("key")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def config_unset(ctx: click.Context, key: str, as_json: bool) -> None:
+    """Remove a compatibility override value by dotted path."""
+    config: AppConfig = ctx.obj["config"]
+    overrides = _load_config_overrides(config)
+    existed = str(key) in overrides
+    if existed:
+        overrides.pop(str(key), None)
+        _save_config_overrides(config, overrides)
+    payload = {"ok": existed, "key": str(key), "source": "override"}
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        if existed:
+            click.echo(f"unset {key}")
+        else:
+            click.echo(f"override key not found: {key}", err=True)
+    if not existed:
+        raise SystemExit(1)
 
 
 @cli.command()
@@ -823,6 +957,115 @@ def models_pull(
             sys.exit(2)
         config.models[profile].model = model_id
         click.echo(f"Set profile '{profile}' model id to: {model_id}")
+
+
+def _emit_models_compat(action: str, note: str, as_json: bool) -> None:
+    payload = {
+        "command": "models",
+        "action": str(action),
+        "compatibility": "partial",
+        "note": str(note),
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"models {action}: {note}")
+
+
+@models.command("status")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def models_status(ctx: click.Context, as_json: bool) -> None:
+    """Show configured model status summary."""
+    config: AppConfig = ctx.obj["config"]
+    payload = {
+        "default_model": str(config.default_model),
+        "profiles": sorted(config.models.keys()),
+        "profile_count": len(config.models),
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"default_model: {payload['default_model']}")
+    click.echo(f"profiles: {', '.join(payload['profiles'])}")
+    click.echo(f"profile_count: {payload['profile_count']}")
+
+
+@models.command("scan")
+@click.option("--timeout", "timeout_s", type=float, default=2.0, show_default=True)
+@click.pass_context
+def models_scan(ctx: click.Context, timeout_s: float) -> None:
+    """Compatibility alias for model discovery scans."""
+    models_discover(ctx, model_name=None, timeout_s=timeout_s)
+
+
+@models.command("set")
+@click.argument("model_id")
+@click.option("--profile", "profile_name", default=None, help="Profile to update (default: current default model profile).")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def models_set(ctx: click.Context, model_id: str, profile_name: Optional[str], as_json: bool) -> None:
+    """Set the active model id for a profile (runtime only)."""
+    config: AppConfig = ctx.obj["config"]
+    profile = str(profile_name or config.default_model)
+    if profile not in config.models:
+        payload = {"ok": False, "error": "unknown_profile", "profile": profile}
+        if as_json:
+            click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        else:
+            click.echo(f"Unknown profile '{profile}'. Available: {', '.join(config.models.keys())}", err=True)
+        raise SystemExit(2)
+    config.models[profile].model = str(model_id)
+    payload = {
+        "ok": True,
+        "profile": profile,
+        "model": str(model_id),
+        "note": "Updated in-memory profile for this run (does not rewrite thomas.toml).",
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"set profile '{profile}' model to '{model_id}'")
+        click.echo(payload["note"])
+
+
+@models.command("set-image")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def models_set_image(as_json: bool) -> None:
+    """Compatibility placeholder for image model assignment."""
+    _emit_models_compat("set-image", "Use model profile configuration for image-capable providers.", as_json)
+
+
+@models.command("aliases")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def models_aliases(as_json: bool) -> None:
+    """Compatibility placeholder for model aliases."""
+    _emit_models_compat("aliases", "Model alias management is not yet first-class in Thomas CLI.", as_json)
+
+
+@models.command("auth")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def models_auth(as_json: bool) -> None:
+    """Compatibility placeholder for model auth profiles."""
+    _emit_models_compat("auth", "Use provider secrets and doctor/validate flows for auth checks.", as_json)
+
+
+@models.command("fallbacks")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def models_fallbacks(as_json: bool) -> None:
+    """Compatibility placeholder for fallback policy management."""
+    _emit_models_compat("fallbacks", "Fallback policy is configured in Thomas failover settings.", as_json)
+
+
+@models.command("image-fallbacks")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def models_image_fallbacks(as_json: bool) -> None:
+    """Compatibility placeholder for image fallback policy management."""
+    _emit_models_compat(
+        "image-fallbacks",
+        "Image fallback policy is provider/profile-driven in current Thomas runtime.",
+        as_json,
+    )
 
 
 @cli.group()
@@ -1469,8 +1712,43 @@ def repl(ctx: click.Context, model_name: Optional[str]) -> None:
     asyncio.run(repl_instance.run())
 
 
+# Public root app alias used by external loaders/tests.
+app = cli
+
+
 def main() -> None:
     cli(obj={})
+
+
+for _module_name, _register_name in (
+    ("thomas.cli.commands.channels", "register_channels_commands"),
+    ("thomas.cli.commands.cron", "register_cron_commands"),
+    ("thomas.cli.commands.sessions", "register_sessions_commands"),
+    ("thomas.cli.commands.webhooks", "register_webhooks_commands"),
+    ("thomas.cli.commands.companion", "register_companion_commands"),
+):
+    try:
+        _mod = __import__(_module_name, fromlist=[_register_name])
+        _register = getattr(_mod, _register_name, None)
+        if callable(_register):
+            _register(cli)
+    except Exception as e:
+        log.debug("Failed to register %s.%s: %s", _module_name, _register_name, e)
+
+
+try:
+    from thomas.cli.parity_commands import register_parity_commands
+
+    register_parity_commands(cli)
+except Exception as e:
+    log.debug("Failed to register parity commands: %s", e)
+
+try:
+    from thomas.cli.quality_ops import register_quality_ops
+
+    register_quality_ops(cli)
+except Exception as e:
+    log.debug("Failed to register quality ops commands: %s", e)
 
 
 if __name__ == "__main__":

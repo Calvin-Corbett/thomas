@@ -1,0 +1,26 @@
+﻿# Thomas Plan Hub
+
+Use this folder first when starting work.
+
+## Start Here
+
+1. `plans/thomas/WORKBOARD.md`
+2. Relevant plan file linked from the workboard
+3. Supporting spec/protocol docs in `docs/` only as needed:
+   - `docs/COMPANION_APP_INTEGRATION.md`
+   - `docs/COMPANION_BUILDER_RELEASE_GUIDE.md`
+
+## Active Plans
+
+- Companion store compliance: `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
+- UI upgrade: `plans/thomas/ui/UI_UPGRADE_PLAN.md`
+- Weekly deep dive roadmap: `plans/thomas/roadmap/WEEKLY_DEEP_DIVE_PLAN.md`
+- Launch plan: `plans/thomas/launch/LAUNCH_V1_PLAN.md`
+
+## Plan Hygiene
+
+- Keep status/date fields current in the plan itself.
+- Do not add new random plan files at repo root or in `docs/`.
+- If a new product/domain is added, create `plans/<domain>/`.
+- Keep pointer files at old paths when moving a plan.
+- Treat `tasks/` plan-like notes as historical transcripts, not active source of truth.

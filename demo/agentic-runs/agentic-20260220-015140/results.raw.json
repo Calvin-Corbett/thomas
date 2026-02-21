@@ -1,0 +1,13 @@
+[
+  {
+    "task_id": "artifact_probe_write",
+    "competitor": "thomas_os",
+    "success": false,
+    "elapsed_seconds": 3.422,
+    "follow_up_prompts": 0,
+    "quality_score": 1,
+    "evidence": "transcripts/thomas_os/artifact_probe_write.md",
+    "notes": "required file not found: runtime/agentic_bench/agentic-20260220-015140/thomas_os/smoke_probe.txt; required file missing expected text: {{artifact_dir}}/smoke_probe.txt",
+    "captured_at": "2026-02-20T01:51:44.385327+00:00"
+  }
+]

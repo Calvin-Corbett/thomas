@@ -1,20 +1,29 @@
 from __future__ import annotations
 
 import asyncio
-import logging
 import traceback
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Awaitable, Callable, Dict, Optional
+from pathlib import Path
+from typing import Any, Awaitable, Callable, Dict, Mapping, Optional
 
 from .models import AutonomyError, AutonomyTransientError, Job
 from .agents import PlannerAgent, ReviewerAgent
 from .executor import ExecutorAgent
+from .media_agents import (
+    MediaAgentError,
+    MediaAgentTransientError,
+    OpenAICompatMediaClient,
+    _extract_text,
+    _extract_video_meta,
+)
 from .scheduler import EngineTiming, compute_next_run
+from .workflows import WorkflowExecutionError, WorkflowRunner, summarize_workflow_telemetry
+from thomas.core.autonomy import clamp_autonomy_level
+from thomas.core.config import ModelConfig
 
 
 JobHandler = Callable[[Job], Awaitable[Dict[str, Any]]]
-log = logging.getLogger(__name__)
 
 
 class AutonomyEngine:
@@ -35,11 +44,16 @@ class AutonomyEngine:
         timing: Optional[EngineTiming] = None,
         max_concurrency: int = 4,
         worker_id: Optional[str] = None,
+        model_resolver: Optional[Callable[[Optional[str]], ModelConfig]] = None,
+        artifact_root: Optional[str] = None,
     ):
         self.store = store
         self.policy = policy
         self.chat_adapter = chat_adapter
         self.timing = timing or EngineTiming()
+        self._model_resolver = model_resolver
+        self._artifact_root = Path(artifact_root or Path("runtime") / "autonomy" / "artifacts").expanduser()
+        self._artifact_root.mkdir(parents=True, exist_ok=True)
 
         self._worker_id = worker_id or f"autonomy-{uuid.uuid4().hex[:8]}"
         self._stop = asyncio.Event()
@@ -105,9 +119,9 @@ class AutonomyEngine:
                 # Requeue any stale running jobs with expired locks.
                 try:
                     self.store.reap_stale_running(now=now)
-                except Exception as e:
+                except Exception:
                     # Non-fatal; keep the engine alive.
-                    log.debug("Failed to reap stale running jobs: %s", e)
+                    pass
 
                 # Claim due jobs (up to remaining capacity)
                 claimed = self.store.claim_due_jobs(
@@ -143,6 +157,10 @@ class AutonomyEngine:
         self.register_handler("reminder", self._handle_reminder)
         self.register_handler("daily_briefing", self._handle_daily_briefing)
         self.register_handler("autonomy_task", self._handle_autonomy_task)
+        self.register_handler("workflow_task", self._handle_workflow_task)
+        self.register_handler("video_generation", self._handle_video_generation)
+        self.register_handler("speech_transcription", self._handle_speech_transcription)
+        self.register_handler("speech_synthesis", self._handle_speech_synthesis)
 
     # -------- core execution --------
     async def _run_job(self, job: Job) -> None:
@@ -259,6 +277,213 @@ class AutonomyEngine:
         self.store.set_job_status(job.id, "dead", error=err, attempts=attempts, lock_clear=True)
 
     # -------- built-in handlers --------
+    def _resolve_model_config(self, profile: Optional[str]) -> ModelConfig:
+        if callable(self._model_resolver):
+            try:
+                cfg = self._model_resolver(profile)
+            except TypeError:
+                cfg = self._model_resolver(None)
+            if isinstance(cfg, ModelConfig):
+                return cfg
+        return ModelConfig(name=str(profile or "local"))
+
+    @staticmethod
+    def _to_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
+        try:
+            iv = int(value)
+        except Exception:
+            iv = int(default)
+        if iv < minimum:
+            return minimum
+        if iv > maximum:
+            return maximum
+        return iv
+
+    @staticmethod
+    def _to_optional_float(value: Any) -> Optional[float]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except Exception as e:
+            raise AutonomyError("payload.speed must be a number") from e
+
+    @staticmethod
+    def _as_dict(value: Any) -> Dict[str, Any]:
+        if isinstance(value, dict):
+            return dict(value)
+        if isinstance(value, Mapping):
+            return dict(value)
+        return {}
+
+    def _workflow_policy_for_payload(self, payload: Mapping[str, Any]) -> Dict[str, Any]:
+        autonomy_level = clamp_autonomy_level(payload.get("autonomy_level", 3), default=3)
+        # Lower autonomy levels constrain fan-out for orchestrated workflows.
+        worker_cap = {1: 1, 2: 2, 3: 3, 4: 4}.get(int(autonomy_level), 3)
+        requested_workers = payload.get("worker_count")
+        worker_count = self._to_int(requested_workers, default=worker_cap, minimum=1, maximum=8)
+        worker_count = min(worker_count, worker_cap)
+        return {
+            "autonomy_level": int(autonomy_level),
+            "worker_count": int(worker_count),
+        }
+
+    async def _handle_workflow_task(self, job: Job) -> Dict[str, Any]:
+        if self.chat_adapter is None:
+            raise AutonomyTransientError("no chat adapter configured for workflow_task")
+
+        payload = self._as_dict(job.payload)
+        workflow = str(payload.get("workflow") or payload.get("pattern") or "chain").strip().lower()
+        policy = self._workflow_policy_for_payload(payload)
+
+        # Apply policy defaults to orchestrator fan-out when not explicitly bounded.
+        if workflow in {"orchestrator_worker", "orchestrator-workers", "orchestrate"}:
+            payload["worker_count"] = int(policy["worker_count"])
+
+        runner = WorkflowRunner(
+            chat_adapter=self.chat_adapter,
+            session_id=job.session_id,
+            default_profile=str(payload.get("profile") or "").strip() or None,
+        )
+        try:
+            result = await runner.run(payload)
+        except WorkflowExecutionError as e:
+            raise AutonomyError(str(e)) from e
+
+        telemetry = summarize_workflow_telemetry(result)
+        out = self._as_dict(result)
+        out["telemetry"] = telemetry
+        out["workflow_policy"] = policy
+        return out
+
+    def _media_client_for_job(self, job: Job) -> OpenAICompatMediaClient:
+        payload = self._as_dict(job.payload)
+        profile = str(payload.get("profile") or "").strip() or None
+        cfg = self._resolve_model_config(profile)
+        return OpenAICompatMediaClient(cfg)
+
+    def _artifact_output_path(self, job_id: str, *, audio_format: str) -> Path:
+        ext = str(audio_format or "mp3").strip().lower() or "mp3"
+        ext = ext if ext.startswith(".") else f".{ext}"
+        self._artifact_root.mkdir(parents=True, exist_ok=True)
+        return (self._artifact_root / f"{job_id}{ext}").resolve()
+
+    async def _handle_video_generation(self, job: Job) -> Dict[str, Any]:
+        payload = self._as_dict(job.payload)
+        prompt = str(payload.get("prompt") or "").strip()
+        if not prompt:
+            raise AutonomyError("video_generation requires payload.prompt")
+
+        duration_seconds = payload.get("duration_seconds")
+        if duration_seconds is not None:
+            try:
+                duration_seconds = int(duration_seconds)
+            except Exception as e:
+                raise AutonomyError("video_generation payload.duration_seconds must be an integer") from e
+
+        client = self._media_client_for_job(job)
+        try:
+            raw = await client.generate_video(
+                prompt=prompt,
+                model=str(payload.get("model") or "").strip() or None,
+                endpoint_paths=payload.get("endpoint_paths") or payload.get("endpoint_path"),
+                image_url=str(payload.get("image_url") or "").strip() or None,
+                duration_seconds=duration_seconds,
+                size=str(payload.get("size") or "").strip() or None,
+                extra=self._as_dict(payload.get("extra")),
+            )
+            parsed = self._as_dict(raw)
+            status, video_id, video_url = _extract_video_meta(parsed)
+            return {
+                "video_id": video_id,
+                "status": status,
+                "url": video_url,
+                "provider_response": parsed,
+            }
+        except MediaAgentTransientError as e:
+            raise AutonomyTransientError(str(e)) from e
+        except MediaAgentError as e:
+            raise AutonomyError(str(e)) from e
+        finally:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+
+    async def _handle_speech_transcription(self, job: Job) -> Dict[str, Any]:
+        payload = self._as_dict(job.payload)
+        audio_path = str(payload.get("audio_path") or "").strip()
+        if not audio_path:
+            raise AutonomyError("speech_transcription requires payload.audio_path")
+
+        client = self._media_client_for_job(job)
+        try:
+            raw = await client.transcribe_audio(
+                audio_path=audio_path,
+                model=str(payload.get("model") or "").strip() or None,
+                endpoint_path=str(payload.get("endpoint_path") or "/audio/transcriptions").strip(),
+                language=str(payload.get("language") or "").strip() or None,
+                prompt=str(payload.get("prompt") or "").strip() or None,
+                response_format=str(payload.get("response_format") or "").strip() or None,
+                extra=self._as_dict(payload.get("extra")),
+            )
+            parsed = self._as_dict(raw)
+            text = _extract_text(parsed)
+            return {
+                "text": text,
+                "provider_response": parsed,
+            }
+        except MediaAgentTransientError as e:
+            raise AutonomyTransientError(str(e)) from e
+        except MediaAgentError as e:
+            raise AutonomyError(str(e)) from e
+        finally:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+
+    async def _handle_speech_synthesis(self, job: Job) -> Dict[str, Any]:
+        payload = self._as_dict(job.payload)
+        text = str(payload.get("text") or payload.get("input") or "").strip()
+        if not text:
+            raise AutonomyError("speech_synthesis requires payload.text")
+
+        audio_format = str(payload.get("audio_format") or payload.get("format") or "mp3").strip().lower() or "mp3"
+        output_path_raw = str(payload.get("output_path") or "").strip()
+        if output_path_raw:
+            output_path = Path(output_path_raw).expanduser()
+        else:
+            output_path = self._artifact_output_path(job.id, audio_format=audio_format)
+
+        client = self._media_client_for_job(job)
+        try:
+            raw = await client.synthesize_speech(
+                text=text,
+                voice=str(payload.get("voice") or "alloy").strip() or "alloy",
+                model=str(payload.get("model") or "").strip() or None,
+                endpoint_path=str(payload.get("endpoint_path") or "/audio/speech").strip(),
+                audio_format=audio_format,
+                speed=self._to_optional_float(payload.get("speed")),
+                output_path=output_path,
+                extra=self._as_dict(payload.get("extra")),
+            )
+            parsed = self._as_dict(raw)
+            return {
+                "output_path": str(parsed.get("output_path") or output_path),
+                "size_bytes": int(parsed.get("size_bytes") or 0),
+                "provider_response": parsed,
+            }
+        except MediaAgentTransientError as e:
+            raise AutonomyTransientError(str(e)) from e
+        except MediaAgentError as e:
+            raise AutonomyError(str(e)) from e
+        finally:
+            try:
+                await client.aclose()
+            except Exception:
+                pass
+
     async def _handle_reminder(self, job: Job) -> Dict[str, Any]:
         msg = str(job.payload.get("message") or job.payload.get("text") or "").strip()
         if not msg:

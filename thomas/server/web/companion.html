@@ -1,0 +1,460 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Thomas Companion Builder</title>
+  <style>
+    :root{
+      --bg:#0b0d12;
+      --panel:#121727;
+      --panel2:#0f1422;
+      --text:#e7ecff;
+      --muted:#a7b0d6;
+      --border:rgba(255,255,255,0.10);
+      --accent:#7aa2ff;
+      --ok:#4ade80;
+      --bad:#fb7185;
+      --warn:#fbbf24;
+      --shadow:0 10px 30px rgba(0,0,0,0.35);
+      --radius:14px;
+      --focus:0 0 0 3px rgba(122,162,255,0.25);
+    }
+    *{box-sizing:border-box}
+    body{
+      margin:0;
+      font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Arial;
+      color:var(--text);
+      background:
+        radial-gradient(1100px 700px at 15% -10%, rgba(122,162,255,0.20), transparent 55%),
+        radial-gradient(1000px 700px at 90% 10%, rgba(74,222,128,0.12), transparent 50%),
+        var(--bg);
+    }
+    .wrap{max-width:1320px;margin:0 auto;padding:18px 18px 60px;}
+    .top{
+      display:flex;align-items:flex-start;justify-content:space-between;gap:14px;
+      margin-bottom:14px;
+    }
+    h1{margin:0;font-size:26px;letter-spacing:.2px}
+    .sub{margin-top:6px;color:var(--muted);font-size:13px;line-height:1.5}
+    .links{display:flex;gap:8px;flex-wrap:wrap;margin-top:10px}
+    .links a{
+      text-decoration:none;color:var(--text);
+      border:1px solid var(--border);
+      background:rgba(122,162,255,0.12);
+      border-radius:10px;padding:7px 10px;font-size:12px;font-weight:700;
+    }
+    .status{
+      border:1px solid var(--border);background:rgba(255,255,255,0.03);
+      border-radius:999px;padding:8px 11px;font-size:13px;display:flex;align-items:center;gap:8px;
+      white-space:nowrap;
+    }
+    .dot{width:9px;height:9px;border-radius:999px;background:var(--muted)}
+    .dot.ok{background:var(--ok)}
+    .dot.bad{background:var(--bad)}
+    .dot.warn{background:var(--warn)}
+    .grid{
+      display:grid;
+      grid-template-columns:1.35fr 1fr;
+      gap:14px;
+      align-items:start;
+    }
+    @media(max-width:1120px){.grid{grid-template-columns:1fr}}
+    .panel{
+      border:1px solid var(--border);
+      background:rgba(255,255,255,0.03);
+      border-radius:var(--radius);
+      box-shadow:var(--shadow);
+      padding:14px;
+      margin-bottom:14px;
+    }
+    .panel h2{margin:0 0 6px;font-size:17px}
+    .desc{color:var(--muted);font-size:12px;line-height:1.55;margin-bottom:12px}
+    .row{display:grid;grid-template-columns:180px 1fr;gap:10px;align-items:center;margin-bottom:10px}
+    .row label{font-size:12px;color:var(--muted);font-weight:700}
+    input[type="text"], select, textarea{
+      width:100%;
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:rgba(0,0,0,0.20);
+      color:var(--text);
+      padding:9px 11px;
+      outline:none;
+    }
+    textarea{min-height:120px;resize:vertical}
+    input:focus,select:focus,textarea:focus{box-shadow:var(--focus)}
+    .btnrow{display:flex;gap:8px;flex-wrap:wrap}
+    button{
+      border:1px solid var(--border);
+      border-radius:10px;
+      background:rgba(122,162,255,0.14);
+      color:var(--text);
+      padding:9px 12px;
+      font-size:12px;
+      font-weight:700;
+      cursor:pointer;
+    }
+    button:hover{background:rgba(122,162,255,0.22)}
+    .btn-good{background:rgba(74,222,128,0.18)}
+    .btn-good:hover{background:rgba(74,222,128,0.26)}
+    .btn-warn{background:rgba(251,191,36,0.20)}
+    .btn-warn:hover{background:rgba(251,191,36,0.30)}
+    .small{font-size:11px;color:var(--muted)}
+    .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+    .kpi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-bottom:10px}
+    @media(max-width:800px){.kpi{grid-template-columns:repeat(2,minmax(0,1fr))}}
+    .kpi .card{
+      border:1px solid var(--border);
+      border-radius:11px;
+      background:rgba(255,255,255,0.03);
+      padding:9px;
+    }
+    .kpi .v{font-size:18px;font-weight:800}
+    .kpi .k{font-size:11px;color:var(--muted)}
+    .list{
+      border:1px solid var(--border);
+      border-radius:11px;
+      background:rgba(0,0,0,0.18);
+      max-height:320px;overflow:auto;
+    }
+    .list-item{padding:9px 10px;border-bottom:1px solid var(--border)}
+    .list-item:last-child{border-bottom:0}
+    .list-title{font-size:13px;font-weight:700}
+    .list-sub{font-size:11px;color:var(--muted);margin-top:4px}
+    .empty{padding:14px;color:var(--muted);font-size:12px}
+    pre{
+      margin:0;
+      border:1px solid var(--border);
+      border-radius:11px;
+      background:rgba(0,0,0,0.22);
+      padding:10px;
+      overflow:auto;
+      max-height:360px;
+      font-size:12px;
+      line-height:1.45;
+      white-space:pre-wrap;
+      word-break:break-word;
+    }
+    table{width:100%;border-collapse:collapse;font-size:12px}
+    th,td{padding:8px 7px;border-bottom:1px solid var(--border);text-align:left;vertical-align:top}
+    th{font-size:11px;color:var(--muted);font-weight:700}
+    tr:last-child td{border-bottom:0}
+    .hint{
+      border:1px dashed var(--border);
+      border-radius:11px;
+      padding:9px 10px;
+      background:rgba(122,162,255,0.10);
+      font-size:12px;
+      color:var(--muted);
+      margin-top:10px;
+      line-height:1.5;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="top">
+      <div>
+        <h1>Companion Builder</h1>
+        <div class="sub">
+          Preview the phone app layout from Thomas, then <span class="mono">Ship</span> a signed update release.
+          Phone clients can poll updates and download release bundles from Thomas.
+        </div>
+        <div class="links">
+          <a href="/">Open Chat</a>
+          <a href="/settings">Settings</a>
+          <a href="/mission">Mission Control</a>
+          <a href="/api/companion/v1/contract" target="_blank" rel="noopener">API Contract</a>
+          <a href="/api/companion/v1/studio/capabilities" target="_blank" rel="noopener">Studio Capabilities</a>
+        </div>
+      </div>
+      <div class="status" id="connStatus">
+        <span class="dot" id="connDot"></span>
+        <span id="connText">connecting</span>
+      </div>
+    </div>
+
+    <div class="grid">
+      <div>
+        <section class="panel">
+          <h2>Control Plane</h2>
+          <div class="desc">Use the same API token as Thomas UI (remote mode only). Peer identity should be a tailscale node like <span class="mono">builder-laptop.ts.net</span>.</div>
+          <div class="row">
+            <label for="apiTokenInput">API Token</label>
+            <input id="apiTokenInput" type="text" placeholder="optional in local mode" />
+          </div>
+          <div class="row">
+            <label for="peerInput">Peer Identity</label>
+            <input id="peerInput" type="text" placeholder="builder-laptop.ts.net" />
+          </div>
+          <div class="row">
+            <label for="deviceIdInput">Preview Device ID</label>
+            <input id="deviceIdInput" type="text" placeholder="ios-1 (optional)" />
+          </div>
+          <div class="btnrow">
+            <button id="refreshAllBtn" type="button">Refresh All</button>
+            <button id="bootstrapBtn" type="button">Refresh Layout</button>
+            <button id="statusBtn" type="button">Reload Status</button>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Studio Capability Catalog</h2>
+          <div class="desc">
+            Source-of-truth build surface for coding agents and companion client generators.
+            Use this to avoid hardcoded assumptions about permissions, primitives, and release controls.
+          </div>
+          <div class="btnrow">
+            <button id="refreshCapabilitiesBtn" type="button">Refresh Catalog</button>
+          </div>
+          <pre id="capabilityCatalog">{}</pre>
+        </section>
+
+        <section class="panel">
+          <h2>Live App Layout</h2>
+          <div class="desc">This is what Thomas currently serves to companion clients from installed enabled modules.</div>
+          <div class="kpi">
+            <div class="card"><div class="v" id="kpiModules">0</div><div class="k">modules</div></div>
+            <div class="card"><div class="v" id="kpiSlots">0</div><div class="k">slots</div></div>
+            <div class="card"><div class="v" id="kpiDevices">0</div><div class="k">devices</div></div>
+            <div class="card"><div class="v" id="kpiReleases">0</div><div class="k">releases</div></div>
+          </div>
+          <div class="row">
+            <label for="slotSelect">Selected Slot</label>
+            <select id="slotSelect"></select>
+          </div>
+          <pre id="slotPreview">{}</pre>
+        </section>
+
+        <section class="panel">
+          <h2>Bundle Preview (Before Ship)</h2>
+          <div class="desc">Preview a bundle without applying it, so you can inspect layout payload first.</div>
+          <div class="row">
+            <label for="bundleDirInput">Bundle Directory</label>
+            <input id="bundleDirInput" type="text" placeholder="C:/path/to/bundle" />
+          </div>
+          <div class="row">
+            <label for="channelSelect">Release Channel</label>
+            <select id="channelSelect">
+              <option value="stable">stable</option>
+              <option value="beta">beta</option>
+              <option value="dev">dev</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="targetPlatformSelect">Target Platform</label>
+            <select id="targetPlatformSelect">
+              <option value="">(auto)</option>
+              <option value="ios">ios</option>
+              <option value="android">android</option>
+              <option value="web">web</option>
+              <option value="desktop">desktop</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="distributionChannelSelect">Distribution Channel</label>
+            <select id="distributionChannelSelect">
+              <option value="">(auto)</option>
+              <option value="app_store">app_store</option>
+              <option value="play_store">play_store</option>
+              <option value="testflight">testflight</option>
+              <option value="enterprise">enterprise</option>
+              <option value="internal">internal</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="storefrontRegionInput">Storefront Region</label>
+            <input id="storefrontRegionInput" type="text" placeholder="US (optional)" />
+          </div>
+          <div class="row">
+            <label for="policyProfileInput">Policy Profile Override</label>
+            <input id="policyProfileInput" type="text" placeholder="ios_app_store (optional)" />
+          </div>
+          <div class="row">
+            <label for="rolloutPctInput">Rollout %</label>
+            <input id="rolloutPctInput" type="text" value="100" />
+          </div>
+          <div class="row">
+            <label for="minAppVersionInput">Min App Version</label>
+            <input id="minAppVersionInput" type="text" placeholder="e.g. 1.0.0" />
+          </div>
+          <div class="row">
+            <label for="requiredCapsInput">Required Capabilities (csv)</label>
+            <input id="requiredCapsInput" type="text" placeholder="camera,mic,notifications" />
+          </div>
+          <div class="row">
+            <label for="runtimeCapsInput">Runtime Capability Set (csv)</label>
+            <input id="runtimeCapsInput" type="text" placeholder="camera,mic,push,websocket" />
+          </div>
+          <div class="row">
+            <label for="commerceModelSelect">Commerce Model</label>
+            <select id="commerceModelSelect">
+              <option value="">(not set)</option>
+              <option value="digital_in_app">digital_in_app</option>
+              <option value="physical_or_off_app">physical_or_off_app</option>
+              <option value="enterprise_internal">enterprise_internal</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="storeBillingEnabledInput">Store Billing Enabled</label>
+            <select id="storeBillingEnabledInput">
+              <option value="false">false</option>
+              <option value="true">true</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="ugcEnabledInput">UGC Enabled</label>
+            <select id="ugcEnabledInput">
+              <option value="false">false</option>
+              <option value="true">true</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="moderationControlsInput">Moderation Controls (csv)</label>
+            <input id="moderationControlsInput" type="text" placeholder="report,block,terms_acceptance" />
+          </div>
+          <div class="row">
+            <label for="ageGateEnabledInput">Age Gate Enabled</label>
+            <select id="ageGateEnabledInput">
+              <option value="false">false</option>
+              <option value="true">true</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="collectsPersonalDataInput">Collects Personal Data</label>
+            <select id="collectsPersonalDataInput">
+              <option value="false">false</option>
+              <option value="true">true</option>
+            </select>
+          </div>
+          <div class="row">
+            <label for="privacyPolicyUrlInput">Privacy Policy URL</label>
+            <input id="privacyPolicyUrlInput" type="text" placeholder="https://example.com/privacy" />
+          </div>
+          <div class="row">
+            <label for="urlAllowlistInput">URL Allowlist (csv)</label>
+            <input id="urlAllowlistInput" type="text" placeholder="app.example.com,cdn.example.com" />
+          </div>
+          <div class="row">
+            <label for="actorInput">Actor</label>
+            <input id="actorInput" type="text" value="owner" />
+          </div>
+          <div class="btnrow">
+            <button id="previewBundleBtn" type="button">Preview Bundle</button>
+            <button id="verifyBundleBtn" type="button">Verify</button>
+            <button id="complianceCheckBtn" type="button">Compliance Check</button>
+            <button id="applyBundleBtn" class="btn-warn" type="button">Apply (Host)</button>
+            <button id="shipBtn" class="btn-good" type="button">Ship</button>
+          </div>
+          <div class="hint">
+            Ship = verify + apply + publish release. Companion apps should poll
+            <span class="mono">updates/check</span> then download
+            <span class="mono">releases/{id}/download</span>.
+          </div>
+          <pre id="shipOutput">{}</pre>
+        </section>
+
+        <section class="panel">
+          <h2>Compliance Report</h2>
+          <div class="desc">
+            Ship/publish is blocked when policy checks fail. Use this to debug profile violations before release.
+          </div>
+          <pre id="complianceOutput">{}</pre>
+        </section>
+
+        <section class="panel">
+          <h2>Studio Bundle Generator</h2>
+          <div class="desc">
+            Generate a signed bundle directly from JSON screen payload. This is the fastest path to prototype app modules from Thomas.
+          </div>
+          <div class="row">
+            <label for="studioModuleIdInput">Module ID</label>
+            <input id="studioModuleIdInput" type="text" value="companion.home" />
+          </div>
+          <div class="row">
+            <label for="studioVersionInput">Module Version</label>
+            <input id="studioVersionInput" type="text" value="0.1.0" />
+          </div>
+          <div class="row">
+            <label for="studioSlotInput">Slot</label>
+            <input id="studioSlotInput" type="text" value="home.main" />
+          </div>
+          <div class="row">
+            <label for="studioNameInput">Display Name</label>
+            <input id="studioNameInput" type="text" value="Companion Home" />
+          </div>
+          <div class="row">
+            <label for="studioPermsInput">Permissions (csv)</label>
+            <input id="studioPermsInput" type="text" value="ui.render,storage.read" />
+          </div>
+          <div class="row">
+            <label for="studioReleaseNotesInput">Release Notes</label>
+            <input id="studioReleaseNotesInput" type="text" value="studio build" />
+          </div>
+          <div class="row">
+            <label for="studioPayloadInput">Screen Payload JSON</label>
+            <textarea id="studioPayloadInput" class="mono">{
+  "screen_id": "home",
+  "title": "Companion Home",
+  "components": [
+    { "type": "text", "value": "Hello from Studio" }
+  ]
+}</textarea>
+          </div>
+          <div class="btnrow">
+            <button id="studioBuildBtn" class="btn-good" type="button">Build Bundle</button>
+            <button id="studioBuildShipBtn" type="button">Build + Ship</button>
+          </div>
+          <div class="hint">
+            Build creates a bundle under Thomas companion state.
+            Build+Ship also publishes it so phones see it on next update check.
+          </div>
+        </section>
+      </div>
+
+      <div>
+        <section class="panel">
+          <h2>Registered Devices</h2>
+          <div class="desc">Devices that called register/heartbeat. Use update check to validate what each phone will receive.</div>
+          <div class="btnrow">
+            <button id="refreshDevicesBtn" type="button">Refresh Devices</button>
+          </div>
+          <div style="margin-top:8px;overflow:auto;">
+            <table>
+              <thead>
+                <tr>
+                  <th>device_id</th>
+                  <th>channel</th>
+                  <th>policy</th>
+                  <th>app</th>
+                  <th>pinned</th>
+                  <th>last_seen</th>
+                  <th></th>
+                </tr>
+              </thead>
+              <tbody id="devicesTableBody"></tbody>
+            </table>
+          </div>
+        </section>
+
+        <section class="panel">
+          <h2>Releases</h2>
+          <div class="desc">Published bundles that clients can download and apply.</div>
+          <div class="btnrow">
+            <button id="refreshReleasesBtn" type="button">Refresh Releases</button>
+          </div>
+          <div class="list" id="releasesList"></div>
+        </section>
+
+        <section class="panel">
+          <h2>Ops Log</h2>
+          <div class="desc">Recent action output from this page.</div>
+          <pre id="opsLog"></pre>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/companion.js?v=__THOMAS_VERSION__"></script>
+</body>
+</html>

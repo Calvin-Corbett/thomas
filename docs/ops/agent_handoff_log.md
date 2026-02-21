@@ -65,3 +65,50 @@ Purpose: durable, timestamped execution notes so future agents can resume instan
 
 - There are still many pre-existing modified/untracked files outside this checkpoint.
 - Next agent should treat `3475aa2` as a known-good automation/iOS-policy checkpoint and continue from current dirty tree intentionally.
+## 2026-02-21T14:03:32-06:00
+
+### Workspace Git Scope Update
+
+- Set F:\DevHub\Thomas as an independent Git repository root by creating local .git metadata from Thomas-only history split.
+- Verified inside Thomas: git rev-parse --show-toplevel -> F:/DevHub/Thomas.
+- Renamed current branch to master (Thomas-local).
+- Removed Thomas-local origin remote to prevent accidental pushes to the parent local repo path.
+- Parent repo F:\DevHub still exists separately and still tracks Thomas/* files, but agents should run Git commands from inside F:\DevHub\Thomas for Thomas work.
+
+### Current Thomas Repo Cleanliness Snapshot
+
+- git ls-files -m: 328 modified tracked files
+- git ls-files -d: 16 deleted tracked files
+- git ls-files --others --exclude-standard: 7096 untracked files
+- Biggest untracked roots: 	homas, 	ests, extensions, 
+ode_modules, 	asks, output.
+
+### Next Recommended Step
+
+- Run a dedicated hygiene pass to trim/ignore generated artifacts and reduce untracked noise before further feature work.
+
+## 2026-02-21T14:03:52-06:00
+
+### Workspace Git Scope Update (Corrected)
+
+- Set `F:\DevHub\Thomas` as an independent Git repository root by creating local `.git` metadata from Thomas-only history split.
+- Verified inside Thomas: `git rev-parse --show-toplevel` -> `F:/DevHub/Thomas`.
+- Branch: `master`.
+- Removed Thomas-local `origin` remote to prevent accidental push to parent local path.
+- Parent repo `F:\DevHub` still exists separately and still tracks `Thomas/*`, so agents must run Git commands from inside `F:\DevHub\Thomas`.
+
+### Current Thomas Repo Cleanliness Snapshot
+
+- `git ls-files -m`: `328`
+- `git ls-files -d`: `16`
+- `git ls-files --others --exclude-standard`: `7096`
+- Largest untracked roots: `thomas`, `tests`, `extensions`, `node_modules`, `tasks`, `output`.
+
+## 2026-02-21T14:10:15-06:00
+
+### Repo Scope Hardened
+
+- Branch: `master`
+- HEAD: `ca7ddff`
+- Parent DevHub .git disabled
+- Thomas is standalone repo root

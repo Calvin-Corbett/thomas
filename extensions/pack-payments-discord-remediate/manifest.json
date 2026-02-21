@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-discord-remediate",
+  "name": "Payments Discord Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "discord",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.discord",
+    "payments.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via discord with remediate mode policies."
+}

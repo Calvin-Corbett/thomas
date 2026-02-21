@@ -9,9 +9,8 @@ from typing import Dict, Iterable, List, Mapping, Optional, Sequence
 
 _SWITCH_PREFIX_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^\s*(switch|change|set|use)\b", re.IGNORECASE),
-    re.compile(r"^\s*i\s+(want|wnat|need)\b", re.IGNORECASE),
-    re.compile(r"^\s*please\b.*\b(switch|change|set|use)\b", re.IGNORECASE),
-    re.compile(r"\b(can|could|would)\s+you\b.*\b(switch|change|set|use)\b", re.IGNORECASE),
+    re.compile(r"^\s*please\s+(switch|change|set|use)\b", re.IGNORECASE),
+    re.compile(r"\b(can|could|would)\s+you\s+(please\s+)?(switch|change|set|use)\b", re.IGNORECASE),
 )
 
 _CLAUDE_HINTS = ("claude", "anthropic", "opus", "sonnet", "haiku")

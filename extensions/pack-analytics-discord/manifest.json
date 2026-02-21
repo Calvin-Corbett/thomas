@@ -1,0 +1,14 @@
+{
+  "id": "pack-analytics-discord",
+  "name": "Analytics Discord Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "discord",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.discord",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via discord."
+}

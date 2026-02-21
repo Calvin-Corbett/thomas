@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-slack-remediate",
+  "name": "Security Slack Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "slack",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.slack",
+    "security.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via slack with remediate mode policies."
+}

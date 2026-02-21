@@ -1,6 +1,5 @@
 import asyncio
 import json
-import pytest
 
 from thomas.agent.swarm import SwarmConfig, SwarmOrchestrator, TaskResult, TaskStatus
 
@@ -29,29 +28,31 @@ class Reviewer:
         return TaskResult(ok=True, output="final")
 
 
-@pytest.mark.asyncio
-async def test_cancellation_marks_tasks_cancelled():
-    graph = {
-        "version": 1,
-        "goal": "test",
-        "summary": "",
-        "tasks": [
-            {"id": "A", "title": "A", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
-            {"id": "B", "title": "B", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
-        ],
-    }
+def test_cancellation_marks_tasks_cancelled():
+    async def _run() -> None:
+        graph = {
+            "version": 1,
+            "goal": "test",
+            "summary": "",
+            "tasks": [
+                {"id": "A", "title": "A", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
+                {"id": "B", "title": "B", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
+            ],
+        }
 
-    orch = SwarmOrchestrator(run_id="run_cancel", config=SwarmConfig(max_parallel_tasks=2))
-    subagents = {"planner": Planner(graph), "coder": SlowAgent("coder"), "reviewer": Reviewer()}
+        orch = SwarmOrchestrator(run_id="run_cancel", config=SwarmConfig(max_parallel_tasks=2))
+        subagents = {"planner": Planner(graph), "coder": SlowAgent("coder"), "reviewer": Reviewer()}
 
-    async def consume():
-        async for _ in orch.astream(user_request="x", subagents=subagents):
-            # cancel as soon as we see something running
-            if orch.task_status.get("A") == TaskStatus.RUNNING or orch.task_status.get("B") == TaskStatus.RUNNING:
-                orch.cancel()
+        async def consume():
+            async for _ in orch.astream(user_request="x", subagents=subagents):
+                # cancel as soon as we see something running
+                if orch.task_status.get("A") == TaskStatus.RUNNING or orch.task_status.get("B") == TaskStatus.RUNNING:
+                    orch.cancel()
 
-    await consume()
+        await consume()
 
-    assert orch._cancel.is_set()
-    assert orch.task_status["A"] in (TaskStatus.CANCELLED, TaskStatus.FAILED, TaskStatus.DONE)
-    assert orch.task_status["B"] in (TaskStatus.CANCELLED, TaskStatus.FAILED, TaskStatus.DONE)
+        assert orch._cancel.is_set()
+        assert orch.task_status["A"] in (TaskStatus.CANCELLED, TaskStatus.FAILED, TaskStatus.DONE)
+        assert orch.task_status["B"] in (TaskStatus.CANCELLED, TaskStatus.FAILED, TaskStatus.DONE)
+
+    asyncio.run(_run())

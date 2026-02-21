@@ -76,3 +76,50 @@ class TestEnvOverride(unittest.TestCase):
         errs = cfg.validate()
         self.assertTrue(any("server.rate_limit_max_requests must be >= 1" in e for e in errs))
         self.assertTrue(any("server.rate_limit_window_seconds must be >= 1" in e for e in errs))
+
+    def test_quality_section_override(self) -> None:
+        os.environ["THOMAS_QUALITY_ENABLED"] = "true"
+        os.environ["THOMAS_QUALITY_ENFORCE"] = "true"
+        os.environ["THOMAS_QUALITY_MAX_AUTO_RETRIES"] = "2"
+        os.environ["THOMAS_QUALITY_REQUIRE_VERIFICATION_FOR_CODING"] = "false"
+        os.environ["THOMAS_QUALITY_REQUIRE_TESTS_FOR_CODE_EDITS"] = "true"
+        os.environ["THOMAS_QUALITY_REQUIRE_MONOLITH_GUARD_FOR_CODING"] = "false"
+        cfg = load_config(Path("__does_not_exist__.toml"))
+        self.assertEqual(cfg.quality.enabled, True)
+        self.assertEqual(cfg.quality.enforce, True)
+        self.assertEqual(cfg.quality.max_auto_retries, 2)
+        self.assertEqual(cfg.quality.require_verification_for_coding, False)
+        self.assertEqual(cfg.quality.require_tests_for_code_edits, True)
+        self.assertEqual(cfg.quality.require_monolith_guard_for_coding, False)
+
+    def test_unknown_core_keys_are_reported(self) -> None:
+        cfg_path = Path("__tmp_bad_core_key__.toml")
+        try:
+            cfg_path.write_text(
+                "\n".join(
+                    [
+                        'default_model = "local"',
+                        "",
+                        "[models.local]",
+                        'model = "dummy"',
+                        "",
+                        "[server]",
+                        'access_mode = "local"',
+                        "rat_limit_enabled = true",
+                    ]
+                )
+                + "\n",
+                encoding="utf-8",
+            )
+            cfg = load_config(cfg_path)
+            errs = cfg.validate()
+            self.assertTrue(any("Unknown core config key 'server.rat_limit_enabled'" in e for e in errs))
+        finally:
+            if cfg_path.exists():
+                cfg_path.unlink()
+
+    def test_quality_retry_cap_validation(self) -> None:
+        os.environ["THOMAS_QUALITY_MAX_AUTO_RETRIES"] = "9"
+        cfg = load_config(Path("__does_not_exist__.toml"))
+        errs = cfg.validate()
+        self.assertTrue(any("quality.max_auto_retries must be <= 3" in e for e in errs))

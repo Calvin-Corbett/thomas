@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-discord-remediate",
+  "name": "Qa Discord Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "discord",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.discord",
+    "qa.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via discord with remediate mode policies."
+}

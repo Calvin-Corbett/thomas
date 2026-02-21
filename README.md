@@ -1,247 +1,204 @@
-# Thomas
+﻿## Start Here (Fresh Download)
 
-Autonomous AI execution platform for local and remote deployments, with:
-- Multi-provider LLM client (OpenAI-compatible + Anthropic)
-- Tool calling (fs/shell/git/search/diff)
-- Memory engine (event log + retrieval)
-- Intent routing flowchart (path-based mode/tool/memory policy per turn)
-- Terminal REPL and a lightweight web UI
+If this is your first time running Thomas on this machine, do this first:
 
-Product scope source of truth:
-- `docs/PROJECT_SCOPE.md`
+1. Run `run-ui.cmd`
+2. Wait for first-launch bootstrap to finish (dependencies + starter profile)
+3. Open `http://127.0.0.1:8899` if it does not open automatically
+4. Complete the in-app Onboarding Wizard (recommended path + interview)
 
-## Quick Start
+Optional advanced/manual setup: run `setup.cmd`.
+If setup breaks, run `repair.cmd` (or use `Auto Repair` in the onboarding wizard).
+Installer build docs: `docs/WINDOWS_INSTALLER_GUIDE.md`.
+Troubleshooting and model setup details are in `ONBOARDING.md`.
+Security policy: `SECURITY.md`.
+Gateway security runbook: `docs/ops/GATEWAY_SECURITY_RUNBOOK.md`.
+Retry guidance: `docs/ops/RETRY_POLICY.md`.
+Docker deploy: `docs/ops/DOCKER_DEPLOY.md`.
 
-Install (dev/editable):
+# Feature 2 â€” Full-Repo RAG Index (Delight Edition)
+## Repo Orientation
+
+For agent coordination and planning:
+- `docs/REPO_STRUCTURE_PROTOCOL.md` is the repository organization source of truth.
+- `plans/thomas/WORKBOARD.md` is the active execution board.
+- `plans/thomas/README.md` links current Thomas plans.
+- Active plans should be created in `plans/`, not randomly in `docs/` or repo root.
+- Enforced checks: `scripts/check_plan_structure_gate.py` and `scripts/check_release_update_gate.py`.
+- Local auto-enforcement available via `.pre-commit-config.yaml`.
+
+## Companion App Scope (Read Before Building Companion)
+
+Thomas companion is now scoped as an immutable-kernel + module platform.
+
+Source of truth:
+- `docs/COMPANION_PLATFORM_SCOPE.md`
+- `docs/COMPANION_APP_INTEGRATION.md`
+- `docs/COMPANION_BUILDER_RELEASE_GUIDE.md`
+- `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
+
+Minimum requirements (frozen for v0 handoff):
+1. Immutable host kernel boundary (modules cannot overwrite kernel paths).
+2. Versioned module contract (id/version/entrypoint/permissions/slots/ui schema).
+3. Signed update verification + rollback backups before module replacement.
+4. Tailscale-only remote control/update identity (localhost dev allowed).
+5. Permission allowlist enforcement for modules.
+6. Audit trail for verify/apply/update events and module provenance.
+
+Companion scaffold in repo:
+- `thomas/companion/`
+- `thomas companion init|status|module-list|verify-bundle|apply-bundle|write-template`
+- API scaffold for companion app integration:
+  - `GET /api/companion/v1/status`
+  - `GET /api/companion/v1/contract`
+  - `GET /api/companion/v1/studio/capabilities`
+  - `GET /api/companion/v1/policy/profiles`
+  - `GET /api/companion/v1/policy/profile/{profile_id}`
+  - `POST /api/companion/v1/compliance/check`
+  - `GET /api/companion/v1/bootstrap`
+  - `GET /api/companion/v1/modules`
+  - `GET /api/companion/v1/slots`
+  - `GET /api/companion/v1/slots/{slot}`
+  - `POST /api/companion/v1/modules/{module_id}/enable`
+  - `POST /api/companion/v1/modules/{module_id}/disable`
+  - `POST /api/companion/v1/studio/build-bundle`
+  - `POST /api/companion/v1/bundles/preview`
+  - `POST /api/companion/v1/bundles/verify`
+  - `POST /api/companion/v1/bundles/apply`
+  - `POST /api/companion/v1/ship`
+  - `GET /api/companion/v1/devices`
+  - `POST /api/companion/v1/devices/register`
+  - `POST /api/companion/v1/devices/{device_id}/heartbeat`
+  - `POST /api/companion/v1/devices/{device_id}/updates/check`
+  - `POST /api/companion/v1/devices/{device_id}/pin-release`
+  - `POST /api/companion/v1/devices/{device_id}/unpin-release`
+  - `GET /api/companion/v1/releases`
+  - `GET /api/companion/v1/releases/{release_id}`
+  - `GET /api/companion/v1/releases/{release_id}/manifest`
+  - `GET /api/companion/v1/releases/{release_id}/download`
+  - `POST /api/companion/v1/releases/publish`
+  - `POST /api/companion/v1/releases/{release_id}/rollout`
+  - `POST /api/companion/v1/releases/{release_id}/promote`
+  - `POST /api/companion/v1/releases/{release_id}/rollback`
+  - `GET /api/companion/v1/audit/events`
+- Companion Builder screen:
+  - `GET /companion`
+- App handoff contract doc:
+  - `docs/COMPANION_APP_INTEGRATION.md`
+- TypeScript SDK for companion app:
+  - `thomas/companion/sdk/typescript/`
+
+This zip adds:
+
+- `thomas/core/rag_index.py`
+- `thomas/tools/search_code.py`
+
+## Dependencies
+
+Semantic vector search:
+```bash
+pip install chromadb sentence-transformers
+```
+
+Lexical search:
+- Uses SQLite FTS5 (built into many Python sqlite builds)
+- If FTS5 isn't available, lexical search auto-disables.
+
+## Whatâ€™s meaningfully better (why users will love it)
+
+### Hybrid search (semantic + lexical)
+- Semantic search finds â€œmeaningâ€
+- Lexical search finds exact identifiers/strings
+- Results are fused via Reciprocal Rank Fusion (RRF) for best-of-both.
+
+### Query operators (inside the query string)
+No schema changes. Just write:
+- `path:thomas/tools ToolRegistry`
+- `file:rag_index.py build`
+- `ext:.py registry register`
+- `symbol:ToolRegistry kind:class`
+- `phrase:"ToolRegistry class"`
+- `regex:/rag\.search/`
+
+### Line-numbered previews
+search() returns snippets formatted with line numbers when it can read the file from disk,
+so results are immediately actionable.
+
+### Smarter chunking
+- Python: AST blocks (functions/classes) with symbol metadata
+- Markdown: heading blocks
+- Fallback: 400-token overlap chunks
+
+### Safe indexing
+- One background worker thread
+- Debounced updates
+- Incremental builds + deleted file pruning
+
+## Usage
+
+### Build (non-blocking)
+```python
+from thomas.core.rag_index import get_rag_index
+get_rag_index().build(r"f:\DevHub\Thomas")
+```
+
+### Update after file write (non-blocking)
+```python
+from thomas.core.rag_index import get_rag_index
+get_rag_index().update(path_to_written_file)
+```
+
+### Tool
+```python
+from thomas.tools.search_code import TOOL
+registry.register(TOOL)
+```
+
+Example calls:
+```json
+{"tool":"rag.search","args":{"query":"path:thomas/tools ToolRegistry register", "k":5}}
+```
+
+```json
+{"tool":"rag.search","args":{"query":"regex:/rag\\.search/", "k":5}}
+```
+
+## Doc Reliability Runner
+
+Run the "Doc" quality sweep (gates + critical protocol tests):
 
 ```bash
-python -m pip install -e ".[repl,server]"
+python scripts/doc.py
 ```
 
-Point Thomas at a local endpoint (Ollama example) via `thomas.toml`:
-- `base_url = "http://localhost:11434/v1"`
-- `model = "qwen2.5-coder:7b"`
-
-Run:
+Run with a full repository pytest pass after quick checks:
 
 ```bash
-thomas repl
-thomas chat "hello"
-thomas serve --port 8899
-python -m thomas.server --port 8899
+python scripts/doc.py --full
 ```
 
-Deployment modes:
-- Local mode (default): `server.access_mode = "local"` in `thomas.toml` (localhost-only API).
-- Remote mode: set
-  - `server.access_mode = "remote"`
-  - `server.api_token = "<strong-random-token>"`
-  - `server.rate_limit_enabled = true`, `server.rate_limit_max_requests = 120`, `server.rate_limit_window_seconds = 60`
-  - run server on a non-loopback host/port.
-- In remote mode, Web UI/API requests must send `Authorization: Bearer <token>` (or `X-Api-Token`).
-- Rate limits are in-memory and per token/IP as a baseline abuse guard; self-hosters can tune or disable.
-- Web UI can store token in browser Settings → About → `Server API token`, or via one-time `?token=<...>` URL param.
+## Auto Checks
 
-Easiest (Windows): double-click `run-ui.cmd`
-Easiest (Windows REPL): double-click `run-repl.cmd`
-- `run-ui.ps1` now keeps a fixed port by default (no silent port hopping). Use `-AutoPort` only when you explicitly want fallback ports.
-- Web chat history is persisted on the server (`runtime/.thomas/chats`) so different browsers/devices pointed at the same Thomas server see the same chats.
-
-Cloud API keys (web UI):
-- Open Settings, then `Providers & API Keys`, and set the key for the profile you want (OpenAI, Anthropic, etc).
-- Keys are stored locally by the server (Windows: DPAPI encrypted) and are not written to `thomas.toml`.
-
-Web UI model switching:
-- Click the model indicator in the top bar, or type `/model` in the message box and press Enter.
-
-Web UI live work + concurrent runs:
-- Thomas now shows in-message live work updates (`routing`, `iteration`, `tool` steps) while a run is still in progress.
-- You can submit another prompt while streaming to start a background run immediately (up to a safe concurrent limit).
-- Inspector now includes a `Jobs` tab to monitor, stop, and jump to running/completed jobs.
-- Header now includes a live `jobs` counter button that opens Inspector `Jobs`.
-- In-progress assistant messages use a compact animated `Working...` card by default; expand the arrow to view detailed live steps.
-
-Live browser smoke (visible typing in your browser):
-- `thomas live-browser-smoke` drives a real Chrome/Edge window via CDP, types into the Thomas composer, clicks send, and verifies reply text.
-- Default expectation: assistant reply contains `LIVE_BROWSER_SMOKE_OK`.
-- Example:
-  - `thomas live-browser-smoke --url http://127.0.0.1:8899/ --cdp-url http://127.0.0.1:9222 --show-driver-logs`
-- If you want to reuse an already-open browser profile, launch browser with CDP first:
-  - `chrome --remote-debugging-port=9222 --remote-allow-origins=* --new-window "http://127.0.0.1:8899/"`
-
-Swarm Mode (local bots / multi-agent):
-- Use the `swarm` mode toggle in the header to run planner/coder/tester/reviewer subagents in parallel.
-- Open `Agents → Swarm Board` in the sidebar to watch the task graph, agent logs, and tool timeline live.
-- Swarm uses the current profile/model, so pick a local profile to keep it fully local.
-
-PowerShell one-liner (cd + activate venv + run UI):
-
-```powershell
-Set-Location F:\DevHub\Thomas; .\.venv\Scripts\Activate.ps1; python -m thomas.server --port 8899
-```
-
-cmd.exe one-liner (cd + activate venv + run UI):
-
-```bat
-cd /d F:\DevHub\Thomas && .venv\Scripts\activate && python -m thomas.server --port 8899
-```
-
-Model helpers:
+Run one command for syntax/lint + gates + full tests:
 
 ```bash
-thomas models list
-thomas models discover -m local
-thomas models validate --model openai --strict
-thomas models pull qwen2.5-coder:7b --set
+python scripts/auto_checks.py
 ```
 
-Model onboarding protocol:
-- Follow `docs/MODEL_ONBOARDING_PROTOCOL.md` for any new/changed model profile.
-- Required validation gate: `thomas models validate --strict`
-- Required onboarding evidence log: `docs/MODEL_ONBOARDING_LOG.md`
-
-Robustness gates (CI + local):
-- `python scripts/check_model_onboarding_gate.py`
-- `python scripts/check_surface_parity.py`
-- Surface parity policy: `docs/SURFACE_PARITY_PROTOCOL.md`
-
-Telegram bot integration (optional):
+Run only fast static checks locally:
 
 ```bash
-python -m pip install -e ".[telegram]"
-set THOMAS_TELEGRAM_BOT_TOKEN=123456:ABCDEF...
-thomas telegram run --model codex
+python scripts/auto_checks.py --quick
 ```
+## Rules Of The Road Quality Gate
 
-Behavior by default:
-- Isolated memory per chat (`telegram:<chat_id>` threads) to avoid cross-chat drift.
-- Per-chat conversation state persisted on disk at `runtime/.thomas/telegram_sessions.json`.
-- Memory retrieval is thread-scoped for episodic chat history, with optional curated global context (facts + profile hints) for cross-channel continuity.
+Thomas now enforces per-job completion checks before finalizing tasks:
 
-Optional allowlist (recommended):
-- `THOMAS_TELEGRAM_ALLOWED_CHAT_IDS=123456789,987654321`
-- Or pass repeatable CLI flags: `thomas telegram run --allow-chat 123456789`
+- `coding`, `config`, `planning`, `research`, `video_design`, `general`
+- attaches a rules report in run output: `token_report.rules_of_road`
+- when `[quality].enforce = true`, Thomas auto-retries failed required checks
+  up to `[quality].max_auto_retries`
 
-Optional runtime controls:
-- `thomas telegram run --shared-memory` (single memory thread across all chats)
-- `thomas telegram run --chat-memories-only` (disable global facts/profile and keep retrieval fully thread-local)
-- `thomas telegram run --no-profile-memory` (keep global facts but skip profile hints)
-- `thomas telegram run --sessions-file C:\path\telegram_sessions.json`
-- `thomas telegram run --no-session-persist`
-- Env override for session path: `THOMAS_TELEGRAM_SESSIONS_FILE=...`
+See `docs/RULES_OF_THE_ROAD_PROTOCOL.md`.
 
-Troubleshooting:
 
-```bash
-thomas doctor
-```
-
-Autonomy (jobs, reminders, daily briefing):
-- Enable the background engine: `THOMAS_AUTONOMY_ENABLED=1`
-- Optional API token (for non-local access): `THOMAS_AUTONOMY_TOKEN=...`
-- Open the UI at `http://127.0.0.1:8899/autonomy` or use `Agents → Autonomy Jobs`.
-- Built-in job kinds: `reminder`, `daily_briefing`, `autonomy_task`
-- On first run, a Daily Briefing job is auto-seeded at `08:00 America/Chicago` if none exists.
-
-Research library (durable long-form knowledge, separate from chat memory):
-
-```bash
-thomas library where
-thomas library list --query "retry patterns"
-thomas library add --title "HTTP retry notes" --category research --source "https://example.com" --content-file notes.md
-thomas library show <entry_id>
-thomas library reindex
-thomas library curate
-```
-
-Behavior:
-- Library entries live in `library/` with:
-  - `library/catalog.json` (machine index)
-  - `library/INDEX.md` (table of contents)
-  - `library/entries/<category>/*.md` (documents)
-- Research-path turns can pull relevant library context automatically.
-- Research-path outputs can auto-capture into the library (deduped by fingerprint).
-- Background curator promotes stable chat/library knowledge into durable memory facts/hints.
-- Inspector Memory tab now includes an open-contradictions queue with resolve actions.
-
-## Configuration
-
-Main config file: `thomas.toml`
-
-Env overrides use this pattern (underscores in keys are supported):
-- `THOMAS_DEFAULT_MODEL=openai`
-- `THOMAS_MODELS_OPENAI_API_KEY=...`
-- `THOMAS_MODELS_LOCAL_BASE_URL=http://127.0.0.1:11434/v1`
-- `THOMAS_TOOLS_ALLOW_SHELL=1` (execute-first setup/integration actions)
-- `THOMAS_LIBRARY_ENABLED=1`
-- `THOMAS_LIBRARY_AUTO_CAPTURE_RESEARCH=1`
-- `THOMAS_MEMORY_CURATOR_ENABLED=1`
-- `THOMAS_MEMORY_CURATOR_MIN_INTERVAL_SECONDS=180`
-- `THOMAS_FAILOVER_ENABLED=1`
-- `THOMAS_FAILOVER_PROFILES=openai,anthropic,local`
-
-## Agent Notes (Important)
-
-This project is an orchestrator with multiple interacting subsystems (agent loop, LLM client, tools, memory, server/UI).
-
-If you are an AI agent (or a human) making changes and you are not 100% sure about the impact:
-- Review the whole codebase (or at minimum the full call path across modules you are touching).
-- Do not assume behavior based on a single file. Missing cross-module context can cause subtle breakages.
-
-Startup guidance resolution (for predictable behavior):
-- Thomas compacts local guidance in this order:
-  - `AGENTS.md`
-  - `IDENTITY.md`
-  - `USER.md`
-  - `SOUL.md`
-  - `definitions/autopoietic.md`
-  - `definitions/change-classification.md`
-  - `docs/ROUTING_FLOWCHART.md`
-  - `README.md` (fallback only when higher-priority guidance is unavailable)
-- Missing files are skipped silently.
-- Run `thomas doctor` to see exactly which guidance files were found and used.
-
-## Versioning And Changelog (Required)
-
-All user-facing or behavioral changes must include:
-- A version bump.
-  - `pyproject.toml`
-  - `thomas/__init__.py`
-- A new entry in `CHANGELOG.md` describing what changed and why, in a user-readable format.
-
-## Autopoietic (Level 5) And Doppelganger Protocol
-
-Thomas is intended to evolve over time (including code pruning), without turning into a fragile jungle.
-
-Definitions:
-- `SOUL.md`
-- `definitions/`
-
-Doppelganger (blue/green) commands:
-
-```bash
-thomas doppelganger status
-thomas doppelganger sync
-thomas doppelganger test
-thomas doppelganger serve-green --port 8902
-thomas doppelganger promote
-thomas doppelganger rollback
-```
-
-Notes:
-- Green uses an isolated runtime root (no real memory, no real secrets).
-- `promote` creates a backup snapshot before syncing Green into Blue.
-
-## Notes
-
-This repo also contains an older/parallel runtime under `agent_vf/` and `agent_memory/`.
-If you still want to run it:
-
-```bash
-python -m agent_vf.cli chat --root ./runtime --text "hello"
-```
-
-Routing policy reference:
-- `docs/ROUTING_FLOWCHART.md`
-- `docs/LIBRARY.md`
-- `docs/WEEKLY_DEEP_DIVE_PLAN.md`

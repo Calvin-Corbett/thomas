@@ -117,6 +117,35 @@ class ToolRegistry:
         cats = sorted(set(t.category for t in self._tools.values()))
         return cats
 
+    def search(self, query: str, limit: int = 10) -> List[Tool]:
+        """Search tools by semantic keyword overlap."""
+        if not query:
+            return []
+            
+        q_tokens = set(re.findall(r"\w+", query.lower()))
+        scores: List[tuple[float, Tool]] = []
+        
+        for tool in self._tools.values():
+            score = 0.0
+            # Exact name match (high)
+            if query.lower() in tool.name.lower():
+                score += 10.0
+            
+            # Token overlap
+            t_name_tokens = set(re.findall(r"\w+", tool.name.lower()))
+            score += len(q_tokens & t_name_tokens) * 3.0
+            
+            if tool.description:
+                t_desc_tokens = set(re.findall(r"\w+", tool.description.lower()))
+                score += len(q_tokens & t_desc_tokens) * 1.0
+            
+            if score > 0:
+                scores.append((score, tool))
+        
+        # Sort by score desc, then name
+        scores.sort(key=lambda x: (-x[0], x[1].name))
+        return [s[1] for s in scores[:limit]]
+
     def get_openai_specs(
         self, category: Optional[str] = None
     ) -> List[Dict[str, Any]]:

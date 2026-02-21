@@ -2,7 +2,111 @@
 
 Durable research/reference library for Thomas.
 
+## architecture
+- `1771373532-api-capability-onboarding-protocol`: API Capability Onboarding Protocol
+  - Summary: Required process for adding non-chat API capabilities (video, voice, batch, realtime, tools) with UI/CLI parity and tests.
+  - Source: docs/API_CAPABILITY_ONBOARDING_PROTOCOL.md
+  - Tags: protocol, onboarding, capabilities, parity, testing
+  - File: `entries/architecture/1771373532-api-capability-onboarding-protocol.md`
+- `1771373446-thomas-agent-integration-backlog-2026-02-18`: Thomas Agent Integration Backlog (2026-02-18)
+  - Summary: Agent families and provider adapter backlog to scale Thomas across all API capabilities.
+  - Source: Thomas architecture research synthesis
+  - Tags: agents, architecture, providers, roadmap, autonomy
+  - File: `entries/architecture/1771373446-thomas-agent-integration-backlog-2026-02-18.md`
+
+## provider-api-research
+- `1771373439-grok-xai-priority-pack-for-thomas-2026-02-18`: Grok/xAI Priority Pack for Thomas (2026-02-18)
+  - Summary: xAI-first implementation pack for chat/tools/batch/audio/image/video integration in Thomas.
+  - Source: Official xAI docs
+  - Tags: xai, grok, batch, video, audio, tools
+  - File: `entries/provider-api-research/1771373439-grok-xai-priority-pack-for-thomas-2026-02-18.md`
+- `1771373433-cloud-control-plane-api-matrix-2026-02-18`: Cloud Control-Plane API Matrix (2026-02-18)
+  - Summary: Cloud model control planes for routing, auth, tool calling, and batch operations.
+  - Source: Official docs (AWS Bedrock/Azure OpenAI/Google Vertex/OpenRouter)
+  - Tags: cloud, control-plane, routing, batch, auth, enterprise
+  - File: `entries/provider-api-research/1771373433-cloud-control-plane-api-matrix-2026-02-18.md`
+- `1771373424-media-api-capability-matrix-2026-02-18`: Media API Capability Matrix (2026-02-18)
+  - Summary: Video/image/voice/STT/TTS API coverage across first-party and specialist providers.
+  - Source: Official media/provider docs (xAI/OpenAI/Gemini/Runway/Pika/Stability/ElevenLabs/Deepgram/AssemblyAI/Replicate)
+  - Tags: media, video, image, voice, stt, tts, providers
+  - File: `entries/provider-api-research/1771373424-media-api-capability-matrix-2026-02-18.md`
+- `1771373416-core-ai-api-capability-matrix-2026-02-18`: Core AI API Capability Matrix (2026-02-18)
+  - Summary: Major AI model providers and feature coverage: chat, tools, realtime, batch, embeddings, fine-tuning, multimodal.
+  - Source: Official provider docs (xAI/OpenAI/Anthropic/Google/Mistral/Cohere/Groq/OpenRouter)
+  - Tags: providers, api, capabilities, batch, realtime, tools, multimodal
+  - File: `entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md`
+
 ## research-notes
+- `1771642591-my-settings-keep-resetting-every-restart.-where-should-i-look-first`: my settings keep resetting every restart. where should i look first?
+  - Summary: To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett
+  - Source: thomas:local
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771642591-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md`
+- `1771642499-my-settings-keep-resetting-every-restart.-where-should-i-look-first`: my settings keep resetting every restart. where should i look first?
+  - Summary: To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett
+  - Source: thomas:local
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771642499-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md`
+- `1771642416-my-settings-keep-resetting-every-restart.-where-should-i-look-first`: my settings keep resetting every restart. where should i look first?
+  - Summary: To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett
+  - Source: thomas:local
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771642416-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md`
+- `1771642015-my-settings-keep-resetting-every-restart.-where-should-i-look-first`: my settings keep resetting every restart. where should i look first?
+  - Summary: To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett
+  - Source: thomas:local
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771642015-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md`
+- `1771641689-my-settings-keep-resetting-every-restart.-where-should-i-look-first`: my settings keep resetting every restart. where should i look first?
+  - Summary: To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett
+  - Source: thomas:local
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771641689-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md`
+- `1771634972-voice-my-last-prompt-was-telling-you-to-go-do-research-and-be-better-at-being-an`: [VOICE] my last prompt was telling you to go do research and be better at being an assistant like you're right now you'r
+  - Summary: I’m taking this as a request to tune Thomas’s conversational behavior (less robotic, better social balance), add explicit handling for cues/keywords, set live testing as the default, and then run verification with visible live tests. I’ll start by reading the
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771634972-voice-my-last-prompt-was-telling-you-to-go-do-research-and-be-better-at-being-an.md`
+- `1771548050-you-re-not-supposed-to-stop-working-i-tried-to-implement-something-where-you-d-n`: you're not supposed to stop working I tried to implement something where you'd not do that you're supposed to finish you
+  - Summary: You're absolutely right. I apologize - I read the files but didn't complete the analysis and recommendations you asked for. Let me finish the task now.
+  - Source: thomas:anthropic
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771548050-you-re-not-supposed-to-stop-working-i-tried-to-implement-something-where-you-d-n.md`
+- `1771524761-what-did-yu-find`: what did yu find
+  - Summary: I found the **TTS (Text-to-Speech) implementation** in Thomas! Here's what I discovered: ## Key Findings **Location:** `thomas/server/web/js/chat.js` (lines 500-680) **How it works:** 1. **Uses browser's native Web Speech API** (`window.speechSynthesis` and `S
+  - Source: thomas:anthropic
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771524761-what-did-yu-find.md`
+- `1771518570-voice-okay-so-yeah-okay-i-want-that-to-be-a-feature-yeah-like-agent-door-and-spr`: VOICE] okay so yeah okay I want that to be a feature yeah like agent door and Sprite alerts but like so every like notif
+  - Summary: On it — writing all of this up now across multiple feature files.Let me inspect the actual codebase first so I build this in the right place.
+  - Source: thomas:anthropic
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771518570-voice-okay-so-yeah-okay-i-want-that-to-be-a-feature-yeah-like-agent-door-and-spr.md`
+- `1771456503-voice-no-man-just-go-in-there-and-look-in-there-and-tell-me-what-they-are-dude`: [VOICE] no man just go in there and look in there and tell me what they are dude
+  - Summary: Look at the config — all the `api_key` fields are empty: ```toml [models.openai] api_key = "" [models.anthropic] api_key = "" [models.xai] api_key = "" ``` The actual keys live in **environment variables**, not in the file. The config even says: ``` # Tip: env
+  - Source: thomas:glm
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771456503-voice-no-man-just-go-in-there-and-look-in-there-and-tell-me-what-they-are-dude.md`
+- `1771441942-also-anytime-i-say-the-word-i-m-not-going-to-say-it-because-anytime-i-say-it-if-`: also anytime I say the word I'm not going to say it because anytime I say it if you look in the chat you automatically l
+  - Summary: Got it – **full chat read, no ignores.** Trigger words (jailbreak/policy) get short decline *only* if criminal/jailbreak attempt. Otherwise: Acknowledge change + full response (e.g., "Config switched to X, now Y?"). **Examples fixed:** - "Hey change config" →
+  - Source: thomas:xai
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771441942-also-anytime-i-say-the-word-i-m-not-going-to-say-it-because-anytime-i-say-it-if-.md`
+- `1771428421-okay-are-you-able-to-like-search-things-and-click-on-anything-you-need-or-is-the`: okay are you able to like search things and click on anything you need or is there anything you can't do right now on th
+  - Summary: I can browse pretty actively: I can search the web, open pages, follow links, and pull info from sites. Current limits: - I can’t reliably do human-only interactions (CAPTCHAs, 2FA prompts, drag/drop-heavy UI). - Some pages behind strict logins/paywalls or ant
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771428421-okay-are-you-able-to-like-search-things-and-click-on-anything-you-need-or-is-the.md`
+- `1771428253-go-on-the-browser-and-search-hot-dog`: go on the browser and search hot dog
+  - Summary: Searching the web for `hot dog` now and I’ll share the top results.Searched for **“hot dog”**. Top results include: 1. Merriam-Webster definition: https://www.merriam-webster.com/dictionary/hot%20dog 2. Britannica overview: https://www.britannica.com/topic/hot
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771428253-go-on-the-browser-and-search-hot-dog.md`
+- `1771427835-you-dont-have-internet-search`: you dont have internet search?
+  - Summary: Correct—I don't have internet search capability. I can: - Read/write files in your workspace - Run shell commands (so I could `curl` an API or run a script) - Search code locally - Use git, run tests, install packages But I don't have a built-in web search or
+  - Source: thomas:anthropic
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771427835-you-dont-have-internet-search.md`
 - `1771370642-yah-man-cool-so-im-tryna-make-a-cool-like-way-to-yes-i-m-trying-to-make-a-cool-w`: yah man cool so im tryna make a cool like way to yes I'm trying to make a cool way to like look at my agents while they'
   - Summary: That's a sick idea honestly. Like a virtual office / workspace where each agent has their own little desk or station, you can peek in and see what they're doing in real-time, and they each have a little avatar/character. Low-fi aesthetic, not trying to be phot
   - Source: thomas:anthropic
@@ -44,4 +148,4 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md`
 
-_Total entries: 8_
+_Total entries: 28_

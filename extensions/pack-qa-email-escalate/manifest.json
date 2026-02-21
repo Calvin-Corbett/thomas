@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-email-escalate",
+  "name": "Qa Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.email",
+    "qa.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via email with escalate mode policies."
+}

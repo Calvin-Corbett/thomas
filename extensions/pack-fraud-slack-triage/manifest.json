@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-slack-triage",
+  "name": "Fraud Slack Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "slack",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.slack",
+    "fraud.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via slack with triage mode policies."
+}

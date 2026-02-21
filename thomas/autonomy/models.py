@@ -43,15 +43,14 @@ class RetryPolicy:
     backoff: float = 2.0  # exponential
 
     def compute_delay(self, attempt: int) -> float:
-        import secrets
+        import random
 
         # attempt starts at 1
         exp = self.base_delay_s * (self.backoff ** max(0, attempt - 1))
         exp = min(exp, self.max_delay_s)
         j = exp * self.jitter
         # uniform jitter in +/- range
-        unit = secrets.randbits(53) / float(1 << 53)
-        return max(0.0, exp + (j * (2.0 * unit - 1.0)))
+        return max(0.0, exp + (j * (2.0 * random.random() - 1.0)))
 
 
 @dataclass

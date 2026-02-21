@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Thomas Run Replay Debugger</title>
+  <link rel="stylesheet" href="/css/replay_debugger.css"/>
+</head>
+<body>
+  <div class="topbar">
+    <div class="brand">
+      <div class="logo">T</div>
+      <div>
+        <div class="title">Run Replay Debugger</div>
+        <div class="subtitle" id="subtitle">loading…</div>
+      </div>
+    </div>
+    <div class="actions">
+      <label class="inline">
+        speed
+        <select id="speed">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="0">max</option>
+        </select>
+      </label>
+      <button id="play">play</button>
+      <button id="pause" disabled>pause</button>
+      <button id="stepBack">step -1</button>
+      <button id="stepFwd">step +1</button>
+      <button id="exportJson">export json</button>
+    </div>
+  </div>
+
+  <div class="layout">
+    <div class="left">
+      <div class="panel">
+        <div class="panelTitle">Filters</div>
+        <div id="filters" class="filters"></div>
+        <div class="searchRow">
+          <input id="search" placeholder="search event_type or payload text"/>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panelTitle">Timeline</div>
+        <input id="scrubber" type="range" min="0" max="0" value="0"/>
+        <div class="scrubMeta">
+          <div>index <span id="idx">0</span> / <span id="total">0</span></div>
+          <div>type <span id="etype">-</span></div>
+          <div>t_ms <span id="tms">-</span></div>
+        </div>
+      </div>
+
+      <div class="panel">
+        <div class="panelTitle">Events</div>
+        <div id="eventList" class="eventList"></div>
+      </div>
+    </div>
+
+    <div class="right">
+      <div class="panel">
+        <div class="panelTitle">Event Detail</div>
+        <pre id="detail" class="detail"></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/replay_debugger.js"></script>
+</body>
+</html>

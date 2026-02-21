@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-slack-prevent",
+  "name": "Support Slack Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "slack",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.slack",
+    "support.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via slack with prevent mode policies."
+}

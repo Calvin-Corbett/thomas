@@ -1,6 +1,5 @@
 import asyncio
 import json
-import pytest
 
 from thomas.agent.swarm import SwarmConfig, SwarmOrchestrator, TaskResult
 
@@ -27,28 +26,30 @@ class Reviewer:
         return TaskResult(ok=True, output="final")
 
 
-@pytest.mark.asyncio
-async def test_event_shape_includes_required_fields():
-    graph = {
-        "version": 1,
-        "goal": "test",
-        "summary": "",
-        "tasks": [
-            {"id": "A", "title": "A", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
-        ],
-    }
-    orch = SwarmOrchestrator(run_id="run_shape", config=SwarmConfig(max_parallel_tasks=1))
-    subagents = {"planner": Planner(graph), "coder": Agent("coder"), "reviewer": Reviewer()}
+def test_event_shape_includes_required_fields():
+    async def _run() -> None:
+        graph = {
+            "version": 1,
+            "goal": "test",
+            "summary": "",
+            "tasks": [
+                {"id": "A", "title": "A", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
+            ],
+        }
+        orch = SwarmOrchestrator(run_id="run_shape", config=SwarmConfig(max_parallel_tasks=1))
+        subagents = {"planner": Planner(graph), "coder": Agent("coder"), "reviewer": Reviewer()}
 
-    events = []
-    async for e in orch.astream(user_request="x", subagents=subagents):
-        events.append(e)
+        events = []
+        async for e in orch.astream(user_request="x", subagents=subagents):
+            events.append(e)
 
-    assert events
-    for e in events:
-        assert isinstance(e.get("type"), str)
-        assert e.get("run_id") == "run_shape"
-        assert isinstance(e.get("agent_id"), str) and e["agent_id"]
-        assert isinstance(e.get("task_id"), str) and e["task_id"]
-        assert isinstance(e.get("seq"), int) and e["seq"] >= 1
-        assert isinstance(e.get("ts"), str) and e["ts"]
+        assert events
+        for e in events:
+            assert isinstance(e.get("type"), str)
+            assert e.get("run_id") == "run_shape"
+            assert isinstance(e.get("agent_id"), str) and e["agent_id"]
+            assert isinstance(e.get("task_id"), str) and e["task_id"]
+            assert isinstance(e.get("seq"), int) and e["seq"] >= 1
+            assert isinstance(e.get("ts"), str) and e["ts"]
+
+    asyncio.run(_run())

@@ -1,0 +1,36 @@
+{
+    "id":  "v0",
+    "name":  "v0",
+    "vendor":  "Vercel",
+    "category":  "app_builder_agent",
+    "surfaces":  [
+                     "web",
+                     "api"
+                 ],
+    "live_streaming":  "yes",
+    "settings_depth":  "medium",
+    "benchmark_mode":  "api_scriptable",
+    "key_strengths":  [
+                          "Prompt-driven UI/app generation",
+                          "Strong web app builder UX",
+                          "MCP adapter documentation"
+                      ],
+    "source_urls":  [
+                        "https://v0.app/docs/api",
+                        "https://v0.app/docs/api/platform/adapters/mcp-server"
+                    ],
+    "confidence":  "high",
+    "notes":  "Primary Vercel-side benchmark for agentic app generation.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  3,
+                                      "ux.live_streaming":  5,
+                                      "ux.settings_depth":  3,
+                                      "autonomy.supervision_modes":  2,
+                                      "integration.mcp_support":  4,
+                                      "integration.git_pr_workflows":  1,
+                                      "platform.self_hostability":  2,
+                                      "composite.provisional_mean":  2.86
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

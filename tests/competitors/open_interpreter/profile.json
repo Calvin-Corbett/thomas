@@ -1,0 +1,36 @@
+{
+    "id":  "open_interpreter",
+    "name":  "Open Interpreter",
+    "vendor":  "Open Interpreter",
+    "category":  "open_source_agent",
+    "surfaces":  [
+                     "cli",
+                     "desktop"
+                 ],
+    "live_streaming":  "partial",
+    "settings_depth":  "medium",
+    "benchmark_mode":  "cli_scriptable",
+    "key_strengths":  [
+                          "Computer automation orientation",
+                          "Local execution flexibility",
+                          "Open source extensibility"
+                      ],
+    "source_urls":  [
+                        "https://docs.openinterpreter.com/getting-started/setup",
+                        "https://www.openinterpreter.com/"
+                    ],
+    "confidence":  "high",
+    "notes":  "Already part of Thomas comparison suite.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  3,
+                                      "ux.live_streaming":  3,
+                                      "ux.settings_depth":  3,
+                                      "autonomy.supervision_modes":  4,
+                                      "integration.mcp_support":  3,
+                                      "integration.git_pr_workflows":  4,
+                                      "platform.self_hostability":  4,
+                                      "composite.provisional_mean":  3.43
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

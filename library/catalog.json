@@ -144,6 +144,384 @@
       "fingerprint": "ca7b4ab91fd730aced212568fde80c04b603c5c38790ef0c356ba038f9236f95",
       "query": "yah man cool so im tryna make a cool like way to yes I'm trying to make a cool way to like look at my agents while they're working kind of like those virtual workspaces you know what I'm talking about I think we should like playing one of those and when you spend up agents and stuff I can like look at the workspace or like whatever it's called you know and I can just see them working like in their little office and they can like customize it and like they have a little digital character thing it is not to be like super high fidelity Graphics you know but I think it'd be really cool to implement what do you think",
       "auto_captured": true
+    },
+    {
+      "id": "1771373416-core-ai-api-capability-matrix-2026-02-18",
+      "title": "Core AI API Capability Matrix (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "Major AI model providers and feature coverage: chat, tools, realtime, batch, embeddings, fine-tuning, multimodal.",
+      "source": "Official provider docs (xAI/OpenAI/Anthropic/Google/Mistral/Cohere/Groq/OpenRouter)",
+      "tags": [
+        "providers",
+        "api",
+        "capabilities",
+        "batch",
+        "realtime",
+        "tools",
+        "multimodal"
+      ],
+      "path": "entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md",
+      "created_ts_utc": 1771373416,
+      "updated_ts_utc": 1771373416,
+      "fingerprint": "a00e6acff54460248adbdd2e088281c9e7546398b59762081811aaefe2eaf8cf",
+      "query": "all major ai provider apis and features",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373424-media-api-capability-matrix-2026-02-18",
+      "title": "Media API Capability Matrix (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "Video/image/voice/STT/TTS API coverage across first-party and specialist providers.",
+      "source": "Official media/provider docs (xAI/OpenAI/Gemini/Runway/Pika/Stability/ElevenLabs/Deepgram/AssemblyAI/Replicate)",
+      "tags": [
+        "media",
+        "video",
+        "image",
+        "voice",
+        "stt",
+        "tts",
+        "providers"
+      ],
+      "path": "entries/provider-api-research/1771373424-media-api-capability-matrix-2026-02-18.md",
+      "created_ts_utc": 1771373424,
+      "updated_ts_utc": 1771373424,
+      "fingerprint": "7562133cc7141b6af26f10d0a7e39379bf3fd0c0d54af3b09e7a3d7c171a0404",
+      "query": "video voice stt tts api providers",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373433-cloud-control-plane-api-matrix-2026-02-18",
+      "title": "Cloud Control-Plane API Matrix (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "Cloud model control planes for routing, auth, tool calling, and batch operations.",
+      "source": "Official docs (AWS Bedrock/Azure OpenAI/Google Vertex/OpenRouter)",
+      "tags": [
+        "cloud",
+        "control-plane",
+        "routing",
+        "batch",
+        "auth",
+        "enterprise"
+      ],
+      "path": "entries/provider-api-research/1771373433-cloud-control-plane-api-matrix-2026-02-18.md",
+      "created_ts_utc": 1771373433,
+      "updated_ts_utc": 1771373433,
+      "fingerprint": "a2bd9ed6c99d783030383e4988e0fdf185fa452a80aa559f87272404ca8238b6",
+      "query": "cloud control plane ai api routing tools batch",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373439-grok-xai-priority-pack-for-thomas-2026-02-18",
+      "title": "Grok/xAI Priority Pack for Thomas (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "xAI-first implementation pack for chat/tools/batch/audio/image/video integration in Thomas.",
+      "source": "Official xAI docs",
+      "tags": [
+        "xai",
+        "grok",
+        "batch",
+        "video",
+        "audio",
+        "tools"
+      ],
+      "path": "entries/provider-api-research/1771373439-grok-xai-priority-pack-for-thomas-2026-02-18.md",
+      "created_ts_utc": 1771373439,
+      "updated_ts_utc": 1771373439,
+      "fingerprint": "0a8b318391922902312da17acad83edb4ea876d63ffaa5db9961b4401758f519",
+      "query": "grok pipeline docs and batch mode for long horizon tasks",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373446-thomas-agent-integration-backlog-2026-02-18",
+      "title": "Thomas Agent Integration Backlog (2026-02-18)",
+      "category": "architecture",
+      "summary": "Agent families and provider adapter backlog to scale Thomas across all API capabilities.",
+      "source": "Thomas architecture research synthesis",
+      "tags": [
+        "agents",
+        "architecture",
+        "providers",
+        "roadmap",
+        "autonomy"
+      ],
+      "path": "entries/architecture/1771373446-thomas-agent-integration-backlog-2026-02-18.md",
+      "created_ts_utc": 1771373446,
+      "updated_ts_utc": 1771373446,
+      "fingerprint": "9b1e60f1e0277ba4bf5c1ac8ed0965ec92c5bb0450877131f81b215efe687132",
+      "query": "make all the agents for api features video voice and beyond",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373532-api-capability-onboarding-protocol",
+      "title": "API Capability Onboarding Protocol",
+      "category": "architecture",
+      "summary": "Required process for adding non-chat API capabilities (video, voice, batch, realtime, tools) with UI/CLI parity and tests.",
+      "source": "docs/API_CAPABILITY_ONBOARDING_PROTOCOL.md",
+      "tags": [
+        "protocol",
+        "onboarding",
+        "capabilities",
+        "parity",
+        "testing"
+      ],
+      "path": "entries/architecture/1771373532-api-capability-onboarding-protocol.md",
+      "created_ts_utc": 1771373532,
+      "updated_ts_utc": 1771373532,
+      "fingerprint": "60b45d0ff81018b3ee6c3ec770d22d798713c6938cab94343a88e180cbaf3965",
+      "query": "robust protocol for adding api capabilities",
+      "auto_captured": false
+    },
+    {
+      "id": "1771427835-you-dont-have-internet-search",
+      "title": "you dont have internet search?",
+      "category": "research-notes",
+      "summary": "Correct—I don't have internet search capability. I can: - Read/write files in your workspace - Run shell commands (so I could `curl` an API or run a script) - Search code locally - Use git, run tests, install packages But I don't have a built-in web search or",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771427835-you-dont-have-internet-search.md",
+      "created_ts_utc": 1771427835,
+      "updated_ts_utc": 1771427835,
+      "fingerprint": "e4513498e656c09c9cb0f78be13e718d84681f470ab47bb083944e9df37ac453",
+      "query": "you dont have internet search?",
+      "auto_captured": true
+    },
+    {
+      "id": "1771428253-go-on-the-browser-and-search-hot-dog",
+      "title": "go on the browser and search hot dog",
+      "category": "research-notes",
+      "summary": "Searching the web for `hot dog` now and I’ll share the top results.Searched for **“hot dog”**. Top results include: 1. Merriam-Webster definition: https://www.merriam-webster.com/dictionary/hot%20dog 2. Britannica overview: https://www.britannica.com/topic/hot",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771428253-go-on-the-browser-and-search-hot-dog.md",
+      "created_ts_utc": 1771428253,
+      "updated_ts_utc": 1771428253,
+      "fingerprint": "6f2d3f22977102f853b14f53aa12f534be631aa480aa5dcca0cd825a3eb3a0d0",
+      "query": "go on the browser and search hot dog",
+      "auto_captured": true
+    },
+    {
+      "id": "1771428421-okay-are-you-able-to-like-search-things-and-click-on-anything-you-need-or-is-the",
+      "title": "okay are you able to like search things and click on anything you need or is there anything you can't do right now on th",
+      "category": "research-notes",
+      "summary": "I can browse pretty actively: I can search the web, open pages, follow links, and pull info from sites. Current limits: - I can’t reliably do human-only interactions (CAPTCHAs, 2FA prompts, drag/drop-heavy UI). - Some pages behind strict logins/paywalls or ant",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771428421-okay-are-you-able-to-like-search-things-and-click-on-anything-you-need-or-is-the.md",
+      "created_ts_utc": 1771428421,
+      "updated_ts_utc": 1771428421,
+      "fingerprint": "c3c1bc65031ea7a4631d6eb76a048c2720801f366a485741629cb1f7d7877be5",
+      "query": "okay are you able to like search things and click on anything you need or is there anything you can't do right now on the browser",
+      "auto_captured": true
+    },
+    {
+      "id": "1771441942-also-anytime-i-say-the-word-i-m-not-going-to-say-it-because-anytime-i-say-it-if-",
+      "title": "also anytime I say the word I'm not going to say it because anytime I say it if you look in the chat you automatically l",
+      "category": "research-notes",
+      "summary": "Got it – **full chat read, no ignores.** Trigger words (jailbreak/policy) get short decline *only* if criminal/jailbreak attempt. Otherwise: Acknowledge change + full response (e.g., \"Config switched to X, now Y?\"). **Examples fixed:** - \"Hey change config\" →",
+      "source": "thomas:xai",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771441942-also-anytime-i-say-the-word-i-m-not-going-to-say-it-because-anytime-i-say-it-if-.md",
+      "created_ts_utc": 1771441942,
+      "updated_ts_utc": 1771441942,
+      "fingerprint": "7a6d41d2e36617e8e424bd52bc3e8a9e8e7b4d0e995cc942bd4b0b5516420a04",
+      "query": "also anytime I say the word I'm not going to say it because anytime I say it if you look in the chat you automatically like see the word and then you're just like oh and you don't do anything else I say that needs to be changed if you see me say hey change into a different thing like a different configuration in the settings that doesn't mean you just ignore everything else I say like read this chat you see how you did that to me we don't need that you can you can say okay I changed this and and respond to me there's no reason that you just have to like ignore everything I say",
+      "auto_captured": true
+    },
+    {
+      "id": "1771456503-voice-no-man-just-go-in-there-and-look-in-there-and-tell-me-what-they-are-dude",
+      "title": "[VOICE] no man just go in there and look in there and tell me what they are dude",
+      "category": "research-notes",
+      "summary": "Look at the config — all the `api_key` fields are empty: ```toml [models.openai] api_key = \"\" [models.anthropic] api_key = \"\" [models.xai] api_key = \"\" ``` The actual keys live in **environment variables**, not in the file. The config even says: ``` # Tip: env",
+      "source": "thomas:glm",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771456503-voice-no-man-just-go-in-there-and-look-in-there-and-tell-me-what-they-are-dude.md",
+      "created_ts_utc": 1771456503,
+      "updated_ts_utc": 1771456503,
+      "fingerprint": "e3fb8a1010ace1cf219d437a9d1529d2156f2ad641c4cf9728368d204f2f5c8a",
+      "query": "[VOICE] no man just go in there and look in there and tell me what they are dude",
+      "auto_captured": true
+    },
+    {
+      "id": "1771518570-voice-okay-so-yeah-okay-i-want-that-to-be-a-feature-yeah-like-agent-door-and-spr",
+      "title": "VOICE] okay so yeah okay I want that to be a feature yeah like agent door and Sprite alerts but like so every like notif",
+      "category": "research-notes",
+      "summary": "On it — writing all of this up now across multiple feature files.Let me inspect the actual codebase first so I build this in the right place.",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771518570-voice-okay-so-yeah-okay-i-want-that-to-be-a-feature-yeah-like-agent-door-and-spr.md",
+      "created_ts_utc": 1771518570,
+      "updated_ts_utc": 1771518570,
+      "fingerprint": "bffbfa4fe880a84f91426fc3177d456490d298a56a1b4db56e24f12f8b380e6d",
+      "query": "VOICE] okay so yeah okay I want that to be a feature yeah like agent door and Sprite alerts but like so every like notification it would just be like a little sprite like balances it'll be a little cute and people are going to like it and be bouncing around but you know like pop up like a little text like say like hey Calvin this just happened blah blah blah blah blah blah and then like click me to take action or click or click me to go there to go there now and then like you click him and then like he grabs your mouth like I say like I don't know if it's possible but imagine he could grab when you click on them your mouse pauses right there and does like I end up just like even though your mouth isn't like disappeared but like you click on them and then he like he he all of a sudden grabs like a mouse pointer thing and starts walking back and takes you through the door so it's like he took your mouth and he's taking you and then after he gets to the door it takes you whatever page he wants to show you like the mission control center which the mission control center needs to also needs to be revamped I don't even know if I want to call it that but like I want it to be a Virtual Office Space where these little Sprites can like walk around and little hop around and they had little names and stuff like above them maybe their their name pops up you know and you can click on them to get more details about their name or individually interact with they're just the agents you know so I think that would be really cool so I want you to do some like research on how to make virtual offices and maybe there's some pre-made ones like so far like what what mission control is like the UI and everything's super ugly and messed up it has repetitive stuff I don't even know if I want to call it Mission Control you know maybe I want to coin my own word cuz this is like I'm making this fun for consumers they want to use this and stuff you know and you know I think that would be really",
+      "auto_captured": true
+    },
+    {
+      "id": "1771524761-what-did-yu-find",
+      "title": "what did yu find",
+      "category": "research-notes",
+      "summary": "I found the **TTS (Text-to-Speech) implementation** in Thomas! Here's what I discovered: ## Key Findings **Location:** `thomas/server/web/js/chat.js` (lines 500-680) **How it works:** 1. **Uses browser's native Web Speech API** (`window.speechSynthesis` and `S",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771524761-what-did-yu-find.md",
+      "created_ts_utc": 1771524761,
+      "updated_ts_utc": 1771524761,
+      "fingerprint": "23ed2be328bbeade8e1d79552c6f80da04c8bad5e6a1a42901baf1dddea22b50",
+      "query": "what did yu find",
+      "auto_captured": true
+    },
+    {
+      "id": "1771548050-you-re-not-supposed-to-stop-working-i-tried-to-implement-something-where-you-d-n",
+      "title": "you're not supposed to stop working I tried to implement something where you'd not do that you're supposed to finish you",
+      "category": "research-notes",
+      "summary": "You're absolutely right. I apologize - I read the files but didn't complete the analysis and recommendations you asked for. Let me finish the task now.",
+      "source": "thomas:anthropic",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771548050-you-re-not-supposed-to-stop-working-i-tried-to-implement-something-where-you-d-n.md",
+      "created_ts_utc": 1771548050,
+      "updated_ts_utc": 1771548050,
+      "fingerprint": "0a01f9cff8015757b3239348f423838715198b0730326eea5ced354f7142a055",
+      "query": "you're not supposed to stop working I tried to implement something where you'd not do that you're supposed to finish your entire task and let me know so if you read through the chat all you told me was let me search and find key files you didn't finish your task so that is an issue and we need to resolve them",
+      "auto_captured": true
+    },
+    {
+      "id": "1771634972-voice-my-last-prompt-was-telling-you-to-go-do-research-and-be-better-at-being-an",
+      "title": "[VOICE] my last prompt was telling you to go do research and be better at being an assistant like you're right now you'r",
+      "category": "research-notes",
+      "summary": "I’m taking this as a request to tune Thomas’s conversational behavior (less robotic, better social balance), add explicit handling for cues/keywords, set live testing as the default, and then run verification with visible live tests. I’ll start by reading the",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771634972-voice-my-last-prompt-was-telling-you-to-go-do-research-and-be-better-at-being-an.md",
+      "created_ts_utc": 1771634972,
+      "updated_ts_utc": 1771634972,
+      "fingerprint": "8fb672e7e0e9cf600d0bf1b134457b9f916435b88fcc4396023da9cb93e9e564",
+      "query": "[VOICE] my last prompt was telling you to go do research and be better at being an assistant like you're right now you're really smart and you have all this stuff set up but you don't have person skills like there needs to be a lot more put into how you how you decide how to talk to us like a way more complicated stuff that utilizes my computer on my computer or whatever because you know like a robot like read this chat like you're not if you're going to read this like normally and they'll have no balance and instructions you'd be like oh I sound really stupid right now you know so you need to take some pointers from open claw and animal claw whatever thing is out there you need to research and see how to bet anything that you might have to add like a lot of stuff like a lot of keywords like oh he says this that means that like maybe you need that I don't know I don't want you to like make it just token hell but like open clock and talk a lot better like an assistant and you're talking like a robot who's like I say one thing you tweak out you know you need to review all this Behavior stuff and make sure that it's fine tuned and then test it you need to test it at the end of this you need to open up another Thomas browser and when you do these tests I want them to be Live Test default and to doing Live Test when you're testing yourself that way I can see what you're doing only do Shadow test when it's something else or otherwise stated you know like there's an option I want live test by default okay that means life means I can actually see the browser open and see you do it",
+      "auto_captured": true
+    },
+    {
+      "id": "1771641689-my-settings-keep-resetting-every-restart.-where-should-i-look-first",
+      "title": "my settings keep resetting every restart. where should i look first?",
+      "category": "research-notes",
+      "summary": "To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett",
+      "source": "thomas:local",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771641689-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md",
+      "created_ts_utc": 1771641689,
+      "updated_ts_utc": 1771641689,
+      "fingerprint": "5b549c7ffbb4c4a2240f0bb89599101b9e9ad6a91decf3b2585dd12d91cce3b3",
+      "query": "my settings keep resetting every restart. where should i look first?",
+      "auto_captured": true
+    },
+    {
+      "id": "1771642015-my-settings-keep-resetting-every-restart.-where-should-i-look-first",
+      "title": "my settings keep resetting every restart. where should i look first?",
+      "category": "research-notes",
+      "summary": "To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett",
+      "source": "thomas:local",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771642015-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md",
+      "created_ts_utc": 1771642015,
+      "updated_ts_utc": 1771642015,
+      "fingerprint": "963efeb33ebbdf5c177073e2870a0be7520432384899fcb9a9190afe32f47fb9",
+      "query": "my settings keep resetting every restart. where should i look first?",
+      "auto_captured": true
+    },
+    {
+      "id": "1771642416-my-settings-keep-resetting-every-restart.-where-should-i-look-first",
+      "title": "my settings keep resetting every restart. where should i look first?",
+      "category": "research-notes",
+      "summary": "To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett",
+      "source": "thomas:local",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771642416-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md",
+      "created_ts_utc": 1771642416,
+      "updated_ts_utc": 1771642416,
+      "fingerprint": "2fc0f8f46a1855226635bdace830971310ccd52e593323763c88271e3db15d9f",
+      "query": "my settings keep resetting every restart. where should i look first?",
+      "auto_captured": true
+    },
+    {
+      "id": "1771642499-my-settings-keep-resetting-every-restart.-where-should-i-look-first",
+      "title": "my settings keep resetting every restart. where should i look first?",
+      "category": "research-notes",
+      "summary": "To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett",
+      "source": "thomas:local",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771642499-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md",
+      "created_ts_utc": 1771642499,
+      "updated_ts_utc": 1771642499,
+      "fingerprint": "cf06685f3cc718e51c5150c6f9668fcd4a3af5de4f912e5602761809707de7c5",
+      "query": "my settings keep resetting every restart. where should i look first?",
+      "auto_captured": true
+    },
+    {
+      "id": "1771642591-my-settings-keep-resetting-every-restart.-where-should-i-look-first",
+      "title": "my settings keep resetting every restart. where should i look first?",
+      "category": "research-notes",
+      "summary": "To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett",
+      "source": "thomas:local",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771642591-my-settings-keep-resetting-every-restart.-where-should-i-look-first.md",
+      "created_ts_utc": 1771642591,
+      "updated_ts_utc": 1771642591,
+      "fingerprint": "50c486792888e06c705f05160ff522fc19608b7a8743c6be704e2b2ee3d80615",
+      "query": "my settings keep resetting every restart. where should i look first?",
+      "auto_captured": true
     }
   ]
 }

@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-email-triage",
+  "name": "Fraud Email Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "email",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.email",
+    "fraud.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via email with triage mode policies."
+}

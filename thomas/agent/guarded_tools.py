@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import json
-import logging
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -10,7 +9,6 @@ from thomas.policy.redact import Redactor
 from .approval import ApprovalBroker
 
 ToolExecutor = Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
-log = logging.getLogger(__name__)
 
 def _pretty_args(args: Dict[str, Any], max_len: int = 4000) -> Any:
     try:
@@ -88,8 +86,8 @@ class GuardedToolRunner:
                     reason=decision.reason,
                     payload={"meta": decision.meta, "args_preview": self.redactor.redact_obj(args)},
                 )
-            except Exception as e:
-                log.debug("Audit log failed (policy_decision): %s", e)
+            except Exception:
+                pass
 
         if decision.type == PolicyDecisionType.DENY:
             await emit_event("TOOL_RESULT", {
@@ -148,8 +146,8 @@ class GuardedToolRunner:
                         reason=decision.reason,
                         payload={},
                     )
-                except Exception as e:
-                    log.debug("Audit log failed (approval_resolved): %s", e)
+                except Exception:
+                    pass
 
             if not approved:
                 err = "Tool execution denied (approval required)."
@@ -178,6 +176,6 @@ class GuardedToolRunner:
                     reason="",
                     payload=redacted,
                 )
-            except Exception as e:
-                log.debug("Audit log failed (tool_result): %s", e)
+            except Exception:
+                pass
         return redacted

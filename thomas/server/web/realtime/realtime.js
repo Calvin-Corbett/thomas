@@ -79,7 +79,7 @@ function addMsg(role, text) {
   const el = document.createElement("div");
   el.className = `msg ${role}`;
   el.innerHTML = `
-    <div class="meta">${role} · ${new Date().toLocaleTimeString()}</div>
+    <div class="meta">${role}  ${new Date().toLocaleTimeString()}</div>
     <div class="body"></div>
   `;
   el.querySelector(".body").textContent = text || "";

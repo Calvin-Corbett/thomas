@@ -398,62 +398,34 @@ class AutonomyStore:
         next_run_at: Optional[datetime] = None,
     ) -> None:
         now = _utcnow()
-        result_enabled = int(result is not None)
-        error_enabled = int(error is not None)
-        attempts_enabled = int(attempts is not None)
-        approved_enabled = int(approved is not None)
-        requires_approval_enabled = int(requires_approval is not None)
-        next_run_enabled = int(next_run_at is not None)
-        lock_clear_flag = int(bool(lock_clear))
+        sets = ["status=?", "updated_at=?"]
+        args: List[Any] = [status, _dt_to_str(now)]
+        if result is not None:
+            sets.append("result_json=?")
+            args.append(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
+        if error is not None:
+            sets.append("error_json=?")
+            args.append(json.dumps(error, separators=(",", ":"), ensure_ascii=False))
+        if attempts is not None:
+            sets.append("attempts=?")
+            args.append(int(attempts))
+        if approved is not None:
+            sets.append("approved=?")
+            args.append(1 if approved else 0)
+        if requires_approval is not None:
+            sets.append("requires_approval=?")
+            args.append(1 if requires_approval else 0)
+        if next_run_at is not None:
+            sets.append("next_run_at=?")
+            args.append(_dt_to_str(next_run_at))
+        if lock_clear:
+            sets.extend(["locked_by=NULL", "lock_token=NULL", "locked_at=NULL", "lock_expires_at=NULL"])
 
-        result_json = json.dumps(result, separators=(",", ":"), ensure_ascii=False) if result is not None else None
-        error_json = json.dumps(error, separators=(",", ":"), ensure_ascii=False) if error is not None else None
-        attempts_value = int(attempts) if attempts is not None else 0
-        approved_value = 1 if bool(approved) else 0
-        requires_approval_value = 1 if bool(requires_approval) else 0
-        next_run_value = _dt_to_str(next_run_at) if next_run_at is not None else None
-
+        q = "UPDATE jobs SET " + ", ".join(sets) + " WHERE id=?;"
+        args.append(job_id)
         with self._lock:
             cur = self._conn.cursor()
-            cur.execute(
-                """
-                UPDATE jobs SET
-                    status=?,
-                    updated_at=?,
-                    result_json=CASE WHEN ? THEN ? ELSE result_json END,
-                    error_json=CASE WHEN ? THEN ? ELSE error_json END,
-                    attempts=CASE WHEN ? THEN ? ELSE attempts END,
-                    approved=CASE WHEN ? THEN ? ELSE approved END,
-                    requires_approval=CASE WHEN ? THEN ? ELSE requires_approval END,
-                    next_run_at=CASE WHEN ? THEN ? ELSE next_run_at END,
-                    locked_by=CASE WHEN ? THEN NULL ELSE locked_by END,
-                    lock_token=CASE WHEN ? THEN NULL ELSE lock_token END,
-                    locked_at=CASE WHEN ? THEN NULL ELSE locked_at END,
-                    lock_expires_at=CASE WHEN ? THEN NULL ELSE lock_expires_at END
-                WHERE id=?;
-                """,
-                (
-                    status,
-                    _dt_to_str(now),
-                    result_enabled,
-                    result_json,
-                    error_enabled,
-                    error_json,
-                    attempts_enabled,
-                    attempts_value,
-                    approved_enabled,
-                    approved_value,
-                    requires_approval_enabled,
-                    requires_approval_value,
-                    next_run_enabled,
-                    next_run_value,
-                    lock_clear_flag,
-                    lock_clear_flag,
-                    lock_clear_flag,
-                    lock_clear_flag,
-                    job_id,
-                ),
-            )
+            cur.execute(q, tuple(args))
             cur.close()
 
     # ---------------------------

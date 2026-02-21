@@ -1,0 +1,555 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-1477",
+  "title": "Browser workflow case 1477 (checkout_recovery)",
+  "category": "checkout_recovery",
+  "risk_level": "low",
+  "objective": "Validate checkout_recovery journey under stable network conditions.",
+  "dimensions": {
+    "channel": "web",
+    "region": "us-east",
+    "network_profile": "stable",
+    "build_variant": "stable",
+    "locale": "en-US"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:checkout_recovery",
+    "region:us-east",
+    "channel:web",
+    "network:stable"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "export_pdf",
+      "target": "[data-test='checkout_recovery-01']",
+      "input": "case-1477-value-01",
+      "expect": "checkout_recovery-expected-01",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "check_a11y",
+      "target": "[data-test='checkout_recovery-02']",
+      "input": "case-1477-value-02",
+      "expect": "checkout_recovery-expected-02",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "open_url",
+      "target": "[data-test='checkout_recovery-03']",
+      "input": "case-1477-value-03",
+      "expect": "checkout_recovery-expected-03",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "wait_for_selector",
+      "target": "[data-test='checkout_recovery-04']",
+      "input": "case-1477-value-04",
+      "expect": "checkout_recovery-expected-04",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "click",
+      "target": "[data-test='checkout_recovery-05']",
+      "input": "case-1477-value-05",
+      "expect": "checkout_recovery-expected-05",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "type",
+      "target": "[data-test='checkout_recovery-06']",
+      "input": "case-1477-value-06",
+      "expect": "checkout_recovery-expected-06",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "press",
+      "target": "[data-test='checkout_recovery-07']",
+      "input": "case-1477-value-07",
+      "expect": "checkout_recovery-expected-07",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "scroll_into_view",
+      "target": "[data-test='checkout_recovery-08']",
+      "input": "case-1477-value-08",
+      "expect": "checkout_recovery-expected-08",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "capture_screenshot",
+      "target": "[data-test='checkout_recovery-09']",
+      "input": "case-1477-value-09",
+      "expect": "checkout_recovery-expected-09",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "snapshot_dom",
+      "target": "[data-test='checkout_recovery-10']",
+      "input": "case-1477-value-10",
+      "expect": "checkout_recovery-expected-10",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "collect_console",
+      "target": "[data-test='checkout_recovery-11']",
+      "input": "case-1477-value-11",
+      "expect": "checkout_recovery-expected-11",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "collect_network",
+      "target": "[data-test='checkout_recovery-12']",
+      "input": "case-1477-value-12",
+      "expect": "checkout_recovery-expected-12",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "assert_text",
+      "target": "[data-test='checkout_recovery-13']",
+      "input": "case-1477-value-13",
+      "expect": "checkout_recovery-expected-13",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "assert_visibility",
+      "target": "[data-test='checkout_recovery-14']",
+      "input": "case-1477-value-14",
+      "expect": "checkout_recovery-expected-14",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "download_file",
+      "target": "[data-test='checkout_recovery-15']",
+      "input": "case-1477-value-15",
+      "expect": "checkout_recovery-expected-15",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "upload_file",
+      "target": "[data-test='checkout_recovery-16']",
+      "input": "case-1477-value-16",
+      "expect": "checkout_recovery-expected-16",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "switch_tab",
+      "target": "[data-test='checkout_recovery-17']",
+      "input": "case-1477-value-17",
+      "expect": "checkout_recovery-expected-17",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "close_tab",
+      "target": "[data-test='checkout_recovery-18']",
+      "input": "case-1477-value-18",
+      "expect": "checkout_recovery-expected-18",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "start_trace",
+      "target": "[data-test='checkout_recovery-19']",
+      "input": "case-1477-value-19",
+      "expect": "checkout_recovery-expected-19",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "stop_trace",
+      "target": "[data-test='checkout_recovery-20']",
+      "input": "case-1477-value-20",
+      "expect": "checkout_recovery-expected-20",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "export_pdf",
+      "target": "[data-test='checkout_recovery-21']",
+      "input": "case-1477-value-21",
+      "expect": "checkout_recovery-expected-21",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "check_a11y",
+      "target": "[data-test='checkout_recovery-22']",
+      "input": "case-1477-value-22",
+      "expect": "checkout_recovery-expected-22",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "open_url",
+      "target": "[data-test='checkout_recovery-23']",
+      "input": "case-1477-value-23",
+      "expect": "checkout_recovery-expected-23",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "wait_for_selector",
+      "target": "[data-test='checkout_recovery-24']",
+      "input": "case-1477-value-24",
+      "expect": "checkout_recovery-expected-24",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "click",
+      "target": "[data-test='checkout_recovery-25']",
+      "input": "case-1477-value-25",
+      "expect": "checkout_recovery-expected-25",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "type",
+      "target": "[data-test='checkout_recovery-26']",
+      "input": "case-1477-value-26",
+      "expect": "checkout_recovery-expected-26",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "network",
+      "query": "assert-checkout_recovery-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "console",
+      "query": "assert-checkout_recovery-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "text",
+      "query": "assert-checkout_recovery-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "visibility",
+      "query": "assert-checkout_recovery-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "network",
+      "query": "assert-checkout_recovery-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "console",
+      "query": "assert-checkout_recovery-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "text",
+      "query": "assert-checkout_recovery-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "visibility",
+      "query": "assert-checkout_recovery-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "network",
+      "query": "assert-checkout_recovery-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "console",
+      "query": "assert-checkout_recovery-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "text",
+      "query": "assert-checkout_recovery-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "visibility",
+      "query": "assert-checkout_recovery-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 2,
+    "max_warning_count": 3,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 20500
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 3
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": true,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/1477/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/1477/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/1477/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/1477/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "checkout_recovery",
+    "web",
+    "us-east",
+    "stable",
+    "severity:low"
+  ]
+}

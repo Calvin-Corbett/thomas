@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-webhook-remediate",
+  "name": "Ops Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.webhook",
+    "ops.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via webhook with remediate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-slack-remediate",
+  "name": "Alerts Slack Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "slack",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.slack",
+    "alerts.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via slack with remediate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-email-detect",
+  "name": "Support Email Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "email",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.email",
+    "support.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via email with detect mode policies."
+}

@@ -148,6 +148,7 @@ def trim_messages_to_budget(
     # Keep middle messages from the end (most recent) that fit
     kept_middle: List[Dict[str, Any]] = []
     used = 0
+    # Iterate backwards (newest to oldest)
     for msg in reversed(middle):
         msg_tokens = estimate_message_tokens(msg)
         if used + msg_tokens > remaining_budget:

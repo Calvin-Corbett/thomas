@@ -1,0 +1,15 @@
+{
+  "created_at": "2026-02-20T01:51:44.390840+00:00",
+  "profile": "local",
+  "workspace": "F:\\DevHub\\Thomas",
+  "thomas_runner": "embedded",
+  "thomas_api_base": "http://127.0.0.1:8899",
+  "thomas_mode": "fast",
+  "thomas_token_economy": "optimal",
+  "thomas_max_mode": false,
+  "max_iterations": null,
+  "watch": false,
+  "baseline_enabled": false,
+  "thomas_enabled": true,
+  "artifact_root": "runtime/agentic_bench/agentic-20260220-015140"
+}

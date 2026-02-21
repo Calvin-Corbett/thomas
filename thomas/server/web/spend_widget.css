@@ -1,0 +1,255 @@
+/* Feature 14 v3  spend widget */
+
+:root {
+  --thomas-spend-border: rgba(255,255,255,0.14);
+  --thomas-spend-bg: rgba(20,20,20,0.98);
+  --thomas-spend-soft: rgba(255,255,255,0.06);
+  --thomas-spend-soft2: rgba(255,255,255,0.12);
+  --thomas-spend-soft3: rgba(255,255,255,0.04);
+}
+
+.thomas-spend-badge {
+  font: inherit;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.18);
+  background: var(--thomas-spend-soft);
+  color: inherit;
+  cursor: pointer;
+  line-height: 1;
+  user-select: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 220px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.thomas-spend-badge:hover { background: var(--thomas-spend-soft2); }
+
+#spendBadgeUsd,
+#spendBadgeTok {
+  white-space: nowrap;
+}
+
+.thomas-spend-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  z-index: 99998;
+}
+
+.thomas-spend-backdrop[hidden] {
+  display: none !important;
+}
+
+.thomas-spend-modal {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(820px, calc(100% - 24px));
+  max-height: calc(100% - 24px);
+  border-radius: 14px;
+  border: 1px solid var(--thomas-spend-border);
+  background: var(--thomas-spend-bg);
+  color: #e6edf7;
+  z-index: 99999;
+  box-shadow: 0 20px 70px rgba(0,0,0,0.45);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.thomas-spend-modal[hidden] {
+  display: none !important;
+}
+
+.thomas-spend-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 14px 10px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.10);
+}
+
+.thomas-spend-title { font-size: 16px; font-weight: 650; }
+.thomas-spend-subtitle { font-size: 12px; opacity: 0.75; margin-top: 2px; }
+
+.thomas-spend-close {
+  font: inherit;
+  border: 1px solid var(--thomas-spend-border);
+  background: var(--thomas-spend-soft);
+  color: #e6edf7;
+  border-radius: 10px;
+  width: 34px;
+  height: 34px;
+  cursor: pointer;
+}
+
+.thomas-spend-modal-body {
+  padding: 14px;
+  overflow: auto;
+  min-height: 0;
+}
+
+.thomas-spend-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.thomas-spend-metric {
+  padding: 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: var(--thomas-spend-soft3);
+}
+
+.thomas-spend-metric-label { font-size: 12px; opacity: 0.75; display:flex; justify-content:space-between; align-items:center; gap:10px;}
+.thomas-spend-metric-value { font-size: 22px; font-weight: 700; margin-top: 6px; }
+.thomas-spend-metric-footnote { font-size: 12px; opacity: 0.75; margin-top: 4px; }
+
+.thomas-spend-chip {
+  font: inherit;
+  font-size: 12px;
+  padding: 5px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  cursor: pointer;
+}
+.thomas-spend-chip:hover { background: rgba(255,255,255,0.10); }
+
+.thomas-spend-tabs {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+}
+.thomas-spend-tab {
+  font: inherit;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(255,255,255,0.05);
+  color: inherit;
+  cursor: pointer;
+}
+.thomas-spend-tab[aria-selected="true"] {
+  background: rgba(255,255,255,0.12);
+  border-color: rgba(255,255,255,0.22);
+}
+
+.thomas-spend-section { margin-top: 14px; }
+.thomas-spend-section-title { font-size: 13px; font-weight: 650; margin-bottom: 8px; opacity: 0.9; display:flex; justify-content:space-between; align-items:center; gap:10px; }
+.thomas-spend-section-title small { opacity: .7; font-weight: 500; }
+
+.thomas-spend-by-model-head {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 6px 10px;
+  font-size: 12px;
+  opacity: 0.8;
+  margin-bottom: 6px;
+}
+
+.thomas-spend-by-model {
+  display: grid;
+  grid-template-columns: 1fr auto auto auto;
+  gap: 6px 10px;
+  font-size: 13px;
+  align-items: baseline;
+}
+.thomas-spend-by-model .model { opacity: 0.95; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.thomas-spend-by-model .usd { opacity: 0.95; font-variant-numeric: tabular-nums; text-align: right; }
+.thomas-spend-by-model .tok { opacity: 0.75; font-variant-numeric: tabular-nums; text-align: right; }
+.thomas-spend-by-model .calls { opacity: 0.75; font-variant-numeric: tabular-nums; text-align: right; }
+
+.thomas-spend-chart-wrap { position: relative; }
+.thomas-spend-chart {
+  width: 100%;
+  height: 180px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  background: rgba(255,255,255,0.03);
+}
+
+.thomas-spend-tooltip {
+  position: absolute;
+  pointer-events: none;
+  padding: 8px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.14);
+  background: rgba(10,10,10,0.92);
+  color: white;
+  font-size: 12px;
+  opacity: 0;
+  transform: translate(-50%, -110%);
+  transition: opacity 80ms linear;
+  white-space: nowrap;
+}
+.thomas-spend-tooltip.on { opacity: 1; }
+
+.thomas-spend-footer {
+  display:flex;
+  justify-content:space-between;
+  align-items:center;
+  gap:10px;
+  margin-top: 10px;
+  font-size: 12px;
+  opacity: .8;
+}
+
+@media (max-width: 900px) {
+  .thomas-spend-modal {
+    top: 6px;
+    width: calc(100% - 12px);
+    max-height: calc(100% - 12px);
+    border-radius: 12px;
+  }
+  .thomas-spend-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .thomas-spend-modal-header {
+    padding: 10px;
+  }
+  .thomas-spend-modal-body {
+    padding: 10px;
+  }
+  .thomas-spend-title {
+    font-size: 15px;
+  }
+  .thomas-spend-metric-value {
+    font-size: 18px;
+  }
+  .thomas-spend-by-model-head,
+  .thomas-spend-by-model {
+    gap: 6px;
+    font-size: 12px;
+  }
+  .thomas-spend-chart {
+    height: 150px;
+  }
+}
+
+@media (max-width: 1200px) {
+  .thomas-spend-badge {
+    max-width: 132px;
+    padding: 6px 8px;
+  }
+  #spendBadgeTok {
+    display: none;
+  }
+}
+
+@media (max-width: 1024px) {
+  .thomas-spend-badge {
+    display: none !important;
+  }
+}

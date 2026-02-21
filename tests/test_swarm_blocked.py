@@ -1,6 +1,5 @@
 import asyncio
 import json
-import pytest
 
 from thomas.agent.swarm import SwarmConfig, SwarmOrchestrator, TaskResult, TaskStatus
 
@@ -36,24 +35,26 @@ class Reviewer:
         return TaskResult(ok=True, output="final")
 
 
-@pytest.mark.asyncio
-async def test_failed_dep_blocks_downstream_task():
-    graph = {
-        "version": 1,
-        "goal": "test",
-        "summary": "",
-        "tasks": [
-            {"id": "A", "title": "A", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
-            {"id": "B", "title": "B", "agent": "tester", "deps": ["A"], "prompt": "", "acceptance": [], "meta": {}},
-        ],
-    }
-    b = BAgent()
-    orch = SwarmOrchestrator(run_id="run_block", config=SwarmConfig(max_parallel_tasks=2))
-    subagents = {"planner": Planner(graph), "coder": AAgent(), "tester": b, "reviewer": Reviewer()}
+def test_failed_dep_blocks_downstream_task():
+    async def _run() -> None:
+        graph = {
+            "version": 1,
+            "goal": "test",
+            "summary": "",
+            "tasks": [
+                {"id": "A", "title": "A", "agent": "coder", "deps": [], "prompt": "", "acceptance": [], "meta": {}},
+                {"id": "B", "title": "B", "agent": "tester", "deps": ["A"], "prompt": "", "acceptance": [], "meta": {}},
+            ],
+        }
+        b = BAgent()
+        orch = SwarmOrchestrator(run_id="run_block", config=SwarmConfig(max_parallel_tasks=2))
+        subagents = {"planner": Planner(graph), "coder": AAgent(), "tester": b, "reviewer": Reviewer()}
 
-    async for _ in orch.astream(user_request="x", subagents=subagents):
-        pass
+        async for _ in orch.astream(user_request="x", subagents=subagents):
+            pass
 
-    assert b.ran is False
-    assert orch.task_status["A"] == TaskStatus.FAILED
-    assert orch.task_status["B"] == TaskStatus.BLOCKED
+        assert b.ran is False
+        assert orch.task_status["A"] == TaskStatus.FAILED
+        assert orch.task_status["B"] == TaskStatus.BLOCKED
+
+    asyncio.run(_run())

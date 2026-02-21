@@ -17,6 +17,7 @@ from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
+from thomas.core.token_economy import normalize_token_economy_level
 from thomas.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
@@ -300,7 +301,10 @@ class TelegramBridge:
         done_text = ""
         error_text = ""
         try:
-            async for event in agent.run(prompt):
+            token_economy = normalize_token_economy_level(
+                os.environ.get("THOMAS_TOKEN_ECONOMY", "optimal")
+            )
+            async for event in agent.run(prompt, token_economy=token_economy):
                 if event.type == EventType.TEXT_DELTA:
                     delta = str(event.data.get("text") or "")
                     if delta:

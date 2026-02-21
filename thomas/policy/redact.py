@@ -5,7 +5,7 @@ from dataclasses import dataclass, field
 from typing import Any, Dict, Iterable, List, Mapping, MutableMapping, MutableSequence, Sequence, Tuple, Union
 
 _REDACT = "<REDACTED>"
-_SENSITIVE_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|pwd|authorization|auth)")
+_SENSITIVE_KEY_RE = re.compile(r"(?i)(api[_-]?key|token|secret|password|passwd|pwd|authorization|bearer)")
 
 # Token / key / secret patterns. Intentionally broad: false positives are preferable to leaks.
 DEFAULT_PATTERNS: List[Tuple[re.Pattern, str]] = [
@@ -74,19 +74,14 @@ class Redactor:
             for k, v in obj.items():
                 nk = self.redact_text(k) if isinstance(k, str) else k
                 if isinstance(k, str) and _SENSITIVE_KEY_RE.search(k):
-                    # Key names like "password"/"token" should redact value even if
-                    # value is short or does not match text patterns. Keep specific
-                    # pattern-based labels when available (e.g. SECRET_KEY).
-                    if v is None:
-                        new[nk] = None
+                    if isinstance(v, (Mapping, list, tuple, set)):
+                        new[nk] = self.redact_obj(v)
                     else:
-                        rv = self.redact_obj(v)
-                        if isinstance(rv, str) and isinstance(v, str) and rv != v:
-                            new[nk] = rv
-                        else:
-                            new[nk] = _REDACT
-                else:
-                    new[nk] = self.redact_obj(v)
+                        raw = "" if v is None else str(v)
+                        redacted = self.redact_text(raw)
+                        new[nk] = redacted if redacted != raw else _REDACT
+                    continue
+                new[nk] = self.redact_obj(v)
             return new
         if isinstance(obj, (list, tuple, set)):
             seq = [self.redact_obj(v) for v in obj]

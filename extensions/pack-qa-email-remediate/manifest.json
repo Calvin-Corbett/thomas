@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-email-remediate",
+  "name": "Qa Email Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "email",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.email",
+    "qa.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via email with remediate mode policies."
+}

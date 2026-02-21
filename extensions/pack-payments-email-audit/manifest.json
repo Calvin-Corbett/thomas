@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-email-audit",
+  "name": "Payments Email Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "email",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.email",
+    "payments.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via email with audit mode policies."
+}

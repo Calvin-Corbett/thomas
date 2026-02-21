@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-webhook-audit",
+  "name": "Compliance Webhook Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "webhook",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.webhook",
+    "compliance.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via webhook with audit mode policies."
+}

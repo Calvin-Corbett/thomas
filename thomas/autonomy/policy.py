@@ -1,13 +1,16 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Dict
 
 try:
-    import tomllib  # py3.11+
+    import tomllib as _toml_loader  # py3.11+
 except Exception:  # pragma: no cover
-    tomllib = None  # type: ignore
+    try:
+        import tomli as _toml_loader  # type: ignore
+    except Exception:  # pragma: no cover
+        _toml_loader = None  # type: ignore
 
 DEFAULT_POLICY = {
     "risk": {
@@ -22,7 +25,7 @@ DEFAULT_POLICY = {
         # "reminder": {"risk_class": "low", "mode": "allow"},
     },
     "api": {
-        "require_token": False,  # nosec
+        "require_token": False,
     },
 }
 
@@ -42,10 +45,10 @@ class AutonomyPolicy:
     def load(policy_path: str) -> "AutonomyPolicy":
         if not policy_path or not os.path.exists(policy_path):
             return AutonomyPolicy()
-        if tomllib is None:
-            raise RuntimeError("tomllib not available; need Python 3.11+")
+        if _toml_loader is None:
+            raise RuntimeError("TOML loader unavailable; install tomli for Python < 3.11")
         with open(policy_path, "rb") as f:
-            data = tomllib.load(f) or {}
+            data = _toml_loader.load(f) or {}
         merged = dict(DEFAULT_POLICY)
         # shallow merge for top-level keys
         for k, v in data.items():
@@ -89,3 +92,7 @@ class AutonomyPolicy:
 
     def api_require_token(self) -> bool:
         return bool((self.policy.get("api") or {}).get("require_token", False))
+
+
+
+

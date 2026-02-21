@@ -1,0 +1,14 @@
+{
+  "id": "pack-qa-slack",
+  "name": "Qa Slack Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "slack",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.slack",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via slack."
+}
