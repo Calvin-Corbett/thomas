@@ -121,3 +121,14 @@ ode_modules, 	asks, output.
 - HEAD: `177eefa`
 - Added scripts/active_folders.py with claim/check/daemon/run/release
 - Added docs/ops/ACTIVE_FOLDERS_COORDINATION.md and updated NEXT_AGENT_HANDOFF
+
+## 2026-02-21T14:30:08-06:00
+
+### Active Folder Coordination Hardened
+
+- Branch: `master`
+- HEAD: `7fb8de5`
+- Enforced overlap blocking for claim/run/daemon by default.
+- Added guard-staged command and wired it into pre-commit.
+- Updated docs and handoff instructions for THOMAS_AGENT_ID workflow.
+- Validated compileall, ruff, auto_checks --quick, and smoke conflict tests.

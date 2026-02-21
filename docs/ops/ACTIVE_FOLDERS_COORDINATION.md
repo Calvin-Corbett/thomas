@@ -1,71 +1,116 @@
 # Active Folders Coordination
 
-Use this when multiple agents are editing the same repository.
+Use this system when multiple agents or humans edit the Thomas repo at the same time.
 
 ## Goal
 
-- Prevent edit collisions by letting each agent claim folder scopes.
-- Make active work visible before anyone edits files.
+- Prevent edit collisions by claiming folder scopes.
+- Block commits that overlap another active claim.
+- Keep in-progress ownership visible in one shared registry.
 
 ## Backing State
 
 - Registry file: `runtime/coordination/active_folders.json`
 - Lock file: `runtime/coordination/active_folders.lock`
 - Tool: `python scripts/active_folders.py ...`
+- Auto hook: `.pre-commit-config.yaml` runs `guard-staged`
 
-Claims use TTL leases and heartbeats. Expired claims are auto-pruned.
+Claims use TTL leases with heartbeats. Expired claims are auto-pruned.
 
-## Basic Workflow
+## Agent Identity (Important)
 
-1. Claim the folders you own.
-2. Check target folders for conflicts before editing.
-3. Heartbeat while working (daemon/run modes do this automatically).
-4. Release claim when done.
+Set a stable agent id once per terminal before claiming folders:
 
-## Commands
+```powershell
+$env:THOMAS_AGENT_ID = "codex-main"
+```
 
-List active claims:
+If unset, the script falls back to `user@host-ppid...`, but explicit `THOMAS_AGENT_ID` is recommended for clean coordination.
+
+See resolved id/source:
 
 ```bash
-python scripts/active_folders.py list
+python scripts/active_folders.py whoami
+```
+
+## Fast Workflow
+
+1. Check target folder before editing.
+2. Claim folders you will change.
+3. Work (or run commands through `run` mode).
+4. Release when done.
+
+Check conflicts:
+
+```bash
+python scripts/active_folders.py check --path thomas/server/routes
 ```
 
 Claim folders:
 
 ```bash
-python scripts/active_folders.py claim --agent codex-main --path thomas/server --path tests --note "routing fixes"
+python scripts/active_folders.py claim --path thomas/server --note "routing fixes"
 ```
 
-Check if your target overlaps active claims:
+Release all claims for your agent:
 
 ```bash
-python scripts/active_folders.py check --agent codex-main --path thomas/server/routes
+python scripts/active_folders.py release --agent "$env:THOMAS_AGENT_ID"
 ```
 
-Release your claims:
+## Recommended Command Wrapper
+
+Run a command with automatic claim + heartbeat + release:
 
 ```bash
-python scripts/active_folders.py release --agent codex-main
+python scripts/active_folders.py run --path thomas/server --note "server checks" -- python scripts/auto_checks.py --quick
 ```
 
-Run command under automatic claim + heartbeat + release:
+## Background Lease Mode
+
+Keep a claim alive in the foreground until interrupted:
 
 ```bash
-python scripts/active_folders.py run --agent codex-main --path thomas/server -- python scripts/auto_checks.py --quick
+python scripts/active_folders.py daemon --path thomas/server --note "API route work"
 ```
 
-## Background Mode
+## Automatic Commit Blocking
 
-Foreground daemon (keeps claim alive until stopped):
+Pre-commit now runs:
 
 ```bash
-python scripts/active_folders.py daemon --agent codex-main --path thomas/server --note "API route work"
+python scripts/active_folders.py guard-staged
 ```
 
-## Team Policy (Recommended)
+Behavior:
 
-- No edits before `check` passes.
-- One active claim per agent id.
-- Keep claims narrow (folders, not repo root).
-- Always release claims at end of task.
-- If an agent crashes, claims expire automatically by TTL.
+- Reads staged files from `git diff --cached --name-only`.
+- Fails commit if staged paths overlap another active claim.
+- Ignores your own claim by current agent id unless `--no-ignore-self` is used.
+
+## Conflict Rules
+
+- `claim`/`run`/`daemon` now block on overlap by default.
+- Use `--allow-conflicts` only for intentional override.
+- Keep scopes narrow (specific folders, not repo root).
+
+## Useful Commands
+
+List claims:
+
+```bash
+python scripts/active_folders.py list
+```
+
+Check staged files manually:
+
+```bash
+python scripts/active_folders.py guard-staged
+```
+
+Force-check including your own claims:
+
+```bash
+python scripts/active_folders.py check --path thomas/server --no-ignore-self
+```
+

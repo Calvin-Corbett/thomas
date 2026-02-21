@@ -1,12 +1,13 @@
 """Active folder coordination for multi-agent collaboration.
 
-This script lets agents claim folders with TTL-based leases, heartbeat while
-working, and check for overlaps before editing.
+This script lets agents claim folders with TTL leases, heartbeat while
+working, and block overlapping edits automatically via pre-commit.
 """
 
 from __future__ import annotations
 
 import argparse
+import getpass
 import json
 import os
 import signal
@@ -26,10 +27,25 @@ STATE_DIR = ROOT / "runtime" / "coordination"
 STATE_FILE = STATE_DIR / "active_folders.json"
 LOCK_FILE = STATE_DIR / "active_folders.lock"
 
-DEFAULT_TTL_SECONDS = 120
-DEFAULT_HEARTBEAT_SECONDS = 20
+AGENT_ENV_KEYS = ("THOMAS_AGENT_ID", "CODEX_AGENT_ID", "AGENT_ID")
+
 LOCK_TIMEOUT_SECONDS = 10.0
 LOCK_STALE_SECONDS = 60.0
+
+
+def _env_int(name: str, default: int) -> int:
+    raw = (os.getenv(name) or "").strip()
+    if not raw:
+        return default
+    try:
+        value = int(raw)
+    except Exception:
+        return default
+    return value if value > 0 else default
+
+
+DEFAULT_TTL_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_TTL", 180)
+DEFAULT_HEARTBEAT_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_HEARTBEAT", 30)
 
 
 def _utc_now() -> datetime:
@@ -41,18 +57,59 @@ def _to_iso(ts: datetime) -> str:
 
 
 def _from_iso(value: str) -> datetime:
-    return datetime.fromisoformat(value)
+    parsed = datetime.fromisoformat(value)
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _auto_agent_id() -> str:
+    for key in AGENT_ENV_KEYS:
+        value = (os.getenv(key) or "").strip()
+        if value:
+            return value
+
+    user = (
+        (os.getenv("USERNAME") or "").strip()
+        or (os.getenv("USER") or "").strip()
+        or (getpass.getuser() or "").strip()
+        or "unknown"
+    )
+    host = socket.gethostname().split(".")[0] or "host"
+    return f"{user}@{host}-ppid{os.getppid()}"
+
+
+def _resolve_agent(agent: str | None) -> str:
+    if agent:
+        stripped = agent.strip()
+        if stripped:
+            return stripped
+    return _auto_agent_id()
 
 
 def _normalize_path(path: str) -> str:
     raw = Path(path)
-    resolved = raw.resolve() if raw.is_absolute() else (Path.cwd() / raw).resolve()
+    resolved = raw.resolve() if raw.is_absolute() else (ROOT / raw).resolve()
     try:
         rel = resolved.relative_to(ROOT.resolve())
     except Exception as exc:  # pragma: no cover - defensive guard
         raise ValueError(f"Path '{path}' is outside repo root {ROOT}") from exc
     normalized = rel.as_posix().strip("/")
     return normalized or "."
+
+
+def _normalize_paths(paths: Iterable[str]) -> list[str]:
+    seen: set[str] = set()
+    out: list[str] = []
+    for raw in paths:
+        normalized = _normalize_path(raw)
+        if normalized in seen:
+            continue
+        seen.add(normalized)
+        out.append(normalized)
+    if not out:
+        raise ValueError("At least one --path is required")
+    return out
 
 
 def _paths_overlap(a: str, b: str) -> bool:
@@ -68,6 +125,7 @@ def _file_lock(lock_file: Path, timeout: float = LOCK_TIMEOUT_SECONDS):
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     deadline = time.time() + timeout
     fd: int | None = None
+
     while True:
         try:
             fd = os.open(str(lock_file), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
@@ -102,6 +160,7 @@ def _file_lock(lock_file: Path, timeout: float = LOCK_TIMEOUT_SECONDS):
 def _read_state() -> dict[str, Any]:
     if not STATE_FILE.exists():
         return {"version": 1, "updated_at": _to_iso(_utc_now()), "claims": []}
+
     try:
         with STATE_FILE.open("r", encoding="utf-8") as f:
             data = json.load(f)
@@ -111,6 +170,8 @@ def _read_state() -> dict[str, Any]:
     claims = data.get("claims")
     if not isinstance(claims, list):
         claims = []
+    claims = [c for c in claims if isinstance(c, dict)]
+
     return {
         "version": 1,
         "updated_at": str(data.get("updated_at") or _to_iso(_utc_now())),
@@ -133,6 +194,7 @@ def _prune_expired(state: dict[str, Any], now: datetime | None = None) -> tuple[
     now = now or _utc_now()
     kept: list[dict[str, Any]] = []
     removed = 0
+
     for claim in list(state.get("claims") or []):
         try:
             expires = _from_iso(str(claim.get("expires_at")))
@@ -143,22 +205,57 @@ def _prune_expired(state: dict[str, Any], now: datetime | None = None) -> tuple[
             removed += 1
             continue
         kept.append(claim)
+
     state["claims"] = kept
     return state, removed
 
 
-def _normalize_paths(paths: Iterable[str]) -> list[str]:
-    seen: set[str] = set()
-    out: list[str] = []
-    for raw in paths:
-        normalized = _normalize_path(raw)
-        if normalized in seen:
+def _collect_conflicts(
+    paths: Sequence[str],
+    claims: Sequence[dict[str, Any]],
+    ignore_agent: str | None = None,
+) -> list[dict[str, Any]]:
+    conflicts: list[dict[str, Any]] = []
+
+    for claim in claims:
+        agent = str(claim.get("agent_id") or "")
+        if ignore_agent and agent == ignore_agent:
             continue
-        seen.add(normalized)
-        out.append(normalized)
-    if not out:
-        raise ValueError("At least one --path is required")
-    return out
+
+        claim_paths = [str(p) for p in (claim.get("paths") or [])]
+        overlap_map: dict[tuple[str, str], dict[str, str]] = {}
+        for wanted in paths:
+            for active in claim_paths:
+                if _paths_overlap(wanted, active):
+                    key = (wanted, active)
+                    overlap_map[key] = {"wanted": wanted, "active": active}
+
+        if overlap_map:
+            conflicts.append(
+                {
+                    "agent_id": agent,
+                    "claim_id": str(claim.get("claim_id") or ""),
+                    "expires_at": str(claim.get("expires_at") or ""),
+                    "note": str(claim.get("note") or ""),
+                    "overlaps": list(overlap_map.values()),
+                }
+            )
+
+    return conflicts
+
+
+def _print_conflicts(conflicts: Sequence[dict[str, Any]]) -> None:
+    if not conflicts:
+        print("No folder conflicts detected.")
+        return
+
+    print("Folder conflicts detected:")
+    for row in conflicts:
+        print(f"- {row['agent_id']} ({row['claim_id']}) expires_at={row['expires_at']}")
+        for item in row["overlaps"]:
+            print(f"  overlap: wanted={item['wanted']} active={item['active']}")
+        if row.get("note"):
+            print(f"  note: {row['note']}")
 
 
 def _new_claim(agent: str, paths: Sequence[str], ttl_seconds: int, note: str) -> dict[str, Any]:
@@ -176,57 +273,169 @@ def _new_claim(agent: str, paths: Sequence[str], ttl_seconds: int, note: str) ->
     }
 
 
-def _claim(args: argparse.Namespace) -> int:
-    paths = _normalize_paths(args.path)
+def _create_claim(
+    agent: str,
+    paths: Sequence[str],
+    ttl_seconds: int,
+    note: str,
+    replace_agent: bool,
+    allow_conflicts: bool,
+) -> tuple[dict[str, Any] | None, list[dict[str, Any]]]:
     with _file_lock(LOCK_FILE):
         state = _read_state()
         state, _ = _prune_expired(state)
         claims = list(state.get("claims") or [])
-        if args.replace_agent:
-            claims = [c for c in claims if str(c.get("agent_id")) != args.agent]
-        claim = _new_claim(args.agent, paths, args.ttl, args.note or "")
+
+        if replace_agent:
+            claims = [c for c in claims if str(c.get("agent_id")) != agent]
+
+        conflicts = _collect_conflicts(paths, claims, ignore_agent=agent)
+        if conflicts and not allow_conflicts:
+            return None, conflicts
+
+        claim = _new_claim(agent, paths, ttl_seconds, note)
         claims.append(claim)
         state["claims"] = claims
         _write_state(state)
 
-    print(json.dumps({"ok": True, "claim_id": claim["claim_id"], "paths": paths}, indent=2))
-    return 0
+    return claim, conflicts
 
 
-def _heartbeat(args: argparse.Namespace) -> int:
+def _heartbeat_claim(claim_id: str, ttl_seconds: int) -> bool:
     now = _utc_now()
     with _file_lock(LOCK_FILE):
         state = _read_state()
         state, _ = _prune_expired(state, now=now)
+
         found = False
         for claim in state.get("claims") or []:
-            if str(claim.get("claim_id")) == args.claim_id:
+            if str(claim.get("claim_id")) == claim_id:
                 claim["last_heartbeat_at"] = _to_iso(now)
-                claim["expires_at"] = _to_iso(now + timedelta(seconds=max(1, args.ttl)))
+                claim["expires_at"] = _to_iso(now + timedelta(seconds=max(1, ttl_seconds)))
                 found = True
                 break
+
         if not found:
-            print(json.dumps({"ok": False, "error": "claim_not_found", "claim_id": args.claim_id}, indent=2))
-            return 1
+            return False
+
         _write_state(state)
+        return True
+
+
+def _release_claim(claim_id: str | None, agent: str | None) -> int:
+    with _file_lock(LOCK_FILE):
+        state = _read_state()
+        before = len(state.get("claims") or [])
+
+        if claim_id:
+            claims = [c for c in (state.get("claims") or []) if str(c.get("claim_id")) != claim_id]
+        elif agent:
+            claims = [c for c in (state.get("claims") or []) if str(c.get("agent_id")) != agent]
+        else:
+            raise ValueError("release requires --claim-id or --agent")
+
+        state["claims"] = claims
+        _write_state(state)
+
+    return before - len(claims)
+
+
+def _find_conflicts(paths: Sequence[str], ignore_agent: str | None = None) -> list[dict[str, Any]]:
+    with _file_lock(LOCK_FILE):
+        state = _read_state()
+        state, removed = _prune_expired(state)
+        if removed:
+            _write_state(state)
+
+    return _collect_conflicts(paths, state.get("claims") or [], ignore_agent=ignore_agent)
+
+
+def _staged_paths(excludes: Sequence[str]) -> list[str]:
+    proc = subprocess.run(
+        ["git", "diff", "--cached", "--name-only"],
+        cwd=str(ROOT),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if proc.returncode != 0:
+        stderr = (proc.stderr or "").strip()
+        raise ValueError(stderr or "git diff --cached --name-only failed")
+
+    staged = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
+    normalized: list[str] = []
+    seen: set[str] = set()
+    for item in staged:
+        try:
+            norm = _normalize_path(item)
+        except ValueError:
+            continue
+        if norm in seen:
+            continue
+        seen.add(norm)
+        normalized.append(norm)
+
+    excluded: list[str] = []
+    for item in excludes:
+        excluded.append(_normalize_path(item))
+
+    if not excluded:
+        return normalized
+
+    filtered: list[str] = []
+    for path in normalized:
+        if any(_paths_overlap(path, ex) for ex in excluded):
+            continue
+        filtered.append(path)
+    return filtered
+
+
+def _claim(args: argparse.Namespace) -> int:
+    agent = _resolve_agent(args.agent)
+    paths = _normalize_paths(args.path)
+    claim, conflicts = _create_claim(
+        agent=agent,
+        paths=paths,
+        ttl_seconds=args.ttl,
+        note=args.note or "",
+        replace_agent=args.replace_agent,
+        allow_conflicts=args.allow_conflicts,
+    )
+
+    if claim is None:
+        if args.json:
+            print(json.dumps({"ok": False, "error": "folder_conflicts", "conflicts": conflicts}, indent=2))
+        else:
+            _print_conflicts(conflicts)
+        return 2
+
+    payload = {
+        "ok": True,
+        "agent_id": agent,
+        "claim_id": claim["claim_id"],
+        "paths": paths,
+        "conflicts_ignored": len(conflicts),
+    }
+    if args.json:
+        print(json.dumps(payload, indent=2))
+    else:
+        print(f"Claimed folders for {agent}: {paths}")
+        if conflicts:
+            print(f"Warning: {len(conflicts)} conflict(s) were ignored due to --allow-conflicts.")
+    return 0
+
+
+def _heartbeat(args: argparse.Namespace) -> int:
+    if not _heartbeat_claim(args.claim_id, args.ttl):
+        print(json.dumps({"ok": False, "error": "claim_not_found", "claim_id": args.claim_id}, indent=2))
+        return 1
 
     print(json.dumps({"ok": True, "claim_id": args.claim_id}, indent=2))
     return 0
 
 
 def _release(args: argparse.Namespace) -> int:
-    with _file_lock(LOCK_FILE):
-        state = _read_state()
-        before = len(state.get("claims") or [])
-        if args.claim_id:
-            claims = [c for c in (state.get("claims") or []) if str(c.get("claim_id")) != args.claim_id]
-        elif args.agent:
-            claims = [c for c in (state.get("claims") or []) if str(c.get("agent_id")) != args.agent]
-        else:
-            raise ValueError("release requires --claim-id or --agent")
-        state["claims"] = claims
-        _write_state(state)
-    removed = before - len(claims)
+    removed = _release_claim(args.claim_id, args.agent)
     print(json.dumps({"ok": True, "removed": removed}, indent=2))
     return 0
 
@@ -262,71 +471,94 @@ def _list(args: argparse.Namespace) -> int:
     return 0
 
 
-def _find_conflicts(paths: Sequence[str], ignore_agent: str | None = None) -> list[dict[str, Any]]:
-    with _file_lock(LOCK_FILE):
-        state = _read_state()
-        state, removed = _prune_expired(state)
-        if removed:
-            _write_state(state)
-
-    conflicts: list[dict[str, Any]] = []
-    for claim in state.get("claims") or []:
-        agent = str(claim.get("agent_id") or "")
-        if ignore_agent and agent == ignore_agent:
-            continue
-        claim_paths = [str(p) for p in (claim.get("paths") or [])]
-        overlap_paths: list[dict[str, str]] = []
-        for wanted in paths:
-            for active in claim_paths:
-                if _paths_overlap(wanted, active):
-                    overlap_paths.append({"wanted": wanted, "active": active})
-        if overlap_paths:
-            conflicts.append(
-                {
-                    "agent_id": agent,
-                    "claim_id": str(claim.get("claim_id") or ""),
-                    "expires_at": str(claim.get("expires_at") or ""),
-                    "overlaps": overlap_paths,
-                    "note": str(claim.get("note") or ""),
-                }
-            )
-    return conflicts
-
-
 def _check(args: argparse.Namespace) -> int:
-    paths = _normalize_paths(args.path)
-    conflicts = _find_conflicts(paths, ignore_agent=args.agent)
-    if args.json:
-        print(json.dumps({"ok": not bool(conflicts), "conflicts": conflicts}, indent=2))
+    paths: list[str]
+    if args.staged:
+        paths = _staged_paths(args.exclude or [])
+        if not paths:
+            if args.json:
+                print(json.dumps({"ok": True, "conflicts": [], "paths": []}, indent=2))
+            else:
+                print("No staged files to check.")
+            return 0
     else:
-        if conflicts:
-            print("Folder conflicts detected:")
-            for row in conflicts:
-                print(f"- {row['agent_id']} ({row['claim_id']}) expires_at={row['expires_at']}")
-                for item in row["overlaps"]:
-                    print(f"  overlap: wanted={item['wanted']} active={item['active']}")
-                if row.get("note"):
-                    print(f"  note: {row['note']}")
+        if not args.path:
+            raise ValueError("check requires --path or --staged")
+        paths = _normalize_paths(args.path)
+
+    ignore_agent: str | None = None
+    if args.agent:
+        ignore_agent = _resolve_agent(args.agent)
+    elif not args.no_ignore_self:
+        ignore_agent = _auto_agent_id()
+
+    conflicts = _find_conflicts(paths, ignore_agent=ignore_agent)
+    if args.json:
+        print(json.dumps({"ok": not bool(conflicts), "conflicts": conflicts, "paths": paths}, indent=2))
+    else:
+        _print_conflicts(conflicts)
+    return 2 if conflicts else 0
+
+
+def _guard_staged(args: argparse.Namespace) -> int:
+    paths = _staged_paths(args.exclude or [])
+    if not paths:
+        if args.json:
+            print(json.dumps({"ok": True, "paths": [], "conflicts": []}, indent=2))
         else:
-            print("No folder conflicts detected.")
+            print("No staged files to check.")
+        return 0
+
+    ignore_agent: str | None = None
+    if not args.no_ignore_self:
+        ignore_agent = _resolve_agent(args.agent)
+
+    conflicts = _find_conflicts(paths, ignore_agent=ignore_agent)
+
+    if args.json:
+        print(
+            json.dumps(
+                {
+                    "ok": not bool(conflicts),
+                    "paths": paths,
+                    "ignore_agent": ignore_agent,
+                    "conflicts": conflicts,
+                },
+                indent=2,
+            )
+        )
+    else:
+        print(f"Checking staged files against active folder claims (count={len(paths)}).")
+        _print_conflicts(conflicts)
+
     return 2 if conflicts else 0
 
 
 def _daemon(args: argparse.Namespace) -> int:
+    agent = _resolve_agent(args.agent)
     paths = _normalize_paths(args.path)
-    with _file_lock(LOCK_FILE):
-        state = _read_state()
-        state, _ = _prune_expired(state)
-        claims = list(state.get("claims") or [])
-        if args.replace_agent:
-            claims = [c for c in claims if str(c.get("agent_id")) != args.agent]
-        claim = _new_claim(args.agent, paths, args.ttl, args.note or "")
-        claims.append(claim)
-        state["claims"] = claims
-        _write_state(state)
+
+    claim, conflicts = _create_claim(
+        agent=agent,
+        paths=paths,
+        ttl_seconds=args.ttl,
+        note=args.note or "",
+        replace_agent=args.replace_agent,
+        allow_conflicts=args.allow_conflicts,
+    )
+
+    if claim is None:
+        if args.json:
+            print(json.dumps({"ok": False, "error": "folder_conflicts", "conflicts": conflicts}, indent=2))
+        else:
+            _print_conflicts(conflicts)
+        return 2
 
     claim_id = claim["claim_id"]
-    print(json.dumps({"ok": True, "claim_id": claim_id, "mode": "daemon"}, indent=2))
+    if args.json:
+        print(json.dumps({"ok": True, "claim_id": claim_id, "mode": "daemon", "agent_id": agent}, indent=2))
+    else:
+        print(f"Claimed folders for {agent} in daemon mode: {paths}")
 
     stop_event = threading.Event()
 
@@ -338,13 +570,12 @@ def _daemon(args: argparse.Namespace) -> int:
 
     try:
         while not stop_event.wait(max(1, args.interval)):
-            hb_args = argparse.Namespace(claim_id=claim_id, ttl=args.ttl)
-            rc = _heartbeat(hb_args)
-            if rc != 0:
-                break
+            if not _heartbeat_claim(claim_id, args.ttl):
+                print("Claim not found during heartbeat; stopping daemon.", file=sys.stderr)
+                return 1
+        return 0
     finally:
-        _release(argparse.Namespace(claim_id=claim_id, agent=None))
-    return 0
+        _release_claim(claim_id=claim_id, agent=None)
 
 
 def _run(args: argparse.Namespace) -> int:
@@ -355,17 +586,21 @@ def _run(args: argparse.Namespace) -> int:
         print("run requires a command after --", file=sys.stderr)
         return 2
 
+    agent = _resolve_agent(args.agent)
     paths = _normalize_paths(args.path)
-    with _file_lock(LOCK_FILE):
-        state = _read_state()
-        state, _ = _prune_expired(state)
-        claims = list(state.get("claims") or [])
-        if args.replace_agent:
-            claims = [c for c in claims if str(c.get("agent_id")) != args.agent]
-        claim = _new_claim(args.agent, paths, args.ttl, args.note or "")
-        claims.append(claim)
-        state["claims"] = claims
-        _write_state(state)
+
+    claim, conflicts = _create_claim(
+        agent=agent,
+        paths=paths,
+        ttl_seconds=args.ttl,
+        note=args.note or "",
+        replace_agent=args.replace_agent,
+        allow_conflicts=args.allow_conflicts,
+    )
+
+    if claim is None:
+        _print_conflicts(conflicts)
+        return 2
 
     claim_id = claim["claim_id"]
     print(json.dumps({"ok": True, "claim_id": claim_id, "mode": "run", "command": command}, indent=2))
@@ -374,7 +609,8 @@ def _run(args: argparse.Namespace) -> int:
 
     def _heartbeat_loop() -> None:
         while not stop_event.wait(max(1, args.interval)):
-            _heartbeat(argparse.Namespace(claim_id=claim_id, ttl=args.ttl))
+            if not _heartbeat_claim(claim_id, args.ttl):
+                break
 
     thread = threading.Thread(target=_heartbeat_loop, daemon=True)
     thread.start()
@@ -384,7 +620,18 @@ def _run(args: argparse.Namespace) -> int:
         return int(proc.returncode)
     finally:
         stop_event.set()
-        _release(argparse.Namespace(claim_id=claim_id, agent=None))
+        _release_claim(claim_id=claim_id, agent=None)
+
+
+def _whoami(_args: argparse.Namespace) -> int:
+    source = "fallback"
+    for key in AGENT_ENV_KEYS:
+        if (os.getenv(key) or "").strip():
+            source = key
+            break
+
+    print(json.dumps({"agent_id": _auto_agent_id(), "source": source}, indent=2))
+    return 0
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -392,11 +639,22 @@ def _build_parser() -> argparse.ArgumentParser:
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     claim = sub.add_parser("claim", help="Create a folder claim.")
-    claim.add_argument("--agent", required=True, help="Stable agent id (e.g. codex-main).")
+    claim.add_argument("--agent", default="", help="Agent id (defaults from env or local fallback).")
     claim.add_argument("--path", action="append", required=True, help="Folder path to claim (repeatable).")
     claim.add_argument("--ttl", type=int, default=DEFAULT_TTL_SECONDS, help="Lease TTL in seconds.")
     claim.add_argument("--note", default="", help="Optional work note.")
-    claim.add_argument("--replace-agent", action="store_true", default=True, help="Replace prior claims for this agent.")
+    claim.add_argument(
+        "--replace-agent",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Replace prior claims for this agent (default true).",
+    )
+    claim.add_argument(
+        "--allow-conflicts",
+        action="store_true",
+        help="Allow claim even when overlapping claims exist.",
+    )
+    claim.add_argument("--json", action="store_true")
     claim.set_defaults(func=_claim)
 
     heartbeat = sub.add_parser("heartbeat", help="Refresh an existing claim.")
@@ -414,29 +672,88 @@ def _build_parser() -> argparse.ArgumentParser:
     listing.set_defaults(func=_list)
 
     check = sub.add_parser("check", help="Check path overlap against active claims.")
-    check.add_argument("--path", action="append", required=True, help="Path(s) you want to edit.")
-    check.add_argument("--agent", default="", help="Ignore conflicts from this agent id.")
+    check.add_argument("--path", action="append", help="Path(s) you want to edit.")
+    check.add_argument(
+        "--staged",
+        action="store_true",
+        help="Check staged file paths from git diff --cached.",
+    )
+    check.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Path to exclude when using --staged (repeatable).",
+    )
+    check.add_argument(
+        "--agent",
+        default="",
+        help="Agent id to ignore; defaults to current agent unless --no-ignore-self.",
+    )
+    check.add_argument(
+        "--no-ignore-self",
+        action="store_true",
+        help="Do not ignore claims from your own agent id.",
+    )
     check.add_argument("--json", action="store_true")
     check.set_defaults(func=_check)
 
+    guard = sub.add_parser(
+        "guard-staged",
+        help="Pre-commit guard: block staged edits that overlap active claims.",
+    )
+    guard.add_argument(
+        "--agent",
+        default="",
+        help="Agent id to ignore (defaults to current agent id).",
+    )
+    guard.add_argument(
+        "--exclude",
+        action="append",
+        default=[],
+        help="Path to exclude from staged guard (repeatable).",
+    )
+    guard.add_argument(
+        "--no-ignore-self",
+        action="store_true",
+        help="Do not ignore claims from your own agent id.",
+    )
+    guard.add_argument("--json", action="store_true")
+    guard.set_defaults(func=_guard_staged)
+
     daemon = sub.add_parser("daemon", help="Run persistent heartbeat in foreground until stopped.")
-    daemon.add_argument("--agent", required=True)
+    daemon.add_argument("--agent", default="", help="Agent id (defaults from env or local fallback).")
     daemon.add_argument("--path", action="append", required=True)
     daemon.add_argument("--ttl", type=int, default=DEFAULT_TTL_SECONDS)
     daemon.add_argument("--interval", type=int, default=DEFAULT_HEARTBEAT_SECONDS)
     daemon.add_argument("--note", default="")
-    daemon.add_argument("--replace-agent", action="store_true", default=True)
+    daemon.add_argument(
+        "--replace-agent",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Replace prior claims for this agent (default true).",
+    )
+    daemon.add_argument("--allow-conflicts", action="store_true")
+    daemon.add_argument("--json", action="store_true")
     daemon.set_defaults(func=_daemon)
 
     run = sub.add_parser("run", help="Claim folders, run a command, heartbeat, then release.")
-    run.add_argument("--agent", required=True)
+    run.add_argument("--agent", default="", help="Agent id (defaults from env or local fallback).")
     run.add_argument("--path", action="append", required=True)
     run.add_argument("--ttl", type=int, default=DEFAULT_TTL_SECONDS)
     run.add_argument("--interval", type=int, default=DEFAULT_HEARTBEAT_SECONDS)
     run.add_argument("--note", default="")
-    run.add_argument("--replace-agent", action="store_true", default=True)
+    run.add_argument(
+        "--replace-agent",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Replace prior claims for this agent (default true).",
+    )
+    run.add_argument("--allow-conflicts", action="store_true")
     run.add_argument("command", nargs=argparse.REMAINDER)
     run.set_defaults(func=_run)
+
+    whoami = sub.add_parser("whoami", help="Show the resolved agent id and source.")
+    whoami.set_defaults(func=_whoami)
 
     return parser
 
@@ -445,7 +762,6 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_parser()
     args = parser.parse_args(argv)
 
-    # argparse stores empty strings for optional fields where we want None-like behavior.
     if hasattr(args, "agent") and args.agent == "":
         args.agent = None
     if hasattr(args, "claim_id") and args.claim_id == "":
@@ -463,3 +779,4 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
