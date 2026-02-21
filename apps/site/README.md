@@ -28,11 +28,16 @@ Open `http://localhost:3000`.
 
 ## Required env
 
-- `THOMAS_GITHUB_REPO`: `owner/repo` slug used to pull releases
+- One of these two setup paths:
+  - website-first/manual: set `THOMAS_DOWNLOAD_URL_WINDOWS`, `THOMAS_DOWNLOAD_URL_MACOS`, `THOMAS_DOWNLOAD_URL_LINUX`
+  - GitHub-driven: set `THOMAS_GITHUB_REPO=owner/repo`
 
 ## Optional env
 
 - `GITHUB_TOKEN`: raises GitHub API rate limits
+- `THOMAS_DOWNLOAD_MODE`: `auto` (default), `manual`, or `github`
+- `THOMAS_DOWNLOAD_URL_WINDOWS_BETA`, `THOMAS_DOWNLOAD_URL_MACOS_BETA`, `THOMAS_DOWNLOAD_URL_LINUX_BETA`
+- `THOMAS_MANUAL_RELEASE_TAG`: label used in tracked events when using manual URLs
 - `DATABASE_URL`: enables download intent persistence in Postgres
 - `EVENT_HASH_SALT`: salt for anonymized IP hashing
 - `POSTHOG_PROJECT_API_KEY`: enables server-side event forwarding
@@ -51,9 +56,9 @@ Without `DATABASE_URL`, the site still works; it just skips event persistence.
 
 1. User clicks download button.
 2. Website calls `GET /api/download`.
-3. Route resolves latest release + correct asset for OS/arch.
+3. Route resolves manual URL or latest GitHub release asset (based on `THOMAS_DOWNLOAD_MODE`).
 4. Route logs intent event (if DB configured).
-5. Route redirects (`302`) to GitHub release asset.
+5. Route redirects (`302`) to the resolved installer URL.
 
 ## Pages
 

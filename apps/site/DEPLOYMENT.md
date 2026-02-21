@@ -13,6 +13,13 @@ This website is designed for immediate public traffic with minimal ops burden.
 1. Set `THOMAS_GITHUB_REPO=owner/repo`.
 2. Add `GITHUB_TOKEN` to avoid anonymous rate limits.
 
+If you want website-first launch before GitHub integration, set:
+
+- `THOMAS_DOWNLOAD_MODE=manual`
+- `THOMAS_DOWNLOAD_URL_WINDOWS`
+- `THOMAS_DOWNLOAD_URL_MACOS`
+- `THOMAS_DOWNLOAD_URL_LINUX`
+
 ## 3. Configure hosting
 
 ### Vercel

@@ -24,17 +24,21 @@ export function getRepoSlug(): string {
 export function getRepoUrl(): string {
   const slug = getRepoSlug();
   if (!slug.includes("/")) {
-    return "https://github.com";
+    return "";
   }
   return `https://github.com/${slug}`;
 }
 
 export function getReleasesUrl(): string {
   const repo = getRepoUrl();
-  if (repo === "https://github.com") {
-    return repo;
+  if (!repo) {
+    return "";
   }
   return `${repo}/releases`;
+}
+
+export function hasRepoConfigured(): boolean {
+  return getRepoUrl().length > 0;
 }
 
 export function getDefaultChannel(): ReleaseChannel {

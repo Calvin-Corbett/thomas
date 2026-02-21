@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 
 type ReleaseItem = {
-  id: number;
+  id: number | string;
   tag: string;
   name: string;
   prerelease: boolean;
@@ -11,6 +11,7 @@ type ReleaseItem = {
   notes: string;
   htmlUrl: string;
   totalAssetDownloads: number;
+  source?: "github" | "local";
 };
 
 type ReleasesPayload = {
@@ -56,7 +57,11 @@ export function ReleaseFeed({ limit = 8 }: { limit?: number }) {
           <h3>{release.name}</h3>
           <p className="release-notes">{release.notes}</p>
           <div className="release-meta">
-            <span>{release.totalAssetDownloads.toLocaleString()} asset downloads</span>
+            <span>
+              {release.source === "local"
+                ? "Local update note"
+                : `${release.totalAssetDownloads.toLocaleString()} asset downloads`}
+            </span>
             <a href={release.htmlUrl} target="_blank" rel="noreferrer">
               Full notes
             </a>

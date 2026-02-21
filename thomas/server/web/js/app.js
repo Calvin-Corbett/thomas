@@ -33,6 +33,23 @@ const saveSettingsBtn = document.getElementById('saveSettingsBtn');
 const settingSystemPrompt = document.getElementById('settingSystemPrompt');
 const settingTheme = document.getElementById('settingTheme');
 
+// Phase 6 Model Setup Elements
+const modelSetupBtn = document.getElementById('modelSetupBtn');
+const modelSetupCurrentLabel = document.getElementById('modelSetupCurrentLabel');
+const modelSetupModal = document.getElementById('modelSetupModal');
+const closeModelSetupBtn = document.getElementById('closeModelSetupBtn');
+const applyModelSetupBtn = document.getElementById('applyModelSetupBtn');
+const setupProfileSelector = document.getElementById('setupProfileSelector');
+const setupPersonalitySelector = document.getElementById('setupPersonalitySelector');
+const customPersonalityGroup = document.getElementById('customPersonalityGroup');
+const setupCustomPrompt = document.getElementById('setupCustomPrompt');
+const setupAutonomyGroup = document.getElementById('setupAutonomyGroup');
+const setupEconomyGroup = document.getElementById('setupEconomyGroup');
+const setupMemoryToggle = document.getElementById('setupMemoryToggle');
+
+let activeAutonomyLevel = 3;
+let activeTokenEconomy = 'balanced';
+
 /**
  * Initialize the ultra-premium UI behaviors
  */
@@ -179,12 +196,20 @@ async function handleSend() {
 
     // 4. Hit API
     try {
+        let finalPrompt = setupPersonalitySelector.value;
+        if (finalPrompt === 'custom') {
+            finalPrompt = setupCustomPrompt.value.trim();
+        }
+
         const payload = {
             message: text,
             docs: docsToSend,
             images: imagesToSend,
             session_id: sessionId,
-            model: modelSelector.value
+            model: setupProfileSelector.value || modelSelector.value,
+            autonomy_level: activeAutonomyLevel,
+            token_economy: activeTokenEconomy,
+            system_prompt: finalPrompt || undefined
         };
 
         const res = await fetch('/api/chat', {
@@ -393,15 +418,26 @@ async function fetchModels() {
         if (res.ok) {
             const data = await res.json();
             modelSelector.innerHTML = '';
+            setupProfileSelector.innerHTML = '';
+
             for (const m of data.profiles || []) {
-                const opt = document.createElement('option');
-                opt.value = m.name;
-                opt.textContent = m.name;
-                // Pre-select if it matches default
+                // Populate internal hidden legacy map
+                const optLegacy = document.createElement('option');
+                optLegacy.value = m.name;
+                optLegacy.textContent = m.name;
+
+                // Populate new modal UI dropdown
+                const optNew = document.createElement('option');
+                optNew.value = m.name;
+                optNew.textContent = `${m.name} (${m.provider})`;
+
                 if (data.default === m.name) {
-                    opt.selected = true;
+                    optLegacy.selected = true;
+                    optNew.selected = true;
+                    modelSetupCurrentLabel.textContent = m.name;
                 }
-                modelSelector.appendChild(opt);
+                modelSelector.appendChild(optLegacy);
+                setupProfileSelector.appendChild(optNew);
             }
         }
     } catch (e) { console.error("Failed to fetch models", e); }
@@ -412,6 +448,7 @@ function initFeatures() {
         sidebar.classList.toggle('collapsed');
     });
 
+    // --- User Settings Modal ---
     settingsBtn.addEventListener('click', () => {
         settingsModal.classList.remove('hidden');
         loadSettings();
@@ -422,6 +459,84 @@ function initFeatures() {
     });
 
     saveSettingsBtn.addEventListener('click', saveSettings);
+
+    // --- Rich Model Setup Modal ---
+    initModelSetup();
+}
+
+function initModelSetup() {
+    // Open Trigger
+    modelSetupBtn.addEventListener('click', () => {
+        modelSetupModal.classList.add('active'); // active uses flex to show centered
+        modelSetupModal.style.display = 'flex';
+
+        // Ensure UI matches current active profile
+        setupProfileSelector.value = modelSelector.value;
+    });
+
+    // Close Triggers
+    closeModelSetupBtn.addEventListener('click', () => {
+        modelSetupModal.style.display = 'none';
+    });
+
+    document.getElementById('modelSetupBackdrop').addEventListener('click', () => {
+        modelSetupModal.style.display = 'none';
+    });
+
+    // Personality Dropdown Logic (Show/Hide Custom Textarea)
+    setupPersonalitySelector.addEventListener('change', (e) => {
+        if (e.target.value === 'custom') {
+            customPersonalityGroup.classList.remove('hidden');
+        } else {
+            customPersonalityGroup.classList.add('hidden');
+        }
+    });
+
+    // Segmented Controls (Autonomy & Economy)
+    const bindSegmentedControl = (groupId, updateCallback) => {
+        const group = document.getElementById(groupId);
+        group.querySelectorAll('.segment').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                // Clear active
+                group.querySelectorAll('.segment').forEach(b => b.classList.remove('active'));
+                // Set active
+                const target = e.currentTarget;
+                target.classList.add('active');
+                updateCallback(target.dataset.level);
+            });
+        });
+    };
+
+    bindSegmentedControl('setupAutonomyGroup', val => activeAutonomyLevel = parseInt(val, 10));
+    bindSegmentedControl('setupEconomyGroup', val => activeTokenEconomy = val);
+
+    // Apply Button
+    applyModelSetupBtn.addEventListener('click', () => {
+        // 1. Sync Base Profile
+        const selectedModel = setupProfileSelector.value;
+        modelSelector.value = selectedModel;
+        modelSetupCurrentLabel.textContent = selectedModel;
+
+        // 2. Persist Memory Setting
+        persistMemorySetting(setupMemoryToggle.checked);
+
+        // 3. Close Modal
+        modelSetupModal.style.display = 'none';
+    });
+}
+
+async function persistMemorySetting(isEnabled) {
+    try {
+        await fetch('/api/preferences', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                memory: { enabled_global: isEnabled }
+            })
+        });
+    } catch (e) {
+        console.error("Failed to save memory preference:", e);
+    }
 }
 
 async function loadSettings() {
@@ -431,6 +546,10 @@ async function loadSettings() {
             const data = await res.json();
             settingSystemPrompt.value = data.system_prompt || '';
             settingTheme.value = data.theme || 'system';
+
+            if (data.memory && data.memory.enabled_global !== undefined) {
+                setupMemoryToggle.checked = data.memory.enabled_global;
+            }
         }
     } catch (e) { console.error("Failed to load settings", e); }
 }

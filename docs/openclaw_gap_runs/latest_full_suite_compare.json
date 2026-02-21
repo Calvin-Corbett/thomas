@@ -1,5 +1,5 @@
 {
-  "computed_at_utc": "2026-02-21T20:02:15Z",
+  "computed_at_utc": "2026-02-21T20:12:23Z",
   "suite": {
     "id": "thomas-full-agent-comparison-v1",
     "version": 1,
@@ -11,6 +11,10 @@
       "cycle_limit_disabled": true,
       "stop_condition": "Continue until no known meaningful gaps remain or user explicitly stops."
     },
+    "head_to_head_pair": [
+      "thomas",
+      "openclaw"
+    ],
     "tracked_cli_commands": [
       "acp",
       "agents",
@@ -94,14 +98,14 @@
       "label": "Thomas",
       "root": "F:\\DevHub\\Thomas",
       "metrics": {
-        "loc.total_files": 5299,
-        "loc.total_loc": 1947955,
+        "loc.total_files": 5300,
+        "loc.total_loc": 1948493,
         "tests.files": 1826,
-        "tests.loc": 880673,
-        "tests.loc_per_file": 482.296276,
-        "tests.to_code_file_ratio": 0.344593,
-        "tests.to_code_loc_ratio": 0.452101,
-        "code.python_files": 1576,
+        "tests.loc": 880679,
+        "tests.loc_per_file": 482.299562,
+        "tests.to_code_file_ratio": 0.344528,
+        "tests.to_code_loc_ratio": 0.45198,
+        "code.python_files": 1577,
         "code.non_python_files": 3723,
         "docs.markdown_files": 764,
         "config.files": 3640,
@@ -109,7 +113,7 @@
         "browser.files": 1794,
         "browser.loc": 872542,
         "plugins.files": 59,
-        "plugins.loc": 15187,
+        "plugins.loc": 15193,
         "gateway.files": 69,
         "gateway.loc": 18784,
         "cli.files": 177,
@@ -121,9 +125,9 @@
         "integrity.invalid_json_files": 0,
         "integrity.missing_required_paths": 0,
         "integrity.empty_production_asset_files": 0,
-        "maintainability.large_code_files_over_800": 1.642748,
+        "maintainability.large_code_files_over_800": 1.642295,
         "maintainability.large_code_files_count_over_800": 32,
-        "maintainability.avg_loc_per_code_file": 367.608039,
+        "maintainability.avg_loc_per_code_file": 367.640189,
         "security.secret_like_hits": 0,
         "security.secret_like_files": 0,
         "security.risky_construct_hits": 0.0,
@@ -168,7 +172,7 @@
         "production.strict_checks.passed": 4,
         "production.strict_checks.failed": 0,
         "production.strict_checks.pass_rate": 1.0,
-        "production.strict_checks.avg_elapsed_seconds": 0.883,
+        "production.strict_checks.avg_elapsed_seconds": 0.898,
         "production.strict_checks.assertion_failures": 0,
         "production.strict_checks.command_failures": 0,
         "benchmark.runs_count": 3,
@@ -196,37 +200,50 @@
         "performance.load.passed_runs": 5,
         "performance.load.failed_runs": 0,
         "performance.load.pass_rate": 1.0,
-        "performance.load.avg_elapsed_seconds": 0.4436,
+        "performance.load.avg_elapsed_seconds": 0.4344,
         "performance.load.p95_elapsed_seconds": 0.453,
-        "performance.load.avg_throughput": 1245.072971,
+        "performance.load.avg_throughput": 1267.715281,
         "resilience.probes.total_runs": 5,
         "resilience.probes.passed_runs": 5,
         "resilience.probes.failed_runs": 0,
         "resilience.probes.pass_rate": 1.0,
-        "resilience.probes.avg_elapsed_seconds": 0.4344,
-        "resilience.probes.p95_elapsed_seconds": 0.6374,
+        "resilience.probes.avg_elapsed_seconds": 0.4186,
+        "resilience.probes.p95_elapsed_seconds": 0.6088,
         "security.probes.total_runs": 1,
         "security.probes.passed_runs": 1,
         "security.probes.failed_runs": 0,
         "security.probes.pass_rate": 1.0,
-        "security.probes.avg_elapsed_seconds": 0.703,
+        "security.probes.avg_elapsed_seconds": 0.688,
         "cost.probes.total_runs": 1,
         "cost.probes.passed_runs": 1,
         "cost.probes.failed_runs": 0,
         "cost.probes.pass_rate": 1.0,
-        "cost.probes.avg_elapsed_seconds": 0.657,
+        "cost.probes.avg_elapsed_seconds": 0.656,
         "cost.benchmark_tokens_per_success": null,
         "cost.benchmark_tool_calls_per_success": null,
         "cost.benchmark_total_tokens_mean": 0.0
       },
       "version_info": {
-        "kind": "none",
+        "kind": "git",
         "root": "F:\\DevHub\\Thomas",
         "enabled": false,
-        "errors": []
+        "remote": "origin",
+        "branch": "main",
+        "fetched": false,
+        "pulled": false,
+        "local_head": "ca7ddffd19520990f80d7388aeefc84e7ab9dc60",
+        "remote_head": "",
+        "local_branch": "master",
+        "ahead": null,
+        "behind": null,
+        "is_up_to_date": null,
+        "errors": [
+          "git remote head query failed: fatal: ambiguous argument 'origin/main': unknown revision or path not in the working tree."
+        ],
+        "local_head_before": "ca7ddffd19520990f80d7388aeefc84e7ab9dc60"
       },
       "model_snapshot": {
-        "captured_at_utc": "2026-02-21T20:01:10Z",
+        "captured_at_utc": "2026-02-21T20:11:25Z",
         "day_utc": "2026-02-21",
         "required": true,
         "ok": true,
@@ -237,13 +254,15 @@
         "context_window": 128000,
         "max_tokens": 8192
       },
-      "errors": [],
+      "errors": [
+        "git remote head query failed: fatal: ambiguous argument 'origin/main': unknown revision or path not in the working tree."
+      ],
       "strict_checks": {
         "total": 4,
         "passed": 4,
         "failed": 0,
         "pass_rate": 1.0,
-        "avg_elapsed_seconds": 0.883,
+        "avg_elapsed_seconds": 0.898,
         "assertion_failures": 0,
         "command_failures": 0,
         "results": [
@@ -252,7 +271,7 @@
             "pass": true,
             "command_ok": true,
             "returncode": -999,
-            "elapsed_seconds": 0.36,
+            "elapsed_seconds": 0.344,
             "assertions": [
               {
                 "path": "count",
@@ -290,7 +309,7 @@
             "pass": true,
             "command_ok": true,
             "returncode": -999,
-            "elapsed_seconds": 0.375,
+            "elapsed_seconds": 0.391,
             "assertions": [
               {
                 "path": "total",
@@ -380,7 +399,7 @@
             "pass": true,
             "command_ok": true,
             "returncode": -999,
-            "elapsed_seconds": 2.375,
+            "elapsed_seconds": 2.437,
             "assertions": [],
             "command": [
               "C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
@@ -391,7 +410,7 @@
               "tests/test_extension_catalog_runtime.py",
               "tests/test_cli_production_assets_integration.py"
             ],
-            "stdout_preview": "......                                                                   [100%]\n============================== warnings summary ===============================\nC:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\config\\__init__.py:852\n  C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\config\\__init__.py:852: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; aiohttp.pytest_plugin\n    self.import_plugin(import_spec)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n6 passed, 1 warning in 1.79s\n",
+            "stdout_preview": "......                                                                   [100%]\n============================== warnings summary ===============================\nC:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\config\\__init__.py:852\n  C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\site-packages\\_pytest\\config\\__init__.py:852: PytestAssertRewriteWarning: Module already imported so cannot be rewritten; aiohttp.pytest_plugin\n    self.import_plugin(import_spec)\n\n-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html\n6 passed, 1 warning in 1.81s\n",
             "stderr_preview": ""
           }
         ]
@@ -404,20 +423,20 @@
         "command_failures": 0,
         "assertion_failures": 0,
         "elapsed": {
-          "mean": 0.4436,
-          "stddev": 0.007684,
+          "mean": 0.4344,
+          "stddev": 0.018249,
           "p50": 0.438,
           "p95": 0.453,
-          "min": 0.437,
+          "min": 0.406,
           "max": 0.453
         },
         "throughput": {
-          "mean": 1245.072971,
-          "stddev": 137.229159,
+          "mean": 1267.715281,
+          "stddev": 90.727007,
           "p50": 1324.503311,
-          "p95": 1372.370772,
-          "min": 1059.602649,
-          "max": 1372.997712
+          "p95": 1360.791073,
+          "min": 1137.440758,
+          "max": 1369.863014
         },
         "extracted": {},
         "runs": [
@@ -427,8 +446,8 @@
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.437,
-            "throughput": 1372.9977116704806,
+            "elapsed_seconds": 0.438,
+            "throughput": 1369.86301369863,
             "assertions": [
               {
                 "path": "total",
@@ -467,8 +486,8 @@
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.438,
-            "throughput": 1369.86301369863,
+            "elapsed_seconds": 0.453,
+            "throughput": 1324.503311258278,
             "assertions": [
               {
                 "path": "total",
@@ -547,8 +566,8 @@
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.437,
-            "throughput": 1098.3981693363844,
+            "elapsed_seconds": 0.406,
+            "throughput": 1182.2660098522167,
             "assertions": [
               {
                 "path": "total",
@@ -585,8 +604,8 @@
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.453,
-            "throughput": 1059.6026490066224,
+            "elapsed_seconds": 0.422,
+            "throughput": 1137.4407582938388,
             "assertions": [
               {
                 "path": "total",
@@ -627,12 +646,12 @@
         "command_failures": 0,
         "assertion_failures": 0,
         "elapsed": {
-          "mean": 0.4344,
-          "stddev": 0.134479,
-          "p50": 0.375,
-          "p95": 0.6374,
-          "min": 0.359,
-          "max": 0.703
+          "mean": 0.4186,
+          "stddev": 0.12634,
+          "p50": 0.359,
+          "p95": 0.6088,
+          "min": 0.344,
+          "max": 0.671
         },
         "throughput": {
           "mean": null,
@@ -647,86 +666,6 @@
           {
             "id": "resilience_repeat_validate",
             "attempt": 1,
-            "pass": true,
-            "command_ok": true,
-            "returncode": 0,
-            "elapsed_seconds": 0.375,
-            "throughput": null,
-            "assertions": [
-              {
-                "path": "total",
-                "op": "eq",
-                "expected": 200,
-                "actual": 200,
-                "pass": true,
-                "error": ""
-              },
-              {
-                "path": "invalid",
-                "op": "eq",
-                "expected": 0,
-                "actual": 0,
-                "pass": true,
-                "error": ""
-              }
-            ],
-            "command": [
-              "C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
-              "-m",
-              "thomas",
-              "browser",
-              "workflow-cases",
-              "validate",
-              "--json",
-              "--limit",
-              "200"
-            ],
-            "stdout_preview": "{\n  \"root\": \"F:\\\\DevHub\\\\Thomas\\\\thomas\\\\browser\\\\workflow_corpus\",\n  \"total\": 200,\n  \"valid\": 200,\n  \"invalid\": 0,\n  \"issues\": []\n}\n",
-            "stderr_preview": ""
-          },
-          {
-            "id": "resilience_repeat_validate",
-            "attempt": 2,
-            "pass": true,
-            "command_ok": true,
-            "returncode": 0,
-            "elapsed_seconds": 0.36,
-            "throughput": null,
-            "assertions": [
-              {
-                "path": "total",
-                "op": "eq",
-                "expected": 200,
-                "actual": 200,
-                "pass": true,
-                "error": ""
-              },
-              {
-                "path": "invalid",
-                "op": "eq",
-                "expected": 0,
-                "actual": 0,
-                "pass": true,
-                "error": ""
-              }
-            ],
-            "command": [
-              "C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
-              "-m",
-              "thomas",
-              "browser",
-              "workflow-cases",
-              "validate",
-              "--json",
-              "--limit",
-              "200"
-            ],
-            "stdout_preview": "{\n  \"root\": \"F:\\\\DevHub\\\\Thomas\\\\thomas\\\\browser\\\\workflow_corpus\",\n  \"total\": 200,\n  \"valid\": 200,\n  \"invalid\": 0,\n  \"issues\": []\n}\n",
-            "stderr_preview": ""
-          },
-          {
-            "id": "resilience_repeat_validate",
-            "attempt": 3,
             "pass": true,
             "command_ok": true,
             "returncode": 0,
@@ -766,11 +705,91 @@
           },
           {
             "id": "resilience_repeat_validate",
+            "attempt": 2,
+            "pass": true,
+            "command_ok": true,
+            "returncode": 0,
+            "elapsed_seconds": 0.359,
+            "throughput": null,
+            "assertions": [
+              {
+                "path": "total",
+                "op": "eq",
+                "expected": 200,
+                "actual": 200,
+                "pass": true,
+                "error": ""
+              },
+              {
+                "path": "invalid",
+                "op": "eq",
+                "expected": 0,
+                "actual": 0,
+                "pass": true,
+                "error": ""
+              }
+            ],
+            "command": [
+              "C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+              "-m",
+              "thomas",
+              "browser",
+              "workflow-cases",
+              "validate",
+              "--json",
+              "--limit",
+              "200"
+            ],
+            "stdout_preview": "{\n  \"root\": \"F:\\\\DevHub\\\\Thomas\\\\thomas\\\\browser\\\\workflow_corpus\",\n  \"total\": 200,\n  \"valid\": 200,\n  \"invalid\": 0,\n  \"issues\": []\n}\n",
+            "stderr_preview": ""
+          },
+          {
+            "id": "resilience_repeat_validate",
+            "attempt": 3,
+            "pass": true,
+            "command_ok": true,
+            "returncode": 0,
+            "elapsed_seconds": 0.36,
+            "throughput": null,
+            "assertions": [
+              {
+                "path": "total",
+                "op": "eq",
+                "expected": 200,
+                "actual": 200,
+                "pass": true,
+                "error": ""
+              },
+              {
+                "path": "invalid",
+                "op": "eq",
+                "expected": 0,
+                "actual": 0,
+                "pass": true,
+                "error": ""
+              }
+            ],
+            "command": [
+              "C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\python.exe",
+              "-m",
+              "thomas",
+              "browser",
+              "workflow-cases",
+              "validate",
+              "--json",
+              "--limit",
+              "200"
+            ],
+            "stdout_preview": "{\n  \"root\": \"F:\\\\DevHub\\\\Thomas\\\\thomas\\\\browser\\\\workflow_corpus\",\n  \"total\": 200,\n  \"valid\": 200,\n  \"invalid\": 0,\n  \"issues\": []\n}\n",
+            "stderr_preview": ""
+          },
+          {
+            "id": "resilience_repeat_validate",
             "attempt": 4,
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.375,
+            "elapsed_seconds": 0.344,
             "throughput": null,
             "assertions": [
               {
@@ -810,7 +829,7 @@
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.703,
+            "elapsed_seconds": 0.671,
             "throughput": null,
             "assertions": [],
             "command": [
@@ -834,12 +853,12 @@
         "command_failures": 0,
         "assertion_failures": 0,
         "elapsed": {
-          "mean": 0.703,
+          "mean": 0.688,
           "stddev": 0.0,
-          "p50": 0.703,
-          "p95": 0.703,
-          "min": 0.703,
-          "max": 0.703
+          "p50": 0.688,
+          "p95": 0.688,
+          "min": 0.688,
+          "max": 0.688
         },
         "throughput": {
           "mean": null,
@@ -857,7 +876,7 @@
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.703,
+            "elapsed_seconds": 0.688,
             "throughput": null,
             "assertions": [],
             "command": [
@@ -881,12 +900,12 @@
         "command_failures": 0,
         "assertion_failures": 0,
         "elapsed": {
-          "mean": 0.657,
+          "mean": 0.656,
           "stddev": 0.0,
-          "p50": 0.657,
-          "p95": 0.657,
-          "min": 0.657,
-          "max": 0.657
+          "p50": 0.656,
+          "p95": 0.656,
+          "min": 0.656,
+          "max": 0.656
         },
         "throughput": {
           "mean": null,
@@ -904,7 +923,7 @@
             "pass": true,
             "command_ok": true,
             "returncode": 0,
-            "elapsed_seconds": 0.657,
+            "elapsed_seconds": 0.656,
             "throughput": null,
             "assertions": [],
             "command": [
@@ -1100,10 +1119,10 @@
         "behind": 0,
         "is_up_to_date": true,
         "errors": [],
-        "local_head_before": "518dbbf4c6c3c3cc1dd010c5a95f3c0a036ca13c"
+        "local_head_before": "ac633366ce1314253c9a2601aae86daed9c93054"
       },
       "model_snapshot": {
-        "captured_at_utc": "2026-02-21T20:01:54Z",
+        "captured_at_utc": "2026-02-21T20:12:04Z",
         "day_utc": "2026-02-21",
         "required": false,
         "ok": true,
@@ -1514,7 +1533,7 @@
         "local_head_before": "7afaa26f8b8b7b56146f0674d2a67e795b616b7c"
       },
       "model_snapshot": {
-        "captured_at_utc": "2026-02-21T20:02:12Z",
+        "captured_at_utc": "2026-02-21T20:12:20Z",
         "day_utc": "2026-02-21",
         "required": false,
         "ok": false,
@@ -1902,7 +1921,7 @@
         "local_head_before": "681f5ce5b84bc96a2a4cc5e90daa6328f3f796e0"
       },
       "model_snapshot": {
-        "captured_at_utc": "2026-02-21T20:02:15Z",
+        "captured_at_utc": "2026-02-21T20:12:22Z",
         "day_utc": "2026-02-21",
         "required": false,
         "ok": false,
@@ -3988,7 +4007,7 @@
       "weight": 1.0,
       "rationale": "Python module breadth.",
       "values": {
-        "thomas": 1576,
+        "thomas": 1577,
         "openclaw": 0,
         "aider": 147,
         "open_interpreter": 144
@@ -4004,18 +4023,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 1576.0,
+      "spread": 1577.0,
       "normalized": {
         "thomas": 1.0,
         "openclaw": 0.0,
-        "aider": 0.093274,
-        "open_interpreter": 0.091371
+        "aider": 0.093215,
+        "open_interpreter": 0.091313
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1576.0,
-        "aider": 1429.0,
-        "open_interpreter": 1432.0
+        "openclaw": 1577.0,
+        "aider": 1430.0,
+        "open_interpreter": 1433.0
       }
     },
     {
@@ -4170,7 +4189,7 @@
       "weight": 1.35,
       "rationale": "Mean elapsed time across cost probes.",
       "values": {
-        "thomas": 0.657,
+        "thomas": 0.656,
         "openclaw": null,
         "aider": null,
         "open_interpreter": null
@@ -4779,7 +4798,7 @@
       "weight": 1.0,
       "rationale": "Overall code surface breadth.",
       "values": {
-        "thomas": 5299,
+        "thomas": 5300,
         "openclaw": 3484,
         "aider": 236,
         "open_interpreter": 163
@@ -4795,18 +4814,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 5136.0,
+      "spread": 5137.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.646612,
-        "aider": 0.014213,
+        "openclaw": 0.646486,
+        "aider": 0.014211,
         "open_interpreter": 0.0
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1815.0,
-        "aider": 5063.0,
-        "open_interpreter": 5136.0
+        "openclaw": 1816.0,
+        "aider": 5064.0,
+        "open_interpreter": 5137.0
       }
     },
     {
@@ -4816,7 +4835,7 @@
       "weight": 1.0,
       "rationale": "Overall implementation depth.",
       "values": {
-        "thomas": 1947955,
+        "thomas": 1948493,
         "openclaw": 566591,
         "aider": 56277,
         "open_interpreter": 17153
@@ -4832,18 +4851,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 1930802.0,
+      "spread": 1931340.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.284565,
-        "aider": 0.020263,
+        "openclaw": 0.284485,
+        "aider": 0.020257,
         "open_interpreter": 0.0
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 1381364.0,
-        "aider": 1891678.0,
-        "open_interpreter": 1930802.0
+        "openclaw": 1381902.0,
+        "aider": 1892216.0,
+        "open_interpreter": 1931340.0
       }
     },
     {
@@ -4853,7 +4872,7 @@
       "weight": 0.9,
       "rationale": "Large-file concentration (files >800 LOC per 100k LOC).",
       "values": {
-        "thomas": 1.642748,
+        "thomas": 1.642295,
         "openclaw": 11.119132,
         "aider": 30.207723,
         "open_interpreter": 11.659768
@@ -4869,18 +4888,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 28.564975,
+      "spread": 28.565428,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.668252,
+        "openclaw": 0.668241,
         "aider": 0.0,
-        "open_interpreter": 0.649325
+        "open_interpreter": 0.649315
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 9.476384,
-        "aider": 28.564975,
-        "open_interpreter": 10.01702
+        "openclaw": 9.476837,
+        "aider": 28.565428,
+        "open_interpreter": 10.017473
       }
     },
     {
@@ -4928,7 +4947,7 @@
       "weight": 1.35,
       "rationale": "Mean elapsed time across load probes.",
       "values": {
-        "thomas": 0.4436,
+        "thomas": 0.4344,
         "openclaw": null,
         "aider": null,
         "open_interpreter": null
@@ -4966,7 +4985,7 @@
       "weight": 1.35,
       "rationale": "Mean load throughput.",
       "values": {
-        "thomas": 1245.072971,
+        "thomas": 1267.715281,
         "openclaw": null,
         "aider": null,
         "open_interpreter": null
@@ -5233,7 +5252,7 @@
       "weight": 1.0,
       "rationale": "Plugin subsystem depth.",
       "values": {
-        "thomas": 15187,
+        "thomas": 15193,
         "openclaw": 10396,
         "aider": 0,
         "open_interpreter": 0
@@ -5249,18 +5268,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 15187.0,
+      "spread": 15193.0,
       "normalized": {
         "thomas": 1.0,
-        "openclaw": 0.684533,
+        "openclaw": 0.684262,
         "aider": 0.0,
         "open_interpreter": 0.0
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 4791.0,
-        "aider": 15187.0,
-        "open_interpreter": 15187.0
+        "openclaw": 4797.0,
+        "aider": 15193.0,
+        "open_interpreter": 15193.0
       }
     },
     {
@@ -5310,7 +5329,7 @@
       "weight": 1.4,
       "rationale": "Average strict check execution time.",
       "values": {
-        "thomas": 0.883,
+        "thomas": 0.898,
         "openclaw": null,
         "aider": null,
         "open_interpreter": null
@@ -5540,7 +5559,7 @@
       "weight": 1.35,
       "rationale": "Mean elapsed time for resilience probes.",
       "values": {
-        "thomas": 0.4344,
+        "thomas": 0.4186,
         "openclaw": null,
         "aider": null,
         "open_interpreter": null
@@ -5618,7 +5637,7 @@
       "weight": 1.35,
       "rationale": "P95 elapsed time for resilience probes.",
       "values": {
-        "thomas": 0.6374,
+        "thomas": 0.6088,
         "openclaw": null,
         "aider": null,
         "open_interpreter": null
@@ -5807,7 +5826,7 @@
       "weight": 1.45,
       "rationale": "Mean elapsed time for security probes.",
       "values": {
-        "thomas": 0.703,
+        "thomas": 0.688,
         "openclaw": null,
         "aider": null,
         "open_interpreter": null
@@ -6192,7 +6211,7 @@
       "weight": 1.2,
       "rationale": "Test implementation depth.",
       "values": {
-        "thomas": 880673,
+        "thomas": 880679,
         "openclaw": 1489,
         "aider": 10214,
         "open_interpreter": 1216
@@ -6208,7 +6227,7 @@
       "winners": [
         "thomas"
       ],
-      "spread": 879457.0,
+      "spread": 879463.0,
       "normalized": {
         "thomas": 1.0,
         "openclaw": 0.00031,
@@ -6217,9 +6236,9 @@
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 879184.0,
-        "aider": 870459.0,
-        "open_interpreter": 879457.0
+        "openclaw": 879190.0,
+        "aider": 870465.0,
+        "open_interpreter": 879463.0
       }
     },
     {
@@ -6229,7 +6248,7 @@
       "weight": 1.2,
       "rationale": "Average depth per test file.",
       "values": {
-        "thomas": 482.296276,
+        "thomas": 482.299562,
         "openclaw": 74.45,
         "aider": 170.233333,
         "open_interpreter": 243.2
@@ -6245,18 +6264,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 407.846276,
+      "spread": 407.849562,
       "normalized": {
         "thomas": 1.0,
         "openclaw": 0.0,
-        "aider": 0.234852,
-        "open_interpreter": 0.413759
+        "aider": 0.23485,
+        "open_interpreter": 0.413756
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 407.846276,
-        "aider": 312.062943,
-        "open_interpreter": 239.096276
+        "openclaw": 407.849562,
+        "aider": 312.066229,
+        "open_interpreter": 239.099562
       }
     },
     {
@@ -6266,7 +6285,7 @@
       "weight": 1.2,
       "rationale": "Test-to-code file ratio.",
       "values": {
-        "thomas": 0.344593,
+        "thomas": 0.344528,
         "openclaw": 0.005741,
         "aider": 0.254237,
         "open_interpreter": 0.030675
@@ -6282,18 +6301,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 0.338852,
+      "spread": 0.338787,
       "normalized": {
         "thomas": 1.0,
         "openclaw": 0.0,
-        "aider": 0.733347,
-        "open_interpreter": 0.073584
+        "aider": 0.733487,
+        "open_interpreter": 0.073598
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.338852,
-        "aider": 0.090356,
-        "open_interpreter": 0.313918
+        "openclaw": 0.338787,
+        "aider": 0.090291,
+        "open_interpreter": 0.313853
       }
     },
     {
@@ -6303,7 +6322,7 @@
       "weight": 1.2,
       "rationale": "Test-to-code LOC ratio.",
       "values": {
-        "thomas": 0.452101,
+        "thomas": 0.45198,
         "openclaw": 0.002628,
         "aider": 0.181495,
         "open_interpreter": 0.070891
@@ -6319,18 +6338,18 @@
       "winners": [
         "thomas"
       ],
-      "spread": 0.449473,
+      "spread": 0.449352,
       "normalized": {
         "thomas": 1.0,
         "openclaw": 0.0,
-        "aider": 0.397948,
-        "open_interpreter": 0.151873
+        "aider": 0.398055,
+        "open_interpreter": 0.151914
       },
       "gap_to_best": {
         "thomas": 0.0,
-        "openclaw": 0.449473,
-        "aider": 0.270606,
-        "open_interpreter": 0.38121
+        "openclaw": 0.449352,
+        "aider": 0.270485,
+        "open_interpreter": 0.381089
       }
     }
   ],
@@ -6357,13 +6376,13 @@
         "metrics_total": 110,
         "comparable_metrics_total": 94,
         "rank": 1,
-        "head_to_head_score": 89.198,
+        "head_to_head_score": 82.87,
         "overall_suite_score": 100.0,
         "overall_suite_rank": 1
       },
       {
         "agent": "openclaw",
-        "weighted_points": 57.703986,
+        "weighted_points": 57.703499,
         "composite_score": 49.659,
         "coverage": 0.854545,
         "comparable_coverage": 1.0,
@@ -6379,8 +6398,8 @@
       },
       {
         "agent": "aider",
-        "weighted_points": 28.761091,
-        "composite_score": 24.751,
+        "weighted_points": 28.761318,
+        "composite_score": 24.752,
         "coverage": 0.5,
         "comparable_coverage": 0.585106,
         "wins": 0,
@@ -6389,13 +6408,13 @@
         "metrics_total": 110,
         "comparable_metrics_total": 94,
         "rank": 3,
-        "head_to_head_score": 7.87,
+        "head_to_head_score": 0.0,
         "overall_suite_score": 13.962,
         "overall_suite_rank": 3
       },
       {
         "agent": "open_interpreter",
-        "weighted_points": 26.345148,
+        "weighted_points": 26.345144,
         "composite_score": 22.672,
         "coverage": 0.5,
         "comparable_coverage": 0.585106,
@@ -6405,7 +6424,7 @@
         "metrics_total": 110,
         "comparable_metrics_total": 94,
         "rank": 4,
-        "head_to_head_score": 7.407,
+        "head_to_head_score": 0.0,
         "overall_suite_score": 13.585,
         "overall_suite_rank": 4
       }
@@ -6521,8 +6540,8 @@
           "comparable_metrics_with_data": 4
         },
         "code_surface": {
-          "score": 36.044,
-          "weighted_points": 4.685736,
+          "score": 36.04,
+          "weighted_points": 4.685259,
           "max_weight": 13.0,
           "metrics_with_data": 13,
           "comparable_metrics_with_data": 13
@@ -6556,8 +6575,8 @@
           "comparable_metrics_with_data": 5
         },
         "maintainability": {
-          "score": 66.825,
-          "weighted_points": 0.601427,
+          "score": 66.824,
+          "weighted_points": 0.601417,
           "max_weight": 0.9,
           "metrics_with_data": 1,
           "comparable_metrics_with_data": 1
@@ -6614,8 +6633,8 @@
           "comparable_metrics_with_data": 0
         },
         "code_surface": {
-          "score": 8.795,
-          "weighted_points": 1.143302,
+          "score": 8.794,
+          "weighted_points": 1.143235,
           "max_weight": 13.0,
           "metrics_with_data": 13,
           "comparable_metrics_with_data": 13
@@ -6684,8 +6703,8 @@
           "comparable_metrics_with_data": 8
         },
         "test_rigor": {
-          "score": 28.132,
-          "weighted_points": 1.687897,
+          "score": 28.137,
+          "weighted_points": 1.688191,
           "max_weight": 6.0,
           "metrics_with_data": 5,
           "comparable_metrics_with_data": 5
@@ -6708,7 +6727,7 @@
         },
         "code_surface": {
           "score": 2.358,
-          "weighted_points": 0.306559,
+          "weighted_points": 0.306501,
           "max_weight": 13.0,
           "metrics_with_data": 13,
           "comparable_metrics_with_data": 13
@@ -6742,8 +6761,8 @@
           "comparable_metrics_with_data": 5
         },
         "maintainability": {
-          "score": 64.933,
-          "weighted_points": 0.584393,
+          "score": 64.931,
+          "weighted_points": 0.584383,
           "max_weight": 0.9,
           "metrics_with_data": 1,
           "comparable_metrics_with_data": 1
@@ -6777,8 +6796,8 @@
           "comparable_metrics_with_data": 8
         },
         "test_rigor": {
-          "score": 12.784,
-          "weighted_points": 0.767059,
+          "score": 12.785,
+          "weighted_points": 0.767122,
           "max_weight": 6.0,
           "metrics_with_data": 5,
           "comparable_metrics_with_data": 5
@@ -6792,22 +6811,13 @@
       "openclaw": {
         "competitor": "openclaw",
         "root": "F:\\DevHub\\_tmp_openclaw_count_1771454552",
-        "previous_head": "518dbbf4c6c3c3cc1dd010c5a95f3c0a036ca13c",
+        "previous_head": "ac633366ce1314253c9a2601aae86daed9c93054",
         "current_head": "ac633366ce1314253c9a2601aae86daed9c93054",
-        "status": "updated_since_last_run",
-        "changed_files_count": 1,
-        "hotspots": [
-          {
-            "path": "CONTRIBUTING.md",
-            "changed_files": 1
-          }
-        ],
-        "predicted_next_focus": [
-          "general_surface_growth"
-        ],
-        "recommended_thomas_counter_moves": [
-          "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories."
-        ]
+        "status": "no_change_since_last_run",
+        "changed_files_count": 0,
+        "hotspots": [],
+        "predicted_next_focus": [],
+        "recommended_thomas_counter_moves": []
       },
       "aider": {
         "competitor": "aider",
@@ -6832,18 +6842,8 @@
         "recommended_thomas_counter_moves": []
       }
     },
-    "aggregate_predicted_focus": [
-      {
-        "area": "general_surface_growth",
-        "count": 1
-      }
-    ],
-    "aggregate_recommended_counter_moves": [
-      {
-        "move": "Monitor breadth growth and preemptively add targeted strict checks in the fastest-growing directories.",
-        "count": 1
-      }
-    ]
+    "aggregate_predicted_focus": [],
+    "aggregate_recommended_counter_moves": []
   },
   "focus": {
     "agent": "thomas",
@@ -6864,8 +6864,8 @@
         },
         {
           "competitor": "aider",
-          "composite_score": 24.751,
-          "composite_delta_vs_focus": -75.249,
+          "composite_score": 24.752,
+          "composite_delta_vs_focus": -75.248,
           "metrics_beating_focus": 0,
           "metrics_focus_beats": 38,
           "metrics_tied": 17,
@@ -6892,7 +6892,7 @@
     "contract_id": "thomas-full-coverage-contract-v1",
     "contract_version": 1,
     "scoring_methodology": {
-      "head_to_head_score": "pairwise vs focus agent; counts any runtime metric where either side has data; excludes metrics where neither side has data",
+      "head_to_head_score": "explicit 1v1 pair; counts runtime metrics where either side has data; excludes metrics where neither side has data",
       "overall_suite_score": "all applicable runtime metric checks + all applicable catalog contract checks"
     },
     "runtime_metrics": {
@@ -9358,7 +9358,7 @@
       "agents": [
         {
           "agent": "thomas",
-          "head_to_head_score": 89.198,
+          "head_to_head_score": 82.87,
           "overall_suite_score": 100.0,
           "runtime_checks": {
             "applicable": 108,
@@ -9400,7 +9400,7 @@
         },
         {
           "agent": "aider",
-          "head_to_head_score": 7.87,
+          "head_to_head_score": null,
           "overall_suite_score": 13.962,
           "runtime_checks": {
             "applicable": 55,
@@ -9421,7 +9421,7 @@
         },
         {
           "agent": "open_interpreter",
-          "head_to_head_score": 7.407,
+          "head_to_head_score": null,
           "overall_suite_score": 13.585,
           "runtime_checks": {
             "applicable": 55,
@@ -9444,7 +9444,7 @@
       "overall_ranking": [
         {
           "agent": "thomas",
-          "head_to_head_score": 89.198,
+          "head_to_head_score": 82.87,
           "overall_suite_score": 100.0,
           "runtime_checks": {
             "applicable": 108,
@@ -9486,7 +9486,7 @@
         },
         {
           "agent": "aider",
-          "head_to_head_score": 7.87,
+          "head_to_head_score": null,
           "overall_suite_score": 13.962,
           "runtime_checks": {
             "applicable": 55,
@@ -9507,7 +9507,7 @@
         },
         {
           "agent": "open_interpreter",
-          "head_to_head_score": 7.407,
+          "head_to_head_score": null,
           "overall_suite_score": 13.585,
           "runtime_checks": {
             "applicable": 55,
@@ -9527,50 +9527,27 @@
           "overall_rank": 4
         }
       ],
-      "pairwise_vs_focus": {
-        "openclaw": {
-          "focus_agent": "thomas",
-          "competitor": "openclaw",
-          "counted_metrics": 108,
-          "focus_points": 89.5,
-          "competitor_points": 18.5,
-          "ties": 37,
-          "focus_score": 82.87,
-          "competitor_score": 17.13
-        },
-        "aider": {
-          "focus_agent": "thomas",
-          "competitor": "aider",
-          "counted_metrics": 108,
-          "focus_points": 99.5,
-          "competitor_points": 8.5,
-          "ties": 17,
-          "focus_score": 92.13,
-          "competitor_score": 7.87
-        },
-        "open_interpreter": {
-          "focus_agent": "thomas",
-          "competitor": "open_interpreter",
-          "counted_metrics": 108,
-          "focus_points": 100.0,
-          "competitor_points": 8.0,
-          "ties": 16,
-          "focus_score": 92.593,
-          "competitor_score": 7.407
-        }
+      "head_to_head": {
+        "enabled": true,
+        "agent_a": "thomas",
+        "agent_b": "openclaw",
+        "counted_metrics": 108,
+        "ties": 37,
+        "agent_a_score": 82.87,
+        "agent_b_score": 17.13
       }
     },
     "errors": []
   },
   "overall_suite_scoreboard": {
     "methodology": {
-      "head_to_head_score": "pairwise vs focus agent; counts any runtime metric where either side has data; excludes metrics where neither side has data",
+      "head_to_head_score": "explicit 1v1 pair; counts runtime metrics where either side has data; excludes metrics where neither side has data",
       "overall_suite_score": "all applicable runtime metric checks + all applicable catalog contract checks"
     },
     "ranking": [
       {
         "agent": "thomas",
-        "head_to_head_score": 89.198,
+        "head_to_head_score": 82.87,
         "overall_suite_score": 100.0,
         "head_to_head_rank": 1,
         "overall_suite_rank": 1
@@ -9584,14 +9561,14 @@
       },
       {
         "agent": "aider",
-        "head_to_head_score": 7.87,
+        "head_to_head_score": 0.0,
         "overall_suite_score": 13.962,
         "head_to_head_rank": 3,
         "overall_suite_rank": 3
       },
       {
         "agent": "open_interpreter",
-        "head_to_head_score": 7.407,
+        "head_to_head_score": 0.0,
         "overall_suite_score": 13.585,
         "head_to_head_rank": 4,
         "overall_suite_rank": 4

@@ -4,6 +4,7 @@ import { captureDownloadIntent } from "@/lib/analytics";
 import { logDownloadEvent } from "@/lib/db";
 import { normalizeArch, normalizePlatform, pickAssetForPlatform } from "@/lib/download-routing";
 import { fetchReleases, selectReleaseByChannel } from "@/lib/github";
+import { getDownloadMode, resolveManualDownload } from "@/lib/manual-downloads";
 import type { ReleaseChannel } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -27,6 +28,55 @@ export async function GET(req: NextRequest) {
   const userAgent = req.headers.get("user-agent") ?? "";
   const forwarded = req.headers.get("x-forwarded-for") ?? "";
   const ip = forwarded.split(",")[0]?.trim() || "unknown";
+  const mode = getDownloadMode();
+  const manual = mode !== "github" ? resolveManualDownload(platform, channel) : null;
+  const eventId = randomUUID();
+  const ipHash = hashIp(ip);
+
+  const redirectWithTracking = async (url: string, releaseTag: string, assetName: string) => {
+    await logDownloadEvent({
+      eventId,
+      platform,
+      channel,
+      arch,
+      source,
+      referrer,
+      userAgent,
+      ipHash,
+      releaseTag,
+      assetName,
+    }).catch(() => {
+      // Keep redirect path resilient even if storage fails.
+    });
+
+    await captureDownloadIntent({
+      distinctId: ipHash.slice(0, 24),
+      platform,
+      channel,
+      releaseTag,
+      assetName,
+      source,
+    });
+
+    const response = NextResponse.redirect(url, { status: 302 });
+    response.headers.set("cache-control", "no-store");
+    return response;
+  };
+
+  if (manual) {
+    return redirectWithTracking(manual.url, manual.releaseTag, manual.assetName);
+  }
+
+  if (mode === "manual") {
+    return NextResponse.json(
+      {
+        ok: false,
+        error: "manual_download_url_missing",
+        hint: "Set THOMAS_DOWNLOAD_URL_WINDOWS / MACOS / LINUX for manual mode.",
+      },
+      { status: 503 },
+    );
+  }
 
   const releases = await fetchReleases(30);
   const targetRelease = selectReleaseByChannel(releases, channel);
@@ -35,7 +85,7 @@ export async function GET(req: NextRequest) {
       {
         ok: false,
         error: "release_not_found",
-        hint: "Set THOMAS_GITHUB_REPO=owner/repo and ensure releases exist.",
+        hint: "Set THOMAS_GITHUB_REPO=owner/repo, or configure THOMAS_DOWNLOAD_URL_* for manual mode.",
       },
       { status: 404 },
     );
@@ -55,34 +105,5 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const eventId = randomUUID();
-  const ipHash = hashIp(ip);
-
-  await logDownloadEvent({
-    eventId,
-    platform,
-    channel,
-    arch,
-    source,
-    referrer,
-    userAgent,
-    ipHash,
-    releaseTag: targetRelease.tag_name,
-    assetName: asset.name,
-  }).catch(() => {
-    // Keep redirect path resilient even if storage fails.
-  });
-
-  await captureDownloadIntent({
-    distinctId: ipHash.slice(0, 24),
-    platform,
-    channel,
-    releaseTag: targetRelease.tag_name,
-    assetName: asset.name,
-    source,
-  });
-
-  const response = NextResponse.redirect(asset.browser_download_url, { status: 302 });
-  response.headers.set("cache-control", "no-store");
-  return response;
+  return redirectWithTracking(asset.browser_download_url, targetRelease.tag_name, asset.name);
 }

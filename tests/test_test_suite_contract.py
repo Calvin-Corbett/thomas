@@ -98,8 +98,14 @@ def test_head_to_head_score_counts_unique_runtime_metrics() -> None:
             },
         ],
     }
-    evaluation = contract.evaluate_test_suite_contract(contract=sample_contract, result=result, focus_agent="thomas")
-    pair = dict(dict(evaluation["scores"]).get("pairwise_vs_focus") or {}).get("openclaw") or {}
-    assert int(pair.get("counted_metrics") or 0) == 2
-    assert float(pair.get("focus_score") or 0.0) == 50.0
-    assert float(pair.get("competitor_score") or 0.0) == 50.0
+    evaluation = contract.evaluate_test_suite_contract(
+        contract=sample_contract,
+        result=result,
+        focus_agent="thomas",
+        head_to_head_pair=["thomas", "openclaw"],
+    )
+    h2h = dict(dict(evaluation["scores"]).get("head_to_head") or {})
+    assert bool(h2h.get("enabled")) is True
+    assert int(h2h.get("counted_metrics") or 0) == 2
+    assert float(h2h.get("agent_a_score") or 0.0) == 50.0
+    assert float(h2h.get("agent_b_score") or 0.0) == 50.0
