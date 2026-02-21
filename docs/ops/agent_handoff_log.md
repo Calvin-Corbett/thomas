@@ -132,3 +132,14 @@ ode_modules, 	asks, output.
 - Added guard-staged command and wired it into pre-commit.
 - Updated docs and handoff instructions for THOMAS_AGENT_ID workflow.
 - Validated compileall, ruff, auto_checks --quick, and smoke conflict tests.
+
+## 2026-02-21T14:32:10-06:00
+
+### Post-Commit Hook Setup
+
+- Branch: `master`
+- HEAD: `d865441`
+- Created commit d865441 for active-folder hardening and staged-edit guard.
+- Installed local git hook: python -m pre_commit install.
+- python -m pre_commit run --all-files: Active Folder Guard passed; Release Update Gate failed in dirty workspace due product-surface change detection on thomas/demo/agent_comparison_suite.py.
+- Concurrent agent changes are present in apps/site and docs/openclaw_gap_runs and were intentionally not modified.
