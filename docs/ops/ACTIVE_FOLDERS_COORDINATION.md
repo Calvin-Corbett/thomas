@@ -13,19 +13,28 @@ Use this system when multiple agents or humans edit the Thomas repo at the same 
 - Registry file: `runtime/coordination/active_folders.json`
 - Lock file: `runtime/coordination/active_folders.lock`
 - Tool: `python scripts/active_folders.py ...`
-- Auto hook: `.pre-commit-config.yaml` runs `guard-staged`
+- Auto hook: `.pre-commit-config.yaml` runs `guard-staged --require-explicit-agent`
 
 Claims use TTL leases with heartbeats. Expired claims are auto-pruned.
 
 ## Agent Identity (Important)
 
-Set a stable agent id once per terminal before claiming folders:
+Set a stable agent id once per terminal before claiming folders.
+
+For external tools:
+
+```powershell
+$env:AGENT_ID = "codexc"
+$env:AGENT_ID = "gemini"
+```
+
+For Thomas-native flows:
 
 ```powershell
 $env:THOMAS_AGENT_ID = "codex-main"
 ```
 
-If unset, the script falls back to `user@host-ppid...`, but explicit `THOMAS_AGENT_ID` is recommended for clean coordination.
+If no explicit id is set, the script falls back to `user@host-ppid...`, but commit-time guard now requires an explicit agent id by default.
 
 See resolved id/source:
 
@@ -55,7 +64,7 @@ python scripts/active_folders.py claim --path thomas/server --note "routing fixe
 Release all claims for your agent:
 
 ```bash
-python scripts/active_folders.py release --agent "$env:THOMAS_AGENT_ID"
+python scripts/active_folders.py release --agent "$env:AGENT_ID"
 ```
 
 ## Recommended Command Wrapper
@@ -79,18 +88,19 @@ python scripts/active_folders.py daemon --path thomas/server --note "API route w
 Pre-commit now runs:
 
 ```bash
-python scripts/active_folders.py guard-staged
+python scripts/active_folders.py guard-staged --require-explicit-agent
 ```
 
 Behavior:
 
 - Reads staged files from `git diff --cached --name-only`.
 - Fails commit if staged paths overlap another active claim.
+- Fails commit when no explicit agent id is set (`AGENT_ID`/`THOMAS_AGENT_ID`) unless overridden.
 - Ignores your own claim by current agent id unless `--no-ignore-self` is used.
 
 ## Conflict Rules
 
-- `claim`/`run`/`daemon` now block on overlap by default.
+- `claim`/`run`/`daemon` block on overlap by default.
 - Use `--allow-conflicts` only for intentional override.
 - Keep scopes narrow (specific folders, not repo root).
 
@@ -105,7 +115,7 @@ python scripts/active_folders.py list
 Check staged files manually:
 
 ```bash
-python scripts/active_folders.py guard-staged
+python scripts/active_folders.py guard-staged --require-explicit-agent
 ```
 
 Force-check including your own claims:
@@ -113,4 +123,3 @@ Force-check including your own claims:
 ```bash
 python scripts/active_folders.py check --path thomas/server --no-ignore-self
 ```
-

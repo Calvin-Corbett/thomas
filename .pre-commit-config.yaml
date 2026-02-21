@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: thomas-active-folder-guard
         name: Thomas Active Folder Guard
-        entry: python scripts/active_folders.py guard-staged
+        entry: python scripts/active_folders.py guard-staged --require-explicit-agent
         language: system
         pass_filenames: false
 
@@ -30,4 +30,5 @@ repos:
         entry: python scripts/auto_checks.py --quick
         language: system
         pass_filenames: false
+
 
