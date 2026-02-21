@@ -1,0 +1,95 @@
+{
+    "version":  1,
+    "scan_roots":  [
+                       "thomas"
+                   ],
+    "hard_limits":  {
+                        "py":  1200,
+                        "js":  1200,
+                        "ts":  1200,
+                        "css":  1600,
+                        "html":  1000
+                    },
+    "allowed_large_files":  {
+                                "thomas/server/app.py":  {
+                                                             "max_lines":  2316,
+                                                             "reason":  "legacy hotspot drifted during integration+security hardening; split before growth; baseline refreshed for automation hardening (2026-02-21)"
+                                                         },
+                                "thomas/server/web/js/chat.js":  {
+                                                                     "max_lines":  2228,
+                                                                     "reason":  "legacy hotspot; split before growth"
+                                                                 },
+                                "thomas/agent/loop.py":  {
+                                                             "max_lines":  2391,
+                                                             "reason":  "legacy hotspot drifted during integration hardening; split before any further growth"
+                                                         },
+                                "thomas/server/web/css/layout.css":  {
+                                                                         "max_lines":  1978,
+                                                                         "reason":  "legacy hotspot; split before growth"
+                                                                     },
+                                "thomas/core/api_importer.py":  {
+                                                                    "max_lines":  1626,
+                                                                    "reason":  "legacy hotspot; split before growth"
+                                                                },
+                                "thomas/server/web/goals.js":  {
+                                                                   "max_lines":  1586,
+                                                                   "reason":  "legacy hotspot; split before growth"
+                                                               },
+                                "thomas/tools/email_calendar.py":  {
+                                                                       "max_lines":  1571,
+                                                                       "reason":  "legacy hotspot; split before growth"
+                                                                   },
+                                "thomas/cli/main.py":  {
+                                                           "max_lines":  1755,
+                                                           "reason":  "legacy hotspot; split before growth; baseline refreshed for automation hardening (2026-02-21)"
+                                                       },
+                                "thomas/cli/parity_commands.py":  {
+                                                                      "max_lines":  1225,
+                                                                      "reason":  "temporary parity expansion; split into focused modules before next growth"
+                                                                  },
+                                "thomas/cli/parity_compat.py":  {
+                                                                    "max_lines":  2173,
+                                                                    "reason":  "temporary compatibility expansion; split into focused modules before next growth; baseline refreshed for automation hardening (2026-02-21)"
+                                                                },
+                                "thomas/demo/agent_comparison_suite.py":  {
+                                                                              "max_lines":  2874,
+                                                                              "reason":  "comparison-suite expansion; split probe collection/scoring modules before next growth; baseline refreshed for automation hardening (2026-02-21)"
+                                                                          },
+                                "thomas/tools/web_search.py":  {
+                                                                   "max_lines":  1505,
+                                                                   "reason":  "legacy hotspot; split before growth"
+                                                               },
+                                "thomas/core/rag_index.py":  {
+                                                                 "max_lines":  1482,
+                                                                 "reason":  "legacy hotspot; split before growth"
+                                                             },
+                                "thomas/server/routes/webhooks.py":  {
+                                                                         "max_lines":  1476,
+                                                                         "reason":  "legacy hotspot; split before growth"
+                                                                     },
+                                "thomas/tools/database.py":  {
+                                                                 "max_lines":  1339,
+                                                                 "reason":  "legacy hotspot; split before growth"
+                                                             },
+                                "thomas/tools/dep_scanner.py":  {
+                                                                    "max_lines":  1323,
+                                                                    "reason":  "legacy hotspot; split before growth"
+                                                                },
+                                "thomas/server/routes/companion_aiohttp.py":  {
+                                                                                  "max_lines":  1645,
+                                                                                  "reason":  "legacy hotspot; split before growth"
+                                                                              },
+                                "thomas/server/routes/mission.py":  {
+                                                                        "max_lines":  1639,
+                                                                        "reason":  "legacy hotspot; split before growth"
+                                                                    },
+                                "thomas/server/web/mission.js":  {
+                                                                     "max_lines":  2663,
+                                                                     "reason":  "legacy hotspot; split before growth; baseline refreshed for automation hardening (2026-02-21)"
+                                                                 },
+                                "thomas/server/web/mission.css":  {
+                                                                      "max_lines":  1887,
+                                                                      "reason":  "legacy hotspot; split before growth"
+                                                                  }
+                            }
+}

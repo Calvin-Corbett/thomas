@@ -4,7 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas"
-version = "0.11.12"
+version = "0.11.39"
+
 description = "Autonomous AI execution platform for local and remote deployments"
 requires-python = ">=3.10"
 dependencies = [
@@ -21,7 +22,16 @@ train = ["numpy>=1.26", "scikit-learn>=1.4"]
 server = ["aiohttp>=3.9"]
 mcp = ["mcp>=1.0"]
 telegram = ["python-telegram-bot>=21.0"]
-all = ["thomas[repl,gpu,train,server,mcp,telegram]"]
+test = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "pytest-aiohttp>=1.0",
+    "Pillow>=10.0",
+    "reportlab>=4.0",
+    "jsonschema>=4.21",
+    "watchdog>=4.0",
+]
+all = ["thomas[repl,gpu,train,server,mcp,telegram,test]"]
 
 [project.scripts]
 thomas = "thomas.cli.main:main"
@@ -32,9 +42,10 @@ where = ["."]
 include = ["thomas*"]
 
 [tool.setuptools.package-data]
-"thomas" = ["server/web/*", "server/web/**/*", "autonomy/ui/*"]
+"thomas" = ["server/web/*", "server/web/**/*", "autonomy/ui/*", "companion/policy_profiles/*.json"]
 
 [tool.pytest.ini_options]
+testpaths = ["tests"]
 norecursedirs = [
     ".venv",
     "runtime",

@@ -1,0 +1,26 @@
+﻿repos:
+  - repo: local
+    hooks:
+      - id: thomas-plan-structure-gate
+        name: Thomas Plan Structure Gate
+        entry: python scripts/check_plan_structure_gate.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-release-hygiene-gate
+        name: Thomas Release Hygiene Gate
+        entry: python scripts/check_release_hygiene.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-release-update-gate
+        name: Thomas Release Update Gate
+        entry: python scripts/check_release_update_gate.py
+        language: system
+        pass_filenames: false
+      - id: thomas-auto-checks-quick
+        name: Thomas Auto Checks (Quick)
+        entry: python scripts/auto_checks.py --quick
+        language: system
+        pass_filenames: false
+
