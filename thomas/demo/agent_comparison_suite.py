@@ -2610,7 +2610,6 @@ def _print_human(result: Mapping[str, Any]) -> None:
     dual_scoring = dict(result.get("overall_suite_scoreboard") or {})
     scoring_methodology = dict(dual_scoring.get("methodology") or {})
     h2h = dict((dict(contract.get("scores") or {}).get("head_to_head") or {}))
-    h2h = dict((dict(contract.get("scores") or {}).get("head_to_head") or {}))
 
     print("Full Agent Comparison Suite")
     print(f"- suite: {suite.get('id')} v{suite.get('version')}")
@@ -2725,6 +2724,7 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
     contract_catalog = dict((dict(contract.get("catalog") or {})).get("by_state") or {})
     dual_scoring = dict(result.get("overall_suite_scoreboard") or {})
     scoring_methodology = dict(dual_scoring.get("methodology") or {})
+    h2h = dict((dict(contract.get("scores") or {}).get("head_to_head") or {}))
     agents = list(result.get("agents") or [])
     lines: List[str] = []
     lines.append(f"# Full Agent Comparison Suite ({suite.get('id')})")
