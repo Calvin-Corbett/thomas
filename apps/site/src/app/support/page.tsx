@@ -23,13 +23,17 @@ export default function SupportPage() {
         </article>
       </div>
 
-      <p>
-        For advanced diagnostics and raw release assets, use{" "}
-        <a className="text-link" href={releasesUrl} target="_blank" rel="noreferrer">
-          GitHub Releases
-        </a>
-        .
-      </p>
+      {releasesUrl ? (
+        <p>
+          For advanced diagnostics and raw release assets, use{" "}
+          <a className="text-link" href={releasesUrl} target="_blank" rel="noreferrer">
+            GitHub Releases
+          </a>
+          .
+        </p>
+      ) : (
+        <p>Advanced GitHub release diagnostics will appear after GitHub integration is connected.</p>
+      )}
     </section>
   );
 }

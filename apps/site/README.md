@@ -12,6 +12,7 @@ Production-grade website for non-technical users:
 
 - Next.js App Router
 - GitHub Releases as installer source of truth
+- Local update feed fallback when GitHub is not connected yet
 - Postgres for download-intent event logging
 - Optional PostHog server-side capture
 
@@ -90,3 +91,9 @@ Set env vars in Pages project settings.
 ## Runbook
 
 See `apps/site/DEPLOYMENT.md` for a production scaling checklist.
+
+## Website-first mode (no GitHub yet)
+
+1. Set `THOMAS_DOWNLOAD_MODE=manual`.
+2. Set `THOMAS_DOWNLOAD_URL_WINDOWS`, `THOMAS_DOWNLOAD_URL_MACOS`, `THOMAS_DOWNLOAD_URL_LINUX`.
+3. Launch. The updates page will use local fallback entries until GitHub is connected.
