@@ -27,7 +27,7 @@ STATE_DIR = ROOT / "runtime" / "coordination"
 STATE_FILE = STATE_DIR / "active_folders.json"
 LOCK_FILE = STATE_DIR / "active_folders.lock"
 
-AGENT_ENV_KEYS = ("THOMAS_AGENT_ID", "CODEX_AGENT_ID", "AGENT_ID")
+AGENT_ENV_KEYS = ("THOMAS_AGENT_ID", "AGENT_ID", "CODEX_AGENT_ID", "GEMINI_AGENT_ID", "CLAUDE_AGENT_ID")
 
 LOCK_TIMEOUT_SECONDS = 10.0
 LOCK_STALE_SECONDS = 60.0
@@ -44,8 +44,20 @@ def _env_int(name: str, default: int) -> int:
     return value if value > 0 else default
 
 
+def _env_bool(name: str, default: bool) -> bool:
+    raw = (os.getenv(name) or "").strip().lower()
+    if not raw:
+        return default
+    if raw in {"1", "true", "yes", "on"}:
+        return True
+    if raw in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
 DEFAULT_TTL_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_TTL", 180)
 DEFAULT_HEARTBEAT_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_HEARTBEAT", 30)
+DEFAULT_REQUIRE_EXPLICIT_AGENT = _env_bool("THOMAS_ACTIVE_FOLDERS_REQUIRE_EXPLICIT_AGENT", True)
 
 
 def _utc_now() -> datetime:
@@ -63,11 +75,18 @@ def _from_iso(value: str) -> datetime:
     return parsed.astimezone(timezone.utc)
 
 
-def _auto_agent_id() -> str:
+def _explicit_agent_from_env() -> tuple[str | None, str]:
     for key in AGENT_ENV_KEYS:
         value = (os.getenv(key) or "").strip()
         if value:
-            return value
+            return value, key
+    return None, "fallback"
+
+
+def _auto_agent_id() -> str:
+    explicit, _ = _explicit_agent_from_env()
+    if explicit:
+        return explicit
 
     user = (
         (os.getenv("USERNAME") or "").strip()
@@ -85,6 +104,14 @@ def _resolve_agent(agent: str | None) -> str:
         if stripped:
             return stripped
     return _auto_agent_id()
+
+
+def _require_explicit_agent(agent: str | None) -> tuple[str | None, str]:
+    if agent:
+        stripped = agent.strip()
+        if stripped:
+            return stripped, "--agent"
+    return _explicit_agent_from_env()
 
 
 def _normalize_path(path: str) -> str:
@@ -509,9 +536,23 @@ def _guard_staged(args: argparse.Namespace) -> int:
             print("No staged files to check.")
         return 0
 
+    explicit_agent, explicit_source = _require_explicit_agent(args.agent)
+    if args.require_explicit_agent and not explicit_agent:
+        message = (
+            "explicit agent id required for staged guard; set AGENT_ID/THOMAS_AGENT_ID "
+            "or pass --agent"
+        )
+        if args.json:
+            print(json.dumps({"ok": False, "error": message, "paths": paths}, indent=2))
+        else:
+            print(f"error: {message}", file=sys.stderr)
+            print("example (PowerShell): $env:AGENT_ID = \"codexc\"", file=sys.stderr)
+            print("example (PowerShell): $env:AGENT_ID = \"gemini\"", file=sys.stderr)
+        return 2
+
     ignore_agent: str | None = None
     if not args.no_ignore_self:
-        ignore_agent = _resolve_agent(args.agent)
+        ignore_agent = explicit_agent if explicit_agent else _resolve_agent(args.agent)
 
     conflicts = _find_conflicts(paths, ignore_agent=ignore_agent)
 
@@ -522,6 +563,7 @@ def _guard_staged(args: argparse.Namespace) -> int:
                     "ok": not bool(conflicts),
                     "paths": paths,
                     "ignore_agent": ignore_agent,
+                    "ignore_agent_source": explicit_source if explicit_agent else "fallback",
                     "conflicts": conflicts,
                 },
                 indent=2,
@@ -529,6 +571,8 @@ def _guard_staged(args: argparse.Namespace) -> int:
         )
     else:
         print(f"Checking staged files against active folder claims (count={len(paths)}).")
+        if explicit_agent:
+            print(f"Using explicit agent id '{explicit_agent}' from {explicit_source}.")
         _print_conflicts(conflicts)
 
     return 2 if conflicts else 0
@@ -624,13 +668,19 @@ def _run(args: argparse.Namespace) -> int:
 
 
 def _whoami(_args: argparse.Namespace) -> int:
-    source = "fallback"
-    for key in AGENT_ENV_KEYS:
-        if (os.getenv(key) or "").strip():
-            source = key
-            break
-
-    print(json.dumps({"agent_id": _auto_agent_id(), "source": source}, indent=2))
+    explicit_agent, source = _explicit_agent_from_env()
+    auto_agent = _auto_agent_id()
+    print(
+        json.dumps(
+            {
+                "agent_id": auto_agent,
+                "source": source,
+                "explicit_agent": explicit_agent or "",
+                "fallback_used": source == "fallback",
+            },
+            indent=2,
+        )
+    )
     return 0
 
 
@@ -717,6 +767,12 @@ def _build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Do not ignore claims from your own agent id.",
     )
+    guard.add_argument(
+        "--require-explicit-agent",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_REQUIRE_EXPLICIT_AGENT,
+        help="Require --agent or AGENT_ID/THOMAS_AGENT_ID env for reliable ownership tagging.",
+    )
     guard.add_argument("--json", action="store_true")
     guard.set_defaults(func=_guard_staged)
 
@@ -779,4 +835,5 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
+
 

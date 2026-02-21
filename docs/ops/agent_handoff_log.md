@@ -143,3 +143,14 @@ ode_modules, 	asks, output.
 - Installed local git hook: python -m pre_commit install.
 - python -m pre_commit run --all-files: Active Folder Guard passed; Release Update Gate failed in dirty workspace due product-surface change detection on thomas/demo/agent_comparison_suite.py.
 - Concurrent agent changes are present in apps/site and docs/openclaw_gap_runs and were intentionally not modified.
+
+## 2026-02-21T14:41:19-06:00
+
+### External Agent Identity Enforcement
+
+- Branch: `master`
+- HEAD: `8409a3b`
+- Expanded active_folders env keys to include AGENT_ID and GEMINI/CLAUDE variants.
+- Added guard-staged explicit-agent requirement and clear error guidance for codexc/gemini.
+- Updated pre-commit hook entry to run guard-staged --require-explicit-agent.
+- Updated coordination docs/handoff to standardize AGENT_ID for external tools.
