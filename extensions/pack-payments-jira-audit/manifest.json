@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-jira-audit",
+  "name": "Payments Jira Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "jira",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.jira",
+    "payments.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via jira with audit mode policies."
+}

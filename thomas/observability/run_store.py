@@ -26,6 +26,7 @@ from __future__ import annotations
 import contextlib
 import datetime as _dt
 import json
+import logging
 import os
 import queue
 import re
@@ -43,6 +44,7 @@ ENABLE_FTS5: bool = True
 
 _DB_PATH: Optional[Path] = None
 _LOCK = threading.Lock()
+log = logging.getLogger(__name__)
 
 def init_db(path: str | os.PathLike[str]) -> Path:
     global _DB_PATH
@@ -91,26 +93,15 @@ def append_event(run_id: str, event_type: str, payload: Dict[str, Any], t_ms: in
     payload_json = _json_dumps(payload)
     search_text = _extract_search_text(payload)
     with _connect(db) as conn:
-        # Retention may evict a run row between create_run() and first event write
-        # under very small MAX_DB_BYTES settings. Ensure the parent run exists.
-        exists = conn.execute("SELECT 1 FROM runs WHERE run_id = ? LIMIT 1", (run_id,)).fetchone()
-        if not exists:
-            conn.execute(
-                """
-                INSERT INTO runs (run_id, started_at)
-                VALUES (?, ?)
-                """,
-                (run_id, _utcnow_iso()),
-            )
-        conn.execute(
-            "INSERT INTO events (run_id, t_ms, seq, event_type, payload_json, search_text) VALUES (?, ?, ?, ?, ?, ?)",
-            (run_id, int(t_ms), int(seq), str(event_type), payload_json, search_text),
+        _append_event_row(
+            conn,
+            run_id,
+            int(t_ms),
+            int(seq),
+            str(event_type),
+            payload_json,
+            search_text,
         )
-        if _fts_enabled(conn):
-            conn.execute(
-                "INSERT INTO events_fts (run_id, seq, search_text) VALUES (?, ?, ?)",
-                (run_id, int(seq), search_text),
-            )
 
 def finalize_run(run_id: str, ok: bool, error: Optional[str], iterations: Optional[int], tool_calls: Optional[int], usage: Optional[Dict[str, Any]]) -> None:
     db = _require_db()
@@ -281,6 +272,10 @@ class ThreadedRunWriter:
         self._thr = threading.Thread(target=self._worker, name=f"RunWriter-{run_id[:8]}", daemon=True)
         self._started = False
         self._exc: Optional[BaseException] = None
+        self._fallback_events = 0
+        self._dropped_events = 0
+        self._warned_fallback = False
+        self._meta_lock = threading.Lock()
 
     def start(self) -> None:
         if self._started:
@@ -291,28 +286,35 @@ class ThreadedRunWriter:
     def record(self, obj: Dict[str, Any]) -> None:
         if not self._started:
             self.start()
-        if self._exc:
-            raise RuntimeError("RunWriter worker failed") from self._exc
         event_type = str(obj.get("type", "unknown"))
         t_ms = int((time.perf_counter_ns() - self._t0_ns) / 1_000_000)
         payload_json = _json_dumps(obj)
         search_text = _extract_search_text(obj)
         seq = self._seq
         self._seq += 1
-        self._q.put((t_ms, seq, event_type, payload_json, search_text))
+        item = (t_ms, seq, event_type, payload_json, search_text)
+        # If worker has failed, degrade to direct append instead of dropping events.
+        if self._exc is not None or (self._started and not self._thr.is_alive()):
+            self._record_direct(item, reason="worker_unavailable")
+            return
+        self._q.put(item)
 
     @property
     def seq(self) -> int:
         return self._seq
 
-    def close(self, timeout: float = 5.0) -> None:
+    def close(self, timeout: float = 5.0, *, strict: bool = False) -> None:
         if not self._started:
             return
-        self._q.put(None)
+        with contextlib.suppress(Exception):
+            self._q.put(None)
         self._thr.join(timeout=timeout)
         if self._thr.is_alive():
             raise TimeoutError("RunWriter did not shut down cleanly")
-        if self._exc:
+        pending = self._drain_pending()
+        if pending:
+            self._write_direct_batch(pending, reason="close_drain")
+        if strict and self._exc:
             raise RuntimeError("RunWriter worker failed") from self._exc
 
     def _worker(self) -> None:
@@ -320,26 +322,41 @@ class ThreadedRunWriter:
         try:
             with _connect(db) as conn:
                 fts = _fts_enabled(conn)
-                batch: List[Tuple[str,int,int,str,str,str]] = []
+                batch: List[Tuple[int, int, str, str, str]] = []
                 last_flush = time.monotonic()
 
-                def flush() -> None:
+                def flush() -> bool:
                     nonlocal batch, last_flush
                     if not batch:
-                        return
-                    conn.execute("BEGIN;")
-                    conn.executemany(
-                        "INSERT INTO events (run_id, t_ms, seq, event_type, payload_json, search_text) VALUES (?,?,?,?,?,?)",
-                        [(rid, tms, sq, et, pj, st) for (rid, tms, sq, et, pj, st) in batch],
-                    )
-                    if fts:
+                        return True
+                    try:
+                        conn.execute("BEGIN;")
                         conn.executemany(
-                            "INSERT INTO events_fts (run_id, seq, search_text) VALUES (?,?,?)",
-                            [(rid, sq, st) for (rid, _tms, sq, _et, _pj, st) in batch],
+                            "INSERT INTO events (run_id, t_ms, seq, event_type, payload_json, search_text) VALUES (?,?,?,?,?,?)",
+                            [
+                                (self.run_id, tms, sq, et, pj, st)
+                                for (tms, sq, et, pj, st) in batch
+                            ],
                         )
-                    conn.execute("COMMIT;")
+                        if fts:
+                            conn.executemany(
+                                "INSERT INTO events_fts (run_id, seq, search_text) VALUES (?,?,?)",
+                                [(self.run_id, sq, st) for (_tms, sq, _et, _pj, st) in batch],
+                            )
+                        conn.execute("COMMIT;")
+                    except Exception as e:
+                        with contextlib.suppress(Exception):
+                            conn.execute("ROLLBACK;")
+                        failed_batch = list(batch)
+                        batch = []
+                        last_flush = time.monotonic()
+                        if self._exc is None:
+                            self._exc = e
+                        self._write_direct_batch(failed_batch, reason="worker_flush_error")
+                        return False
                     batch = []
                     last_flush = time.monotonic()
+                    return True
 
                 while True:
                     timeout = max(0.01, self.flush_interval_s)
@@ -353,14 +370,133 @@ class ThreadedRunWriter:
                         return
                     if item == "__tick__":
                         if batch and (now - last_flush) >= self.flush_interval_s:
-                            flush()
+                            if not flush():
+                                return
                         continue
                     t_ms, seq, event_type, payload_json, search_text = item
-                    batch.append((self.run_id, int(t_ms), int(seq), str(event_type), payload_json, search_text))
+                    batch.append((int(t_ms), int(seq), str(event_type), payload_json, search_text))
                     if len(batch) >= self.flush_every:
-                        flush()
+                        if not flush():
+                            return
         except BaseException as e:
-            self._exc = e
+            if self._exc is None:
+                self._exc = e
+
+    def _record_direct(
+        self,
+        item: Tuple[int, int, str, str, str],
+        *,
+        reason: str,
+        track_stats: bool = True,
+    ) -> None:
+        t_ms, seq, event_type, payload_json, search_text = item
+        db = _require_db()
+        try:
+            with _connect(db) as conn:
+                _append_event_row(
+                    conn,
+                    self.run_id,
+                    int(t_ms),
+                    int(seq),
+                    str(event_type),
+                    payload_json,
+                    search_text,
+                )
+            if track_stats:
+                self._note_fallback(added=1, dropped=0, reason=reason)
+        except Exception:
+            if track_stats:
+                self._note_fallback(added=0, dropped=1, reason=reason)
+            raise
+
+    def _write_direct_batch(self, items: List[Tuple[int, int, str, str, str]], *, reason: str) -> None:
+        if not items:
+            return
+        added = 0
+        dropped = 0
+        for item in items:
+            try:
+                self._record_direct(item, reason=reason, track_stats=False)
+                added += 1
+            except Exception:
+                dropped += 1
+        if added or dropped:
+            self._note_fallback(added=added, dropped=dropped, reason=reason)
+
+    def _note_fallback(self, *, added: int, dropped: int, reason: str) -> None:
+        with self._meta_lock:
+            if added:
+                self._fallback_events += int(added)
+            if dropped:
+                self._dropped_events += int(dropped)
+            should_warn = not self._warned_fallback
+            if should_warn:
+                self._warned_fallback = True
+            total_fallback = self._fallback_events
+            total_dropped = self._dropped_events
+        if should_warn:
+            log.warning(
+                "RunWriter for %s switched to direct fallback (%s). fallback=%d dropped=%d",
+                self.run_id[:8],
+                reason,
+                total_fallback,
+                total_dropped,
+            )
+        elif dropped:
+            log.warning(
+                "RunWriter fallback dropped events for %s (%s). fallback=%d dropped=%d",
+                self.run_id[:8],
+                reason,
+                total_fallback,
+                total_dropped,
+            )
+
+    def _drain_pending(self) -> List[Tuple[int, int, str, str, str]]:
+        out: List[Tuple[int, int, str, str, str]] = []
+        while True:
+            try:
+                item = self._q.get_nowait()
+            except queue.Empty:
+                break
+            if item is None:
+                continue
+            out.append(item)
+        return out
+
+
+def _append_event_row(
+    conn: sqlite3.Connection,
+    run_id: str,
+    t_ms: int,
+    seq: int,
+    event_type: str,
+    payload_json: str,
+    search_text: str,
+) -> None:
+    # Retention may evict a run row between create_run() and first event write
+    # under very small MAX_DB_BYTES settings. Ensure the parent run exists.
+    _ensure_parent_run(conn, run_id)
+    conn.execute(
+        "INSERT INTO events (run_id, t_ms, seq, event_type, payload_json, search_text) VALUES (?, ?, ?, ?, ?, ?)",
+        (run_id, int(t_ms), int(seq), str(event_type), payload_json, search_text),
+    )
+    if _fts_enabled(conn):
+        conn.execute(
+            "INSERT INTO events_fts (run_id, seq, search_text) VALUES (?, ?, ?)",
+            (run_id, int(seq), search_text),
+        )
+
+
+def _ensure_parent_run(conn: sqlite3.Connection, run_id: str) -> None:
+    exists = conn.execute("SELECT 1 FROM runs WHERE run_id = ? LIMIT 1", (run_id,)).fetchone()
+    if not exists:
+        conn.execute(
+            """
+            INSERT INTO runs (run_id, started_at)
+            VALUES (?, ?)
+            """,
+            (run_id, _utcnow_iso()),
+        )
 
 def _require_db() -> Path:
     if _DB_PATH is None:

@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-webhook-remediate",
+  "name": "Incident Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.webhook",
+    "incident.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via webhook with remediate mode policies."
+}

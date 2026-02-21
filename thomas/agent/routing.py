@@ -37,6 +37,68 @@ _SETUP_RE = re.compile(
     r"\b(set ?up|setup|configure|configuration|config|connect|wire up)\b",
     re.I,
 )
+_TROUBLESHOOT_RE = re.compile(
+    r"\b("
+    r"not working|"
+    r"broken|"
+    r"reset(?:s|ting)?|"
+    r"settings?\s+(?:reset|saving|persist|stick)|"
+    r"restart|"
+    r"crash|"
+    r"failing|"
+    r"issue|"
+    r"problem"
+    r")\b",
+    re.I,
+)
+_EXECUTION_PREFERENCE_RE = re.compile(
+    r"\b(i want|don't want|do not want|want thomas to|want you to)\b.*\b(program|code|build|fix|implement)\b",
+    re.I,
+)
+_BEHAVIOR_FEEDBACK_RE = re.compile(
+    r"\b("
+    r"how you talk|"
+    r"how you speak|"
+    r"person skills|"
+    r"too robotic|"
+    r"sound robotic|"
+    r"assistant style|"
+    r"conversation style|"
+    r"talk better|"
+    r"less robotic|"
+    r"be more human"
+    r")\b",
+    re.I,
+)
+_FRUSTRATION_RE = re.compile(
+    r"\b("
+    r"frustrat(?:ed|ing)?|"
+    r"annoy(?:ed|ing)?|"
+    r"upset|"
+    r"this sucks|"
+    r"not working|"
+    r"you keep|"
+    r"you always|"
+    r"why do you"
+    r")\b",
+    re.I,
+)
+_NO_EXECUTION_RE = re.compile(
+    r"\b("
+    r"no task|"
+    r"did not give (you )?a task|"
+    r"didn'?t give (you )?a task|"
+    r"have not given (you )?a task|"
+    r"haven'?t given (you )?a task|"
+    r"we never (even )?started (a )?coding task|"
+    r"not asking (you )?to code|"
+    r"continue talking|"
+    r"just talking|"
+    r"just chat(?:ting)?|"
+    r"conversation mode"
+    r")\b",
+    re.I,
+)
 
 
 @dataclass(frozen=True)
@@ -93,15 +155,15 @@ _POLICY: Dict[str, _PathPolicy] = {
     PATH_CODING: _PathPolicy(
         mode="auto",
         tools_policy="auto",
-        include_purpose=True,
+        include_purpose=False,
         memory_include_global=True,
         memory_include_profile=True,
         memory_budget_tokens=1300,
     ),
     PATH_DEBUG: _PathPolicy(
-        mode="thinking",
-        tools_policy="always",
-        include_purpose=True,
+        mode="auto",
+        tools_policy="auto",
+        include_purpose=False,
         memory_include_global=True,
         memory_include_profile=True,
         memory_budget_tokens=1500,
@@ -186,10 +248,17 @@ class IntentRouter:
             add(PATH_PLANNING, 1.8, "decision_prompt")
 
         # Coding
-        if tok_set.intersection({"code", "coding", "refactor", "function", "class", "api", "repo", "test"}):
+        if tok_set.intersection(
+            {"code", "coding", "program", "programming", "refactor", "function", "class", "api", "repo", "test"}
+        ):
             add(PATH_CODING, 2.8, "coding_keywords")
-        if tok_set.intersection({"build", "implement", "fix", "patch", "commit"}):
+        if tok_set.intersection({"build", "implement", "implemented", "implementation", "fix", "patch", "commit"}):
             add(PATH_CODING, 1.4, "implementation_intent")
+        if _EXECUTION_PREFERENCE_RE.search(src):
+            add(PATH_CODING, 2.4, "execution_preference")
+        if _NO_EXECUTION_RE.search(src):
+            add(PATH_CASUAL, 4.6, "no_execution_intent")
+            add(PATH_META, 2.0, "no_execution_intent_meta")
 
         # Debug/security/audit
         if tok_set.intersection({"debug", "bug", "audit", "security", "vulnerability", "regression", "incident"}):
@@ -198,16 +267,28 @@ class IntentRouter:
             add(PATH_DEBUG, 1.3, "optimization_signal")
 
         # Research
-        if tok_set.intersection({"research", "compare", "latest", "news", "look", "lookup", "find", "online"}):
+        if tok_set.intersection({"research", "compare", "latest", "news", "lookup", "find", "online"}):
             add(PATH_RESEARCH, 2.5, "research_keywords")
         if "look online" in lower or "search" in lower:
             add(PATH_RESEARCH, 1.9, "explicit_lookup")
 
+        # Troubleshooting signals should bias toward debug/coding rather than research.
+        if _TROUBLESHOOT_RE.search(src):
+            add(PATH_DEBUG, 2.6, "troubleshoot_signal")
+            add(PATH_CODING, 1.2, "troubleshoot_signal")
+
         # Assistant-meta
-        if tok_set.intersection({"prompt", "instruction", "behavior", "why", "route", "memory", "how"}):
+        if tok_set.intersection({"prompt", "instruction", "behavior", "why", "route", "memory"}):
             add(PATH_META, 1.6, "assistant_meta_keywords")
         if "how do you work" in lower or "what are you told" in lower:
             add(PATH_META, 3.0, "assistant_self_model")
+        if _BEHAVIOR_FEEDBACK_RE.search(src):
+            add(PATH_META, 3.2, "behavior_feedback")
+            add(PATH_PERSONAL, 1.0, "behavior_feedback_tone")
+            add(PATH_CASUAL, 0.8, "behavior_feedback_chat")
+        if _FRUSTRATION_RE.search(src):
+            add(PATH_PERSONAL, 1.6, "frustration_signal")
+            add(PATH_META, 0.8, "frustration_meta")
 
         # Backstop
         add(PATH_GENERAL, 0.4, "general_backstop")

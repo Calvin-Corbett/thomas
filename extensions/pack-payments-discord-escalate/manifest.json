@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-discord-escalate",
+  "name": "Payments Discord Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "discord",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.discord",
+    "payments.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via discord with escalate mode policies."
+}

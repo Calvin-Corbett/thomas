@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -72,6 +73,68 @@ class AutonomyMemoryEngine:
             )
         except Exception:
             self._curator_max_promotions = 120
+        self._curator_approval_enabled = str(
+            os.environ.get("THOMAS_MEMORY_CURATOR_APPROVAL_ENABLED", "1")
+        ).strip().lower() in ("1", "true", "yes", "on")
+        try:
+            self._curator_approval_auto_apply_conf = float(
+                os.environ.get("THOMAS_MEMORY_CURATOR_APPROVAL_AUTO_APPLY_CONFIDENCE", "0.70") or 0.70
+            )
+        except Exception:
+            self._curator_approval_auto_apply_conf = 0.70
+        self._curator_approval_auto_apply_conf = max(
+            0.0,
+            min(1.0, float(self._curator_approval_auto_apply_conf)),
+        )
+        self._curator_approval_for_library = str(
+            os.environ.get("THOMAS_MEMORY_CURATOR_APPROVAL_REQUIRE_LIBRARY", "1")
+        ).strip().lower() in ("1", "true", "yes", "on")
+
+        self._token_report_compact_enabled = str(
+            os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_FROM_TOKEN_REPORT", "1")
+        ).strip().lower() in ("1", "true", "yes", "on")
+        try:
+            self._token_report_prompt_threshold = max(
+                500, int(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_PROMPT_TOKENS", "12000") or 12000)
+            )
+        except Exception:
+            self._token_report_prompt_threshold = 12000
+        try:
+            self._token_report_total_threshold = max(
+                1000, int(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_TOTAL_TOKENS", "18000") or 18000)
+            )
+        except Exception:
+            self._token_report_total_threshold = 18000
+        try:
+            self._token_report_memory_share_threshold = max(
+                0.05,
+                min(
+                    1.0,
+                    float(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_MEMORY_SHARE", "0.42") or 0.42),
+                ),
+            )
+        except Exception:
+            self._token_report_memory_share_threshold = 0.42
+        try:
+            self._token_report_budget_pressure_threshold = max(
+                0.10,
+                min(
+                    1.5,
+                    float(
+                        os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_BUDGET_PRESSURE", "0.90")
+                        or 0.90
+                    ),
+                ),
+            )
+        except Exception:
+            self._token_report_budget_pressure_threshold = 0.90
+        try:
+            self._token_report_min_interval_s = max(
+                0, int(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_MIN_INTERVAL_SECONDS", "300") or 300)
+            )
+        except Exception:
+            self._token_report_min_interval_s = 300
+        self._token_report_last_compact_ms: Dict[str, int] = {}
 
         # Keep memory packs dense but bounded; the agent prompt has its own
         # larger budget and should not be monopolized by memory text.
@@ -130,6 +193,9 @@ class AutonomyMemoryEngine:
                     max_episode_scan=self._curator_max_episode_scan,
                     max_library_scan=self._curator_max_library_scan,
                     max_promotions_per_run=self._curator_max_promotions,
+                    approval_enabled=self._curator_approval_enabled,
+                    approval_auto_apply_confidence=self._curator_approval_auto_apply_conf,
+                    approval_require_for_library=self._curator_approval_for_library,
                 )
                 self._curator = MemoryCurator(
                     self._fabric_v2,
@@ -288,6 +354,127 @@ class AutonomyMemoryEngine:
             log.warning("Memory curator stats failed: %s", e)
             return {"enabled": False, "error": str(e)}
 
+    def list_curator_approvals(self, *, status: str = "pending", limit: int = 100) -> List[Dict[str, Any]]:
+        self._require_started()
+        if self._curator is None:
+            return []
+        list_fn = getattr(self._curator, "list_approval_queue", None)
+        if not callable(list_fn):
+            return []
+        try:
+            return list(list_fn(status=str(status or "").strip(), limit=int(limit)))
+        except Exception as e:
+            log.warning("Memory curator approval queue listing failed: %s", e)
+            return []
+
+    def decide_curator_approval(
+        self,
+        approval_id: int,
+        *,
+        approve: bool,
+        actor: str = "api",
+        reason: str = "",
+    ) -> Dict[str, Any]:
+        self._require_started()
+        if self._curator is None:
+            return {"ok": False, "error": "curator_unavailable"}
+        decide_fn = getattr(self._curator, "decide_approval", None)
+        if not callable(decide_fn):
+            return {"ok": False, "error": "curator_approval_api_unavailable"}
+        try:
+            return dict(
+                decide_fn(
+                    int(approval_id),
+                    approve=bool(approve),
+                    actor=str(actor or "api"),
+                    reason=str(reason or ""),
+                )
+            )
+        except KeyError:
+            return {"ok": False, "error": "not_found"}
+        except Exception as e:
+            log.warning("Memory curator approval decision failed: %s", e)
+            return {"ok": False, "error": f"{type(e).__name__}: {e}"}
+
+    def auto_compact_from_token_report(
+        self,
+        *,
+        thread_id: Optional[str],
+        token_report: Optional[Dict[str, Any]],
+    ) -> Dict[str, Any]:
+        self._require_started()
+        tid = str(thread_id or "").strip()
+        if not tid:
+            return {"checked": False, "triggered": False, "reason": "missing_thread_id"}
+        if self._fabric_v2 is None:
+            return {"checked": False, "triggered": False, "reason": "fabric_v2_unavailable"}
+        if not self._token_report_compact_enabled:
+            return {"checked": False, "triggered": False, "reason": "disabled"}
+        if not isinstance(token_report, dict):
+            return {"checked": False, "triggered": False, "reason": "token_report_missing"}
+
+        reasons: List[str] = []
+        prompt_tokens = int(token_report.get("prompt_tokens", 0) or 0)
+        total_tokens = int(token_report.get("total_tokens", 0) or 0)
+        memory_share = float(token_report.get("memory_share_of_context", 0.0) or 0.0)
+
+        if prompt_tokens >= int(self._token_report_prompt_threshold):
+            reasons.append(f"prompt_tokens>={self._token_report_prompt_threshold}")
+        if total_tokens >= int(self._token_report_total_threshold):
+            reasons.append(f"total_tokens>={self._token_report_total_threshold}")
+        if memory_share >= float(self._token_report_memory_share_threshold):
+            reasons.append(f"memory_share>={self._token_report_memory_share_threshold:.2f}")
+
+        budget = token_report.get("run_budget")
+        if isinstance(budget, dict):
+            try:
+                warn_cap = int(budget.get("iteration_prompt_warn_cap", 0) or 0)
+                max_spend = int(budget.get("max_iteration_prompt_spend", 0) or 0)
+            except Exception:
+                warn_cap = 0
+                max_spend = 0
+            if warn_cap > 0:
+                pressure = float(max_spend) / float(max(1, warn_cap))
+                if pressure >= float(self._token_report_budget_pressure_threshold):
+                    reasons.append(
+                        "iteration_budget_pressure"
+                        f">={self._token_report_budget_pressure_threshold:.2f}"
+                    )
+
+        if not reasons:
+            return {"checked": True, "triggered": False, "reasons": []}
+
+        now_ms = int(time.time() * 1000)
+        last_ms = int(self._token_report_last_compact_ms.get(tid, 0) or 0)
+        min_interval_ms = max(0, int(self._token_report_min_interval_s)) * 1000
+        if last_ms > 0 and (now_ms - last_ms) < min_interval_ms:
+            return {
+                "checked": True,
+                "triggered": False,
+                "reasons": reasons,
+                "reason": "cooldown",
+                "cooldown_remaining_ms": int(min_interval_ms - (now_ms - last_ms)),
+            }
+
+        try:
+            compact_result = self._fabric_v2.compact(thread_id=tid)
+            self._token_report_last_compact_ms[tid] = now_ms
+            return {
+                "checked": True,
+                "triggered": True,
+                "reasons": reasons,
+                "compact": compact_result if isinstance(compact_result, dict) else {},
+                "triggered_at_ms": now_ms,
+            }
+        except Exception as e:
+            log.warning("Token-report-driven compaction failed for thread %s: %s", tid, e)
+            return {
+                "checked": True,
+                "triggered": False,
+                "reasons": reasons,
+                "reason": f"error:{type(e).__name__}",
+            }
+
     # ------------------------------------------------------------------
     # Policy controls (used by integrations like Telegram)
     # ------------------------------------------------------------------
@@ -357,6 +544,70 @@ class AutonomyMemoryEngine:
             log.warning("Memory Fabric v2 list_contradictions failed: %s", e)
             return []
 
+    def list_contradictions_review(
+        self,
+        *,
+        status: Optional[str] = None,
+        severity: Optional[str] = None,
+        route: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        self._require_started()
+        if self._fabric_v2 is None:
+            return []
+        list_fn = getattr(self._fabric_v2, "list_contradictions_for_review", None)
+        if not callable(list_fn):
+            return self.list_contradictions(only_open=True, limit=limit)
+        try:
+            lim = max(1, min(500, int(limit)))
+        except Exception:
+            lim = 50
+        try:
+            return list(
+                list_fn(
+                    status=str(status or "").strip() or None,
+                    severity=str(severity or "").strip() or None,
+                    route=str(route or "").strip() or None,
+                    limit=lim,
+                )
+            )
+        except Exception as e:
+            log.warning("Memory Fabric v2 contradiction review listing failed: %s", e)
+            return []
+
+    def decide_contradiction_review(
+        self,
+        cid: int,
+        *,
+        decision: str,
+        actor: str = "api",
+        reason: str = "",
+    ) -> bool:
+        self._require_started()
+        if self._fabric_v2 is None:
+            return False
+        review_fn = getattr(self._fabric_v2, "review_contradiction", None)
+        if not callable(review_fn):
+            return False
+        try:
+            cid_i = int(cid)
+        except Exception:
+            return False
+        if cid_i <= 0:
+            return False
+        try:
+            return bool(
+                review_fn(
+                    cid_i,
+                    decision=str(decision or "").strip().lower(),
+                    actor=str(actor or "api"),
+                    reason=str(reason or ""),
+                )
+            )
+        except Exception as e:
+            log.warning("Memory Fabric v2 contradiction review decision failed: %s", e)
+            return False
+
     def resolve_contradiction(self, cid: int, *, resolved: bool = True) -> bool:
         """Resolve/reopen a contradiction entry by id."""
         self._require_started()
@@ -369,6 +620,17 @@ class AutonomyMemoryEngine:
         if cid_i <= 0:
             return False
         try:
+            review_fn = getattr(self._fabric_v2, "review_contradiction", None)
+            if callable(review_fn):
+                decision = "approve" if bool(resolved) else "reopen"
+                return bool(
+                    review_fn(
+                        cid_i,
+                        decision=decision,
+                        actor="system.resolve_api",
+                        reason="legacy_resolve_route",
+                    )
+                )
             self._fabric_v2.resolve_contradiction(cid_i, resolved=bool(resolved))
             return True
         except Exception as e:

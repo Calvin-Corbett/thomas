@@ -10,7 +10,9 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
+from email.utils import parsedate_to_datetime
 from dataclasses import dataclass, field
 from typing import Any, AsyncIterator, Dict, List, Optional
 
@@ -25,6 +27,9 @@ _RETRYABLE = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0
 _FAILOVER_COOLDOWN_UNTIL: Dict[str, float] = {}
+_RATE_LIMIT_COOLDOWN_UNTIL: Dict[str, float] = {}
+_DEFAULT_RATE_LIMIT_COOLDOWN_S = 20.0
+_MAX_RETRY_AFTER_S = 300.0
 
 
 class LLMError(Exception):
@@ -85,6 +90,7 @@ class LLMClient:
         self.session_usage = TokenUsage()
         self._client: Optional[httpx.AsyncClient] = None
         self._anthropic_tool_name_map: Dict[str, str] = {}  # sanitized→original
+        self._openai_tool_name_map: Dict[str, str] = {}  # sanitized→original
         self._codex_provider: Optional[Any] = None  # lazy CodexProvider
         self._fallback_configs = list(fallback_configs or [])
         self._failover_enabled = bool(failover_enabled) and len(self._fallback_configs) > 0
@@ -157,6 +163,50 @@ class LLMClient:
         return rem if rem > 0 else 0.0
 
     @staticmethod
+    def _retry_after_seconds(headers: Any) -> Optional[float]:
+        if headers is None:
+            return None
+        raw = ""
+        try:
+            raw = str(
+                headers.get("retry-after")
+                or headers.get("Retry-After")
+                or ""
+            ).strip()
+        except Exception:
+            raw = ""
+        if not raw:
+            return None
+
+        try:
+            seconds = float(raw)
+            if seconds >= 0:
+                return min(seconds, _MAX_RETRY_AFTER_S)
+        except Exception:
+            pass
+
+        try:
+            dt = parsedate_to_datetime(raw)
+            now = time.time()
+            delta = max(0.0, float(dt.timestamp() - now))
+            return min(delta, _MAX_RETRY_AFTER_S)
+        except Exception:
+            return None
+
+    def _mark_rate_limited(self, cfg: ModelConfig, retry_after_s: Optional[float]) -> None:
+        key = self._cooldown_key(cfg)
+        base = float(_DEFAULT_RATE_LIMIT_COOLDOWN_S)
+        wait = float(retry_after_s) if retry_after_s is not None else base
+        wait = max(base, min(wait, _MAX_RETRY_AFTER_S))
+        _RATE_LIMIT_COOLDOWN_UNTIL[key] = time.monotonic() + wait
+
+    def _rate_limit_remaining(self, cfg: ModelConfig) -> float:
+        key = self._cooldown_key(cfg)
+        until = float(_RATE_LIMIT_COOLDOWN_UNTIL.get(key, 0.0) or 0.0)
+        rem = until - time.monotonic()
+        return rem if rem > 0 else 0.0
+
+    @staticmethod
     def _cfg_snapshot(cfg: ModelConfig) -> Dict[str, Any]:
         return {
             "profile": str(cfg.name or ""),
@@ -183,12 +233,26 @@ class LLMClient:
             "attempts": attempts,
         }
 
+    @staticmethod
+    def _sanitize_tool_name(name: str) -> str:
+        """Sanitize a tool name to match ^[a-zA-Z0-9_-]{1,128}$.
+
+        Many providers (Amazon Bedrock, some Azure deployments) reject tool
+        names that contain dots or other special characters. Replace dots with
+        underscores — the same strategy used for Anthropic.
+        """
+        safe = re.sub(r'[^a-zA-Z0-9_-]', '_', name)
+        return safe[:128]
+
     def _build_openai_request(
         self,
         messages: List[Dict[str, Any]],
         tools: Optional[List[Dict[str, Any]]] = None,
         stream: bool = True,
     ) -> Dict[str, Any]:
+        # Reset per-request tool name map
+        self._openai_tool_name_map = {}
+
         body: Dict[str, Any] = {
             "model": self.config.model,
             "messages": messages,
@@ -199,7 +263,18 @@ class LLMClient:
         if self.config.top_p < 1.0:
             body["top_p"] = self.config.top_p
         if tools:
-            body["tools"] = tools
+            sanitized_tools = []
+            for t in tools:
+                func = t.get("function", {})
+                original_name = func.get("name", "")
+                safe_name = self._sanitize_tool_name(original_name)
+                if safe_name != original_name:
+                    self._openai_tool_name_map[safe_name] = original_name
+                sanitized_tool = dict(t)
+                sanitized_tool["function"] = dict(func)
+                sanitized_tool["function"]["name"] = safe_name
+                sanitized_tools.append(sanitized_tool)
+            body["tools"] = sanitized_tools
         return body
 
     def _build_anthropic_request(
@@ -214,6 +289,8 @@ class LLMClient:
         # Convert OpenAI message format to Anthropic format
         system_text = ""
         anthropic_messages: List[Dict[str, Any]] = []
+        pending_tool_use_ids: set[str] = set()
+        current_tool_result_anchor: Optional[str] = None
 
         for msg in messages:
             role = msg.get("role", "")
@@ -227,6 +304,7 @@ class LLMClient:
                 text = msg.get("content", "")
                 if text:
                     content_blocks.append({"type": "text", "text": text})
+                assistant_tool_use_ids: set[str] = set()
                 for tc in msg.get("tool_calls", []):
                     func = tc.get("function", {})
                     args_str = func.get("arguments", "{}")
@@ -236,9 +314,13 @@ class LLMClient:
                         log.warning("Malformed tool arguments for %s: %s",
                                     func.get("name", "?"), args_str[:200])
                         args = {}
+                    tc_id = str(tc.get("id", "")).strip()
+                    if not tc_id:
+                        continue
+                    assistant_tool_use_ids.add(tc_id)
                     content_blocks.append({
                         "type": "tool_use",
-                        "id": tc.get("id", ""),
+                        "id": tc_id,
                         "name": func.get("name", "").replace(".", "_"),
                         "input": args,
                     })
@@ -246,12 +328,26 @@ class LLMClient:
                     anthropic_messages.append({"role": "assistant", "content": content_blocks})
                 elif text:
                     anthropic_messages.append({"role": "assistant", "content": text})
+                pending_tool_use_ids = set(assistant_tool_use_ids)
+                current_tool_result_anchor = None
 
             elif role == "tool":
+                tool_use_id = str(msg.get("tool_call_id", "")).strip()
+                if not tool_use_id:
+                    log.debug("Dropping Anthropic tool_result without tool_call_id.")
+                    continue
+                if tool_use_id not in pending_tool_use_ids:
+                    log.debug(
+                        "Dropping orphan/mismatched Anthropic tool_result id=%s (pending=%s)",
+                        tool_use_id,
+                        sorted(pending_tool_use_ids),
+                    )
+                    continue
+
                 # Convert tool result to Anthropic tool_result content block
                 tool_result = {
                     "type": "tool_result",
-                    "tool_use_id": msg.get("tool_call_id", ""),
+                    "tool_use_id": tool_use_id,
                     "content": msg.get("content", ""),
                 }
                 # Anthropic requires tool_result blocks in a "user" message
@@ -260,10 +356,13 @@ class LLMClient:
                         and anthropic_messages[-1]["role"] == "user"
                         and isinstance(anthropic_messages[-1]["content"], list)
                         and anthropic_messages[-1]["content"]
-                        and anthropic_messages[-1]["content"][0].get("type") == "tool_result"):
+                        and anthropic_messages[-1]["content"][0].get("type") == "tool_result"
+                        and current_tool_result_anchor == "assistant_tool_use"):
                     anthropic_messages[-1]["content"].append(tool_result)
                 else:
                     anthropic_messages.append({"role": "user", "content": [tool_result]})
+                    current_tool_result_anchor = "assistant_tool_use"
+                pending_tool_use_ids.discard(tool_use_id)
 
             elif role == "user":
                 content = msg.get("content", "")
@@ -295,6 +394,8 @@ class LLMClient:
                     anthropic_messages.append({"role": "user", "content": blocks})
                 else:
                     anthropic_messages.append({"role": "user", "content": content})
+                pending_tool_use_ids = set()
+                current_tool_result_anchor = None
 
         body: Dict[str, Any] = {
             "model": self.config.model,
@@ -371,6 +472,20 @@ class LLMClient:
         """Stream a chat completion, yielding events as they arrive."""
         self._attempt_trace = []
         if not self._failover_enabled:
+            rem = self._rate_limit_remaining(self.config)
+            if rem > 0:
+                attempt = {
+                    **self._cfg_snapshot(self.config),
+                    "status": "skipped_rate_limited",
+                    "cooldown_remaining_s": int(rem),
+                }
+                self._attempt_trace.append(attempt)
+                raise LLMError(
+                    f"Rate-limit cooldown active for profile '{self.config.name}' "
+                    f"({int(rem)}s remaining).",
+                    status=429,
+                    retryable=True,
+                )
             attempt = {
                 **self._cfg_snapshot(self.config),
                 "status": "running",
@@ -396,6 +511,19 @@ class LLMClient:
                 "status": "running",
             }
             self._attempt_trace.append(attempt)
+            rate_limited_for = self._rate_limit_remaining(cfg)
+            if rate_limited_for > 0:
+                attempt["status"] = "skipped_rate_limited"
+                attempt["cooldown_remaining_s"] = int(rate_limited_for)
+                if idx < len(candidates) - 1:
+                    continue
+                last_error = LLMError(
+                    f"Rate-limit cooldown active for profile '{cfg.name}' "
+                    f"({int(rate_limited_for)}s remaining).",
+                    status=429,
+                    retryable=True,
+                )
+                continue
             if idx > 0:
                 rem = self._cooldown_remaining(cfg)
                 if rem > 0:
@@ -488,6 +616,20 @@ class LLMClient:
                 async with client.stream("POST", url, json=body, params=params) as resp:
                     if resp.status_code != 200:
                         error_body = await resp.aread()
+                        if resp.status_code == 429:
+                            retry_after_s = self._retry_after_seconds(getattr(resp, "headers", None))
+                            self._mark_rate_limited(self.config, retry_after_s)
+                            wait_note = (
+                                f" Retry after about {int(retry_after_s)}s."
+                                if retry_after_s is not None and retry_after_s > 0
+                                else ""
+                            )
+                            raise LLMError(
+                                f"HTTP 429 rate limited.{wait_note} "
+                                f"{error_body.decode(errors='replace')[:240]}",
+                                status=429,
+                                retryable=True,
+                            )
                         if resp.status_code in _RETRYABLE:
                             last_error = LLMError(
                                 f"HTTP {resp.status_code}: {error_body.decode(errors='replace')[:200]}",
@@ -581,7 +723,9 @@ class LLMClient:
                                 idx = 0
                             if idx not in tool_calls:
                                 tc_id = tc_delta.get("id", f"call_{idx}")
-                                tc_name = tc_delta.get("function", {}).get("name", "")
+                                raw_name = tc_delta.get("function", {}).get("name", "")
+                                # Reverse-map sanitized name back to original dotted name
+                                tc_name = self._openai_tool_name_map.get(raw_name, raw_name)
                                 tool_calls[idx] = ToolCallAccumulator(id=tc_id, name=tc_name)
                                 pending_events.append(StreamEvent(
                                     type="tool_call_start",
@@ -598,10 +742,10 @@ class LLMClient:
                                     data={"id": tool_calls[idx].id, "delta": args_delta},
                                 ))
 
-                            # Update name if it wasn't in the first chunk
+                            # Update name if it wasn't in the first chunk (reverse-map too)
                             name_delta = tc_delta.get("function", {}).get("name", "")
                             if name_delta and not tool_calls[idx].name:
-                                tool_calls[idx].name = name_delta
+                                tool_calls[idx].name = self._openai_tool_name_map.get(name_delta, name_delta)
 
                         # Legacy OpenAI function-calling stream format:
                         # delta.function_call.{name,arguments}
@@ -692,6 +836,20 @@ class LLMClient:
                 async with client.stream("POST", url, json=body) as resp:
                     if resp.status_code != 200:
                         error_body = await resp.aread()
+                        if resp.status_code == 429:
+                            retry_after_s = self._retry_after_seconds(getattr(resp, "headers", None))
+                            self._mark_rate_limited(self.config, retry_after_s)
+                            wait_note = (
+                                f" Retry after about {int(retry_after_s)}s."
+                                if retry_after_s is not None and retry_after_s > 0
+                                else ""
+                            )
+                            raise LLMError(
+                                f"Anthropic HTTP 429 rate limited.{wait_note} "
+                                f"{error_body.decode(errors='replace')[:240]}",
+                                status=429,
+                                retryable=True,
+                            )
                         if resp.status_code in _RETRYABLE:
                             last_error = LLMError(
                                 f"Anthropic HTTP {resp.status_code}: "

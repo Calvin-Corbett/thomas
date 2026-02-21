@@ -1,0 +1,36 @@
+{
+    "id":  "github_copilot",
+    "name":  "GitHub Copilot",
+    "vendor":  "GitHub",
+    "category":  "coding_agent",
+    "surfaces":  [
+                     "ide",
+                     "github_web",
+                     "cli"
+                 ],
+    "live_streaming":  "partial",
+    "settings_depth":  "high",
+    "benchmark_mode":  "mixed",
+    "key_strengths":  [
+                          "Enterprise IDE footprint",
+                          "GitHub workflow integration",
+                          "Policy controls for orgs"
+                      ],
+    "source_urls":  [
+                        "https://docs.github.com/en/copilot"
+                    ],
+    "confidence":  "medium",
+    "notes":  "Large baseline for enterprise adoption and PR workflow integration.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  4,
+                                      "ux.live_streaming":  3,
+                                      "ux.settings_depth":  5,
+                                      "autonomy.supervision_modes":  4,
+                                      "integration.mcp_support":  3,
+                                      "integration.git_pr_workflows":  5,
+                                      "platform.self_hostability":  2,
+                                      "composite.provisional_mean":  3.71
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

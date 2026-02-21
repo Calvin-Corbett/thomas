@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-jira-detect",
+  "name": "Security Jira Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "jira",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.jira",
+    "security.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via jira with detect mode policies."
+}

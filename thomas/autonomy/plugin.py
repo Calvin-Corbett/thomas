@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import os
 from datetime import datetime, timezone
 from typing import Optional
@@ -17,14 +18,18 @@ def _default_db_path(config: object) -> str:
     # Try common Thomas config shapes; fall back to runtime/.thomas
     root = None
     for attr in ("memory", "config"):
-        obj = getattr(config, attr, None)
+        try:
+            obj = getattr(config, attr)
+        except Exception:
+            obj = None
         if obj is not None:
             for a2 in ("root_path", "root", "path"):
-                root = getattr(obj, a2, None)
-                if root:
-                    break
-        if root:
-            break
+                try:
+                    root = getattr(obj, a2)
+                    if root:
+                        break
+                except Exception:
+                    pass
     if not root:
         root = os.path.join("runtime", ".thomas")
     return os.path.join(str(root), "autonomy", "autonomy.sqlite3")

@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-pagerduty-detect",
+  "name": "Security Pagerduty Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "pagerduty",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.pagerduty",
+    "security.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via pagerduty with detect mode policies."
+}

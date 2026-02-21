@@ -10,6 +10,7 @@ Architecture:
 from __future__ import annotations
 
 import logging
+import os
 import re
 import json
 import sys
@@ -40,6 +41,7 @@ from thomas.core.config import AppConfig
 from thomas.core.autonomy import clamp_autonomy_level, autonomy_level_name
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
+from thomas.core.token_economy import normalize_token_economy_level
 from thomas.tools.registry import ToolRegistry
 from thomas.agent.loop import AgentLoop
 
@@ -56,7 +58,7 @@ except ImportError:
 _SLASH_COMMANDS = [
     "/help", "/clear", "/save", "/load",
     "/model", "/tools", "/memory", "/pin", "/unpin",
-    "/autonomy",
+    "/autonomy", "/status", "/permissions", "/cost", "/review", "/todo",
     "/exit", "/quit",
 ]
 
@@ -246,6 +248,11 @@ class ThomasREPL:
                     "[bold]/load [file][/bold]     Load conversation from JSON file",
                     "[bold]/model [name][/bold]    Show or switch model profile",
                     "[bold]/autonomy [1-4][/bold]  Show or set autonomy level",
+                    "[bold]/status[/bold]          Show current REPL/runtime status",
+                    "[bold]/permissions[/bold]     Show tool + server access posture",
+                    "[bold]/cost[/bold]            Show token/cost tracking for this process",
+                    "[bold]/review[/bold]          Quick review of recent conversation turns",
+                    "[bold]/todo[/bold]            Show open todo/goals from memory/state",
                     "[bold]/tools[/bold]           List available tools",
                     "[bold]/memory[/bold]          Show memory stats, pins, and token usage",
                     "[bold]/pin key=val[/bold]     Pin context (always included in memory)",
@@ -427,6 +434,140 @@ class ThomasREPL:
                 f"[dim]Autonomy set to L{level} ({autonomy_level_name(level)})[/dim]"
             )
 
+        elif command == "/status":
+            user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
+            asst_turns = sum(1 for m in self._conversation if m.get("role") == "assistant")
+            tool_count = 0
+            for cat in self.tools.list_categories():
+                tool_count += len(self.tools.list_tools(cat))
+            self._console.print(f"[dim]Model: {self._current_model}[/dim]")
+            self._console.print(
+                f"[dim]Autonomy: L{self._autonomy_level} "
+                f"({autonomy_level_name(self._autonomy_level)})[/dim]"
+            )
+            self._console.print(
+                f"[dim]Conversation: {user_turns} user, {asst_turns} assistant, "
+                f"{len(self._conversation)} total messages[/dim]"
+            )
+            self._console.print(f"[dim]Tools: {tool_count} registered[/dim]")
+            self._console.print(
+                f"[dim]Access: server={self.config.server.access_mode}, "
+                f"shell={'enabled' if self.config.tools.allow_shell else 'disabled'}[/dim]"
+            )
+
+        elif command == "/permissions":
+            self._console.print(f"[dim]server.access_mode = {self.config.server.access_mode}[/dim]")
+            self._console.print(
+                f"[dim]server.api_token configured = "
+                f"{bool(str(self.config.server.api_token or '').strip())}[/dim]"
+            )
+            self._console.print(
+                f"[dim]tools.allow_shell = {bool(self.config.tools.allow_shell)}[/dim]"
+            )
+            self._console.print(f"[dim]tools.sandbox_root = {self.config.tools.sandbox_path}[/dim]")
+            self._console.print(f"[dim]tools.max_file_size = {self.config.tools.max_file_size} bytes[/dim]")
+
+        elif command == "/cost":
+            if self._llm:
+                usage = self._llm.session_usage
+                self._console.print(
+                    f"[dim]LLM session tokens: prompt={usage.prompt_tokens}, "
+                    f"completion={usage.completion_tokens}, total={usage.total_tokens}[/dim]"
+                )
+            else:
+                self._console.print("[dim]LLM session tokens: no active model session yet[/dim]")
+            try:
+                from thomas.core.cost_tracker import get_cost_tracker
+
+                tracker = get_cost_tracker()
+                session_tokens = tracker.session_tokens()
+                self._console.print(
+                    f"[dim]Cost tracker tokens: prompt={session_tokens.get('prompt_tokens', 0)}, "
+                    f"completion={session_tokens.get('completion_tokens', 0)}, "
+                    f"total={session_tokens.get('total_tokens', 0)}[/dim]"
+                )
+                self._console.print(
+                    f"[dim]Cost tracker: calls={tracker.session_call_count()}, "
+                    f"usd={tracker.session_usd():.6f}[/dim]"
+                )
+            except Exception as e:
+                self._console.print(f"[yellow]Cost tracker unavailable: {type(e).__name__}[/yellow]")
+
+        elif command == "/review":
+            if not self._conversation:
+                self._console.print("[dim]No conversation to review yet.[/dim]")
+                return False
+            user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
+            asst_turns = sum(1 for m in self._conversation if m.get("role") == "assistant")
+            self._console.print(
+                f"[dim]Review: {user_turns} user turns, {asst_turns} assistant turns, "
+                f"{len(self._conversation)} messages total[/dim]"
+            )
+            self._console.print("[dim]Recent turns:[/dim]")
+            for row in self._conversation[-6:]:
+                role = str(row.get("role") or "unknown")
+                text = str(row.get("content") or "").replace("\n", " ").strip()
+                if len(text) > 140:
+                    text = text[:137] + "..."
+                self._console.print(f"  [cyan]{role}[/cyan]: {text}")
+            self._console.print("[dim]Tip: pin priorities with /pin todo.<key>=<task>[/dim]")
+
+        elif command == "/todo":
+            todos: list[tuple[str, str]] = []
+            seen: set[str] = set()
+            if self._memory and self._memory.started:
+                try:
+                    pins = self._memory.list_pins()
+                except Exception:
+                    pins = []
+                for key, text, _score in pins:
+                    key_s = str(key or "").strip()
+                    text_s = str(text or "").strip()
+                    if not key_s or not text_s:
+                        continue
+                    if not key_s.lower().startswith("todo"):
+                        continue
+                    marker = f"pin:{key_s.lower()}"
+                    if marker in seen:
+                        continue
+                    seen.add(marker)
+                    todos.append((f"pin:{key_s}", text_s))
+
+            for candidate in (
+                Path(self.config.memory.root_path) / "thomas_state.json",
+                Path.cwd() / "thomas_state.json",
+            ):
+                if not candidate.exists():
+                    continue
+                try:
+                    payload = json.loads(candidate.read_text(encoding="utf-8"))
+                except Exception:
+                    continue
+                goals = payload.get("goals") if isinstance(payload, dict) else None
+                if not isinstance(goals, list):
+                    continue
+                for idx, row in enumerate(goals, start=1):
+                    if not isinstance(row, dict):
+                        continue
+                    status = str(row.get("status") or "open").strip().lower()
+                    if status in {"done", "completed", "closed"}:
+                        continue
+                    text = str(row.get("text") or row.get("goal") or row.get("title") or "").strip()
+                    if not text:
+                        continue
+                    marker = f"goal:{status}:{text.lower()}"
+                    if marker in seen:
+                        continue
+                    seen.add(marker)
+                    todos.append((f"goal:{idx}", text))
+
+            if not todos:
+                self._console.print("[dim]No open todos found. Add one with /pin todo.<key>=<task>[/dim]")
+            else:
+                self._console.print(f"[dim]Open todos: {len(todos)}[/dim]")
+                for origin, text in todos[:20]:
+                    self._console.print(f"  - {origin}: {text}")
+
         elif command == "/tools":
             for cat in self.tools.list_categories():
                 self._console.print(f"\n[bold]{cat}[/bold]")
@@ -511,7 +652,10 @@ class ThomasREPL:
         token_info = ""
 
         try:
-            async for event in agent.run(prompt):
+            token_economy = normalize_token_economy_level(
+                os.environ.get("THOMAS_TOKEN_ECONOMY", "optimal")
+            )
+            async for event in agent.run(prompt, token_economy=token_economy):
                 if event.type == EventType.AGENT_START:
                     route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
                     mode = route.get("mode") or event.data.get("mode") or "auto"

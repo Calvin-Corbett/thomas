@@ -31,7 +31,21 @@ def test_curator_promotes_library_entries_into_global_facts(tmp_path, monkeypatc
     try:
         result = mem.run_curator(force=True)
         assert result.get("ran") is True
-        assert int(result.get("facts_promoted", 0)) >= 1
+        promoted = int(result.get("facts_promoted", 0))
+        queued = int(result.get("queued_for_approval", 0))
+        assert (promoted + queued) >= 1
+
+        if promoted <= 0 and queued > 0:
+            pending = mem.list_curator_approvals(status="pending", limit=20)
+            assert pending
+            aid = int(pending[0]["id"])
+            decision = mem.decide_curator_approval(
+                aid,
+                approve=True,
+                actor="test",
+                reason="approve for retrieval assertion",
+            )
+            assert decision.get("ok") is True
 
         assert int(mem.stats().get("v2_facts", 0)) >= 1
 
@@ -86,5 +100,40 @@ def test_curator_promotes_episode_facts_incrementally(tmp_path, monkeypatch) -> 
         assert after_first >= before + 1
         assert int(second.get("facts_promoted", 0)) == 0
         assert after_second == after_first
+    finally:
+        mem.close()
+
+
+def test_curator_approval_queue_and_apply(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("THOMAS_MEMORY_CURATOR_ENABLED", "1")
+    monkeypatch.setenv("THOMAS_MEMORY_CURATOR_MIN_INTERVAL_SECONDS", "0")
+    monkeypatch.setenv("THOMAS_MEMORY_CURATOR_APPROVAL_ENABLED", "1")
+    monkeypatch.setenv("THOMAS_MEMORY_CURATOR_APPROVAL_AUTO_APPLY_CONFIDENCE", "0.95")
+
+    cfg = _cfg(tmp_path)
+    mem = AutonomyMemoryEngine(cfg, enable_legacy=False, enable_v2=True)
+    mem.start()
+    try:
+        mem.add_event("telegram:11", "user_message", "I use zed for coding")
+        before = int(mem.stats().get("v2_facts", 0))
+        result = mem.run_curator(force=True)
+        assert result.get("ran") is True
+        assert int(result.get("queued_for_approval", 0)) >= 1
+
+        pending = mem.list_curator_approvals(status="pending", limit=20)
+        assert len(pending) >= 1
+        aid = int(pending[0]["id"])
+
+        decision = mem.decide_curator_approval(
+            aid,
+            approve=True,
+            actor="test",
+            reason="unit test approval",
+        )
+        assert decision.get("ok") is True
+        assert str(decision.get("status") or "") in ("applied", "approved")
+
+        after = int(mem.stats().get("v2_facts", 0))
+        assert after >= before + 1
     finally:
         mem.close()

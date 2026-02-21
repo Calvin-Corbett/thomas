@@ -14,7 +14,7 @@ def utc_ms() -> int:
 
 
 def sha1_hex(data: bytes) -> str:
-    return hashlib.sha1(data, usedforsecurity=False).hexdigest()
+    return hashlib.sha1(data).hexdigest()
 
 
 def clamp(v: float, lo: float, hi: float) -> float:

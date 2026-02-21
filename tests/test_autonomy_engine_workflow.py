@@ -1,0 +1,113 @@
+import asyncio
+import os
+import tempfile
+import unittest
+from datetime import datetime, timezone
+
+from thomas.autonomy.engine import AutonomyEngine
+from thomas.autonomy.policy import AutonomyPolicy
+from thomas.autonomy.scheduler import EngineTiming
+from thomas.autonomy.store import AutonomyStore
+
+
+class _WorkflowChatAdapter:
+    def __init__(self) -> None:
+        self.calls = []
+
+    async def generate_json(  # noqa: D401
+        self,
+        *,
+        system_prompt,
+        user_prompt,
+        session_id=None,
+        schema_hint=None,
+        profile=None,
+        model_id=None,
+    ):
+        self.calls.append({"system_prompt": system_prompt, "user_prompt": user_prompt, "profile": profile})
+        if "You are an orchestrator. Decompose the goal" in system_prompt:
+            return {"workers": [{"name": "w1", "prompt": "subtask 1"}]}
+        if "parallel workflow worker" in system_prompt:
+            return {"output": "worker-done", "summary": "worker-summary"}
+        if "orchestrator that merges worker outputs" in system_prompt:
+            return {"final_output": "merged", "rationale": "ok"}
+        if "workflow chain worker" in system_prompt:
+            return {"output": "step-done", "summary": "step-summary"}
+        return {"output": "ok", "summary": "ok"}
+
+
+class TestAutonomyEngineWorkflow(unittest.IsolatedAsyncioTestCase):
+    async def asyncSetUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self.tmpdir.name, "autonomy.sqlite3")
+        self.store = AutonomyStore(self.db_path)
+        self.policy = AutonomyPolicy()
+        self.chat = _WorkflowChatAdapter()
+        self.engine = AutonomyEngine(
+            store=self.store,
+            policy=self.policy,
+            timing=EngineTiming(scheduler_tick_s=0.05, claim_batch=4, lock_ttl_s=5.0),
+            max_concurrency=1,
+            chat_adapter=self.chat,
+        )
+        await self.engine.start()
+
+    async def asyncTearDown(self):
+        await self.engine.stop()
+        self.store.close()
+        self.tmpdir.cleanup()
+
+    async def test_workflow_task_chain_succeeds(self):
+        job = self.store.create_job(
+            name="workflow chain",
+            kind="workflow_task",
+            payload={
+                "workflow": "chain",
+                "goal": "prepare release checklist",
+                "steps": ["collect requirements", "draft checklist"],
+            },
+            schedule=None,
+            next_run_at=datetime.now(timezone.utc),
+            risk_class="low",
+        )
+        self.engine.wake_up()
+        for _ in range(80):
+            current = self.store.get_job(job.id)
+            if current.status in ("succeeded", "failed", "dead", "cancelled"):
+                break
+            await asyncio.sleep(0.05)
+        done = self.store.get_job(job.id)
+        self.assertEqual(done.status, "succeeded")
+        result = done.result or {}
+        self.assertEqual(result.get("pattern"), "chain")
+        self.assertEqual(len(result.get("steps", [])), 2)
+        self.assertEqual(int((result.get("telemetry") or {}).get("step_count") or 0), 2)
+        self.assertEqual(int((result.get("workflow_policy") or {}).get("autonomy_level") or 0), 3)
+
+    async def test_workflow_task_autonomy_preset_applies_to_orchestrator(self):
+        job = self.store.create_job(
+            name="workflow orchestrator",
+            kind="workflow_task",
+            payload={
+                "workflow": "orchestrator_worker",
+                "goal": "ship feature proposal",
+                "autonomy_level": 1,
+            },
+            schedule=None,
+            next_run_at=datetime.now(timezone.utc),
+            risk_class="low",
+        )
+        self.engine.wake_up()
+        for _ in range(80):
+            current = self.store.get_job(job.id)
+            if current.status in ("succeeded", "failed", "dead", "cancelled"):
+                break
+            await asyncio.sleep(0.05)
+        done = self.store.get_job(job.id)
+        self.assertEqual(done.status, "succeeded")
+        result = done.result or {}
+        policy = result.get("workflow_policy") or {}
+        self.assertEqual(int(policy.get("autonomy_level") or 0), 1)
+        self.assertEqual(int(policy.get("worker_count") or 0), 1)
+        prompts = [str(c.get("user_prompt") or "") for c in self.chat.calls]
+        self.assertTrue(any("Create up to 1 workers" in p for p in prompts))

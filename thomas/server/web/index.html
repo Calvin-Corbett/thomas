@@ -1,281 +1,226 @@
-<!doctype html>
-<html lang="en" data-theme="light">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
     <title>Thomas</title>
-    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='12' fill='%231f2937'/%3E%3Ctext x='32' y='42' text-anchor='middle' font-size='34' fill='white' font-family='Arial,sans-serif'%3ET%3C/text%3E%3C/svg%3E" />
 
-    <!-- Fonts -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap"
-      rel="stylesheet"
-    />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 
-    <!-- Markdown + Syntax Highlighting (CDN) -->
+    <!-- Icons -->
+    <script src="https://unpkg.com/@phosphor-icons/web"></script>
+
+    <!-- Markdown & Code Highlighting -->
     <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js"></script>
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github.min.css" id="hljs-light" />
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/github-dark.min.css" id="hljs-dark" disabled />
+    <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css">
     <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
 
-    <!-- Thomas CSS -->
-    <link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__" />
-    <link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__" />
-    <link rel="stylesheet" href="/static/css/layout.css?v=__THOMAS_VERSION__" />
-    <link rel="stylesheet" href="/static/guardrails.css?v=__THOMAS_VERSION__" />
-    <link rel="stylesheet" href="/static/swarm_board.css?v=__THOMAS_VERSION__" />
-  </head>
-  <body>
-    <div id="app">
-      <!-- ====== SIDEBAR ====== -->
-      <aside class="sidebar" id="sidebar" role="navigation" aria-label="Chat sidebar">
-        <div class="sidebar-header">
-          <div class="sidebar-brand">
-            <span class="sidebar-logo">Thomas</span>
-          </div>
-          <button class="btn-icon" id="newChatBtn" type="button" aria-label="New chat"
-            style="color: var(--sidebar-text);"></button>
-        </div>
+    <!-- Clean, Professional CSS -->
+    <link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__">
+    <link rel="stylesheet" href="/static/css/layout.css?v=__THOMAS_VERSION__">
+    <link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__">
+</head>
 
-        <button class="sidebar-new-chat" id="newChatBtnFull" type="button">+ New Chat</button>
-
-        <div class="sidebar-search">
-          <input class="sidebar-search-input" id="chatSearchInput" type="text"
-            placeholder="Search chats..." aria-label="Search chats" />
-        </div>
-
-        <div class="sidebar-chats" id="chatList" role="listbox" aria-label="Chat list"></div>
-
-        <div class="sidebar-section" id="agentsSection">
-          <div class="sidebar-section-header" id="agentsToggle">
-            Agents <span style="font-size: 10px;">&#9656;</span>
-          </div>
-          <div id="agentsContent" style="display: none;">
-            <button class="sidebar-link" id="openSwarmBoardBtn" type="button">Swarm Board</button>
-            <a class="sidebar-link" href="/autonomy" target="_blank" rel="noopener">Autonomy Jobs</a>
-          </div>
-        </div>
-
-        <div class="sidebar-section" id="projectsSection">
-          <div class="sidebar-section-header" id="projectsToggle">
-            Projects <span style="font-size: 10px;">&#9656;</span>
-          </div>
-          <div id="projectsContent" style="display: none;">
-            <div class="empty-state" style="padding: var(--space-4);">
-              <div class="empty-state-text">Coming soon</div>
+<body>
+    <div id="app" class="app-layout">
+        <!-- Sleek Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <h2 class="brand-text">Thomas</h2>
+                <button class="btn-icon" id="newChatSidebar" title="New Chat"><i
+                        class="ph ph-pencil-simple"></i></button>
             </div>
-          </div>
-        </div>
 
-        <div class="sidebar-footer">
-          <button class="sidebar-footer-btn" id="settingsBtn" type="button">
-            <span class="icon" aria-hidden="true"></span> Settings
-          </button>
-          <button class="sidebar-footer-btn" id="helpBtn" type="button">
-            <span class="icon" aria-hidden="true"></span> Help &amp; About
-          </button>
-        </div>
-      </aside>
+            <nav class="sidebar-nav">
+                <a href="/" class="nav-item active"><i class="ph ph-chat-teardrop"></i> Chat</a>
+                <a href="/mission.html" class="nav-item"><i class="ph ph-rocket"></i> Mission Control</a>
+                <a href="/memory.html" class="nav-item"><i class="ph ph-brain"></i> Memory</a>
+                <a href="/index.html?search" class="nav-item"><i class="ph ph-magnifying-glass"></i> Search</a>
+                <a href="/spend.html" class="nav-item"><i class="ph ph-coin"></i> Spend</a>
+            </nav>
 
-      <div class="sidebar-overlay" id="sidebarOverlay"></div>
-
-      <!-- ====== MAIN ====== -->
-      <main class="main" role="main">
-        <header class="chat-header" id="chatHeader">
-          <div class="chat-header-left">
-            <button class="btn-icon sidebar-toggle" id="sidebarToggle" type="button"
-              aria-label="Toggle sidebar"></button>
-            <div class="chat-title" id="chatTitle" contenteditable="true" spellcheck="false"
-              role="textbox" aria-label="Chat title">New Chat</div>
-          </div>
-          <div class="chat-header-right">
-            <button class="model-indicator" id="modelIndicator" type="button"
-              aria-label="Open model picker">
-              <span id="modelIndicatorText">local</span>
-              <span id="modelIndicatorChevron"></span>
-            </button>
-            <div class="segmented" id="modeToggle">
-              <button class="segmented-btn active tooltip tooltip-below" data-mode="fast" data-tooltip="Quick responses, skip deep reasoning">fast</button>
-              <button class="segmented-btn tooltip tooltip-below" data-mode="auto" data-tooltip="Auto-decide when to reason deeper">auto</button>
-              <button class="segmented-btn tooltip tooltip-below" data-mode="thinking" data-tooltip="Extended reasoning, slower but thorough">think</button>
-              <button class="segmented-btn tooltip tooltip-below" data-mode="swarm" data-tooltip="Multi-agent swarm with live board">swarm</button>
+            <div class="sidebar-footer">
+                <button class="nav-item user-btn" id="settingsBtn">
+                    <div class="user-avatar">U</div>
+                    <span>Settings</span>
+                </button>
             </div>
-            <div class="segmented" id="autonomyToggle">
-              <button class="segmented-btn tooltip tooltip-below" data-autonomy-level="1" data-tooltip="Manual Review: asks before each action">L1 manual</button>
-              <button class="segmented-btn tooltip tooltip-below" data-autonomy-level="2" data-tooltip="Guarded Assist: safe/approved tasks first">L2 guarded</button>
-              <button class="segmented-btn active tooltip tooltip-below" data-autonomy-level="3" data-tooltip="Tool-Bounded Auto: autonomous until blocked">L3 auto</button>
-              <button class="segmented-btn tooltip tooltip-below" data-autonomy-level="4" data-tooltip="Full Auto: self-unblocks and proceeds">L4 full</button>
-            </div>
-            <div class="status-chip connected" id="statusChip">
-              <span class="status-dot"></span>
-              <span id="statusText">ready</span>
-            </div>
-            <button class="jobs-indicator" id="jobsBtn" type="button" aria-label="Open jobs panel">
-              <span id="jobsBtnText">jobs 0</span>
-            </button>
-            <button class="btn-icon" id="inspectorToggle" type="button"
-              aria-label="Toggle inspector panel"></button>
-          </div>
-        </header>
+        </aside>
 
-        <div class="chat-messages" id="chatMessages">
-          <div class="chat-messages-inner" id="chatMessagesInner"></div>
-        </div>
+        <main class="main-content">
 
-        <div class="composer" id="composer">
-          <div class="composer-inner">
-            <div class="composer-attachments" id="composerAttachments"></div>
-            <div class="composer-row">
-              <div class="composer-input-wrap">
-                <textarea class="composer-textarea" id="composerTextarea"
-                  placeholder="Message Thomas... (Enter to send, Shift+Enter for newline)"
-                  rows="1" aria-label="Message input"></textarea>
-              </div>
-              <button class="composer-send" id="sendBtn" type="button" disabled
-                aria-label="Send message"></button>
-            </div>
-            <div class="composer-actions">
-              <div class="composer-actions-left">
-                <button class="btn-icon tooltip tooltip-below" id="attachDocBtn" type="button" aria-label="Attach document" data-tooltip="Attach file"></button>
-                <button class="btn-icon tooltip tooltip-below" id="attachImageBtn" type="button" aria-label="Attach image" data-tooltip="Attach image"></button>
-                <button class="btn-icon tooltip tooltip-below" id="micBtn" type="button" aria-label="Push to talk" data-tooltip="Push to talk. Double-click or long-press for voice mode"></button>
-              </div>
-              <div class="composer-actions-right">
-                <span class="composer-hint" id="composerHint"></span>
-              </div>
-            </div>
-            <input class="composer-file-input" id="docFileInput" type="file" multiple />
-            <input class="composer-file-input" id="imageFileInput" type="file" accept="image/*" multiple />
-          </div>
-        </div>
-      </main>
+            <!-- Top Navigator -->
+            <nav class="top-nav">
+                <div class="nav-left">
+                    <button class="btn-icon sidebar-toggle" id="sidebarToggleBtn"><i class="ph ph-list"></i></button>
+                </div>
+                <div class="model-select-wrapper">
+                    <!-- The new Model Setup Trigger Button -->
+                    <button id="modelSetupBtn" class="model-setup-btn" title="Configure Model">
+                        <span id="modelSetupCurrentLabel">gemini-pro</span>
+                        <i class="ph ph-caret-down"></i>
+                    </button>
+                    <!-- Kept hidden for backend compatibility mapping when traversing options -->
+                    <select id="modelSelector" class="hidden"></select>
+                </div>
+                <div class="nav-right"></div>
+            </nav>
 
-      <!-- ====== INSPECTOR ====== -->
-      <aside class="inspector" id="inspector" role="complementary" aria-label="Inspector panel">
-        <div class="inspector-header" id="inspectorTabs"></div>
-        <div class="inspector-body" id="inspectorBody"></div>
-      </aside>
+            <!-- Welcome Screen -->
+            <div class="welcome-screen" id="welcomeScreen">
+                <h1 class="welcome-title">How can I help you today?</h1>
+                <div class="welcome-suggestions">
+                    <button class="suggestion-chip">Write a python script <i class="ph ph-code"></i></button>
+                    <button class="suggestion-chip">Summarize my notes <i class="ph ph-text-align-left"></i></button>
+                    <button class="suggestion-chip">Brainstorm ideas <i class="ph ph-lightbulb"></i></button>
+                </div>
+            </div>
+
+            <!-- Chat Stream -->
+            <div class="chat-scroll-area hidden" id="chatScrollArea">
+                <div class="chat-container" id="chatMessagesInner">
+                    <!-- Messages will be injected here -->
+                </div>
+            </div>
+
+            <!-- Bottom Composer -->
+            <div class="composer-container">
+                <div class="composer-inner">
+                    <div class="composer-box">
+
+                        <div id="attachmentsPreview" class="attachments-preview"></div>
+
+                        <div class="composer-input-row">
+                            <button class="btn-icon" id="attachBtn" title="Attach file"><i
+                                    class="ph ph-paperclip"></i></button>
+
+                            <textarea class="composer-textarea" id="composerTextarea" rows="1"
+                                placeholder="Message Thomas..." autofocus></textarea>
+
+                            <button class="btn-icon" id="micBtn" title="Use microphone"><i
+                                    class="ph ph-microphone"></i></button>
+                            <button class="btn-send" id="sendBtn" disabled><i class="ph ph-arrow-up"></i></button>
+                        </div>
+
+                    </div>
+                    <div class="disclaimer">
+                        Thomas can make mistakes. Consider verifying important information.
+                    </div>
+                </div>
+            </div>
+
+        </main>
     </div>
 
-    <div id="modals"></div>
-    <script>
-      (function () {
-        window.__THOMAS_UI_BOOTED = false;
-        window.__THOMAS_UI_BOOT_ERRORS = [];
+    <!-- User Settings Modal -->
+    <div class="thomas-modal" id="settingsModal">
+        <div class="modal-backdrop"></div>
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Settings</h2>
+                <button class="btn-icon" id="closeSettingsBtn"><i class="ph ph-x"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>System Prompt (Personality)</label>
+                    <textarea id="settingSystemPrompt" rows="4" placeholder="You are Thomas..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>OpenAI Theme Mode</label>
+                    <select id="settingTheme">
+                        <option value="auto">Auto</option>
+                        <option value="light">Light</option>
+                        <option value="dark">Dark</option>
+                    </select>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn-primary" id="saveSettingsBtn">Save Preferences</button>
+            </div>
+        </div>
+    </div>
 
-        function pushErr(kind, err) {
-          try {
-            var msg = '';
-            if (err && err.message) msg = String(err.message);
-            else if (typeof err === 'string') msg = err;
-            else msg = String(err || '');
-            if (!msg) msg = '(unknown error)';
-            window.__THOMAS_UI_BOOT_ERRORS.push(kind + ': ' + msg);
-          } catch (_) { /* ignore */ }
-        }
+    <!-- Rich Model Setup Modal -->
+    <div class="thomas-modal" id="modelSetupModal">
+        <div class="modal-backdrop" id="modelSetupBackdrop"></div>
+        <div class="modal-content model-setup-content">
+            <div class="modal-header">
+                <h2>Model Setup</h2>
+                <button class="btn-icon" id="closeModelSetupBtn"><i class="ph ph-x"></i></button>
+            </div>
 
-        window.addEventListener('error', function (e) {
-          pushErr('error', e && e.error ? e.error : (e && e.message ? e.message : e));
-        });
-        window.addEventListener('unhandledrejection', function (e) {
-          pushErr('promise', e && e.reason ? e.reason : e);
-        });
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Provider & Profile</label>
+                    <!-- Will be populated dynamically by JS just like the old <select> was -->
+                    <select id="setupProfileSelector" class="setup-fluid-select"></select>
+                </div>
 
-        function showOverlay() {
-          if (document.getElementById('bootFailOverlay')) return;
-          var overlay = document.createElement('div');
-          overlay.id = 'bootFailOverlay';
-          overlay.style.position = 'fixed';
-          overlay.style.inset = '0';
-          overlay.style.zIndex = '99999';
-          overlay.style.background = 'rgba(0,0,0,0.6)';
-          overlay.style.display = 'flex';
-          overlay.style.alignItems = 'center';
-          overlay.style.justifyContent = 'center';
-          overlay.style.padding = '24px';
+                <div class="form-group split-group">
+                    <div class="form-subgroup">
+                        <label>Personality Preset</label>
+                        <select id="setupPersonalitySelector" class="setup-fluid-select">
+                            <option value="">Default Assistant</option>
+                            <option value="You are a helpful and friendly companion. Use emojis.">Friendly Companion
+                            </option>
+                            <option
+                                value="You are a terse senior software engineer. Answer directly in code with zero fluff.">
+                                Senior Coder</option>
+                            <option value="custom">Custom (Override)</option>
+                        </select>
+                    </div>
+                </div>
 
-          var card = document.createElement('div');
-          card.style.maxWidth = '720px';
-          card.style.width = '100%';
-          card.style.background = '#111827';
-          card.style.color = '#e5e7eb';
-          card.style.border = '1px solid rgba(255,255,255,0.12)';
-          card.style.borderRadius = '14px';
-          card.style.boxShadow = '0 18px 60px rgba(0,0,0,0.5)';
-          card.style.padding = '18px';
+                <div class="form-group hidden" id="customPersonalityGroup">
+                    <label>Custom System Prompt</label>
+                    <textarea id="setupCustomPrompt" rows="3" placeholder="You are Thomas..."></textarea>
+                </div>
 
-          var title = document.createElement('div');
-          title.textContent = 'Thomas UI failed to start';
-          title.style.fontSize = '16px';
-          title.style.fontWeight = '700';
-          title.style.marginBottom = '8px';
+                <div class="form-group">
+                    <label>Autonomy Engine Level</label>
+                    <div class="segmented-control" id="setupAutonomyGroup">
+                        <button class="segment active" data-level="1">L1 <span>Chat</span></button>
+                        <button class="segment" data-level="2">L2 <span>Assist</span></button>
+                        <button class="segment" data-level="3">L3 <span>Auto</span></button>
+                        <button class="segment" data-level="4">L4 <span>Agent</span></button>
+                    </div>
+                </div>
 
-          var hint = document.createElement('div');
-          hint.style.fontSize = '13px';
-          hint.style.lineHeight = '1.6';
-          hint.style.opacity = '0.95';
-          hint.innerHTML =
-            'The page loaded, but the JavaScript app did not boot. Try:<br/>' +
-            '1) Hard refresh: <b>Ctrl+F5</b><br/>' +
-            '2) Open a new tab: <code>http://127.0.0.1:8899/</code><br/>' +
-            '3) If it still fails, check DevTools Console for the first error.';
+                <div class="form-group">
+                    <label>Token Economy</label>
+                    <div class="segmented-control" id="setupEconomyGroup">
+                        <button class="segment" data-level="cheap">Cheap</button>
+                        <button class="segment active" data-level="balanced">Balanced</button>
+                        <button class="segment" data-level="max">Maximum</button>
+                    </div>
+                </div>
 
-          var pre = document.createElement('pre');
-          pre.style.marginTop = '12px';
-          pre.style.padding = '10px 12px';
-          pre.style.background = 'rgba(0,0,0,0.35)';
-          pre.style.border = '1px solid rgba(255,255,255,0.12)';
-          pre.style.borderRadius = '10px';
-          pre.style.fontSize = '12px';
-          pre.style.whiteSpace = 'pre-wrap';
-          pre.style.wordBreak = 'break-word';
-          pre.textContent = (window.__THOMAS_UI_BOOT_ERRORS || []).slice(0, 12).join('\n') || '(no errors captured)';
+                <div class="form-group switch-group">
+                    <div class="switch-label">
+                        <strong>Memory Engine</strong>
+                        <span>Persist context across sessions natively</span>
+                    </div>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="setupMemoryToggle" checked>
+                        <span class="slider round"></span>
+                    </label>
+                </div>
+            </div>
 
-          var row = document.createElement('div');
-          row.style.display = 'flex';
-          row.style.gap = '10px';
-          row.style.marginTop = '14px';
+            <div class="modal-footer">
+                <button class="btn-primary" id="applyModelSetupBtn">Apply Configuration</button>
+            </div>
+        </div>
+    </div>
 
-          var reload = document.createElement('button');
-          reload.textContent = 'Reload';
-          reload.style.background = '#10b981';
-          reload.style.color = '#062316';
-          reload.style.border = 'none';
-          reload.style.borderRadius = '10px';
-          reload.style.padding = '10px 12px';
-          reload.style.cursor = 'pointer';
-          reload.onclick = function () { location.reload(); };
+    <!-- Hidden file inputs -->
+    <input type="file" id="docFileInput" style="display:none" multiple />
+    <input type="file" id="imageFileInput" accept="image/*" style="display:none" multiple />
 
-          var dismiss = document.createElement('button');
-          dismiss.textContent = 'Dismiss';
-          dismiss.style.background = 'transparent';
-          dismiss.style.color = '#e5e7eb';
-          dismiss.style.border = '1px solid rgba(255,255,255,0.25)';
-          dismiss.style.borderRadius = '10px';
-          dismiss.style.padding = '10px 12px';
-          dismiss.style.cursor = 'pointer';
-          dismiss.onclick = function () { overlay.remove(); };
-
-          row.appendChild(reload);
-          row.appendChild(dismiss);
-
-          card.appendChild(title);
-          card.appendChild(hint);
-          card.appendChild(pre);
-          card.appendChild(row);
-          overlay.appendChild(card);
-          document.body.appendChild(overlay);
-        }
-
-        setTimeout(function () {
-          if (!window.__THOMAS_UI_BOOTED) showOverlay();
-        }, 2200);
-      })();
-    </script>
-    <script src="/static/guardrails.js?v=__THOMAS_VERSION__"></script>
-    <script src="/static/swarm_board.js?v=__THOMAS_VERSION__"></script>
+    <!-- Javascript Logic -->
     <script type="module" src="/static/js/app.js?v=__THOMAS_VERSION__"></script>
-  </body>
+</body>
+
 </html>

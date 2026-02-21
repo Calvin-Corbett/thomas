@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-discord-remediate",
+  "name": "Support Discord Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "discord",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.discord",
+    "support.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via discord with remediate mode policies."
+}

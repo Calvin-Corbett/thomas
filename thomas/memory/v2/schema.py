@@ -114,6 +114,20 @@ CREATE INDEX IF NOT EXISTS idx_contra_resolved_created ON contradictions(resolve
 
 CREATE INDEX IF NOT EXISTS idx_contra_open ON contradictions(resolved, score DESC);
 
+CREATE TABLE IF NOT EXISTS contradiction_reviews (
+  contradiction_id INTEGER PRIMARY KEY,
+  severity TEXT NOT NULL,
+  route TEXT NOT NULL DEFAULT 'standard',
+  status TEXT NOT NULL DEFAULT 'pending',
+  actor TEXT,
+  note TEXT,
+  created_at_ms INTEGER NOT NULL,
+  updated_at_ms INTEGER NOT NULL,
+  FOREIGN KEY (contradiction_id) REFERENCES contradictions(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_contra_reviews_status
+  ON contradiction_reviews(status, severity, route, updated_at_ms DESC);
+
 CREATE TABLE IF NOT EXISTS thread_settings (
   thread_id TEXT PRIMARY KEY,
   enabled INTEGER NOT NULL DEFAULT 1,

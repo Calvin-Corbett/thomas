@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-discord-prevent",
+  "name": "Analytics Discord Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "discord",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.discord",
+    "analytics.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via discord with prevent mode policies."
+}

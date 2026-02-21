@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-webhook-remediate",
+  "name": "Security Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.webhook",
+    "security.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via webhook with remediate mode policies."
+}

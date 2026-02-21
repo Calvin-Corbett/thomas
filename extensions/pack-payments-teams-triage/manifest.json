@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-teams-triage",
+  "name": "Payments Teams Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "teams",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.teams",
+    "payments.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via teams with triage mode policies."
+}

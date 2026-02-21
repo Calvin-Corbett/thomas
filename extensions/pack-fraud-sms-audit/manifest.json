@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-sms-audit",
+  "name": "Fraud Sms Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "sms",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.sms",
+    "fraud.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via sms with audit mode policies."
+}

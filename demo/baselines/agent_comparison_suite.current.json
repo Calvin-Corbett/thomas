@@ -1,0 +1,493 @@
+{
+  "id": "thomas-full-agent-comparison-v1",
+  "version": 1,
+  "description": "Comprehensive repeatable comparison suite for Thomas versus competitor agents, covering code surface, tests, CLI depth, compatibility wiring, production readiness, benchmark quality, and reliability.",
+  "test_suite_contract_path": "demo/baselines/agent_test_suite_full_coverage.contract.json",
+  "execution_policy": {
+    "quality_is_king": true,
+    "cycle_limit_disabled": true,
+    "stop_condition": "Continue until no known meaningful gaps remain or user explicitly stops."
+  },
+  "head_to_head_pair": [
+    "thomas",
+    "openclaw"
+  ],
+  "tracked_cli_commands": [
+    "acp",
+    "agents",
+    "approvals",
+    "browser",
+    "channels",
+    "clawbot",
+    "config",
+    "cron",
+    "daemon",
+    "devices",
+    "directory",
+    "dns",
+    "gateway",
+    "help",
+    "hooks",
+    "memory",
+    "message",
+    "models",
+    "node",
+    "nodes",
+    "pairing",
+    "plugins",
+    "sandbox",
+    "security",
+    "skills",
+    "system",
+    "update",
+    "webhooks"
+  ],
+  "category_weights": {
+    "code_surface": 1.0,
+    "test_rigor": 1.2,
+    "cli_surface": 1.15,
+    "compatibility": 1.15,
+    "performance_load": 1.35,
+    "resilience": 1.35,
+    "security": 1.45,
+    "cost_efficiency": 1.35,
+    "production_readiness": 1.4,
+    "benchmark_execution": 1.5,
+    "reliability": 1.35,
+    "integrity": 1.3,
+    "maintainability": 0.9
+  },
+  "competitor_catalog": [
+    {
+      "id": "openclaw",
+      "label": "OpenClaw",
+      "repo_url": "https://github.com/openclaw/openclaw.git",
+      "root": "F:/DevHub/_tmp_openclaw_count_1771454552",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "aider",
+      "label": "Aider",
+      "repo_url": "https://github.com/Aider-AI/aider.git",
+      "root": "F:/DevHub/_tmp_competitor_aider",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "open_interpreter",
+      "label": "Open Interpreter",
+      "repo_url": "https://github.com/OpenInterpreter/open-interpreter.git",
+      "root": "F:/DevHub/_tmp_competitor_open_interpreter",
+      "branch": "main",
+      "enabled": true
+    }
+  ],
+  "agents": [
+    {
+      "id": "thomas",
+      "label": "Thomas",
+      "root": ".",
+      "repo_sync": {
+        "enabled": false
+      },
+      "source_roots": [
+        "thomas",
+        "tests",
+        "extensions",
+        "docs",
+        "scripts",
+        "cli"
+      ],
+      "test_roots": [
+        "tests"
+      ],
+      "browser_roots": [
+        "thomas/browser",
+        "thomas/cli/commands/browser",
+        "thomas/cli/live_browser.py",
+        "thomas/tools/browser.py"
+      ],
+      "plugin_roots": [
+        "thomas/plugins",
+        "thomas/cli/commands/plugins"
+      ],
+      "gateway_roots": [
+        "thomas/server/routes",
+        "thomas/cli/commands/gateway"
+      ],
+      "cli_roots": [
+        "thomas/cli"
+      ],
+      "extensions_root": "extensions",
+      "mobile_roots": [
+        ".",
+        "apps"
+      ],
+      "required_paths": [
+        "thomas/browser/workflow_corpus",
+        "thomas/browser/workflows",
+        "extensions/catalog.json",
+        "thomas/plugins/extension_catalog_runtime.py",
+        "thomas/browser/workflow_runtime.py"
+      ],
+      "production_asset_roots": [
+        "thomas/browser/workflows",
+        "thomas/browser/workflow_corpus",
+        "extensions"
+      ],
+      "security_scan_roots": [
+        "thomas",
+        "extensions",
+        "cli"
+      ],
+      "security_scan_ignore_globs": [
+        "**/tests/**",
+        "**/test/**",
+        "**/*.md",
+        "**/thomas/tools/sandbox.py"
+      ],
+      "cli": {
+        "command": [
+          "{python}",
+          "-m",
+          "thomas"
+        ]
+      },
+      "gateway_patterns": {
+        "chat_completions": "/v1/chat/completions",
+        "responses": "/v1/responses"
+      },
+      "strict_checks": [
+        {
+          "id": "workflow_profiles_cli",
+          "command": [
+            "{python}",
+            "-m",
+            "thomas",
+            "browser",
+            "workflows",
+            "list",
+            "--json",
+            "--limit",
+            "25"
+          ],
+          "assertions": [
+            {
+              "path": "count",
+              "op": "eq",
+              "value": 25
+            },
+            {
+              "path": "profiles.0.profile_id",
+              "op": "truthy",
+              "value": true
+            }
+          ]
+        },
+        {
+          "id": "workflow_corpus_validate",
+          "command": [
+            "{python}",
+            "-m",
+            "thomas",
+            "browser",
+            "workflow-cases",
+            "validate",
+            "--json",
+            "--limit",
+            "300"
+          ],
+          "assertions": [
+            {
+              "path": "total",
+              "op": "eq",
+              "value": 300
+            },
+            {
+              "path": "valid",
+              "op": "eq",
+              "value": 300
+            },
+            {
+              "path": "invalid",
+              "op": "eq",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "extension_catalog_strict",
+          "command": [
+            "{python}",
+            "-m",
+            "thomas",
+            "plugins",
+            "extension-catalog",
+            "--json",
+            "--strict"
+          ],
+          "assertions": [
+            {
+              "path": "total",
+              "op": "gte",
+              "value": 480
+            },
+            {
+              "path": "valid",
+              "op": "gte",
+              "value": 480
+            },
+            {
+              "path": "invalid",
+              "op": "eq",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "production_asset_tests",
+          "command": [
+            "{python}",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_browser_workflow_runtime.py",
+            "tests/test_extension_catalog_runtime.py",
+            "tests/test_cli_production_assets_integration.py"
+          ]
+        }
+      ],
+      "performance_probes": [
+        {
+          "id": "perf_workflow_corpus_validate",
+          "repeat": 3,
+          "command": [
+            "{python}",
+            "-m",
+            "thomas",
+            "browser",
+            "workflow-cases",
+            "validate",
+            "--json",
+            "--limit",
+            "600"
+          ],
+          "throughput_numerator_path": "total",
+          "assertions": [
+            {
+              "path": "total",
+              "op": "eq",
+              "value": 600
+            },
+            {
+              "path": "invalid",
+              "op": "eq",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "perf_extension_catalog",
+          "repeat": 2,
+          "command": [
+            "{python}",
+            "-m",
+            "thomas",
+            "plugins",
+            "extension-catalog",
+            "--json",
+            "--strict"
+          ],
+          "throughput_numerator_path": "total",
+          "assertions": [
+            {
+              "path": "total",
+              "op": "gte",
+              "value": 480
+            },
+            {
+              "path": "invalid",
+              "op": "eq",
+              "value": 0
+            }
+          ]
+        }
+      ],
+      "resilience_probes": [
+        {
+          "id": "resilience_repeat_validate",
+          "repeat": 4,
+          "command": [
+            "{python}",
+            "-m",
+            "thomas",
+            "browser",
+            "workflow-cases",
+            "validate",
+            "--json",
+            "--limit",
+            "200"
+          ],
+          "assertions": [
+            {
+              "path": "total",
+              "op": "eq",
+              "value": 200
+            },
+            {
+              "path": "invalid",
+              "op": "eq",
+              "value": 0
+            }
+          ]
+        },
+        {
+          "id": "resilience_parity_tests",
+          "command": [
+            "{python}",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_openclaw_metric_parity_gate.py",
+            "tests/test_compare_openclaw_baseline_metrics.py"
+          ]
+        }
+      ],
+      "security_probes": [
+        {
+          "id": "security_dep_scanner_tests",
+          "command": [
+            "{python}",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_dep_scanner.py",
+            "tests/test_module_audit_registry.py"
+          ]
+        }
+      ],
+      "cost_probes": [
+        {
+          "id": "cost_tracker_tests",
+          "command": [
+            "{python}",
+            "-m",
+            "pytest",
+            "-q",
+            "tests/test_cost_tracker.py"
+          ]
+        }
+      ],
+      "benchmark_scorecard_globs": [
+        "demo/agentic-runs/*/scorecard.json"
+      ],
+      "benchmark_raw_globs": [
+        "demo/agentic-runs/*/benchmark_results.raw.json"
+      ],
+      "benchmark_aliases": [
+        "thomas_os",
+        "thomas"
+      ]
+    },
+    {
+      "id": "openclaw",
+      "label": "OpenClaw",
+      "root": "F:/DevHub/_tmp_openclaw_count_1771454552",
+      "repo_sync": {
+        "enabled": true,
+        "remote": "origin",
+        "branch": "main",
+        "fetch": true,
+        "pull_ff_only": true
+      },
+      "model_snapshot_command": [
+        "node",
+        "-e",
+        "const p=require('./package.json'); console.log(JSON.stringify({model:'runtime-configured', provider:'multi-provider', profile:'openclaw', version:p.version}));"
+      ],
+      "model_snapshot_required": false,
+      "source_roots": [
+        "src",
+        "test",
+        "tests"
+      ],
+      "test_roots": [
+        "test",
+        "tests"
+      ],
+      "browser_roots": [
+        "src/browser"
+      ],
+      "plugin_roots": [
+        "src/plugins",
+        "packages/plugin-sdk"
+      ],
+      "gateway_roots": [
+        "src/gateway",
+        "src/cli"
+      ],
+      "cli_roots": [
+        "src/cli"
+      ],
+      "extensions_root": "extensions",
+      "mobile_roots": [
+        ".",
+        "apps"
+      ],
+      "required_paths": [
+        "src",
+        "src/cli"
+      ],
+      "production_asset_roots": [],
+      "cli": {
+        "fixed_top_level_commands": 44,
+        "fixed_subcommand_depth": {
+          "acp": 2,
+          "agents": 4,
+          "approvals": 4,
+          "browser": 43,
+          "channels": 10,
+          "clawbot": 2,
+          "config": 3,
+          "cron": 10,
+          "daemon": 7,
+          "devices": 8,
+          "directory": 3,
+          "dns": 2,
+          "gateway": 13,
+          "help": 44,
+          "hooks": 7,
+          "memory": 4,
+          "message": 24,
+          "models": 9,
+          "node": 7,
+          "nodes": 16,
+          "pairing": 3,
+          "plugins": 9,
+          "sandbox": 3,
+          "security": 2,
+          "skills": 3,
+          "system": 4,
+          "update": 2,
+          "webhooks": 2
+        }
+      },
+      "gateway_patterns": {
+        "chat_completions": "/v1/chat/completions",
+        "responses": "/v1/responses"
+      },
+      "strict_checks": [],
+      "benchmark_scorecard_globs": [
+        "demo/agentic-runs/*/scorecard.json"
+      ],
+      "benchmark_raw_globs": [
+        "demo/agentic-runs/*/benchmark_results.raw.json"
+      ],
+      "benchmark_aliases": [
+        "openclaw",
+        "baseline_raw"
+      ]
+    }
+  ]
+}

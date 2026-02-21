@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-jira-escalate",
+  "name": "Payments Jira Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "jira",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.jira",
+    "payments.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via jira with escalate mode policies."
+}

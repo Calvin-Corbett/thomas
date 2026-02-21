@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-jira-prevent",
+  "name": "Analytics Jira Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "jira",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.jira",
+    "analytics.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via jira with prevent mode policies."
+}

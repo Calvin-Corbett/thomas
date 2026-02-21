@@ -1,0 +1,14 @@
+{
+  "id": "pack-analytics-webhook",
+  "name": "Analytics Webhook Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "webhook",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.webhook",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via webhook."
+}

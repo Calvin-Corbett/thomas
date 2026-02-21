@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-webhook-escalate",
+  "name": "Incident Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.webhook",
+    "incident.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via webhook with escalate mode policies."
+}

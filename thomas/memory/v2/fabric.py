@@ -15,6 +15,13 @@ from .token import estimate_tokens, normalize_lines, redundancy_ratio, truncate_
 from .scoring import SalienceInputs, score as salience_score
 from .types import RetrievalItem, RetrievalResult
 from .contradictions import contradiction_score_for_fact
+from .contradiction_review import (
+    list_contradictions as list_contradictions_with_reviews,
+    list_contradictions_for_review as list_contradictions_for_review_rows,
+    review_contradiction as apply_contradiction_review,
+    severity_route as contradiction_severity_route,
+    upsert_review_state as upsert_contradiction_review_state,
+)
 from .profile_hints import extract_profile_hints
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
@@ -424,6 +431,29 @@ class MemoryFabricV2:
     # -----------------------
     # Contradictions
     # -----------------------
+    def _contradiction_severity_route(self, *, score: float, reason: str) -> Tuple[str, str]:
+        return contradiction_severity_route(score=float(score), reason=str(reason or ""))
+
+    def _upsert_contradiction_review_state(
+        self,
+        *,
+        cid: int,
+        severity: str,
+        route: str,
+        status: str = "pending",
+        actor: str = "system",
+        note: str = "",
+    ) -> None:
+        upsert_contradiction_review_state(
+            self.db,
+            cid=int(cid),
+            severity=str(severity),
+            route=str(route),
+            status=str(status),
+            actor=str(actor),
+            note=str(note),
+        )
+
     def _record_contradiction(
         self,
         left_kind: str,
@@ -433,25 +463,67 @@ class MemoryFabricV2:
         score: float,
         reason: str,
     ) -> None:
+        severity, route = self._contradiction_severity_route(score=float(score), reason=str(reason or ""))
         with self.db.transact() as conn:
-            conn.execute(
+            cur = conn.execute(
                 "INSERT INTO contradictions(left_kind,left_id,right_kind,right_id,score,reason,created_at_ms,resolved) VALUES(?,?,?,?,?,?,?,0)",
-                (left_kind, str(left_id), right_kind, str(right_id), float(score), reason, self.db.now_ms()),
+                (left_kind, str(left_id), right_kind, str(right_id), float(score), str(reason), self.db.now_ms()),
+            )
+            cid = int(cur.lastrowid)
+        if cid > 0:
+            self._upsert_contradiction_review_state(
+                cid=cid,
+                severity=severity,
+                route=route,
+                status="pending",
+                actor="system.detector",
+                note="auto_routed",
             )
 
     def list_contradictions(self, only_open: bool = True, limit: int = 50) -> List[Dict[str, Any]]:
-        if only_open:
-            cur = self.db.execute(
-                "SELECT * FROM contradictions WHERE resolved=0 ORDER BY score DESC, created_at_ms DESC LIMIT ?",
-                (int(limit),),
-            )
-        else:
-            cur = self.db.execute("SELECT * FROM contradictions ORDER BY created_at_ms DESC LIMIT ?", (int(limit),))
-        return [dict(r) for r in cur.fetchall()]
+        return list_contradictions_with_reviews(
+            self.db,
+            only_open=bool(only_open),
+            limit=int(limit),
+        )
+
+    def list_contradictions_for_review(
+        self,
+        *,
+        status: Optional[str] = None,
+        severity: Optional[str] = None,
+        route: Optional[str] = None,
+        limit: int = 50,
+    ) -> List[Dict[str, Any]]:
+        return list_contradictions_for_review_rows(
+            self.db,
+            status=str(status or "").strip() or None,
+            severity=str(severity or "").strip() or None,
+            route=str(route or "").strip() or None,
+            limit=int(limit),
+        )
+
+    def review_contradiction(
+        self,
+        cid: int,
+        *,
+        decision: str,
+        actor: str = "system",
+        reason: str = "",
+    ) -> bool:
+        return apply_contradiction_review(
+            self.db,
+            int(cid),
+            decision=str(decision or ""),
+            actor=str(actor or "system"),
+            reason=str(reason or ""),
+        )
 
     def resolve_contradiction(self, cid: int, resolved: bool = True) -> None:
-        with self.db.transact() as conn:
-            conn.execute("UPDATE contradictions SET resolved=? WHERE id=?", (1 if resolved else 0, int(cid)))
+        action = "approve" if bool(resolved) else "reopen"
+        if not self.review_contradiction(int(cid), decision=action, actor="system.resolve", reason="legacy_resolve"):
+            with self.db.transact() as conn:
+                conn.execute("UPDATE contradictions SET resolved=? WHERE id=?", (1 if resolved else 0, int(cid)))
 
         # -----------------------
     # Auto maintenance
@@ -594,7 +666,9 @@ class MemoryFabricV2:
                 pinned=False,
                 relevance_boost=rel,
             )
-            sc = salience_score(inputs)
+            conf = max(0.0, min(1.0, float(r["confidence"])))
+            confidence_weight = 0.72 + (0.48 * conf)
+            sc = salience_score(inputs) * confidence_weight
             snippet = f"FACT: {r['subject']} • {r['predicate']} • {r['obj']} (conf {float(r['confidence']):.2f})"
             items.append(
                 RetrievalItem(
@@ -602,7 +676,13 @@ class MemoryFabricV2:
                     ref_id=str(int(r["id"])),
                     score=sc,
                     snippet=snippet,
-                    meta={"thread_id": r["thread_id"], "polarity": int(r["polarity"]), "score_components": inputs.__dict__},
+                    meta={
+                        "thread_id": r["thread_id"],
+                        "polarity": int(r["polarity"]),
+                        "confidence": conf,
+                        "confidence_weight": round(confidence_weight, 4),
+                        "score_components": inputs.__dict__,
+                    },
                 )
             )
 

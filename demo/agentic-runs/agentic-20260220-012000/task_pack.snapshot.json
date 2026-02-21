@@ -1,0 +1,29 @@
+{
+  "id": "thomas-agentic-smoke-v1",
+  "name": "Thomas Agentic Smoke Test",
+  "version": 1,
+  "description": "Single-task shortest benchmark smoke test.",
+  "protocol": [
+    "Run on a single local model profile.",
+    "Keep workspace unchanged during run."
+  ],
+  "weights": {
+    "success_rate": 0.6,
+    "speed": 0.2,
+    "follow_up": 0.0,
+    "quality": 0.2
+  },
+  "quality_scale": {
+    "min": 1,
+    "max": 5
+  },
+  "tasks": [
+    {
+      "id": "artifact_probe_write",
+      "title": "Artifact Probe Write",
+      "prompt": "Create file {{artifact_dir}}/smoke_probe.txt with this exact line:\nTHOMAS_SMOKE_PROBE=1\nThen return one line confirming smoke_probe.txt was created.",
+      "success_criteria": "Writes required artifact file with exact probe line.",
+      "time_budget_seconds": 180
+    }
+  ]
+}

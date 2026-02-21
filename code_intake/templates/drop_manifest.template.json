@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "drop_id": "D2026XXXX_001",
+  "prompt_id": "P001",
+  "batch_id": "B01",
+  "title": "short title",
+  "artifact": {
+    "type": "unified_diff",
+    "path": "change.diff",
+    "sha256": ""
+  },
+  "ownership": {
+    "allowed_paths": [
+      "thomas/cli/commands",
+      "tests",
+      "docs"
+    ],
+    "forbidden_paths": []
+  },
+  "policy": {
+    "strict_name_guard": true,
+    "name_guard_blocklist": [
+      "openclaw",
+      "clawbot"
+    ]
+  },
+  "tests": {
+    "commands": []
+  },
+  "meta": {
+    "source": "chatgpt_tab",
+    "created_at": "2026-02-20T00:00:00+00:00",
+    "notes": ""
+  }
+}

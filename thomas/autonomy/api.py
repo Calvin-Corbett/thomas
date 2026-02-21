@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import hmac
-import ipaddress
 from datetime import datetime, timezone
 from importlib import resources
 from typing import Any, Dict, Optional
@@ -57,42 +55,18 @@ def _job_to_json(j: Job) -> Dict[str, Any]:
     }
 
 
-def _is_loopback_request(request: web.Request) -> bool:
-    remote = (request.remote or "").strip()
-    if not remote:
-        return False
-    try:
-        return ipaddress.ip_address(remote).is_loopback
-    except ValueError:
-        return False
-
-
-def _extract_request_token(request: web.Request) -> str:
-    auth = request.headers.get("Authorization", "")
-    x = request.headers.get("X-Api-Token", "")
-    if auth.lower().startswith("bearer "):
-        return auth.split(" ", 1)[1].strip()
-    if x:
-        return x.strip()
-    return ""
-
-
 def _require_token_middleware(api_token: str):
     @web.middleware
     async def _mw(request: web.Request, handler):
-        token = _extract_request_token(request)
-        if not hmac.compare_digest(token.encode("utf-8"), api_token.encode("utf-8")):
+        auth = request.headers.get("Authorization", "")
+        x = request.headers.get("X-Api-Token", "")
+        token = ""
+        if auth.lower().startswith("bearer "):
+            token = auth.split(" ", 1)[1].strip()
+        elif x:
+            token = x.strip()
+        if token != api_token:
             raise web.HTTPUnauthorized(text="missing or invalid token")
-        return await handler(request)
-
-    return _mw
-
-
-def _require_loopback_middleware():
-    @web.middleware
-    async def _mw(request: web.Request, handler):
-        if not _is_loopback_request(request):
-            raise web.HTTPForbidden(text="autonomy API without token is localhost-only")
         return await handler(request)
 
     return _mw
@@ -113,8 +87,6 @@ def register_autonomy_routes(
     middlewares = []
     if api_token:
         middlewares.append(_require_token_middleware(api_token))
-    else:
-        middlewares.append(_require_loopback_middleware())
 
     api_app = web.Application(middlewares=middlewares)
 

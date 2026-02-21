@@ -1,0 +1,26 @@
+{
+  "thomas": {
+    "composer_selector": "#composerTextarea",
+    "send_selector": "#sendBtn",
+    "assistant_container_selector": ".message",
+    "assistant_role_selector": ".message-role",
+    "assistant_role_text": "Thomas",
+    "assistant_text_selector": ".message-content",
+    "status_selector": "#statusText",
+    "status_done_substrings": [
+      "done",
+      "ready"
+    ]
+  },
+  "openclaw": {
+    "composer_selector": "textarea",
+    "send_selector": "button[type='submit']",
+    "assistant_container_selector": ".message",
+    "assistant_role_selector": ".role",
+    "assistant_role_text": "assistant",
+    "assistant_text_selector": ".content",
+    "status_selector": "",
+    "status_done_substrings": []
+  }
+}
+

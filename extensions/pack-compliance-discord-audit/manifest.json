@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-discord-audit",
+  "name": "Compliance Discord Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "discord",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.discord",
+    "compliance.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via discord with audit mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-sms-remediate",
+  "name": "Fraud Sms Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "sms",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.sms",
+    "fraud.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via sms with remediate mode policies."
+}

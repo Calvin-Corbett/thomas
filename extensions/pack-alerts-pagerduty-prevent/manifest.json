@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-pagerduty-prevent",
+  "name": "Alerts Pagerduty Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "pagerduty",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.pagerduty",
+    "alerts.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via pagerduty with prevent mode policies."
+}

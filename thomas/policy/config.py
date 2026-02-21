@@ -29,25 +29,9 @@ class GuardrailsSettings:
     # If true, only certain tools require approvals; otherwise use rules.
     tools_require_approval: List[str] = field(default_factory=list)
 
-
-@dataclass
-class AutomationSiteRule:
-    domain: str = ""
-    mode: str = "manual_only"  # autonomous_allowed | manual_only | blocked
-    note: str = ""
-
-
-@dataclass
-class AutomationSettings:
-    enabled: bool = True
-    default_mode: str = "autonomous_allowed"
-    sites: List[AutomationSiteRule] = field(default_factory=list)
-
-
 @dataclass
 class PolicyConfig:
     guardrails: GuardrailsSettings = field(default_factory=GuardrailsSettings)
-    automation: AutomationSettings = field(default_factory=AutomationSettings)
 
     # Rule tuning:
     deny_roots: List[str] = field(default_factory=list)
@@ -62,35 +46,10 @@ class PolicyConfig:
     @staticmethod
     def from_mapping(m: Dict[str, Any]) -> "PolicyConfig":
         g = m.get("guardrails") or {}
-        a = m.get("automation") or {}
         cfg = PolicyConfig()
         cfg.guardrails.enabled = bool(g.get("enabled", cfg.guardrails.enabled))
         cfg.guardrails.approval_timeout_s = int(g.get("approval_timeout_s", cfg.guardrails.approval_timeout_s))
         cfg.guardrails.tools_require_approval = list(g.get("tools_require_approval", cfg.guardrails.tools_require_approval))
-
-        cfg.automation.enabled = bool(a.get("enabled", cfg.automation.enabled))
-        cfg.automation.default_mode = str(a.get("default_mode", cfg.automation.default_mode) or cfg.automation.default_mode)
-        site_rows = a.get("sites", [])
-        if not isinstance(site_rows, list):
-            site_rows = []
-        sites: List[AutomationSiteRule] = []
-        for row in site_rows:
-            if isinstance(row, str):
-                domain = row.strip()
-                if not domain:
-                    continue
-                sites.append(AutomationSiteRule(domain=domain))
-                continue
-            if not isinstance(row, dict):
-                continue
-            domain = str(row.get("domain", "") or "").strip()
-            if not domain:
-                continue
-            mode = str(row.get("mode", "manual_only") or "manual_only").strip()
-            note = str(row.get("note", "") or "").strip()
-            sites.append(AutomationSiteRule(domain=domain, mode=mode, note=note))
-        cfg.automation.sites = sites
-
         cfg.deny_roots = list(m.get("deny_roots", cfg.deny_roots))
         cfg.deny_paths = list(m.get("deny_paths", cfg.deny_paths))
         cfg.approval_roots = list(m.get("approval_roots", cfg.approval_roots))
@@ -137,12 +96,4 @@ def load_policy_config(runtime_root: str) -> PolicyConfig:
             cfg.guardrails.approval_timeout_s = max(1, int(to))
         except ValueError:
             pass
-
-    auto_enabled = _env_bool("THOMAS_AUTOMATION_POLICY_ENABLED", None)
-    if auto_enabled is not None:
-        cfg.automation.enabled = auto_enabled
-
-    auto_default = os.environ.get("THOMAS_AUTOMATION_DEFAULT_MODE")
-    if auto_default:
-        cfg.automation.default_mode = str(auto_default).strip()
     return cfg

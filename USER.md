@@ -8,3 +8,4 @@
 - The user expects Thomas to integrate new code drops (for example zip bundles) quickly and cleanly.
 - The user dislikes repetitive assistant cliches and wants natural, human conversation.
 - The user priority is building a super assistant that can help across coding and daily tasks.
+- The user prefers Google Chrome for all browser-based tasks and demos.

@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-discord-prevent",
+  "name": "Security Discord Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "discord",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.discord",
+    "security.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via discord with prevent mode policies."
+}

@@ -22,7 +22,7 @@ _DIRECTIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bplease\b", re.IGNORECASE),
 )
 
-_MODE_VALUES: tuple[str, ...] = ("auto", "fast", "thinking", "swarm")
+_MODE_VALUES: tuple[str, ...] = ("auto", "fast", "thinking", "swarm", "batch")
 
 _ENABLE_MARKERS: tuple[str, ...] = (
     "turn on",
@@ -118,6 +118,30 @@ _AUTONOMY_HINTS: Dict[int, tuple[str, ...]] = {
     4: ("level 4", "l4", "full auto", "max autonomy", "fully autonomous"),
 }
 
+_CONTROL_INTENT_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\b(set|change|switch|use|run|turn|enable|disable|show|hide|open|close|update|make)\b", re.IGNORECASE),
+    re.compile(r"\bmode\s*(to|=|:)\b", re.IGNORECASE),
+    re.compile(r"\bautonomy\s*(to|level|=|:)\b", re.IGNORECASE),
+    re.compile(r"\btheme\s*(to|=|:)\b", re.IGNORECASE),
+)
+
+_QUESTION_PREFIXES: tuple[re.Pattern[str], ...] = (
+    re.compile(r"^\s*(why|what|how|is|are|was|were|can|could|would|do|does|did)\b", re.IGNORECASE),
+)
+
+_AUTONOMY_SHORTHAND_COMMANDS: tuple[str, ...] = (
+    "full auto",
+    "max autonomy",
+    "fully autonomous",
+    "manual review",
+    "manual mode",
+    "guarded assist",
+    "guarded mode",
+    "tool-bounded auto",
+    "bounded auto",
+    "normal auto",
+)
+
 
 def _norm(text: str) -> str:
     return str(text or "").strip().lower()
@@ -133,6 +157,27 @@ def _is_directive(text: str) -> bool:
 
 def _contains_alias(low: str, aliases: Sequence[str]) -> bool:
     return any(a in low for a in aliases)
+
+
+def _is_question_like(text: str) -> bool:
+    raw = str(text or "").strip()
+    low = _norm(raw)
+    if not low:
+        return False
+    if "?" in raw:
+        return True
+    return any(p.search(raw) for p in _QUESTION_PREFIXES)
+
+
+def _has_explicit_control_intent(text: str) -> bool:
+    raw = str(text or "")
+    if not raw.strip():
+        return False
+    return any(p.search(raw) for p in _CONTROL_INTENT_PATTERNS)
+
+
+def _is_autonomy_shorthand_command(low: str) -> bool:
+    return low in _AUTONOMY_SHORTHAND_COMMANDS
 
 
 def _parse_bool_intent(low: str) -> Optional[bool]:
@@ -158,21 +203,29 @@ def _parse_mode(text: str, *, directive: bool) -> Optional[str]:
     low = _norm(text)
     if "autonomy" in low and "mode" not in low:
         return None
-    if not directive and "mode" not in low:
+    if "mode" not in low:
+        return None
+    explicit_control = _has_explicit_control_intent(text)
+    if _is_question_like(text) and not explicit_control:
+        return None
+    if not explicit_control and not directive:
         return None
 
-    hits: List[tuple[int, str]] = []
-    for mode in _MODE_VALUES:
-        m = re.search(rf"\b{re.escape(mode)}\b", low)
+    explicit_patterns = (
+        rf"\b(?:set|change|switch)\s+(?:the\s+)?mode\s+(?:to\s+)?(?P<mode>{'|'.join(_MODE_VALUES)})\b",
+        rf"\b(?:use|run)\s+(?:in\s+)?(?P<mode>{'|'.join(_MODE_VALUES)})\s+mode\b",
+        rf"\bmode\s*(?:to|=|:)\s*(?P<mode>{'|'.join(_MODE_VALUES)})\b",
+    )
+    for pat in explicit_patterns:
+        m = re.search(pat, low)
         if m:
-            hits.append((m.start(), mode))
-    if not hits:
-        return None
+            return str(m.group("mode") or "").strip().lower() or None
 
-    # Prefer explicit "mode" context; otherwise fallback to first detected mode token.
-    if "mode" in low or re.search(r"\b(set|switch|change|use|run)\b", low):
-        hits.sort(key=lambda x: x[0])
-        return hits[0][1]
+    # Short imperative fallback (e.g. "thinking mode")
+    if explicit_control and len(low.split()) <= 4:
+        m = re.search(rf"\b(?P<mode>{'|'.join(_MODE_VALUES)})\s+mode\b", low)
+        if m:
+            return str(m.group("mode") or "").strip().lower() or None
     return None
 
 
@@ -190,26 +243,59 @@ def _parse_theme(text: str, *, directive: bool) -> Optional[str]:
 
 def _parse_autonomy_level(text: str, *, directive: bool) -> Optional[int]:
     low = _norm(text)
-    likely = (
-        bool(re.search(r"\bautonomy\b", low))
-        or bool(re.search(r"\bautonomous\b", low))
-        or "full auto" in low
-        or bool(re.search(r"\blevel\s*[1-4]\b", low))
-        or bool(re.search(r"\bl[1-4]\b", low))
+    explicit_control = _has_explicit_control_intent(text)
+    if _is_question_like(text) and not explicit_control:
+        return None
+    shorthand = _is_autonomy_shorthand_command(low)
+
+    has_autonomy_keyword = bool(re.search(r"\bautonomy\b", low)) or bool(re.search(r"\bautonomous\b", low))
+    has_explicit_phrase = any(
+        phrase in low
+        for phrase in (
+            "full auto",
+            "max autonomy",
+            "fully autonomous",
+            "manual review",
+            "manual mode",
+            "guarded assist",
+            "guarded mode",
+            "tool-bounded auto",
+            "bounded auto",
+            "normal auto",
+        )
     )
-    if not likely and not directive:
+    likely = (
+        shorthand
+        or (
+            explicit_control
+            and (
+                has_autonomy_keyword
+                or has_explicit_phrase
+                or bool(re.search(r"\blevel\s*[1-4]\b", low))
+                or bool(re.search(r"\bl[1-4]\b", low))
+            )
+        )
+    )
+    if not likely:
         return None
 
     m = re.search(r"\blevel\s*([1-4])\b", low)
     if m:
         return clamp_autonomy_level(m.group(1), default=3)
-    m = re.search(r"\bl([1-4])\b", low)
+    m = re.search(r"\bl([1-4])\b", low) if (explicit_control or has_autonomy_keyword) else None
     if m:
         return clamp_autonomy_level(m.group(1), default=3)
 
     for level, hints in _AUTONOMY_HINTS.items():
-        if any(h in low for h in hints):
-            return int(level)
+        for hint in hints:
+            if re.fullmatch(r"l[1-4]", hint):
+                if not (explicit_control or has_autonomy_keyword):
+                    continue
+                if re.search(rf"\b{re.escape(hint)}\b", low):
+                    return int(level)
+                continue
+            if hint in low:
+                return int(level)
     return None
 
 
@@ -233,6 +319,9 @@ def resolve_ui_control_request(
 ) -> Optional[UiControlResolution]:
     low = _norm(text)
     directive = _is_directive(text)
+    explicit_control = _has_explicit_control_intent(text)
+    shorthand_autonomy = _is_autonomy_shorthand_command(low)
+    settings_directive = (directive and explicit_control) or shorthand_autonomy
 
     patch: Dict[str, Any] = {}
     operations: List[Dict[str, Any]] = []
@@ -258,7 +347,7 @@ def resolve_ui_control_request(
             }
         )
 
-    if directive:
+    if settings_directive:
         mode_val = _parse_mode(text, directive=directive)
         if mode_val:
             patch["mode"] = mode_val
@@ -322,24 +411,6 @@ def resolve_ui_control_request(
 
         if settings_patch:
             patch["settings"] = settings_patch
-
-    autonomy_level = _parse_autonomy_level(text, directive=directive)
-    if autonomy_level is not None and not any(str(op.get("key") or "") == "autonomyLevel" for op in operations):
-        settings_patch = patch.get("settings")
-        if not isinstance(settings_patch, dict):
-            settings_patch = {}
-        settings_patch["autonomyLevel"] = int(autonomy_level)
-        patch["settings"] = settings_patch
-        operations.append(
-            {
-                "kind": "setting",
-                "key": "autonomyLevel",
-                "value": int(autonomy_level),
-                "summary": f"autonomy to L{autonomy_level} {autonomy_level_name(autonomy_level)}",
-                "confidence": 0.86,
-                "explanation": "autonomy_level_directive",
-            }
-        )
 
     if not operations:
         return None

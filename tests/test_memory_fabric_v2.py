@@ -90,7 +90,37 @@ class TestMemoryFabricV2(unittest.TestCase):
         ).fetchone()
         self.assertGreaterEqual(int(row["c"]), 1)
 
+    def test_contradiction_review_routing_and_decision(self):
+        thread_id = "t7"
+        self.fabric.upsert_profile_hints(
+            thread_id=thread_id,
+            hints=[{"key": "preferred_name", "value": "Calvin", "confidence": 0.92}],
+            source_episode_id=None,
+            ts_ms=1700000000000,
+        )
+        self.fabric.upsert_profile_hints(
+            thread_id=thread_id,
+            hints=[{"key": "preferred_name", "value": "Kevin", "confidence": 0.92}],
+            source_episode_id=None,
+            ts_ms=1700000001000,
+        )
+        rows = self.fabric.list_contradictions(only_open=True, limit=20)
+        self.assertGreaterEqual(len(rows), 1)
+        cid = int(rows[0]["id"])
+        self.assertIn(str(rows[0].get("severity") or ""), ("low", "medium", "high"))
+        self.assertIn(str(rows[0].get("review_status") or ""), ("pending", "approved", "dismissed", "escalated"))
+
+        review_rows = self.fabric.list_contradictions_for_review(status="pending", limit=20)
+        review_ids = {int(r["id"]) for r in review_rows}
+        self.assertIn(cid, review_ids)
+
+        ok = self.fabric.review_contradiction(cid, decision="approve", actor="test", reason="resolved in test")
+        self.assertTrue(ok)
+        all_rows = self.fabric.list_contradictions(only_open=False, limit=20)
+        target = next(r for r in all_rows if int(r["id"]) == cid)
+        self.assertEqual(int(target["resolved"]), 1)
+        self.assertEqual(str(target.get("review_status") or ""), "approved")
+
 
 if __name__ == "__main__":
     unittest.main()
-

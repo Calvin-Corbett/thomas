@@ -164,11 +164,20 @@ def should_create_journal(
     enabled: bool = True,
 ) -> bool:
     """Decide whether a journal should be created for this request."""
+    return journal_skip_reason(prompt, route, enabled=enabled) is None
+
+
+def journal_skip_reason(
+    prompt: str,
+    route: Dict[str, Any],
+    enabled: bool = True,
+) -> Optional[str]:
+    """Return skip reason when journal creation is blocked, otherwise None."""
     if not enabled:
-        return False
+        return "journal_disabled"
     if len(prompt.strip()) < _MIN_PROMPT_LEN:
-        return False
-    route_path = route.get("path", "")
+        return "prompt_too_short"
+    route_path = str(route.get("path", "")).strip().lower()
     if route_path in _SKIP_ROUTES:
-        return False
-    return True
+        return f"route_skipped:{route_path}"
+    return None

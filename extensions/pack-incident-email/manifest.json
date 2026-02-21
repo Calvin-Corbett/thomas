@@ -1,0 +1,14 @@
+{
+  "id": "pack-incident-email",
+  "name": "Incident Email Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "email",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.email",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via email."
+}

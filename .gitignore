@@ -3,9 +3,16 @@ __pycache__/
 *.egg-info/
 .pytest_cache/
 .claude/
+.coverage
+.coverage.*
 
 # Runtime state (memory index, logs, secrets, etc)
 runtime/
+thomas_state.json
+thomas_tool_registry.json
+thomas_webhooks.json.lock
+thomas_test_results.jsonl
+thomas_test_report_*.md
 
 # Incoming drops (zips/bundles) and other large artifacts.
 Inbox/**
@@ -17,4 +24,30 @@ inbox/**
 
 # One-off local artifacts
 thomas_conversation.json
+server_output.txt
+ux_event_probe.txt
+ux_visible_test_*.txt
+vel4_test.txt
+test_autonomous_task*.txt
+tmp_switch_test.py
+nul
 =*
+
+# Workspace hygiene (generated/local artifacts)
+node_modules/
+.playwright-cli/
+.feature_backups/
+output/
+tmp/
+.tmp*/
+logs/
+
+# Local archives / handoff bundles
+tasks/
+archives/
+_archive/
+
+# Misc local noise
+*.log
+Thumbs.db
+.DS_Store

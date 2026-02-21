@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-pagerduty-detect",
+  "name": "Compliance Pagerduty Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "pagerduty",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.pagerduty",
+    "compliance.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via pagerduty with detect mode policies."
+}

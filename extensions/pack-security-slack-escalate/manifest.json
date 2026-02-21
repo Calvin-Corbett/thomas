@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-slack-escalate",
+  "name": "Security Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.slack",
+    "security.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via slack with escalate mode policies."
+}

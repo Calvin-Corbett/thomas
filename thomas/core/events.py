@@ -26,6 +26,7 @@ class EventType(Enum):
     AGENT_ITERATION = "agent_iteration"
     AGENT_DONE = "agent_done"
     AGENT_ERROR = "agent_error"
+    AGENT_END = "agent_end"
 
     # Tool events
     TOOL_START = "tool_start"
@@ -35,6 +36,9 @@ class EventType(Enum):
     # Memory events
     MEMORY_QUERY = "memory_query"
     MEMORY_RESULT = "memory_result"
+
+    # Security events
+    SECURITY_FLAG = "security_flag"
 
     # System events
     THINKING = "thinking"

@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-discord-triage",
+  "name": "Support Discord Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "discord",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.discord",
+    "support.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via discord with triage mode policies."
+}

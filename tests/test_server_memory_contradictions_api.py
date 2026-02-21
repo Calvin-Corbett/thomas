@@ -53,6 +53,57 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
         open_ids = {int(r["id"]) for r in (data3.get("contradictions") or [])}
         self.assertNotIn(cid, open_ids)
 
+    async def test_contradiction_review_routes(self):
+        pin1 = await self.client.post("/api/memory/pins", json={"key": "user.city", "text": "Miami"})
+        self.assertEqual(pin1.status, 200)
+        pin2 = await self.client.post("/api/memory/pins", json={"key": "user.city", "text": "Orlando"})
+        self.assertEqual(pin2.status, 200)
+
+        list_resp = await self.client.get("/api/memory/contradictions/review?status=pending&limit=20")
+        self.assertEqual(list_resp.status, 200)
+        list_data = await list_resp.json()
+        self.assertTrue(list_data.get("ok"))
+        rows = list_data.get("contradictions") or []
+        self.assertGreaterEqual(len(rows), 1)
+        cid = int(rows[0]["id"])
+
+        decide_resp = await self.client.post(
+            f"/api/memory/contradictions/{cid}/review",
+            json={"decision": "approve", "actor": "test", "reason": "verified"},
+        )
+        self.assertEqual(decide_resp.status, 200)
+        decide_data = await decide_resp.json()
+        self.assertTrue(decide_data.get("ok"))
+        self.assertEqual(int(decide_data.get("id", 0)), cid)
+
+        open_resp = await self.client.get("/api/memory/contradictions?only_open=1&limit=20")
+        self.assertEqual(open_resp.status, 200)
+        open_data = await open_resp.json()
+        open_ids = {int(r["id"]) for r in (open_data.get("contradictions") or [])}
+        self.assertNotIn(cid, open_ids)
+
+    async def test_curator_approval_queue_routes(self):
+        list_resp = await self.client.get("/api/memory/curator/approvals?status=pending&limit=20")
+        self.assertEqual(list_resp.status, 200)
+        list_data = await list_resp.json()
+        self.assertTrue(list_data.get("ok"))
+        rows = list_data.get("approvals") or []
+        if rows:
+            aid = int(rows[0]["id"])
+            decide_resp = await self.client.post(
+                f"/api/memory/curator/approvals/{aid}/decision",
+                json={"approve": True, "actor": "test"},
+            )
+            self.assertEqual(decide_resp.status, 200)
+            decide_data = await decide_resp.json()
+            self.assertTrue(decide_data.get("ok"))
+        else:
+            not_found = await self.client.post(
+                "/api/memory/curator/approvals/999999/decision",
+                json={"approve": True, "actor": "test"},
+            )
+            self.assertEqual(not_found.status, 404)
+
     async def test_loopback_route_rejects_cross_origin_browser_requests(self):
         resp = await self.client.get(
             "/api/memory/contradictions?only_open=1&limit=5",

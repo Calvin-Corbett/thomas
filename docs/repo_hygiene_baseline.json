@@ -1,0 +1,31 @@
+{
+  "version": 1,
+  "max_tracked_root_files": 25,
+  "allowed_tracked_root_files": [
+    ".gitignore",
+    "AGENTS.md",
+    "CHANGELOG.md",
+    "IDENTITY.md",
+    "PLAN-UI-UPGRADE.md",
+    "README.md",
+    "SOUL.md",
+    "USER.md",
+    "pyproject.toml",
+    "run-repl.cmd",
+    "run-ui.cmd",
+    "security_best_practices_report.md",
+    "thomas.toml"
+  ],
+  "forbidden_tracked_prefixes": [
+    "runtime/",
+    "output/",
+    "pack/",
+    "patches/",
+    ".inbox_extract_"
+  ],
+  "blocked_tracked_suffixes": [
+    ".pyc",
+    ".tmp",
+    ".log"
+  ]
+}

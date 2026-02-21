@@ -1,0 +1,16 @@
+{
+  "run_id": "agentic-20260220-015421",
+  "created_at": "2026-02-20T01:54:22.434300+00:00",
+  "randomized_order": false,
+  "random_seed": null,
+  "require_evidence": false,
+  "competitors": [
+    "thomas_os"
+  ],
+  "hashes": {
+    "task_pack_snapshot_sha256": "b8c08859290a39a136b1095d20f70ecb07c91565211bddb8d6e7f6edfc931101",
+    "execution_plan_sha256": "472fedb18d7f6a415e06dc29de86a05e49137020a25a94be9593c660ef58ff5b",
+    "results_raw_sha256": "57f595129979e68d0c9d913672ba8fc35a1b0c052895e8a954b7ab04b8395598",
+    "scorecard_sha256": "b3a12c1f20478dfa68bd8d8af66d82542e57577d10c261e81e14c4e05d429881"
+  }
+}

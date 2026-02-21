@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-webhook-triage",
+  "name": "Alerts Webhook Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "webhook",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.webhook",
+    "alerts.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via webhook with triage mode policies."
+}

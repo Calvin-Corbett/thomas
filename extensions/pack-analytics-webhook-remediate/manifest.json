@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-webhook-remediate",
+  "name": "Analytics Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.webhook",
+    "analytics.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via webhook with remediate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-jira-audit",
+  "name": "Qa Jira Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "jira",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.jira",
+    "qa.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via jira with audit mode policies."
+}

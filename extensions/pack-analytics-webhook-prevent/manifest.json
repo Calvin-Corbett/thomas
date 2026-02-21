@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-webhook-prevent",
+  "name": "Analytics Webhook Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "webhook",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.webhook",
+    "analytics.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via webhook with prevent mode policies."
+}

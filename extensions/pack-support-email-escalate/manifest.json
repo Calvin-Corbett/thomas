@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-email-escalate",
+  "name": "Support Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.email",
+    "support.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via email with escalate mode policies."
+}

@@ -52,11 +52,19 @@ class DummyMemory:
 
 
 class DummyLLM:
-    def __init__(self) -> None:
+    def __init__(self, prompt_tokens: int = 1500, completion_tokens: int = 300) -> None:
         self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=128)
-        self.session_usage = TokenUsage(prompt_tokens=1500, completion_tokens=300, total_tokens=1800)
+        self._prompt_tokens = int(prompt_tokens)
+        self._completion_tokens = int(completion_tokens)
+        self.session_usage = TokenUsage()
 
     async def stream_chat(self, messages, tools):  # noqa: ANN001
+        usage = TokenUsage(
+            prompt_tokens=self._prompt_tokens,
+            completion_tokens=self._completion_tokens,
+            total_tokens=self._prompt_tokens + self._completion_tokens,
+        )
+        self.session_usage.add(usage)
         yield StreamEvent(type="token", data={"text": "ok"})
         yield StreamEvent(type="done", data={})
 
@@ -139,3 +147,37 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertTrue(policy.get("enabled"))
         self.assertFalse(policy.get("include_global"))
         self.assertTrue(policy.get("include_profile"))
+
+    def test_usage_is_scoped_to_single_run_not_session_cumulative(self) -> None:
+        cfg = AppConfig(
+            models={"local": ModelConfig(name="local", model="dummy")},
+            default_model="local",
+        )
+        tools = ToolRegistry()
+        memory = DummyMemory()
+        llm = DummyLLM(prompt_tokens=220, completion_tokens=80)
+        agent = AgentLoop(cfg, llm, tools, conversation=[], memory=memory, thread_id="t1")
+
+        async def run_once(prompt: str):
+            events = []
+            async for ev in agent.run(prompt, tools_policy="never", mode="auto"):
+                events.append(ev)
+            await asyncio.sleep(0.02)
+            done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+            self.assertIsNotNone(done)
+            assert done is not None
+            return done.data.get("usage") or {}, done.data.get("token_report") or {}
+
+        usage1, report1 = asyncio.run(run_once("first turn"))
+        usage2, report2 = asyncio.run(run_once("second turn"))
+
+        self.assertEqual(int(usage1.get("prompt_tokens", 0)), 220)
+        self.assertEqual(int(usage1.get("completion_tokens", 0)), 80)
+        self.assertEqual(int(usage1.get("total_tokens", 0)), 300)
+
+        # Session usage grows across turns, but per-run reporting must not.
+        self.assertEqual(int(llm.session_usage.total_tokens), 600)
+        self.assertEqual(int(usage2.get("prompt_tokens", 0)), 220)
+        self.assertEqual(int(usage2.get("completion_tokens", 0)), 80)
+        self.assertEqual(int(usage2.get("total_tokens", 0)), 300)
+        self.assertEqual(int(report2.get("total_tokens", 0)), 300)

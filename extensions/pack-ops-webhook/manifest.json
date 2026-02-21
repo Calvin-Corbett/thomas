@@ -1,0 +1,14 @@
+{
+  "id": "pack-ops-webhook",
+  "name": "Ops Webhook Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "webhook",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.webhook",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via webhook."
+}

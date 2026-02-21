@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-slack-audit",
+  "name": "Qa Slack Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "slack",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.slack",
+    "qa.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via slack with audit mode policies."
+}

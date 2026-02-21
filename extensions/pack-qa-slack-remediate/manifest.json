@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-slack-remediate",
+  "name": "Qa Slack Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "slack",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.slack",
+    "qa.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via slack with remediate mode policies."
+}

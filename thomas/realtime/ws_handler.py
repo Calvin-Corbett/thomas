@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import json
 from typing import Any, AsyncIterator, Optional
 
 from aiohttp import web, WSMsgType
@@ -34,43 +33,53 @@ async def _http_chat_bridge(app: web.Application, payload: dict[str, Any]) -> As
     This is a best-effort bridge to minimize integration friction when you don't want to touch internal chat plumbing.
     """
     import aiohttp
+    import json as _json
 
     req = payload.get("_request")
     if req is None:
         raise RuntimeError("http bridge requires _request injected")  # pragma: no cover
 
-    url = f"{req.scheme}://{req.host}/api/chat"
+    # Never reflect client-supplied Host back into the bridge target.
+    port = int(req.url.port or (443 if str(req.scheme).lower() == "https" else 80))
+    url = f"{req.scheme}://127.0.0.1:{port}/api/chat"
     body = {k: v for k, v in payload.items() if not k.startswith("_")}
+    forward_headers: dict[str, str] = {}
+    auth = str(req.headers.get("Authorization") or "").strip()
+    if auth:
+        forward_headers["Authorization"] = auth
+    x_api_token = str(req.headers.get("X-Api-Token") or "").strip()
+    if x_api_token:
+        forward_headers["X-Api-Token"] = x_api_token
 
     timeout = aiohttp.ClientTimeout(total=None, sock_read=None)
     async with aiohttp.ClientSession(timeout=timeout) as sess:
-        async with sess.post(url, json=body) as resp:
+        async with sess.post(url, json=body, headers=forward_headers or None) as resp:
             resp.raise_for_status()
             async for line in resp.content:
-                s = line.decode("utf-8", errors="ignore").strip()
+                try:
+                    s = line.decode("utf-8", errors="ignore").strip()
+                except Exception:
+                    continue
                 if not s:
                     continue
                 if s.startswith("data:"):
                     s = s[5:].strip()
 
                 if s.startswith("{") and s.endswith("}"):
-                    obj: dict[str, Any] | None = None
                     try:
-                        parsed = json.loads(s)
-                        if isinstance(parsed, dict):
-                            obj = parsed
-                    except json.JSONDecodeError:
-                        obj = None
-                    if obj is not None:
-                        if obj.get("type") in ("delta", "assistant_delta") and "text" in obj:
-                            yield {"type": "delta", "text": obj["text"]}
-                            continue
-                        if obj.get("type") in ("done", "assistant_done"):
-                            yield {"type": "done", "usage": obj.get("usage")}
-                            continue
-                        if "text" in obj and isinstance(obj["text"], str):
-                            yield {"type": "delta", "text": obj["text"]}
-                            continue
+                        obj = _json.loads(s)
+                        if isinstance(obj, dict):
+                            if obj.get("type") in ("delta", "assistant_delta") and "text" in obj:
+                                yield {"type": "delta", "text": obj["text"]}
+                                continue
+                            if obj.get("type") in ("done", "assistant_done"):
+                                yield {"type": "done", "usage": obj.get("usage")}
+                                continue
+                            if "text" in obj and isinstance(obj["text"], str):
+                                yield {"type": "delta", "text": obj["text"]}
+                                continue
+                    except Exception:
+                        pass
                 yield {"type": "delta", "text": s}
     yield {"type": "done"}
 

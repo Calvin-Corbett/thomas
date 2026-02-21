@@ -1,8 +1,21 @@
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-pip install -e .
-# Optional:
-# pip install -e ".[browser,train]"
-Write-Host "Example:"
-Write-Host "python -m agent_vf.cli chat --root ./runtime --text \"hello\""
+﻿param(
+  [switch]$SkipInstall,
+  [switch]$SkipDoctor,
+  [switch]$WithTestDeps,
+  [ValidateSet("auto", "local", "codex", "openai", "anthropic")]
+  [string]$Profile = "auto",
+  [switch]$Easy,
+  [switch]$AutoInstallTools,
+  [switch]$NoPrompt
+)
+
+$ErrorActionPreference = "Stop"
+
+$SetupScript = Join-Path $PSScriptRoot "setup.ps1"
+if (-not (Test-Path $SetupScript)) {
+  Write-Host "[thomas] ERROR: missing setup script: $SetupScript"
+  exit 2
+}
+
+& $SetupScript @PSBoundParameters
+exit $LASTEXITCODE

@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-jira-detect",
+  "name": "Incident Jira Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "jira",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.jira",
+    "incident.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via jira with detect mode policies."
+}

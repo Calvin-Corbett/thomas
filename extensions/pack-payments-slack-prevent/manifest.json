@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-slack-prevent",
+  "name": "Payments Slack Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "slack",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.slack",
+    "payments.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via slack with prevent mode policies."
+}

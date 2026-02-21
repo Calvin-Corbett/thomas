@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-email-detect",
+  "name": "Incident Email Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "email",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.email",
+    "incident.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via email with detect mode policies."
+}

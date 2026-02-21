@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-sms-escalate",
+  "name": "Security Sms Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "sms",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.sms",
+    "security.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via sms with escalate mode policies."
+}

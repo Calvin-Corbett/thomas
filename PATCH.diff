@@ -1,0 +1,1601 @@
+diff --git a/thomas/observability/redaction.py b/thomas/observability/redaction.py
+new file mode 100644
+--- a/thomas/observability/redaction.py
++++ b/thomas/observability/redaction.py
+@@ -0,0 +1,125 @@
++# thomas/observability/redaction.py
++from __future__ import annotations
++
++import json
++import os
++import re
++from dataclasses import dataclass
++from typing import Any, Mapping
++
++DEFAULT_PLACEHOLDER = "[REDACTED]"
++
++DEFAULT_SENSITIVE_KEYS = {
++    "authorization",
++    "proxy-authorization",
++    "cookie",
++    "set-cookie",
++    "x-api-key",
++    "api_key",
++    "apikey",
++    "access_token",
++    "refresh_token",
++    "token",
++    "secret",
++    "client_secret",
++    "password",
++    "passphrase",
++    "private_key",
++    "ssh_key",
++    "openai_api_key",
++    "anthropic_api_key",
++    "google_api_key",
++    "aws_access_key_id",
++    "aws_secret_access_key",
++    "aws_session_token",
++}
++
++DEFAULT_SECRET_PATTERNS: list[re.Pattern[str]] = [
++    re.compile(r"(?i)\bBearer\s+[A-Za-z0-9\-._~+/]+=*\b"),
++    re.compile(r"\bsk-[A-Za-z0-9]{20,}\b"),
++    re.compile(r"\bAIza[0-9A-Za-z\-_]{20,}\b"),
++    re.compile(r"\beyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,}\b"),
++    re.compile(r"\bxox[baprs]-[0-9A-Za-z-]{10,}\b"),
++    re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
++]
++
++def _load_extra_patterns_from_env() -> list[re.Pattern[str]]:
++    raw = os.getenv("THOMAS_REDACTION_REGEXES", "").strip()
++    if not raw:
++        return []
++    try:
++        arr = json.loads(raw)
++        if not isinstance(arr, list):
++            return []
++        out: list[re.Pattern[str]] = []
++        for s in arr:
++            if isinstance(s, str) and s:
++                try:
++                    out.append(re.compile(s))
++                except re.error:
++                    pass
++        return out
++    except Exception:
++        return []
++
++@dataclass(frozen=True)
++class RedactionConfig:
++    placeholder: str = DEFAULT_PLACEHOLDER
++    sensitive_keys: set[str] | None = None
++    patterns: list[re.Pattern[str]] | None = None
++    max_depth: int = 32
++    max_string_len: int = 200_000
++
++    @staticmethod
++    def default() -> "RedactionConfig":
++        extra = _load_extra_patterns_from_env()
++        return RedactionConfig(
++            placeholder=DEFAULT_PLACEHOLDER,
++            sensitive_keys=set(DEFAULT_SENSITIVE_KEYS),
++            patterns=[*DEFAULT_SECRET_PATTERNS, *extra],
++        )
++
++def _is_sensitive_key(key: str, cfg: RedactionConfig) -> bool:
++    try:
++        return key.strip().lower() in (cfg.sensitive_keys or set())
++    except Exception:
++        return False
++
++def redact_string(s: str, cfg: RedactionConfig) -> str:
++    if not s:
++        return s
++    if len(s) > cfg.max_string_len:
++        s = s[: cfg.max_string_len] + "…(truncated)"
++    out = s
++    for pat in (cfg.patterns or []):
++        out = pat.sub(cfg.placeholder, out)
++    return out
++
++def redact_obj(obj: Any, cfg: RedactionConfig | None = None, _depth: int = 0) -> Any:
++    if cfg is None:
++        cfg = RedactionConfig.default()
++    if _depth > cfg.max_depth:
++        return cfg.placeholder
++
++    if obj is None or isinstance(obj, (bool, int, float)):
++        return obj
++    if isinstance(obj, str):
++        return redact_string(obj, cfg)
++
++    if isinstance(obj, Mapping):
++        out = {}
++        for k, v in obj.items():
++            ks = str(k)
++            if _is_sensitive_key(ks, cfg):
++                out[ks] = cfg.placeholder
++            else:
++                out[ks] = redact_obj(v, cfg, _depth=_depth + 1)
++        return out
++
++    if isinstance(obj, (list, tuple, set)):
++        return [redact_obj(v, cfg, _depth=_depth + 1) for v in obj]
++
++    try:
++        return redact_string(str(obj), cfg)
++    except Exception:
++        return cfg.placeholder
+
+diff --git a/thomas/observability/run_db.py b/thomas/observability/run_db.py
+new file mode 100644
+--- a/thomas/observability/run_db.py
++++ b/thomas/observability/run_db.py
+@@ -0,0 +1,90 @@
++# thomas/observability/run_db.py
++from __future__ import annotations
++
++import os
++import sqlite3
++from pathlib import Path
++from typing import Iterable
++
++ENV_DB_PATH = "THOMAS_RUNS_DB_PATH"
++
++BASE_SCHEMA = """
++CREATE TABLE IF NOT EXISTS runs (
++  run_id TEXT PRIMARY KEY,
++  started_at TEXT,
++  ended_at TEXT,
++  ok INTEGER,
++  error TEXT,
++  meta_json TEXT,
++  last_seq INTEGER DEFAULT 0
++);
++
++CREATE TABLE IF NOT EXISTS events (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  run_id TEXT NOT NULL,
++  t_ms INTEGER,
++  seq INTEGER,
++  event_type TEXT,
++  payload_json TEXT,
++  FOREIGN KEY(run_id) REFERENCES runs(run_id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_events_run_seq ON events(run_id, seq, id);
++"""
++
++def resolve_runs_db_path() -> Path:
++    env = os.getenv(ENV_DB_PATH, "").strip()
++    if env:
++        return Path(env)
++
++    # Try to reuse an existing run_store if present in repo.
++    try:
++        from thomas.observability import run_store  # type: ignore
++        for attr in ("RUNS_DB_PATH", "DB_PATH", "db_path"):
++            p = getattr(run_store, attr, None)
++            if p:
++                return Path(p)
++        if hasattr(run_store, "get_db_path"):
++            return Path(run_store.get_db_path())  # type: ignore
++    except Exception:
++        pass
++
++    return Path.home() / ".thomas" / "runs.sqlite3"
++
++def connect(db_path: Path) -> sqlite3.Connection:
++    db_path.parent.mkdir(parents=True, exist_ok=True)
++    con = sqlite3.connect(str(db_path))
++    con.row_factory = sqlite3.Row
++    return con
++
++def _table_columns(con: sqlite3.Connection, table: str) -> set[str]:
++    cur = con.execute(f"PRAGMA table_info({table})")
++    return {str(r["name"]) for r in cur.fetchall()}
++
++def _add_column(con: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
++    cols = _table_columns(con, table)
++    if col in cols:
++        return
++    con.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
++
++def ensure_schema(db_path: Path) -> None:
++    con = connect(db_path)
++    try:
++        con.executescript(BASE_SCHEMA)
++        # If tables pre-existed, ensure critical columns exist.
++        if "runs" in {r["name"] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
++            _add_column(con, "runs", "meta_json", "meta_json TEXT")
++            _add_column(con, "runs", "last_seq", "last_seq INTEGER DEFAULT 0")
++            _add_column(con, "runs", "ok", "ok INTEGER")
++            _add_column(con, "runs", "error", "error TEXT")
++            _add_column(con, "runs", "started_at", "started_at TEXT")
++            _add_column(con, "runs", "ended_at", "ended_at TEXT")
++        if "events" in {r["name"] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}:
++            _add_column(con, "events", "t_ms", "t_ms INTEGER")
++            _add_column(con, "events", "seq", "seq INTEGER")
++            _add_column(con, "events", "event_type", "event_type TEXT")
++            _add_column(con, "events", "payload_json", "payload_json TEXT")
++
++        con.commit()
++    finally:
++        con.close()
+
+diff --git a/thomas/observability/event_recorder.py b/thomas/observability/event_recorder.py
+new file mode 100644
+--- a/thomas/observability/event_recorder.py
++++ b/thomas/observability/event_recorder.py
+@@ -0,0 +1,153 @@
++# thomas/observability/event_recorder.py
++from __future__ import annotations
++
++import contextlib
++import contextvars
++import json
++import os
++import time
++import uuid
++from dataclasses import dataclass
++from datetime import datetime, timezone
++from typing import Any, Callable
++
++from thomas.observability.run_db import connect, ensure_schema, resolve_runs_db_path
++from thomas.observability.redaction import redact_obj
++
++_current_run_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("thomas_run_id", default=None)
++_run_start_perf: contextvars.ContextVar[float | None] = contextvars.ContextVar("thomas_run_start_perf", default=None)
++_seq_counter: contextvars.ContextVar[int] = contextvars.ContextVar("thomas_run_seq", default=0)
++
++ENV_REDACT_WRITE = "THOMAS_REDACT_AT_WRITE"  # "1" to enable
++
++def _now_iso() -> str:
++    return datetime.now(timezone.utc).isoformat()
++
++def _t_ms() -> int | None:
++    start = _run_start_perf.get()
++    if start is None:
++        return None
++    return int((time.perf_counter() - start) * 1000.0)
++
++def get_current_run_id() -> str | None:
++    return _current_run_id.get()
++
++def attach_run(run_id: str) -> None:
++    _current_run_id.set(run_id)
++    if _run_start_perf.get() is None:
++        _run_start_perf.set(time.perf_counter())
++
++def _ensure_run_row(run_id: str, meta: dict[str, Any] | None = None) -> None:
++    db = resolve_runs_db_path()
++    ensure_schema(db)
++    con = connect(db)
++    try:
++        cur = con.execute("SELECT run_id, last_seq FROM runs WHERE run_id = ? LIMIT 1", (run_id,))
++        row = cur.fetchone()
++        if row is None:
++            con.execute(
++                "INSERT INTO runs(run_id, started_at, ok, meta_json, last_seq) VALUES (?, ?, ?, ?, ?)",
++                (run_id, _now_iso(), None, json.dumps(meta or {}, separators=(",", ":")), 0),
++            )
++            con.commit()
++            _seq_counter.set(0)
++        else:
++            try:
++                last = int(row["last_seq"] or 0)
++            except Exception:
++                last = 0
++            _seq_counter.set(last)
++    finally:
++        con.close()
++
++def start_run(meta: dict[str, Any] | None = None, run_id: str | None = None) -> str:
++    rid = run_id or f"run_{uuid.uuid4().hex}"
++    attach_run(rid)
++    _ensure_run_row(rid, meta=meta)
++    return rid
++
++def end_run(ok: bool | None = None, error: str | None = None) -> None:
++    rid = get_current_run_id()
++    if not rid:
++        return
++    db = resolve_runs_db_path()
++    ensure_schema(db)
++    con = connect(db)
++    try:
++        con.execute(
++            "UPDATE runs SET ended_at = ?, ok = COALESCE(?, ok), error = COALESCE(?, error), last_seq = ? WHERE run_id = ?",
++            (_now_iso(), None if ok is None else (1 if ok else 0), error, _seq_counter.get(), rid),
++        )
++        con.commit()
++    finally:
++        con.close()
++
++def _next_seq() -> int:
++    nxt = _seq_counter.get() + 1
++    _seq_counter.set(nxt)
++    return nxt
++
++def record_event(event_type: str, payload: Any, *, t_ms: int | None = None, run_id: str | None = None) -> None:
++    """
++    Persist an event for the current run.
++    Secrets are enforced at read/export time; optional write-time redaction is available.
++    """
++    rid = run_id or get_current_run_id()
++    if not rid:
++        return
++
++    # Prefer existing repo's run_store if it has an event writer.
++    try:
++        from thomas.observability import run_store  # type: ignore
++        for fn_name in ("record_event", "append_event", "log_event", "add_event"):
++            fn = getattr(run_store, fn_name, None)
++            if callable(fn):
++                fn(rid, event_type, payload, t_ms=t_ms)  # type: ignore
++                return
++    except Exception:
++        pass
++
++    db = resolve_runs_db_path()
++    ensure_schema(db)
++
++    t = t_ms if t_ms is not None else _t_ms()
++    seq = _next_seq()
++
++    do_redact = os.getenv(ENV_REDACT_WRITE, "0").strip() == "1"
++    safe_payload = redact_obj(payload) if do_redact else payload
++
++    con = connect(db)
++    try:
++        con.execute(
++            "INSERT INTO events(run_id, t_ms, seq, event_type, payload_json) VALUES (?, ?, ?, ?, ?)",
++            (rid, t, seq, event_type, json.dumps(safe_payload, separators=(",", ":"), ensure_ascii=False)),
++        )
++        con.execute("UPDATE runs SET last_seq = ? WHERE run_id = ?", (seq, rid))
++        con.commit()
++    finally:
++        con.close()
++
++@dataclass(frozen=True)
++class RunContext:
++    run_id: str
++
++    def __enter__(self) -> "RunContext":
++        attach_run(self.run_id)
++        _ensure_run_row(self.run_id, meta={})
++        return self
++
++    def __exit__(self, exc_type, exc, tb) -> None:
++        if exc is None:
++            end_run(ok=True)
++        else:
++            end_run(ok=False, error=str(exc))
++
++@contextlib.contextmanager
++def run_context(meta: dict[str, Any] | None = None, run_id: str | None = None):
++    rid = start_run(meta=meta, run_id=run_id)
++    try:
++        yield rid
++        end_run(ok=True)
++    except Exception as e:
++        end_run(ok=False, error=str(e))
++        raise
+
+diff --git a/thomas/observability/auto_instrument.py b/thomas/observability/auto_instrument.py
+new file mode 100644
+--- a/thomas/observability/auto_instrument.py
++++ b/thomas/observability/auto_instrument.py
+@@ -0,0 +1,133 @@
++# thomas/observability/auto_instrument.py
++from __future__ import annotations
++
++import asyncio
++import inspect
++import types
++from functools import wraps
++from typing import Any, Callable, Awaitable
++
++from thomas.observability.event_recorder import record_event
++
++_INSTALLED = False
++
++def _wrap_async_fn(name: str, fn: Callable[..., Awaitable[Any]]):
++    @wraps(fn)
++    async def wrapped(*args, **kwargs):
++        record_event("auto_instrument.call", {"target": name, "kind": "async", "args_n": len(args), "kwargs_keys": list(kwargs.keys())})
++        try:
++            out = await fn(*args, **kwargs)
++            record_event("auto_instrument.result", {"target": name, "kind": "async"})
++            return out
++        except Exception as e:
++            record_event("auto_instrument.error", {"target": name, "kind": "async", "error": str(e)})
++            raise
++    return wrapped
++
++def _wrap_sync_fn(name: str, fn: Callable[..., Any]):
++    @wraps(fn)
++    def wrapped(*args, **kwargs):
++        record_event("auto_instrument.call", {"target": name, "kind": "sync", "args_n": len(args), "kwargs_keys": list(kwargs.keys())})
++        try:
++            out = fn(*args, **kwargs)
++            record_event("auto_instrument.result", {"target": name, "kind": "sync"})
++            return out
++        except Exception as e:
++            record_event("auto_instrument.error", {"target": name, "kind": "sync", "error": str(e)})
++            raise
++    return wrapped
++
++def _wrap_async_gen(name: str, agen_fn: Callable[..., Any]):
++    @wraps(agen_fn)
++    async def wrapped(*args, **kwargs):
++        record_event("auto_instrument.call", {"target": name, "kind": "async_gen"})
++        agen = agen_fn(*args, **kwargs)
++        i = 0
++        try:
++            async for chunk in agen:
++                # "model.chunk" heuristic: if it's bytes/str/dict
++                record_event("model.chunk", {"target": name, "i": i, "chunk": chunk})
++                i += 1
++                yield chunk
++            record_event("auto_instrument.result", {"target": name, "kind": "async_gen", "chunks": i})
++        except Exception as e:
++            record_event("auto_instrument.error", {"target": name, "kind": "async_gen", "error": str(e), "chunks": i})
++            raise
++    return wrapped
++
++def _wrap_sync_gen(name: str, gen_fn: Callable[..., Any]):
++    @wraps(gen_fn)
++    def wrapped(*args, **kwargs):
++        record_event("auto_instrument.call", {"target": name, "kind": "sync_gen"})
++        gen = gen_fn(*args, **kwargs)
++        i = 0
++        try:
++            for chunk in gen:
++                record_event("model.chunk", {"target": name, "i": i, "chunk": chunk})
++                i += 1
++                yield chunk
++            record_event("auto_instrument.result", {"target": name, "kind": "sync_gen", "chunks": i})
++        except Exception as e:
++            record_event("auto_instrument.error", {"target": name, "kind": "sync_gen", "error": str(e), "chunks": i})
++            raise
++    return wrapped
++
++def _maybe_wrap_callable(mod: types.ModuleType, attr_name: str):
++    obj = getattr(mod, attr_name, None)
++    if not callable(obj):
++        return False
++    qual = f"{mod.__name__}.{attr_name}"
++
++    # Avoid double-wrap
++    if getattr(obj, "__thomas_instrumented__", False):
++        return False
++
++    try:
++        if inspect.isasyncgenfunction(obj):
++            w = _wrap_async_gen(qual, obj)
++        elif inspect.iscoroutinefunction(obj):
++            w = _wrap_async_fn(qual, obj)
++        elif inspect.isgeneratorfunction(obj):
++            w = _wrap_sync_gen(qual, obj)
++        else:
++            w = _wrap_sync_fn(qual, obj)
++        setattr(w, "__thomas_instrumented__", True)
++        setattr(mod, attr_name, w)
++        return True
++    except Exception:
++        return False
++
++def ensure_installed() -> None:
++    global _INSTALLED
++    if _INSTALLED:
++        return
++
++    # Best-effort: wrap "likely" entrypoints without assuming exact structure.
++    candidates = [
++        "thomas.llm",
++        "thomas.model",
++        "thomas.models",
++        "thomas.openai_client",
++        "thomas.tools",
++        "thomas.tool_runner",
++        "thomas.cortex",
++        "thomas.agent",
++    ]
++    wrapped = 0
++    for mod_name in candidates:
++        try:
++            mod = __import__(mod_name, fromlist=["*"])
++        except Exception:
++            continue
++
++        for attr in dir(mod):
++            low = attr.lower()
++            if low in {"__", "main"}:
++                continue
++            # Heuristics: likely model/tool entrypoints
++            if any(k in low for k in ("tool", "call", "execute", "run", "stream", "chat", "complete", "generate", "infer")):
++                if _maybe_wrap_callable(mod, attr):
++                    wrapped += 1
++
++    record_event("auto_instrument.status", {"installed": True, "wrapped": wrapped})
++    _INSTALLED = True
+
+diff --git a/thomas/observability/run_store_replay.py b/thomas/observability/run_store_replay.py
+new file mode 100644
+--- a/thomas/observability/run_store_replay.py
++++ b/thomas/observability/run_store_replay.py
+@@ -0,0 +1,103 @@
++# thomas/observability/run_store_replay.py
++from __future__ import annotations
++
++import json
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++from thomas.observability.run_db import connect, ensure_schema, resolve_runs_db_path
++
++@dataclass(frozen=True)
++class RunEvent:
++    index: int
++    seq: int
++    t_ms: int | None
++    event_type: str
++    payload: Any
++
++def count_events(run_id: str, db_path: Path | None = None) -> int:
++    db_path = db_path or resolve_runs_db_path()
++    ensure_schema(db_path)
++    con = connect(db_path)
++    try:
++        cur = con.execute("SELECT COUNT(1) AS n FROM events WHERE run_id = ?", (run_id,))
++        row = cur.fetchone()
++        return int(row["n"] if row else 0)
++    finally:
++        con.close()
++
++def list_events(
++    run_id: str,
++    *,
++    start: int = 0,
++    limit: int = 500,
++    db_path: Path | None = None,
++) -> list[RunEvent]:
++    if start < 0:
++        start = 0
++    if limit <= 0:
++        return []
++    if limit > 5000:
++        limit = 5000
++
++    db_path = db_path or resolve_runs_db_path()
++    ensure_schema(db_path)
++    con = connect(db_path)
++    try:
++        cur = con.execute(
++            """
++            SELECT id, seq, t_ms, event_type, payload_json
++            FROM events
++            WHERE run_id = ?
++            ORDER BY seq ASC, id ASC
++            LIMIT ? OFFSET ?
++            """,
++            (run_id, limit, start),
++        )
++        out: list[RunEvent] = []
++        idx = start
++        for row in cur.fetchall():
++            payload_json = row["payload_json"]
++            try:
++                payload = json.loads(payload_json) if payload_json else None
++            except Exception:
++                payload = {"_parse_error": True, "raw": payload_json}
++            out.append(
++                RunEvent(
++                    index=idx,
++                    seq=int(row["seq"]) if row["seq"] is not None else idx,
++                    t_ms=int(row["t_ms"]) if row["t_ms"] is not None else None,
++                    event_type=str(row["event_type"] or ""),
++                    payload=payload,
++                )
++            )
++            idx += 1
++        return out
++    finally:
++        con.close()
++
++def get_event_at_index(run_id: str, index: int, db_path: Path | None = None) -> RunEvent | None:
++    if index < 0:
++        return None
++    events = list_events(run_id, start=index, limit=1, db_path=db_path)
++    return events[0] if events else None
++
++def get_run_metadata(run_id: str, db_path: Path | None = None) -> dict[str, Any] | None:
++    db_path = db_path or resolve_runs_db_path()
++    ensure_schema(db_path)
++    con = connect(db_path)
++    try:
++        cur = con.execute("SELECT * FROM runs WHERE run_id = ? LIMIT 1", (run_id,))
++        row = cur.fetchone()
++        if not row:
++            return None
++        d = dict(row)
++        if "meta_json" in d and isinstance(d["meta_json"], str):
++            try:
++                d["meta_json"] = json.loads(d["meta_json"])
++            except Exception:
++                pass
++        return d
++    finally:
++        con.close()
+
+diff --git a/thomas/server/routes/replay_debugger.py b/thomas/server/routes/replay_debugger.py
+new file mode 100644
+--- a/thomas/server/routes/replay_debugger.py
++++ b/thomas/server/routes/replay_debugger.py
+@@ -0,0 +1,185 @@
++# thomas/server/routes/replay_debugger.py
++from __future__ import annotations
++
++import asyncio
++import json
++from aiohttp import web
++from importlib import resources
++
++from thomas.observability.redaction import RedactionConfig, redact_obj
++from thomas.observability.run_store_replay import (
++    count_events,
++    get_event_at_index,
++    get_run_metadata,
++    list_events,
++)
++
++def _parse_int(q: str | None, default: int) -> int:
++    if q is None:
++        return default
++    try:
++        return int(q)
++    except Exception:
++        return default
++
++def _parse_float(q: str | None, default: float) -> float:
++    if q is None:
++        return default
++    try:
++        return float(q)
++    except Exception:
++        return default
++
++async def handle_run_events(request: web.Request) -> web.Response:
++    run_id = request.match_info["run_id"]
++    start = _parse_int(request.query.get("start"), 0)
++    limit = _parse_int(request.query.get("limit"), 250)
++    total = count_events(run_id)
++    events = list_events(run_id, start=start, limit=limit)
++    cfg = RedactionConfig.default()
++    payload = {
++        "run_id": run_id,
++        "total": total,
++        "start": start,
++        "limit": limit,
++        "events": [
++            {
++                "index": e.index,
++                "seq": e.seq,
++                "t_ms": e.t_ms,
++                "event_type": e.event_type,
++                "payload": redact_obj(e.payload, cfg),
++            }
++            for e in events
++        ],
++    }
++    return web.json_response(payload)
++
++async def handle_replay_seek(request: web.Request) -> web.Response:
++    run_id = request.match_info["run_id"]
++    body = await request.json()
++    index = int(body.get("index", 0))
++    ev = get_event_at_index(run_id, index)
++    if ev is None:
++        return web.json_response({"ok": False, "error": "index_out_of_range"}, status=404)
++    cfg = RedactionConfig.default()
++    return web.json_response({"ok": True, "event": {
++        "index": ev.index, "seq": ev.seq, "t_ms": ev.t_ms, "event_type": ev.event_type, "payload": redact_obj(ev.payload, cfg),
++    }})
++
++async def handle_replay_step(request: web.Request) -> web.Response:
++    run_id = request.match_info["run_id"]
++    body = await request.json()
++    index = int(body.get("index", 0))
++    delta = int(body.get("delta", 1))
++    new_index = index + delta
++    ev = get_event_at_index(run_id, new_index)
++    if ev is None:
++        return web.json_response({"ok": False, "error": "index_out_of_range"}, status=404)
++    cfg = RedactionConfig.default()
++    return web.json_response({"ok": True, "event": {
++        "index": ev.index, "seq": ev.seq, "t_ms": ev.t_ms, "event_type": ev.event_type, "payload": redact_obj(ev.payload, cfg),
++    }})
++
++async def handle_replay_stream(request: web.Request) -> web.StreamResponse:
++    run_id = request.match_info["run_id"]
++    start = _parse_int(request.query.get("from"), 0)
++    speed = _parse_float(request.query.get("speed"), 1.0)
++    limit = _parse_int(request.query.get("limit"), 0)
++    if speed < 0:
++        speed = 1.0
++
++    cfg = RedactionConfig.default()
++    resp = web.StreamResponse(status=200, headers={"Content-Type": "application/x-ndjson; charset=utf-8"})
++    await resp.prepare(request)
++
++    chunk = 500
++    idx = start
++    streamed = 0
++    prev_t = None
++
++    while True:
++        if limit and streamed >= limit:
++            break
++        batch = list_events(run_id, start=idx, limit=min(chunk, (limit - streamed) if limit else chunk))
++        if not batch:
++            break
++        for ev in batch:
++            if limit and streamed >= limit:
++                break
++            if speed and speed > 0 and prev_t is not None and ev.t_ms is not None:
++                dt_ms = max(0, (ev.t_ms - prev_t))
++                if dt_ms:
++                    await asyncio.sleep((dt_ms / 1000.0) / speed)
++            prev_t = ev.t_ms if ev.t_ms is not None else prev_t
++            line = json.dumps({
++                "index": ev.index, "seq": ev.seq, "t_ms": ev.t_ms, "event_type": ev.event_type, "payload": redact_obj(ev.payload, cfg),
++            }, separators=(",", ":")).encode("utf-8") + b"\n"
++            await resp.write(line)
++            streamed += 1
++        idx += len(batch)
++
++    await resp.write_eof()
++    return resp
++
++async def handle_run_export_json(request: web.Request) -> web.Response:
++    run_id = request.match_info["run_id"]
++    meta = get_run_metadata(run_id) or {"run_id": run_id}
++    total = count_events(run_id)
++    max_events = _parse_int(request.query.get("max_events"), 20_000)
++    if max_events < 0:
++        max_events = 0
++    cfg = RedactionConfig.default()
++
++    events = []
++    idx = 0
++    remaining = min(total, max_events)
++    while remaining > 0:
++        batch = list_events(run_id, start=idx, limit=min(1000, remaining))
++        if not batch:
++            break
++        for ev in batch:
++            events.append({
++                "index": ev.index, "seq": ev.seq, "t_ms": ev.t_ms, "event_type": ev.event_type, "payload": redact_obj(ev.payload, cfg),
++            })
++        idx += len(batch)
++        remaining -= len(batch)
++
++    payload = {
++        "schema_version": 1,
++        "feature_id": "observability.run_replay_debugger",
++        "run": redact_obj(meta, cfg),
++        "events": events,
++        "truncated": total > max_events,
++        "total_events": total,
++    }
++    return web.json_response(payload)
++
++def _asset_path(rel: str):
++    # Files live in thomas/server/web/...
++    pkg = "thomas.server.web"
++    return resources.files(pkg) / rel
++
++async def handle_ui(request: web.Request) -> web.Response:
++    p = _asset_path("replay_debugger.html")
++    return web.FileResponse(path=str(p))
++
++async def handle_css(request: web.Request) -> web.Response:
++    p = _asset_path("css/replay_debugger.css")
++    return web.FileResponse(path=str(p))
++
++async def handle_js(request: web.Request) -> web.Response:
++    p = _asset_path("js/replay_debugger.js")
++    return web.FileResponse(path=str(p))
++
++def setup(app: web.Application) -> None:
++    # API
++    app.router.add_get("/api/runs/{run_id}/events", handle_run_events)
++    app.router.add_post("/api/runs/{run_id}/replay/seek", handle_replay_seek)
++    app.router.add_post("/api/runs/{run_id}/replay/step", handle_replay_step)
++    app.router.add_get("/api/runs/{run_id}/replay_stream", handle_replay_stream)
++    app.router.add_get("/api/runs/{run_id}/export.json", handle_run_export_json)
++    # UI + assets (self-contained, no reliance on static routes)
++    app.router.add_get("/replay_debugger.html", handle_ui)
++    app.router.add_get("/css/replay_debugger.css", handle_css)
++    app.router.add_get("/js/replay_debugger.js", handle_js)
+
+diff --git a/thomas/server/middleware/replay_observability.py b/thomas/server/middleware/replay_observability.py
+new file mode 100644
+--- a/thomas/server/middleware/replay_observability.py
++++ b/thomas/server/middleware/replay_observability.py
+@@ -0,0 +1,75 @@
++# thomas/server/middleware/replay_observability.py
++from __future__ import annotations
++
++import json
++from aiohttp import web
++
++from thomas.observability import auto_instrument
++from thomas.observability.event_recorder import start_run, attach_run, end_run, record_event, get_current_run_id
++
++@web.middleware
++async def replay_observability_middleware(request: web.Request, handler):
++    """
++    Best-effort middleware that:
++    - ensures an active run context for /api/chat and /api/autonomy (and any request that provides X-Thomas-Run-Id)
++    - records request/response observability events
++    - enables auto instrumentation for tool/model calls (best-effort, non-breaking)
++    """
++    # Install wrappers once (best-effort).
++    try:
++        auto_instrument.ensure_installed()
++    except Exception:
++        pass
++
++    path = request.path or ""
++    hdr_run = request.headers.get("X-Thomas-Run-Id") or request.headers.get("x-thomas-run-id")
++    q_run = request.query.get("run_id")
++    existing = hdr_run or q_run
++
++    should_track = (
++        existing is not None
++        or path.startswith("/api/chat")
++        or path.startswith("/api/autonomy")
++        or path.startswith("/api/agent")
++    )
++
++    if not should_track:
++        return await handler(request)
++
++    run_id = existing or start_run(meta={"source": "http", "path": path, "method": request.method})
++
++    attach_run(run_id)
++    try:
++        # record request (do not store raw body; only metadata)
++        record_event("http.request", {
++            "method": request.method,
++            "path": path,
++            "query": dict(request.query),
++            "remote": request.remote,
++            "headers": {k: v for k, v in request.headers.items() if k.lower() in {"user-agent","content-type","accept","x-request-id","x-thomas-run-id"}},
++        })
++
++        resp = await handler(request)
++
++        # record response metadata
++        record_event("http.response", {
++            "status": getattr(resp, "status", None),
++            "content_type": getattr(resp, "content_type", None),
++        })
++
++        # make run_id discoverable by clients
++        try:
++            resp.headers["X-Thomas-Run-Id"] = run_id
++        except Exception:
++            pass
++
++        end_run(ok=True)
++        return resp
++    except web.HTTPException as e:
++        record_event("http.error", {"status": e.status, "reason": getattr(e, "reason", None)})
++        end_run(ok=False, error=f"HTTP {e.status}")
++        raise
++    except Exception as e:
++        record_event("http.error", {"error": str(e)})
++        end_run(ok=False, error=str(e))
++        raise
+
+diff --git a/thomas/server/web/replay_debugger.html b/thomas/server/web/replay_debugger.html
+new file mode 100644
+--- a/thomas/server/web/replay_debugger.html
++++ b/thomas/server/web/replay_debugger.html
+@@ -0,0 +1,72 @@
++<!doctype html>
++<html lang="en">
++<head>
++  <meta charset="utf-8"/>
++  <meta name="viewport" content="width=device-width,initial-scale=1"/>
++  <title>Thomas Run Replay Debugger</title>
++  <link rel="stylesheet" href="/css/replay_debugger.css"/>
++</head>
++<body>
++  <div class="topbar">
++    <div class="brand">
++      <div class="logo">T</div>
++      <div>
++        <div class="title">Run Replay Debugger</div>
++        <div class="subtitle" id="subtitle">loading…</div>
++      </div>
++    </div>
++    <div class="actions">
++      <label class="inline">
++        speed
++        <select id="speed">
++          <option value="0.5">0.5x</option>
++          <option value="1" selected>1x</option>
++          <option value="2">2x</option>
++          <option value="0">max</option>
++        </select>
++      </label>
++      <button id="play">play</button>
++      <button id="pause" disabled>pause</button>
++      <button id="stepBack">step -1</button>
++      <button id="stepFwd">step +1</button>
++      <button id="exportJson">export json</button>
++    </div>
++  </div>
++
++  <div class="layout">
++    <div class="left">
++      <div class="panel">
++        <div class="panelTitle">Filters</div>
++        <div id="filters" class="filters"></div>
++        <div class="searchRow">
++          <input id="search" placeholder="search event_type or payload text"/>
++        </div>
++      </div>
++
++      <div class="panel">
++        <div class="panelTitle">Timeline</div>
++        <input id="scrubber" type="range" min="0" max="0" value="0"/>
++        <div class="scrubMeta">
++          <div>index <span id="idx">0</span> / <span id="total">0</span></div>
++          <div>type <span id="etype">-</span></div>
++          <div>t_ms <span id="tms">-</span></div>
++        </div>
++      </div>
++
++      <div class="panel">
++        <div class="panelTitle">Events</div>
++        <div id="eventList" class="eventList"></div>
++      </div>
++    </div>
++
++    <div class="right">
++      <div class="panel">
++        <div class="panelTitle">Event Detail</div>
++        <pre id="detail" class="detail"></pre>
++      </div>
++    </div>
++  </div>
++
++  <script src="/js/replay_debugger.js"></script>
++</body>
++</html>
+
+diff --git a/thomas/server/web/css/replay_debugger.css b/thomas/server/web/css/replay_debugger.css
+new file mode 100644
+--- a/thomas/server/web/css/replay_debugger.css
++++ b/thomas/server/web/css/replay_debugger.css
+@@ -0,0 +1,42 @@
++/* thomas/server/web/css/replay_debugger.css */
++:root {
++  --bg: #0b0f14;
++  --panel: #0f1621;
++  --panel2: #0c121b;
++  --text: #d6e1f0;
++  --muted: #93a7c3;
++  --accent: #73b7ff;
++  --border: rgba(255,255,255,0.08);
++  --shadow: 0 10px 30px rgba(0,0,0,0.35);
++}
++* { box-sizing: border-box; }
++html, body { height: 100%; margin: 0; font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial; background: var(--bg); color: var(--text); }
++.topbar { display:flex; align-items:center; justify-content:space-between; padding:12px 14px; border-bottom:1px solid var(--border); position:sticky; top:0; background: rgba(11,15,20,0.92); backdrop-filter: blur(10px); }
++.brand { display:flex; gap:10px; align-items:center; }
++.logo { width:34px; height:34px; border-radius:12px; display:flex; align-items:center; justify-content:center; background: linear-gradient(135deg, rgba(115,183,255,0.2), rgba(115,183,255,0.05)); border:1px solid var(--border); color:var(--accent); font-weight:700; }
++.title { font-size:14px; font-weight:700; }
++.subtitle { font-size:12px; color: var(--muted); margin-top:2px; }
++.actions { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
++.inline { display:flex; gap:8px; align-items:center; color: var(--muted); font-size:12px; }
++select, button, input { background: var(--panel); color: var(--text); border:1px solid var(--border); border-radius:10px; padding:8px 10px; outline:none; }
++button { cursor:pointer; }
++button:disabled { opacity:0.5; cursor:default; }
++button:hover:not(:disabled) { border-color: rgba(115,183,255,0.35); }
++.layout { display:grid; grid-template-columns: 420px 1fr; gap:12px; padding:12px; }
++.left, .right { display:flex; flex-direction:column; gap:12px; }
++.panel { background: linear-gradient(180deg, rgba(15,22,33,0.95), rgba(12,18,27,0.95)); border:1px solid var(--border); border-radius:16px; box-shadow: var(--shadow); padding:12px; }
++.panelTitle { font-size:12px; color: var(--muted); margin-bottom:10px; text-transform:uppercase; letter-spacing:0.06em; }
++.filters { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:10px; }
++.filterChip { display:flex; gap:6px; align-items:center; border:1px solid var(--border); border-radius:999px; padding:6px 10px; background: rgba(115,183,255,0.06); color: var(--text); font-size:12px; }
++.filterChip input { margin:0; }
++.searchRow input { width:100%; }
++#scrubber { width:100%; }
++.scrubMeta { display:flex; gap:14px; color: var(--muted); font-size:12px; margin-top:8px; flex-wrap:wrap; }
++.eventList { max-height:55vh; overflow:auto; border-radius:12px; border:1px solid var(--border); background: var(--panel2); }
++.eventRow { padding:10px 10px; border-bottom:1px solid var(--border); display:flex; justify-content:space-between; gap:10px; cursor:pointer; }
++.eventRow:hover { background: rgba(115,183,255,0.05); }
++.eventRow.active { outline:1px solid rgba(115,183,255,0.35); background: rgba(115,183,255,0.08); }
++.eventMeta { display:flex; flex-direction:column; gap:4px; }
++.eventType { font-weight:650; font-size:12px; }
++.eventSmall { font-size:12px; color: var(--muted); }
++.detail { margin:0; max-height:82vh; overflow:auto; background: var(--panel2); border:1px solid var(--border); border-radius:12px; padding:12px; font-size:12px; line-height:1.35; }
+
+diff --git a/thomas/server/web/js/replay_debugger.js b/thomas/server/web/js/replay_debugger.js
+new file mode 100644
+--- a/thomas/server/web/js/replay_debugger.js
++++ b/thomas/server/web/js/replay_debugger.js
+@@ -0,0 +1,252 @@
++// thomas/server/web/js/replay_debugger.js
++(function () {
++  const $ = (id) => document.getElementById(id);
++
++  function qs(name) {
++    const url = new URL(window.location.href);
++    return url.searchParams.get(name);
++  }
++
++  const state = {
++    runId: qs("run_id") || "",
++    total: 0,
++    events: [],
++    filtered: [],
++    types: new Set(),
++    enabledTypes: new Set(),
++    search: "",
++    index: 0,
++    playing: false,
++    timer: null,
++    speed: 1,
++    pageStart: 0,
++    pageSize: 500,
++  };
++
++  function fmtJson(obj) {
++    return JSON.stringify(obj, null, 2);
++  }
++
++  async function apiJson(path, opts = {}) {
++    const res = await fetch(path, {
++      headers: { "Content-Type": "application/json" },
++      ...opts,
++    });
++    if (!res.ok) {
++      const txt = await res.text();
++      throw new Error(`${res.status} ${res.statusText}: ${txt}`);
++    }
++    return await res.json();
++  }
++
++  async function loadPage(start) {
++    if (!state.runId) throw new Error("Missing run_id query param");
++    state.pageStart = start;
++    const data = await apiJson(`/api/runs/${encodeURIComponent(state.runId)}/events?start=${start}&limit=${state.pageSize}`);
++    state.total = data.total || 0;
++    state.events = data.events || [];
++    state.types = new Set(state.events.map((e) => e.event_type).filter(Boolean));
++    if (state.enabledTypes.size === 0) {
++      state.enabledTypes = new Set(state.types);
++    } else {
++      for (const t of state.types) state.enabledTypes.add(t);
++    }
++    $("total").textContent = String(state.total);
++    $("scrubber").max = String(Math.max(0, state.total - 1));
++    renderFilters();
++    applyFilters();
++  }
++
++  function renderFilters() {
++    const wrap = $("filters");
++    wrap.innerHTML = "";
++    const types = Array.from(state.types).sort();
++    for (const t of types) {
++      const chip = document.createElement("label");
++      chip.className = "filterChip";
++      const cb = document.createElement("input");
++      cb.type = "checkbox";
++      cb.checked = state.enabledTypes.has(t);
++      cb.addEventListener("change", () => {
++        if (cb.checked) state.enabledTypes.add(t);
++        else state.enabledTypes.delete(t);
++        applyFilters();
++      });
++      const span = document.createElement("span");
++      span.textContent = t;
++      chip.appendChild(cb);
++      chip.appendChild(span);
++      wrap.appendChild(chip);
++    }
++  }
++
++  function applyFilters() {
++    const s = (state.search || "").toLowerCase();
++    state.filtered = state.events.filter((e) => {
++      if (e.event_type && !state.enabledTypes.has(e.event_type)) return false;
++      if (!s) return true;
++      const blob = (e.event_type || "") + " " + JSON.stringify(e.payload || {});
++      return blob.toLowerCase().includes(s);
++    });
++    renderEventList();
++    updateIndexUI(state.index);
++  }
++
++  function renderEventList() {
++    const list = $("eventList");
++    list.innerHTML = "";
++    for (const e of state.filtered) {
++      const row = document.createElement("div");
++      row.className = "eventRow";
++      row.dataset.index = String(e.index);
++      const left = document.createElement("div");
++      left.className = "eventMeta";
++      const t = document.createElement("div");
++      t.className = "eventType";
++      t.textContent = e.event_type || "(no type)";
++      const s = document.createElement("div");
++      s.className = "eventSmall";
++      s.textContent = `idx ${e.index} · seq ${e.seq}${e.t_ms != null ? " · t_ms " + e.t_ms : ""}`;
++      left.appendChild(t);
++      left.appendChild(s);
++
++      const right = document.createElement("div");
++      right.className = "eventSmall";
++      right.textContent = "";
++
++      row.appendChild(left);
++      row.appendChild(right);
++      row.addEventListener("click", () => {
++        setIndex(e.index).catch(console.error);
++      });
++      list.appendChild(row);
++    }
++    highlightActiveRow();
++  }
++
++  function highlightActiveRow() {
++    const rows = $("eventList").querySelectorAll(".eventRow");
++    rows.forEach((r) => {
++      const idx = Number(r.dataset.index || "0");
++      r.classList.toggle("active", idx === state.index);
++    });
++  }
++
++  function findEventInPage(index) {
++    return state.events.find((e) => e.index === index) || null;
++  }
++
++  async function ensureIndexLoaded(index) {
++    if (index < 0) index = 0;
++    if (index >= state.total && state.total > 0) index = state.total - 1;
++    const pageStart = Math.floor(index / state.pageSize) * state.pageSize;
++    if (pageStart !== state.pageStart || state.events.length === 0) {
++      await loadPage(pageStart);
++    }
++  }
++
++  async function setIndex(index) {
++    await ensureIndexLoaded(index);
++    state.index = index;
++    $("scrubber").value = String(index);
++    updateIndexUI(index);
++  }
++
++  function updateIndexUI(index) {
++    $("idx").textContent = String(index);
++    const ev = findEventInPage(index);
++    if (ev) {
++      $("etype").textContent = ev.event_type || "-";
++      $("tms").textContent = ev.t_ms != null ? String(ev.t_ms) : "-";
++      $("detail").textContent = fmtJson(ev);
++    } else {
++      $("etype").textContent = "-";
++      $("tms").textContent = "-";
++      $("detail").textContent = "(event not in this page)";
++    }
++    highlightActiveRow();
++  }
++
++  function stopPlaying() {
++    state.playing = false;
++    if (state.timer) {
++      clearTimeout(state.timer);
++      state.timer = null;
++    }
++    $("play").disabled = false;
++    $("pause").disabled = true;
++  }
++
++  async function tick() {
++    if (!state.playing) return;
++    const next = state.index + 1;
++    if (next >= state.total) {
++      stopPlaying();
++      return;
++    }
++    await setIndex(next);
++
++    const cur = findEventInPage(state.index);
++    const prev = findEventInPage(state.index - 1);
++    let delay = 120;
++    if (state.speed === 0) delay = 0;
++    else if (cur && prev && cur.t_ms != null && prev.t_ms != null) {
++      delay = Math.max(0, (cur.t_ms - prev.t_ms) / state.speed);
++    } else {
++      delay = delay / (state.speed || 1);
++    }
++
++    state.timer = setTimeout(() => { tick().catch(console.error); }, delay);
++  }
++
++  async function play() {
++    state.speed = Number($("speed").value || "1");
++    state.playing = true;
++    $("play").disabled = true;
++    $("pause").disabled = false;
++    await tick();
++  }
++
++  async function step(delta) {
++    const res = await apiJson(`/api/runs/${encodeURIComponent(state.runId)}/replay/step`, {
++      method: "POST",
++      body: JSON.stringify({ index: state.index, delta }),
++    });
++    if (res && res.ok && res.event) {
++      await setIndex(res.event.index);
++    }
++  }
++
++  function exportJson() {
++    const url = `/api/runs/${encodeURIComponent(state.runId)}/export.json`;
++    window.open(url, "_blank");
++  }
++
++  async function init() {
++    $("subtitle").textContent = `run ${state.runId || "(missing)"}`;
++    await loadPage(0);
++    await setIndex(0);
++
++    $("scrubber").addEventListener("input", async (ev) => {
++      const i = Number(ev.target.value || "0");
++      await setIndex(i);
++    });
++
++    $("search").addEventListener("input", (ev) => {
++      state.search = ev.target.value || "";
++      applyFilters();
++    });
++
++    $("play").addEventListener("click", () => { play().catch(console.error); });
++    $("pause").addEventListener("click", () => { stopPlaying(); });
++    $("stepBack").addEventListener("click", () => { step(-1).catch(console.error); });
++    $("stepFwd").addEventListener("click", () => { step(1).catch(console.error); });
++    $("exportJson").addEventListener("click", () => { exportJson(); });
++    $("speed").addEventListener("change", () => { state.speed = Number($("speed").value || "1"); });
++  }
++
++  init().catch((e) => {
++    console.error(e);
++    $("detail").textContent = String(e && e.stack ? e.stack : e);
++  });
++})();
+
+diff --git a/docs/ops/run_replay_debugger.md b/docs/ops/run_replay_debugger.md
+new file mode 100644
+--- a/docs/ops/run_replay_debugger.md
++++ b/docs/ops/run_replay_debugger.md
+@@ -0,0 +1,59 @@
++# Run Replay Debugger (Operator Guide)
++
++Feature: `observability.run_replay_debugger`
++
++This feature is for post-mortem debugging of chat/autonomy runs by replaying the run event stream (HTTP context, prompts, tool calls/outputs, model chunks, and any state patches your runtime emits) with deterministic ordering.
++
++## Typical workflow: debug a failed run
++
++1) Find the run_id
++- Check the server logs for the `X-Thomas-Run-Id` header (this middleware adds it on tracked endpoints), or
++- If your UI shows run ids, copy the id.
++
++2) Open the replay debugger UI
++- `/replay_debugger.html?run_id=<RUN_ID>`
++
++3) Scrub + filter
++- Use the slider to jump by event index.
++- Use step -1 / +1 to walk event-by-event.
++- Filter by event type and use search.
++
++4) Stream replay (NDJSON)
++- `/api/runs/<RUN_ID>/replay_stream?from=0&speed=1`
++- `speed=0` disables delays.
++
++5) Share replay artifact (redacted)
++- `/api/runs/<RUN_ID>/export.json`
++- This payload is redacted: keys/tokens/passwords/etc become `[REDACTED]`.
++
++## Redaction behavior
++
++Redaction is applied at API read/export time:
++- Keys like `authorization`, `api_key`, `token`, `password`, etc are replaced with `[REDACTED]`.
++- Common secret patterns (Bearer tokens, JWTs, sk-… keys, etc) are scrubbed inside strings too.
++- Optional extra regexes:
++  - `THOMAS_REDACTION_REGEXES='["my_regex_here"]'`
++
++Optional write-time redaction (off by default):
++- `THOMAS_REDACT_AT_WRITE=1`
++
++## Persistence model
++
++This feature pack provides an internal SQLite schema (created if missing) at:
++- `~/.thomas/runs.sqlite3` by default
++- Override with: `THOMAS_RUNS_DB_PATH=/path/to/runs.sqlite3`
++
++Tables:
++- `runs(run_id, started_at, ended_at, ok, error, meta_json, last_seq)`
++- `events(run_id, t_ms, seq, event_type, payload_json)`
++
++Deterministic ordering:
++- replay reads order by `(seq, id)`.
++
++## Integration notes
++
++This pack installs:
++- an aiohttp middleware that starts/attaches a run context for `/api/chat`, `/api/autonomy`, `/api/agent` requests
++- a best-effort auto-instrumentation layer that wraps likely tool/model entrypoints (non-breaking)
++
++If your repo already has strong event logging, the recorder will prefer your existing `thomas.observability.run_store` event writer when detected.
+
+diff --git a/tests/_replay_test_db.py b/tests/_replay_test_db.py
+new file mode 100644
+--- a/tests/_replay_test_db.py
++++ b/tests/_replay_test_db.py
+@@ -0,0 +1,57 @@
++# tests/_replay_test_db.py
++from __future__ import annotations
++import sqlite3
++from pathlib import Path
++
++SCHEMA_SQL = """
++CREATE TABLE IF NOT EXISTS runs (
++  run_id TEXT PRIMARY KEY,
++  started_at TEXT,
++  ended_at TEXT,
++  ok INTEGER,
++  error TEXT,
++  meta_json TEXT,
++  last_seq INTEGER DEFAULT 0
++);
++
++CREATE TABLE IF NOT EXISTS events (
++  id INTEGER PRIMARY KEY AUTOINCREMENT,
++  run_id TEXT NOT NULL,
++  t_ms INTEGER,
++  seq INTEGER,
++  event_type TEXT,
++  payload_json TEXT,
++  FOREIGN KEY(run_id) REFERENCES runs(run_id)
++);
++
++CREATE INDEX IF NOT EXISTS idx_events_run_seq ON events(run_id, seq, id);
++"""
++
++def init_db(path: Path) -> None:
++    con = sqlite3.connect(str(path))
++    try:
++        con.executescript(SCHEMA_SQL)
++        con.commit()
++    finally:
++        con.close()
++
++def seed_run(path: Path, run_id: str = "run_test_1") -> None:
++    con = sqlite3.connect(str(path))
++    try:
++        con.execute(
++            "INSERT INTO runs(run_id, ok, last_seq) VALUES (?, ?, ?)",
++            (run_id, 0, 0),
++        )
++        events = [
++            (run_id, 0, 2, "prompt", '{"text":"hello"}'),
++            (run_id, 5, 1, "tool.call", '{"name":"secret_tool","authorization":"Bearer abcdef"}'),
++            (run_id, 8, 3, "tool.output", '{"result":"ok","api_key":"sk-THIS_SHOULD_NOT_LEAK"}'),
++        ]
++        con.executemany(
++            "INSERT INTO events(run_id, t_ms, seq, event_type, payload_json) VALUES (?, ?, ?, ?, ?)",
++            events,
++        )
++        con.execute("UPDATE runs SET last_seq = 3 WHERE run_id = ?", (run_id,))
++        con.commit()
++    finally:
++        con.close()
+
+diff --git a/tests/test_replay_debugger_redaction.py b/tests/test_replay_debugger_redaction.py
+new file mode 100644
+--- a/tests/test_replay_debugger_redaction.py
++++ b/tests/test_replay_debugger_redaction.py
+@@ -0,0 +1,24 @@
++# tests/test_replay_debugger_redaction.py
++from __future__ import annotations
++
++import os
++from pathlib import Path
++
++from thomas.observability.redaction import redact_obj
++from thomas.observability.run_store_replay import list_events
++from thomas.observability.run_db import ENV_DB_PATH
++from tests._replay_test_db import init_db, seed_run
++
++def test_redaction_scrubs_known_keys_and_patterns(tmp_path: Path):
++    db = tmp_path / "runs.sqlite3"
++    init_db(db)
++    seed_run(db)
++    os.environ[ENV_DB_PATH] = str(db)
++
++    evs = list_events("run_test_1", start=0, limit=10)
++    assert len(evs) == 3
++
++    red = [redact_obj(e.payload) for e in evs]
++    blob = str(red)
++    assert "Bearer abcdef" not in blob
++    assert "sk-THIS_SHOULD_NOT_LEAK" not in blob
+
+diff --git a/tests/test_replay_debugger_determinism.py b/tests/test_replay_debugger_determinism.py
+new file mode 100644
+--- a/tests/test_replay_debugger_determinism.py
++++ b/tests/test_replay_debugger_determinism.py
+@@ -0,0 +1,19 @@
++# tests/test_replay_debugger_determinism.py
++from __future__ import annotations
++
++import os
++from pathlib import Path
++
++from thomas.observability.run_store_replay import list_events
++from thomas.observability.run_db import ENV_DB_PATH
++from tests._replay_test_db import init_db, seed_run
++
++def test_list_events_is_deterministic_sorted_by_seq_then_id(tmp_path: Path):
++    db = tmp_path / "runs.sqlite3"
++    init_db(db)
++    seed_run(db)
++    os.environ[ENV_DB_PATH] = str(db)
++
++    evs = list_events("run_test_1", start=0, limit=10)
++    assert [e.seq for e in evs] == [1, 2, 3]
++    assert [e.event_type for e in evs] == ["tool.call", "prompt", "tool.output"]
+
+diff --git a/tests/test_replay_debugger_api.py b/tests/test_replay_debugger_api.py
+new file mode 100644
+--- a/tests/test_replay_debugger_api.py
++++ b/tests/test_replay_debugger_api.py
+@@ -0,0 +1,51 @@
++# tests/test_replay_debugger_api.py
++from __future__ import annotations
++
++import os
++from pathlib import Path
++
++import pytest
++from aiohttp import web
++from aiohttp.test_utils import TestClient, TestServer
++
++from thomas.server.routes import replay_debugger
++from thomas.observability.run_db import ENV_DB_PATH
++from tests._replay_test_db import init_db, seed_run
++
++@pytest.mark.asyncio
++async def test_replay_endpoints_seek_step_events(tmp_path: Path):
++    db = tmp_path / "runs.sqlite3"
++    init_db(db)
++    seed_run(db)
++    os.environ[ENV_DB_PATH] = str(db)
++
++    app = web.Application()
++    replay_debugger.setup(app)
++
++    server = TestServer(app)
++    client = TestClient(server)
++    await client.start_server()
++    try:
++        resp = await client.get("/api/runs/run_test_1/events?start=0&limit=2")
++        assert resp.status == 200
++        data = await resp.json()
++        assert data["total"] == 3
++        assert len(data["events"]) == 2
++
++        resp = await client.post("/api/runs/run_test_1/replay/seek", json={"index": 0})
++        assert resp.status == 200
++        data = await resp.json()
++        assert data["ok"] is True
++        assert data["event"]["index"] == 0
++
++        resp = await client.post("/api/runs/run_test_1/replay/step", json={"index": 0, "delta": 1})
++        data = await resp.json()
++        assert data["ok"] is True
++        assert data["event"]["index"] == 1
++
++        resp = await client.post("/api/runs/run_test_1/replay/step", json={"index": 1, "delta": -1})
++        data = await resp.json()
++        assert data["ok"] is True
++        assert data["event"]["index"] == 0
++    finally:
++        await client.close()
+
+diff --git a/tests/test_event_recorder_persistence.py b/tests/test_event_recorder_persistence.py
+new file mode 100644
+--- a/tests/test_event_recorder_persistence.py
++++ b/tests/test_event_recorder_persistence.py
+@@ -0,0 +1,23 @@
++# tests/test_event_recorder_persistence.py
++from __future__ import annotations
++
++import os
++from pathlib import Path
++
++from thomas.observability.run_db import ENV_DB_PATH
++from thomas.observability.event_recorder import start_run, record_event, end_run
++from thomas.observability.run_store_replay import list_events, count_events
++
++def test_event_recorder_writes_and_replays(tmp_path: Path):
++    db = tmp_path / "runs.sqlite3"
++    os.environ[ENV_DB_PATH] = str(db)
++
++    run_id = start_run(meta={"test": True})
++    record_event("prompt", {"text": "hello"})
++    record_event("tool.call", {"name": "x", "authorization": "Bearer SECRET"})
++    record_event("tool.output", {"result": "ok", "api_key": "sk-SECRET"})
++    end_run(ok=True)
++
++    assert count_events(run_id) == 3
++    evs = list_events(run_id, start=0, limit=10)
++    assert [e.event_type for e in evs] == ["prompt", "tool.call", "tool.output"]
+
+diff --git a/tests/test_replay_middleware_records_run.py b/tests/test_replay_middleware_records_run.py
+new file mode 100644
+--- a/tests/test_replay_middleware_records_run.py
++++ b/tests/test_replay_middleware_records_run.py
+@@ -0,0 +1,37 @@
++# tests/test_replay_middleware_records_run.py
++from __future__ import annotations
++
++import os
++from pathlib import Path
++
++import pytest
++from aiohttp import web
++from aiohttp.test_utils import TestClient, TestServer
++
++from thomas.observability.run_db import ENV_DB_PATH
++from thomas.observability.run_store_replay import count_events
++from thomas.server.middleware.replay_observability import replay_observability_middleware
++
++@pytest.mark.asyncio
++async def test_middleware_creates_run_and_records_http(tmp_path: Path):
++    db = tmp_path / "runs.sqlite3"
++    os.environ[ENV_DB_PATH] = str(db)
++
++    async def handler(request: web.Request):
++        return web.json_response({"ok": True})
++
++    app = web.Application(middlewares=[replay_observability_middleware])
++    app.router.add_post("/api/chat", handler)
++
++    server = TestServer(app)
++    client = TestClient(server)
++    await client.start_server()
++    try:
++        resp = await client.post("/api/chat", json={"msg": "hi"})
++        assert resp.status == 200
++        rid = resp.headers.get("X-Thomas-Run-Id")
++        assert rid is not None
++        # Should have at least http.request + http.response
++        assert count_events(rid) >= 2
++    finally:
++        await client.close()

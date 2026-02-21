@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-slack-prevent",
+  "name": "Incident Slack Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "slack",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.slack",
+    "incident.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via slack with prevent mode policies."
+}

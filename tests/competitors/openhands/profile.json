@@ -1,0 +1,37 @@
+{
+    "id":  "openhands",
+    "name":  "OpenHands",
+    "vendor":  "OpenHands",
+    "category":  "open_source_agent",
+    "surfaces":  [
+                     "web",
+                     "sdk",
+                     "api"
+                 ],
+    "live_streaming":  "yes",
+    "settings_depth":  "high",
+    "benchmark_mode":  "self_host_scriptable",
+    "key_strengths":  [
+                          "Autonomous SWE workflows",
+                          "SDK and integration surface",
+                          "Self-host capable OSS"
+                      ],
+    "source_urls":  [
+                        "https://docs.openhands.dev/sdk/index",
+                        "https://openhands.dev/"
+                    ],
+    "confidence":  "high",
+    "notes":  "High-priority benchmark for autonomous engineering tasks.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  4,
+                                      "ux.live_streaming":  5,
+                                      "ux.settings_depth":  5,
+                                      "autonomy.supervision_modes":  4,
+                                      "integration.mcp_support":  3,
+                                      "integration.git_pr_workflows":  4,
+                                      "platform.self_hostability":  5,
+                                      "composite.provisional_mean":  4.29
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}
