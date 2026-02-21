@@ -49,3 +49,19 @@ Purpose: durable, timestamped execution notes so future agents can resume instan
 ### Non-Commit Tracking Rule
 
 - If ending a session without committing all relevant work, append a new timestamped section to this file and update `docs/ops/NEXT_AGENT_HANDOFF.md`.
+## 2026-02-21T13:55:09-06:00
+
+### Commit Checkpoint
+
+- Created commit: `3475aa2` (`harden automation checks and add durable agent handoff tracking`).
+- Note: commit captured files that were already staged in this dirty workspace before final commit, including several parity/plugin artifacts.
+
+### Post-Commit Verification
+
+- `python scripts/auto_checks.py --quick` -> PASS.
+- Companion iOS policy/API focused tests remain green (`8 passed`).
+
+### Remaining Workspace Reality
+
+- There are still many pre-existing modified/untracked files outside this checkpoint.
+- Next agent should treat `3475aa2` as a known-good automation/iOS-policy checkpoint and continue from current dirty tree intentionally.
