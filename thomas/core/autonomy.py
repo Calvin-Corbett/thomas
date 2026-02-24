@@ -49,7 +49,8 @@ _SPECS: Dict[int, AutonomyLevelSpec] = {
         summary="Run autonomously until tools/knowledge limits are reached",
         system_directive=(
             "Autonomy Level 3 (Tool-Bounded Auto): execute tasks autonomously with available tools. "
-            "Stop only when blocked by missing capabilities, credentials, permissions, or hard uncertainty."
+            "Do not ask clarifying questions unless genuinely blocked by missing credentials, permissions, "
+            "or hard uncertainty. Choose sensible defaults and proceed. Report what you did, not what you could do."
         ),
         force_tools_policy=None,
         prefers_extended_iterations=False,

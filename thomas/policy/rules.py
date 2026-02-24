@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
 
@@ -79,6 +79,63 @@ class Rule:
     id: str
     def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
         raise NotImplementedError
+
+# Maps preference-toggle group names to tool categories + exact tool names.
+# Values ending with "." are prefix matches; others are exact matches.
+_GROUP_TOOL_PATTERNS: Dict[str, Tuple[str, ...]] = {
+    "shell": ("shell.", "shell", "bash.exec", "powershell.exec", "cmd.exec", "sandbox.run", "sandbox.test_snippet"),
+    "file_write": ("file.write", "file.append", "file.delete", "file.mkdir", "file.rmdir", "file.move", "file.rename", "file.copy", "file.save", "file.create"),
+    "network": ("http.", "web_search", "web_fetch", "web."),
+    "browser": ("browser.",),
+    "channels": ("telegram.", "discord.", "slack.", "email.", "channel."),
+    "git": ("git.", "git_exec"),
+}
+# Fallback: map group names to tool categories for catch-all matching.
+_GROUP_CATEGORY_MAP: Dict[str, Tuple[str, ...]] = {
+    "shell": ("shell",),
+    "file_write": ("filesystem",),
+    "network": ("web",),
+    "browser": ("browser",),
+    "channels": (),
+    "git": ("git",),
+}
+
+
+@dataclass(frozen=True)
+class DenyToolGroupRule(Rule):
+    """Deny tools by named group (shell, file_write, network, browser, channels, git).
+
+    Matches by tool name pattern first, then falls back to tool category if a
+    tool_categories map is provided.
+    """
+    deny_groups: Tuple[str, ...]
+    tool_categories: Dict[str, str] = field(default_factory=dict)  # tool_name -> category
+
+    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+        tn = ctx.tool_name
+        for group in self.deny_groups:
+            # Check explicit tool name patterns.
+            patterns = _GROUP_TOOL_PATTERNS.get(group, ())
+            for pat in patterns:
+                if pat.endswith(".") and tn.startswith(pat):
+                    return PolicyDecision.deny(
+                        f"Tool '{tn}' blocked by group:{group} deny policy.",
+                        rule_id=self.id, group=group,
+                    )
+                if tn == pat:
+                    return PolicyDecision.deny(
+                        f"Tool '{tn}' blocked by group:{group} deny policy.",
+                        rule_id=self.id, group=group,
+                    )
+            # Fallback: check tool category.
+            cats = _GROUP_CATEGORY_MAP.get(group, ())
+            if cats and self.tool_categories.get(tn, "") in cats:
+                return PolicyDecision.deny(
+                    f"Tool '{tn}' (category '{self.tool_categories[tn]}') blocked by group:{group} deny policy.",
+                    rule_id=self.id, group=group,
+                )
+        return None
+
 
 @dataclass(frozen=True)
 class DenyToolRule(Rule):
@@ -172,11 +229,20 @@ def default_rules(
     deny_tools: Sequence[str] = (),
     deny_roots: Sequence[str] = (),
     deny_paths: Sequence[str] = (),
+    deny_groups: Sequence[str] = (),
+    tool_categories: Optional[Dict[str, str]] = None,
 ) -> List[Rule]:
     """Built-in rule library (order matters)."""
     rules: List[Rule] = []
     if allow_tools:
         rules.append(AllowToolRule(id="allow_tools", allow_tools=tuple(allow_tools)))
+    # Group deny evaluated BEFORE individual deny so toggles take precedence.
+    if deny_groups:
+        rules.append(DenyToolGroupRule(
+            id="deny_tool_groups",
+            deny_groups=tuple(deny_groups),
+            tool_categories=dict(tool_categories or {}),
+        ))
     if deny_tools:
         rules.append(DenyToolRule(id="deny_tools", deny_tools=tuple(deny_tools)))
 

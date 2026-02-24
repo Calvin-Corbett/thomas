@@ -61,6 +61,7 @@ If a task mentions website/site/homepage/domain/Spline or the user asks for web 
 1. Start in `apps/site` immediately.
 2. Read `apps/site/README_DEV.md` first for current URLs and workflow.
 3. Run website commands from `apps/site` (`npm run dev`, `npm run typecheck`, deploy scripts).
+4. Apply skill `ui-precision-guard` at `.codex/skills/ui-precision-guard/SKILL.md` for any UI edit.
 
 ## Runtime Skills (Model-Agnostic)
 Thomas resolves runtime skills at the orchestrator layer before model calls.

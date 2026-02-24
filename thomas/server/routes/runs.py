@@ -293,7 +293,7 @@ async def handle_export_run_json(request: web.Request) -> web.Response:
 
     payload = {
         "schema_version": 1,
-        "feature_id": "observability.run_replay_debugger",
+        "feature_id": "observability.run_replay",
         "run": redact_obj(run_meta, redaction_cfg),
         "events": events,
         "total_events": total,

@@ -5,7 +5,7 @@ from pathlib import Path
 
 from click.testing import CliRunner
 
-import thomas.cli.main as cli_main
+import thomas.cli.main_runtime_ops as cli_runtime_ops
 from thomas.cli.main import cli
 from thomas.observability.run_db import connect, ensure_schema
 
@@ -140,8 +140,8 @@ model = "gpt-4o-mini"
 def test_cli_status_strict_worktree_exits_on_dirty(tmp_path: Path, monkeypatch) -> None:
     cfg = _write_min_config(tmp_path)
     monkeypatch.setattr(
-        cli_main,
-        "_git_status_porcelain_lines",
+        cli_runtime_ops,
+        "git_status_porcelain_lines",
         lambda _repo_root: [" M thomas/core/config.py", "?? scratch/local.txt"],
     )
     runner = CliRunner()
@@ -157,7 +157,7 @@ def test_cli_status_strict_worktree_exits_on_dirty(tmp_path: Path, monkeypatch) 
 
 def test_cli_status_strict_worktree_passes_when_clean(tmp_path: Path, monkeypatch) -> None:
     cfg = _write_min_config(tmp_path)
-    monkeypatch.setattr(cli_main, "_git_status_porcelain_lines", lambda _repo_root: [])
+    monkeypatch.setattr(cli_runtime_ops, "git_status_porcelain_lines", lambda _repo_root: [])
     runner = CliRunner()
     result = runner.invoke(cli, ["-c", str(cfg), "status", "--json", "--strict-worktree"])
     assert result.exit_code == 0, result.output
@@ -172,8 +172,8 @@ def test_cli_status_strict_worktree_passes_when_clean(tmp_path: Path, monkeypatc
 
 def test_cli_repo_clean_json_summary(monkeypatch) -> None:
     monkeypatch.setattr(
-        cli_main,
-        "_run_repo_cleanup",
+        cli_runtime_ops,
+        "run_repo_cleanup",
         lambda **_: {
             "repo_root": "F:/DevHub/Thomas",
             "include_ignored": True,
@@ -184,7 +184,7 @@ def test_cli_repo_clean_json_summary(monkeypatch) -> None:
             "_exit_code": 0,
         },
     )
-    monkeypatch.setattr(cli_main, "_git_status_porcelain_lines", lambda _repo_root: [])
+    monkeypatch.setattr(cli_runtime_ops, "git_status_porcelain_lines", lambda _repo_root: [])
 
     runner = CliRunner()
     result = runner.invoke(cli, ["repo-clean", "--json"])
@@ -200,8 +200,8 @@ def test_cli_repo_clean_json_summary(monkeypatch) -> None:
 
 def test_cli_repo_clean_strict_exits_on_dirty_worktree(monkeypatch) -> None:
     monkeypatch.setattr(
-        cli_main,
-        "_run_repo_cleanup",
+        cli_runtime_ops,
+        "run_repo_cleanup",
         lambda **_: {
             "repo_root": "F:/DevHub/Thomas",
             "include_ignored": True,
@@ -213,8 +213,8 @@ def test_cli_repo_clean_strict_exits_on_dirty_worktree(monkeypatch) -> None:
         },
     )
     monkeypatch.setattr(
-        cli_main,
-        "_git_status_porcelain_lines",
+        cli_runtime_ops,
+        "git_status_porcelain_lines",
         lambda _repo_root: [" M thomas/core/config.py", "?? scratch/local.txt"],
     )
 
@@ -230,8 +230,8 @@ def test_cli_repo_clean_strict_exits_on_dirty_worktree(monkeypatch) -> None:
 
 def test_cli_repo_clean_exits_on_cleanup_failure(monkeypatch) -> None:
     monkeypatch.setattr(
-        cli_main,
-        "_run_repo_cleanup",
+        cli_runtime_ops,
+        "run_repo_cleanup",
         lambda **_: {
             "repo_root": "F:/DevHub/Thomas",
             "include_ignored": True,
@@ -242,7 +242,7 @@ def test_cli_repo_clean_exits_on_cleanup_failure(monkeypatch) -> None:
             "_exit_code": 1,
         },
     )
-    monkeypatch.setattr(cli_main, "_git_status_porcelain_lines", lambda _repo_root: [])
+    monkeypatch.setattr(cli_runtime_ops, "git_status_porcelain_lines", lambda _repo_root: [])
 
     runner = CliRunner()
     result = runner.invoke(cli, ["repo-clean", "--json"])

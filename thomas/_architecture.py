@@ -29,7 +29,7 @@ MODULES = {
                                    "autonomy", "realtime", "security", "plugins",
                                    "asset_studio", "codex", "channels", "companion"],
                     "health": "yellow",
-                    "debt": "app.py exceeds 1500 lines (shrunk from 3957); routes/companion_aiohttp.py exceeds 1000 lines, routes/webhooks.py exceeds 1100 lines, routes/mission.py exceeds 2500 lines, routes/asset_studio_aiohttp.py exceeds 960 lines",
+                    "debt": "app.py exceeds 1500 lines (shrunk from 3957); routes/chat_aiohttp.py exceeds 800 lines, routes/companion_aiohttp.py exceeds 1000 lines, routes/webhooks.py exceeds 1100 lines, routes/mission.py exceeds 2500 lines, routes/asset_studio_aiohttp.py exceeds 960 lines",
                     "description": "aiohttp web server, API routing, static serving"},
     "cli":         {"tier": "core",
                     "depends_on": ["core", "agent", "server", "tools", "memory",

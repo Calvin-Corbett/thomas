@@ -27,7 +27,7 @@ export default function DinoRiderLabPage() {
         <h1>Dino Rider Mount Lab</h1>
         <p>
           Use this page to verify the robot is seated on the dino back before footer deployment.
-          Footer source values: <code>left: 24px</code>, <code>top: 0px</code>, <code>scale: 0.84</code>.
+          Footer source values: <code>left: 28px</code>, <code>top: -5px</code>, <code>scale: 0.84</code>.
         </p>
         <p>
           <Link href="/">Back to site</Link>

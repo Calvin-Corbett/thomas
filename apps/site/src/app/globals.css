@@ -432,7 +432,7 @@ h1 {
   z-index: 2;
   width: min(1140px, calc(100vw - 2rem));
   margin: 0 auto;
-  padding: 1.4rem 0 1.8rem;
+  padding: 1.8rem 0 1.8rem;
   display: flex;
   justify-content: space-between;
   gap: 1.2rem;
@@ -492,22 +492,22 @@ h1 {
 }
 
 .dino-rider-track.lane-0 {
-  top: -22px;
-  --lane-scale: 0.66;
-  --lane-opacity: 0.82;
+  top: -24px;
+  --lane-scale: 0.7;
+  --lane-opacity: 0.96;
   z-index: 1;
 }
 
 .dino-rider-track.lane-1 {
-  top: -17px;
-  --lane-scale: 0.74;
-  --lane-opacity: 0.9;
+  top: -19px;
+  --lane-scale: 0.78;
+  --lane-opacity: 0.98;
   z-index: 2;
 }
 
 .dino-rider-track.lane-2 {
-  top: -12px;
-  --lane-scale: 0.82;
+  top: -14px;
+  --lane-scale: 0.86;
   --lane-opacity: 1;
   z-index: 3;
 }
@@ -519,12 +519,12 @@ h1 {
 }
 
 .dino-rider-sprite {
-  --trex-main: #67be73;
-  --trex-shadow: #3f9754;
-  --trex-belly: #9de1a8;
+  --trex-main: #56a667;
+  --trex-shadow: #357a49;
+  --trex-belly: #8ed89d;
   --trim: #0a121d;
-  --rider-mount-left: 24px;
-  --rider-mount-top: 0px;
+  --rider-mount-left: 28px;
+  --rider-mount-top: -5px;
   --rider-mount-scale: 0.84;
   position: relative;
   display: block;
@@ -728,21 +728,51 @@ h1 {
   z-index: 8;
 }
 
+.dino-rider-robot-wrap::before {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 14px;
+  width: 26px;
+  height: 9px;
+  border: 2px solid rgba(9, 15, 24, 0.88);
+  border-radius: 4px;
+  background: rgba(15, 21, 31, 0.72);
+  z-index: 0;
+}
+
 .pixel-agent.dino-rider-robot {
   position: absolute;
   left: 0;
   top: 0;
   display: block;
   margin: 0;
-  width: 52px;
-  height: 36px;
+  width: 48px;
+  height: 42px;
   filter:
     drop-shadow(0 1px 0 rgba(5, 9, 14, 0.98))
     drop-shadow(0 3px 6px rgba(0, 0, 0, 0.4));
+  z-index: 1;
 }
 
 .dino-rider-robot .agent-leg {
-  display: none;
+  top: 34px;
+  height: 6px;
+  opacity: 0.84;
+}
+
+.dino-rider-robot .agent-head,
+.dino-rider-robot .agent-body {
+  box-shadow: inset 0 0 0 1px rgba(242, 248, 255, 0.22);
+}
+
+.dino-rider-robot .agent-body {
+  border-color: #050a12;
+}
+
+.dino-rider-robot.pixel-agent-green {
+  --agent-primary: #e0fff4;
+  --agent-secondary: #4bd3a8;
 }
 
 .dino-rider-bubble {

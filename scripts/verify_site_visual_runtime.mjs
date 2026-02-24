@@ -198,14 +198,27 @@ function evaluateAssertions(metrics) {
   const rootScrollWidth = parseMetricNumber(metrics.root_scroll_width);
   const consoleErrorCount = parseMetricNumber(metrics.console_error_count);
   const brokenImageCount = parseMetricNumber(metrics.broken_image_count);
+  const routeMatrix = Array.isArray(metrics.route_matrix) ? metrics.route_matrix : [];
   const hasNav = metrics.has_nav === true;
   const hasMain = metrics.has_main === true;
   const hasFooter = metrics.has_footer === true;
   const riders = Array.isArray(metrics.riders) ? metrics.riders : [];
 
-  const coreLayoutPresent = hasNav && hasMain && hasFooter;
+  const coreLayoutPresent =
+    routeMatrix.length > 0
+      ? routeMatrix.every(
+          (route) =>
+            route &&
+            route.has_nav === true &&
+            route.has_main === true &&
+            route.has_footer === true,
+        )
+      : hasNav && hasMain && hasFooter;
   const noConsoleRuntimeErrors = consoleErrorCount !== null && consoleErrorCount === 0;
-  const noBrokenImages = brokenImageCount !== null && brokenImageCount === 0;
+  const noBrokenImages =
+    routeMatrix.length > 0
+      ? routeMatrix.every((route) => parseMetricNumber(route.broken_image_count) === 0)
+      : brokenImageCount !== null && brokenImageCount === 0;
   const bandOnFooterBorder =
     footerTop !== null && bandTop !== null && Math.abs(bandTop - footerTop) <= 3;
   const noBandStripHeight = bandHeight !== null && Math.round(bandHeight) === 0;
@@ -281,14 +294,49 @@ function evaluateAssertions(metrics) {
       return robotWidth >= 12 && robotHeight >= 10 && intersectsTrack;
     });
   const noHorizontalDragOverflow =
-    viewportWidth !== null &&
-    rootScrollWidth !== null &&
-    rootScrollWidth <= viewportWidth + 1;
+    routeMatrix.length > 0
+      ? routeMatrix.every((route) => {
+          const width = parseMetricNumber(route.viewport_width);
+          const scrollWidth = parseMetricNumber(route.root_scroll_width);
+          return width !== null && scrollWidth !== null && scrollWidth <= width + 1;
+        })
+      : viewportWidth !== null &&
+          rootScrollWidth !== null &&
+          rootScrollWidth <= viewportWidth + 1;
+  const navPersistentAllRoutes =
+    routeMatrix.length > 0 &&
+    routeMatrix.every((route) => {
+      const navPosition = String(route.nav_position ?? "").toLowerCase();
+      const navTop = parseMetricNumber(route.nav_top);
+      const navTopAfterScroll = parseMetricNumber(route.nav_top_after_scroll);
+      const validPosition = navPosition === "fixed" || navPosition === "sticky";
+      return (
+        validPosition &&
+        navTop !== null &&
+        navTopAfterScroll !== null &&
+        Math.abs(navTop) <= 2 &&
+        Math.abs(navTopAfterScroll) <= 2
+      );
+    });
+  const unknownRouteThemeIntegrity = (() => {
+    const probe = routeMatrix.find((route) => route && route.route === "/__ui-route-smoke__");
+    if (!probe) return false;
+    const sectionShellCount = parseMetricNumber(probe.section_shell_count);
+    const bgLuminance = parseMetricNumber(probe.body_bg_luminance);
+    return (
+      sectionShellCount !== null &&
+      sectionShellCount >= 1 &&
+      bgLuminance !== null &&
+      bgLuminance < 245
+    );
+  })();
 
   return {
     core_layout_present: coreLayoutPresent,
     no_console_runtime_errors: noConsoleRuntimeErrors,
     no_broken_images: noBrokenImages,
+    nav_persistent_all_routes: navPersistentAllRoutes,
+    unknown_route_theme_integrity: unknownRouteThemeIntegrity,
     band_on_footer_border: bandOnFooterBorder,
     no_band_strip_height: noBandStripHeight,
     riders_mounted_on_back: ridersMountedOnBack,
@@ -375,105 +423,218 @@ async function main() {
     const page = await context.newPage();
     const consoleErrors = [];
     const pageErrors = [];
+    let activeRoute = "/";
     page.on("console", (msg) => {
       if (msg.type() === "error") {
-        consoleErrors.push(msg.text());
+        const text = msg.text();
+        if (
+          activeRoute === "/__ui-route-smoke__" &&
+          text.includes("the server responded with a status of 404 (Not Found)")
+        ) {
+          return;
+        }
+        consoleErrors.push(text);
       }
     });
     page.on("pageerror", (err) => {
       pageErrors.push(String(err));
     });
-    await page.goto(serverUrl, { waitUntil: "networkidle", timeout: opts.timeoutMs });
-    await page.waitForSelector(".footer-shell", { timeout: opts.timeoutMs });
-    await page.waitForSelector(".dino-riders-band", {
-      state: "attached",
-      timeout: opts.timeoutMs,
-    });
-
     const fullPageShot = path.join(opts.outputDir, "full-page.png");
     const footerShot = path.join(opts.outputDir, "footer-focus.png");
+    const routesDir = path.join(opts.outputDir, "routes");
+    await fs.mkdir(routesDir, { recursive: true });
 
-    await page.screenshot({
-      path: fullPageShot,
-      fullPage: true,
-      type: "png",
-    });
+    const routesToCheck = [
+      "/",
+      "/download",
+      "/updates",
+      "/journey",
+      "/support",
+      "/__ui-route-smoke__",
+    ];
 
-    await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-    await page.waitForTimeout(300);
+    const routeMatrix = [];
+    let homeMetrics = null;
 
-    await page.screenshot({
-      path: footerShot,
-      type: "png",
-    });
+    for (const route of routesToCheck) {
+      const routeUrl = new URL(route, `${serverUrl}/`).toString();
+      activeRoute = route;
+      await page.goto(routeUrl, { waitUntil: "load", timeout: opts.timeoutMs });
+      await page.waitForSelector(".nav-shell", { timeout: opts.timeoutMs });
+      await page.waitForSelector(".footer-shell", { timeout: opts.timeoutMs });
+      await page.waitForTimeout(280);
 
-    const metrics = await page.evaluate(() => {
-      const footer = document.querySelector(".footer-shell");
-      const band = document.querySelector(".dino-riders-band");
-      const allTracks = Array.from(document.querySelectorAll(".dino-rider-track"));
-      const visibleTracks = allTracks.filter((track) => {
-        const rect = track.getBoundingClientRect();
-        return rect.right > 10 && rect.left < window.innerWidth - 10;
+      const routeKey = route === "/" ? "home" : route.replace(/^\//, "").replace(/[^a-z0-9-]/gi, "-");
+      const topShotPath = path.join(routesDir, `${routeKey}-top.png`);
+      const bottomShotPath = path.join(routesDir, `${routeKey}-bottom.png`);
+
+      await page.screenshot({
+        path: topShotPath,
+        type: "png",
       });
-      const tracks = (visibleTracks.length > 0 ? visibleTracks : allTracks).slice(0, 4);
-      const riders = tracks.map((track) => {
-        const saddle = track.querySelector(".trex-saddle");
-        // Measure the actual robot sprite, not just the wrapper container.
-        const robot =
-          track.querySelector(".dino-rider-robot") ?? track.querySelector(".dino-rider-robot-wrap");
-        const robotBody = track.querySelector(".dino-rider-robot .agent-body");
-        const trackRect = track.getBoundingClientRect();
-        const saddleRect = saddle?.getBoundingClientRect();
-        const robotRect = robot?.getBoundingClientRect();
-        const robotBodyRect = robotBody?.getBoundingClientRect();
-        const robotCenterX = robotRect ? robotRect.left + robotRect.width / 2 : null;
-        const robotBodyCenterX = robotBodyRect ? robotBodyRect.left + robotBodyRect.width / 2 : null;
+
+      if (route === "/") {
+        await page.screenshot({
+          path: fullPageShot,
+          fullPage: true,
+          type: "png",
+        });
+      }
+
+      const topMetrics = await page.evaluate((routePath) => {
+        const nav = document.querySelector(".nav-shell");
+        const navRect = nav?.getBoundingClientRect();
+        const main = document.querySelector("main.page-shell");
+        const bodyBg = getComputedStyle(document.body).backgroundColor || "";
+        const rgbMatch = bodyBg.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
+        let bodyBgLuminance = null;
+        if (rgbMatch) {
+          const r = Number(rgbMatch[1]);
+          const g = Number(rgbMatch[2]);
+          const b = Number(rgbMatch[3]);
+          if (Number.isFinite(r) && Number.isFinite(g) && Number.isFinite(b)) {
+            bodyBgLuminance = Math.round(0.2126 * r + 0.7152 * g + 0.0722 * b);
+          }
+        }
         return {
-          track_top: Math.round(trackRect.top),
-          track_bottom: Math.round(trackRect.bottom),
-          saddle_top: saddleRect ? Math.round(saddleRect.top) : null,
-          saddle_bottom: saddleRect ? Math.round(saddleRect.bottom) : null,
-          saddle_left: saddleRect ? Math.round(saddleRect.left) : null,
-          saddle_right: saddleRect ? Math.round(saddleRect.right) : null,
-          robot_top: robotRect ? Math.round(robotRect.top) : null,
-          robot_bottom: robotRect ? Math.round(robotRect.bottom) : null,
-          robot_left: robotRect ? Math.round(robotRect.left) : null,
-          robot_right: robotRect ? Math.round(robotRect.right) : null,
-          robot_center_x: robotCenterX !== null ? Math.round(robotCenterX) : null,
-          robot_width: robotRect ? Math.round(robotRect.width) : null,
-          robot_height: robotRect ? Math.round(robotRect.height) : null,
-          robot_body_top: robotBodyRect ? Math.round(robotBodyRect.top) : null,
-          robot_body_bottom: robotBodyRect ? Math.round(robotBodyRect.bottom) : null,
-          robot_body_left: robotBodyRect ? Math.round(robotBodyRect.left) : null,
-          robot_body_right: robotBodyRect ? Math.round(robotBodyRect.right) : null,
-          robot_body_center_x: robotBodyCenterX !== null ? Math.round(robotBodyCenterX) : null,
-          robot_body_width: robotBodyRect ? Math.round(robotBodyRect.width) : null,
-          robot_body_height: robotBodyRect ? Math.round(robotBodyRect.height) : null,
+          route: routePath,
+          has_nav: Boolean(nav),
+          has_main: Boolean(main),
+          has_footer: Boolean(document.querySelector(".footer-shell")),
+          section_shell_count: document.querySelectorAll(".section-shell").length,
+          nav_position: nav ? getComputedStyle(nav).position : null,
+          nav_top: navRect ? Math.round(navRect.top) : null,
+          broken_image_count: Array.from(document.images).filter(
+            (img) => img.complete && img.naturalWidth === 0,
+          ).length,
+          viewport_width: Math.round(window.innerWidth),
+          root_scroll_width: Math.round(
+            Math.max(
+              document.documentElement?.scrollWidth ?? 0,
+              document.body?.scrollWidth ?? 0,
+            ),
+          ),
+          body_bg_color: bodyBg,
+          body_bg_luminance: bodyBgLuminance,
         };
+      }, route);
+
+      await page.evaluate(() => window.scrollTo(0, Math.max(window.innerHeight + 420, 920)));
+      await page.waitForTimeout(220);
+      const navTopAfterScroll = await page.evaluate(() => {
+        const nav = document.querySelector(".nav-shell");
+        const navRect = nav?.getBoundingClientRect();
+        return navRect ? Math.round(navRect.top) : null;
       });
 
-      const footerRect = footer?.getBoundingClientRect();
-      const bandRect = band?.getBoundingClientRect();
-      return {
-        has_nav: Boolean(document.querySelector(".nav-shell")),
-        has_main: Boolean(document.querySelector("main.page-shell")),
-        has_footer: Boolean(document.querySelector(".footer-shell")),
-        broken_image_count: Array.from(document.images).filter(
-          (img) => img.complete && img.naturalWidth === 0,
-        ).length,
-        viewport_width: Math.round(window.innerWidth),
-        root_scroll_width: Math.round(
-          Math.max(
-            document.documentElement?.scrollWidth ?? 0,
-            document.body?.scrollWidth ?? 0,
-          ),
-        ),
-        footer_top: footerRect ? Math.round(footerRect.top) : null,
-        band_top: bandRect ? Math.round(bandRect.top) : null,
-        band_height: bandRect ? Math.round(bandRect.height) : null,
-        riders,
-      };
-    });
+      await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+      await page.waitForTimeout(300);
+
+      await page.screenshot({
+        path: bottomShotPath,
+        type: "png",
+      });
+
+      if (route === "/") {
+        await page.screenshot({
+          path: footerShot,
+          type: "png",
+        });
+        homeMetrics = await page.evaluate(() => {
+          const footer = document.querySelector(".footer-shell");
+          const band = document.querySelector(".dino-riders-band");
+          const allTracks = Array.from(document.querySelectorAll(".dino-rider-track"));
+          const visibleTracks = allTracks.filter((track) => {
+            const rect = track.getBoundingClientRect();
+            return rect.right > 10 && rect.left < window.innerWidth - 10;
+          });
+          const tracks = (visibleTracks.length > 0 ? visibleTracks : allTracks).slice(0, 4);
+          const riders = tracks.map((track) => {
+            const saddle = track.querySelector(".trex-saddle");
+            // Measure the actual robot sprite, not just the wrapper container.
+            const robot =
+              track.querySelector(".dino-rider-robot") ?? track.querySelector(".dino-rider-robot-wrap");
+            const robotBody = track.querySelector(".dino-rider-robot .agent-body");
+            const trackRect = track.getBoundingClientRect();
+            const saddleRect = saddle?.getBoundingClientRect();
+            const robotRect = robot?.getBoundingClientRect();
+            const robotBodyRect = robotBody?.getBoundingClientRect();
+            const robotCenterX = robotRect ? robotRect.left + robotRect.width / 2 : null;
+            const robotBodyCenterX = robotBodyRect ? robotBodyRect.left + robotBodyRect.width / 2 : null;
+            return {
+              track_top: Math.round(trackRect.top),
+              track_bottom: Math.round(trackRect.bottom),
+              saddle_top: saddleRect ? Math.round(saddleRect.top) : null,
+              saddle_bottom: saddleRect ? Math.round(saddleRect.bottom) : null,
+              saddle_left: saddleRect ? Math.round(saddleRect.left) : null,
+              saddle_right: saddleRect ? Math.round(saddleRect.right) : null,
+              robot_top: robotRect ? Math.round(robotRect.top) : null,
+              robot_bottom: robotRect ? Math.round(robotRect.bottom) : null,
+              robot_left: robotRect ? Math.round(robotRect.left) : null,
+              robot_right: robotRect ? Math.round(robotRect.right) : null,
+              robot_center_x: robotCenterX !== null ? Math.round(robotCenterX) : null,
+              robot_width: robotRect ? Math.round(robotRect.width) : null,
+              robot_height: robotRect ? Math.round(robotRect.height) : null,
+              robot_body_top: robotBodyRect ? Math.round(robotBodyRect.top) : null,
+              robot_body_bottom: robotBodyRect ? Math.round(robotBodyRect.bottom) : null,
+              robot_body_left: robotBodyRect ? Math.round(robotBodyRect.left) : null,
+              robot_body_right: robotBodyRect ? Math.round(robotBodyRect.right) : null,
+              robot_body_center_x: robotBodyCenterX !== null ? Math.round(robotBodyCenterX) : null,
+              robot_body_width: robotBodyRect ? Math.round(robotBodyRect.width) : null,
+              robot_body_height: robotBodyRect ? Math.round(robotBodyRect.height) : null,
+            };
+          });
+
+          const footerRect = footer?.getBoundingClientRect();
+          const bandRect = band?.getBoundingClientRect();
+          return {
+            viewport_width: Math.round(window.innerWidth),
+            root_scroll_width: Math.round(
+              Math.max(
+                document.documentElement?.scrollWidth ?? 0,
+                document.body?.scrollWidth ?? 0,
+              ),
+            ),
+            footer_top: footerRect ? Math.round(footerRect.top) : null,
+            band_top: bandRect ? Math.round(bandRect.top) : null,
+            band_height: bandRect ? Math.round(bandRect.height) : null,
+            riders,
+          };
+        });
+      }
+
+      routeMatrix.push({
+        ...topMetrics,
+        nav_top_after_scroll: navTopAfterScroll,
+        screenshot_top: relRepoPath(topShotPath),
+        screenshot_bottom: relRepoPath(bottomShotPath),
+      });
+    }
+
+    if (!homeMetrics) {
+      throw new Error("Failed to capture home metrics");
+    }
+
+    const metrics = {
+      has_nav: routeMatrix.every((route) => route.has_nav === true),
+      has_main: routeMatrix.every((route) => route.has_main === true),
+      has_footer: routeMatrix.every((route) => route.has_footer === true),
+      broken_image_count: routeMatrix.reduce(
+        (sum, route) => sum + (parseMetricNumber(route.broken_image_count) ?? 0),
+        0,
+      ),
+      viewport_width:
+        parseMetricNumber(homeMetrics.viewport_width) ?? parseMetricNumber(routeMatrix[0]?.viewport_width),
+      root_scroll_width: routeMatrix.reduce(
+        (maxWidth, route) => Math.max(maxWidth, parseMetricNumber(route.root_scroll_width) ?? 0),
+        parseMetricNumber(homeMetrics.root_scroll_width) ?? 0,
+      ),
+      footer_top: homeMetrics.footer_top,
+      band_top: homeMetrics.band_top,
+      band_height: homeMetrics.band_height,
+      riders: homeMetrics.riders,
+      route_matrix: routeMatrix,
+    };
     metrics.console_error_count = consoleErrors.length + pageErrors.length;
     metrics.console_error_samples = [...consoleErrors, ...pageErrors].slice(0, 10);
 

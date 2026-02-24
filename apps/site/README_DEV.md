@@ -53,6 +53,10 @@ python scripts/refresh_site_visual_proof.py
 This command runs runtime browser verification, refreshes proof artifacts, and executes the proof gate.
 CI and pre-commit enforce the same rule. If it fails, do not deploy.
 
+Runtime verification now captures a route matrix (`/`, `/download`, `/updates`, `/journey`, `/support`, and unknown-route smoke check) and writes per-route screenshots to:
+
+- `output/site-visual-proof/routes/`
+
 If the UI change is intentionally large and should reset visual baseline, run:
 
 ```bash

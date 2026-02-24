@@ -53,6 +53,7 @@ class _StepSpec:
     prompt: str
     capability: str
     profile: str
+    approval_required: bool = False  # halt for human approval before executing
 
 
 @dataclass(frozen=True)
@@ -102,10 +103,12 @@ class WorkflowRunner:
         session_id: str | None = None,
         default_profile: str | None = None,
         capabilities_by_profile: Optional[Mapping[str, Mapping[str, bool]]] = None,
+        approval_broker: Any = None,
     ):
         self._chat = chat_adapter
         self._session_id = session_id
         self._default_profile = _text(default_profile)
+        self._approval_broker = approval_broker  # optional ApprovalBroker for step gates
         self._caps: Dict[str, Dict[str, bool]] = {}
         for profile, caps in (capabilities_by_profile or {}).items():
             p = _text(profile)
@@ -302,6 +305,7 @@ class WorkflowRunner:
                             prompt=prompt,
                             capability=_text(item.get("capability"), default=default_capability),
                             profile=_text(item.get("profile")),
+                            approval_required=_as_bool(item.get("approval") or item.get("approval_required")),
                         )
                     )
                 elif isinstance(item, str) and item.strip():
@@ -378,6 +382,25 @@ class WorkflowRunner:
         previous_summary = ""
         outputs: List[Dict[str, Any]] = []
         for idx, step in enumerate(steps, start=1):
+            # Approval gate: halt for human approval before executing this step.
+            if step.approval_required and self._approval_broker is not None:
+                approved = await self._approval_broker.require(
+                    run_id=goal[:60],
+                    tool_call_id=f"workflow_step:{step.name}",
+                    session_id="",
+                    tool_name=f"workflow.{step.name}",
+                    args_preview={"prompt": step.prompt[:200], "step": f"{idx}/{len(steps)}"},
+                    reason=f"Workflow step '{step.name}' requires approval before execution.",
+                    timeout_s=300,
+                )
+                if not approved:
+                    return {
+                        "pattern": "chain",
+                        "ok": False,
+                        "error": f"Step '{step.name}' not approved by user.",
+                        "completed_steps": idx - 1,
+                        "outputs": outputs,
+                    }
             step_profile = self._select_profile(capability=step.capability, preferred_profile=step.profile)
             step_exec = await self._ask_json(
                 system_prompt=(

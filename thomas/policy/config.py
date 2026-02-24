@@ -39,6 +39,7 @@ class PolicyConfig:
     approval_roots: List[str] = field(default_factory=list)
     allow_tools: List[str] = field(default_factory=list)
     deny_tools: List[str] = field(default_factory=list)
+    deny_groups: List[str] = field(default_factory=list)  # e.g. ["shell", "browser", "git"]
 
     # Redaction tuning:
     redact_additional_patterns: List[str] = field(default_factory=list)
@@ -55,6 +56,7 @@ class PolicyConfig:
         cfg.approval_roots = list(m.get("approval_roots", cfg.approval_roots))
         cfg.allow_tools = list(m.get("allow_tools", cfg.allow_tools))
         cfg.deny_tools = list(m.get("deny_tools", cfg.deny_tools))
+        cfg.deny_groups = list(m.get("deny_groups", cfg.deny_groups))
         cfg.redact_additional_patterns = list(m.get("redact_additional_patterns", cfg.redact_additional_patterns))
         return cfg
 

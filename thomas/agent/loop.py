@@ -125,6 +125,7 @@ class LoopState:
     finished: bool = False
     error: Optional[str] = None
     token_estimate: int = 0
+    user_interrupted: bool = False
 
 
 # ---------------------------------------------------------------------------
@@ -170,6 +171,7 @@ class AgentLoop:
         autonomy_level: int = 3,
         max_parallel_tools: Optional[int] = None,
         tool_timeout_s: Optional[int] = None,
+        message_queue: Optional["asyncio.Queue[Optional[str]]"] = None,
     ):
         self.config = config
         self.llm = llm
@@ -220,6 +222,7 @@ class AgentLoop:
                 log.warning("Library init failed: %s", e)
         scope = str(memory_retrieval_scope or "thread").strip().lower()
         self._memory_retrieval_scope = scope if scope in ("thread", "all") else "thread"
+        self._message_queue = message_queue
         self._last_sanitize_flags: Dict[str, bool] = {}
 
     def _build_system_message(
@@ -824,25 +827,32 @@ class AgentLoop:
             log.debug("Library retrieval failed: %s", e)
             return ""
 
+    # Routes whose answers are worth auto-capturing into the library.
+    _LIBRARY_CAPTURE_ROUTES = frozenset({"research", "planning", "debug_audit", "coding_task"})
+    # Non-research routes need a longer answer to be worth persisting.
+    _LIBRARY_CAPTURE_MIN_CHARS = {"research": 80, "planning": 200, "debug_audit": 200, "coding_task": 300}
+
     def _auto_capture_research(self, *, route: RouteDecision, query: str, answer: str) -> None:
         """Persist research-heavy answers into the external library."""
         if not self._library_auto_capture:
             return
-        if route.path != "research":
+        rpath = str(route.path or "")
+        if rpath not in self._LIBRARY_CAPTURE_ROUTES:
             return
         lib = self._library
         if lib is None:
             return
         q = str(query or "").strip()
         a = str(answer or "").strip()
-        if len(q) < 5 or len(a) < 80:
+        min_chars = self._LIBRARY_CAPTURE_MIN_CHARS.get(rpath, 200)
+        if len(q) < 5 or len(a) < min_chars:
             return
         try:
             lib.add_research_note(
                 query=q,
                 answer=a,
                 source=f"thomas:{getattr(self.llm.config, 'name', 'unknown')}",
-                tags=["research", "auto", "route:research"],
+                tags=["research", "auto", f"route:{rpath}"],
             )
         except Exception as e:
             log.debug("Library auto-capture skipped: %s", e)
@@ -1474,6 +1484,8 @@ class AgentLoop:
         clarification_question_cap = 2
         if clarification_budget_active:
             clarification_question_cap = 1
+        if clarification_budget_active and explicit_action and int(self._autonomy_level) >= 3:
+            clarification_question_cap = 0
         if continuation_turn:
             clarification_question_cap = 0 if clarification_budget_active else 1
         if full_auto_action_turn:
@@ -2038,6 +2050,33 @@ class AgentLoop:
                 }
                 self._conversation.append(tool_msg)
 
+                # ── message interruption check ──
+                # Between tool completions, check if the user sent a new message.
+                # If so, inject it and cancel remaining un-completed tool calls.
+                if self._message_queue is not None:
+                    try:
+                        queued_msg = self._message_queue.get_nowait()
+                        if queued_msg is not None:
+                            completed_tc_ids = set(tool_results_by_id.keys())
+                            for remaining_tc in pending_tool_calls:
+                                rtc_id = str(remaining_tc.get("id", ""))
+                                if rtc_id and rtc_id not in completed_tc_ids:
+                                    self._conversation.append({
+                                        "role": "tool",
+                                        "tool_call_id": rtc_id,
+                                        "content": "Cancelled: user interrupted.",
+                                    })
+                            self._conversation.append({"role": "user", "content": str(queued_msg)})
+                            yield AgentEvent.status(
+                                "User message received mid-execution. Deferring remaining tools.",
+                                iteration=iteration,
+                            )
+                            # Signal outer loop to re-enter LLM turn with the new user message
+                            state.user_interrupted = True
+                            break
+                    except asyncio.QueueEmpty:
+                        pass
+
             state.total_tool_calls += len(pending_tool_calls)
 
             tool_results = [
@@ -2112,6 +2151,12 @@ class AgentLoop:
                 state.error = runaway_guard_reason
                 state.finished = True
                 break
+
+            # If the user interrupted mid-tool-execution, skip to next
+            # iteration so the LLM sees the injected user message.
+            if state.user_interrupted:
+                state.user_interrupted = False
+                continue
 
         # Ingest new events into memory index (best-effort in background).
         if self._memory and self._memory.started:

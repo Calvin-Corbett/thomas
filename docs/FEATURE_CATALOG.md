@@ -63,21 +63,18 @@ Update rule:
 - [observability.run_store_and_journal] Run/event persistence with filtering and retention controls. (Paths: `thomas/observability/run_store.py`, `thomas/observability/journal.py`)
 - [upgrade.doppelganger] Blue/green upgrade workflow and rollback controls. (Paths: `thomas/upgrade/doppelganger.py`, `thomas/cli/main.py`)
 
-## observability.run_replay_debugger
+## observability.run_replay
 
-**Goal:** Deterministic run replay + timeline debugger for chat/autonomy runs.
+**Goal:** Deterministic run replay for chat/autonomy runs.
 
 **What it adds**
 - Persist replayable event streams (HTTP run context + best-effort auto-instrument for model/tool calls).
-- Replay control APIs:
+- Replay control APIs (served from `thomas/server/routes/runs.py`):
   - `GET /api/runs/{run_id}/events` (paged)
   - `POST /api/runs/{run_id}/replay/seek`
   - `POST /api/runs/{run_id}/replay/step`
   - `GET /api/runs/{run_id}/replay_stream?from=&speed=` (NDJSON stream w/ optional timing)
   - `GET /api/runs/{run_id}/export.json` (shareable JSON replay artifact)
 - Redaction layer on all replay payloads (secrets never appear in API/UI replay responses).
-- Web UI replay viewer with timeline scrubber + event filters:
-  - `/replay_debugger.html?run_id=<RUN_ID>`
 
-**Operator docs**
-- `docs/ops/run_replay_debugger.md`
+**Note:** The standalone `replay_debugger.py` route module was removed in v0.11.73 — all replay functionality lives in `runs.py`.
