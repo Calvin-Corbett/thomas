@@ -44,6 +44,8 @@ ENABLE_FTS5: bool = True
 
 _DB_PATH: Optional[Path] = None
 _LOCK = threading.Lock()
+_ACTIVE_WRITERS: set["ThreadedRunWriter"] = set()
+_ACTIVE_WRITERS_LOCK = threading.Lock()
 log = logging.getLogger(__name__)
 
 def init_db(path: str | os.PathLike[str]) -> Path:
@@ -55,6 +57,33 @@ def init_db(path: str | os.PathLike[str]) -> Path:
         _migrate_schema(conn)
     _DB_PATH = db_path
     return db_path
+
+
+def shutdown(*, close_timeout: float = 5.0, reset_db_path: bool = False) -> None:
+    """Best-effort shutdown for run-store resources.
+
+    Closes active threaded writers so Windows can release DB file handles.
+    """
+    global _DB_PATH
+    with _ACTIVE_WRITERS_LOCK:
+        active = list(_ACTIVE_WRITERS)
+    for writer in active:
+        try:
+            writer.close(timeout=close_timeout)
+        except Exception as e:
+            log.debug("Run store shutdown: writer close failed for %s: %s", writer.run_id[:8], e)
+    if reset_db_path:
+        _DB_PATH = None
+
+
+def _register_writer(writer: "ThreadedRunWriter") -> None:
+    with _ACTIVE_WRITERS_LOCK:
+        _ACTIVE_WRITERS.add(writer)
+
+
+def _unregister_writer(writer: "ThreadedRunWriter") -> None:
+    with _ACTIVE_WRITERS_LOCK:
+        _ACTIVE_WRITERS.discard(writer)
 
 def create_run(metadata: Dict[str, Any]) -> str:
     db = _require_db()
@@ -281,6 +310,7 @@ class ThreadedRunWriter:
         if self._started:
             return
         self._started = True
+        _register_writer(self)
         self._thr.start()
 
     def record(self, obj: Dict[str, Any]) -> None:
@@ -305,6 +335,7 @@ class ThreadedRunWriter:
 
     def close(self, timeout: float = 5.0, *, strict: bool = False) -> None:
         if not self._started:
+            _unregister_writer(self)
             return
         with contextlib.suppress(Exception):
             self._q.put(None)
@@ -316,6 +347,7 @@ class ThreadedRunWriter:
             self._write_direct_batch(pending, reason="close_drain")
         if strict and self._exc:
             raise RuntimeError("RunWriter worker failed") from self._exc
+        _unregister_writer(self)
 
     def _worker(self) -> None:
         db = _require_db()
@@ -381,6 +413,8 @@ class ThreadedRunWriter:
         except BaseException as e:
             if self._exc is None:
                 self._exc = e
+        finally:
+            _unregister_writer(self)
 
     def _record_direct(
         self,
@@ -503,14 +537,24 @@ def _require_db() -> Path:
         raise RuntimeError("run_store.init_db(path) must be called before using the run store.")
     return _DB_PATH
 
-def _connect(db_path: Path) -> sqlite3.Connection:
-    conn = sqlite3.connect(str(db_path), timeout=max(1, BUSY_TIMEOUT_MS // 1000), isolation_level=None, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    conn.execute("PRAGMA foreign_keys=ON;")
-    conn.execute("PRAGMA journal_mode=WAL;")
-    conn.execute("PRAGMA synchronous=NORMAL;")
-    conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS};")
-    return conn
+@contextlib.contextmanager
+def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
+    conn = sqlite3.connect(
+        str(db_path),
+        timeout=max(1, BUSY_TIMEOUT_MS // 1000),
+        isolation_level=None,
+        check_same_thread=False,
+    )
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys=ON;")
+        conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA synchronous=NORMAL;")
+        conn.execute(f"PRAGMA busy_timeout={BUSY_TIMEOUT_MS};")
+        yield conn
+    finally:
+        with contextlib.suppress(Exception):
+            conn.close()
 
 def _create_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(

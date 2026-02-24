@@ -8,8 +8,10 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
+from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
 
 
 DEFAULT_HARD_LIMITS: Dict[str, int] = {
@@ -41,9 +43,26 @@ SKIP_DIR_NAMES = {
 }
 
 
+def _parse_iso_date(text: str) -> Optional[date]:
+    value = str(text or "").strip()
+    if not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except Exception:
+        return None
+
+
 def _line_count(path: Path) -> int:
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
         return sum(1 for _ in fh)
+
+
+def _normalize_rel_path(path: str) -> str:
+    text = str(path or "").strip().replace("\\", "/")
+    while text.startswith("./"):
+        text = text[2:]
+    return text
 
 
 def _is_skipped(path: Path) -> bool:
@@ -84,7 +103,49 @@ def load_baseline(path: Path) -> Dict[str, Any]:
     return raw
 
 
-def run_guard(repo_root: Path, baseline_path: Path) -> Dict[str, Any]:
+def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> Set[str]:
+    proc = subprocess.run(
+        ["git", "diff", "--name-only", f"{base_ref}...{head_ref}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or "").strip() or "unknown git diff failure"
+        raise RuntimeError(msg)
+    out: Set[str] = set()
+    for line in proc.stdout.splitlines():
+        rel = _normalize_rel_path(line)
+        if rel:
+            out.add(rel)
+    return out
+
+
+def _git_blob_line_count(repo_root: Path, *, ref: str, rel_path: str) -> Optional[int]:
+    rel = _normalize_rel_path(rel_path)
+    if not rel:
+        return None
+    proc = subprocess.run(
+        ["git", "show", f"{ref}:{rel}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return None
+    text = proc.stdout
+    if not text:
+        return 0
+    return len(text.splitlines())
+
+
+def run_guard(
+    repo_root: Path,
+    baseline_path: Path,
+    *,
+    base_ref: Optional[str] = None,
+    head_ref: str = "HEAD",
+) -> Dict[str, Any]:
     baseline = load_baseline(baseline_path)
     hard_limits = dict(DEFAULT_HARD_LIMITS)
     if isinstance(baseline.get("hard_limits"), dict):
@@ -102,9 +163,42 @@ def run_guard(repo_root: Path, baseline_path: Path) -> Dict[str, Any]:
 
     allowed_raw = baseline.get("allowed_large_files")
     allowed = allowed_raw if isinstance(allowed_raw, dict) else {}
+    waiver_policy_raw = baseline.get("waiver_policy")
+    waiver_policy = waiver_policy_raw if isinstance(waiver_policy_raw, dict) else {}
+    require_waiver_metadata = bool(waiver_policy.get("require_metadata", True))
+    allow_legacy_reason = bool(waiver_policy.get("allow_legacy_reason", False))
+    default_owner = str(waiver_policy.get("default_owner", "") or "").strip()
+    default_expires = str(waiver_policy.get("default_expires_on", "") or "").strip()
+    default_growth = 0
+    try:
+        default_growth = int(waiver_policy.get("default_max_growth_lines", 0))
+    except Exception:
+        default_growth = 0
+    if default_growth < 0:
+        default_growth = 0
 
     violations: List[Dict[str, Any]] = []
     measured: List[Dict[str, Any]] = []
+    growth_context: Dict[str, Any] = {
+        "enabled": bool(str(base_ref or "").strip()),
+        "base_ref": str(base_ref or ""),
+        "head_ref": str(head_ref or "HEAD"),
+        "changed_file_count": 0,
+    }
+
+    changed_files: Set[str] = set()
+    prior_line_cache: Dict[str, Optional[int]] = {}
+    growth_lookup_error = ""
+    if growth_context["enabled"]:
+        try:
+            changed_files = _git_changed_files(
+                repo_root,
+                base_ref=str(base_ref or "").strip(),
+                head_ref=str(head_ref or "").strip() or "HEAD",
+            )
+            growth_context["changed_file_count"] = len(changed_files)
+        except Exception as exc:
+            growth_lookup_error = f"{type(exc).__name__}: {exc}"
 
     for path, ext in _iter_candidate_files(repo_root, scan_roots, hard_limits):
         rel = path.relative_to(repo_root).as_posix()
@@ -116,6 +210,54 @@ def run_guard(repo_root: Path, baseline_path: Path) -> Dict[str, Any]:
 
         entry = allowed.get(rel)
         if isinstance(entry, dict):
+            owner = str(entry.get("owner", "") or default_owner).strip()
+            expires_on = str(entry.get("expires_on", "") or default_expires).strip()
+            waiver_reason = str(entry.get("reason", "") or "").strip()
+
+            if require_waiver_metadata:
+                if not owner:
+                    violations.append(
+                        {
+                            "path": rel,
+                            "ext": ext,
+                            "lines": lines,
+                            "hard_limit": hard,
+                            "reason": "baselined file missing waiver owner",
+                        }
+                    )
+                expires_date = _parse_iso_date(expires_on)
+                if not expires_date:
+                    violations.append(
+                        {
+                            "path": rel,
+                            "ext": ext,
+                            "lines": lines,
+                            "hard_limit": hard,
+                            "reason": "baselined file missing/invalid expires_on (YYYY-MM-DD)",
+                        }
+                    )
+                elif expires_date < date.today():
+                    violations.append(
+                        {
+                            "path": rel,
+                            "ext": ext,
+                            "lines": lines,
+                            "hard_limit": hard,
+                            "expires_on": expires_on,
+                            "reason": "baselined waiver expired",
+                        }
+                    )
+            if not allow_legacy_reason and "legacy" in waiver_reason.lower():
+                violations.append(
+                    {
+                        "path": rel,
+                        "ext": ext,
+                        "lines": lines,
+                        "hard_limit": hard,
+                        "reason": "baselined waiver reason uses forbidden 'legacy' wording",
+                    }
+                )
+
             try:
                 max_lines = int(entry.get("max_lines", hard))
             except Exception:
@@ -131,6 +273,38 @@ def run_guard(repo_root: Path, baseline_path: Path) -> Dict[str, Any]:
                         "reason": "baselined file exceeded max_lines",
                     }
                 )
+            if growth_context["enabled"]:
+                growth_raw = entry.get("max_growth_lines", default_growth)
+                if rel in changed_files:
+                    try:
+                        max_growth = int(growth_raw)
+                    except Exception:
+                        max_growth = 0
+                    if max_growth < 0:
+                        max_growth = 0
+                    if rel not in prior_line_cache:
+                        prior_line_cache[rel] = _git_blob_line_count(
+                            repo_root,
+                            ref=str(base_ref or "").strip(),
+                            rel_path=rel,
+                        )
+                    prior_lines = prior_line_cache.get(rel)
+                    baseline_lines = int(prior_lines) if prior_lines is not None else 0
+                    growth = int(lines - baseline_lines)
+                    if growth > max_growth:
+                        violations.append(
+                            {
+                                "path": rel,
+                                "ext": ext,
+                                "lines": lines,
+                                "baseline_lines": baseline_lines,
+                                "growth_lines": growth,
+                                "max_growth_lines": max_growth,
+                                "base_ref": str(base_ref or ""),
+                                "head_ref": str(head_ref or "HEAD"),
+                                "reason": "baselined file exceeded max_growth_lines",
+                            }
+                        )
             continue
 
         violations.append(
@@ -143,6 +317,16 @@ def run_guard(repo_root: Path, baseline_path: Path) -> Dict[str, Any]:
             }
         )
 
+    if growth_lookup_error:
+        violations.append(
+            {
+                "path": "<git-range>",
+                "reason": f"unable to compute growth range: {growth_lookup_error}",
+                "base_ref": str(base_ref or ""),
+                "head_ref": str(head_ref or "HEAD"),
+            }
+        )
+
     return {
         "ok": len(violations) == 0,
         "repo_root": str(repo_root),
@@ -150,6 +334,7 @@ def run_guard(repo_root: Path, baseline_path: Path) -> Dict[str, Any]:
         "scan_roots": scan_roots,
         "violations": violations,
         "measured_count": len(measured),
+        "growth_context": growth_context,
     }
 
 
@@ -165,6 +350,16 @@ def main() -> int:
         default=DEFAULT_BASELINE,
         help=f"Baseline JSON path, relative to repo root by default (default: {DEFAULT_BASELINE}).",
     )
+    parser.add_argument(
+        "--base",
+        default="",
+        help="Optional git base ref for growth checks (enables max_growth_lines enforcement).",
+    )
+    parser.add_argument(
+        "--head",
+        default="HEAD",
+        help="Optional git head ref for growth checks (default: HEAD).",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     args = parser.parse_args()
 
@@ -173,14 +368,23 @@ def main() -> int:
     if not baseline_path.is_absolute():
         baseline_path = (repo_root / baseline_path).resolve()
 
-    result = run_guard(repo_root, baseline_path)
+    base_ref = str(args.base or "").strip() or None
+    head_ref = str(args.head or "").strip() or "HEAD"
+    result = run_guard(repo_root, baseline_path, base_ref=base_ref, head_ref=head_ref)
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
         if result["ok"]:
+            growth_note = ""
+            growth_ctx = dict(result.get("growth_context") or {})
+            if bool(growth_ctx.get("enabled")):
+                growth_note = (
+                    f" Growth checks enabled for {growth_ctx.get('base_ref')}..."
+                    f"{growth_ctx.get('head_ref')} ({growth_ctx.get('changed_file_count', 0)} changed files)."
+                )
             print(
                 f"Monolith guard OK. Scanned {result['measured_count']} files "
-                f"under {', '.join(result['scan_roots'])}."
+                f"under {', '.join(result['scan_roots'])}.{growth_note}"
             )
         else:
             print(
@@ -190,10 +394,17 @@ def main() -> int:
             for row in result["violations"]:
                 hard = row.get("hard_limit")
                 max_lines = row.get("max_lines")
+                max_growth = row.get("max_growth_lines")
                 max_part = f", max {max_lines}" if max_lines is not None else ""
+                growth_part = (
+                    f", baseline {row.get('baseline_lines')}, growth {row.get('growth_lines')}, "
+                    f"max_growth {max_growth}"
+                    if max_growth is not None
+                    else ""
+                )
                 print(
                     f"- {row.get('path')}: {row.get('lines')} lines "
-                    f"(hard {hard}{max_part}) -> {row.get('reason')}"
+                    f"(hard {hard}{max_part}{growth_part}) -> {row.get('reason')}"
                 )
     return 0 if result["ok"] else 1
 

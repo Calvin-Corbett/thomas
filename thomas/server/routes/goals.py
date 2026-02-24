@@ -1,20 +1,21 @@
-﻿from __future__ import annotations
+"""aiohttp route registration for goals / task-board endpoints."""
 
+from __future__ import annotations
+
+import asyncio
 import importlib
 import json
 import re
 from datetime import datetime, timedelta, timezone
 from hashlib import sha256
-from pathlib import Path
-from typing import Any, Dict, List, Literal, Optional, Tuple
+from typing import Any, Awaitable, Callable, Dict, List, Literal, Optional, Tuple
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Request, Response
-from fastapi.responses import FileResponse, JSONResponse
-from pydantic import BaseModel, Field, field_validator
+from aiohttp import web
 
 from thomas.core.persistence import get_persistence
 
-router = APIRouter()
+RequireAccessFn = Callable[[web.Request], None]
+ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
 
 Priority = Literal["low", "medium", "high"]
 Status = Literal["open", "in_progress", "done"]
@@ -40,6 +41,9 @@ STATUS_ALIASES: Dict[str, Status] = {
 }
 
 
+# ── pure helpers (framework-agnostic) ──
+
+
 def _utc_now() -> datetime:
     return datetime.now(timezone.utc)
 
@@ -51,7 +55,7 @@ def _utc_now_iso() -> str:
 def _coerce_priority(v: Any) -> Priority:
     s = str(v).strip().lower()
     if s not in ("low", "medium", "high"):
-        raise HTTPException(status_code=422, detail="priority must be low|medium|high")
+        raise web.HTTPUnprocessableEntity(text="priority must be low|medium|high")
     return s  # type: ignore[return-value]
 
 
@@ -59,9 +63,8 @@ def _coerce_status(v: Any) -> Status:
     s = str(v).strip().lower()
     if s in STATUS_ALIASES:
         return STATUS_ALIASES[s]
-    raise HTTPException(
-        status_code=422,
-        detail='status must be "open"|"in_progress"|"done" (aliases allowed: todo/doing/closed/etc)',
+    raise web.HTTPUnprocessableEntity(
+        text='status must be "open"|"in_progress"|"done" (aliases: todo/doing/closed/etc)',
     )
 
 
@@ -133,9 +136,8 @@ def _coerce_tags(v: Any) -> List[str]:
             s = str(x).strip()
             if s:
                 out.append(s[:64])
-        # de-dupe, preserve order
-        seen = set()
-        dedup = []
+        seen: set[str] = set()
+        dedup: List[str] = []
         for t in out:
             k = t.lower()
             if k in seen:
@@ -146,22 +148,21 @@ def _coerce_tags(v: Any) -> List[str]:
     s = str(v).strip()
     if not s:
         return []
-    # comma/space separated
     parts = re.split(r"[,\n]+", s)
     out = []
     for p in parts:
         pp = p.strip()
         if pp:
             out.append(pp[:64])
-    seen = set()
-    dedup = []
+    seen2: set[str] = set()
+    dedup2: List[str] = []
     for t in out:
         k = t.lower()
-        if k in seen:
+        if k in seen2:
             continue
-        seen.add(k)
-        dedup.append(t)
-    return dedup[:16]
+        seen2.add(k)
+        dedup2.append(t)
+    return dedup2[:16]
 
 
 def _normalize_goal(g: Dict[str, Any]) -> Dict[str, Any]:
@@ -169,7 +170,7 @@ def _normalize_goal(g: Dict[str, Any]) -> Dict[str, Any]:
 
     gid = gg.get("id")
     if gid is None:
-        gid = f"goal_{abs(hash((gg.get('text',''), gg.get('created',''))))}"
+        gid = f"goal_{abs(hash((gg.get('text', ''), gg.get('created', ''))))}"
     gg["id"] = str(gid)
 
     if not gg.get("created"):
@@ -178,13 +179,13 @@ def _normalize_goal(g: Dict[str, Any]) -> Dict[str, Any]:
     raw_status = gg.get("status", "open")
     try:
         gg["status"] = _coerce_status(raw_status)
-    except HTTPException:
+    except web.HTTPUnprocessableEntity:
         gg["status"] = "open"
 
     raw_pri = gg.get("priority", "medium")
     try:
         gg["priority"] = _coerce_priority(raw_pri)
-    except HTTPException:
+    except web.HTTPUnprocessableEntity:
         gg["priority"] = "medium"
 
     r = _parse_rank(gg.get("rank"))
@@ -195,30 +196,25 @@ def _normalize_goal(g: Dict[str, Any]) -> Dict[str, Any]:
 
     gg["tags"] = _coerce_tags(gg.get("tags"))
 
-    # due_at should be ISO string or epoch; normalize to ISO string for UI
     due_dt = _parse_iso(gg.get("due_at"))
     if due_dt:
         gg["due_at"] = due_dt.isoformat()
     elif "due_at" in gg and gg.get("due_at") is None:
         gg.pop("due_at", None)
 
-    # done_at is useful for lead-time metrics
     done_dt = _parse_iso(gg.get("done_at"))
     if done_dt:
         gg["done_at"] = done_dt.isoformat()
     elif "done_at" in gg and gg.get("done_at") is None:
         gg.pop("done_at", None)
 
-    # optional fields used by UI
     for k in ("notes", "estimate_minutes", "archived", "updated"):
         if k in gg and gg[k] is None:
             gg.pop(k, None)
 
-    # Ensure notes is a string if present
     if "notes" in gg and not isinstance(gg["notes"], str):
         gg["notes"] = str(gg["notes"])
 
-    # Ensure archived is bool
     if "archived" in gg:
         gg["archived"] = bool(gg["archived"])
 
@@ -266,21 +262,15 @@ def _group_and_sort(goals: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any
         grouped[ng["status"]].append(ng)
 
     def sort_key(g: Dict[str, Any]) -> Tuple[int, float, int, int, float]:
-        # rank (manual ordering) dominates
         r = _parse_rank(g.get("rank"))
         has_rank = 0 if r is not None else 1
         rank_val = r if r is not None else 0.0
-
         pri = PRIORITY_ORDER.get(g.get("priority", "medium"), 1)
-
-        # due soon comes earlier (only when no rank)
         due = _parse_ts_seconds(g.get("due_at"))
         due_bucket = 0 if due > 0 else 1
         due_val = due if due > 0 else 0.0
-
         created_ts = _parse_ts_seconds(g.get("created"))
-
-        return (has_rank, rank_val, pri, due_bucket, due_val - created_ts * 0.0)  # stable
+        return (has_rank, rank_val, pri, due_bucket, due_val - created_ts * 0.0)
 
     for k in grouped:
         grouped[k].sort(key=sort_key)
@@ -335,12 +325,11 @@ def _resolve_initiative_enqueue() -> Tuple[Any, str]:
 
         errors.append(f"{mod_name}: no enqueue method found")
 
-    raise HTTPException(
-        status_code=501,
-        detail={
+    raise web.HTTPNotImplemented(
+        text=json.dumps({
             "error": "initiative engine not found",
             "probe_errors": errors[-6:],
-        },
+        }),
     )
 
 
@@ -354,278 +343,338 @@ def _call_enqueue(enqueue_fn: Any, goal: Dict[str, Any]) -> None:
         return
 
 
-class GoalCreate(BaseModel):
-    text: str = Field(..., min_length=1, max_length=10_000)
-    priority: Priority = "medium"
-    due_at: Optional[str] = None  # ISO8601 or epoch-ish string; stored as-is and normalized
-    tags: Optional[List[str]] = None
-    notes: Optional[str] = None
+# ── validation helpers (replace Pydantic models) ──
 
 
-class GoalPatch(BaseModel):
-    status: Optional[str] = None
-    text: Optional[str] = Field(None, min_length=1, max_length=10_000)
-    priority: Optional[str] = None
-    rank: Optional[float] = None
-    due_at: Optional[str] = None
-    tags: Optional[List[str]] = None
-    notes: Optional[str] = None
-    estimate_minutes: Optional[int] = None
-    archived: Optional[bool] = None
+def _validate_goal_create(data: Dict[str, Any]) -> Dict[str, Any]:
+    text = str(data.get("text") or "").strip()
+    if not text:
+        raise web.HTTPBadRequest(text="text is required")
+    if len(text) > 10_000:
+        raise web.HTTPBadRequest(text="text must be <= 10,000 characters")
 
-    @field_validator("rank")
-    @classmethod
-    def _rank_is_finite(cls, v: Optional[float]) -> Optional[float]:
-        if v is None:
-            return None
-        if v != v or v in (float("inf"), float("-inf")):
-            raise ValueError("rank must be a finite number")
-        return float(v)
+    priority = _coerce_priority(data.get("priority", "medium"))
+    due_at = data.get("due_at")
+    tags = _coerce_tags(data.get("tags"))
+    notes = data.get("notes")
+    if notes is not None:
+        notes = str(notes)
 
-    @field_validator("estimate_minutes")
-    @classmethod
-    def _estimate_range(cls, v: Optional[int]) -> Optional[int]:
-        if v is None:
-            return None
-        if v < 0 or v > 10_000:
-            raise ValueError("estimate_minutes out of range")
-        return int(v)
-
-
-@router.get("/goals")
-def goals_page() -> FileResponse:
-    web_dir = Path(__file__).resolve().parents[1] / "web"
-    page = web_dir / "goals.html"
-    if not page.exists():
-        raise HTTPException(status_code=404, detail="goals.html not found")
-    return FileResponse(str(page))
-
-
-@router.get("/goals.js")
-def goals_js() -> FileResponse:
-    web_dir = Path(__file__).resolve().parents[1] / "web"
-    js = web_dir / "goals.js"
-    if not js.exists():
-        raise HTTPException(status_code=404, detail="goals.js not found")
-    return FileResponse(str(js), media_type="application/javascript")
-
-
-@router.get("/api/goals")
-def get_goals(request: Request) -> Response:
-    pe = get_persistence()
-    goals = getattr(pe, "goals", []) or []
-    payload = _group_and_sort(list(goals))
-
-    etag = _etag_for_payload(payload)
-    inm = (request.headers.get("if-none-match") or "").strip().lower()
-
-    headers = {"ETag": etag, "Cache-Control": "no-store"}
-    if inm and inm == etag.lower():
-        return Response(status_code=304, headers=headers)
-    return JSONResponse(payload, headers=headers)
-
-
-@router.get("/api/goals/stats")
-def goals_stats(request: Request) -> Response:
-    """
-    Small â€œconsumer loveâ€ endpoint: dashboard stats.
-    Safe to ignore if you don't need it.
-    """
-    pe = get_persistence()
-    goals = [_normalize_goal(g) for g in (getattr(pe, "goals", []) or [])]
-    now = _utc_now()
-
-    open_n = sum(1 for g in goals if g.get("status") == "open" and not g.get("archived"))
-    ip_n = sum(1 for g in goals if g.get("status") == "in_progress" and not g.get("archived"))
-    done_n = sum(1 for g in goals if g.get("status") == "done" and not g.get("archived"))
-
-    # done today
-    done_today = 0
-    lead_hours = []
-    for g in goals:
-        if g.get("status") != "done":
-            continue
-        done_dt = _parse_iso(g.get("done_at"))
-        if done_dt and done_dt.date() == now.date():
-            done_today += 1
-        created_dt = _parse_iso(g.get("created"))
-        if created_dt and done_dt:
-            lead_hours.append((done_dt - created_dt).total_seconds() / 3600.0)
-
-    avg_lead_h = round(sum(lead_hours) / len(lead_hours), 2) if lead_hours else None
-
-    payload = {
-        "open": open_n,
-        "in_progress": ip_n,
-        "done": done_n,
-        "done_today": done_today,
-        "avg_lead_hours": avg_lead_h,
-        "generated_at": now.isoformat(),
+    return {
+        "text": text,
+        "priority": priority,
+        "due_at": due_at,
+        "tags": tags,
+        "notes": notes,
     }
 
-    etag = _etag_for_payload(payload)
-    inm = (request.headers.get("if-none-match") or "").strip().lower()
-    headers = {"ETag": etag, "Cache-Control": "no-store"}
-    if inm and inm == etag.lower():
-        return Response(status_code=304, headers=headers)
-    return JSONResponse(payload, headers=headers)
+
+def _validate_goal_patch(data: Dict[str, Any]) -> Dict[str, Any]:
+    patch: Dict[str, Any] = {}
+
+    if "status" in data and data["status"] is not None:
+        patch["status"] = str(data["status"])
+
+    if "text" in data and data["text"] is not None:
+        text = str(data["text"]).strip()
+        if not text:
+            raise web.HTTPBadRequest(text="text must not be empty")
+        if len(text) > 10_000:
+            raise web.HTTPBadRequest(text="text must be <= 10,000 characters")
+        patch["text"] = text
+
+    if "priority" in data and data["priority"] is not None:
+        patch["priority"] = str(data["priority"])
+
+    if "rank" in data and data["rank"] is not None:
+        r = _parse_rank(data["rank"])
+        if r is None:
+            raise web.HTTPBadRequest(text="rank must be a finite number")
+        patch["rank"] = r
+
+    if "due_at" in data:
+        patch["due_at"] = data["due_at"]
+
+    if "tags" in data:
+        patch["tags"] = _coerce_tags(data["tags"])
+
+    if "notes" in data and data["notes"] is not None:
+        patch["notes"] = str(data["notes"])
+
+    if "estimate_minutes" in data and data["estimate_minutes"] is not None:
+        try:
+            em = int(data["estimate_minutes"])
+        except (ValueError, TypeError):
+            raise web.HTTPBadRequest(text="estimate_minutes must be an integer")
+        if em < 0 or em > 10_000:
+            raise web.HTTPBadRequest(text="estimate_minutes out of range (0-10000)")
+        patch["estimate_minutes"] = em
+
+    if "archived" in data and data["archived"] is not None:
+        patch["archived"] = bool(data["archived"])
+
+    return patch
 
 
-@router.post("/api/goals")
-def create_goal(payload: GoalCreate) -> Dict[str, Any]:
-    pe = get_persistence()
-    priority = _coerce_priority(payload.priority)
-    text = payload.text.strip()
+# ── route registration ──
 
-    add_goal = getattr(pe, "add_goal", None)
-    if not callable(add_goal):
-        raise HTTPException(status_code=500, detail="Persistence engine missing add_goal()")
 
-    result = add_goal(text, priority=priority)
+def register_goals_routes(
+    app: web.Application,
+    *,
+    require_api_access: RequireAccessFn,
+    read_json: ReadJsonFn,
+) -> None:
+    """Register /api/goals/* routes on *app*."""
 
-    # best-effort: set rank so new goals appear at top of Open
-    try:
+    # ── GET /api/goals ──
+
+    async def api_goals_list(request: web.Request) -> web.Response:
+        require_api_access(request)
+        pe = get_persistence()
         goals = getattr(pe, "goals", []) or []
-        top_rank = _top_rank_for_status(goals, "open")
+        payload = _group_and_sort(list(goals))
 
-        gid = None
-        if isinstance(result, dict):
-            gid = str(result.get("id"))
-        elif result is not None:
-            gid = str(result)
+        etag = _etag_for_payload(payload)
+        inm = (request.headers.get("If-None-Match") or "").strip().lower()
 
-        if gid:
-            g = _find_goal(pe, gid)
-            if g is None and isinstance(result, dict):
-                g = result
-            if g is not None:
-                g.setdefault("status", "open")
-                g["rank"] = top_rank
-                if payload.due_at:
-                    g["due_at"] = payload.due_at
-                if payload.tags:
-                    g["tags"] = payload.tags
-                if payload.notes:
-                    g["notes"] = payload.notes
-    except Exception:
-        pass
+        headers = {"ETag": etag, "Cache-Control": "no-store"}
+        if inm and inm == etag.lower():
+            return web.Response(status=304, headers=headers)
+        return web.json_response(payload, headers=headers)
 
-    _commit(pe)
+    # ── GET /api/goals/stats ──
 
-    if isinstance(result, dict):
-        return {"ok": True, "goal": _normalize_goal(result)}
-    if result is not None:
-        found = _find_goal(pe, str(result))
-        if found:
-            return {"ok": True, "goal": _normalize_goal(found)}
+    async def api_goals_stats(request: web.Request) -> web.Response:
+        """Dashboard stats: open/ip/done counts, lead time."""
+        require_api_access(request)
+        pe = get_persistence()
+        goals = [_normalize_goal(g) for g in (getattr(pe, "goals", []) or [])]
+        now = _utc_now()
 
-    # fallback: newest match by text
-    goals = getattr(pe, "goals", []) or []
-    matches = [g for g in goals if str(g.get("text", "")).strip() == text]
-    if matches:
-        matches.sort(key=lambda g: -_parse_ts_seconds(g.get("created")))
-        return {"ok": True, "goal": _normalize_goal(matches[0])}
+        open_n = sum(1 for g in goals if g.get("status") == "open" and not g.get("archived"))
+        ip_n = sum(1 for g in goals if g.get("status") == "in_progress" and not g.get("archived"))
+        done_n = sum(1 for g in goals if g.get("status") == "done" and not g.get("archived"))
 
-    return {"ok": True, "goal": {"id": str(result) if result is not None else "unknown", "text": text, "priority": priority, "status": "open", "created": _utc_now_iso()}}
+        done_today = 0
+        lead_hours: List[float] = []
+        for g in goals:
+            if g.get("status") != "done":
+                continue
+            done_dt = _parse_iso(g.get("done_at"))
+            if done_dt and done_dt.date() == now.date():
+                done_today += 1
+            created_dt = _parse_iso(g.get("created"))
+            if created_dt and done_dt:
+                lead_hours.append((done_dt - created_dt).total_seconds() / 3600.0)
 
+        avg_lead_h = round(sum(lead_hours) / len(lead_hours), 2) if lead_hours else None
 
-@router.patch("/api/goals/{goal_id}")
-def update_goal(goal_id: str, payload: GoalPatch) -> Dict[str, Any]:
-    pe = get_persistence()
-    g = _find_goal(pe, goal_id)
-    if not g:
-        raise HTTPException(status_code=404, detail="Goal not found")
+        payload = {
+            "open_n": open_n,
+            "ip_n": ip_n,
+            "done_n": done_n,
+            "done_today": done_today,
+            "avg_lead_hours": avg_lead_h,
+            "generated_at": now.isoformat(),
+        }
 
-    # text
-    if payload.text is not None:
-        g["text"] = payload.text.strip()
+        etag = _etag_for_payload(payload)
+        inm = (request.headers.get("If-None-Match") or "").strip().lower()
+        headers = {"ETag": etag, "Cache-Control": "no-store"}
+        if inm and inm == etag.lower():
+            return web.Response(status=304, headers=headers)
+        return web.json_response(payload, headers=headers)
 
-    # priority
-    if payload.priority is not None:
-        g["priority"] = _coerce_priority(payload.priority)
+    # ── POST /api/goals ──
 
-    # notes/tags/due/estimate/archive
-    if payload.notes is not None:
-        g["notes"] = payload.notes
-    if payload.tags is not None:
-        g["tags"] = payload.tags
-    if payload.due_at is not None:
-        if payload.due_at.strip() == "":
-            g.pop("due_at", None)
-        else:
-            g["due_at"] = payload.due_at
-    if payload.estimate_minutes is not None:
-        g["estimate_minutes"] = int(payload.estimate_minutes)
-    if payload.archived is not None:
-        g["archived"] = bool(payload.archived)
+    async def api_goals_create(request: web.Request) -> web.Response:
+        require_api_access(request)
+        data = await read_json(request)
+        if not isinstance(data, dict):
+            raise web.HTTPBadRequest(text="expected JSON object")
+        validated = _validate_goal_create(data)
 
-    status_changed = False
-    if payload.status is not None:
-        new_status = _coerce_status(payload.status)
-        prev = str(g.get("status", "open"))
-        if new_status == "done":
-            close_goal = getattr(pe, "close_goal", None)
-            if callable(close_goal):
-                close_goal(goal_id)
-            g["status"] = "done"
-            if not g.get("done_at"):
-                g["done_at"] = _utc_now_iso()
-        else:
-            g["status"] = new_status
-            # reopening clears done_at
-            if prev == "done":
-                g.pop("done_at", None)
-        status_changed = True
+        pe = get_persistence()
+        text = validated["text"]
+        priority = validated["priority"]
 
-    # rank ordering within column (optional)
-    if payload.rank is not None:
-        g["rank"] = float(payload.rank)
-    elif status_changed:
+        add_goal = getattr(pe, "add_goal", None)
+        if not callable(add_goal):
+            raise web.HTTPInternalServerError(text="Persistence engine missing add_goal()")
+
+        result = add_goal(text, priority=priority)
+
+        # best-effort: set rank so new goals appear at top of Open
         try:
             goals = getattr(pe, "goals", []) or []
-            g["rank"] = _top_rank_for_status(goals, str(g.get("status", "open")))
+            top_rank = _top_rank_for_status(goals, "open")
+
+            gid = None
+            if isinstance(result, dict):
+                gid = str(result.get("id"))
+            elif result is not None:
+                gid = str(result)
+
+            if gid:
+                g = _find_goal(pe, gid)
+                if g is None and isinstance(result, dict):
+                    g = result
+                if g is not None:
+                    g.setdefault("status", "open")
+                    g["rank"] = top_rank
+                    if validated["due_at"]:
+                        g["due_at"] = validated["due_at"]
+                    if validated["tags"]:
+                        g["tags"] = validated["tags"]
+                    if validated["notes"]:
+                        g["notes"] = validated["notes"]
         except Exception:
             pass
 
-    g["updated"] = _utc_now_iso()
-    _commit(pe)
-
-    g2 = _find_goal(pe, goal_id) or g
-    return {"ok": True, "goal": _normalize_goal(g2)}
-
-
-@router.delete("/api/goals/{goal_id}")
-def delete_goal(goal_id: str) -> Dict[str, Any]:
-    pe = get_persistence()
-
-    delete_fn = getattr(pe, "delete_goal", None)
-    if callable(delete_fn):
-        delete_fn(goal_id)
         _commit(pe)
-        return {"ok": True}
 
-    goals = getattr(pe, "goals", []) or []
-    before = len(goals)
-    goals[:] = [g for g in goals if str(g.get("id")) != str(goal_id)]
-    after = len(goals)
+        if isinstance(result, dict):
+            return web.json_response({"ok": True, "goal": _normalize_goal(result)})
+        if result is not None:
+            found = _find_goal(pe, str(result))
+            if found:
+                return web.json_response({"ok": True, "goal": _normalize_goal(found)})
 
-    if before == after:
-        raise HTTPException(status_code=404, detail="Goal not found")
+        # fallback: newest match by text
+        goals = getattr(pe, "goals", []) or []
+        matches = [g for g in goals if str(g.get("text", "")).strip() == text]
+        if matches:
+            matches.sort(key=lambda g: -_parse_ts_seconds(g.get("created")))
+            return web.json_response({"ok": True, "goal": _normalize_goal(matches[0])})
 
-    _commit(pe)
-    return {"ok": True}
+        return web.json_response({
+            "ok": True,
+            "goal": {
+                "id": str(result) if result is not None else "unknown",
+                "text": text,
+                "priority": priority,
+                "status": "open",
+                "created": _utc_now_iso(),
+            },
+        })
 
+    # ── PATCH /api/goals/{goal_id} ──
 
-@router.post("/api/goals/{goal_id}/run")
-def run_goal(goal_id: str, background: BackgroundTasks) -> JSONResponse:
-    pe = get_persistence()
-    g = _find_goal(pe, goal_id)
-    if not g:
-        raise HTTPException(status_code=404, detail="Goal not found")
+    async def api_goals_update(request: web.Request) -> web.Response:
+        require_api_access(request)
+        goal_id = request.match_info["goal_id"]
+        data = await read_json(request)
+        if not isinstance(data, dict):
+            raise web.HTTPBadRequest(text="expected JSON object")
+        patch = _validate_goal_patch(data)
 
-    goal = _normalize_goal(g)
-    enqueue_fn, how = _resolve_initiative_enqueue()
+        pe = get_persistence()
+        g = _find_goal(pe, goal_id)
+        if not g:
+            raise web.HTTPNotFound(text="Goal not found")
 
-    background.add_task(_call_enqueue, enqueue_fn, goal)
-    return JSONResponse({"ok": True, "queued": True, "how": how})
+        if "text" in patch:
+            g["text"] = patch["text"]
 
+        if "priority" in patch:
+            g["priority"] = _coerce_priority(patch["priority"])
+
+        if "notes" in patch:
+            g["notes"] = patch["notes"]
+        if "tags" in patch:
+            g["tags"] = patch["tags"]
+        if "due_at" in patch:
+            if patch["due_at"] is not None and str(patch["due_at"]).strip() == "":
+                g.pop("due_at", None)
+            else:
+                g["due_at"] = patch["due_at"]
+        if "estimate_minutes" in patch:
+            g["estimate_minutes"] = patch["estimate_minutes"]
+        if "archived" in patch:
+            g["archived"] = patch["archived"]
+
+        status_changed = False
+        if "status" in patch:
+            new_status = _coerce_status(patch["status"])
+            prev = str(g.get("status", "open"))
+            if new_status == "done":
+                close_goal = getattr(pe, "close_goal", None)
+                if callable(close_goal):
+                    close_goal(goal_id)
+                g["status"] = "done"
+                if not g.get("done_at"):
+                    g["done_at"] = _utc_now_iso()
+            else:
+                g["status"] = new_status
+                if prev == "done":
+                    g.pop("done_at", None)
+            status_changed = True
+
+        if "rank" in patch:
+            g["rank"] = patch["rank"]
+        elif status_changed:
+            try:
+                goals = getattr(pe, "goals", []) or []
+                g["rank"] = _top_rank_for_status(goals, str(g.get("status", "open")))
+            except Exception:
+                pass
+
+        g["updated"] = _utc_now_iso()
+        _commit(pe)
+
+        g2 = _find_goal(pe, goal_id) or g
+        return web.json_response({"ok": True, "goal": _normalize_goal(g2)})
+
+    # ── DELETE /api/goals/{goal_id} ──
+
+    async def api_goals_delete(request: web.Request) -> web.Response:
+        require_api_access(request)
+        goal_id = request.match_info["goal_id"]
+
+        pe = get_persistence()
+
+        delete_fn = getattr(pe, "delete_goal", None)
+        if callable(delete_fn):
+            delete_fn(goal_id)
+            _commit(pe)
+            return web.json_response({"ok": True})
+
+        goals = getattr(pe, "goals", []) or []
+        before = len(goals)
+        goals[:] = [g for g in goals if str(g.get("id")) != str(goal_id)]
+        after = len(goals)
+
+        if before == after:
+            raise web.HTTPNotFound(text="Goal not found")
+
+        _commit(pe)
+        return web.json_response({"ok": True})
+
+    # ── POST /api/goals/{goal_id}/run ──
+
+    async def api_goals_run(request: web.Request) -> web.Response:
+        require_api_access(request)
+        goal_id = request.match_info["goal_id"]
+
+        pe = get_persistence()
+        g = _find_goal(pe, goal_id)
+        if not g:
+            raise web.HTTPNotFound(text="Goal not found")
+
+        goal = _normalize_goal(g)
+        enqueue_fn, how = _resolve_initiative_enqueue()
+
+        loop = asyncio.get_event_loop()
+        loop.call_soon(lambda: _call_enqueue(enqueue_fn, goal))
+
+        return web.json_response({"ok": True, "queued": True, "how": how})
+
+    # ── register ──
+
+    app.router.add_get("/api/goals", api_goals_list)
+    app.router.add_get("/api/goals/stats", api_goals_stats)
+    app.router.add_post("/api/goals", api_goals_create)
+    app.router.add_patch("/api/goals/{goal_id}", api_goals_update)
+    app.router.add_delete("/api/goals/{goal_id}", api_goals_delete)
+    app.router.add_post("/api/goals/{goal_id}/run", api_goals_run)

@@ -150,10 +150,13 @@ class PersistenceEngine:
         try:
             with self._lock:
                 payload = self._serialise()
-            self.state_file.write_text(
-                json.dumps(payload, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+                self.state_file.parent.mkdir(parents=True, exist_ok=True)
+                tmp_path = self.state_file.with_suffix(self.state_file.suffix + ".tmp")
+                tmp_path.write_text(
+                    json.dumps(payload, indent=2, ensure_ascii=False),
+                    encoding="utf-8",
+                )
+                os.replace(tmp_path, self.state_file)
             log.debug("PersistenceEngine: state saved (%d turns).", len(self.turn_history))
             return True
         except Exception as e:

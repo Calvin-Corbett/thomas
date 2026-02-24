@@ -8,27 +8,14 @@ from typing import Any, Mapping
 from aiohttp import web
 
 _ROUTES: tuple[tuple[str, str, str], ...] = (
-    ("get", "/api/models", "api_models"),
-    ("get", "/api/models/capabilities", "api_models_capabilities"),
-    ("get", "/api/models/{profile}/ids", "api_profile_models"),
-    ("get", "/api/models/{profile}/handshake", "api_profile_handshake"),
-    ("get", "/api/models/{profile}/validate", "api_profile_validate"),
-    ("get", "/api/version", "api_version"),
-    ("get", "/api/setup/bootstrap", "api_setup_bootstrap"),
-    ("post", "/api/setup/repair", "api_setup_repair"),
+    ("get", "/api/task-ledger/current", "api_task_ledger_current"),
+    ("get", "/api/task-ledger/history", "api_task_ledger_history"),
     ("get", "/api/engines", "api_engines"),
     ("get", "/api/tools", "api_tools"),
+    ("get", "/api/security/mutating-routes", "api_security_mutating_routes"),
     ("get", "/api/chats", "api_chats"),
     ("put", "/api/chats/{chat_id}", "api_chat_put"),
     ("delete", "/api/chats/{chat_id}", "api_chat_delete"),
-    ("get", "/api/secrets", "api_secrets"),
-    ("post", "/api/secrets/{profile}", "api_secret_set"),
-    ("delete", "/api/secrets/{profile}", "api_secret_clear"),
-    ("post", "/api/local/pull", "api_local_pull"),
-    ("post", "/api/session/new", "api_session_new"),
-    ("post", "/api/session/fork", "api_session_fork"),
-    ("post", "/api/session/import", "api_session_import"),
-    ("post", "/api/chat", "api_chat"),
 )
 
 

@@ -1,4 +1,5 @@
 import json
+import os
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -137,8 +138,15 @@ class TestServerBatchMode(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
+        self._prev_db_path = os.environ.get("THOMAS_DB_PATH")
+        self._db_path = f"{self._tmpdir.name}\\prefs_batch_runtime.sqlite"
+        os.environ["THOMAS_DB_PATH"] = self._db_path
 
     def tearDown(self) -> None:
+        if self._prev_db_path is None:
+            os.environ.pop("THOMAS_DB_PATH", None)
+        else:
+            os.environ["THOMAS_DB_PATH"] = self._prev_db_path
         try:
             self._tmpdir.cleanup()
         finally:
@@ -292,6 +300,45 @@ class TestServerBatchMode(AioHTTPTestCase):
 
         text_events = [e for e in events if e.get("type") == "text"]
         self.assertTrue(any("AUTO_FALLBACK_OK" in str(e.get("text") or "") for e in text_events))
+
+    async def test_batch_mode_done_includes_budget_report_when_advanced_cost_enabled(self):
+        sess_resp = await self.client.post("/api/session/new")
+        self.assertEqual(sess_resp.status, 200)
+        sid = str((await sess_resp.json()).get("session_id") or "")
+        self.assertTrue(sid)
+
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={
+                "advanced": {
+                    "cost": {
+                        "session_token_budget": 1000,
+                        "daily_token_budget": 10000,
+                        "throttle_on_budget": True,
+                    }
+                }
+            },
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        with patch("thomas.server.app.OpenAICompatBatchClient", _FakeBatchClient):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "xai",
+                    "mode": "batch",
+                    "text": "budget test",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        done_events = [e for e in events if e.get("type") == "done"]
+        self.assertEqual(len(done_events), 1)
+        budget = ((done_events[0].get("token_report") or {}).get("budget") or {})
+        self.assertEqual((budget.get("session") or {}).get("budget_tokens"), 1000)
+        self.assertEqual((budget.get("daily") or {}).get("budget_tokens"), 10000)
 
 
 if __name__ == "__main__":

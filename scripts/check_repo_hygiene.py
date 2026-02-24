@@ -1,4 +1,4 @@
-"""Guard repo layout drift (root clutter and tracked artifact pollution)."""
+"""Guard repo hygiene (tracked layout + dirty worktree checks)."""
 
 from __future__ import annotations
 
@@ -34,6 +34,23 @@ def _git_ls_files(repo_root: Path) -> List[str]:
     return sorted(set(out))
 
 
+def _git_status_porcelain(repo_root: Path) -> List[str]:
+    proc = subprocess.run(
+        ["git", "status", "--porcelain"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or "git status --porcelain failed")
+    out: List[str] = []
+    for raw in proc.stdout.splitlines():
+        line = str(raw or "").rstrip()
+        if line:
+            out.append(line)
+    return out
+
+
 def _load_baseline(path: Path) -> Dict[str, Any]:
     if not path.exists():
         raise FileNotFoundError(f"Missing baseline file: {path}")
@@ -50,6 +67,73 @@ def _any_suffix(path: str, suffixes: Iterable[str]) -> bool:
         if s and p.endswith(s):
             return True
     return False
+
+
+def _porcelain_path(line: str) -> str:
+    raw = str(line or "")
+    if len(raw) <= 3:
+        return _normalize(raw)
+    return _normalize(raw[3:])
+
+
+def _sample_paths(paths: Sequence[str], *, limit: int = 5) -> str:
+    if not paths:
+        return ""
+    cap = max(1, int(limit))
+    sample = ", ".join(str(p) for p in paths[:cap])
+    if len(paths) > cap:
+        sample += f", ... (+{len(paths) - cap} more)"
+    return sample
+
+
+def evaluate_worktree_clean(status_lines: Sequence[str]) -> Dict[str, Any]:
+    staged_paths: List[str] = []
+    unstaged_paths: List[str] = []
+    untracked_paths: List[str] = []
+    raw_entries = [str(line or "").rstrip() for line in status_lines if str(line or "").strip()]
+
+    for line in raw_entries:
+        if line.startswith("??"):
+            path = _porcelain_path(line)
+            if path:
+                untracked_paths.append(path)
+            continue
+        if line.startswith("!!"):
+            continue
+
+        index_status = line[0] if len(line) > 0 else " "
+        worktree_status = line[1] if len(line) > 1 else " "
+        path = _porcelain_path(line)
+        if index_status not in (" ", "?", "!") and path:
+            staged_paths.append(path)
+        if worktree_status not in (" ", "?", "!") and path:
+            unstaged_paths.append(path)
+
+    staged_paths = sorted(set(staged_paths))
+    unstaged_paths = sorted(set(unstaged_paths))
+    untracked_paths = sorted(set(untracked_paths))
+
+    violations: List[str] = []
+    if staged_paths:
+        violations.append(f"{len(staged_paths)} staged path(s): {_sample_paths(staged_paths)}")
+    if unstaged_paths:
+        violations.append(f"{len(unstaged_paths)} unstaged path(s): {_sample_paths(unstaged_paths)}")
+    if untracked_paths:
+        violations.append(f"{len(untracked_paths)} untracked path(s): {_sample_paths(untracked_paths)}")
+
+    return {
+        "ok": not violations,
+        "entry_count": len(raw_entries),
+        "staged_paths": staged_paths,
+        "unstaged_paths": unstaged_paths,
+        "untracked_paths": untracked_paths,
+        "summary": {
+            "staged_count": len(staged_paths),
+            "unstaged_count": len(unstaged_paths),
+            "untracked_count": len(untracked_paths),
+        },
+        "violations": violations,
+    }
 
 
 def evaluate_hygiene(tracked_paths: Sequence[str], baseline: Dict[str, Any]) -> Dict[str, Any]:
@@ -102,6 +186,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         default=DEFAULT_BASELINE,
         help=f"Baseline JSON path, relative to repo root by default (default: {DEFAULT_BASELINE}).",
     )
+    parser.add_argument(
+        "--require-clean-worktree",
+        dest="require_clean_worktree",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Fail when git status reports staged/unstaged/untracked files (default: enabled).",
+    )
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
 
@@ -113,7 +204,14 @@ def run(argv: Sequence[str] | None = None) -> int:
     try:
         baseline = _load_baseline(baseline_path)
         tracked = _git_ls_files(repo_root)
+        worktree = evaluate_worktree_clean(_git_status_porcelain(repo_root))
         result = evaluate_hygiene(tracked, baseline)
+        result["worktree"] = worktree
+        result["worktree_clean"] = bool(worktree.get("ok", False))
+        if bool(args.require_clean_worktree) and not bool(worktree.get("ok", False)):
+            for msg in list(worktree.get("violations") or []):
+                result["violations"].append(f"dirty worktree: {msg}")
+            result["ok"] = False
     except Exception as exc:
         print(f"Repo hygiene gate failed: {exc}")
         return 1
@@ -125,9 +223,14 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 0 if result["ok"] else 1
 
     if result["ok"]:
+        worktree_summary = dict((result.get("worktree") or {}).get("summary") or {})
         print(
             "Repo hygiene gate: OK "
-            f"(tracked files={result['tracked_total']}, tracked root files={len(result['tracked_root_files'])})"
+            f"(tracked files={result['tracked_total']}, "
+            f"tracked root files={len(result['tracked_root_files'])}, "
+            f"staged={int(worktree_summary.get('staged_count', 0))}, "
+            f"unstaged={int(worktree_summary.get('unstaged_count', 0))}, "
+            f"untracked={int(worktree_summary.get('untracked_count', 0))})"
         )
         return 0
 

@@ -190,6 +190,25 @@ Run only fast static checks locally:
 ```bash
 python scripts/auto_checks.py --quick
 ```
+
+Clean junk artifacts and report worktree cleanliness:
+
+```bash
+thomas repo-clean --apply --strict
+```
+
+Quick gate-ready status check:
+
+```bash
+thomas status --json --strict-worktree
+```
+
+Install local git hooks (commit + push guards):
+
+```bash
+pre-commit install
+pre-commit install --hook-type pre-push
+```
 ## Rules Of The Road Quality Gate
 
 Thomas now enforces per-job completion checks before finalizing tasks:

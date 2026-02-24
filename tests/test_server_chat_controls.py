@@ -25,9 +25,9 @@ class TestServerChatControls(AioHTTPTestCase):
 
     def tearDown(self) -> None:
         try:
-            self._tmpdir.cleanup()
-        finally:
             super().tearDown()
+        finally:
+            self._tmpdir.cleanup()
 
     async def get_application(self):
         cfg = AppConfig(
@@ -130,6 +130,37 @@ class TestServerChatControls(AioHTTPTestCase):
         patch = patch_events[0].get("patch") or {}
         settings = patch.get("settings") or {}
         self.assertIs(settings.get("showToolDetails"), True)
+
+    async def test_chat_control_rejects_unknown_model_alias_profile(self):
+        sess_resp = await self.client.post("/api/session/new")
+        self.assertEqual(sess_resp.status, 200)
+        sid = str((await sess_resp.json()).get("session_id") or "")
+        self.assertTrue(sid)
+
+        resp = await self.client.post(
+            "/api/chat",
+            json={
+                "sessionId": sid,
+                "model": "not-a-real-profile",
+                "mode": "fast",
+                "message": "please turn on tool details",
+            },
+        )
+        self.assertEqual(resp.status, 400)
+        text = await resp.text()
+        self.assertIn("unknown profile", text)
+
+    async def test_session_import_rejects_unknown_model_alias_profile(self):
+        resp = await self.client.post(
+            "/api/session/import",
+            json={
+                "model": "not-a-real-profile",
+                "conversation": [],
+            },
+        )
+        self.assertEqual(resp.status, 400)
+        text = await resp.text()
+        self.assertIn("unknown profile", text)
 
     async def test_chat_control_updates_batch_mode_via_stream_event(self):
         sess_resp = await self.client.post("/api/session/new")

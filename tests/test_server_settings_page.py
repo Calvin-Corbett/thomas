@@ -32,8 +32,13 @@ class TestServerSettingsPage(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         text = await resp.text()
         self.assertIn("Settings", text)
-        self.assertIn("Appearance", text)
-        self.assertIn("API Keys", text)
+        self.assertIn("Settings Suite", text)
+        self.assertIn("Basic", text)
+        self.assertIn("settingsSectionNav", text)
+        self.assertIn("Find setting section", text)
+        self.assertIn("debugOnboardingGateStatusPill", text)
+        self.assertIn("debugOnboardingGateStatus", text)
+        self.assertIn("debugOnboardingGateList", text)
 
 
 if __name__ == "__main__":

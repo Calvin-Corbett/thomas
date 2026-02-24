@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Optional
+from typing import Callable, Optional
 
 from aiohttp import web
 
@@ -21,11 +21,14 @@ from .db import (
     upsert_membership, deactivate_member,
     create_invite, get_invite_by_token, accept_invite, list_invites,
 )
-from .rbac import WorkspaceRole, role_allows, can_manage_members
+from .rbac import WorkspaceRole, can_manage_members
 
 log = logging.getLogger(__name__)
 
 APP_WORKSPACE_CON = web.AppKey("workspace_con", object)
+APP_WORKSPACE_REQUIRE_API_ACCESS = web.AppKey("workspace_require_api_access", object)
+
+RequireAccessFn = Callable[[web.Request], None]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -64,6 +67,12 @@ def _get_user_id(request: web.Request) -> str:
     return request.headers.get("X-User-Id", "default")
 
 
+def _enforce_api_access(request: web.Request) -> None:
+    require_api_access = request.app.get(APP_WORKSPACE_REQUIRE_API_ACCESS)
+    if callable(require_api_access):
+        require_api_access(request)
+
+
 def _pick_workspace_id(request: web.Request) -> Optional[str]:
     ws = request.headers.get("X-Workspace-Id") or request.headers.get("X-Workspace-ID")
     if ws:
@@ -99,6 +108,7 @@ def _require_workspace_ctx(con, request: web.Request):
 # ── Route handlers ────────────────────────────────────────────────────────────
 
 async def h_list_workspaces(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     user_id = _get_user_id(request)
     rows = list_workspaces_for_user(con, user_id)
@@ -106,6 +116,7 @@ async def h_list_workspaces(request: web.Request) -> web.Response:
 
 
 async def h_create_workspace(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     user_id = _get_user_id(request)
     try:
@@ -124,18 +135,21 @@ async def h_create_workspace(request: web.Request) -> web.Response:
 
 
 async def h_current_workspace(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     ws, _m, _r = _require_workspace_ctx(con, request)
     return _json(_row(ws))
 
 
 async def h_current_membership(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     _ws, membership, _r = _require_workspace_ctx(con, request)
     return _json(_row(membership))
 
 
 async def h_list_members(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     workspace_id = request.match_info["workspace_id"]
     ws, _m, role = _require_workspace_ctx(con, request)
@@ -148,6 +162,7 @@ async def h_list_members(request: web.Request) -> web.Response:
 
 
 async def h_create_invite(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     workspace_id = request.match_info["workspace_id"]
     ws, _m, role = _require_workspace_ctx(con, request)
@@ -171,6 +186,7 @@ async def h_create_invite(request: web.Request) -> web.Response:
 
 
 async def h_list_invites(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     workspace_id = request.match_info["workspace_id"]
     ws, _m, role = _require_workspace_ctx(con, request)
@@ -183,6 +199,7 @@ async def h_list_invites(request: web.Request) -> web.Response:
 
 
 async def h_accept_invite(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     user_id = _get_user_id(request)
     try:
@@ -207,6 +224,7 @@ async def h_accept_invite(request: web.Request) -> web.Response:
 
 
 async def h_change_role(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     workspace_id = request.match_info["workspace_id"]
     target_user_id = request.match_info["user_id"]
@@ -232,6 +250,7 @@ async def h_change_role(request: web.Request) -> web.Response:
 
 
 async def h_revoke_member(request: web.Request) -> web.Response:
+    _enforce_api_access(request)
     con = request.app[APP_WORKSPACE_CON]
     workspace_id = request.match_info["workspace_id"]
     target_user_id = request.match_info["user_id"]
@@ -251,13 +270,25 @@ async def h_revoke_member(request: web.Request) -> web.Response:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-def setup(app: web.Application, config) -> None:
+def setup(app: web.Application, config, *, require_api_access: Optional[RequireAccessFn] = None) -> None:
     """Register workspace routes and open the DB connection."""
     db_path = get_db_path(config)
     con = connect(db_path)
     ensure_schema(con)
     app[APP_WORKSPACE_CON] = con
+    app[APP_WORKSPACE_REQUIRE_API_ACCESS] = require_api_access
     log.info("workspace.rbac_multi_tenant: DB at %s", db_path)
+
+    async def _close_workspace_connection(app_: web.Application) -> None:
+        con_ = app_.get(APP_WORKSPACE_CON)
+        if con_ is None:
+            return
+        try:
+            con_.close()
+        except Exception as e:
+            log.debug("workspace db close failed: %s", e)
+
+    app.on_cleanup.append(_close_workspace_connection)
 
     r = app.router
     r.add_get("/api/workspaces", h_list_workspaces)

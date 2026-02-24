@@ -2,9 +2,9 @@ import type { ReleaseChannel } from "@/lib/types";
 
 export const siteConfig = {
   name: "Thomas",
-  productLine: "AI Command Center",
+  productLine: "Everything Assistant",
   description:
-    "Thomas helps everyday users get real work done with one assistant for planning, execution, and follow-through.",
+    "Thomas is an everything assistant that helps you do real work on your computer: planning, writing, research, automation, troubleshooting, and coding.",
   nav: [
     { href: "/", label: "Home" },
     { href: "/download", label: "Download" },

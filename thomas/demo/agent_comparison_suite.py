@@ -19,6 +19,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Sequence
 
 from thomas.plugins.competitor_evo_scope import build_prediction_evo_scope
 from thomas.plugins.competitor_intel_store import load_registry, render_registry_markdown
+from thomas.plugins.benchmark_program import evaluate_benchmark_program
 from thomas.plugins.test_suite_contract import evaluate_test_suite_contract, load_test_suite_contract
 
 
@@ -121,6 +122,7 @@ class MetricSpec:
     preference: str
     weight: float
     rationale: str
+    test_mode: str = "quick"
 
 
 def _now_iso() -> str:
@@ -222,12 +224,25 @@ def _count_code(root_paths: Iterable[Path]) -> Dict[str, int]:
     return {"files": files, "loc": loc}
 
 
-def _count_test_code(root_paths: Iterable[Path]) -> Dict[str, int]:
+def _count_test_code(
+    root_paths: Iterable[Path],
+    *,
+    include_all: bool = False,
+    seen_files: set[str] | None = None,
+) -> Dict[str, int]:
     files = 0
     loc = 0
+    seen = seen_files if seen_files is not None else set()
     for path in _iter_files(root_paths, suffixes=CODE_EXTENSIONS):
-        if not _is_test_file(path):
+        try:
+            key = str(path.resolve())
+        except Exception:
+            key = str(path)
+        if key in seen:
             continue
+        if not include_all and not _is_test_file(path):
+            continue
+        seen.add(key)
         files += 1
         loc += _count_non_empty_lines(path)
     return {"files": files, "loc": loc}
@@ -705,6 +720,7 @@ def _default_competitor_agent(entry: Mapping[str, Any], *, suite_root: Path) -> 
         "strict_checks": [],
         "benchmark_scorecard_globs": [],
         "benchmark_raw_globs": [],
+        "benchmark_evidence_globs": [],
         "benchmark_aliases": [cid],
         "repo_sync": {
             "enabled": True,
@@ -1530,6 +1546,152 @@ def _collect_benchmark_summary(agent: Mapping[str, Any], *, suite_root: Path) ->
     }
 
 
+def _clamp01(value: Any) -> float | None:
+    num = _safe_float(value)
+    if num is None:
+        return None
+    return max(0.0, min(1.0, float(num)))
+
+
+def _positive_float(value: Any) -> float | None:
+    num = _safe_float(value)
+    if num is None or num <= 0:
+        return None
+    return float(num)
+
+
+def _compute_token_efficiency(
+    *,
+    benchmark: Mapping[str, Any],
+    cost_probe: Mapping[str, Any],
+) -> Dict[str, Any]:
+    tokens_per_success = _positive_float(benchmark.get("raw_tokens_per_success"))
+    total_tokens_mean = _positive_float(benchmark.get("raw_total_tokens_mean"))
+    prompt_tokens_mean = _positive_float(benchmark.get("raw_prompt_tokens_mean"))
+    completion_tokens_mean = _positive_float(benchmark.get("raw_completion_tokens_mean"))
+
+    if total_tokens_mean is None and (prompt_tokens_mean is not None or completion_tokens_mean is not None):
+        total_tokens_mean = float(prompt_tokens_mean or 0.0) + float(completion_tokens_mean or 0.0)
+
+    success_rate = _clamp01(benchmark.get("raw_success_rate_mean"))
+    if success_rate is None:
+        success_rate = _clamp01(benchmark.get("success_rate_mean"))
+    cost_pass_rate = _clamp01(cost_probe.get("pass_rate"))
+
+    effective_tokens_per_success = None
+    source = ""
+    if tokens_per_success is not None:
+        effective_tokens_per_success = tokens_per_success
+        source = "raw_tokens_per_success"
+    elif total_tokens_mean is not None and success_rate is not None and success_rate > 0.0:
+        effective_tokens_per_success = total_tokens_mean / max(float(success_rate), 0.05)
+        source = "derived_total_tokens_mean_div_success_rate"
+    elif total_tokens_mean is not None:
+        effective_tokens_per_success = total_tokens_mean
+        source = "fallback_total_tokens_mean"
+
+    token_component = None
+    if effective_tokens_per_success is not None:
+        token_component = 100.0 / (1.0 + (float(effective_tokens_per_success) / 1500.0))
+
+    density_component = None
+    if total_tokens_mean is not None:
+        density_component = 100.0 / (1.0 + (float(total_tokens_mean) / 1200.0))
+
+    success_component = (float(success_rate) * 100.0) if success_rate is not None else None
+    reliability_component = (float(cost_pass_rate) * 100.0) if cost_pass_rate is not None else None
+
+    components = [
+        (token_component, 0.6),
+        (density_component, 0.15),
+        (success_component, 0.15),
+        (reliability_component, 0.1),
+    ]
+    available_weight = sum(weight for value, weight in components if value is not None)
+    blended_score = (
+        sum(float(value) * weight for value, weight in components if value is not None) / available_weight
+        if available_weight > 0 and token_component is not None
+        else None
+    )
+
+    token_signals = [
+        tokens_per_success,
+        total_tokens_mean,
+        prompt_tokens_mean,
+        completion_tokens_mean,
+    ]
+    token_signal_count = sum(1 for value in token_signals if value is not None)
+    telemetry_coverage = round(token_signal_count / len(token_signals), 6)
+
+    overall_score = None
+    if blended_score is not None:
+        overall_score = float(blended_score) * (0.65 + (0.35 * float(telemetry_coverage)))
+
+    return {
+        "overall_score": (round(float(overall_score), 6) if overall_score is not None else None),
+        "telemetry_coverage": float(telemetry_coverage),
+        "token_signal_count": int(token_signal_count),
+        "token_signal_total": int(len(token_signals)),
+        "effective_tokens_per_success": (
+            round(float(effective_tokens_per_success), 6) if effective_tokens_per_success is not None else None
+        ),
+        "source": source,
+        "components": {
+            "token_component": (round(float(token_component), 6) if token_component is not None else None),
+            "density_component": (round(float(density_component), 6) if density_component is not None else None),
+            "success_component": (round(float(success_component), 6) if success_component is not None else None),
+            "reliability_component": (
+                round(float(reliability_component), 6) if reliability_component is not None else None
+            ),
+            "blended_score": (round(float(blended_score), 6) if blended_score is not None else None),
+        },
+    }
+
+
+def _collect_benchmark_evidence(agent: Mapping[str, Any], *, suite_root: Path) -> Dict[str, Any]:
+    patterns = [str(item).strip() for item in (agent.get("benchmark_evidence_globs") or []) if str(item).strip()]
+    files_used: List[str] = []
+    checks: Dict[str, Dict[str, Any]] = {}
+    errors: List[str] = []
+    if not patterns:
+        return {"files_used": files_used, "checks": checks, "errors": errors}
+
+    seen: set[str] = set()
+    for pattern in patterns:
+        path = Path(pattern)
+        if not path.is_absolute():
+            path = (suite_root / pattern).resolve()
+        matches = [Path(item) for item in sorted(glob.glob(str(path), recursive=True))]
+        for match in matches:
+            key = str(match.resolve())
+            if key in seen:
+                continue
+            seen.add(key)
+            files_used.append(str(match))
+            try:
+                payload = json.loads(match.read_text(encoding="utf-8"))
+            except Exception as exc:
+                errors.append(f"{match}: {type(exc).__name__}: {exc}")
+                continue
+            if not isinstance(payload, dict):
+                errors.append(f"{match}: evidence payload must be an object")
+                continue
+            raw_checks = payload.get("checks")
+            if not isinstance(raw_checks, dict):
+                continue
+            for cid, raw in raw_checks.items():
+                check_id = str(cid or "").strip()
+                if not check_id:
+                    continue
+                row = dict(raw) if isinstance(raw, dict) else {"value": raw}
+                merged = dict(checks.get(check_id) or {})
+                for key_name in ["pass", "score", "value", "notes", "source", "updated_at_utc"]:
+                    if key_name in row:
+                        merged[key_name] = row[key_name]
+                checks[check_id] = merged
+    return {"files_used": files_used, "checks": checks, "errors": errors}
+
+
 def _collect_cli_metrics(
     agent: Mapping[str, Any],
     *,
@@ -1599,6 +1761,7 @@ def _collect_agent_metrics(
     if not source_roots:
         source_roots = [root]
     test_roots = [_resolve(root, rel) for rel in (agent.get("test_roots") or [])] or list(source_roots)
+    test_dataset_roots = [_resolve(root, rel) for rel in (agent.get("test_dataset_roots") or [])]
 
     browser_roots = [_resolve(root, rel) for rel in (agent.get("browser_roots") or [])]
     plugin_roots = [_resolve(root, rel) for rel in (agent.get("plugin_roots") or [])]
@@ -1635,7 +1798,13 @@ def _collect_agent_metrics(
         )
 
     code = _count_code(source_roots)
-    tests = _count_test_code(test_roots)
+    seen_test_files: set[str] = set()
+    tests_named = _count_test_code(test_roots, seen_files=seen_test_files)
+    tests_dataset = _count_test_code(test_dataset_roots, include_all=True, seen_files=seen_test_files)
+    tests = {
+        "files": int(tests_named["files"] + tests_dataset["files"]),
+        "loc": int(tests_named["loc"] + tests_dataset["loc"]),
+    }
     browser = _count_code(browser_roots)
     plugins = _count_code(plugin_roots)
     gateway = _count_code(gateway_roots)
@@ -1676,11 +1845,13 @@ def _collect_agent_metrics(
 
     strict_checks = _run_strict_checks(agent, agent_root=root)
     benchmark = _collect_benchmark_summary(agent, suite_root=suite_root)
+    benchmark_evidence = _collect_benchmark_evidence(agent, suite_root=suite_root)
     performance_probe = _run_probe_suite(agent, agent_root=root, probe_key="performance_probes")
     resilience_probe = _run_probe_suite(agent, agent_root=root, probe_key="resilience_probes")
     security_probe = _run_probe_suite(agent, agent_root=root, probe_key="security_probes")
     cost_probe = _run_probe_suite(agent, agent_root=root, probe_key="cost_probes")
     errors.extend([str(item) for item in (benchmark.get("errors") or [])])
+    errors.extend([str(item) for item in (benchmark_evidence.get("errors") or [])])
 
     secret_patterns = [
         r"AKIA[0-9A-Z]{16}",
@@ -1713,12 +1884,15 @@ def _collect_agent_metrics(
         security_probe = _fallback_security_probe(secret_hits, risky_hits)
     if int(cost_probe.get("total_runs") or 0) <= 0:
         cost_probe = _fallback_cost_probe(benchmark)
+    token_efficiency = _compute_token_efficiency(benchmark=benchmark, cost_probe=cost_probe)
 
     metrics: Dict[str, Any] = {}
     metrics["loc.total_files"] = int(code["files"])
     metrics["loc.total_loc"] = int(code["loc"])
     metrics["tests.files"] = int(tests["files"])
     metrics["tests.loc"] = int(tests["loc"])
+    metrics["tests.dataset_files"] = int(tests_dataset["files"])
+    metrics["tests.dataset_loc"] = int(tests_dataset["loc"])
     metrics["tests.loc_per_file"] = round((tests["loc"] / tests["files"]), 6) if tests["files"] > 0 else None
     metrics["tests.to_code_file_ratio"] = round((tests["files"] / code["files"]), 6) if code["files"] > 0 else None
     metrics["tests.to_code_loc_ratio"] = round((tests["loc"] / code["loc"]), 6) if code["loc"] > 0 else None
@@ -1834,6 +2008,9 @@ def _collect_agent_metrics(
     metrics["cost.benchmark_tokens_per_success"] = benchmark["raw_tokens_per_success"]
     metrics["cost.benchmark_tool_calls_per_success"] = benchmark["raw_tool_calls_per_success"]
     metrics["cost.benchmark_total_tokens_mean"] = benchmark["raw_total_tokens_mean"]
+    metrics["cost.token_efficiency_score"] = token_efficiency["overall_score"]
+    metrics["cost.token_efficiency_tokens_per_success_effective"] = token_efficiency["effective_tokens_per_success"]
+    metrics["cost.token_efficiency_telemetry_coverage"] = token_efficiency["telemetry_coverage"]
 
     return {
         "id": aid,
@@ -1848,6 +2025,8 @@ def _collect_agent_metrics(
         "resilience_probe": resilience_probe,
         "security_probe": security_probe,
         "cost_probe": cost_probe,
+        "token_efficiency": token_efficiency,
+        "benchmark_evidence": benchmark_evidence,
         "benchmark": benchmark,
     }
 
@@ -1876,8 +2055,18 @@ def _build_metric_specs(
     weight_overrides: Mapping[str, Any],
 ) -> Dict[str, MetricSpec]:
     specs: Dict[str, MetricSpec] = {}
+    dynamic_categories = {
+        "performance_load",
+        "resilience",
+        "security",
+        "cost_efficiency",
+        "production_readiness",
+        "benchmark_execution",
+        "reliability",
+    }
 
     def add(metric: str, category: str, preference: str, rationale: str) -> None:
+        mode = ("dynamic" if category in dynamic_categories else "quick")
         specs[metric] = MetricSpec(
             metric=metric,
             category=category,
@@ -1889,6 +2078,7 @@ def _build_metric_specs(
                 weight_overrides=weight_overrides,
             ),
             rationale=rationale,
+            test_mode=mode,
         )
 
     add("loc.total_files", "code_surface", "higher_is_better", "Overall code surface breadth.")
@@ -1901,6 +2091,8 @@ def _build_metric_specs(
 
     add("tests.files", "test_rigor", "higher_is_better", "Test file breadth.")
     add("tests.loc", "test_rigor", "higher_is_better", "Test implementation depth.")
+    add("tests.dataset_files", "test_rigor", "higher_is_better", "Structured evaluation dataset files counted as executable test assets.")
+    add("tests.dataset_loc", "test_rigor", "higher_is_better", "Structured evaluation dataset LOC counted as executable test assets.")
     add("tests.loc_per_file", "test_rigor", "higher_is_better", "Average depth per test file.")
     add("tests.to_code_file_ratio", "test_rigor", "higher_is_better", "Test-to-code file ratio.")
     add("tests.to_code_loc_ratio", "test_rigor", "higher_is_better", "Test-to-code LOC ratio.")
@@ -2024,6 +2216,24 @@ def _build_metric_specs(
         "cost_efficiency",
         "lower_is_better",
         "Mean benchmark total token usage.",
+    )
+    add(
+        "cost.token_efficiency_tokens_per_success_effective",
+        "cost_efficiency",
+        "lower_is_better",
+        "Effective token cost per success (direct or derived).",
+    )
+    add(
+        "cost.token_efficiency_telemetry_coverage",
+        "cost_efficiency",
+        "higher_is_better",
+        "Coverage of token telemetry signals used by efficiency scoring.",
+    )
+    add(
+        "cost.token_efficiency_score",
+        "cost_efficiency",
+        "higher_is_better",
+        "Blended token-efficiency score with telemetry-aware confidence weighting.",
     )
 
     add("integrity.empty_code_files", "integrity", "lower_is_better", "Empty code files indicate dead surface.")
@@ -2211,6 +2421,7 @@ def _build_metric_rows(
                 "preference": spec.preference,
                 "weight": round(float(spec.weight), 6),
                 "rationale": spec.rationale,
+                "test_mode": str(spec.test_mode or "quick"),
                 "values": values,
                 "participants": sorted(participants.keys()),
                 "missing": missing,
@@ -2455,6 +2666,9 @@ def load_suite_config(path: Path) -> Dict[str, Any]:
     head_to_head_pair = [str(item).strip() for item in (data.get("head_to_head_pair") or []) if str(item).strip()]
     if len(head_to_head_pair) != 2:
         head_to_head_pair = []
+    tie_policy = str(data.get("head_to_head_tie_policy") or "half_point").strip().lower()
+    if tie_policy not in {"half_point", "exclude"}:
+        tie_policy = "half_point"
 
     return {
         "id": str(data.get("id") or path.stem),
@@ -2467,6 +2681,7 @@ def load_suite_config(path: Path) -> Dict[str, Any]:
         "test_suite_contract_path": test_suite_contract_path,
         "execution_policy": execution_policy,
         "head_to_head_pair": head_to_head_pair,
+        "head_to_head_tie_policy": tie_policy,
         "agents": normalized_agents,
     }
 
@@ -2538,6 +2753,7 @@ def build_suite_result(
             "test_suite_contract_path": str(contract_path),
             "execution_policy": execution_policy,
             "head_to_head_pair": list(head_to_head_pair or []),
+            "head_to_head_tie_policy": str(suite_config.get("head_to_head_tie_policy") or "half_point"),
             "tracked_cli_commands": tracked_cli,
             "category_weights": category_weights,
             "metric_weight_overrides": metric_weight_overrides,
@@ -2562,29 +2778,110 @@ def build_suite_result(
         focus_agent=focus_agent,
         head_to_head_pair=head_to_head_pair,
     )
+    result["benchmark_program"] = evaluate_benchmark_program(
+        contract=contract,
+        result=result,
+        contract_evaluation=dict(result.get("test_suite_contract") or {}),
+    )
     contract_scores = list((dict(result.get("test_suite_contract") or {}).get("scores") or {}).get("agents") or [])
     score_map = {
         str(row.get("agent") or "").strip(): dict(row)
         for row in contract_scores
         if str(row.get("agent") or "").strip()
     }
+    benchmark_rows = list((dict(result.get("benchmark_program") or {}).get("ranking") or []))
+    benchmark_map = {
+        str(row.get("agent") or "").strip(): dict(row)
+        for row in benchmark_rows
+        if str(row.get("agent") or "").strip()
+    }
     ranking_rows = list((dict(result.get("scoreboard") or {})).get("ranking") or [])
     for row in ranking_rows:
         aid = str(row.get("agent") or "").strip()
         ext = dict(score_map.get(aid) or {})
-        row["head_to_head_score"] = round(float(ext.get("head_to_head_score") or 0.0), 3)
+        row["head_to_head_score"] = (
+            round(float(ext.get("head_to_head_score")), 3) if _is_number(ext.get("head_to_head_score")) else None
+        )
+        row["head_to_head_decisive_score"] = (
+            round(float(ext.get("head_to_head_decisive_score")), 3)
+            if _is_number(ext.get("head_to_head_decisive_score"))
+            else None
+        )
+        row["token_efficiency_score"] = (
+            round(float(ext.get("token_efficiency_score")), 6)
+            if _is_number(ext.get("token_efficiency_score"))
+            else None
+        )
+        row["token_efficiency_tokens_per_success"] = (
+            round(float(ext.get("token_efficiency_tokens_per_success")), 6)
+            if _is_number(ext.get("token_efficiency_tokens_per_success"))
+            else None
+        )
+        row["token_efficiency_telemetry_coverage"] = (
+            round(float(ext.get("token_efficiency_telemetry_coverage")), 6)
+            if _is_number(ext.get("token_efficiency_telemetry_coverage"))
+            else 0.0
+        )
         row["overall_suite_score"] = round(float(ext.get("overall_suite_score") or 0.0), 3)
         row["overall_suite_rank"] = int(ext.get("overall_rank") or 0)
+        row["quick_suite_score"] = round(float(ext.get("quick_suite_score") or 0.0), 3)
+        row["dynamic_suite_score"] = round(float(ext.get("dynamic_suite_score") or 0.0), 3)
+        row["human_suite_score"] = round(float(ext.get("human_suite_score") or 0.0), 3)
+        row["quick_suite_rank"] = int(ext.get("quick_suite_rank") or 0)
+        row["dynamic_suite_rank"] = int(ext.get("dynamic_suite_rank") or 0)
+        row["human_suite_rank"] = int(ext.get("human_suite_rank") or 0)
+        bench = dict(benchmark_map.get(aid) or {})
+        row["overall_benchmark_capability_score"] = round(
+            float(bench.get("overall_benchmark_capability_score") or 0.0), 3
+        )
+        row["benchmark_program_rank"] = int(bench.get("rank") or 0)
+        row["governance_verdict"] = str(bench.get("governance_verdict") or "NO_GO")
+        lane_scores = dict(bench.get("lane_scores") or {})
+        row["quick_lane_score"] = round(float(dict(lane_scores.get("quick") or {}).get("score") or 0.0), 3)
+        row["dynamic_lane_score"] = round(float(dict(lane_scores.get("dynamic") or {}).get("score") or 0.0), 3)
     result["overall_suite_scoreboard"] = {
         "methodology": dict((dict(result.get("test_suite_contract") or {}).get("scoring_methodology") or {})),
         "ranking": sorted(
             [
                 {
                     "agent": str(row.get("agent") or ""),
-                    "head_to_head_score": round(float(row.get("head_to_head_score") or 0.0), 3),
+                    "head_to_head_score": (
+                        round(float(row.get("head_to_head_score")), 3) if _is_number(row.get("head_to_head_score")) else None
+                    ),
+                    "head_to_head_decisive_score": (
+                        round(float(row.get("head_to_head_decisive_score")), 3)
+                        if _is_number(row.get("head_to_head_decisive_score"))
+                        else None
+                    ),
+                    "token_efficiency_score": (
+                        round(float(row.get("token_efficiency_score")), 6)
+                        if _is_number(row.get("token_efficiency_score"))
+                        else None
+                    ),
+                    "token_efficiency_tokens_per_success": (
+                        round(float(row.get("token_efficiency_tokens_per_success")), 6)
+                        if _is_number(row.get("token_efficiency_tokens_per_success"))
+                        else None
+                    ),
+                    "token_efficiency_telemetry_coverage": round(
+                        float(row.get("token_efficiency_telemetry_coverage") or 0.0), 6
+                    ),
                     "overall_suite_score": round(float(row.get("overall_suite_score") or 0.0), 3),
                     "head_to_head_rank": int(row.get("rank") or 0),
                     "overall_suite_rank": int(row.get("overall_suite_rank") or 0),
+                    "quick_suite_score": round(float(row.get("quick_suite_score") or 0.0), 3),
+                    "dynamic_suite_score": round(float(row.get("dynamic_suite_score") or 0.0), 3),
+                    "human_suite_score": round(float(row.get("human_suite_score") or 0.0), 3),
+                    "quick_suite_rank": int(row.get("quick_suite_rank") or 0),
+                    "dynamic_suite_rank": int(row.get("dynamic_suite_rank") or 0),
+                    "human_suite_rank": int(row.get("human_suite_rank") or 0),
+                    "overall_benchmark_capability_score": round(
+                        float(row.get("overall_benchmark_capability_score") or 0.0), 3
+                    ),
+                    "benchmark_program_rank": int(row.get("benchmark_program_rank") or 0),
+                    "governance_verdict": str(row.get("governance_verdict") or "NO_GO"),
+                    "quick_lane_score": round(float(row.get("quick_lane_score") or 0.0), 3),
+                    "dynamic_lane_score": round(float(row.get("dynamic_lane_score") or 0.0), 3),
                 }
                 for row in ranking_rows
             ],
@@ -2597,7 +2894,7 @@ def build_suite_result(
 def _print_human(result: Mapping[str, Any]) -> None:
     suite = dict(result.get("suite") or {})
     scoreboard = dict(result.get("scoreboard") or {})
-    ranking = list(scoreboard.get("ranking") or [])
+    runtime_ranking = list(scoreboard.get("ranking") or [])
     focus = dict(result.get("focus") or {})
     focus_gaps = list(focus.get("open_gaps") or [])
     pressure = dict(focus.get("competitor_pressure") or {})
@@ -2609,7 +2906,18 @@ def _print_human(result: Mapping[str, Any]) -> None:
     contract_catalog = dict((dict(contract.get("catalog") or {})).get("by_state") or {})
     dual_scoring = dict(result.get("overall_suite_scoreboard") or {})
     scoring_methodology = dict(dual_scoring.get("methodology") or {})
+    ranking = list(dual_scoring.get("ranking") or [])
+    runtime_map = {
+        str(row.get("agent") or "").strip(): dict(row)
+        for row in runtime_ranking
+        if str(row.get("agent") or "").strip()
+    }
+    benchmark_program = dict(result.get("benchmark_program") or {})
+    benchmark_ranking = list(benchmark_program.get("ranking") or [])
     h2h = dict((dict(contract.get("scores") or {}).get("head_to_head") or {}))
+    token_efficiency = dict((dict(contract.get("scores") or {}).get("token_efficiency") or {}))
+    token_h2h = dict(token_efficiency.get("head_to_head") or {})
+    token_ranking = list(token_efficiency.get("overall_ranking") or [])
 
     print("Full Agent Comparison Suite")
     print(f"- suite: {suite.get('id')} v{suite.get('version')}")
@@ -2626,27 +2934,106 @@ def _print_human(result: Mapping[str, Any]) -> None:
     print("")
     print("Ranking")
     if scoring_methodology:
+        tie_policy = str(h2h.get("tie_policy") or "half_point")
         print(f"- head_to_head: {scoring_methodology.get('head_to_head_score')}")
+        print(f"- token_efficiency: {scoring_methodology.get('token_efficiency_score')}")
         print(f"- overall_suite: {scoring_methodology.get('overall_suite_score')}")
+        print(f"- lane_scores: {scoring_methodology.get('lane_suite_scores')}")
+        print("- score math:")
+        if tie_policy == "exclude":
+            print("  - runtime head_to_head: winner=1, ties excluded, score=(points/counted_metrics)*100")
+        else:
+            print("  - runtime head_to_head: winner=1, tie=0.5, score=(points/counted_metrics)*100")
+        print("  - head_to_head_decisive: winner=1, ties always excluded, score=(wins/non_tied_counted)*100")
+        print("  - overall_suite: (runtime_passed + catalog_passed) / (runtime_applicable + catalog_applicable) * 100")
+        print("  - lane_suite_scores: same formula as overall but mode-filtered by quick/dynamic/human tags")
+        print("  - token_efficiency: separate token-only scoring block, emitted only with token telemetry evidence")
     for row in ranking:
+        aid = str(row.get("agent") or "")
+        runtime_row = dict(runtime_map.get(aid) or {})
         h2h_value = row.get("head_to_head_score")
         h2h_text = f"{h2h_value}" if _is_number(h2h_value) else "n/a"
+        h2h_decisive_value = row.get("head_to_head_decisive_score")
+        h2h_decisive_text = f"{h2h_decisive_value}" if _is_number(h2h_decisive_value) else "n/a"
+        token_value = row.get("token_efficiency_score")
+        token_text = f"{token_value}" if _is_number(token_value) else "n/a"
         print(
-            f"- #{row.get('rank')} {row.get('agent')}: "
-            f"head_to_head={h2h_text} overall_suite={row.get('overall_suite_score')}, "
-            f"wins={row.get('wins')}, coverage={float(row.get('coverage') or 0.0) * 100:.1f}%"
+            f"- #{row.get('overall_suite_rank')} {row.get('agent')}: "
+            f"overall_suite={row.get('overall_suite_score')} capability={row.get('overall_benchmark_capability_score')} "
+            f"(quick={row.get('quick_suite_score')}, dynamic={row.get('dynamic_suite_score')}, human={row.get('human_suite_score')}), "
+            f"(runtime_rank={runtime_row.get('rank')}, head_to_head={h2h_text}, decisive_h2h={h2h_decisive_text}, token_efficiency={token_text}), "
+            f"verdict={row.get('governance_verdict')} "
+            f"runtime_wins={runtime_row.get('wins')}, runtime_coverage={float(runtime_row.get('coverage') or 0.0) * 100:.1f}%"
         )
     print("")
     print("Head-to-Head (1v1)")
     if bool(h2h.get("enabled")):
+        tie_policy = str(h2h.get("tie_policy") or "half_point")
         print(f"- pair: {h2h.get('agent_a')} vs {h2h.get('agent_b')}")
         print(
             f"- scores: {h2h.get('agent_a')}={h2h.get('agent_a_score')} "
             f"{h2h.get('agent_b')}={h2h.get('agent_b_score')} "
-            f"(counted_metrics={h2h.get('counted_metrics')}, ties={h2h.get('ties')})"
+            f"(tie_policy={tie_policy}, counted_metrics={h2h.get('counted_metrics')}, "
+            f"ties_counted={h2h.get('ties')}, ties_observed={h2h.get('ties_observed')})"
         )
+        print(
+            f"- decisive: {h2h.get('agent_a')}={h2h.get('decisive_agent_a_score')} "
+            f"{h2h.get('agent_b')}={h2h.get('decisive_agent_b_score')} "
+            f"(counted_metrics={h2h.get('decisive_counted_metrics')}, ties_excluded=True)"
+        )
+        h2h_by_mode = dict(h2h.get("by_mode") or {})
+        for mode in ("quick", "dynamic", "human"):
+            mode_row = dict(h2h_by_mode.get(mode) or {})
+            counted = int(mode_row.get("counted_metrics") or 0)
+            if counted <= 0:
+                continue
+            print(
+                f"- by_mode.{mode}: {h2h.get('agent_a')}={mode_row.get('agent_a_score')} "
+                f"{h2h.get('agent_b')}={mode_row.get('agent_b_score')} "
+                f"(counted_metrics={counted}, ties_counted={mode_row.get('ties')}, "
+                f"ties_observed={mode_row.get('ties_observed')})"
+            )
     else:
         print("- not configured (use --h2h-a and --h2h-b for explicit 1v1).")
+    print("")
+    print("Token Efficiency")
+    print(f"- method: {token_efficiency.get('methodology')}")
+    if bool(token_h2h.get("enabled")):
+        print(f"- pair: {token_h2h.get('agent_a')} vs {token_h2h.get('agent_b')}")
+        print(
+            f"- scores: {token_h2h.get('agent_a')}={token_h2h.get('agent_a_score')} "
+            f"{token_h2h.get('agent_b')}={token_h2h.get('agent_b_score')} "
+            f"(counted_metrics={token_h2h.get('counted_metrics')}, ties={token_h2h.get('ties')})"
+        )
+    else:
+        print("- pair: not configured")
+    for row in token_ranking[:6]:
+        print(
+            f"- #{row.get('token_efficiency_rank')} {row.get('agent')}: "
+            f"score={row.get('token_efficiency_score')} "
+            f"tokens_per_success={row.get('effective_tokens_per_success')} "
+            f"coverage={row.get('telemetry_coverage')}"
+        )
+    print("")
+    print("Benchmark Program")
+    if benchmark_program:
+        print(f"- id: {benchmark_program.get('id')}")
+        lane_weights = dict(benchmark_program.get("lane_weights") or {})
+        if lane_weights:
+            joined = ", ".join(f"{k}={lane_weights[k]}" for k in sorted(lane_weights.keys()))
+            print(f"- lane_weights: {joined}")
+        verdict_counts = dict(benchmark_program.get("verdict_counts") or {})
+        if verdict_counts:
+            joined = ", ".join(f"{k}={verdict_counts[k]}" for k in sorted(verdict_counts.keys()))
+            print(f"- verdict_counts: {joined}")
+        for row in benchmark_ranking[:8]:
+            print(
+                f"- #{row.get('rank')} {row.get('agent')}: "
+                f"capability={row.get('overall_benchmark_capability_score')} "
+                f"quick={dict(row.get('lane_scores') or {}).get('quick', {}).get('score', 0.0)} "
+                f"dynamic={dict(row.get('lane_scores') or {}).get('dynamic', {}).get('score', 0.0)} "
+                f"verdict={row.get('governance_verdict')}"
+            )
     print("")
     print("Metric Coverage")
     print(
@@ -2712,7 +3099,7 @@ def _print_human(result: Mapping[str, Any]) -> None:
 def _render_markdown(result: Mapping[str, Any]) -> str:
     suite = dict(result.get("suite") or {})
     scoreboard = dict(result.get("scoreboard") or {})
-    ranking = list(scoreboard.get("ranking") or [])
+    runtime_ranking = list(scoreboard.get("ranking") or [])
     focus = dict(result.get("focus") or {})
     gaps = list(focus.get("open_gaps") or [])
     pressure = dict(focus.get("competitor_pressure") or {})
@@ -2724,7 +3111,18 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
     contract_catalog = dict((dict(contract.get("catalog") or {})).get("by_state") or {})
     dual_scoring = dict(result.get("overall_suite_scoreboard") or {})
     scoring_methodology = dict(dual_scoring.get("methodology") or {})
+    ranking = list(dual_scoring.get("ranking") or [])
+    runtime_map = {
+        str(row.get("agent") or "").strip(): dict(row)
+        for row in runtime_ranking
+        if str(row.get("agent") or "").strip()
+    }
     h2h = dict((dict(contract.get("scores") or {}).get("head_to_head") or {}))
+    token_efficiency = dict((dict(contract.get("scores") or {}).get("token_efficiency") or {}))
+    token_h2h = dict(token_efficiency.get("head_to_head") or {})
+    token_ranking = list(token_efficiency.get("overall_ranking") or [])
+    benchmark_program = dict(result.get("benchmark_program") or {})
+    benchmark_ranking = list(benchmark_program.get("ranking") or [])
     agents = list(result.get("agents") or [])
     lines: List[str] = []
     lines.append(f"# Full Agent Comparison Suite ({suite.get('id')})")
@@ -2743,29 +3141,111 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
     lines.append("## Ranking")
     lines.append("")
     if scoring_methodology:
+        tie_policy = str(h2h.get("tie_policy") or "half_point")
         lines.append(f"- Head-to-head method: `{scoring_methodology.get('head_to_head_score')}`")
+        lines.append(f"- Token efficiency method: `{scoring_methodology.get('token_efficiency_score')}`")
         lines.append(f"- Overall suite method: `{scoring_methodology.get('overall_suite_score')}`")
+        lines.append(f"- Lane suite method: `{scoring_methodology.get('lane_suite_scores')}`")
+        lines.append("- Score math:")
+        if tie_policy == "exclude":
+            lines.append("- runtime head_to_head: `winner=1`, `ties_excluded`, `score=(points/counted_metrics)*100`")
+        else:
+            lines.append("- runtime head_to_head: `winner=1`, `tie=0.5`, `score=(points/counted_metrics)*100`")
+        lines.append("- head_to_head_decisive: `winner=1`, `ties_excluded`, `score=(wins/non_tied_counted)*100`")
+        lines.append(
+            "- overall_suite: `(runtime_passed + catalog_passed) / (runtime_applicable + catalog_applicable) * 100`"
+        )
+        lines.append(
+            "- lane_suite_scores: same formula as overall, filtered by `test_mode` (`quick`, `dynamic`, `human`)"
+        )
+        lines.append("- token_efficiency: separate token-only scoring block, emitted only with token telemetry evidence")
         lines.append("")
     for row in ranking:
+        aid = str(row.get("agent") or "")
+        runtime_row = dict(runtime_map.get(aid) or {})
         h2h_value = row.get("head_to_head_score")
         h2h_text = str(h2h_value) if _is_number(h2h_value) else "n/a"
+        h2h_decisive_value = row.get("head_to_head_decisive_score")
+        h2h_decisive_text = str(h2h_decisive_value) if _is_number(h2h_decisive_value) else "n/a"
+        token_value = row.get("token_efficiency_score")
+        token_text = str(token_value) if _is_number(token_value) else "n/a"
         lines.append(
-            f"- #{row.get('rank')} `{row.get('agent')}`: head_to_head `{h2h_text}`, "
-            f"overall_suite `{row.get('overall_suite_score')}`, "
-            f"wins `{row.get('wins')}`, coverage `{round(float(row.get('coverage') or 0.0) * 100.0, 2)}%`"
+            f"- #{row.get('overall_suite_rank')} `{row.get('agent')}`: overall_suite `{row.get('overall_suite_score')}`, capability `{row.get('overall_benchmark_capability_score')}`, "
+            f"quick_suite `{row.get('quick_suite_score')}`, dynamic_suite `{row.get('dynamic_suite_score')}`, human_suite `{row.get('human_suite_score')}`, "
+            f"runtime_rank `{runtime_row.get('rank')}`, head_to_head `{h2h_text}`, decisive_h2h `{h2h_decisive_text}`, token_efficiency `{token_text}`, "
+            f"verdict `{row.get('governance_verdict')}`, runtime_wins `{runtime_row.get('wins')}`, "
+            f"runtime_coverage `{round(float(runtime_row.get('coverage') or 0.0) * 100.0, 2)}%`"
         )
     lines.append("")
     lines.append("## Head-to-Head (1v1)")
     lines.append("")
     if bool(h2h.get("enabled")):
+        tie_policy = str(h2h.get("tie_policy") or "half_point")
         lines.append(f"- Pair: `{h2h.get('agent_a')}` vs `{h2h.get('agent_b')}`")
         lines.append(
             f"- Scores: `{h2h.get('agent_a')}`=`{h2h.get('agent_a_score')}`, "
             f"`{h2h.get('agent_b')}`=`{h2h.get('agent_b_score')}` "
-            f"(counted_metrics `{h2h.get('counted_metrics')}`, ties `{h2h.get('ties')}`)"
+            f"(tie_policy `{tie_policy}`, counted_metrics `{h2h.get('counted_metrics')}`, "
+            f"ties_counted `{h2h.get('ties')}`, ties_observed `{h2h.get('ties_observed')}`)"
         )
+        lines.append(
+            f"- Decisive (ties excluded): `{h2h.get('agent_a')}`=`{h2h.get('decisive_agent_a_score')}`, "
+            f"`{h2h.get('agent_b')}`=`{h2h.get('decisive_agent_b_score')}` "
+            f"(counted_metrics `{h2h.get('decisive_counted_metrics')}`)"
+        )
+        h2h_by_mode = dict(h2h.get("by_mode") or {})
+        for mode in ("quick", "dynamic", "human"):
+            mode_row = dict(h2h_by_mode.get(mode) or {})
+            counted = int(mode_row.get("counted_metrics") or 0)
+            if counted <= 0:
+                continue
+            lines.append(
+                f"- By mode `{mode}`: `{h2h.get('agent_a')}`=`{mode_row.get('agent_a_score')}`, "
+                f"`{h2h.get('agent_b')}`=`{mode_row.get('agent_b_score')}` "
+                f"(counted_metrics `{counted}`, ties_counted `{mode_row.get('ties')}`, "
+                f"ties_observed `{mode_row.get('ties_observed')}`)"
+            )
     else:
         lines.append("- Not configured (use `--h2h-a` and `--h2h-b` for explicit 1v1).")
+    lines.append("")
+    lines.append("## Token Efficiency")
+    lines.append("")
+    lines.append(f"- Method: `{token_efficiency.get('methodology')}`")
+    if bool(token_h2h.get("enabled")):
+        lines.append(f"- Pair: `{token_h2h.get('agent_a')}` vs `{token_h2h.get('agent_b')}`")
+        lines.append(
+            f"- Scores: `{token_h2h.get('agent_a')}`=`{token_h2h.get('agent_a_score')}`, "
+            f"`{token_h2h.get('agent_b')}`=`{token_h2h.get('agent_b_score')}` "
+            f"(counted_metrics `{token_h2h.get('counted_metrics')}`, ties `{token_h2h.get('ties')}`)"
+        )
+    else:
+        lines.append("- Pair: not configured.")
+    for row in token_ranking[:6]:
+        lines.append(
+            f"- `#{row.get('token_efficiency_rank')}` `{row.get('agent')}`: "
+            f"score `{row.get('token_efficiency_score')}`, "
+            f"tokens_per_success `{row.get('effective_tokens_per_success')}`, "
+            f"coverage `{row.get('telemetry_coverage')}`"
+        )
+    lines.append("")
+    lines.append("## Benchmark Program")
+    lines.append("")
+    lines.append(f"- Program id: `{benchmark_program.get('id')}`")
+    lane_weights = dict(benchmark_program.get("lane_weights") or {})
+    if lane_weights:
+        for lane in sorted(lane_weights.keys()):
+            lines.append(f"- Lane weight `{lane}`: `{lane_weights[lane]}`")
+    verdict_counts = dict(benchmark_program.get("verdict_counts") or {})
+    if verdict_counts:
+        for key in sorted(verdict_counts.keys()):
+            lines.append(f"- Verdict `{key}`: `{verdict_counts[key]}`")
+    for row in benchmark_ranking[:8]:
+        lines.append(
+            f"- `#{row.get('rank')}` `{row.get('agent')}`: capability `{row.get('overall_benchmark_capability_score')}`, "
+            f"quick `{dict(row.get('lane_scores') or {}).get('quick', {}).get('score', 0.0)}`, "
+            f"dynamic `{dict(row.get('lane_scores') or {}).get('dynamic', {}).get('score', 0.0)}`, "
+            f"verdict `{row.get('governance_verdict')}`"
+        )
     lines.append("")
     if contract:
         lines.append("## Full Coverage Contract")

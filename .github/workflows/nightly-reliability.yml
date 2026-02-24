@@ -1,0 +1,123 @@
+name: Nightly Reliability
+
+on:
+  schedule:
+    - cron: "15 09 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: nightly-reliability-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  nightly-reliability:
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[server,repl,test]"
+          python -m pip install pytest pytest-asyncio pytest-aiohttp ruff
+
+      - name: Prepare artifact directory
+        shell: bash
+        run: |
+          mkdir -p artifacts/nightly_reliability
+
+      - name: Soak baseline with failure injection
+        shell: bash
+        run: |
+          python scripts/soak_runner.py \
+            --command "python scripts/config_validator.py --json" \
+            --iterations 60 \
+            --interval-seconds 1 \
+            --failure-command 'python -c "import sys; sys.exit(1)"' \
+            --inject-failure-every 15 \
+            --timeout-seconds 90 \
+            --max-failure-rate 0.05 \
+            --json > artifacts/nightly_reliability/soak_report.json
+
+      - name: Perf baseline
+        shell: bash
+        run: |
+          python scripts/perf_probe.py \
+            --command "python scripts/config_validator.py --json" \
+            --runs 30 \
+            --timeout-seconds 90 \
+            --min-success-rate 1.0 \
+            --json > artifacts/nightly_reliability/perf_report.json
+
+      - name: Onboarding outcomes + gate snapshots
+        shell: bash
+        run: |
+          python scripts/onboarding_outcomes_report.py --days 7 --json > artifacts/nightly_reliability/onboarding_outcomes_report.json
+          python scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning > artifacts/nightly_reliability/onboarding_outcomes_gate.json
+          python scripts/focus_scorecard.py --days 7 --json > artifacts/nightly_reliability/focus_scorecard.json
+
+      - name: Security posture snapshot
+        shell: bash
+        run: |
+          python scripts/security_audit.py --repo-root . --json > artifacts/nightly_reliability/security_audit.json
+
+      - name: Build nightly summary
+        shell: bash
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+
+          root = Path("artifacts/nightly_reliability")
+
+          def load(name: str) -> dict:
+              path = root / name
+              try:
+                  return json.loads(path.read_text(encoding="utf-8"))
+              except Exception:
+                  return {}
+
+          soak = load("soak_report.json")
+          perf = load("perf_report.json")
+          gate = load("onboarding_outcomes_gate.json")
+          scorecard = load("focus_scorecard.json")
+          security = load("security_audit.json")
+
+          soak_summary = dict(soak.get("summary") or {})
+          perf_summary = dict(perf.get("summary") or {})
+          gate_summary = dict((gate.get("gate") or {}).get("summary") or {})
+          sec_summary = dict(security.get("summary") or {})
+
+          lines = [
+              "# Nightly Reliability Summary",
+              "",
+              f"- soak total runs: {int(soak_summary.get('total_runs', 0))}",
+              f"- soak failure rate: {float(soak_summary.get('failure_rate', 0.0)):.4f}",
+              f"- perf p95 ms: {float(perf_summary.get('p95_ms', 0.0)):.3f}",
+              f"- perf success rate: {float(perf_summary.get('success_rate', 0.0)):.4f}",
+              f"- onboarding gate ok: {bool(gate.get('ok', False))}",
+              f"- onboarding completion rate: {float(gate_summary.get('completion_rate', 0.0)):.4f}",
+              f"- onboarding recovery success rate: {float(gate_summary.get('recovery_success_rate', 0.0)):.4f}",
+              f"- onboarding median ready seconds: {float(gate_summary.get('median_time_to_ready_seconds', 0.0)):.3f}",
+              f"- security audit ok: {bool(security.get('ok', False))}",
+              f"- security failing checks: {', '.join(sec_summary.get('failing_checks') or []) if sec_summary.get('failing_checks') else 'none'}",
+              f"- scorecard health score: {int(scorecard.get('health_score', 0))}",
+          ]
+
+          (root / "nightly_summary.md").write_text("\n".join(lines) + "\n", encoding="utf-8")
+          PY
+
+      - name: Upload nightly reliability artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: nightly-reliability-${{ github.run_id }}
+          path: artifacts/nightly_reliability/
+          if-no-files-found: error

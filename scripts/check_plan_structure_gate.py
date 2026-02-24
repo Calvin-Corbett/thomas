@@ -24,6 +24,7 @@ LEGACY_POINTER_FILES: Sequence[str] = (
     "docs/WEEKLY_DEEP_DIVE_PLAN.md",
     "docs/LAUNCH_V1.md",
     "docs/COMPANION_STORE_COMPLIANCE_PLAN.md",
+    "docs/THOMAS_ONBOARDING_UX_PLAN.md",
 )
 
 PLAN_NAME_RE = re.compile(r"(plan|roadmap|workboard|launch)", re.IGNORECASE)

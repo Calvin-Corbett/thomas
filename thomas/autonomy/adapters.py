@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
+import re
 from dataclasses import dataclass
 from typing import Any, Dict, Optional
 
@@ -29,6 +31,79 @@ class ChatAdapter:
         self._app = app
         self._cfg = cfg or ChatAdapterConfig()
 
+    @staticmethod
+    def _extract_first_json_object(text: Any) -> Optional[Dict[str, Any]]:
+        raw = str(text or "").strip()
+        if not raw:
+            return None
+
+        with contextlib.suppress(Exception):
+            obj = json.loads(raw)
+            if isinstance(obj, dict):
+                return obj
+
+        fenced_re = re.compile(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", re.IGNORECASE)
+        for match in fenced_re.finditer(raw):
+            candidate = str(match.group(1) or "").strip()
+            if not candidate:
+                continue
+            with contextlib.suppress(Exception):
+                obj = json.loads(candidate)
+                if isinstance(obj, dict):
+                    return obj
+
+        start = raw.find("{")
+        while start >= 0:
+            depth = 0
+            for idx in range(start, len(raw)):
+                ch = raw[idx]
+                if ch == "{":
+                    depth += 1
+                elif ch == "}":
+                    depth -= 1
+                    if depth == 0:
+                        snippet = raw[start : idx + 1]
+                        with contextlib.suppress(Exception):
+                            obj = json.loads(snippet)
+                            if isinstance(obj, dict):
+                                return obj
+                        break
+            start = raw.find("{", start + 1)
+        return None
+
+    @staticmethod
+    def _parse_streaming_chat_blob(blob: str) -> Optional[Dict[str, Any]]:
+        events: list[Dict[str, Any]] = []
+        text_parts: list[str] = []
+        done_event: Dict[str, Any] | None = None
+        for raw_line in str(blob or "").splitlines():
+            line = raw_line.strip()
+            if not line:
+                continue
+            try:
+                obj = json.loads(line)
+            except Exception:
+                continue
+            if not isinstance(obj, dict):
+                continue
+            events.append(obj)
+            ev_type = str(obj.get("type") or "").strip().lower()
+            if ev_type == "error":
+                raise RuntimeError(str(obj.get("error") or "chat stream returned error event"))
+            if ev_type == "text":
+                text_parts.append(str(obj.get("text") or ""))
+            if ev_type == "done":
+                done_event = dict(obj)
+        if not events:
+            return None
+        out: Dict[str, Any] = {
+            "events": events,
+            "text": "".join(text_parts),
+        }
+        if isinstance(done_event, dict):
+            out["done"] = done_event
+        return out
+
     async def submit_chat_json(self, payload: Dict[str, Any]) -> Dict[str, Any]:
         # Prefer in-process hook
         if self._app is not None and hasattr(self._app, "get"):
@@ -41,12 +116,37 @@ class ChatAdapter:
         if self._cfg.api_token:
             headers["Authorization"] = f"Bearer {self._cfg.api_token}"
 
+        wire_payload = dict(payload or {})
+        if not str(wire_payload.get("text") or "").strip():
+            msgs = wire_payload.get("messages")
+            if isinstance(msgs, list):
+                last_user = ""
+                first_system = ""
+                for msg in msgs:
+                    if not isinstance(msg, dict):
+                        continue
+                    role = str(msg.get("role") or "").strip().lower()
+                    content = str(msg.get("content") or "")
+                    if role == "system" and not first_system and content.strip():
+                        first_system = content.strip()
+                    if role == "user" and content.strip():
+                        last_user = content.strip()
+                if first_system and not str(wire_payload.get("system_prompt") or "").strip():
+                    wire_payload["system_prompt"] = first_system
+                if last_user:
+                    wire_payload["text"] = last_user
+        if not str(wire_payload.get("message") or "").strip() and str(wire_payload.get("text") or "").strip():
+            wire_payload["message"] = str(wire_payload.get("text") or "").strip()
+
         timeout = aiohttp.ClientTimeout(total=self._cfg.timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(self._cfg.base_url + "/api/chat", json=payload, headers=headers) as resp:
+            async with session.post(self._cfg.base_url.rstrip("/") + "/api/chat", json=wire_payload, headers=headers) as resp:
                 text = await resp.text()
                 if resp.status >= 400:
                     raise RuntimeError(f"/api/chat HTTP {resp.status}: {text[:500]}")
+                stream_obj = self._parse_streaming_chat_blob(text)
+                if isinstance(stream_obj, dict):
+                    return stream_obj
                 # We don't know exact response shape; try JSON
                 try:
                     return json.loads(text)
@@ -61,9 +161,12 @@ class ChatAdapter:
         # Preferred parameter names (used by some Thomas codepaths)
         system_prompt: Optional[str] = None,
         user_prompt: Optional[str] = None,
+        profile: Optional[str] = None,
+        model: Optional[str] = None,
         # Aliases for compatibility with other internal helpers
         system: Optional[str] = None,
         user: Optional[str] = None,
+        **_: Any,
     ) -> Dict[str, Any]:
         """Ask Thomas chat to return a JSON object.
 
@@ -79,6 +182,11 @@ class ChatAdapter:
         # Your in-process hook can translate this to whatever Thomas expects.
         payload = {
             "session_id": session_id,
+            "profile": (str(profile or "").strip() or None),
+            "model_id": (str(model or "").strip() or None),
+            "system_prompt": sys,
+            "text": usr,
+            "message": usr,
             "messages": [
                 {"role": "system", "content": sys},
                 {"role": "user", "content": usr},
@@ -86,7 +194,34 @@ class ChatAdapter:
             "response_format": {"type": "json_object"},
             "metadata": {"schema_hint": schema_hint, "source": "autonomy_engine"},
         }
-        return await self.submit_chat_json(payload)
+        raw = await self.submit_chat_json(payload)
+        if isinstance(raw, dict):
+            direct = raw.get("json")
+            if isinstance(direct, dict):
+                return direct
+
+            candidates: list[str] = []
+            text_value = raw.get("text")
+            if isinstance(text_value, str) and text_value.strip():
+                candidates.append(text_value)
+            done_obj = raw.get("done")
+            if isinstance(done_obj, dict):
+                done_text = done_obj.get("text")
+                if isinstance(done_text, str) and done_text.strip():
+                    candidates.append(done_text)
+            raw_blob = raw.get("raw")
+            if isinstance(raw_blob, str) and raw_blob.strip():
+                candidates.append(raw_blob)
+
+            for candidate in candidates:
+                parsed = self._extract_first_json_object(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+
+            if isinstance(text_value, str) and text_value.strip():
+                raise RuntimeError("chat response was not valid JSON")
+
+        raise RuntimeError("chat adapter did not return a JSON object")
 
 
 class MemoryAdapter:

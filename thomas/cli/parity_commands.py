@@ -6,231 +6,39 @@ import hashlib
 import json
 import os
 import secrets
-import signal
-import shutil
-import socket
 import subprocess
 import sys
 import time
-import urllib.error
-import urllib.request
 import webbrowser
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
 import click
 
+from thomas.cli.parity_gateway_support import (
+    active_gateway_target as _active_gateway_target,
+    clear_gateway_state as _clear_gateway_state,
+    gateway_spawn as _gateway_spawn,
+    is_pid_running as _is_pid_running,
+    kill_pid as _kill_pid,
+    parse_json_file as _parse_json_file,
+    probe_gateway as _probe_gateway,
+    resolve_bind_port as _resolve_bind_port,
+    save_gateway_state as _save_gateway_state,
+)
 from thomas.cli.pack_bridge import register_pack_proxy_commands
+from thomas.cli.parity_support import (
+    emit_json_or_text as _emit_json_or_text,
+    gateway_log_file as _gateway_log_file,
+    gateway_state_file as _gateway_state_file,
+    load_gateway_state as _load_gateway_state,
+    read_json as _read_json,
+    state_dir as _state_dir,
+    tail_file as _tail_file,
+    utc_iso as _utc_iso,
+    write_json as _write_json,
+)
 from thomas.core.config import AppConfig
-
-
-def _utc_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _state_dir(config: AppConfig) -> Path:
-    path = config.memory.root_path / ".thomas" / "cli"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return default
-
-
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
-
-
-def _parse_json_file(path: Path) -> Any:
-    return json.loads(path.read_text(encoding="utf-8-sig"))
-
-
-def _is_pid_running(pid: int) -> bool:
-    if int(pid) <= 0:
-        return False
-    if os.name == "nt":
-        out = subprocess.run(
-            ["tasklist", "/FI", f"PID eq {int(pid)}"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        text = str(out.stdout or "").lower()
-        if "no tasks are running" in text:
-            return False
-        return str(int(pid)) in text
-    try:
-        os.kill(int(pid), 0)
-        return True
-    except Exception:
-        return False
-
-
-def _kill_pid(pid: int) -> bool:
-    if int(pid) <= 0:
-        return False
-    if os.name == "nt":
-        out = subprocess.run(
-            ["taskkill", "/PID", str(int(pid)), "/T", "/F"],
-            capture_output=True,
-            text=True,
-            check=False,
-        )
-        return int(out.returncode or 1) == 0
-    try:
-        os.kill(int(pid), signal.SIGTERM)
-        return True
-    except Exception:
-        return False
-
-
-def _port_in_use(host: str, port: int) -> bool:
-    try:
-        with socket.create_connection((host, int(port)), timeout=0.35):
-            return True
-    except OSError:
-        return False
-
-
-def _find_free_port(host: str, preferred: int, max_offset: int = 25) -> Optional[int]:
-    for candidate in range(int(preferred), int(preferred) + int(max_offset) + 1):
-        if not _port_in_use(host, candidate):
-            return candidate
-    return None
-
-
-def _resolve_bind_port(host: str, port: int, auto_port: bool) -> int:
-    selected = int(port)
-    if _port_in_use(host, selected):
-        if not auto_port:
-            raise click.ClickException(
-                f"Port {selected} is busy. Re-run with --auto-port or choose a different --port."
-            )
-        free_port = _find_free_port(host, selected)
-        if free_port is None:
-            raise click.ClickException(f"No free port found in range {selected}..{selected + 25}.")
-        click.echo(f"Port {selected} is busy; auto-selecting {free_port}.")
-        selected = int(free_port)
-    return selected
-
-
-def _http_get_json(url: str, timeout_s: float = 2.0, token: str = "") -> dict[str, Any]:
-    headers = {}
-    token_val = str(token or "").strip()
-    if token_val:
-        headers["Authorization"] = f"Bearer {token_val}"
-    req = urllib.request.Request(url=url, headers=headers)
-    try:
-        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
-            status = int(getattr(resp, "status", 0) or 0)
-            body = resp.read().decode("utf-8", errors="replace")
-        payload: Any
-        try:
-            payload = json.loads(body)
-        except Exception:
-            payload = {"raw": body[:2000]}
-        return {"ok": True, "status": status, "payload": payload}
-    except urllib.error.HTTPError as e:
-        body = ""
-        try:
-            body = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            body = ""
-        payload: Any
-        try:
-            payload = json.loads(body) if body else {}
-        except Exception:
-            payload = {"raw": body[:2000]}
-        return {"ok": False, "status": int(getattr(e, "code", 0) or 0), "error": str(e), "payload": payload}
-    except Exception as e:
-        return {"ok": False, "status": 0, "error": f"{type(e).__name__}: {e}", "payload": {}}
-
-
-def _probe_gateway(host: str, port: int, *, token: str = "") -> dict[str, Any]:
-    base = f"http://{host}:{int(port)}"
-    tcp_ok = _port_in_use(host, int(port))
-    version = _http_get_json(f"{base}/api/version", token=token)
-    models = _http_get_json(f"{base}/api/models", token=token)
-    engines = _http_get_json(f"{base}/api/engines", token=token)
-    healthy = bool(tcp_ok and (version.get("ok") or models.get("ok")))
-    return {
-        "host": host,
-        "port": int(port),
-        "base_url": base,
-        "tcp_open": bool(tcp_ok),
-        "version": version,
-        "models": models,
-        "engines": engines,
-        "healthy": healthy,
-    }
-
-
-def _tail_file(path: Path, lines: int) -> str:
-    if not path.exists():
-        return ""
-    data = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(data[-max(1, int(lines)) :])
-
-
-def _gateway_state_file(config: AppConfig) -> Path:
-    return _state_dir(config) / "gateway_state.json"
-
-
-def _gateway_log_file(config: AppConfig) -> Path:
-    return _state_dir(config) / "gateway.log"
-
-
-def _load_gateway_state(config: AppConfig) -> dict[str, Any]:
-    payload = _read_json(_gateway_state_file(config), {})
-    return payload if isinstance(payload, dict) else {}
-
-
-def _save_gateway_state(config: AppConfig, payload: dict[str, Any]) -> None:
-    _write_json(_gateway_state_file(config), payload)
-
-
-def _clear_gateway_state(config: AppConfig) -> None:
-    path = _gateway_state_file(config)
-    if path.exists():
-        path.unlink(missing_ok=True)
-
-
-def _active_gateway_target(config: AppConfig, host: Optional[str], port: Optional[int]) -> tuple[str, int, dict[str, Any]]:
-    state = _load_gateway_state(config)
-    state_host = str(state.get("host") or "").strip()
-    state_port_raw = state.get("port")
-    state_port = int(state_port_raw) if isinstance(state_port_raw, int) else 0
-    if host:
-        use_host = str(host).strip()
-    elif state_host:
-        use_host = state_host
-    else:
-        use_host = "127.0.0.1"
-    if port is not None:
-        use_port = int(port)
-    elif state_port > 0:
-        use_port = int(state_port)
-    else:
-        use_port = 8899
-    return use_host, use_port, state
-
-
-def _emit_json_or_text(payload: dict[str, Any], as_json: bool) -> None:
-    if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
-        return
-    for key, value in payload.items():
-        click.echo(f"{key}: {value}")
 
 
 @click.group()
@@ -751,6 +559,100 @@ def plugins_extension_catalog(strict: bool, as_json: bool) -> None:
         raise SystemExit(1)
 
 
+@plugins.command("certify")
+@click.option(
+    "--required-capability",
+    "required_capabilities",
+    multiple=True,
+    help="Required capability for certification (repeatable).",
+)
+@click.option(
+    "--min-pass-rate",
+    type=float,
+    default=0.95,
+    show_default=True,
+    help="Minimum certification pass rate.",
+)
+@click.option("--strict", is_flag=True, help="Exit non-zero when certification fails.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def plugins_certify(
+    required_capabilities: tuple[str, ...],
+    min_pass_rate: float,
+    strict: bool,
+    as_json: bool,
+) -> None:
+    """Run extension certification with capability and pass-rate gates."""
+    from thomas.plugins.certification import certify_extension_catalog
+
+    payload = certify_extension_catalog(
+        required_capabilities=list(required_capabilities or []),
+        min_pass_rate=float(min_pass_rate),
+    )
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+        click.echo(f"result: {'ok' if payload.get('ok') else 'failed'}")
+        click.echo(f"catalog: {payload.get('catalog_path')}")
+        click.echo(f"total: {summary.get('total', 0)}")
+        click.echo(f"certified: {summary.get('certified', 0)}")
+        click.echo(f"uncertified: {summary.get('uncertified', 0)}")
+        click.echo(f"pass_rate: {summary.get('pass_rate', 0.0)}")
+        required = payload.get("required_capabilities") if isinstance(payload.get("required_capabilities"), list) else []
+        click.echo("required_capabilities: " + ", ".join(str(x) for x in required))
+    if strict and not bool(payload.get("ok")):
+        raise SystemExit(1)
+
+
+@plugins.command("update")
+@click.option("--include-prereleases", is_flag=True, help="Consider prerelease versions when planning updates.")
+@click.option(
+    "--strict",
+    is_flag=True,
+    help="Exit non-zero when recommended updates or unknown versions are present.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def plugins_update(
+    ctx: click.Context,
+    include_prereleases: bool,
+    strict: bool,
+    as_json: bool,
+) -> None:
+    """Plan plugin updates using local install state + extension catalog."""
+    from thomas.plugins.certification import build_plugin_update_plan_from_state
+
+    config: AppConfig = ctx.obj["config"]
+    rows = _load_plugins(config)
+    payload = build_plugin_update_plan_from_state(rows, include_prereleases=bool(include_prereleases))
+
+    summary = payload.get("summary") if isinstance(payload.get("summary"), dict) else {}
+    actions = payload.get("actions") if isinstance(payload.get("actions"), list) else []
+    recommended_updates = sum(1 for row in actions if bool((row or {}).get("recommended", False)))
+    payload["recommended_updates"] = int(recommended_updates)
+
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        click.echo(f"catalog_root: {payload.get('catalog_root', '')}")
+        click.echo(f"total: {summary.get('total', 0)}")
+        click.echo(f"update: {summary.get('update', 0)}")
+        click.echo(f"up_to_date: {summary.get('up_to_date', 0)}")
+        click.echo(f"unknown: {summary.get('unknown', 0)}")
+        click.echo(f"recommended_updates: {recommended_updates}")
+        for row in actions[:25]:
+            click.echo(
+                f"- {row.get('id')} | {row.get('status')} | "
+                f"{row.get('current_version')} -> {row.get('latest_version')} | "
+                f"recommended={bool(row.get('recommended', False))}"
+            )
+        if len(actions) > 25:
+            click.echo(f"... {len(actions) - 25} more")
+
+    if strict and (int(recommended_updates) > 0 or int(summary.get("unknown") or 0) > 0):
+        raise SystemExit(1)
+
+
 register_pack_proxy_commands(
     plugins,
     package="thomas.cli.commands.plugins",
@@ -894,36 +796,6 @@ def sandbox_test_cmd(
 def gateway(ctx: click.Context) -> None:
     """Run and inspect the local Thomas gateway server lifecycle."""
     _ = ctx
-
-
-def _gateway_spawn(
-    *,
-    config_path: str,
-    host: str,
-    port: int,
-    log_path: Path,
-) -> subprocess.Popen[Any]:
-    cmd: list[str] = [sys.executable, "-m", "thomas.cli.main"]
-    cfg = str(config_path or "").strip()
-    if cfg:
-        cmd.extend(["-c", cfg])
-    cmd.extend(["serve", "--host", str(host), "--port", str(int(port)), "--strict-port"])
-
-    log_path.parent.mkdir(parents=True, exist_ok=True)
-    out = log_path.open("a", encoding="utf-8")
-    creationflags = 0
-    if os.name == "nt":
-        creationflags = int(getattr(subprocess, "DETACHED_PROCESS", 0)) | int(
-            getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0)
-        )
-    return subprocess.Popen(
-        cmd,
-        stdin=subprocess.DEVNULL,
-        stdout=out,
-        stderr=out,
-        close_fds=True,
-        creationflags=creationflags,
-    )
 
 
 @gateway.command("run")

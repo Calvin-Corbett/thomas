@@ -13,7 +13,8 @@ Use this system when multiple agents or humans edit the Thomas repo at the same 
 - Registry file: `runtime/coordination/active_folders.json`
 - Lock file: `runtime/coordination/active_folders.lock`
 - Tool: `python scripts/active_folders.py ...`
-- Auto hook: `.pre-commit-config.yaml` runs `guard-staged --require-explicit-agent`
+- Auto hook: `.pre-commit-config.yaml` runs
+  `guard-staged --auto-claim-staged --no-require-explicit-agent`
 
 Claims use TTL leases with heartbeats. Expired claims are auto-pruned.
 
@@ -34,7 +35,7 @@ For Thomas-native flows:
 $env:THOMAS_AGENT_ID = "codex-main"
 ```
 
-If no explicit id is set, the script falls back to `user@host-ppid...`, but commit-time guard now requires an explicit agent id by default.
+If no explicit id is set, the script falls back to `user@host-ppid...`.
 
 See resolved id/source:
 
@@ -88,14 +89,15 @@ python scripts/active_folders.py daemon --path thomas/server --note "API route w
 Pre-commit now runs:
 
 ```bash
-python scripts/active_folders.py guard-staged --require-explicit-agent
+python scripts/active_folders.py guard-staged --auto-claim-staged --no-require-explicit-agent
 ```
 
 Behavior:
 
 - Reads staged files from `git diff --cached --name-only`.
+- Auto-claims staged paths for the current agent before checking conflicts.
 - Fails commit if staged paths overlap another active claim.
-- Fails commit when no explicit agent id is set (`AGENT_ID`/`THOMAS_AGENT_ID`) unless overridden.
+- Uses explicit `AGENT_ID`/`THOMAS_AGENT_ID` when set, else falls back automatically.
 - Ignores your own claim by current agent id unless `--no-ignore-self` is used.
 
 ## Conflict Rules
@@ -115,7 +117,7 @@ python scripts/active_folders.py list
 Check staged files manually:
 
 ```bash
-python scripts/active_folders.py guard-staged --require-explicit-agent
+python scripts/active_folders.py guard-staged --auto-claim-staged
 ```
 
 Force-check including your own claims:

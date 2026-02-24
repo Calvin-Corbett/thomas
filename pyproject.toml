@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas"
-version = "0.11.39"
+version = "0.11.73"
 
 description = "Autonomous AI execution platform for local and remote deployments"
 requires-python = ">=3.10"
@@ -22,10 +22,12 @@ train = ["numpy>=1.26", "scikit-learn>=1.4"]
 server = ["aiohttp>=3.9"]
 mcp = ["mcp>=1.0"]
 telegram = ["python-telegram-bot>=21.0"]
+investigation = ["python-docx>=1.0", "pdfplumber>=0.10"]
 test = [
     "pytest>=8.0",
     "pytest-asyncio>=0.23",
     "pytest-aiohttp>=1.0",
+    "ruff>=0.8",
     "Pillow>=10.0",
     "reportlab>=4.0",
     "jsonschema>=4.21",
@@ -54,3 +56,4 @@ norecursedirs = [
     "agent_memory",
     "*.egg-info",
 ]
+

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import tempfile
+from pathlib import Path
 from typing import Any, AsyncIterator, Dict, List, Optional
 
 from thomas.core.config import ModelConfig
@@ -53,6 +55,17 @@ class CodexProvider:
             await self._bridge.stop()
             self._bridge = None
 
+    def _no_tools_cwd(self) -> str:
+        """Workspace used for no-tools conversational turns.
+
+        Keep this separate from the project root so Codex does not discover
+        repo-specific AGENTS/bootstrap files and trigger command churn for
+        simple chat messages.
+        """
+        root = Path(tempfile.gettempdir()) / "thomas_codex_no_tools"
+        root.mkdir(parents=True, exist_ok=True)
+        return str(root)
+
     async def stream_chat(
         self,
         messages: List[Dict[str, Any]],
@@ -90,18 +103,35 @@ class CodexProvider:
             return
 
         model = self.config.model or ""
+        effort = self.config.reasoning_effort or "medium"
+        allow_tools = bool(tools)
+        chat_cwd = self._no_tools_cwd() if not allow_tools else None
 
         # Map tool ids to names so tool_output can include a useful label.
         tool_names: Dict[str, str] = {}
 
         try:
-            async for event in bridge.chat(text, model=model):
+            try:
+                event_stream = bridge.chat(
+                    text,
+                    model=model,
+                    effort=effort,
+                    cwd=chat_cwd,
+                    allow_tools=allow_tools,
+                )
+            except TypeError:
+                # Backward-compat: older bridge/test doubles may not accept newer kwargs.
+                event_stream = bridge.chat(text, model=model, cwd=chat_cwd, allow_tools=allow_tools)
+
+            async for event in event_stream:
                 etype = event.get("type", "")
 
                 if etype == "text":
                     yield StreamEvent(type="token", data={"text": event.get("text", "")})
 
                 elif etype == "tool_start":
+                    if not allow_tools:
+                        continue
                     tool_id = event.get("id", "")
                     tool_name = event.get("name", "")
                     if tool_id:
@@ -112,6 +142,8 @@ class CodexProvider:
                     })
 
                 elif etype == "tool_output":
+                    if not allow_tools:
+                        continue
                     tool_id = event.get("id", "")
                     tool_name = tool_names.get(tool_id, "")
                     yield StreamEvent(type="tool_call_end", data={

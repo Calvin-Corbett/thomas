@@ -1,110 +1,154 @@
+"""aiohttp route registration for spend / cost-tracking endpoints."""
+
 from __future__ import annotations
 
+import asyncio
 import csv
 import json
 from io import StringIO
-from pathlib import Path
-from typing import Iterator
+from typing import Any, Callable, Dict
 
-from fastapi import APIRouter, Query, Request
-from fastapi.responses import Response, StreamingResponse
+from aiohttp import web
 
 from thomas.core.cost_tracker import get_cost_tracker
 
-router = APIRouter(prefix="/api/spend", tags=["spend"])
-
-_ASSET_DIR = Path(__file__).resolve().parents[1] / "web"
-_JS_PATH = _ASSET_DIR / "spend_widget.js"
-_CSS_PATH = _ASSET_DIR / "spend_widget.css"
+RequireAccessFn = Callable[[web.Request], None]
 
 
-@router.get("/today")
-def spend_today() -> dict:
-    ct = get_cost_tracker()
-    return {
-        "total_usd": float(ct.today_usd()),
-        "by_model": ct.by_model(),
-        "by_model_detail": ct.today_by_model_detail(),
-        "call_count": int(ct.today_call_count()),
-        "tokens": ct.today_tokens(),
-    }
+def register_spend_routes(
+    app: web.Application,
+    *,
+    require_api_access: RequireAccessFn,
+) -> None:
+    """Register /api/spend/* routes on *app*."""
 
+    # ── GET /api/spend/today ──
 
-@router.get("/session")
-def spend_session() -> dict:
-    ct = get_cost_tracker()
-    return {
-        "total_usd": float(ct.session_usd()),
-        "by_model_detail": ct.session_by_model_detail(),
-        "call_count": int(ct.session_call_count()),
-        "tokens": ct.session_tokens(),
-    }
+    async def api_spend_today(request: web.Request) -> web.Response:
+        require_api_access(request)
+        ct = get_cost_tracker()
+        return web.json_response({
+            "total_usd": float(ct.today_usd()),
+            "by_model": ct.by_model(),
+            "by_model_detail": ct.today_by_model_detail(),
+            "call_count": int(ct.today_call_count()),
+            "tokens": ct.today_tokens(),
+        })
 
+    # ── GET /api/spend/session ──
 
-@router.post("/session/reset")
-def spend_session_reset() -> dict:
-    ct = get_cost_tracker()
-    ct.reset_session()
-    return {"ok": True}
+    async def api_spend_session(request: web.Request) -> web.Response:
+        require_api_access(request)
+        ct = get_cost_tracker()
+        return web.json_response({
+            "total_usd": float(ct.session_usd()),
+            "by_model_detail": ct.session_by_model_detail(),
+            "call_count": int(ct.session_call_count()),
+            "tokens": ct.session_tokens(),
+        })
 
+    # ── POST /api/spend/session/reset ──
 
-@router.get("/history")
-def spend_history(days: int = Query(7, ge=1, le=365)) -> list[dict]:
-    ct = get_cost_tracker()
-    return ct.by_day(days=days)
+    async def api_spend_session_reset(request: web.Request) -> web.Response:
+        require_api_access(request)
+        ct = get_cost_tracker()
+        ct.reset_session()
+        return web.json_response({"ok": True})
 
+    # ── GET /api/spend/history ──
 
-@router.get("/pricing")
-def spend_pricing() -> dict:
-    ct = get_cost_tracker()
-    return {"pricing": ct.pricing_table()}
-
-
-@router.get("/export.csv")
-def spend_export_csv(days: int = Query(30, ge=1, le=365)) -> Response:
-    ct = get_cost_tracker()
-    rows = ct.by_day(days=days)
-    buf = StringIO()
-    w = csv.writer(buf)
-    w.writerow(["date", "usd"])
-    for r in rows:
-        w.writerow([r["date"], f"{float(r['usd']):.10f}"])
-    return Response(
-        content=buf.getvalue(),
-        media_type="text/csv",
-        headers={"Content-Disposition": f'attachment; filename="thomas_spend_{days}d.csv"'},
-    )
-
-
-@router.get("/stream")
-def spend_stream(request: Request) -> StreamingResponse:
-    ct = get_cost_tracker()
-    sub = ct.subscribe()
-
-    def gen() -> Iterator[bytes]:
+    async def api_spend_history(request: web.Request) -> web.Response:
+        require_api_access(request)
+        raw = request.query.get("days", "7")
         try:
-            yield b"event: hello\ndata: {}\n\n"
+            days = int(raw)
+        except (ValueError, TypeError):
+            days = 7
+        days = max(1, min(days, 365))
+
+        ct = get_cost_tracker()
+        rows = ct.by_day(days=days)
+        return web.json_response(rows)
+
+    # ── GET /api/spend/pricing ──
+
+    async def api_spend_pricing(request: web.Request) -> web.Response:
+        require_api_access(request)
+        ct = get_cost_tracker()
+        return web.json_response({"pricing": ct.pricing_table()})
+
+    # ── GET /api/spend/export.csv ──
+
+    async def api_spend_export_csv(request: web.Request) -> web.Response:
+        require_api_access(request)
+        raw = request.query.get("days", "30")
+        try:
+            days = int(raw)
+        except (ValueError, TypeError):
+            days = 30
+        days = max(1, min(days, 365))
+
+        ct = get_cost_tracker()
+        rows = ct.by_day(days=days)
+
+        buf = StringIO()
+        w = csv.writer(buf)
+        w.writerow(["date", "usd"])
+        for r in rows:
+            w.writerow([r["date"], f"{float(r['usd']):.10f}"])
+
+        return web.Response(
+            body=buf.getvalue(),
+            content_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="thomas_spend_{days}d.csv"',
+            },
+        )
+
+    # ── GET /api/spend/stream  (SSE) ──
+
+    async def api_spend_stream(request: web.Request) -> web.StreamResponse:
+        require_api_access(request)
+        ct = get_cost_tracker()
+        sub = ct.subscribe()
+
+        resp = web.StreamResponse(
+            status=200,
+            headers={
+                "Content-Type": "text/event-stream",
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
+        await resp.prepare(request)
+
+        try:
+            await resp.write(b"event: hello\ndata: {}\n\n")
             while True:
-                if hasattr(request, "is_disconnected") and request.is_disconnected():
-                    break
-                payload = sub.get(timeout_s=15.0)
+                payload = await asyncio.to_thread(sub.get, 15.0)
                 if payload is None:
-                    yield b": keepalive\n\n"
+                    await resp.write(b": keepalive\n\n")
                     continue
                 data = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-                yield f"event: spend\ndata: {data}\n\n".encode("utf-8")
+                await resp.write(f"event: spend\ndata: {data}\n\n".encode("utf-8"))
+        except (ConnectionResetError, asyncio.CancelledError):
+            pass
         finally:
             sub.close()
             ct.unsubscribe(sub)
+            try:
+                await resp.write_eof()
+            except Exception:
+                pass
 
-    return StreamingResponse(gen(), media_type="text/event-stream", headers={"Cache-Control": "no-cache"})
+        return resp
 
+    # ── register ──
 
-@router.get("/widget.js")
-def spend_widget_js() -> Response:
-    return Response(_JS_PATH.read_text(encoding="utf-8"), media_type="text/javascript", headers={"Cache-Control": "no-cache"})
-
-
-@router.get("/widget.css")
-def spend_widget_css() -> Response:
-    return Response(_CSS_PATH.read_text(encoding="utf-8"), media_type="text/css", headers={"Cache-Control": "no-cache"})
+    app.router.add_get("/api/spend/today", api_spend_today)
+    app.router.add_get("/api/spend/session", api_spend_session)
+    app.router.add_post("/api/spend/session/reset", api_spend_session_reset)
+    app.router.add_get("/api/spend/history", api_spend_history)
+    app.router.add_get("/api/spend/pricing", api_spend_pricing)
+    app.router.add_get("/api/spend/export.csv", api_spend_export_csv)
+    app.router.add_get("/api/spend/stream", api_spend_stream)

@@ -93,19 +93,33 @@ async def _dispatch(handler: Callable[..., Any], *args: Any, **kwargs: Any) -> w
         return _error_response(getattr(e, "detail", "request failed"), status=int(getattr(e, "status_code", 500)))
     except ValidationError as e:
         return _error_response(e.errors(), status=422)
+    except Exception as e:
+        status_code = getattr(e, "status_code", None)
+        detail = getattr(e, "detail", None)
+        if status_code is not None:
+            try:
+                return _error_response(detail if detail is not None else "request failed", status=int(status_code))
+            except Exception:
+                return _error_response("request failed", status=500)
+        return _error_response("request failed", status=500)
 
 
 def register_webhooks_routes(
     app: web.Application,
     *,
     require_api_access: Callable[[web.Request], None],
+    signature_enforcement_default: Optional[bool] = None,
 ) -> None:
     """Attach webhook management + receive routes to aiohttp app."""
+    webhook_mod.configure_webhook_signature_enforcement_default(signature_enforcement_default)
 
     async def api_register(request: web.Request) -> web.Response:
         require_api_access(request)
         payload = await _read_json_object(request)
-        body = webhook_mod.RegisterWebhookRequest(**payload)
+        try:
+            body = webhook_mod.RegisterWebhookRequest(**payload)
+        except (ValidationError, TypeError) as e:
+            raise web.HTTPBadRequest(text=f"Invalid webhook registration payload: {e}")
         return await _dispatch(
             webhook_mod.register_webhook,
             body=body,
@@ -115,7 +129,10 @@ def register_webhooks_routes(
     async def api_patch(request: web.Request) -> web.Response:
         require_api_access(request)
         payload = await _read_json_object(request)
-        body = webhook_mod.PatchWebhookRequest(**payload)
+        try:
+            body = webhook_mod.PatchWebhookRequest(**payload)
+        except (ValidationError, TypeError) as e:
+            raise web.HTTPBadRequest(text=f"Invalid webhook patch payload: {e}")
         return await _dispatch(
             webhook_mod.patch_webhook,
             id=str(request.match_info.get("id") or "").strip(),
@@ -230,4 +247,3 @@ def register_webhooks_routes(
     app.router.add_post("/webhooks/receive/github", receive_github)
     app.router.add_post("/webhooks/receive/stripe", receive_stripe)
     app.router.add_post("/webhooks/receive/{id}", receive_generic)
-

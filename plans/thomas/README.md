@@ -12,8 +12,13 @@ Use this folder first when starting work.
 
 ## Active Plans
 
+- Ruthless focus execution: `plans/thomas/roadmap/RUTHLESS_FOCUS_EXECUTION_PLAN.md`
+- Onboarding UX + recovery: `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
 - Companion store compliance: `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
 - UI upgrade: `plans/thomas/ui/UI_UPGRADE_PLAN.md`
+- UI tab interiors redesign: `plans/thomas/ui/TAB_INTERIORS_REDESIGN_PLAN.md`
+- Virtual office master backlog: `plans/thomas/ui/VIRTUAL_OFFICE_MASTER_BACKLOG.md`
+- Asset Studio external integration: `plans/thomas/ui/ASSET_STUDIO_INTEGRATION_PLAN.md`
 - Weekly deep dive roadmap: `plans/thomas/roadmap/WEEKLY_DEEP_DIVE_PLAN.md`
 - Launch plan: `plans/thomas/launch/LAUNCH_V1_PLAN.md`
 
@@ -24,3 +29,4 @@ Use this folder first when starting work.
 - If a new product/domain is added, create `plans/<domain>/`.
 - Keep pointer files at old paths when moving a plan.
 - Treat `tasks/` plan-like notes as historical transcripts, not active source of truth.
+

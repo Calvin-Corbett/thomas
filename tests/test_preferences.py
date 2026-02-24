@@ -137,6 +137,9 @@ def test_onboarding_patch_roundtrip(tmp_db):
             "version": 2,
             "completed_at": completed_at,
             "dismissed_at": dismissed_at,
+            "current_step": "dependencies",
+            "connection_method": "local",
+            "dependency_plan": {"node": {"installed": True}, "ollama": {"installed": False}},
             "answers": {"experience": "builder", "autonomy": "balanced"},
         }
     }
@@ -147,8 +150,97 @@ def test_onboarding_patch_roundtrip(tmp_db):
     assert data["onboarding"]["version"] == 2
     assert data["onboarding"]["completed_at"] == completed_at
     assert data["onboarding"]["dismissed_at"] == dismissed_at
+    assert data["onboarding"]["current_step"] == "dependencies"
+    assert data["onboarding"]["connection_method"] == "local"
+    assert data["onboarding"]["dependency_plan"]["node"]["installed"] is True
     assert data["onboarding"]["answers"]["experience"] == "builder"
 
-    clear = c.patch("/api/preferences", json={"onboarding": {"dismissed_at": None}})
+    clear = c.patch(
+        "/api/preferences",
+        json={"onboarding": {"dismissed_at": None, "connection_method": None, "dependency_plan": None, "current_step": None}},
+    )
     assert clear.status_code == 200
     assert clear.json()["onboarding"]["dismissed_at"] is None
+    assert clear.json()["onboarding"]["connection_method"] is None
+    assert clear.json()["onboarding"]["dependency_plan"] == {}
+    assert clear.json()["onboarding"]["current_step"] == ""
+
+
+def test_advanced_settings_roundtrip(tmp_db):
+    app = make_app()
+    c = TestClient(app)
+
+    initial = c.get("/api/preferences")
+    assert initial.status_code == 200
+    assert initial.json()["advanced"]["model"]["temperature"] == 0.7
+    assert initial.json()["advanced"]["tools"]["allow_shell"] is True
+    assert initial.json()["advanced"]["runtime"]["default_mode"] == "auto"
+    assert initial.json()["advanced"]["failover"]["enabled"] is True
+
+    patch_payload = {
+        "advanced": {
+            "model": {
+                "temperature": 0.25,
+                "reasoning_effort": "high",
+                "deterministic_seed": 1234,
+            },
+            "tools": {
+                "allow_shell": False,
+                "allow_network": False,
+                "allow_browser": False,
+                "allow_channels": False,
+                "tool_timeout_s": 45,
+            },
+            "memory": {
+                "include_global_memory": False,
+                "pins_only": True,
+                "max_pack_tokens": 2400,
+                "auto_compact_enabled": False,
+            },
+            "runtime": {
+                "default_mode": "thinking",
+                "default_token_economy": "cheap",
+                "max_agent_iterations": 22,
+                "quality_require_tests_for_code_edits": True,
+            },
+            "failover": {
+                "enabled": False,
+                "chat_auto_failover": True,
+                "fallback_on_auth_error": True,
+                "cooldown_seconds": 42,
+            },
+            "interface": {
+                "ui_density": "dense",
+                "event_log_verbosity": "verbose",
+            },
+        }
+    }
+    updated = c.patch("/api/preferences", json=patch_payload)
+    assert updated.status_code == 200
+    data = updated.json()
+    assert data["advanced"]["model"]["temperature"] == 0.25
+    assert data["advanced"]["model"]["reasoning_effort"] == "high"
+    assert data["advanced"]["model"]["deterministic_seed"] == 1234
+    assert data["advanced"]["tools"]["allow_shell"] is False
+    assert data["advanced"]["tools"]["allow_network"] is False
+    assert data["advanced"]["tools"]["allow_browser"] is False
+    assert data["advanced"]["tools"]["allow_channels"] is False
+    assert data["advanced"]["tools"]["tool_timeout_s"] == 45
+    assert data["advanced"]["memory"]["include_global_memory"] is False
+    assert data["advanced"]["memory"]["pins_only"] is True
+    assert data["advanced"]["memory"]["max_pack_tokens"] == 2400
+    assert data["advanced"]["memory"]["auto_compact_enabled"] is False
+    assert data["advanced"]["runtime"]["default_mode"] == "thinking"
+    assert data["advanced"]["runtime"]["default_token_economy"] == "cheap"
+    assert data["advanced"]["runtime"]["max_agent_iterations"] == 22
+    assert data["advanced"]["runtime"]["quality_require_tests_for_code_edits"] is True
+    assert data["advanced"]["failover"]["enabled"] is False
+    assert data["advanced"]["failover"]["chat_auto_failover"] is True
+    assert data["advanced"]["failover"]["fallback_on_auth_error"] is True
+    assert data["advanced"]["failover"]["cooldown_seconds"] == 42
+    assert data["advanced"]["interface"]["ui_density"] == "dense"
+    assert data["advanced"]["interface"]["event_log_verbosity"] == "verbose"
+
+    cleared = c.patch("/api/preferences", json={"advanced": {"model": {"deterministic_seed": None}}})
+    assert cleared.status_code == 200
+    assert cleared.json()["advanced"]["model"]["deterministic_seed"] is None

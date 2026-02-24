@@ -1,0 +1,386 @@
+"""Tool execution helpers extracted from thomas.agent.loop."""
+
+from __future__ import annotations
+
+import ast
+import asyncio
+import json
+import logging
+import os
+import re
+import time
+from typing import Any, AsyncIterator, Dict, List
+
+from thomas.core.events import AgentEvent, EventType
+
+log = logging.getLogger(__name__)
+
+
+def parse_tool_args(raw_args: Any) -> tuple[Dict[str, Any] | None, str | None]:
+    """Parse tool arguments with repair heuristics for weak model outputs."""
+    if raw_args is None:
+        return {}, None
+    if isinstance(raw_args, dict):
+        return raw_args, None
+
+    text = str(raw_args).strip()
+    if not text:
+        return {}, None
+
+    fenced = re.match(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", text, re.I | re.S)
+    if fenced:
+        text = fenced.group(1).strip()
+
+    try:
+        parsed = json.loads(text)
+        if isinstance(parsed, dict):
+            return parsed, None
+        return None, f"Tool arguments must be a JSON object, got {type(parsed).__name__}"
+    except json.JSONDecodeError:
+        pass
+
+    repaired = (
+        text.replace("\u201c", '"')
+        .replace("\u201d", '"')
+        .replace("\u2018", "'")
+        .replace("\u2019", "'")
+    )
+    repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
+    brace_delta = repaired.count("{") - repaired.count("}")
+    if brace_delta > 0:
+        repaired = repaired + ("}" * brace_delta)
+
+    try:
+        parsed = json.loads(repaired)
+        if isinstance(parsed, dict):
+            return parsed, None
+        return None, f"Tool arguments must be a JSON object, got {type(parsed).__name__}"
+    except json.JSONDecodeError:
+        pass
+
+    try:
+        parsed = ast.literal_eval(repaired)
+        if isinstance(parsed, dict):
+            return parsed, None
+        return None, f"Tool arguments must be an object, got {type(parsed).__name__}"
+    except Exception as e:
+        return None, f"Could not parse tool arguments: {type(e).__name__}: {e}"
+
+
+async def execute_tools(
+    loop: Any,
+    tool_calls: List[Dict[str, Any]],
+    iteration: int,
+    *,
+    file_audit_module: Any,
+) -> AsyncIterator[AgentEvent]:
+    """Execute tool calls and stream result events as each call completes."""
+
+    async def _run_one(tc: Dict[str, Any]) -> AgentEvent:
+        name = tc["name"]
+        tc_id = tc["id"]
+        raw_args = tc["arguments"]
+
+        args, parse_error = parse_tool_args(raw_args)
+        if parse_error is not None or args is None:
+            await loop._audit_action(
+                kind="tool_action_invalid_args",
+                tool_call_id=tc_id,
+                tool_name=name,
+                decision="FAILED",
+                reason=str(parse_error or "invalid arguments"),
+                payload={"raw_arguments": str(raw_args)[:1000]},
+            )
+            return AgentEvent(
+                type=EventType.TOOL_RESULT,
+                data={
+                    "tool_id": tc_id,
+                    "tool_name": name,
+                    "result": f"Invalid tool arguments: {str(raw_args)[:200]}",
+                    "result_text": (
+                        "Error: Could not parse tool arguments.\n"
+                        f"Raw arguments: {str(raw_args)[:500]}\n"
+                        f"Reason: {parse_error or 'unknown parse error'}\n"
+                        "Hint: return a JSON object for tool arguments."
+                    ),
+                    "ok": False,
+                    "duration_ms": 0,
+                },
+                iteration=iteration,
+            )
+
+        start = time.monotonic()
+        await loop._audit_action(
+            kind="tool_action_start",
+            tool_call_id=tc_id,
+            tool_name=name,
+            decision="STARTED",
+            payload={"arguments": args},
+        )
+        if loop._guarded_tool_runner is not None:
+
+            async def _execute_guarded_tool() -> Dict[str, Any]:
+                async def _guarded_executor(call: Dict[str, Any]) -> Dict[str, Any]:
+                    tr = await loop.tools.execute(str(call.get("name") or ""), call.get("args") or {})
+                    return {
+                        "ok": bool(tr.ok),
+                        "error": tr.error,
+                        "data": tr.data,
+                        "result_text": tr.to_content(),
+                    }
+
+                async def _emit_guardrails_event(evt_type: str, payload: Dict[str, Any]) -> None:
+                    cb = loop._guardrails_event_cb
+                    if cb is None:
+                        return
+                    try:
+                        await cb(evt_type, payload)
+                    except Exception as e:
+                        log.debug("Guardrails callback failed: %s", e)
+
+                summary_lines: List[str] = []
+                for m in loop._conversation[-8:]:
+                    if not isinstance(m, dict):
+                        continue
+                    role = str(m.get("role") or "?")
+                    content = m.get("content")
+                    if isinstance(content, str) and content.strip():
+                        summary_lines.append(f"{role}: {content[:220]}")
+                conversation_summary = "\n".join(summary_lines)
+
+                return await loop._guarded_tool_runner.run(
+                    executor=_guarded_executor,
+                    tool_call={"id": tc_id, "name": name, "args": args},
+                    run_id=loop._run_id,
+                    session_id=loop._session_id,
+                    iteration=iteration,
+                    cwd=os.getcwd(),
+                    sandbox_root=str(loop.config.tools.sandbox_path),
+                    runtime_root=str(loop.config.memory.root_path),
+                    conversation_summary=conversation_summary,
+                    emit_event=_emit_guardrails_event,
+                )
+
+            try:
+                guarded: Any
+                if loop._tool_timeout_s is not None:
+                    guarded = await asyncio.wait_for(
+                        _execute_guarded_tool(),
+                        timeout=float(loop._tool_timeout_s),
+                    )
+                else:
+                    guarded = await _execute_guarded_tool()
+            except asyncio.TimeoutError:
+                duration = (time.monotonic() - start) * 1000
+                await loop._audit_action(
+                    kind="tool_action_timeout",
+                    tool_call_id=tc_id,
+                    tool_name=name,
+                    decision="TIMEOUT",
+                    reason=f"timeout_s={loop._tool_timeout_s}",
+                    payload={"duration_ms": duration},
+                )
+                return AgentEvent(
+                    type=EventType.TOOL_RESULT,
+                    data={
+                        "tool_id": tc_id,
+                        "tool_name": name,
+                        "result": f"Tool timed out after {loop._tool_timeout_s}s",
+                        "result_text": f"Tool timed out after {loop._tool_timeout_s}s",
+                        "ok": False,
+                        "duration_ms": duration,
+                    },
+                    iteration=iteration,
+                )
+
+            duration = (time.monotonic() - start) * 1000
+            ok = bool(guarded.get("ok", False)) if isinstance(guarded, dict) else True
+            if isinstance(guarded, dict):
+                if isinstance(guarded.get("result_text"), str):
+                    result_text = guarded.get("result_text", "")
+                elif isinstance(guarded.get("result"), str):
+                    result_text = guarded.get("result", "")
+                elif guarded.get("data") is not None:
+                    try:
+                        result_text = json.dumps(guarded.get("data"), ensure_ascii=False, default=str)
+                    except Exception:
+                        result_text = str(guarded.get("data"))
+                elif guarded.get("error"):
+                    result_text = json.dumps(
+                        {"ok": False, "error": str(guarded.get("error"))},
+                        ensure_ascii=False,
+                    )
+                else:
+                    result_text = json.dumps(guarded, ensure_ascii=False, default=str)
+            else:
+                result_text = str(guarded)
+        else:
+            try:
+                if loop._tool_timeout_s is not None:
+                    result = await asyncio.wait_for(
+                        loop.tools.execute(name, args),
+                        timeout=float(loop._tool_timeout_s),
+                    )
+                else:
+                    result = await loop.tools.execute(name, args)
+            except asyncio.TimeoutError:
+                duration = (time.monotonic() - start) * 1000
+                await loop._audit_action(
+                    kind="tool_action_timeout",
+                    tool_call_id=tc_id,
+                    tool_name=name,
+                    decision="TIMEOUT",
+                    reason=f"timeout_s={loop._tool_timeout_s}",
+                    payload={"duration_ms": duration},
+                )
+                return AgentEvent(
+                    type=EventType.TOOL_RESULT,
+                    data={
+                        "tool_id": tc_id,
+                        "tool_name": name,
+                        "result": f"Tool timed out after {loop._tool_timeout_s}s",
+                        "result_text": f"Tool timed out after {loop._tool_timeout_s}s",
+                        "ok": False,
+                        "duration_ms": duration,
+                    },
+                    iteration=iteration,
+                )
+            except Exception as e:
+                duration = (time.monotonic() - start) * 1000
+                err_text = f"{type(e).__name__}: {e}"
+                await loop._audit_action(
+                    kind="tool_action_exception",
+                    tool_call_id=tc_id,
+                    tool_name=name,
+                    decision="FAILED",
+                    reason=err_text,
+                    payload={"duration_ms": duration},
+                )
+                return AgentEvent(
+                    type=EventType.TOOL_RESULT,
+                    data={
+                        "tool_id": tc_id,
+                        "tool_name": name,
+                        "result": f"Tool execution failed: {err_text}",
+                        "result_text": f"Tool execution failed: {err_text}",
+                        "ok": False,
+                        "duration_ms": duration,
+                    },
+                    iteration=iteration,
+                )
+            duration = (time.monotonic() - start) * 1000
+            ok = bool(result.ok)
+            result_text = result.to_content()
+
+        try:
+            if file_audit_module is not None and file_audit_module.is_write_tool(name):
+                file_path = (
+                    str(args.get("path") or args.get("file") or args.get("filename") or "")
+                    if isinstance(args, dict)
+                    else ""
+                )
+                action = "delete" if "delet" in name.lower() or "remov" in name.lower() else "write"
+                args_snippet = (
+                    json.dumps(
+                        {k: v for k, v in (args or {}).items() if k != "content"},
+                        ensure_ascii=False,
+                        default=str,
+                    )[:300]
+                    if isinstance(args, dict)
+                    else ""
+                )
+                model_name = getattr(getattr(loop, "llm", None), "model_name", None) or getattr(
+                    getattr(loop.llm, "config", None), "model", "unknown"
+                )
+                file_audit_module.record_file_write(
+                    run_id=loop._run_id,
+                    model=str(model_name),
+                    tool_name=name,
+                    path=file_path,
+                    action=action,
+                    args_snippet=args_snippet,
+                )
+        except Exception as _ae:
+            log.debug("file_audit record failed: %s", _ae)
+
+        await loop._audit_action(
+            kind="tool_action_result",
+            tool_call_id=tc_id,
+            tool_name=name,
+            decision="EXECUTED" if ok else "FAILED",
+            payload={
+                "ok": bool(ok),
+                "duration_ms": duration,
+                "result_preview": str(result_text)[:1000],
+            },
+        )
+
+        return AgentEvent(
+            type=EventType.TOOL_RESULT,
+            data={
+                "tool_id": tc_id,
+                "tool_name": name,
+                "result": result_text[:4000],
+                "result_text": result_text,
+                "ok": ok,
+                "duration_ms": duration,
+            },
+            iteration=iteration,
+        )
+
+    if not tool_calls:
+        return
+
+    max_parallel = loop._max_parallel_tools
+    if max_parallel is None:
+        max_parallel = max(1, len(tool_calls))
+    sem = asyncio.Semaphore(max(1, int(max_parallel)))
+
+    async def _run_one_limited(tc: Dict[str, Any]) -> AgentEvent:
+        async with sem:
+            return await _run_one(tc)
+
+    tool_tasks = {asyncio.create_task(_run_one_limited(tc)): tc for tc in tool_calls}
+    try:
+        for done in asyncio.as_completed(tool_tasks):
+            try:
+                result_event = await done
+            except Exception as e:
+                tc = tool_tasks.get(done, {})
+                tc_id = str(tc.get("id", ""))
+                tool_name = str(tc.get("name") or "tool")
+                await loop._audit_action(
+                    kind="tool_action_exception",
+                    tool_call_id=tc_id,
+                    tool_name=tool_name,
+                    decision="FAILED",
+                    reason=f"{type(e).__name__}: {e}",
+                    payload={},
+                )
+                yield AgentEvent(
+                    type=EventType.TOOL_RESULT,
+                    data={
+                        "tool_id": tc_id,
+                        "tool_name": tool_name,
+                        "result": f"Tool execution failed before completion: {e}",
+                        "result_text": f"Tool execution failed before completion: {e}",
+                        "ok": False,
+                        "duration_ms": 0,
+                    },
+                    iteration=iteration,
+                )
+                continue
+            yield result_event
+    finally:
+        for t in tool_tasks:
+            if not t.done():
+                t.cancel()
+        if tool_tasks:
+            done_fallback = await asyncio.gather(*tool_tasks, return_exceptions=True)
+            _ = done_fallback
+
+
+__all__ = [
+    "execute_tools",
+    "parse_tool_args",
+]

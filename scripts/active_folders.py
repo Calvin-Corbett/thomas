@@ -58,6 +58,12 @@ def _env_bool(name: str, default: bool) -> bool:
 DEFAULT_TTL_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_TTL", 180)
 DEFAULT_HEARTBEAT_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_HEARTBEAT", 30)
 DEFAULT_REQUIRE_EXPLICIT_AGENT = _env_bool("THOMAS_ACTIVE_FOLDERS_REQUIRE_EXPLICIT_AGENT", True)
+DEFAULT_GUARD_AUTO_CLAIM = _env_bool("THOMAS_ACTIVE_FOLDERS_GUARD_AUTO_CLAIM", True)
+DEFAULT_GUARD_AUTO_CLAIM_TTL_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_GUARD_AUTO_CLAIM_TTL", 1800)
+DEFAULT_GUARD_AUTO_CLAIM_NOTE = (
+    (os.getenv("THOMAS_ACTIVE_FOLDERS_GUARD_AUTO_CLAIM_NOTE") or "").strip()
+    or "pre-commit staged auto-claim"
+)
 
 
 def _utc_now() -> datetime:
@@ -536,6 +542,7 @@ def _guard_staged(args: argparse.Namespace) -> int:
             print("No staged files to check.")
         return 0
 
+    resolved_agent = _resolve_agent(args.agent)
     explicit_agent, explicit_source = _require_explicit_agent(args.agent)
     if args.require_explicit_agent and not explicit_agent:
         message = (
@@ -550,9 +557,48 @@ def _guard_staged(args: argparse.Namespace) -> int:
             print("example (PowerShell): $env:AGENT_ID = \"gemini\"", file=sys.stderr)
         return 2
 
+    auto_claim_payload = {
+        "enabled": bool(args.auto_claim_staged),
+        "created": False,
+        "claim_id": "",
+        "error": "",
+    }
+    if args.auto_claim_staged:
+        claim, claim_conflicts = _create_claim(
+            agent=resolved_agent,
+            paths=paths,
+            ttl_seconds=max(1, int(args.auto_claim_ttl)),
+            note=str(args.auto_claim_note or "").strip(),
+            replace_agent=bool(args.replace_agent),
+            allow_conflicts=False,
+        )
+        if claim is None:
+            auto_claim_payload["error"] = "folder_conflicts"
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "agent_id": resolved_agent,
+                            "paths": paths,
+                            "ignore_agent": None,
+                            "ignore_agent_source": explicit_source if explicit_agent else "fallback",
+                            "auto_claim": auto_claim_payload,
+                            "conflicts": claim_conflicts,
+                        },
+                        indent=2,
+                    )
+                )
+            else:
+                print(f"Auto-claim failed for agent '{resolved_agent}'.")
+                _print_conflicts(claim_conflicts)
+            return 2
+        auto_claim_payload["created"] = True
+        auto_claim_payload["claim_id"] = str(claim.get("claim_id") or "")
+
     ignore_agent: str | None = None
     if not args.no_ignore_self:
-        ignore_agent = explicit_agent if explicit_agent else _resolve_agent(args.agent)
+        ignore_agent = explicit_agent if explicit_agent else resolved_agent
 
     conflicts = _find_conflicts(paths, ignore_agent=ignore_agent)
 
@@ -561,9 +607,11 @@ def _guard_staged(args: argparse.Namespace) -> int:
             json.dumps(
                 {
                     "ok": not bool(conflicts),
+                    "agent_id": resolved_agent,
                     "paths": paths,
                     "ignore_agent": ignore_agent,
                     "ignore_agent_source": explicit_source if explicit_agent else "fallback",
+                    "auto_claim": auto_claim_payload,
                     "conflicts": conflicts,
                 },
                 indent=2,
@@ -573,6 +621,16 @@ def _guard_staged(args: argparse.Namespace) -> int:
         print(f"Checking staged files against active folder claims (count={len(paths)}).")
         if explicit_agent:
             print(f"Using explicit agent id '{explicit_agent}' from {explicit_source}.")
+        else:
+            print(f"Using auto agent id '{resolved_agent}'.")
+        if auto_claim_payload["enabled"]:
+            if auto_claim_payload["created"]:
+                print(
+                    "Auto-claimed staged paths: "
+                    f"claim_id={auto_claim_payload['claim_id']} ttl={max(1, int(args.auto_claim_ttl))}s"
+                )
+            else:
+                print("Auto-claim staged paths: not created.")
         _print_conflicts(conflicts)
 
     return 2 if conflicts else 0
@@ -772,6 +830,29 @@ def _build_parser() -> argparse.ArgumentParser:
         action=argparse.BooleanOptionalAction,
         default=DEFAULT_REQUIRE_EXPLICIT_AGENT,
         help="Require --agent or AGENT_ID/THOMAS_AGENT_ID env for reliable ownership tagging.",
+    )
+    guard.add_argument(
+        "--auto-claim-staged",
+        action=argparse.BooleanOptionalAction,
+        default=DEFAULT_GUARD_AUTO_CLAIM,
+        help="Automatically claim staged paths for current agent before conflict check.",
+    )
+    guard.add_argument(
+        "--auto-claim-ttl",
+        type=int,
+        default=DEFAULT_GUARD_AUTO_CLAIM_TTL_SECONDS,
+        help="TTL (seconds) for auto-created staged claims.",
+    )
+    guard.add_argument(
+        "--auto-claim-note",
+        default=DEFAULT_GUARD_AUTO_CLAIM_NOTE,
+        help="Note attached to auto-created staged claims.",
+    )
+    guard.add_argument(
+        "--replace-agent",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Replace prior claims for this agent when auto-claiming staged paths.",
     )
     guard.add_argument("--json", action="store_true")
     guard.set_defaults(func=_guard_staged)

@@ -1,0 +1,166 @@
+{
+  "rule_version": 2,
+  "captured_at_utc": "2026-02-24T03:31:36.051Z",
+  "target_url": "http://127.0.0.1:3108",
+  "generator": {
+    "script": "scripts/refresh_site_visual_proof.py",
+    "runtime_verifier": "scripts/verify_site_visual_runtime.mjs",
+    "generated_at_utc": "2026-02-24T03:31:38.318353+00:00"
+  },
+  "git": {
+    "head_sha": "e7a4e3f6ed03834ceae0bee35a9aa7c102699cf3",
+    "ui_changed_paths": [
+      "apps/site/src/app/api/download/route.ts",
+      "apps/site/src/app/dev/dino-rider-lab/page.tsx",
+      "apps/site/src/app/download/page.tsx",
+      "apps/site/src/app/globals.css",
+      "apps/site/src/app/layout.tsx",
+      "apps/site/src/app/not-found.tsx",
+      "apps/site/src/app/page.tsx",
+      "apps/site/src/app/robots.ts",
+      "apps/site/src/app/spline-viewer.d.ts",
+      "apps/site/src/components/dino-riders.tsx",
+      "apps/site/src/components/footer.tsx",
+      "apps/site/src/components/pixel-agents.tsx"
+    ]
+  },
+  "runtime_report": {
+    "path": "apps/site/verification/runtime-report.json",
+    "sha256": "6eb0c97e0cc4eaefba8b4cb1ba0e4a4800244504621cf1fb9e7ef21d4ae6ebb4"
+  },
+  "screenshots": {
+    "full_page": {
+      "path": "apps/site/verification/screenshots/full-page.png",
+      "sha256": "62f0cae8568b06fdce943074c5b168f9fd0cca44908f47d76461e000db38902f"
+    },
+    "footer_focus": {
+      "path": "apps/site/verification/screenshots/footer-focus.png",
+      "sha256": "c27e4ae2eb9d630a895371568531fc0ccc03e311086701671d72ffe77391f6b1"
+    }
+  },
+  "metrics": {
+    "has_nav": true,
+    "has_main": true,
+    "has_footer": true,
+    "broken_image_count": 0,
+    "viewport_width": 1424,
+    "root_scroll_width": 1424,
+    "footer_top": 637,
+    "band_top": 638,
+    "band_height": 0,
+    "riders": [
+      {
+        "track_top": 621,
+        "track_bottom": 677,
+        "saddle_top": 644,
+        "saddle_bottom": 649,
+        "saddle_left": 155,
+        "saddle_right": 167,
+        "robot_top": 635,
+        "robot_bottom": 658,
+        "robot_left": 146,
+        "robot_right": 178,
+        "robot_center_x": 162,
+        "robot_width": 32,
+        "robot_height": 22,
+        "robot_body_top": 647,
+        "robot_body_bottom": 658,
+        "robot_body_left": 153,
+        "robot_body_right": 172,
+        "robot_body_center_x": 162,
+        "robot_body_width": 19,
+        "robot_body_height": 11
+      },
+      {
+        "track_top": 626,
+        "track_bottom": 682,
+        "saddle_top": 646,
+        "saddle_bottom": 651,
+        "saddle_left": 431,
+        "saddle_right": 444,
+        "robot_top": 636,
+        "robot_bottom": 661,
+        "robot_left": 418,
+        "robot_right": 454,
+        "robot_center_x": 436,
+        "robot_width": 36,
+        "robot_height": 25,
+        "robot_body_top": 648,
+        "robot_body_bottom": 661,
+        "robot_body_left": 425,
+        "robot_body_right": 446,
+        "robot_body_center_x": 436,
+        "robot_body_width": 21,
+        "robot_body_height": 12
+      },
+      {
+        "track_top": 621,
+        "track_bottom": 677,
+        "saddle_top": 644,
+        "saddle_bottom": 649,
+        "saddle_left": 707,
+        "saddle_right": 719,
+        "robot_top": 635,
+        "robot_bottom": 658,
+        "robot_left": 695,
+        "robot_right": 727,
+        "robot_center_x": 711,
+        "robot_width": 32,
+        "robot_height": 22,
+        "robot_body_top": 647,
+        "robot_body_bottom": 658,
+        "robot_body_left": 702,
+        "robot_body_right": 720,
+        "robot_body_center_x": 711,
+        "robot_body_width": 19,
+        "robot_body_height": 11
+      },
+      {
+        "track_top": 621,
+        "track_bottom": 677,
+        "saddle_top": 644,
+        "saddle_bottom": 649,
+        "saddle_left": 981,
+        "saddle_right": 992,
+        "robot_top": 635,
+        "robot_bottom": 658,
+        "robot_left": 972,
+        "robot_right": 1004,
+        "robot_center_x": 988,
+        "robot_width": 32,
+        "robot_height": 22,
+        "robot_body_top": 647,
+        "robot_body_bottom": 658,
+        "robot_body_left": 979,
+        "robot_body_right": 997,
+        "robot_body_center_x": 988,
+        "robot_body_width": 19,
+        "robot_body_height": 11
+      }
+    ],
+    "console_error_count": 0,
+    "console_error_samples": [],
+    "pixel_diff_threshold_ratio": 0.02,
+    "pixel_diff_full_page_ratio": 0.0,
+    "pixel_diff_footer_focus_ratio": 0.0,
+    "pixel_diff_max_ratio": 0.0,
+    "pixel_diff_size_mismatch_count": 0
+  },
+  "assertions": {
+    "core_layout_present": true,
+    "no_console_runtime_errors": true,
+    "no_broken_images": true,
+    "band_on_footer_border": true,
+    "no_band_strip_height": true,
+    "riders_mounted_on_back": true,
+    "riders_seat_contact_stable": true,
+    "riders_centered_on_saddle": true,
+    "riders_robot_clearly_visible": true,
+    "no_horizontal_drag_overflow": true,
+    "pixel_diff_within_threshold": true
+  },
+  "commands": [
+    "node F:\\DevHub\\Thomas\\scripts\\verify_site_visual_runtime.mjs --host 127.0.0.1 --port 3108 --timeout-ms 180000 --output-dir F:\\DevHub\\Thomas\\output\\site-visual-proof --report F:\\DevHub\\Thomas\\output\\site-visual-proof\\runtime-report.json",
+    "python scripts/check_site_visual_proof.py"
+  ]
+}

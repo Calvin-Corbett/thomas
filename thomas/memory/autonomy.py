@@ -489,6 +489,13 @@ class AutonomyMemoryEngine:
         pins_only: Optional[bool] = None,
         max_pack_tokens: Optional[int] = None,
         max_results: Optional[int] = None,
+        decay_half_life_hours: Optional[float] = None,
+        auto_compact_enabled: Optional[bool] = None,
+        auto_compact_episode_threshold: Optional[int] = None,
+        auto_compact_min_interval_hours: Optional[float] = None,
+        auto_optimize_enabled: Optional[bool] = None,
+        auto_optimize_waste_threshold: Optional[float] = None,
+        auto_optimize_min_interval_hours: Optional[float] = None,
     ) -> Dict[str, Any]:
         self._require_started()
         if self._fabric_v2 is None:
@@ -511,6 +518,20 @@ class AutonomyMemoryEngine:
             patch["max_pack_tokens"] = int(max_pack_tokens)
         if max_results is not None:
             patch["max_results"] = int(max_results)
+        if decay_half_life_hours is not None:
+            patch["decay_half_life_hours"] = float(decay_half_life_hours)
+        if auto_compact_enabled is not None:
+            patch["auto_compact_enabled"] = bool(auto_compact_enabled)
+        if auto_compact_episode_threshold is not None:
+            patch["auto_compact_episode_threshold"] = int(auto_compact_episode_threshold)
+        if auto_compact_min_interval_hours is not None:
+            patch["auto_compact_min_interval_hours"] = float(auto_compact_min_interval_hours)
+        if auto_optimize_enabled is not None:
+            patch["auto_optimize_enabled"] = bool(auto_optimize_enabled)
+        if auto_optimize_waste_threshold is not None:
+            patch["auto_optimize_waste_threshold"] = float(auto_optimize_waste_threshold)
+        if auto_optimize_min_interval_hours is not None:
+            patch["auto_optimize_min_interval_hours"] = float(auto_optimize_min_interval_hours)
 
         settings = (
             self._fabric_v2.update_thread_settings(tid, patch)

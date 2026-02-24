@@ -88,15 +88,27 @@ class WorkspaceStore:
     def _blank(self) -> Dict[str, Any]:
         return {"workspaces": {}, "memberships": [], "invites": []}
 
-    def _load(self) -> Dict[str, Any]:
+    def _backup_path(self) -> Path:
+        return self.path.with_suffix(self.path.suffix + ".bak")
+
+    def _quarantine_corrupt_file(self) -> Optional[Path]:
         if not self.path.exists():
-            return self._blank()
+            return None
+        stamp = _utc_now().strftime("%Y%m%dT%H%M%S")
+        target = self.path.with_name(f"{self.path.name}.corrupt.{stamp}")
         try:
-            data = json.loads(self.path.read_text(encoding="utf-8"))
+            self.path.replace(target)
+            return target
         except Exception:
-            return self._blank()
+            return None
+
+    def _load_from_file(self, src: Path) -> Optional[Dict[str, Any]]:
+        try:
+            data = json.loads(src.read_text(encoding="utf-8"))
+        except Exception:
+            return None
         if not isinstance(data, dict):
-            return self._blank()
+            return None
         out = self._blank()
         workspaces = data.get("workspaces")
         memberships = data.get("memberships")
@@ -109,10 +121,32 @@ class WorkspaceStore:
             out["invites"] = invites
         return out
 
+    def _load(self) -> Dict[str, Any]:
+        if not self.path.exists():
+            return self._blank()
+        loaded = self._load_from_file(self.path)
+        if loaded is not None:
+            return loaded
+
+        # Preserve corrupt primary file for forensics and recover from backup.
+        self._quarantine_corrupt_file()
+        backup = self._backup_path()
+        if backup.exists():
+            recovered = self._load_from_file(backup)
+            if recovered is not None:
+                return recovered
+        return self._blank()
+
     def _save(self) -> None:
         payload = json.dumps(self._state, ensure_ascii=False, indent=2)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_text(payload, encoding="utf-8")
+        if self.path.exists():
+            try:
+                self._backup_path().write_text(self.path.read_text(encoding="utf-8"), encoding="utf-8")
+            except Exception:
+                # Keep save path resilient; backup failures should not block writes.
+                pass
         tmp.replace(self.path)
 
     def _memberships_for_user(self, user_id: str) -> List[Dict[str, Any]]:
@@ -378,4 +412,3 @@ class WorkspaceStore:
 
             target["is_active"] = False
             self._save()
-

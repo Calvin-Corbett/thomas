@@ -31,6 +31,26 @@ class DummyLLMText:
         yield StreamEvent(type="done", data={})
 
 
+class DummyLLMTextSequence:
+    def __init__(self, texts):  # noqa: ANN001
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+        self._texts = [str(x) for x in (texts or [])]
+        self._idx = 0
+
+    async def stream_chat(self, messages, tools):  # noqa: ANN001
+        _ = messages
+        _ = tools
+        if not self._texts:
+            text = ""
+        elif self._idx < len(self._texts):
+            text = self._texts[self._idx]
+        else:
+            text = self._texts[-1]
+        self._idx += 1
+        yield StreamEvent(type="token", data={"text": text})
+        yield StreamEvent(type="done", data={})
+
+
 class DummyTool(Tool):
     name = "dummy.echo"
     category = "test"
@@ -249,6 +269,76 @@ class TestAgentLoopConversation(unittest.TestCase):
         assert done is not None
         txt = str(done.data.get("text") or "")
         self.assertIn("What is it?", txt)
+
+    def test_clarification_budget_reprompts_on_history_augmented_full_auto(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        conversation = [
+            {
+                "role": "assistant",
+                "content": "I can continue Telegram setup now. Reply ok to proceed.",
+            }
+        ]
+        agent = AgentLoop(
+            cfg,
+            DummyLLMTextSequence(
+                [
+                    "Which branch should I use?",
+                    "Proceeding with default branch and finishing setup now.",
+                ]
+            ),
+            tools,
+            conversation=conversation,
+            autonomy_level=4,
+        )
+
+        async def run_once():
+            events = []
+            async for ev in agent.run("ok", tools_policy="auto"):
+                events.append(ev)
+            return events
+
+        events = asyncio.run(run_once())
+        done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+        self.assertIsNotNone(done)
+        assert done is not None
+        self.assertIn("finishing setup now", str(done.data.get("text") or "").lower())
+        continuity = (done.data.get("token_report") or {}).get("continuity") or {}
+        self.assertEqual(int(continuity.get("clarification_question_cap", -1)), 0)
+        self.assertGreaterEqual(int(continuity.get("clarification_questions_asked", 0) or 0), 1)
+        self.assertGreaterEqual(int(continuity.get("clarification_reprompt_count", 0) or 0), 1)
+        self.assertGreaterEqual(int(continuity.get("full_auto_reprompt_count", 0) or 0), 1)
+
+    def test_clarification_budget_does_not_suppress_credential_request(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        conversation = [
+            {
+                "role": "assistant",
+                "content": "I can continue setup now. Reply ok to proceed.",
+            }
+        ]
+        agent = AgentLoop(
+            cfg,
+            DummyLLMTextSequence(["I need your API key. What is it?"]),
+            tools,
+            conversation=conversation,
+            autonomy_level=4,
+        )
+
+        async def run_once():
+            events = []
+            async for ev in agent.run("ok", tools_policy="auto"):
+                events.append(ev)
+            return events
+
+        events = asyncio.run(run_once())
+        done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+        self.assertIsNotNone(done)
+        assert done is not None
+        self.assertIn("What is it?", str(done.data.get("text") or ""))
+        continuity = (done.data.get("token_report") or {}).get("continuity") or {}
+        self.assertEqual(int(continuity.get("clarification_reprompt_count", 0) or 0), 0)
 
     def test_sanitize_on_frustration_strips_robotic_opener_without_stock_prefix(self) -> None:
         cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")

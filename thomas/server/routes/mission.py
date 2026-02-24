@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import ipaddress
 import json
 import math
 import os
@@ -12,6 +13,7 @@ import secrets
 import smtplib
 import sys
 import urllib.error
+import urllib.parse
 import urllib.request
 from datetime import datetime, timezone
 from email.message import EmailMessage
@@ -21,6 +23,14 @@ from typing import Any, Callable, Dict, List, Optional
 from aiohttp import web
 
 from thomas import __version__ as THOMAS_VERSION
+from thomas.autonomy.scheduler import compute_next_run
+from thomas.core.config import AppConfig
+from .mission_content_hub import (
+    _build_content_hub_payload,
+    _content_count_configured_api_keys,
+    _content_count_installed_skills,
+    _content_count_recent_audit_events,
+)
 
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]{1,120}$")
 _MAX_BENCH_LOG_LINES = 220
@@ -43,7 +53,18 @@ _ARTIFACT_CONTENT_TYPES: Dict[str, str] = {
 }
 _MAX_ALERT_NOTIFICATION_BODY_CHARS = 8000
 _ALERT_HTTP_TIMEOUT_SECONDS = 8.0
-
+_MISSION_ALLOWED_JOB_KINDS = {
+    "workflow_task",
+    "autonomy_task",
+    "daily_briefing",
+    "reminder",
+    "video_generation",
+    "speech_transcription",
+    "speech_synthesis",
+}
+_MISSION_ALLOWED_RISK_CLASSES = {"low", "medium", "high", "critical"}
+_MISSION_TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled", "dead"}
+_AUTOPILOT_OBJECTIVE_ID_RE = re.compile(r"^[A-Za-z0-9._-]{4,80}$")
 
 def _task_pack_key_for_path(path: Path) -> str:
     name = str(path.name or "").strip()
@@ -157,6 +178,91 @@ def _trim_summary(value: Any, max_len: int = 180) -> str:
     return txt[: max(0, max_len - 3)].rstrip() + "..."
 
 
+def _short_id(value: Any, width: int = 6) -> str:
+    txt = str(value or "").strip()
+    if not txt:
+        return ""
+    return txt[: max(1, int(width))]
+
+
+def _compact_model_label(value: Any, max_len: int = 24) -> str:
+    txt = str(value or "").strip()
+    if not txt:
+        return ""
+    if "/" in txt:
+        txt = txt.split("/")[-1]
+    txt = txt.replace("models:", "").replace("model:", "").strip()
+    return _trim_summary(txt, max_len)
+
+
+def _mission_display_hhmm_utc(value: Any) -> str:
+    epoch = _iso_to_epoch(value)
+    if epoch <= 0:
+        return ""
+    try:
+        dt = datetime.fromtimestamp(epoch, tz=timezone.utc)
+        return dt.strftime("%H:%MZ")
+    except Exception:
+        return ""
+
+
+def _mission_run_display_name(run_meta: Dict[str, Any]) -> str:
+    mode = str(run_meta.get("mode") or "").strip().lower()
+    if mode == "swarm":
+        base = "Swarm Session"
+    elif mode:
+        base = f"{mode.title()} Session"
+    else:
+        base = "Chat Session"
+
+    profile = str(run_meta.get("profile") or "").strip()
+    model_id = _compact_model_label(run_meta.get("model_id"))
+    session_id = _short_id(run_meta.get("session_id"), width=6)
+    started = _mission_display_hhmm_utc(run_meta.get("started_at"))
+
+    suffix = profile or model_id or (f"session {session_id}" if session_id else "")
+    parts = [base]
+    if suffix:
+        parts.append(suffix)
+    if started:
+        parts.append(started)
+    return " | ".join(parts)
+
+
+def _mission_job_display_name(job: Any) -> str:
+    kind = str(getattr(job, "kind", "") or "").strip().lower()
+    payload = getattr(job, "payload", None)
+    payload_dict = payload if isinstance(payload, dict) else {}
+
+    raw_name = str(getattr(job, "name", "") or "").strip()
+    generic_names = {"job", "task", "mission task", "workflow task", "autonomy task"}
+    if raw_name and raw_name.lower() not in generic_names:
+        return _trim_summary(raw_name, 84)
+
+    goal = str(payload_dict.get("goal") or payload_dict.get("task") or payload_dict.get("prompt") or "").strip()
+    if goal:
+        return _trim_summary(goal, 84)
+
+    if kind == "workflow_task":
+        workflow = str(payload_dict.get("workflow") or "chain").strip().lower() or "chain"
+        return f"Workflow Task ({workflow})"
+    if kind == "autonomy_task":
+        return "Autonomy Task"
+    if kind == "daily_briefing":
+        return "Daily Briefing"
+    if kind == "reminder":
+        return "Reminder"
+    if kind == "video_generation":
+        return "Video Generation"
+    if kind == "speech_transcription":
+        return "Speech Transcription"
+    if kind == "speech_synthesis":
+        return "Speech Synthesis"
+    if kind:
+        return _trim_summary(kind.replace("_", " ").title(), 84)
+    return "Mission Job"
+
+
 def _json_or_empty(path: Path) -> Dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8-sig")
@@ -185,6 +291,183 @@ def _coerce_int(value: Any, default: int) -> int:
     with contextlib.suppress(Exception):
         return int(value)
     return int(default)
+
+
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    txt = str(value or "").strip()
+    if not txt:
+        return None
+    if txt.endswith("Z"):
+        txt = txt[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(txt)
+    except Exception:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
+def _mission_validate_hhmm(value: Any) -> str:
+    txt = str(value or "").strip()
+    if not re.fullmatch(r"^\d{2}:\d{2}$", txt):
+        raise web.HTTPBadRequest(text="schedule.at must be HH:MM")
+    hh = int(txt[:2])
+    mm = int(txt[3:5])
+    if hh < 0 or hh > 23 or mm < 0 or mm > 59:
+        raise web.HTTPBadRequest(text="schedule.at must be HH:MM")
+    return txt
+
+
+def _mission_normalize_schedule(raw: Any, *, run_at: Optional[datetime]) -> Optional[Dict[str, Any]]:
+    if raw is None:
+        if run_at is None:
+            return None
+        return {"type": "once", "run_at": run_at.isoformat()}
+    if not isinstance(raw, dict):
+        raise web.HTTPBadRequest(text="schedule must be an object")
+
+    stype = str(raw.get("type") or "").strip().lower()
+    if not stype:
+        if run_at is None:
+            return None
+        stype = "once"
+
+    if stype == "once":
+        when = _parse_iso_datetime(raw.get("run_at")) or run_at
+        if when is None:
+            raise web.HTTPBadRequest(text="schedule.run_at required for once")
+        return {"type": "once", "run_at": when.isoformat()}
+
+    if stype == "interval":
+        with contextlib.suppress(Exception):
+            every = float(raw.get("every_seconds"))
+            if math.isfinite(every) and every > 0:
+                out: Dict[str, Any] = {"type": "interval", "every_seconds": float(every)}
+                start_at = _parse_iso_datetime(raw.get("start_at"))
+                if start_at is not None:
+                    out["start_at"] = start_at.isoformat()
+                return out
+        raise web.HTTPBadRequest(text="schedule.every_seconds must be > 0")
+
+    if stype == "daily":
+        at = _mission_validate_hhmm(raw.get("at"))
+        tz = str(raw.get("tz") or "UTC").strip() or "UTC"
+        return {"type": "daily", "at": at, "tz": tz}
+
+    if stype == "weekly":
+        at = _mission_validate_hhmm(raw.get("at"))
+        tz = str(raw.get("tz") or "UTC").strip() or "UTC"
+        dow_raw = raw.get("dow")
+        dows: List[int] = []
+        if isinstance(dow_raw, list):
+            for row in dow_raw:
+                with contextlib.suppress(Exception):
+                    day = int(row)
+                    if 0 <= day <= 6:
+                        dows.append(day)
+        dows = sorted(set(dows))
+        if not dows:
+            raise web.HTTPBadRequest(text="schedule.dow must include weekday numbers 0..6")
+        return {"type": "weekly", "at": at, "tz": tz, "dow": dows}
+
+    raise web.HTTPBadRequest(text=f"unsupported schedule type '{stype}'")
+
+
+def _autopilot_objective_id(raw_objective_id: Any, *, goal: str) -> str:
+    candidate = str(raw_objective_id or "").strip()
+    if candidate and _AUTOPILOT_OBJECTIVE_ID_RE.fullmatch(candidate):
+        return candidate
+    seed = re.sub(r"[^a-z0-9]+", "-", str(goal or "").strip().lower()).strip("-")
+    if not seed:
+        seed = "objective"
+    suffix = secrets.token_urlsafe(4).replace("-", "").replace("_", "").lower()
+    return f"{seed[:48]}-{suffix[:8]}"
+
+
+def _autopilot_schedule_from_payload(payload: Dict[str, Any]) -> tuple[Dict[str, Any], str]:
+    run_at = _parse_iso_datetime(payload.get("run_at"))
+    raw_schedule = payload.get("schedule")
+    if raw_schedule is not None:
+        schedule = _mission_normalize_schedule(raw_schedule, run_at=run_at)
+        if schedule is None:
+            raise web.HTTPBadRequest(text="schedule is required")
+        return schedule, "custom"
+
+    cadence = str(payload.get("cadence") or payload.get("mode") or "continuous").strip().lower()
+    if cadence in {"", "continuous", "always", "24/7", "24x7", "247"}:
+        every_seconds = _coerce_int(payload.get("every_seconds"), 900)
+        if payload.get("every_minutes") is not None:
+            every_seconds = max(every_seconds, _coerce_int(payload.get("every_minutes"), 15) * 60)
+        every_seconds = max(60, min(every_seconds, 86400))
+        return {"type": "interval", "every_seconds": float(every_seconds)}, "continuous"
+    if cadence in {"interval", "repeat"}:
+        every_seconds = _coerce_int(payload.get("every_seconds"), 900)
+        every_seconds = max(60, min(every_seconds, 86400))
+        return {"type": "interval", "every_seconds": float(every_seconds)}, "interval"
+    if cadence in {"hour", "hourly"}:
+        return {"type": "interval", "every_seconds": float(3600)}, "hourly"
+    if cadence in {"daily", "day"}:
+        at = _mission_validate_hhmm(payload.get("at") or "09:00")
+        tz = str(payload.get("tz") or "UTC").strip() or "UTC"
+        return {"type": "daily", "at": at, "tz": tz}, "daily"
+    if cadence in {"weekly", "week"}:
+        at = _mission_validate_hhmm(payload.get("at") or "09:00")
+        tz = str(payload.get("tz") or "UTC").strip() or "UTC"
+        dow_raw = payload.get("dow")
+        dows: List[int] = []
+        if isinstance(dow_raw, list):
+            for row in dow_raw:
+                with contextlib.suppress(Exception):
+                    day = int(row)
+                    if 0 <= day <= 6:
+                        dows.append(day)
+        dows = sorted(set(dows)) or [0]
+        return {"type": "weekly", "at": at, "tz": tz, "dow": dows}, "weekly"
+    raise web.HTTPBadRequest(text=f"unsupported cadence '{cadence}'")
+
+
+def _mission_job_payload(job: Any) -> Dict[str, Any]:
+    retry_policy = getattr(job, "retry_policy", None)
+    retry_payload: Dict[str, Any] = {}
+    if retry_policy is not None:
+        retry_payload = {
+            "max_attempts": int(getattr(retry_policy, "max_attempts", 0) or 0),
+            "base_delay_s": float(getattr(retry_policy, "base_delay_s", 0.0) or 0.0),
+            "max_delay_s": float(getattr(retry_policy, "max_delay_s", 0.0) or 0.0),
+            "jitter": float(getattr(retry_policy, "jitter", 0.0) or 0.0),
+            "backoff": float(getattr(retry_policy, "backoff", 0.0) or 0.0),
+        }
+
+    payload = getattr(job, "payload", None)
+    result = getattr(job, "result", None)
+    error = getattr(job, "error", None)
+    schedule = getattr(job, "schedule", None)
+    return {
+        "id": str(getattr(job, "id", "") or ""),
+        "name": str(getattr(job, "name", "") or ""),
+        "kind": str(getattr(job, "kind", "") or ""),
+        "status": str(getattr(job, "status", "") or ""),
+        "created_at": _coerce_iso(getattr(job, "created_at", None)),
+        "updated_at": _coerce_iso(getattr(job, "updated_at", None)),
+        "next_run_at": (
+            _coerce_iso(getattr(job, "next_run_at", None))
+            if getattr(job, "next_run_at", None)
+            else ""
+        ),
+        "parent_id": str(getattr(job, "parent_id", "") or ""),
+        "session_id": str(getattr(job, "session_id", "") or ""),
+        "payload": payload if isinstance(payload, dict) else {},
+        "result": result if isinstance(result, dict) else {},
+        "error": error if isinstance(error, dict) else {},
+        "schedule": schedule if isinstance(schedule, dict) else None,
+        "attempts": int(getattr(job, "attempts", 0) or 0),
+        "retry_policy": retry_payload,
+        "risk_class": str(getattr(job, "risk_class", "") or "low"),
+        "requires_approval": bool(getattr(job, "requires_approval", False)),
+        "approved": bool(getattr(job, "approved", False)) if getattr(job, "approved", None) is not None else None,
+        "cancelled": bool(getattr(job, "cancelled", False)),
+    }
 
 
 def _safe_approval_dict(ap: Any) -> Dict[str, Any]:
@@ -233,6 +516,83 @@ def _http_post_json(url: str, payload: Dict[str, Any], *, timeout_s: float = _AL
         return {"ok": False, "status": 0, "error": f"{type(exc).__name__}: {exc}"}
 
 
+def _contains_header_newline(value: str) -> bool:
+    return "\n" in value or "\r" in value
+
+
+def _sanitize_alert_header(value: Any, *, field: str, default: str = "") -> str:
+    text = str(value or default).strip()
+    if _contains_header_newline(text):
+        raise web.HTTPBadRequest(text=f"invalid {field}")
+    return text
+
+
+def _is_private_or_local_host(host: str) -> bool:
+    normalized = str(host or "").strip().lower().rstrip(".")
+    if not normalized:
+        return True
+    if normalized in {"localhost"} or normalized.endswith(".localhost") or normalized.endswith(".local"):
+        return True
+    with contextlib.suppress(Exception):
+        ip = ipaddress.ip_address(normalized)
+        return bool(
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        )
+    return False
+
+
+def _alert_webhook_host_allowlist() -> List[str]:
+    raw = str(os.environ.get("THOMAS_ALERT_WEBHOOK_HOST_ALLOWLIST") or "").strip()
+    if not raw:
+        return []
+    out: List[str] = []
+    for part in raw.split(","):
+        host = str(part or "").strip().lower().rstrip(".")
+        if host:
+            out.append(host)
+    return out
+
+
+def _host_allowlisted(host: str, allowlist: List[str]) -> bool:
+    normalized = str(host or "").strip().lower().rstrip(".")
+    for item in allowlist:
+        if normalized == item or normalized.endswith("." + item):
+            return True
+    return False
+
+
+def _normalize_alert_webhook_url(raw_url: str) -> str:
+    text = str(raw_url or "").strip()
+    if not text:
+        return ""
+    parsed = urllib.parse.urlparse(text)
+    if parsed.scheme not in {"http", "https"}:
+        raise web.HTTPBadRequest(text="invalid webhook_url")
+    if parsed.username or parsed.password:
+        raise web.HTTPBadRequest(text="invalid webhook_url")
+    host = str(parsed.hostname or "").strip().lower()
+    if not host:
+        raise web.HTTPBadRequest(text="invalid webhook_url")
+
+    allow_private_targets = _coerce_bool(
+        os.environ.get("THOMAS_ALERT_ALLOW_PRIVATE_WEBHOOK_URLS"),
+        False,
+    )
+    if _is_private_or_local_host(host) and not allow_private_targets:
+        raise web.HTTPBadRequest(text="webhook_url must target a public host")
+
+    allowlist = _alert_webhook_host_allowlist()
+    if allowlist and not _host_allowlisted(host, allowlist):
+        raise web.HTTPBadRequest(text="webhook_url host is not allowlisted")
+
+    return parsed.geturl()
+
+
 def _send_alert_email(to_addr: str, subject: str, body_text: str) -> Dict[str, Any]:
     host = str(os.environ.get("THOMAS_ALERT_SMTP_HOST") or "").strip()
     port = _coerce_int(os.environ.get("THOMAS_ALERT_SMTP_PORT") or "587", 587)
@@ -247,6 +607,8 @@ def _send_alert_email(to_addr: str, subject: str, body_text: str) -> Dict[str, A
         }
     if not to_addr:
         return {"ok": False, "error": "email unavailable: missing recipient"}
+    if _contains_header_newline(str(to_addr)) or _contains_header_newline(str(subject)):
+        return {"ok": False, "error": "email unavailable: invalid header value"}
 
     msg = EmailMessage()
     msg["Subject"] = str(subject or "Thomas Mission Alert")
@@ -778,7 +1140,7 @@ def register_mission_routes(
                         "id": f"run:{run_id}",
                         "source": "chat_run",
                         "kind": "run",
-                        "name": f"{'Swarm' if mode == 'swarm' else 'Chat'} {run_id[:8]}",
+                        "name": _mission_run_display_name(run),
                         "room": room,
                         "status": status,
                         "summary": summary,
@@ -836,7 +1198,7 @@ def register_mission_routes(
                     getattr(job, "updated_at", None) or getattr(job, "created_at", None)
                 )
                 kind = str(getattr(job, "kind", "") or "").strip()
-                name = str(getattr(job, "name", "") or kind or "job")
+                name = _mission_job_display_name(job)
                 payload_obj = getattr(job, "payload", None)
                 payload_dict = payload_obj if isinstance(payload_obj, dict) else {}
                 model_profile = str(
@@ -1080,8 +1442,109 @@ def register_mission_routes(
                 await resp.write_eof()
         return resp
 
-    async def _mission_require_store() -> Any:
+    autonomy_bootstrap_lock = asyncio.Lock()
+
+    def _mission_find_config() -> Optional[AppConfig]:
+        for _k, value in app.items():
+            if isinstance(value, AppConfig):
+                return value
+        return None
+
+    async def _mission_bootstrap_autonomy() -> bool:
         store = app.get("autonomy_store")
+        engine = app.get("autonomy_engine")
+        if store is not None and engine is not None:
+            if not bool(getattr(engine, "is_running", False)):
+                with contextlib.suppress(Exception):
+                    await engine.start()
+            return True
+
+        async with autonomy_bootstrap_lock:
+            store = app.get("autonomy_store")
+            engine = app.get("autonomy_engine")
+            if store is not None and engine is not None:
+                if not bool(getattr(engine, "is_running", False)):
+                    with contextlib.suppress(Exception):
+                        await engine.start()
+                return True
+
+            cfg = _mission_find_config()
+            if cfg is None:
+                return False
+
+            try:
+                from thomas.autonomy.adapters import ChatAdapter, ChatAdapterConfig
+                from thomas.autonomy.engine import AutonomyEngine
+                from thomas.autonomy.policy import AutonomyPolicy
+                from thomas.autonomy.scheduler import EngineTiming
+                from thomas.autonomy.store import AutonomyStore
+
+                root = Path(getattr(getattr(cfg, "memory", None), "root_path", "") or Path("runtime") / ".thomas")
+                db_path = Path(os.environ.get("THOMAS_AUTONOMY_DB_PATH") or (root / "autonomy" / "autonomy.sqlite3"))
+                db_path.parent.mkdir(parents=True, exist_ok=True)
+                policy_path = Path(
+                    os.environ.get("THOMAS_AUTONOMY_POLICY_PATH")
+                    or (db_path.parent / "autonomy_policy.toml")
+                )
+                policy = AutonomyPolicy.load(str(policy_path))
+                audit_key = os.environ.get("THOMAS_AUTONOMY_AUDIT_KEY")
+                integrity_key = audit_key.encode("utf-8") if audit_key else None
+                store = AutonomyStore(str(db_path), integrity_key=integrity_key)
+
+                api_token = str(
+                    os.environ.get("THOMAS_AUTONOMY_TOKEN")
+                    or getattr(getattr(cfg, "server", None), "api_token", "")
+                    or ""
+                ).strip() or None
+                adapter_cfg = ChatAdapterConfig(api_token=api_token)
+                chat_adapter = ChatAdapter(app=app, cfg=adapter_cfg)
+                engine = AutonomyEngine(
+                    store=store,
+                    policy=policy,
+                    timing=EngineTiming(),
+                    chat_adapter=chat_adapter,
+                )
+                await engine.start()
+                app_state = getattr(app, "_state", None)
+                if isinstance(app_state, dict):
+                    app_state["autonomy_store"] = store
+                    app_state["autonomy_engine"] = engine
+                    app_state["autonomy_policy"] = policy
+                else:
+                    app["autonomy_store"] = store
+                    app["autonomy_engine"] = engine
+                    app["autonomy_policy"] = policy
+
+                if not bool(app.get("_mission_autonomy_cleanup_registered")):
+                    async def _cleanup_mission_autonomy(_app: web.Application) -> None:
+                        runtime_engine = _app.get("autonomy_engine")
+                        runtime_store = _app.get("autonomy_store")
+                        if runtime_engine is not None:
+                            with contextlib.suppress(Exception):
+                                await runtime_engine.stop()
+                        if runtime_store is not None:
+                            with contextlib.suppress(Exception):
+                                runtime_store.close()
+
+                    with contextlib.suppress(Exception):
+                        app.on_cleanup.append(_cleanup_mission_autonomy)
+                        app_state = getattr(app, "_state", None)
+                        if isinstance(app_state, dict):
+                            app_state["_mission_autonomy_cleanup_registered"] = True
+                        else:
+                            app["_mission_autonomy_cleanup_registered"] = True
+
+                return True
+            except Exception:
+                if app.get("autonomy_store") is not None and app.get("autonomy_engine") is not None:
+                    return True
+                return False
+
+    async def _mission_require_store(*, auto_enable: bool = False) -> Any:
+        store = app.get("autonomy_store")
+        if store is None and auto_enable:
+            await _mission_bootstrap_autonomy()
+            store = app.get("autonomy_store")
         if store is None:
             raise web.HTTPNotFound(text="autonomy store is not available")
         return store
@@ -1093,6 +1556,234 @@ def register_mission_routes(
         wake = getattr(engine, "wake_up", None)
         if callable(wake):
             wake()
+
+    async def api_mission_jobs(request: web.Request) -> web.Response:
+        require_api_access(request)
+        q = request.query
+        status = str(q.get("status") or "").strip() or None
+        kind = str(q.get("kind") or "").strip() or None
+        parent_id = str(q.get("parent_id") or "").strip() or None
+        session_id = str(q.get("session_id") or "").strip() or None
+        limit = _coerce_int(q.get("limit"), 200)
+        offset = _coerce_int(q.get("offset"), 0)
+        limit = max(1, min(limit, 500))
+        offset = max(0, offset)
+        filters = {
+            "status": status or "",
+            "kind": kind or "",
+            "parent_id": parent_id or "",
+            "session_id": session_id or "",
+            "limit": limit,
+            "offset": offset,
+        }
+
+        store = app.get("autonomy_store")
+        if store is None:
+            return web.json_response(
+                {
+                    "ok": True,
+                    "jobs": [],
+                    "count": 0,
+                    "filters": filters,
+                    "unavailable": True,
+                    "reason": "autonomy store is not available",
+                },
+                dumps=lambda x: json.dumps(x, ensure_ascii=False),
+            )
+
+        try:
+            jobs = list(
+                store.list_jobs(
+                    status=status,
+                    kind=kind,
+                    parent_id=parent_id,
+                    session_id=session_id,
+                    limit=limit,
+                    offset=offset,
+                )
+                or []
+            )
+        except Exception as exc:
+            raise web.HTTPInternalServerError(text=f"unable to list jobs: {exc}")
+
+        rows = [_mission_job_payload(job) for job in jobs]
+        return web.json_response(
+            {
+                "ok": True,
+                "jobs": rows,
+                "count": len(rows),
+                "filters": filters,
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_mission_content_hub(request: web.Request) -> web.Response:
+        require_api_access(request)
+
+        store = app.get("autonomy_store")
+        job_rows: List[Dict[str, Any]] = []
+        if store is not None:
+            try:
+                jobs = list(store.list_jobs(limit=420, offset=0) or [])
+            except Exception as exc:
+                raise web.HTTPInternalServerError(text=f"unable to list content jobs: {exc}")
+            job_rows = [_mission_job_payload(job) for job in jobs]
+
+        run_store_mod = app.get(run_store_module_key)
+        run_store_enabled = bool(app.get(run_store_enabled_key)) and run_store_mod is not None
+        sessions_active = 0
+        sessions_recent_total = 0
+        if run_store_enabled and run_store_mod is not None:
+            try:
+                runs = list(run_store_mod.list_runs(limit=220, offset=0, filters={}) or [])
+            except Exception:
+                runs = []
+            sessions_recent_total = len(runs)
+            sessions_active = sum(1 for run in runs if not str(run.get("ended_at") or "").strip())
+
+        skills_installed = _content_count_installed_skills()
+        api_keys_configured = _content_count_configured_api_keys(user_id="default")
+        audit_events_last_24h = _content_count_recent_audit_events(store, hours=24)
+
+        approvals_payload = await _mission_approvals_payload()
+        approvals_pending = int(approvals_payload.get("pending_total") or 0)
+        payload = _build_content_hub_payload(
+            job_rows,
+            approvals_pending=approvals_pending,
+            sessions_active=sessions_active,
+            sessions_recent_total=sessions_recent_total,
+            skills_installed=skills_installed,
+            api_keys_configured=api_keys_configured,
+            audit_events_last_24h=audit_events_last_24h,
+        )
+        payload["engine"] = {
+            "autonomy_store_available": bool(store is not None),
+            "run_store_enabled": bool(run_store_enabled),
+        }
+        payload["approvals"] = {"pending_total": approvals_pending}
+        return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
+
+    async def api_mission_job_create(request: web.Request) -> web.Response:
+        require_api_access(request)
+        store = await _mission_require_store(auto_enable=True)
+
+        try:
+            payload = await request.json()
+            if not isinstance(payload, dict):
+                payload = {}
+        except Exception:
+            payload = {}
+
+        name = str(payload.get("name") or "").strip() or "Mission Task"
+        kind = str(payload.get("kind") or "workflow_task").strip().lower() or "workflow_task"
+        if kind not in _MISSION_ALLOWED_JOB_KINDS:
+            allowed = ", ".join(sorted(_MISSION_ALLOWED_JOB_KINDS))
+            raise web.HTTPBadRequest(text=f"kind must be one of: {allowed}")
+
+        job_payload = payload.get("payload")
+        if not isinstance(job_payload, dict):
+            job_payload = {}
+        else:
+            job_payload = dict(job_payload)
+
+        if kind in {"workflow_task", "autonomy_task"}:
+            goal = (
+                str(payload.get("goal") or "").strip()
+                or str(payload.get("prompt") or "").strip()
+                or str(job_payload.get("goal") or "").strip()
+                or str(job_payload.get("prompt") or "").strip()
+                or str(job_payload.get("task") or "").strip()
+            )
+            if not goal:
+                raise web.HTTPBadRequest(text="goal or prompt is required for workflow/autonomy tasks")
+            job_payload["goal"] = goal
+            if not str(job_payload.get("prompt") or "").strip():
+                job_payload["prompt"] = goal
+            workflow = (
+                str(payload.get("workflow") or "").strip().lower()
+                or str(job_payload.get("workflow") or "").strip().lower()
+            )
+            if workflow:
+                job_payload["workflow"] = workflow
+            profile = (
+                str(payload.get("profile") or "").strip()
+                or str(job_payload.get("profile") or "").strip()
+            )
+            if profile:
+                job_payload["profile"] = profile
+            model_id = (
+                str(payload.get("model_id") or "").strip()
+                or str(job_payload.get("model_id") or "").strip()
+            )
+            if model_id:
+                job_payload["model_id"] = model_id
+        elif kind == "reminder":
+            msg = (
+                str(payload.get("message") or "").strip()
+                or str(payload.get("prompt") or "").strip()
+                or str(job_payload.get("message") or "").strip()
+                or str(job_payload.get("text") or "").strip()
+            )
+            if msg:
+                job_payload["message"] = msg
+                if not str(job_payload.get("text") or "").strip():
+                    job_payload["text"] = msg
+        elif kind == "daily_briefing":
+            prompt = (
+                str(payload.get("prompt") or "").strip()
+                or str(job_payload.get("prompt") or "").strip()
+            )
+            if prompt:
+                job_payload["prompt"] = prompt
+
+        run_at = _parse_iso_datetime(payload.get("run_at"))
+        schedule = _mission_normalize_schedule(payload.get("schedule"), run_at=run_at)
+        now = datetime.now(timezone.utc)
+        next_run_at: Optional[datetime]
+        if schedule is None:
+            next_run_at = run_at or now
+        else:
+            try:
+                next_run_at = compute_next_run(schedule, now)
+            except Exception as exc:
+                raise web.HTTPBadRequest(text=f"invalid schedule: {exc}")
+            if next_run_at is None:
+                raise web.HTTPBadRequest(text="schedule does not produce a future run time")
+            if next_run_at.tzinfo is None:
+                next_run_at = next_run_at.replace(tzinfo=timezone.utc)
+            else:
+                next_run_at = next_run_at.astimezone(timezone.utc)
+
+        risk_class = str(payload.get("risk_class") or "low").strip().lower() or "low"
+        if risk_class not in _MISSION_ALLOWED_RISK_CLASSES:
+            risk_class = "low"
+        requires_approval = bool(payload.get("requires_approval"))
+        parent_id = str(payload.get("parent_id") or "").strip() or None
+        session_id = str(payload.get("session_id") or "").strip() or None
+
+        try:
+            job = store.create_job(
+                name=name,
+                kind=kind,
+                payload=job_payload,
+                schedule=schedule,
+                next_run_at=next_run_at,
+                risk_class=risk_class,
+                requires_approval=requires_approval,
+                parent_id=parent_id,
+                session_id=session_id,
+            )
+        except Exception as exc:
+            raise web.HTTPInternalServerError(text=f"unable to create job: {exc}")
+
+        _mission_wakeup_engine()
+        return web.json_response(
+            {
+                "ok": True,
+                "job": _mission_job_payload(job),
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
 
     async def api_mission_job_cancel(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -1145,6 +1836,255 @@ def register_mission_routes(
             raise web.HTTPNotFound(text="job not found")
         _mission_wakeup_engine()
         return web.json_response({"ok": True, "job_id": job_id, "action": "requeue"})
+
+    async def api_mission_autopilot_bootstrap(request: web.Request) -> web.Response:
+        require_api_access(request)
+        enabled = await _mission_bootstrap_autonomy()
+        store = app.get("autonomy_store")
+        engine = app.get("autonomy_engine")
+        if not enabled or store is None or engine is None:
+            raise web.HTTPInternalServerError(text="unable to bootstrap autonomy runtime")
+        return web.json_response(
+            {
+                "ok": True,
+                "enabled": True,
+                "engine": {
+                    "running": bool(getattr(engine, "is_running", False)),
+                    "worker_id": str(getattr(engine, "worker_id", "") or ""),
+                },
+                "store": {
+                    "db_path": str(getattr(store, "db_path", "") or ""),
+                },
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_mission_autopilot_objective_create(request: web.Request) -> web.Response:
+        require_api_access(request)
+        try:
+            payload = await request.json()
+            if not isinstance(payload, dict):
+                payload = {}
+        except Exception:
+            payload = {}
+
+        auto_enable = _coerce_bool(payload.get("auto_enable"), default=True)
+        store = await _mission_require_store(auto_enable=auto_enable)
+
+        goal = (
+            str(payload.get("goal") or "").strip()
+            or str(payload.get("prompt") or "").strip()
+            or str(payload.get("task") or "").strip()
+        )
+        if not goal:
+            raise web.HTTPBadRequest(text="goal is required")
+
+        kind = str(payload.get("kind") or "workflow_task").strip().lower() or "workflow_task"
+        if kind not in {"workflow_task", "autonomy_task"}:
+            raise web.HTTPBadRequest(text="kind must be 'workflow_task' or 'autonomy_task'")
+
+        objective_id = _autopilot_objective_id(payload.get("objective_id"), goal=goal)
+        schedule, cadence = _autopilot_schedule_from_payload(payload)
+        now = datetime.now(timezone.utc)
+        start_immediately = _coerce_bool(payload.get("start_immediately"), default=True)
+        if start_immediately:
+            next_run_at = now
+        else:
+            try:
+                next_run_at = compute_next_run(schedule, now)
+            except Exception as exc:
+                raise web.HTTPBadRequest(text=f"invalid schedule: {exc}")
+            if next_run_at is None:
+                raise web.HTTPBadRequest(text="schedule does not produce a future run time")
+            if next_run_at.tzinfo is None:
+                next_run_at = next_run_at.replace(tzinfo=timezone.utc)
+            else:
+                next_run_at = next_run_at.astimezone(timezone.utc)
+
+        risk_class = str(payload.get("risk_class") or "low").strip().lower() or "low"
+        if risk_class not in _MISSION_ALLOWED_RISK_CLASSES:
+            risk_class = "low"
+
+        session_id = str(payload.get("session_id") or "").strip() or None
+        requires_approval = bool(payload.get("requires_approval"))
+        profile = str(payload.get("profile") or "").strip()
+        model_id = str(payload.get("model_id") or "").strip()
+        workflow = str(payload.get("workflow") or "orchestrator_worker").strip().lower() or "orchestrator_worker"
+        autonomy_level = max(1, min(4, _coerce_int(payload.get("autonomy_level"), 4)))
+        worker_count = max(1, min(8, _coerce_int(payload.get("worker_count"), 3)))
+        every_seconds = 0
+        with contextlib.suppress(Exception):
+            every_seconds = int((schedule or {}).get("every_seconds") or 0)
+
+        job_payload = payload.get("payload")
+        if not isinstance(job_payload, dict):
+            job_payload = {}
+        else:
+            job_payload = dict(job_payload)
+
+        job_payload["goal"] = goal
+        job_payload["prompt"] = str(job_payload.get("prompt") or "").strip() or goal
+        job_payload["task"] = str(job_payload.get("task") or "").strip() or goal
+        job_payload["workflow"] = workflow
+        job_payload["autonomy_level"] = int(autonomy_level)
+        job_payload["worker_count"] = int(worker_count)
+        if profile:
+            job_payload["profile"] = profile
+        if model_id:
+            job_payload["model_id"] = model_id
+        job_payload["autopilot"] = {
+            "enabled": True,
+            "objective_id": objective_id,
+            "cadence": cadence,
+            "every_seconds": int(every_seconds) if every_seconds > 0 else 0,
+            "created_at": now.isoformat(),
+        }
+
+        name = str(payload.get("name") or "").strip() or f"Autopilot: {goal[:64]}"
+
+        try:
+            job = store.create_job(
+                name=name,
+                kind=kind,
+                payload=job_payload,
+                schedule=schedule,
+                next_run_at=next_run_at,
+                risk_class=risk_class,
+                requires_approval=requires_approval,
+                parent_id=None,
+                session_id=session_id,
+            )
+        except Exception as exc:
+            raise web.HTTPInternalServerError(text=f"unable to create autopilot objective: {exc}")
+
+        _mission_wakeup_engine()
+        return web.json_response(
+            {
+                "ok": True,
+                "objective_id": objective_id,
+                "job": _mission_job_payload(job),
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_mission_autopilot_objectives(request: web.Request) -> web.Response:
+        require_api_access(request)
+        q = request.query
+        limit = max(1, min(_coerce_int(q.get("limit"), 180), 500))
+        objective_filter = str(q.get("objective_id") or "").strip()
+        active_only = _coerce_bool(q.get("active_only"), default=True)
+
+        store = app.get("autonomy_store")
+        if store is None:
+            return web.json_response(
+                {
+                    "ok": True,
+                    "objectives": [],
+                    "count": 0,
+                    "unavailable": True,
+                    "reason": "autonomy store is not available",
+                },
+                dumps=lambda x: json.dumps(x, ensure_ascii=False),
+            )
+
+        try:
+            jobs = list(store.list_jobs(limit=max(limit * 3, 180), offset=0) or [])
+        except Exception as exc:
+            raise web.HTTPInternalServerError(text=f"unable to list autopilot objectives: {exc}")
+
+        rows: List[Dict[str, Any]] = []
+        for job in jobs:
+            payload_obj = getattr(job, "payload", None)
+            payload_dict = payload_obj if isinstance(payload_obj, dict) else {}
+            auto = payload_dict.get("autopilot")
+            auto_dict = auto if isinstance(auto, dict) else {}
+            if not bool(auto_dict.get("enabled")):
+                continue
+            objective_id = str(auto_dict.get("objective_id") or "").strip()
+            if not objective_id:
+                continue
+            if objective_filter and objective_id != objective_filter:
+                continue
+            status = str(getattr(job, "status", "") or "").strip().lower() or "unknown"
+            if active_only and status in _MISSION_TERMINAL_JOB_STATUSES:
+                continue
+            rows.append(
+                {
+                    "objective_id": objective_id,
+                    "job_id": str(getattr(job, "id", "") or ""),
+                    "name": str(getattr(job, "name", "") or ""),
+                    "goal": str(payload_dict.get("goal") or payload_dict.get("prompt") or "").strip(),
+                    "status": status,
+                    "kind": str(getattr(job, "kind", "") or ""),
+                    "cadence": str(auto_dict.get("cadence") or ""),
+                    "every_seconds": int(auto_dict.get("every_seconds") or 0),
+                    "next_run_at": _coerce_iso(getattr(job, "next_run_at", None)),
+                    "updated_at": _coerce_iso(getattr(job, "updated_at", None)),
+                    "session_id": str(getattr(job, "session_id", "") or ""),
+                    "requires_approval": bool(getattr(job, "requires_approval", False)),
+                }
+            )
+
+        rows.sort(key=lambda row: _iso_to_epoch(row.get("updated_at")), reverse=True)
+        rows = rows[:limit]
+        return web.json_response(
+            {
+                "ok": True,
+                "objectives": rows,
+                "count": len(rows),
+                "filters": {
+                    "objective_id": objective_filter,
+                    "active_only": bool(active_only),
+                    "limit": int(limit),
+                },
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_mission_autopilot_objective_stop(request: web.Request) -> web.Response:
+        require_api_access(request)
+        store = await _mission_require_store()
+        objective_id = str(request.match_info.get("objective_id") or "").strip()
+        if not objective_id:
+            raise web.HTTPBadRequest(text="missing objective_id")
+        if not _AUTOPILOT_OBJECTIVE_ID_RE.fullmatch(objective_id):
+            raise web.HTTPBadRequest(text="invalid objective_id")
+
+        try:
+            jobs = list(store.list_jobs(limit=2000, offset=0) or [])
+        except Exception as exc:
+            raise web.HTTPInternalServerError(text=f"unable to read objectives: {exc}")
+
+        matched = 0
+        cancelled = 0
+        for job in jobs:
+            payload_obj = getattr(job, "payload", None)
+            payload_dict = payload_obj if isinstance(payload_obj, dict) else {}
+            auto = payload_dict.get("autopilot")
+            auto_dict = auto if isinstance(auto, dict) else {}
+            if str(auto_dict.get("objective_id") or "").strip() != objective_id:
+                continue
+            matched += 1
+            status = str(getattr(job, "status", "") or "").strip().lower()
+            if status in _MISSION_TERMINAL_JOB_STATUSES:
+                continue
+            with contextlib.suppress(Exception):
+                store.cancel_job(str(getattr(job, "id", "") or ""), actor="mission_autopilot")
+                cancelled += 1
+
+        if matched == 0:
+            raise web.HTTPNotFound(text="objective not found")
+
+        _mission_wakeup_engine()
+        return web.json_response(
+            {
+                "ok": True,
+                "objective_id": objective_id,
+                "matched_jobs": int(matched),
+                "cancelled_jobs": int(cancelled),
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
 
     async def api_mission_autonomy_approval_decide(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -1258,9 +2198,13 @@ def register_mission_routes(
                     }
                 )
         channels = payload.get("channels") if isinstance(payload.get("channels"), dict) else {}
-        webhook_url = str(channels.get("webhook_url") or "").strip()
-        email_to = str(channels.get("email_to") or "").strip()
-        subject = str(channels.get("subject") or "").strip() or "Thomas Mission Alert"
+        webhook_url = _normalize_alert_webhook_url(channels.get("webhook_url"))
+        email_to = _sanitize_alert_header(channels.get("email_to"), field="email_to")
+        subject = _sanitize_alert_header(
+            channels.get("subject"),
+            field="subject",
+            default="Thomas Mission Alert",
+        ) or "Thomas Mission Alert"
 
         lines: List[str] = []
         for row in alerts:
@@ -1277,8 +2221,6 @@ def register_mission_routes(
 
         out: Dict[str, Any] = {"ok": True, "channels": {}}
         if webhook_url:
-            if not re.match(r"^https?://", webhook_url, re.IGNORECASE):
-                raise web.HTTPBadRequest(text="invalid webhook_url")
             webhook_res = _http_post_json(
                 webhook_url,
                 {
@@ -1615,10 +2557,20 @@ def register_mission_routes(
 
     app.router.add_get("/mission", mission_page)
     app.router.add_get("/api/mission/control", api_mission_control)
+    app.router.add_get("/api/mission/content-hub", api_mission_content_hub)
     app.router.add_get("/api/mission/stream", api_mission_stream)
+    app.router.add_get("/api/mission/jobs", api_mission_jobs)
+    app.router.add_post("/api/mission/jobs", api_mission_job_create)
     app.router.add_post("/api/mission/jobs/{job_id}/cancel", api_mission_job_cancel)
     app.router.add_post("/api/mission/jobs/{job_id}/run_now", api_mission_job_run_now)
     app.router.add_post("/api/mission/jobs/{job_id}/requeue", api_mission_job_requeue)
+    app.router.add_post("/api/mission/autopilot/bootstrap", api_mission_autopilot_bootstrap)
+    app.router.add_get("/api/mission/autopilot/objectives", api_mission_autopilot_objectives)
+    app.router.add_post("/api/mission/autopilot/objectives", api_mission_autopilot_objective_create)
+    app.router.add_post(
+        "/api/mission/autopilot/objectives/{objective_id}/stop",
+        api_mission_autopilot_objective_stop,
+    )
     app.router.add_post(
         "/api/mission/approvals/autonomy/{approval_id}/decision",
         api_mission_autonomy_approval_decide,

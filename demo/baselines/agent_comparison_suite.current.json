@@ -12,6 +12,7 @@
     "thomas",
     "openclaw"
   ],
+  "head_to_head_tie_policy": "exclude",
   "tracked_cli_commands": [
     "acp",
     "agents",
@@ -81,6 +82,86 @@
       "root": "F:/DevHub/_tmp_competitor_open_interpreter",
       "branch": "main",
       "enabled": true
+    },
+    {
+      "id": "openhands",
+      "label": "OpenHands",
+      "repo_url": "https://github.com/All-Hands-AI/OpenHands.git",
+      "root": "F:/DevHub/_tmp_competitor_openhands",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "cline",
+      "label": "Cline",
+      "repo_url": "https://github.com/cline/cline.git",
+      "root": "F:/DevHub/_tmp_competitor_cline",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "roo_code",
+      "label": "Roo Code",
+      "repo_url": "https://github.com/RooCodeInc/Roo-Code.git",
+      "root": "F:/DevHub/_tmp_competitor_roo_code",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "continue",
+      "label": "Continue",
+      "repo_url": "https://github.com/continuedev/continue.git",
+      "root": "F:/DevHub/_tmp_competitor_continue",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "swe_agent",
+      "label": "SWE-agent",
+      "repo_url": "https://github.com/SWE-agent/SWE-agent.git",
+      "root": "F:/DevHub/_tmp_competitor_swe_agent",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "gpt_engineer",
+      "label": "GPT Engineer",
+      "repo_url": "https://github.com/gpt-engineer-org/gpt-engineer.git",
+      "root": "F:/DevHub/_tmp_competitor_gpt_engineer",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "autogpt",
+      "label": "AutoGPT",
+      "repo_url": "https://github.com/Significant-Gravitas/AutoGPT.git",
+      "root": "F:/DevHub/_tmp_competitor_autogpt",
+      "branch": "master",
+      "enabled": true
+    },
+    {
+      "id": "autogen",
+      "label": "AutoGen",
+      "repo_url": "https://github.com/microsoft/autogen.git",
+      "root": "F:/DevHub/_tmp_competitor_autogen",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "crewai",
+      "label": "CrewAI",
+      "repo_url": "https://github.com/crewAIInc/crewAI.git",
+      "root": "F:/DevHub/_tmp_competitor_crewai",
+      "branch": "main",
+      "enabled": true
+    },
+    {
+      "id": "langgraph",
+      "label": "LangGraph",
+      "repo_url": "https://github.com/langchain-ai/langgraph.git",
+      "root": "F:/DevHub/_tmp_competitor_langgraph",
+      "branch": "main",
+      "enabled": true
     }
   ],
   "agents": [
@@ -102,6 +183,9 @@
       "test_roots": [
         "tests"
       ],
+      "test_dataset_roots": [
+        "thomas/browser/workflow_corpus"
+      ],
       "browser_roots": [
         "thomas/browser",
         "thomas/cli/commands/browser",
@@ -110,7 +194,10 @@
       ],
       "plugin_roots": [
         "thomas/plugins",
-        "thomas/cli/commands/plugins"
+        "thomas/cli/commands/plugins",
+        "extensions",
+        "thomas/browser/workflows",
+        "thomas/browser/workflow_corpus"
       ],
       "gateway_roots": [
         "thomas/server/routes",

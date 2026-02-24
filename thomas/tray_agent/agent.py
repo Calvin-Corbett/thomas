@@ -1,7 +1,7 @@
-﻿"""
+"""
 thomas/tray_agent/agent.py
-â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
-Thomas System Tray Agent â€” 24/7 background process with tray icon.
+-------------------------
+Thomas System Tray Agent -- 24/7 background process with tray icon.
 
 Features:
   - Hidden background process (no visible terminal)
@@ -208,12 +208,15 @@ class ServerProcess:
                 exe = _get_exe_path()
                 cwd = str(Path.cwd())
 
-                # Start server as hidden subprocess
+                # Start server as hidden subprocess, logging to file
+                _ensure_state_dir()
+                server_log = _STATE_DIR / "server.log"
+                self._server_log_file = open(str(server_log), "a", encoding="utf-8")
                 self._process = subprocess.Popen(
                     [exe, "-m", "thomas.server", "--host", "127.0.0.1", "--port", str(self.port)],
                     cwd=cwd,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
+                    stdout=self._server_log_file,
+                    stderr=self._server_log_file,
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
                 )
                 pid = self._process.pid
@@ -261,6 +264,13 @@ class ServerProcess:
                         pass
                 self._process = None
                 log.info("Server stopped")
+            log_fh = getattr(self, "_server_log_file", None)
+            if log_fh is not None:
+                try:
+                    log_fh.close()
+                except Exception:
+                    pass
+                self._server_log_file = None
 
     def is_running(self) -> bool:
         """Check if server is running."""
@@ -322,7 +332,7 @@ class ThomasTrayAgent:
             self._pystray = pystray
         except ImportError:
             self._pystray = None
-            log.warning("pystray not installed â€” running in headless mode")
+            log.warning("pystray not installed -- running in headless mode")
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -531,6 +541,16 @@ class ThomasTrayAgent:
 
             # Check if server process is alive and the port is serving.
             if not self.server.is_healthy():
+                # If our subprocess died but the port is still live, a newer
+                # instance took over (user clicked "run UI" again). Exit
+                # gracefully instead of fighting for the port.
+                if not self.server.is_running() and self.server._port_is_live():
+                    log.info("Port %d taken over by another instance; exiting.", self.port)
+                    self._stop_event.set()
+                    if self._icon:
+                        self._icon.stop()
+                    return
+
                 log.warning("Server unhealthy or not running - attempting restart...")
                 time.sleep(RESTART_DELAY_S)
                 if not self._stop_event.is_set():

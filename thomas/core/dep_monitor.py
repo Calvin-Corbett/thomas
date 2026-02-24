@@ -1,13 +1,13 @@
-﻿"""
-FEATURE 13 â€” Dependency Monitor for Thomas (v4 "user-love mode")
+"""
+FEATURE 13 -- Dependency Monitor for Thomas (v4 "user-love mode")
 
 Requirements (requested):
 - Background daily check (runs once per day at startup if last check > 24hrs ago)
 - Scans the Thomas project itself (f:\\DevHub\\Thomas) by default
-- If any CRITICAL or HIGH vulns found â†’ calls notify_fn immediately
+- If any CRITICAL or HIGH vulns found -> calls notify_fn immediately
 - Persists last scan results and timestamp to persistence engine
 - Singleton: get_dep_monitor()
-- Method: start(notify_fn) â€” starts background monitor
+- Method: start(notify_fn) -- starts background monitor
 
 Meaningful upgrades:
 1) **Alert only when it matters**: emits "new high/critical since last scan" by default

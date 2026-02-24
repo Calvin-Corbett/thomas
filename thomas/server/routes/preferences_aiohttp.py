@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from functools import lru_cache
 from pathlib import Path
 from typing import Any, Awaitable, Callable
@@ -9,10 +10,12 @@ from typing import Any, Awaitable, Callable
 from aiohttp import web
 from pydantic import ValidationError
 
+from thomas.observability.event_recorder import record_event
 from thomas.preferences.store import PreferencesPatch, PreferencesResponse, PreferencesStore, get_db_path
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
+log = logging.getLogger(__name__)
 
 
 def _prefs_store_for_path(db_path: str) -> PreferencesStore:
@@ -40,6 +43,29 @@ def _prefs_json(payload: PreferencesResponse) -> web.Response:
 def _parse_thread_id(request: web.Request) -> str | None:
     raw = str(request.query.get("thread_id") or "").strip()
     return raw if raw else None
+
+
+def _emit_onboarding_patch_telemetry(*, user_id: str, thread_id: str | None, patch: PreferencesPatch) -> None:
+    if patch.onboarding is None:
+        return
+    fields_set = sorted(str(k) for k in patch.onboarding.model_fields_set)
+    if not fields_set:
+        return
+    incoming = patch.onboarding.model_dump(exclude_unset=True)
+    changed_fields = {k: incoming.get(k, None) for k in fields_set}
+    run_id = thread_id or f"onboarding_prefs_{user_id}"
+    try:
+        record_event(
+            "onboarding.preferences.patch",
+            {
+                "user_id": user_id,
+                "thread_id": thread_id,
+                "changed_onboarding_fields": changed_fields,
+            },
+            run_id=run_id,
+        )
+    except Exception as exc:
+        log.debug("onboarding preferences telemetry emit failed: %s", exc)
 
 
 def _prefs_settings_js() -> Path:
@@ -90,6 +116,7 @@ def register_preferences_routes(
             updated = store.patch(patch=patch, user_id=user_id, thread_id=thread_id)
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
+        _emit_onboarding_patch_telemetry(user_id=user_id, thread_id=thread_id, patch=patch)
 
         return _prefs_json(updated)
 

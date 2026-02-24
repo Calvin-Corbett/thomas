@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import secrets
 import sqlite3
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -16,7 +16,7 @@ DEFAULT_MEMBERSHIP_ID = "00000000-0000-0000-0000-000000000002"
 
 
 def _utcnow() -> str:
-    return datetime.utcnow().isoformat(sep=" ", timespec="seconds")
+    return datetime.now(timezone.utc).replace(tzinfo=None).isoformat(sep=" ", timespec="seconds")
 
 
 def _new_id() -> str:
@@ -195,7 +195,10 @@ def create_invite(con: sqlite3.Connection, workspace_id: str, email: str,
     token_hash = _hash_token(raw)
     inv_id = _new_id()
     now = _utcnow()
-    expires = (datetime.utcnow() + timedelta(days=7)).isoformat(sep=" ", timespec="seconds")
+    expires = (datetime.now(timezone.utc) + timedelta(days=7)).replace(tzinfo=None).isoformat(
+        sep=" ",
+        timespec="seconds",
+    )
     con.execute(
         "INSERT INTO workspace_invites"
         "(invite_id,workspace_id,email,role,token_hash,created_by_user_id,created_at,expires_at,note)"

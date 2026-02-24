@@ -57,6 +57,14 @@ from thomas.agent.prompt_templates import (
     format_library_context,
     format_memory_context,
 )
+from thomas.agent.loop_tool_exec import (
+    execute_tools as _execute_tools_impl,
+    parse_tool_args as _parse_tool_args_impl,
+)
+from thomas.agent.skills_runtime import (
+    format_runtime_skills_context,
+    resolve_runtime_skills,
+)
 from thomas.agent.response_tone import (
     apply_directness_constraints,
     apply_social_tone_adjustments,
@@ -153,12 +161,15 @@ class AgentLoop:
         memory: Optional[MemoryEngine] = None,
         thread_id: Optional[str] = None,
         guarded_tool_runner: Optional["GuardedToolRunner"] = None,
+        action_audit: Optional[Any] = None,
         run_id: Optional[str] = None,
         session_id: Optional[str] = None,
         guardrails_event_cb: Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]] = None,
         memory_retrieval_scope: str = "thread",
         automation_policy: Optional["PolicyEngine"] = None,
         autonomy_level: int = 3,
+        max_parallel_tools: Optional[int] = None,
+        tool_timeout_s: Optional[int] = None,
     ):
         self.config = config
         self.llm = llm
@@ -171,9 +182,22 @@ class AgentLoop:
         self._run_id = run_id or self._thread_id
         self._session_id = session_id or self._thread_id
         self._guarded_tool_runner = guarded_tool_runner
+        self._action_audit = action_audit
         self._guardrails_event_cb = guardrails_event_cb
         self._automation_policy = automation_policy
         self._autonomy_level = clamp_autonomy_level(autonomy_level, default=3)
+        self._max_parallel_tools: Optional[int] = None
+        if max_parallel_tools is not None:
+            try:
+                self._max_parallel_tools = max(1, int(max_parallel_tools))
+            except Exception:
+                self._max_parallel_tools = None
+        self._tool_timeout_s: Optional[int] = None
+        if tool_timeout_s is not None:
+            try:
+                self._tool_timeout_s = max(1, int(tool_timeout_s))
+            except Exception:
+                self._tool_timeout_s = None
         self._context_window = llm.config.context_window
         self._router = IntentRouter()
         self._library_enabled = str(os.environ.get("THOMAS_LIBRARY_ENABLED", "1")).strip().lower() not in (
@@ -203,20 +227,24 @@ class AgentLoop:
         memory_text: str = "",
         include_purpose: bool = True,
         route_path: str = "",
+        skills_context: str = "",
     ) -> Dict[str, Any]:
         import sys
 
         model_cfg = self.llm.config
+        base_prompt = build_route_system_prompt(
+            route_path=str(route_path or ""),
+            cwd=os.getcwd(),
+            platform=sys.platform,
+            model_name=getattr(model_cfg, "name", "unknown"),
+            model_id=getattr(model_cfg, "model", "unknown"),
+        )
         if self._system_prompt:
-            prompt = self._system_prompt
+            # Custom personality is *prepended* to the base agent prompt so
+            # execution capabilities (tools, file ops, etc.) are never lost.
+            prompt = self._system_prompt.rstrip() + "\n\n" + base_prompt
         else:
-            prompt = build_route_system_prompt(
-                route_path=str(route_path or ""),
-                cwd=os.getcwd(),
-                platform=sys.platform,
-                model_name=getattr(model_cfg, "name", "unknown"),
-                model_id=getattr(model_cfg, "model", "unknown"),
-            )
+            prompt = base_prompt
 
         purpose = _load_purpose_text() if include_purpose else ""
         if purpose:
@@ -238,6 +266,9 @@ class AgentLoop:
             + "\n--- End Autonomy Profile ---\n"
         )
 
+        if skills_context:
+            prompt = prompt.rstrip() + "\n\n" + str(skills_context).strip()
+
         if memory_text:
             prompt += format_memory_context(memory_text)
         return {"role": "system", "content": prompt}
@@ -252,12 +283,14 @@ class AgentLoop:
         preserve_last: int = 4,
         history_token_cap: Optional[int] = None,
         route_path: str = "",
+        skills_context: str = "",
     ) -> List[Dict[str, Any]]:
         """Build the message list for an LLM call, with context window management."""
         system_msg = self._build_system_message(
             memory_text,
             include_purpose=include_purpose,
             route_path=route_path,
+            skills_context=skills_context,
         )
         system_tokens = estimate_message_tokens(system_msg)
 
@@ -368,7 +401,17 @@ class AgentLoop:
     def _has_explicit_action_intent(prompt: str) -> bool:
         return bool(
             re.search(
-                r"\b(run|execute|edit|write|create|delete|remove|install|apply|patch|commit|open|search|find|read|fix|debug|build|deploy)\b",
+                r"\b("
+                r"run|execute|edit|write|create|delete|remove|install|apply|patch|commit"
+                r"|open|search|find|read|fix|debug|build|deploy"
+                r"|make|change|update|modify|add|set|adjust|move|resize|implement"
+                r"|refactor|rename|replace|merge|revert|undo|redo|configure|setup"
+                r"|check|look|show|list|scan|analyze|locate|explore|inspect|test"
+                r"|start|stop|restart|enable|disable|toggle|switch|connect|send"
+                r"|download|upload|fetch|pull|push|sync|copy|paste|duplicate|clone"
+                r"|convert|transform|generate|scaffold|migrate|optimize|clean|format"
+                r"|put|do|help|handle|process|use|try|give|tell|explain"
+                r")\b",
                 str(prompt or "").lower(),
             )
         )
@@ -623,6 +666,23 @@ class AgentLoop:
             "execute now, and report concrete actions taken. "
             f"(full_auto_retry={int(retry_index)}; original_request={prompt_text[:220]})"
         )
+    @staticmethod
+    def _assume_and_proceed_nudge(
+        prompt_text: str,
+        *,
+        retry_index: int,
+        question_cap: int,
+        questions_seen: int,
+        route_input_source: str,
+    ) -> str:
+        return (
+            "Continue execution now. Do not ask another clarifying question unless it is truly blocked by "
+            "missing credentials, access, or unsafe constraints. Assume sensible defaults, state assumptions "
+            "briefly, and proceed with concrete actions. "
+            f"(clarification_retry={int(retry_index)}; clarification_cap={int(question_cap)}; "
+            f"clarification_seen={int(questions_seen)}; route_input_source={str(route_input_source or 'prompt_only')}; "
+            f"original_request={prompt_text[:220]})"
+        )
 
     def _routing_input_text(self, prompt_text: str) -> tuple[str, str]:
         """Optionally augment routing input with prior assistant context on follow-ups."""
@@ -795,6 +855,34 @@ class AgentLoop:
             self._memory.add_event(self._thread_id, etype, text)
         except Exception as e:
             log.warning("Memory record failed: %s", e)
+
+    async def _audit_action(
+        self,
+        *,
+        kind: str,
+        tool_call_id: str = "",
+        tool_name: str = "",
+        decision: str = "",
+        reason: str = "",
+        payload: Any = None,
+    ) -> None:
+        """Best-effort action audit event for tool lifecycle tracing."""
+        audit = self._action_audit
+        if audit is None:
+            return
+        try:
+            await audit.log_async(
+                kind=kind,
+                run_id=self._run_id,
+                session_id=self._session_id,
+                tool_call_id=str(tool_call_id or ""),
+                tool_name=str(tool_name or ""),
+                decision=str(decision or ""),
+                reason=str(reason or ""),
+                payload=payload if payload is not None else {},
+            )
+        except Exception as e:
+            log.debug("action audit failed (%s/%s): %s", kind, tool_name, e)
 
     def _capture_profile_hints(self, text: str) -> None:
         """Promote stable user hints into global pins for cross-session continuity."""
@@ -992,9 +1080,11 @@ class AgentLoop:
         project_related = self._is_project_related_prompt(prompt)
         if policy == "auto" and route is not None:
             low_intent_route = self._is_low_intent_route(route.path)
-            if low_intent_route and not explicit_action:
-                # Keep casual/meta turns lightweight. Tool definitions are often
-                # larger than the user prompt for these turns.
+            if low_intent_route and not explicit_action and not project_related and not remote_profile:
+                # Keep casual/meta turns lightweight for LOCAL models only.
+                # Remote/API models can handle tool definitions cheaply, and
+                # suppressing tools when the user wants action is far worse than
+                # the token cost of including them.
                 return None
 
         # 1. Identify Core Tools (Always included in Auto/Always)
@@ -1191,6 +1281,29 @@ class AgentLoop:
         effective_mode = route.mode
         applied_token_economy = normalize_token_economy_level(token_economy)
         token_economy_meta = build_token_economy_meta(token_economy, applied_token_economy)
+        runtime_skills_context = ""
+        runtime_skills_payload: Dict[str, Any] = {
+            "enabled": False,
+            "discovered_count": 0,
+            "selected_count": 0,
+            "explicit_mentions": [],
+            "pinned_matches": [],
+            "roots": [],
+            "selected": [],
+        }
+        try:
+            runtime_skills = resolve_runtime_skills(
+                self.config,
+                prompt_text=prompt_text,
+                relevance_text=route_input,
+                route_path=str(route.path or ""),
+                cwd=Path.cwd(),
+            )
+            runtime_skills_context = format_runtime_skills_context(runtime_skills)
+            runtime_skills_payload = runtime_skills.to_event_payload()
+        except Exception as e:
+            log.warning("Runtime skills resolution failed: %s", e)
+            runtime_skills_payload["error"] = f"{type(e).__name__}: {e}"
         usage_before = self._session_usage_snapshot()
         stream_usage = self._normalize_usage(0, 0, 0)
 
@@ -1211,6 +1324,7 @@ class AgentLoop:
                     "autonomy_name": autonomy_name,
                     "token_economy": token_economy_meta,
                     "library_enabled": bool(self._library is not None),
+                    "skills": dict(runtime_skills_payload),
                     "history_policy": {
                         "preserve_first": int(preserve_first),
                         "preserve_last": int(preserve_last),
@@ -1251,8 +1365,12 @@ class AgentLoop:
                 "followup_suppressed_count": 0,
                 "thought_leak_suppressed_count": 0,
                 "full_auto_reprompt_count": 0,
+                "clarification_question_cap": 0,
+                "clarification_questions_asked": 0,
+                "clarification_reprompt_count": 0,
             }
             token_report["token_economy"] = dict(token_economy_meta)
+            token_report["skills"] = dict(runtime_skills_payload)
             cfg_errors: List[str] = []
             cfg_unknown: List[str] = []
             try:
@@ -1351,7 +1469,19 @@ class AgentLoop:
         full_auto_action_turn = bool(
             int(self._autonomy_level) == 4 and (project_related or explicit_action or action_route)
         )
+        clarification_budget_active = bool(project_related or explicit_action or action_route)
+        continuation_turn = bool(route_input_source == "history_augmented")
+        clarification_question_cap = 2
+        if clarification_budget_active:
+            clarification_question_cap = 1
+        if continuation_turn:
+            clarification_question_cap = 0 if clarification_budget_active else 1
+        if full_auto_action_turn:
+            clarification_question_cap = 0
+        clarification_question_cap = max(0, int(clarification_question_cap))
         full_auto_reprompt_count = 0
+        clarification_questions_asked = 0
+        clarification_reprompt_count = 0
         effective_tools_policy = route.tools_policy
         if tools_policy == "auto" and route.tools_policy == "auto":
             if effective_mode == "fast":
@@ -1377,7 +1507,9 @@ class AgentLoop:
             effective_tools_policy = "auto"
         if autonomy.force_tools_policy in ("never", "auto", "always"):
             forced = str(autonomy.force_tools_policy)
-            if forced == "always" and low_intent_route and not explicit_action:
+            if forced == "always" and low_intent_route and not explicit_action and not project_related:
+                # Only downgrade "always" to "never" when truly conversational
+                # (no action verbs AND no project signals).
                 effective_tools_policy = "never"
             else:
                 effective_tools_policy = forced
@@ -1475,6 +1607,7 @@ class AgentLoop:
                 "autonomy_name": autonomy_name,
                 "token_economy": token_economy_meta,
                 "library_enabled": bool(self._library is not None),
+                "skills": dict(runtime_skills_payload),
                 "history_policy": {
                     "preserve_first": int(preserve_first),
                     "preserve_last": int(preserve_last),
@@ -1538,6 +1671,7 @@ class AgentLoop:
                 preserve_last=preserve_last,
                 history_token_cap=history_token_cap,
                 route_path=str(route.path or ""),
+                skills_context=runtime_skills_context,
             )
             iter_token_estimates.append(int(state.token_estimate))
             cumulative_context_tokens += int(state.token_estimate)
@@ -1611,7 +1745,15 @@ class AgentLoop:
             try:
                 llm_stream_error: Optional[str] = None
                 async for event in self.llm.stream_chat(messages, tool_specs):
-                    if event.type == "token":
+                    if event.type == "thinking":
+                        # Forward thinking/reasoning tokens to the stream
+                        yield AgentEvent(
+                            type=EventType.THINKING,
+                            data={"text": event.data.get("text", "")},
+                            iteration=iteration,
+                        )
+
+                    elif event.type == "token":
                         text = event.data["text"]
                         text_chunks.append(text)
                         if not buffer_text_tokens:
@@ -1647,6 +1789,19 @@ class AgentLoop:
                                     ok = int(exit_code) == 0
                                 except Exception:
                                     ok = False
+
+                            await self._audit_action(
+                                kind="tool_action_result",
+                                tool_call_id=tc_id,
+                                tool_name=tc_name,
+                                decision="EXECUTED" if ok else "FAILED",
+                                payload={
+                                    "provider": "codex",
+                                    "ok": ok,
+                                    "exit_code": exit_code,
+                                    "output_preview": output[:1000],
+                                },
+                            )
 
                             yield AgentEvent.tool_call_end(tc_id, iteration=iteration)
                             yield AgentEvent(
@@ -1746,22 +1901,33 @@ class AgentLoop:
             if iter_text.strip() == "Understood. How can I assist you further?":
                 iter_text = "I didn't answer that. Please ask a specific question."
 
-            # Level 4 execution guardrail: avoid stalling on avoidable
-            # clarifying questions. Re-prompt internally and continue.
+            # Clarification budget guardrail for action turns: avoid repeated
+            # ask-back loops when the model can proceed with sensible defaults.
+            is_clarifying_question = bool(
+                not pending_tool_calls and self._looks_like_clarifying_question(iter_text)
+            )
+            if is_clarifying_question:
+                clarification_questions_asked += 1
             if (
-                full_auto_action_turn
-                and not pending_tool_calls
-                and self._looks_like_clarifying_question(iter_text)
-                and full_auto_reprompt_count < 2
+                clarification_budget_active
+                and is_clarifying_question
+                and clarification_questions_asked > clarification_question_cap
+                and clarification_reprompt_count < 2
                 and (iteration + 1) < max_iter
             ):
-                full_auto_reprompt_count += 1
-                self._conversation.append(
-                    {
-                        "role": "user",
-                        "content": self._full_auto_nudge(prompt_text, full_auto_reprompt_count),
-                    }
-                )
+                clarification_reprompt_count += 1
+                if full_auto_action_turn:
+                    full_auto_reprompt_count += 1
+                    nudge = self._full_auto_nudge(prompt_text, full_auto_reprompt_count)
+                else:
+                    nudge = self._assume_and_proceed_nudge(
+                        prompt_text,
+                        retry_index=clarification_reprompt_count,
+                        question_cap=clarification_question_cap,
+                        questions_seen=clarification_questions_asked,
+                        route_input_source=route_input_source,
+                    )
+                self._conversation.append({"role": "user", "content": nudge})
                 continue
 
             if buffer_text_tokens and iter_text:
@@ -2006,8 +2172,12 @@ class AgentLoop:
             "followup_suppressed_count": int(followup_suppressed_count),
             "thought_leak_suppressed_count": int(thought_leak_suppressed_count),
             "full_auto_reprompt_count": int(full_auto_reprompt_count),
+            "clarification_question_cap": int(clarification_question_cap),
+            "clarification_questions_asked": int(clarification_questions_asked),
+            "clarification_reprompt_count": int(clarification_reprompt_count),
         }
         token_report["token_economy"] = dict(token_economy_meta)
+        token_report["skills"] = dict(runtime_skills_payload)
         if provider_tpm_budget > 0:
             _prune_prompt_window(time.monotonic())
             provider_prompt_tokens_last_minute = int(
@@ -2148,239 +2318,21 @@ class AgentLoop:
 
     def _parse_tool_args(self, raw_args: Any) -> tuple[Optional[Dict[str, Any]], Optional[str]]:
         """Parse tool arguments with repair heuristics for weak model outputs."""
-        if raw_args is None:
-            return {}, None
-        if isinstance(raw_args, dict):
-            return raw_args, None
-
-        text = str(raw_args).strip()
-        if not text:
-            return {}, None
-
-        # Common model output shape: fenced JSON blocks.
-        fenced = re.match(r"^\s*```(?:json)?\s*(.*?)\s*```\s*$", text, re.I | re.S)
-        if fenced:
-            text = fenced.group(1).strip()
-
-        # Strict JSON first.
-        try:
-            parsed = json.loads(text)
-            if isinstance(parsed, dict):
-                return parsed, None
-            return None, f"Tool arguments must be a JSON object, got {type(parsed).__name__}"
-        except json.JSONDecodeError:
-            pass
-
-        # Repair common drift: smart quotes, trailing commas, unbalanced braces.
-        repaired = (
-            text.replace("\u201c", '"')
-            .replace("\u201d", '"')
-            .replace("\u2018", "'")
-            .replace("\u2019", "'")
-        )
-        repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
-        brace_delta = repaired.count("{") - repaired.count("}")
-        if brace_delta > 0:
-            repaired = repaired + ("}" * brace_delta)
-
-        try:
-            parsed = json.loads(repaired)
-            if isinstance(parsed, dict):
-                return parsed, None
-            return None, f"Tool arguments must be a JSON object, got {type(parsed).__name__}"
-        except json.JSONDecodeError:
-            pass
-
-        # Python-style dict fallback (single quotes, etc).
-        try:
-            parsed = ast.literal_eval(repaired)
-            if isinstance(parsed, dict):
-                return parsed, None
-            return None, f"Tool arguments must be an object, got {type(parsed).__name__}"
-        except Exception as e:
-            return None, f"Could not parse tool arguments: {type(e).__name__}: {e}"
+        return _parse_tool_args_impl(raw_args)
 
     async def _execute_tools(
         self,
         tool_calls: List[Dict[str, Any]],
         iteration: int,
     ) -> AsyncIterator[AgentEvent]:
-        """Execute tool calls, running independent calls in parallel.
-
-        Yields tool result events as each call finishes so the caller can
-        stream results immediately while still getting a complete result set
-        at the end of the stream.
-        """
-
-        async def _run_one(tc: Dict[str, Any]) -> AgentEvent:
-            name = tc["name"]
-            tc_id = tc["id"]
-            raw_args = tc["arguments"]
-
-            # Parse arguments
-            args, parse_error = self._parse_tool_args(raw_args)
-            if parse_error is not None or args is None:
-                return AgentEvent(
-                    type=EventType.TOOL_RESULT,
-                    data={
-                        "tool_id": tc_id,
-                        "tool_name": name,
-                        "result": f"Invalid tool arguments: {str(raw_args)[:200]}",
-                        "result_text": (
-                            "Error: Could not parse tool arguments.\n"
-                            f"Raw arguments: {str(raw_args)[:500]}\n"
-                            f"Reason: {parse_error or 'unknown parse error'}\n"
-                            "Hint: return a JSON object for tool arguments."
-                        ),
-                        "ok": False,
-                        "duration_ms": 0,
-                    },
-                    iteration=iteration,
-                )
-
-            # Execute tool
-            start = time.monotonic()
-            if self._guarded_tool_runner is not None:
-                async def _guarded_executor(call: Dict[str, Any]) -> Dict[str, Any]:
-                    tr = await self.tools.execute(str(call.get("name") or ""), call.get("args") or {})
-                    return {
-                        "ok": bool(tr.ok),
-                        "error": tr.error,
-                        "data": tr.data,
-                        "result_text": tr.to_content(),
-                    }
-
-                async def _emit_guardrails_event(evt_type: str, payload: Dict[str, Any]) -> None:
-                    cb = self._guardrails_event_cb
-                    if cb is None:
-                        return
-                    try:
-                        await cb(evt_type, payload)
-                    except Exception as e:
-                        log.debug("Guardrails callback failed: %s", e)
-
-                summary_lines: List[str] = []
-                for m in self._conversation[-8:]:
-                    if not isinstance(m, dict):
-                        continue
-                    role = str(m.get("role") or "?")
-                    content = m.get("content")
-                    if isinstance(content, str) and content.strip():
-                        summary_lines.append(f"{role}: {content[:220]}")
-                conversation_summary = "\n".join(summary_lines)
-
-                guarded = await self._guarded_tool_runner.run(
-                    executor=_guarded_executor,
-                    tool_call={"id": tc_id, "name": name, "args": args},
-                    run_id=self._run_id,
-                    session_id=self._session_id,
-                    iteration=iteration,
-                    cwd=os.getcwd(),
-                    sandbox_root=str(self.config.tools.sandbox_path),
-                    runtime_root=str(self.config.memory.root_path),
-                    conversation_summary=conversation_summary,
-                    emit_event=_emit_guardrails_event,
-                )
-
-                duration = (time.monotonic() - start) * 1000
-                ok = bool(guarded.get("ok", False)) if isinstance(guarded, dict) else True
-                if isinstance(guarded, dict):
-                    if isinstance(guarded.get("result_text"), str):
-                        result_text = guarded.get("result_text", "")
-                    elif isinstance(guarded.get("result"), str):
-                        result_text = guarded.get("result", "")
-                    elif guarded.get("data") is not None:
-                        try:
-                            result_text = json.dumps(guarded.get("data"), ensure_ascii=False, default=str)
-                        except Exception:
-                            result_text = str(guarded.get("data"))
-                    elif guarded.get("error"):
-                        result_text = json.dumps(
-                            {"ok": False, "error": str(guarded.get("error"))},
-                            ensure_ascii=False,
-                        )
-                    else:
-                        result_text = json.dumps(guarded, ensure_ascii=False, default=str)
-                else:
-                    result_text = str(guarded)
-            else:
-                result = await self.tools.execute(name, args)
-                duration = (time.monotonic() - start) * 1000
-                ok = bool(result.ok)
-                result_text = result.to_content()
-
-            # Audit: record file-mutating tool calls
-            try:
-                if _file_audit.is_write_tool(name):
-                    file_path = (
-                        str(args.get("path") or args.get("file") or args.get("filename") or "")
-                        if isinstance(args, dict) else ""
-                    )
-                    action = "delete" if "delet" in name.lower() or "remov" in name.lower() else "write"
-                    args_snippet = json.dumps(
-                        {k: v for k, v in (args or {}).items() if k != "content"},
-                        ensure_ascii=False, default=str,
-                    )[:300] if isinstance(args, dict) else ""
-                    model_name = getattr(getattr(self, "llm", None), "model_name",
-                                        None) or getattr(getattr(self.llm, "config", None), "model", "unknown")
-                    _file_audit.record_file_write(
-                        run_id=self._run_id,
-                        model=str(model_name),
-                        tool_name=name,
-                        path=file_path,
-                        action=action,
-                        args_snippet=args_snippet,
-                    )
-            except Exception as _ae:
-                log.debug("file_audit record failed: %s", _ae)
-
-            return AgentEvent(
-                type=EventType.TOOL_RESULT,
-                data={
-                    "tool_id": tc_id,
-                    "tool_name": name,
-                    "result": result_text[:4000],  # Summary for event consumers
-                    "result_text": result_text,     # Full text for LLM message
-                    "ok": ok,
-                    "duration_ms": duration,
-                },
-                iteration=iteration,
-            )
-
-        if not tool_calls:
-            return
-
-        # Run all tool calls in parallel and stream each completion as it lands.
-        tool_tasks = {asyncio.create_task(_run_one(tc)): tc for tc in tool_calls}
-        try:
-            for done in asyncio.as_completed(tool_tasks):
-                try:
-                    result_event = await done
-                except Exception as e:
-                    tc = tool_tasks.get(done, {})
-                    tc_id = str(tc.get("id", ""))
-                    tool_name = str(tc.get("name") or "tool")
-                    yield AgentEvent(
-                        type=EventType.TOOL_RESULT,
-                        data={
-                            "tool_id": tc_id,
-                            "tool_name": tool_name,
-                            "result": f"Tool execution failed before completion: {e}",
-                            "result_text": f"Tool execution failed before completion: {e}",
-                            "ok": False,
-                            "duration_ms": 0,
-                        },
-                        iteration=iteration,
-                    )
-                    continue
-                yield result_event
-        finally:
-            for t in tool_tasks:
-                if not t.done():
-                    t.cancel()
-            if tool_tasks:
-                done_fallback = await asyncio.gather(*tool_tasks, return_exceptions=True)
-                _ = done_fallback
+        """Execute tool calls, running independent calls in parallel."""
+        async for event in _execute_tools_impl(
+            self,
+            tool_calls,
+            iteration,
+            file_audit_module=_file_audit,
+        ):
+            yield event
 
 
 # Sentinel for catching connection errors without importing httpx at module level

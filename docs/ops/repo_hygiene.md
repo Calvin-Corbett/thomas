@@ -1,6 +1,6 @@
 # Repo Hygiene Guard
 
-This guard keeps Thomas scalable by preventing root-file sprawl and tracked runtime artifacts.
+This guard keeps Thomas scalable by preventing root-file sprawl, tracked runtime artifacts, and dirty pushes.
 
 ## Why
 
@@ -18,6 +18,7 @@ This guard keeps Thomas scalable by preventing root-file sprawl and tracked runt
   - `patches/`
   - `.inbox_extract_*`
 - Block tracked transient suffixes (`.pyc`, `.tmp`, `.log`).
+- Clean worktree enforcement (default): fail when staged, unstaged, or untracked paths exist.
 
 Canonical baseline:
 - `docs/repo_hygiene_baseline.json`
@@ -28,10 +29,35 @@ Gate command:
 python scripts/check_repo_hygiene.py
 ```
 
+Layout-only mode (skip clean-worktree enforcement):
+
+```bash
+python scripts/check_repo_hygiene.py --no-require-clean-worktree
+```
+
 Local cleanup helper (untracked + ignored junk artifacts):
 
 ```bash
 python scripts/cleanup_local_junk.py --apply
+```
+
+CLI helper (cleanup + worktree summary):
+
+```bash
+thomas repo-clean --apply --strict
+```
+
+Status helper (config + worktree cleanliness):
+
+```bash
+thomas status --json --strict-worktree
+```
+
+Local hook installation (recommended):
+
+```bash
+pre-commit install
+pre-commit install --hook-type pre-push
 ```
 
 ## Updating Baseline Intentionally

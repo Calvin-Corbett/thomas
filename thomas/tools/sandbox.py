@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import dataclasses
@@ -25,7 +25,7 @@ thomas.tools.sandbox
 
 A consumer-grade safe code execution sandbox for Thomas.
 
-Key idea: users donâ€™t just want â€œit ranâ€; they want â€œI can trust what happenedâ€.
+Key idea: users don't just want "it ran"; they want "I can trust what happened".
 So this module does three things:
 
 1) SAFETY (best-effort; real isolation when available)
@@ -168,13 +168,13 @@ RUNTIME_DIR = Path(os.environ.get("THOMAS_RUNTIME_DIR", str(Path.cwd() / "runtim
 RUNS_DIR = Path(os.environ.get("THOMAS_SANDBOX_RUNS_DIR", str(RUNTIME_DIR / "sandbox" / "runs")))
 RUNS_DIR.mkdir(parents=True, exist_ok=True)
 
-# Docker backend â€œphysics sandboxâ€
+# Docker backend "physics sandbox"
 DOCKER_IMAGE = os.environ.get("THOMAS_SANDBOX_DOCKER_IMAGE", "python:3.12-slim")
 DOCKER_MEMORY = os.environ.get("THOMAS_SANDBOX_DOCKER_MEMORY", "512m")
 DOCKER_CPUS = os.environ.get("THOMAS_SANDBOX_DOCKER_CPUS", "1.0")
 DOCKER_PIDS_LIMIT = os.environ.get("THOMAS_SANDBOX_DOCKER_PIDS_LIMIT", "128")
 
-# Wheelhouse cache so packages donâ€™t re-download every run
+# Wheelhouse cache so packages don't re-download every run
 WHEELHOUSE_CACHE_DIR = Path(os.environ.get("THOMAS_SANDBOX_WHEELHOUSE_DIR", str(RUNTIME_DIR / "sandbox" / "wheelhouse_cache")))
 WHEELHOUSE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
