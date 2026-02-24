@@ -517,6 +517,13 @@ def evaluate_claims(workboard_path: Path = DEFAULT_WORKBOARD) -> Tuple[List[str]
     return _evaluate_claims(workboard_path)
 
 
+def evaluate_board(
+    workboard_path: Path = DEFAULT_WORKBOARD,
+) -> Tuple[List[str], List[Claim], List[ActiveTask], List[UpForGrabTask], List[WorkboardIssue]]:
+    """Public full-board evaluation helper for coordination gates."""
+    return _evaluate_board(workboard_path)
+
+
 def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> List[str]:
     violations, _claims = evaluate_claims(workboard_path)
     return violations

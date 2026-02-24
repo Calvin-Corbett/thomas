@@ -136,3 +136,67 @@ def test_gate_accepts_codex_agent_id_env(tmp_path: Path, monkeypatch, capsys) ->
 
     assert rc == 0
     assert "Workboard agent claim gate: PASS" in out
+
+
+def test_gate_fails_when_agent_owns_unresolved_issue(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 2; scope=thomas/cli/main.py; task=models scan",
+        active_tasks_block="- task_id=models-scan; agent=Codex 2; scope=thomas/cli/main.py; summary=models scan; status=blocked",
+        issues_block=(
+            "- issue_id=ISS-9; task_id=models-scan; reporter=qa; owner=Codex 2; "
+            "state=open; summary=scan traceback"
+        ),
+    )
+    monkeypatch.setenv("AGENT_ID", "codex 2")
+
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "owns unresolved workboard issue(s): ISS-9" in out
+
+
+def test_gate_passes_when_owned_issue_is_resolved(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 2; scope=thomas/cli/main.py; task=models scan",
+        active_tasks_block="- task_id=models-scan; agent=Codex 2; scope=thomas/cli/main.py; summary=models scan; status=active",
+        issues_block=(
+            "- issue_id=ISS-9; task_id=models-scan; reporter=qa; owner=Codex 2; "
+            "state=resolved; summary=scan traceback fixed"
+        ),
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 2")
+
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Workboard agent claim gate: PASS" in out
+
+
+def test_gate_json_reports_unresolved_owned_issues(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 2; scope=thomas/cli/main.py; task=models scan",
+        active_tasks_block="- task_id=models-scan; agent=Codex 2; scope=thomas/cli/main.py; summary=models scan; status=blocked",
+        issues_block=(
+            "\n".join(
+                [
+                    "- issue_id=ISS-9; task_id=models-scan; reporter=qa; owner=Codex 2; state=open; summary=scan traceback",
+                    "- issue_id=ISS-10; task_id=models-scan; reporter=qa; owner=codex 2; state=triaged; summary=retry bug",
+                ]
+            )
+        ),
+    )
+    monkeypatch.setenv("AGENT_ID", "codex 2")
+
+    rc = mod.run(["--workboard", str(workboard), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["unresolved_issue_count"] == 2
+    assert payload["unresolved_issue_ids"] == ["ISS-10", "ISS-9"]
+    assert "owns unresolved workboard issue(s)" in payload["error"]

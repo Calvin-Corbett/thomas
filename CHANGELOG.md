@@ -7,6 +7,22 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.11.78] - 2026-02-24
+
+### Changed
+- Reworked agent overhead prompt assembly to an OpenClaw-style structured format in `thomas/agent/prompt_templates.py` and `thomas/agent/loop.py`:
+  - replaced freeform markdown sections with tagged overhead blocks (`agent_overhead`, `priority_order`, `response_contract`, `execution_contract`, `runtime_context`)
+  - switched purpose/autonomy/memory/continuity/library injections to structured tagged sections for lower-friction parsing and clearer instruction precedence
+- Reworked runtime skill prompt injection in `thomas/agent/skills_runtime.py` from dashed prose sections to a compact structured `runtime_skills` block with explicit selection policy, selected skill items, and conflict policy.
+
+### Fixed
+- Fixed architecture gate coverage by registering the existing `thomas/benchmarks` module in `thomas/_architecture.py` so `tests/test_architecture.py` module coverage remains green.
+- Updated prompt/skills regression expectations to match the new overhead format:
+  - `tests/test_agent_loop_conversation.py`
+  - `tests/test_agent_skills_runtime.py`
+  - `tests/test_agent_loop_library.py`
+  - `tests/test_cli_parity_commands.py`
+
 ## [0.11.77] - 2026-02-24
 
 ### Fixed

@@ -3,6 +3,11 @@
 Last updated: 2026-02-22
 
 This file is the active execution board for agents.
+Participation is mandatory for every contributor touching Thomas code, including Codex, Claude, Grok, Thomas, and human operators.
+Required operating rules:
+- claim scope in `## Agent Claims (Active)` and keep a matching row in `## Active Tasks` before editing
+- if work is blocked, add/update an entry in `## Issues / Blockers`
+- if work is relinquished, move it to `## Up For Grabs` so another agent can pick it up
 
 ## Recent Completed
 
@@ -81,6 +86,45 @@ This file is the active execution board for agents.
 - Plan: `plans/thomas/ui/ASSET_STUDIO_INTEGRATION_PLAN.md`
 - Status: active proposal
 - Next milestone: ship Phase 0 connector runtime + API skeleton
+
+## Agent Claims (Active)
+
+Use this section to announce active ownership and prevent conflicting edits.
+Claim format:
+`- \`agent=<id>; scope=<path[,path...]>; task=<short text>\``
+Helper commands:
+`python scripts/workboard_claim.py --claim --agent "Codex 3" --scope "thomas/cli/commands/browser/p011_browser_artifact_dom_snapshot.py,tests/prompt_pack" --task "dom snapshot runtime fix"`
+`python scripts/workboard_claim.py --release --agent "Codex 3"`
+`python scripts/workboard_claim.py --list`
+Defaults:
+Omitting `--agent` uses `THOMAS_AGENT_NAME` / `CODEX_AGENT_NAME` / `AGENT_NAME`, then git `user.name`.
+Omitting `--task` uses the current git branch name.
+
+
+- agent=Codex Demo; scope=thomas/cli/main.py,tests/test_models_cli_scan_alias.py; task=[WIP][HSK-DEMO] models reliability
+- agent=agent-04; scope=output/benchmark_research; task=[WIP][HSK-04] HumanEval MBPP benchmark research
+
+## Active Tasks
+
+Task format:
+`- \`task_id=<id>; agent=<id>; scope=<path[,path...]>; summary=<short text>; status=<active|blocked>\``
+
+- task_id=models-reliability; agent=Codex Demo; scope=thomas/cli/main.py,tests/test_models_cli_scan_alias.py; summary=models reliability; status=active
+- task_id=benchmark-research; agent=agent-04; scope=output/benchmark_research; summary=HumanEval MBPP benchmark research; status=active
+
+## Issues / Blockers
+
+Issue format:
+`- \`issue_id=<id>; task_id=<task_id>; reporter=<id>; owner=<id|unassigned>; state=<open|triaged|resolved>; summary=<short text>\``
+
+- none
+
+## Up For Grabs
+
+Task format:
+`- \`task_id=<id>; scope=<path[,path...]>; summary=<short text>; reported_by=<id>\``
+
+- none
 
 ## Supporting Docs (Not Plan Sources)
 
