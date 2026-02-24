@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "approvals": [
+    {
+      "id": "2026-02-22-thomas-server-app-max-lines",
+      "path": "thomas/server/app.py",
+      "change": "max_lines_increase",
+      "new_value": 3635,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-22",
+      "reason": "Temporary cap sync while routing/security/runtime slices are being split from app.py; growth cap remains enforced."
+    },
+    {
+      "id": "2026-02-22-thomas-cli-main-max-lines",
+      "path": "thomas/cli/main.py",
+      "change": "max_lines_increase",
+      "new_value": 1843,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-22",
+      "reason": "Temporary cap increase while command families are extracted from monolithic CLI entrypoint."
+    },
+    {
+      "id": "2026-02-22-thomas-web-index-max-lines",
+      "path": "thomas/server/web/index.html",
+      "change": "max_lines_increase",
+      "new_value": 1969,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-22",
+      "reason": "Temporary cap increase pending shell/component HTML split."
+    },
+    {
+      "id": "2026-02-22-thomas-web-components-css-max-lines",
+      "path": "thomas/server/web/css/components.css",
+      "change": "max_lines_increase",
+      "new_value": 6200,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-22",
+      "reason": "Temporary cap sync while CSS components are decomposed into module files; growth cap remains enforced."
+    },
+    {
+      "id": "2026-02-22-thomas-web-app-js-max-lines",
+      "path": "thomas/server/web/js/app.js",
+      "change": "max_lines_increase",
+      "new_value": 26000,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-22",
+      "reason": "Temporary cap sync while app.js is split into modular UI/runtime bundles; growth cap was tightened."
+    }
+  ]
+}

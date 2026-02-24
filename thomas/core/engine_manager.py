@@ -8,6 +8,8 @@ Engines managed:
   2. tool_factory   — reusable tool extraction
   3. initiative     — autonomous work when idle
   4. testing_suite  — background quality testing
+  5. code_issue     — iterative detect/fix loops for code issues
+  6. self_upgrade   — autonomous upgrade opportunity management
 
 Usage (automatic on server start):
     from thomas.core.engine_manager import EngineManager
@@ -21,6 +23,7 @@ Consumer rules:
 
 from __future__ import annotations
 
+import contextlib
 import logging
 import threading
 import time
@@ -40,9 +43,10 @@ class EngineStatus:
     error: Optional[str] = None
     cycles_completed: int = 0
     last_activity: Optional[str] = None
+    details: Dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> Dict[str, Any]:
-        return {
+        payload = {
             "name": self.name,
             "running": self.running,
             "started_at": self.started_at,
@@ -50,6 +54,9 @@ class EngineStatus:
             "cycles_completed": self.cycles_completed,
             "last_activity": self.last_activity,
         }
+        if self.details:
+            payload["details"] = dict(self.details)
+        return payload
 
 
 class EngineManager:
@@ -61,6 +68,8 @@ class EngineManager:
       - ToolFactory (reusable tools)
       - InitiativeEngine (idle autonomous work)
       - TestingSuite (background quality cycles)
+      - CodeIssueEngine (iterative code issue detection/fix)
+      - SelfUpgradeEngine (durable self-upgrade backlog management)
     """
 
     def __init__(self) -> None:
@@ -97,6 +106,18 @@ class EngineManager:
         # 4. Testing Suite (background quality testing)
         results["testing_suite"] = self._start_testing_suite(executor_fn, notify_fn)
 
+        # 5. Code Issue Engine (iterative detect/fix loops)
+        results["code_issue_engine"] = self._start_code_issue_engine(notify_fn)
+
+        # 6. Self Upgrade Engine (upgrade opportunity management)
+        results["self_upgrade_engine"] = self._start_self_upgrade_engine(notify_fn)
+
+        # 7. UI Workflow Engine (UI consistency + effects + assets)
+        results["ui_workflow_engine"] = self._start_ui_workflow_engine(notify_fn)
+
+        # 8. Workspace Sync Engine (automatic git commit/push workflow)
+        results["workspace_sync_engine"] = self._start_workspace_sync_engine(notify_fn)
+
         self._running = True
         log.info("EngineManager: all engines started — %s", results)
 
@@ -125,6 +146,34 @@ class EngineManager:
         except Exception:
             pass
 
+        # Stop code issue engine
+        try:
+            from thomas.core.code_issue_engine import get_code_issue_engine
+            get_code_issue_engine().stop()
+        except Exception:
+            pass
+
+        # Stop self-upgrade engine
+        try:
+            from thomas.core.self_upgrade_engine import get_self_upgrade_engine
+            get_self_upgrade_engine().stop()
+        except Exception:
+            pass
+
+        # Stop UI workflow engine
+        try:
+            from thomas.core.ui_workflow_engine import get_ui_workflow_engine
+            get_ui_workflow_engine().stop()
+        except Exception:
+            pass
+
+        # Stop workspace sync engine
+        try:
+            from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+            get_workspace_sync_engine().stop()
+        except Exception:
+            pass
+
         # Save persistence state
         try:
             from thomas.core.persistence import get_persistence
@@ -137,6 +186,31 @@ class EngineManager:
     def status(self) -> Dict[str, Any]:
         """Return status of all engines."""
         with self._lock:
+            for name, engine in self._engines.items():
+                snap_fn = getattr(engine, "status_snapshot", None)
+                if not callable(snap_fn):
+                    continue
+                try:
+                    snap = snap_fn() or {}
+                except Exception:
+                    continue
+                if not isinstance(snap, dict):
+                    continue
+                st = self._status.get(name)
+                if st is None:
+                    st = EngineStatus(name=name)
+                    self._status[name] = st
+                if "running" in snap:
+                    st.running = bool(snap.get("running"))
+                if "cycles_completed" in snap:
+                    with_cycles = snap.get("cycles_completed")
+                    with contextlib.suppress(Exception):
+                        st.cycles_completed = int(with_cycles)
+                last_activity = str(snap.get("last_cycle_at") or snap.get("last_activity") or "").strip()
+                if last_activity:
+                    st.last_activity = last_activity
+                core_keys = {"running", "cycles_completed", "last_cycle_at", "last_activity"}
+                st.details = {k: v for k, v in snap.items() if k not in core_keys}
             return {
                 "running": self._running,
                 "engines": {k: v.to_dict() for k, v in self._status.items()},
@@ -156,6 +230,26 @@ class EngineManager:
         try:
             from thomas.core.testing_suite import get_testing_suite
             get_testing_suite().record_user_message()
+        except Exception:
+            pass
+        try:
+            from thomas.core.code_issue_engine import get_code_issue_engine
+            get_code_issue_engine().record_user_message()
+        except Exception:
+            pass
+        try:
+            from thomas.core.self_upgrade_engine import get_self_upgrade_engine
+            get_self_upgrade_engine().record_user_message()
+        except Exception:
+            pass
+        try:
+            from thomas.core.ui_workflow_engine import get_ui_workflow_engine
+            get_ui_workflow_engine().record_user_message()
+        except Exception:
+            pass
+        try:
+            from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+            get_workspace_sync_engine().record_user_message()
         except Exception:
             pass
 
@@ -250,6 +344,103 @@ class EngineManager:
             return True
         except Exception as e:
             log.error("TestingSuite: failed to start: %s", e)
+            self._status[name] = EngineStatus(name=name, error=str(e))
+            return False
+
+    def _start_code_issue_engine(
+        self,
+        notify_fn: Optional[Callable[[str], None]],
+    ) -> bool:
+        """Start code issue engine (iterative detect/fix loops)."""
+        name = "code_issue_engine"
+        try:
+            from thomas.core.code_issue_engine import get_code_issue_engine
+
+            engine = get_code_issue_engine()
+            engine.start(notify_fn=notify_fn)
+            self._engines[name] = engine
+            self._status[name] = EngineStatus(
+                name=name,
+                running=True,
+                started_at=datetime.now(timezone.utc).isoformat(),
+            )
+            log.info("CodeIssueEngine: started")
+            return True
+        except Exception as e:
+            log.error("CodeIssueEngine: failed to start: %s", e)
+            self._status[name] = EngineStatus(name=name, error=str(e))
+            return False
+
+    def _start_self_upgrade_engine(
+        self,
+        notify_fn: Optional[Callable[[str], None]],
+    ) -> bool:
+        """Start self-upgrade engine (upgrade backlog management)."""
+        name = "self_upgrade_engine"
+        try:
+            from thomas.core.self_upgrade_engine import get_self_upgrade_engine
+
+            issue_engine = self._engines.get("code_issue_engine")
+            engine = get_self_upgrade_engine()
+            engine.start(notify_fn=notify_fn, issue_engine=issue_engine)
+            self._engines[name] = engine
+            self._status[name] = EngineStatus(
+                name=name,
+                running=True,
+                started_at=datetime.now(timezone.utc).isoformat(),
+            )
+            log.info("SelfUpgradeEngine: started")
+            return True
+        except Exception as e:
+            log.error("SelfUpgradeEngine: failed to start: %s", e)
+            self._status[name] = EngineStatus(name=name, error=str(e))
+            return False
+
+    def _start_ui_workflow_engine(
+        self,
+        notify_fn: Optional[Callable[[str], None]],
+    ) -> bool:
+        """Start UI workflow engine (consistency audits and polish recommendations)."""
+        name = "ui_workflow_engine"
+        try:
+            from thomas.core.ui_workflow_engine import get_ui_workflow_engine
+
+            engine = get_ui_workflow_engine()
+            engine.start(notify_fn=notify_fn)
+            self._engines[name] = engine
+            self._status[name] = EngineStatus(
+                name=name,
+                running=True,
+                started_at=datetime.now(timezone.utc).isoformat(),
+            )
+            log.info("UIWorkflowEngine: started")
+            return True
+        except Exception as e:
+            log.error("UIWorkflowEngine: failed to start: %s", e)
+            self._status[name] = EngineStatus(name=name, error=str(e))
+            return False
+
+    def _start_workspace_sync_engine(
+        self,
+        notify_fn: Optional[Callable[[str], None]],
+    ) -> bool:
+        """Start workspace sync engine (automatic git commit/push handling)."""
+        name = "workspace_sync_engine"
+        try:
+            from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+
+            engine = get_workspace_sync_engine()
+            engine.start(notify_fn=notify_fn)
+            self._engines[name] = engine
+            self._status[name] = EngineStatus(
+                name=name,
+                running=True,
+                started_at=datetime.now(timezone.utc).isoformat(),
+            )
+            log.info("WorkspaceSyncEngine: started")
+            return True
+        except Exception as e:
+            log.error("WorkspaceSyncEngine: failed to start: %s", e)
             self._status[name] = EngineStatus(name=name, error=str(e))
             return False
 

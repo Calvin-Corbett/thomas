@@ -111,3 +111,28 @@ class TestAutonomyEngineWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(int(policy.get("worker_count") or 0), 1)
         prompts = [str(c.get("user_prompt") or "") for c in self.chat.calls]
         self.assertTrue(any("Create up to 1 workers" in p for p in prompts))
+
+    async def test_workflow_task_compiles_natural_language_payload(self):
+        job = self.store.create_job(
+            name="workflow nl compile",
+            kind="workflow_task",
+            payload={
+                "text": "In parallel, collect requirements; draft solution; estimate implementation effort.",
+            },
+            schedule=None,
+            next_run_at=datetime.now(timezone.utc),
+            risk_class="low",
+        )
+        self.engine.wake_up()
+        for _ in range(80):
+            current = self.store.get_job(job.id)
+            if current.status in ("succeeded", "failed", "dead", "cancelled"):
+                break
+            await asyncio.sleep(0.05)
+        done = self.store.get_job(job.id)
+        self.assertEqual(done.status, "succeeded")
+        result = done.result or {}
+        self.assertEqual(result.get("pattern"), "parallel")
+        self.assertIn("workflow_compile", result)
+        workers = result.get("workers") or []
+        self.assertGreaterEqual(len(workers), 1)

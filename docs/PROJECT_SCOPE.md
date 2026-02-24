@@ -45,6 +45,10 @@ Thomas must deliver all of the following:
 - Extensibility:
   - stable connector/tool protocol for external integrations
   - strict onboarding gates for new model providers/capabilities
+- Workbench operator-mode baseline:
+  - studio/workbench tabs are AI-first control surfaces where Thomas executes jobs
+  - tabs prioritize dispatch, monitoring, and output review over manual full-editor replication
+  - user-created tabs inherit operator-mode semantics by default
 
 ## Hard Win Gates (Must All Pass)
 

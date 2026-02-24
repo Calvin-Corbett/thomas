@@ -123,3 +123,11 @@ class TestEnvOverride(unittest.TestCase):
         cfg = load_config(Path("__does_not_exist__.toml"))
         errs = cfg.validate()
         self.assertTrue(any("quality.max_auto_retries must be <= 3" in e for e in errs))
+
+    def test_unrelated_thomas_env_is_ignored_by_config_loader(self) -> None:
+        os.environ["THOMAS_STATE_DIR"] = "/tmp/thomas-state"
+        os.environ["THOMAS_SERVER_URL"] = "http://127.0.0.1:8080"
+        cfg = load_config(Path("__does_not_exist__.toml"))
+        errs = cfg.validate()
+        self.assertFalse(any("Unknown core config key 'state'" in e for e in errs))
+        self.assertFalse(any("Unknown core config key 'server.url'" in e for e in errs))

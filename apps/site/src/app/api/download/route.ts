@@ -34,6 +34,7 @@ export async function GET(req: NextRequest) {
   const ipHash = hashIp(ip);
 
   const redirectWithTracking = async (url: string, releaseTag: string, assetName: string) => {
+    const redirectUrl = new URL(url, req.nextUrl.origin).toString();
     await logDownloadEvent({
       eventId,
       platform,
@@ -58,7 +59,17 @@ export async function GET(req: NextRequest) {
       source,
     });
 
-    const response = NextResponse.redirect(url, { status: 302 });
+    const response = NextResponse.redirect(redirectUrl, { status: 302 });
+    response.headers.set("cache-control", "no-store");
+    return response;
+  };
+
+  const redirectToDownload = (status: string) => {
+    const fallbackUrl = new URL("/download", req.nextUrl.origin);
+    fallbackUrl.searchParams.set("status", status);
+    fallbackUrl.searchParams.set("platform", platform);
+    fallbackUrl.searchParams.set("channel", channel);
+    const response = NextResponse.redirect(fallbackUrl, { status: 302 });
     response.headers.set("cache-control", "no-store");
     return response;
   };
@@ -68,41 +79,18 @@ export async function GET(req: NextRequest) {
   }
 
   if (mode === "manual") {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "manual_download_url_missing",
-        hint: "Set THOMAS_DOWNLOAD_URL_WINDOWS / MACOS / LINUX for manual mode.",
-      },
-      { status: 503 },
-    );
+    return redirectToDownload("manual-not-configured");
   }
 
   const releases = await fetchReleases(30);
   const targetRelease = selectReleaseByChannel(releases, channel);
   if (!targetRelease) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "release_not_found",
-        hint: "Set THOMAS_GITHUB_REPO=owner/repo, or configure THOMAS_DOWNLOAD_URL_* for manual mode.",
-      },
-      { status: 404 },
-    );
+    return redirectToDownload("release-not-found");
   }
 
   const asset = pickAssetForPlatform(targetRelease.assets, platform, arch);
   if (!asset) {
-    return NextResponse.json(
-      {
-        ok: false,
-        error: "asset_not_found",
-        release: targetRelease.tag_name,
-        platform,
-        availableAssets: targetRelease.assets.map((item) => item.name),
-      },
-      { status: 404 },
-    );
+    return redirectToDownload("asset-not-found");
   }
 
   return redirectWithTracking(asset.browser_download_url, targetRelease.tag_name, asset.name);

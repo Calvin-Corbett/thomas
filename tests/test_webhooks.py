@@ -35,11 +35,23 @@ def app(tmp_path, monkeypatch):
     return _build_webhooks_app(tmp_path, monkeypatch, admin_token="adm")
 
 
-def _build_webhooks_app(tmp_path, monkeypatch, *, admin_token: str | None):
+@pytest.fixture()
+def strict_app(tmp_path, monkeypatch):
+    return _build_webhooks_app(tmp_path, monkeypatch, admin_token="adm", require_signatures=True)
+
+
+def _build_webhooks_app(
+    tmp_path,
+    monkeypatch,
+    *,
+    admin_token: str | None,
+    require_signatures: bool = False,
+):
     monkeypatch.setenv("THOMAS_WEBHOOKS_FILE", str(tmp_path / "thomas_webhooks.json"))
     monkeypatch.setenv("THOMAS_WEBHOOK_RECEIPTS_FILE", str(tmp_path / "thomas_webhook_receipts.json"))
     monkeypatch.setenv("THOMAS_WEBHOOK_STATS_FILE", str(tmp_path / "thomas_webhook_stats.json"))
     monkeypatch.setenv("THOMAS_WEBHOOK_INBOX_FILE", str(tmp_path / "thomas_webhook_inbox.jsonl"))
+    monkeypatch.setenv("THOMAS_WEBHOOK_REQUIRE_SIGNATURES", "1" if require_signatures else "0")
     if admin_token is None:
         monkeypatch.delenv("THOMAS_WEBHOOK_ADMIN_TOKEN", raising=False)
     else:
@@ -60,6 +72,19 @@ def _build_webhooks_app(tmp_path, monkeypatch, *, admin_token: str | None):
 @pytest.fixture()
 def app_without_admin_token(tmp_path, monkeypatch):
     return _build_webhooks_app(tmp_path, monkeypatch, admin_token=None)
+
+
+def test_store_raw_payload_defaults_off(tmp_path, monkeypatch):
+    monkeypatch.setenv("THOMAS_WEBHOOKS_FILE", str(tmp_path / "thomas_webhooks.json"))
+    monkeypatch.setenv("THOMAS_WEBHOOK_RECEIPTS_FILE", str(tmp_path / "thomas_webhook_receipts.json"))
+    monkeypatch.setenv("THOMAS_WEBHOOK_STATS_FILE", str(tmp_path / "thomas_webhook_stats.json"))
+    monkeypatch.setenv("THOMAS_WEBHOOK_INBOX_FILE", str(tmp_path / "thomas_webhook_inbox.jsonl"))
+    monkeypatch.delenv("THOMAS_WEBHOOK_STORE_RAW_PAYLOAD", raising=False)
+
+    import thomas.server.routes.webhooks as webhooks_mod
+
+    importlib.reload(webhooks_mod)
+    assert webhooks_mod.STORE_RAW_PAYLOAD is False
 
 
 def test_register_list_patch_get(app):
@@ -176,6 +201,130 @@ def test_stripe_signature_optional_and_zero_decimal(app, monkeypatch):
     assert "500 JPY" in fake_p.goals[0]["text"]
 
 
+def test_register_requires_secret_when_signature_enforcement_enabled(strict_app):
+    a, _fake_p, _mod, _tmp = strict_app
+    c = TestClient(a)
+
+    missing_secret = c.post(
+        "/webhooks/register",
+        headers={"X-Admin-Token": "adm"},
+        json={"id": "abc", "goal_template": "Hello {payload.name}"},
+    )
+    assert missing_secret.status_code == 400
+    assert "Webhook secret is required" in str(missing_secret.json().get("detail", ""))
+
+    ok = c.post(
+        "/webhooks/register",
+        headers={"X-Admin-Token": "adm"},
+        json={"id": "abc", "secret": "s3cr3t", "goal_template": "Hello {payload.name}"},
+    )
+    assert ok.status_code == 200
+
+
+def test_generic_receive_rejects_unsigned_when_signature_enforcement_enabled(strict_app):
+    a, _fake_p, _mod, _tmp = strict_app
+    c = TestClient(a)
+
+    c.post(
+        "/webhooks/register",
+        headers={"X-Admin-Token": "adm"},
+        json={"id": "abc", "secret": "s3cr3t", "goal_template": "X {payload.x}"},
+    )
+
+    body = json.dumps({"x": 1}).encode("utf-8")
+    missing_sig = c.post("/webhooks/receive/abc", data=body, headers={"content-type": "application/json"})
+    assert missing_sig.status_code == 401
+    assert "Missing X-Webhook-Signature header." in str(missing_sig.json().get("detail", ""))
+
+    bad_sig = c.post(
+        "/webhooks/receive/abc",
+        data=body,
+        headers={
+            "content-type": "application/json",
+            "X-Webhook-Signature": "sha256=deadbeef",
+        },
+    )
+    assert bad_sig.status_code == 401
+    assert "Invalid signature." in str(bad_sig.json().get("detail", ""))
+
+
+def test_generic_receive_rejects_secretless_config_when_signature_enforcement_enabled(strict_app):
+    a, _fake_p, mod, _tmp = strict_app
+    c = TestClient(a)
+
+    # Simulate a pre-existing webhook created before strict enforcement.
+    mod._STORE.register(
+        mod.WebhookRecord(
+            id="legacy",
+            secret=None,
+            goal_template="Y {payload.y}",
+            created_at="2026-02-22T00:00:00Z",
+            rate_limit_per_min=10,
+        )
+    )
+
+    resp = c.post("/webhooks/receive/legacy", json={"y": 2})
+    assert resp.status_code == 503
+    assert "must have a secret" in str(resp.json().get("detail", ""))
+
+
+def test_stripe_receive_requires_secret_and_signature_when_enforced(strict_app, monkeypatch):
+    a, fake_p, mod, _tmp = strict_app
+    c = TestClient(a)
+
+    payload = {
+        "id": "evt_123",
+        "type": "payment_intent.succeeded",
+        "data": {"object": {"amount_received": 500, "currency": "jpy", "customer": "cus_123"}},
+    }
+    body = json.dumps(payload).encode("utf-8")
+
+    no_secret = c.post("/webhooks/receive/stripe", data=body, headers={"content-type": "application/json"})
+    assert no_secret.status_code == 503
+    assert "Stripe webhook signature enforcement is enabled" in str(no_secret.json().get("detail", ""))
+
+    monkeypatch.setenv("THOMAS_STRIPE_WEBHOOK_SECRET", "sk_test")
+    importlib.reload(mod)
+    monkeypatch.setattr(mod, "get_persistence", lambda: fake_p)
+    monkeypatch.setattr(mod, "_unix_now", lambda: 1700000000)
+
+    missing_signature = c.post("/webhooks/receive/stripe", data=body, headers={"content-type": "application/json"})
+    assert missing_signature.status_code == 401
+    assert "Missing Stripe-Signature header." in str(missing_signature.json().get("detail", ""))
+
+
+def test_github_receive_requires_secret_and_signature_when_enforced(strict_app, monkeypatch):
+    a, fake_p, mod, _tmp = strict_app
+    c = TestClient(a)
+
+    payload = {
+        "ref": "refs/heads/main",
+        "repository": {"full_name": "owner/repo"},
+        "commits": [{"message": "fix bug"}],
+    }
+    body = json.dumps(payload).encode("utf-8")
+
+    no_secret = c.post(
+        "/webhooks/receive/github",
+        data=body,
+        headers={"content-type": "application/json", "X-GitHub-Event": "push"},
+    )
+    assert no_secret.status_code == 503
+    assert "GitHub webhook signature enforcement is enabled" in str(no_secret.json().get("detail", ""))
+
+    monkeypatch.setenv("THOMAS_GITHUB_WEBHOOK_SECRET", "ghsecret")
+    importlib.reload(mod)
+    monkeypatch.setattr(mod, "get_persistence", lambda: fake_p)
+
+    missing_signature = c.post(
+        "/webhooks/receive/github",
+        data=body,
+        headers={"content-type": "application/json", "X-GitHub-Event": "push"},
+    )
+    assert missing_signature.status_code == 401
+    assert "Missing X-Hub-Signature-256 header." in str(missing_signature.json().get("detail", ""))
+
+
 def test_inbox_retry_generic(app):
     a, fake_p, _mod, _tmp = app
     c = TestClient(a)
@@ -200,3 +349,23 @@ def test_management_routes_fail_closed_without_admin_token(app_without_admin_tok
     r = c.get("/webhooks")
     assert r.status_code == 503
     assert "THOMAS_WEBHOOK_ADMIN_TOKEN" in r.json()["detail"]
+
+
+def test_runtime_default_enforcement_can_be_configured(monkeypatch):
+    monkeypatch.delenv("THOMAS_WEBHOOK_REQUIRE_SIGNATURES", raising=False)
+    monkeypatch.delenv("THOMAS_ENV", raising=False)
+    monkeypatch.delenv("ENV", raising=False)
+    monkeypatch.delenv("PYTHON_ENV", raising=False)
+
+    import thomas.server.routes.webhooks as webhooks_mod
+
+    importlib.reload(webhooks_mod)
+    assert webhooks_mod._webhook_signature_enforcement_enabled() is False
+
+    webhooks_mod.configure_webhook_signature_enforcement_default(True)
+    assert webhooks_mod._webhook_signature_enforcement_enabled() is True
+
+    webhooks_mod.configure_webhook_signature_enforcement_default(False)
+    assert webhooks_mod._webhook_signature_enforcement_enabled() is False
+
+    webhooks_mod.configure_webhook_signature_enforcement_default(None)

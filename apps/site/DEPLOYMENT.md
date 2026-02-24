@@ -35,6 +35,23 @@ If you want website-first launch before GitHub integration, set:
 3. Configure output mode according to Pages Next support.
 4. Add environment variables from `.env.example`.
 
+### GitHub Actions (recommended deploy path)
+
+Use `.github/workflows/site-release.yml`:
+
+- `dev` push (`apps/site/**`) -> preview deploy (`thomas-site-preview`)
+- `main`/`master` push (`apps/site/**`) -> production deploy (`thomas-site`)
+
+Set repository secrets:
+
+- `CLOUDFLARE_API_TOKEN`
+- `CLOUDFLARE_ACCOUNT_ID`
+
+Set GitHub environments:
+
+- `preview`
+- `production` (add required reviewer approval)
+
 ## 4. Domain and caching
 
 1. Point `thomas.dev` (or your chosen domain) to hosting provider.

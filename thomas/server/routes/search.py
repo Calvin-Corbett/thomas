@@ -1,181 +1,208 @@
-# thomas/server/routes/search.py
+"""aiohttp routes for conversation search (FTS5 full-text search API).
+
+Endpoints cover full-text search, autocomplete, context retrieval,
+channel listing, bookmarks, saved searches, and index management.
+"""
+
 from __future__ import annotations
 
-from typing import Optional
+from dataclasses import asdict
+from typing import Any, Callable, Dict
 
-from fastapi import APIRouter, Query
-from pydantic import BaseModel
+from aiohttp import web
 
 from thomas.core.search_history import get_search
 
-
-router = APIRouter(tags=["search"])
-
-
-class SearchResultModel(BaseModel):
-    turn_id: str
-    turn_pos: int
-    ts: str
-    channel: str
-    user_msg: str
-    user_snippet: str
-    assistant_snippet: str
-    assistant_snippet_plain: str
-    rank: float
-    score: float
+# Type alias matching the pattern used by spend/goals routes.
+RequireAccessFn = Callable[[web.Request], None]
 
 
-class TurnContextModel(BaseModel):
-    turn_id: str
-    turn_pos: int
-    ts: str
-    channel: str
-    user_msg: str
-    assistant_msg: str
-    tool_calls: str
+def register_search_routes(
+    app: web.Application,
+    *,
+    require_api_access: RequireAccessFn,
+) -> None:
+    """Register all /api/search/* routes on *app*."""
 
+    # ── helpers ──────────────────────────────────────────────
 
-class SearchStatusModel(BaseModel):
-    db_path: str
-    indexed_rows: int
-    last_indexed_pos: int
-    last_optimize_at_pos: int
-    db_size_bytes: int
-    schema_version: str
-    bookmarks: int
-    saved_searches: int
+    def _qp(request: web.Request, key: str, default: str | None = None) -> str | None:
+        """Return a query-parameter or *default*."""
+        v = request.rel_url.query.get(key)
+        if v in (None, ""):
+            return default
+        return v
 
-
-class BookmarkModel(BaseModel):
-    turn_id: str
-    label: str = ""
-    created_ts: str | None = None
-
-
-class SavedSearchModel(BaseModel):
-    id: int
-    name: str
-    query: str
-    filters_json: str
-    created_ts: str
-    last_used_ts: str
-    use_count: int
-
-
-class SaveSearchRequest(BaseModel):
-    name: str
-    query: str
-    filters: dict = {}
-
-
-@router.get("/api/search", response_model=list[SearchResultModel])
-def api_search(
-    q: str = Query(..., min_length=1),
-    limit: int = Query(20, ge=1, le=200),
-    offset: int = Query(0, ge=0, le=10000),
-    channel: Optional[str] = Query(None),
-    since: Optional[str] = Query(None, description="YYYY-MM-DD or ISO"),
-    before: Optional[str] = Query(None, description="YYYY-MM-DD or ISO"),
-    has_tools: Optional[bool] = Query(None),
-    sort: str = Query("relevance", description="relevance | newest"),
-    scope: str = Query("all", description="Comma list: all,user,assistant,tools"),
-    saved_id: Optional[int] = Query(None, description="If provided, increments saved search use_count"),
-):
-    search = get_search()
-    search.record_query(q)
-
-    scopes = set([s.strip().lower() for s in (scope or "all").split(",") if s.strip()])
-    if not scopes:
-        scopes = {"all"}
-
-    results = search.search(
-        query=q,
-        limit=limit,
-        offset=offset,
-        channel=channel,
-        since=since,
-        before=before,
-        has_tool_calls=has_tools,
-        sort=sort,
-        scopes=scopes,
-    )
-    if saved_id is not None:
+    def _qp_int(request: web.Request, key: str, default: int) -> int:
+        v = _qp(request, key)
+        if v is None:
+            return default
         try:
-            search.touch_saved_search(int(saved_id))
-        except Exception:
-            pass
+            return int(v)
+        except (ValueError, TypeError):
+            return default
 
-    return [SearchResultModel(**r.__dict__) for r in results]
+    def _qp_bool(request: web.Request, key: str) -> bool | None:
+        v = _qp(request, key)
+        if v is None:
+            return None
+        return v.strip().lower() in ("1", "true", "yes")
 
+    async def _read_json(request: web.Request) -> Dict[str, Any]:
+        try:
+            data = await request.json()
+        except Exception as exc:
+            raise web.HTTPBadRequest(text=f"invalid json: {exc}")
+        if not isinstance(data, dict):
+            raise web.HTTPBadRequest(text="json body must be an object")
+        return data
 
-@router.get("/api/search/suggest", response_model=list[str])
-def api_suggest(q: str = Query(..., min_length=1)):
-    return get_search().suggest(q)
+    # ── GET /api/search ──────────────────────────────────────
 
+    async def api_search(request: web.Request) -> web.Response:
+        require_api_access(request)
+        q = (_qp(request, "q") or "").strip()
+        if not q:
+            raise web.HTTPBadRequest(text="query parameter 'q' is required")
 
-@router.get("/api/search/context", response_model=list[TurnContextModel])
-def api_context(turn_id: str = Query(..., min_length=1), window: int = Query(2, ge=0, le=25)):
-    ctx = get_search().get_context(turn_id=turn_id, window=window)
-    return [TurnContextModel(**c.__dict__) for c in ctx]
+        limit = max(1, min(_qp_int(request, "limit", 20), 200))
+        offset = max(0, min(_qp_int(request, "offset", 0), 10000))
+        channel = _qp(request, "channel")
+        since = _qp(request, "since")
+        before = _qp(request, "before")
+        has_tools = _qp_bool(request, "has_tools")
+        sort = _qp(request, "sort", "relevance") or "relevance"
+        scope_raw = _qp(request, "scope", "all") or "all"
+        scopes = {s.strip().lower() for s in scope_raw.split(",") if s.strip()} or {"all"}
+        saved_id = _qp_int(request, "saved_id", -1)
 
+        search = get_search()
+        search.record_query(q)
 
-@router.get("/api/search/channels", response_model=list[str])
-def api_channels():
-    return get_search().list_channels()
+        results = search.search(
+            query=q,
+            limit=limit,
+            offset=offset,
+            channel=channel,
+            since=since,
+            before=before,
+            has_tool_calls=has_tools,
+            sort=sort,
+            scopes=scopes,
+        )
 
+        if saved_id >= 0:
+            try:
+                search.touch_saved_search(saved_id)
+            except Exception:
+                pass
 
-@router.get("/api/search/status", response_model=SearchStatusModel)
-def api_status():
-    return SearchStatusModel(**get_search().status())
+        return web.json_response([asdict(r) for r in results])
 
+    # ── GET /api/search/suggest ──────────────────────────────
 
-@router.post("/api/search/reindex", response_model=SearchStatusModel)
-def api_reindex():
-    s = get_search()
-    s.reindex_all()
-    return SearchStatusModel(**s.status())
+    async def api_suggest(request: web.Request) -> web.Response:
+        require_api_access(request)
+        q = (_qp(request, "q") or "").strip()
+        if not q:
+            raise web.HTTPBadRequest(text="query parameter 'q' is required")
+        return web.json_response(get_search().suggest(q))
 
+    # ── GET /api/search/context ──────────────────────────────
 
-# -----------------------
-# Bookmarks
-# -----------------------
-@router.get("/api/search/bookmarks", response_model=list[BookmarkModel])
-def api_list_bookmarks():
-    bms = get_search().list_bookmarks()
-    return [BookmarkModel(turn_id=b.turn_id, label=b.label, created_ts=b.created_ts) for b in bms]
+    async def api_context(request: web.Request) -> web.Response:
+        require_api_access(request)
+        turn_id = (_qp(request, "turn_id") or "").strip()
+        if not turn_id:
+            raise web.HTTPBadRequest(text="query parameter 'turn_id' is required")
+        window = max(0, min(_qp_int(request, "window", 2), 25))
+        ctx = get_search().get_context(turn_id=turn_id, window=window)
+        return web.json_response([asdict(c) for c in ctx])
 
+    # ── GET /api/search/channels ─────────────────────────────
 
-@router.post("/api/search/bookmarks", response_model=dict)
-def api_set_bookmark(req: BookmarkModel):
-    s = get_search()
-    s.set_bookmark(req.turn_id, req.label or "")
-    return {"ok": True}
+    async def api_channels(request: web.Request) -> web.Response:
+        require_api_access(request)
+        return web.json_response(get_search().list_channels())
 
+    # ── GET /api/search/status ───────────────────────────────
 
-@router.delete("/api/search/bookmarks/{turn_id}", response_model=dict)
-def api_remove_bookmark(turn_id: str):
-    s = get_search()
-    s.remove_bookmark(turn_id)
-    return {"ok": True}
+    async def api_status(request: web.Request) -> web.Response:
+        require_api_access(request)
+        return web.json_response(get_search().status())
 
+    # ── POST /api/search/reindex ─────────────────────────────
 
-# -----------------------
-# Saved Searches
-# -----------------------
-@router.get("/api/search/saved", response_model=list[SavedSearchModel])
-def api_list_saved():
-    ss = get_search().list_saved_searches()
-    return [SavedSearchModel(**x.__dict__) for x in ss]
+    async def api_reindex(request: web.Request) -> web.Response:
+        require_api_access(request)
+        s = get_search()
+        s.reindex_all()
+        return web.json_response(s.status())
 
+    # ── Bookmarks ────────────────────────────────────────────
 
-@router.post("/api/search/saved", response_model=dict)
-def api_save_search(req: SaveSearchRequest):
-    s = get_search()
-    sid = s.save_search(req.name, req.query, req.filters or {})
-    return {"ok": True, "id": sid}
+    async def api_list_bookmarks(request: web.Request) -> web.Response:
+        require_api_access(request)
+        bms = get_search().list_bookmarks()
+        return web.json_response([asdict(b) for b in bms])
 
+    async def api_set_bookmark(request: web.Request) -> web.Response:
+        require_api_access(request)
+        data = await _read_json(request)
+        turn_id = str(data.get("turn_id") or "").strip()
+        if not turn_id:
+            raise web.HTTPBadRequest(text="'turn_id' is required")
+        label = str(data.get("label") or "")
+        get_search().set_bookmark(turn_id, label)
+        return web.json_response({"ok": True})
 
-@router.delete("/api/search/saved/{sid}", response_model=dict)
-def api_delete_saved(sid: int):
-    get_search().delete_saved_search(int(sid))
-    return {"ok": True}
+    async def api_remove_bookmark(request: web.Request) -> web.Response:
+        require_api_access(request)
+        turn_id = request.match_info["turn_id"]
+        get_search().remove_bookmark(turn_id)
+        return web.json_response({"ok": True})
+
+    # ── Saved Searches ───────────────────────────────────────
+
+    async def api_list_saved(request: web.Request) -> web.Response:
+        require_api_access(request)
+        ss = get_search().list_saved_searches()
+        return web.json_response([asdict(s) for s in ss])
+
+    async def api_save_search(request: web.Request) -> web.Response:
+        require_api_access(request)
+        data = await _read_json(request)
+        name = str(data.get("name") or "").strip()
+        query = str(data.get("query") or "").strip()
+        if not query:
+            raise web.HTTPBadRequest(text="'query' is required")
+        filters = data.get("filters") or {}
+        if not isinstance(filters, dict):
+            filters = {}
+        sid = get_search().save_search(name, query, filters)
+        return web.json_response({"ok": True, "id": sid})
+
+    async def api_delete_saved(request: web.Request) -> web.Response:
+        require_api_access(request)
+        sid_raw = request.match_info["sid"]
+        try:
+            sid = int(sid_raw)
+        except (ValueError, TypeError):
+            raise web.HTTPBadRequest(text="invalid saved search id")
+        get_search().delete_saved_search(sid)
+        return web.json_response({"ok": True})
+
+    # ── route registration ───────────────────────────────────
+
+    app.router.add_get("/api/search", api_search)
+    app.router.add_get("/api/search/suggest", api_suggest)
+    app.router.add_get("/api/search/context", api_context)
+    app.router.add_get("/api/search/channels", api_channels)
+    app.router.add_get("/api/search/status", api_status)
+    app.router.add_post("/api/search/reindex", api_reindex)
+    app.router.add_get("/api/search/bookmarks", api_list_bookmarks)
+    app.router.add_post("/api/search/bookmarks", api_set_bookmark)
+    app.router.add_delete("/api/search/bookmarks/{turn_id}", api_remove_bookmark)
+    app.router.add_get("/api/search/saved", api_list_saved)
+    app.router.add_post("/api/search/saved", api_save_search)
+    app.router.add_delete("/api/search/saved/{sid}", api_delete_saved)

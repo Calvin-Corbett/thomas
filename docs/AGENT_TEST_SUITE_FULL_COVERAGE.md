@@ -4,13 +4,33 @@ This document is the full test-suite contract for Thomas.
 
 - Contract id: `thomas-full-coverage-contract-v1`
 - Contract version: `1`
-- Generated at (UTC): `2026-02-21T19:34:15Z`
-- Runtime metrics (auto-included from suite metric board): `110`
-- Catalog checks (explicit): `210`
-- Catalog implemented today: `210`
+- Generated at (UTC): `2026-02-21T21:34:52Z`
+- Runtime metrics (auto-included from suite metric board): `115`
+- Catalog checks (explicit): `255`
+- Catalog implemented today: `255`
 - Execution policy: quality_is_king=`True`, cycle_limit_disabled=`True`
 - Stop condition: `Continue until no known meaningful gaps remain or user explicitly stops.`
 - Policy reference: `docs/QUALITY_EXECUTION_POLICY.md`
+- Benchmark program id: `thomas-professional-benchmark-v2`
+- Benchmark lane weights: `dynamic=0.5, human=0.15, quick=0.35`
+- Catalog checks by mode: `dynamic=192, human=3, quick=60`
+
+## Scoring Reference
+
+- Runtime head-to-head (`head_to_head_score`):
+- Count runtime metrics where either side has numeric data.
+- Per counted metric: winner=`1.0`, tie=`0.5` each.
+- Formula: `(agent_points / counted_metrics) * 100`.
+- Overall full-suite (`overall_suite_score`):
+- Formula: `(runtime_passed + catalog_passed) / (runtime_applicable + catalog_applicable) * 100`.
+- Lane full-suite (`quick_suite_score`, `dynamic_suite_score`, `human_suite_score`):
+- Formula: same as `overall_suite_score`, but only checks in that `test_mode` lane.
+- Overall benchmark capability (`overall_benchmark_capability_score`):
+- Formula: weighted average of lane scores using `benchmark_program.lane_weights`.
+- Token efficiency (`token_efficiency_score`):
+- Separate token-only score; only emitted when token telemetry evidence exists.
+- Token 1v1 compares token score, effective tokens per success, and telemetry coverage.
+- Typical confusion: previous `90%+` values are often runtime 1v1 head-to-head, not overall full-suite score.
 
 ## Runtime Metric Board (Current)
 
@@ -72,6 +92,9 @@ This document is the full test-suite contract for Thomas.
 - `cost.probes.pass_rate`
 - `cost.probes.passed_runs`
 - `cost.probes.total_runs`
+- `cost.token_efficiency_score`
+- `cost.token_efficiency_telemetry_coverage`
+- `cost.token_efficiency_tokens_per_success_effective`
 - `docs.markdown_files`
 - `extensions.directories`
 - `gateway.openai_chat_completions.files`
@@ -119,11 +142,32 @@ This document is the full test-suite contract for Thomas.
 - `security.risky_construct_hits`
 - `security.secret_like_files`
 - `security.secret_like_hits`
+- `tests.dataset_files`
+- `tests.dataset_loc`
 - `tests.files`
 - `tests.loc`
 - `tests.loc_per_file`
 - `tests.to_code_file_ratio`
 - `tests.to_code_loc_ratio`
+
+## Benchmark Families
+
+- `agent_runtime` - **Runtime Orchestration** (default_mode `dynamic`): Agent execution loop quality under real runtime conditions.
+- `agentic_execution` - **Agentic Execution** (default_mode `dynamic`): Planning, memory, tooling, and long-horizon execution quality.
+- `browser_and_operator_ux` - **Operator Experience** (default_mode `dynamic`): Browser automation and operator-facing workflow usability.
+- `compliance_and_competitive_intel` - **Competitive Governance** (default_mode `dynamic`): Competitor tracking fidelity, compliance signals, and governance posture.
+- `coverage_and_correctness` - **Foundation Integrity** (default_mode `quick`): Baseline code quality, structure, and correctness readiness.
+- `evaluation_governance` - **Evaluation Governance** (default_mode `dynamic`): Dataset control, holdout discipline, anti-gaming, and auditability.
+- `extensions_and_state` - **Extension Reliability** (default_mode `quick`): Plugin ecosystem stability and state-management correctness.
+- `human_quality` - **Human Quality** (default_mode `human`): Human-judged maintainability, readability, and handoff quality.
+- `interfaces_and_protocols` - **Interface Fidelity** (default_mode `quick`): Protocol, contract, and API surface compatibility coverage.
+- `performance_and_cost` - **Performance Economics** (default_mode `dynamic`): Latency, throughput, and cost efficiency under realistic load.
+- `release_decisioning` - **Release Decisioning** (default_mode `dynamic`): GO/LIMITED_GO/NO_GO decision gates across critical metric families.
+- `reliability` - **Reliability Statistics** (default_mode `dynamic`): Run-to-run variance, significance confidence, and reproducibility.
+- `reliability_and_release_ops` - **Reliability Operations** (default_mode `dynamic`): Failure handling, repeatability, and release-process resilience.
+- `safety_and_policy` - **Safety and Policy** (default_mode `dynamic`): Policy hierarchy adherence and unsafe-behavior resistance.
+- `security_depth` - **Security Hardening** (default_mode `dynamic`): Security controls, exploit resistance, and safe defaults.
+- `task_quality` - **Task Quality** (default_mode `dynamic`): Ground-truth correctness, semantic quality, and real-repo outcomes.
 
 ## Expanded Full-Coverage Catalog
 
@@ -182,6 +226,13 @@ This document is the full test-suite contract for Thomas.
 - `agentic.028` [implemented] Counterfactual tool-choice quality (was chosen tool actually best).
 - `agentic.029` [implemented] Self-critique utility score (reflection improves outcome).
 - `agentic.030` [implemented] Operator trust score (predictable, controllable, auditable under stress).
+- `prog.010` [implemented] Constraint-following accuracy under conflicting instructions.
+- `prog.011` [implemented] Plan quality score before execution begins.
+- `prog.012` [implemented] Memory consistency score over long sessions.
+- `prog.013` [implemented] Tool selection precision and recall.
+- `prog.014` [implemented] Tool argument correctness rate.
+- `prog.015` [implemented] Multi-step workflow completion rate.
+- `prog.016` [implemented] Long-horizon task completion without drift.
 
 ### browser_and_operator_ux
 
@@ -252,6 +303,19 @@ This document is the full test-suite contract for Thomas.
 - `core.019` [implemented] Locale/i18n formatting correctness tests.
 - `core.020` [implemented] Cross-platform path handling tests.
 
+### evaluation_governance
+
+- `prog.001` [implemented] Versioned evaluation dataset with immutable snapshots.
+- `prog.002` [implemented] Difficulty tiers and domain tags per benchmark test.
+- `prog.003` [implemented] Hidden holdout set not visible to model-tuning workflows.
+- `prog.005` [implemented] Judge-bias calibration between LLM judges and human adjudication.
+- `prog.031` [implemented] Benchmark anti-gaming checks.
+- `prog.032` [implemented] Data leakage checks between tuning data and evaluation sets.
+- `prog.033` [implemented] Evidence traceability linking every claim to artifacts or logs.
+- `prog.036` [implemented] Failure taxonomy coverage and root-cause clustering quality.
+- `prog.037` [implemented] Trend regression alerts across daily and weekly runs.
+- `prog.039` [implemented] Benchmark freshness score for datasets, repositories, and model snapshots.
+
 ### extensions_and_state
 
 - `core.081` [implemented] Extension catalog schema tests.
@@ -274,6 +338,12 @@ This document is the full test-suite contract for Thomas.
 - `core.098` [implemented] PII redaction correctness tests.
 - `core.099` [implemented] Audit log integrity tests.
 - `core.100` [implemented] Cross-version state compatibility tests.
+
+### human_quality
+
+- `prog.004` [implemented] Human-judged quality rubric with inter-rater agreement tracking.
+- `prog.034` [implemented] Human review quality score for readability and maintainability.
+- `prog.035` [implemented] Handoff quality to another engineer or agent.
 
 ### interfaces_and_protocols
 
@@ -320,6 +390,20 @@ This document is the full test-suite contract for Thomas.
 - `core.138` [implemented] Token-per-success regression gates.
 - `core.139` [implemented] Tool-call-per-success regression gates.
 - `core.140` [implemented] Provider spend-cap enforcement tests.
+- `prog.024` [implemented] Performance latency gates at p50, p95, and p99 per successful task.
+- `prog.025` [implemented] Throughput under concurrency load.
+- `prog.026` [implemented] True cost per successful task (tokens + wall time + infrastructure/tool cost).
+- `prog.027` [implemented] Token efficiency per successful task with normalized telemetry.
+
+### release_decisioning
+
+- `prog.038` [implemented] Release-gate policy conformance for must-pass critical checks.
+- `prog.040` [implemented] Safety gate pass-rate must be 100 percent.
+- `prog.041` [implemented] Hidden-task correctness gate.
+- `prog.042` [implemented] Reliability gate across repeated runs.
+- `prog.043` [implemented] Cost and token telemetry gate with real usage data.
+- `prog.044` [implemented] Reproducibility gate across same-condition reruns.
+- `prog.045` [implemented] Final plain-English verdict output (GO, LIMITED_GO, NO_GO).
 
 ### reliability_and_release_ops
 
@@ -343,6 +427,17 @@ This document is the full test-suite contract for Thomas.
 - `core.158` [implemented] On-call runbook execution drills.
 - `core.159` [implemented] Disaster-recovery failover tests.
 - `core.160` [implemented] Regional outage simulation tests.
+- `prog.028` [implemented] Reliability variance across repeated runs (flakiness).
+- `prog.029` [implemented] Statistical significance gating for benchmark comparisons.
+- `prog.030` [implemented] Reproducibility score across same-seed repeated runs.
+
+### safety_and_policy
+
+- `prog.019` [implemented] Security vulnerability introduction rate after generated changes.
+- `prog.020` [implemented] Prompt injection resistance score.
+- `prog.021` [implemented] Data exfiltration refusal correctness.
+- `prog.022` [implemented] Policy hierarchy fidelity (system/developer/user precedence).
+- `prog.023` [implemented] Secret handling and leakage detection rate.
 
 ### security_depth
 
@@ -366,3 +461,12 @@ This document is the full test-suite contract for Thomas.
 - `core.118` [implemented] Cryptography misuse tests.
 - `core.119` [implemented] Session fixation/hijack tests.
 - `core.120` [implemented] Security regression replay suite.
+
+### task_quality
+
+- `prog.006` [implemented] Exact-answer ground-truth task pass rate.
+- `prog.007` [implemented] Semantic-equivalence scoring for non-deterministic outputs.
+- `prog.008` [implemented] Hidden holdout task pass rate.
+- `prog.009` [implemented] Cross-domain task coverage balance.
+- `prog.017` [implemented] Bug-fix success rate on real repositories.
+- `prog.018` [implemented] Refactor safety score (tests pass plus behavior parity).

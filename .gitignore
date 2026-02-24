@@ -7,6 +7,7 @@ __pycache__/
 .coverage.*
 
 # Runtime state (memory index, logs, secrets, etc)
+.thomas/
 runtime/
 thomas_state.json
 thomas_tool_registry.json
@@ -22,7 +23,13 @@ inbox/**
 .inbox_extract*/
 *.zip
 
+# Build output
+.open-next/
+apps/site/.open-next/
+
 # One-off local artifacts
+response.txt
+response2.txt
 thomas_conversation.json
 server_output.txt
 ux_event_probe.txt
@@ -46,6 +53,17 @@ logs/
 tasks/
 archives/
 _archive/
+
+# Local DB and debug artifacts
+thomas_search.db
+thomas_chat_debug.png
+thomas.db
+thomas.db-shm
+thomas.db-wal
+thomas.asset_studio.db
+thomas.asset_studio.db-shm
+thomas.asset_studio.db-wal
+*.sqlite3
 
 # Misc local noise
 *.log

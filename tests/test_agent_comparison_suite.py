@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from thomas.demo import agent_comparison_suite as suite
+from thomas.plugins import benchmark_program as benchmark_program_plugin
 
 
 def test_load_suite_config_infers_tracked_cli_commands_from_fixed_depth(tmp_path: Path) -> None:
@@ -68,6 +69,18 @@ def test_load_suite_config_reads_execution_policy(tmp_path: Path) -> None:
     assert policy["quality_is_king"] is True
     assert policy["cycle_limit_disabled"] is True
     assert policy["stop_condition"] == "Never stop on cycle count."
+
+
+def test_load_suite_config_reads_head_to_head_tie_policy(tmp_path: Path) -> None:
+    cfg = {
+        "id": "x",
+        "head_to_head_tie_policy": "exclude",
+        "agents": [{"id": "thomas", "root": "."}],
+    }
+    path = tmp_path / "suite.json"
+    path.write_text(json.dumps(cfg), encoding="utf-8")
+    loaded = suite.load_suite_config(path)
+    assert loaded["head_to_head_tie_policy"] == "exclude"
 
 
 def test_assertion_resolution_and_ops() -> None:
@@ -163,6 +176,21 @@ def test_collect_benchmark_summary_reads_raw_rows_for_cost_signals(tmp_path: Pat
     assert summary["raw_total_tokens_mean"] == 125.0
     assert summary["raw_tool_calls_mean"] == 1.5
     assert summary["raw_tokens_per_success"] == 250.0
+
+
+def test_compute_token_efficiency_returns_blended_score() -> None:
+    benchmark = {
+        "raw_tokens_per_success": 320.0,
+        "raw_total_tokens_mean": 180.0,
+        "raw_prompt_tokens_mean": 120.0,
+        "raw_completion_tokens_mean": 60.0,
+        "raw_success_rate_mean": 0.75,
+    }
+    probe = {"pass_rate": 1.0}
+    payload = suite._compute_token_efficiency(benchmark=benchmark, cost_probe=probe)
+    assert payload["overall_score"] is not None
+    assert payload["effective_tokens_per_success"] == 320.0
+    assert payload["telemetry_coverage"] == 1.0
 
 
 def test_run_probe_suite_collects_repeats_and_throughput(tmp_path: Path) -> None:
@@ -262,6 +290,128 @@ def test_build_scoreboard_ignores_single_agent_metrics_in_composite_scoring() ->
     assert top["comparable_metrics_total"] == 1
 
 
+def test_evaluate_benchmark_program_computes_lane_scores_and_verdicts() -> None:
+    contract = {
+        "benchmark_program": {"id": "bp", "lane_weights": {"quick": 0.4, "dynamic": 0.6}},
+        "benchmark_families": [
+            {
+                "id": "coverage_and_correctness",
+                "name": "Foundation Integrity",
+                "default_test_mode": "quick",
+                "description": "Foundation checks.",
+            },
+            {
+                "id": "task_quality",
+                "name": "Task Quality",
+                "default_test_mode": "dynamic",
+                "description": "Task checks.",
+            },
+        ],
+        "catalog_checks": [
+            {
+                "id": "core.quick",
+                "category": "coverage_and_correctness",
+                "implementation_mode": "contract_rule_v1",
+                "test_mode": "quick",
+                "benchmark_family": "coverage_and_correctness",
+            },
+            {
+                "id": "prog.001",
+                "category": "task_quality",
+                "implementation_mode": "evidence_required_v1",
+                "test_mode": "dynamic",
+                "benchmark_family": "task_quality",
+                "evidence_id": "prog.001",
+                "pass_score_gte": 90.0,
+            },
+        ],
+    }
+    result = {
+        "suite": {"competitor_catalog_count": 1},
+        "prediction_evo_scope": {},
+        "metric_board": [
+            {
+                "metric": "tests.files",
+                "category": "test_rigor",
+                "test_mode": "quick",
+                "values": {"a": 10, "b": 5},
+                "winners": ["a"],
+            },
+            {
+                "metric": "performance.load.pass_rate",
+                "category": "performance_load",
+                "test_mode": "dynamic",
+                "values": {"a": 1.0, "b": 0.5},
+                "winners": ["a"],
+            },
+        ],
+        "agents": [
+            {
+                "id": "a",
+                "metrics": {
+                    "tests.files": 10,
+                    "tests.loc": 20,
+                    "production.strict_checks.pass_rate": 1.0,
+                    "performance.load.pass_rate": 1.0,
+                    "resilience.probes.pass_rate": 1.0,
+                    "security.probes.pass_rate": 1.0,
+                    "cost.probes.pass_rate": 1.0,
+                    "benchmark.runs_count": 1,
+                    "integrity.python_syntax_errors": 0,
+                    "integrity.invalid_json_files": 0,
+                    "integrity.missing_required_paths": 0,
+                    "integrity.empty_production_asset_files": 0,
+                    "security.secret_like_hits": 0,
+                    "security.risky_construct_hits_count": 0,
+                    "benchmark.weighted_score_stddev": 0.05,
+                    "benchmark.success_rate_stddev": 0.05,
+                    "cost.token_efficiency_score": 70.0,
+                },
+                "benchmark_evidence": {"checks": {"prog.001": {"pass": True, "score": 100}}},
+            },
+            {
+                "id": "b",
+                "metrics": {
+                    "tests.files": 5,
+                    "tests.loc": 10,
+                    "production.strict_checks.pass_rate": 0.0,
+                    "performance.load.pass_rate": 0.5,
+                    "resilience.probes.pass_rate": 0.5,
+                    "security.probes.pass_rate": 0.5,
+                    "cost.probes.pass_rate": 0.5,
+                    "benchmark.runs_count": 1,
+                    "integrity.python_syntax_errors": 0,
+                    "integrity.invalid_json_files": 0,
+                    "integrity.missing_required_paths": 0,
+                    "integrity.empty_production_asset_files": 0,
+                    "security.secret_like_hits": 1,
+                    "security.risky_construct_hits_count": 1,
+                    "benchmark.weighted_score_stddev": 0.8,
+                    "benchmark.success_rate_stddev": 0.8,
+                },
+                "benchmark_evidence": {"checks": {"prog.001": {"pass": False, "score": 10}}},
+            },
+        ],
+    }
+    contract_eval = {
+        "scores": {
+            "agents": [
+                {"agent": "a", "token_efficiency_score": 70.0},
+                {"agent": "b", "token_efficiency_score": None},
+            ]
+        }
+    }
+    program = benchmark_program_plugin.evaluate_benchmark_program(
+        contract=contract, result=result, contract_evaluation=contract_eval
+    )
+    assert program["id"] == "bp"
+    assert len(program["family_catalog"]) == 2
+    assert len(program["ranking"]) == 2
+    assert program["ranking"][0]["agent"] == "a"
+    assert "governance_verdict" in program["ranking"][0]
+    assert "task_quality" in program["ranking"][0]["family_scores"]
+
+
 def test_build_competitor_pressure_ranks_top_threat() -> None:
     rows = [
         {
@@ -357,8 +507,43 @@ def test_collect_agent_metrics_uses_fallback_probes_when_unconfigured(tmp_path: 
     assert payload["metrics"]["maintainability.large_code_files_count_over_800"] == 0
     assert payload["metrics"]["security.risky_construct_hits"] == 0.0
     assert payload["metrics"]["security.risky_construct_hits_count"] == 0
+    assert "cost.token_efficiency_score" in payload["metrics"]
+    assert payload["metrics"]["cost.token_efficiency_telemetry_coverage"] >= 0.0
     assert isinstance(payload["version_info"], dict)
     assert isinstance(payload["model_snapshot"], dict)
+
+
+def test_collect_agent_metrics_counts_test_dataset_roots(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "main.py").write_text("print('ok')\n", encoding="utf-8")
+    dataset = tmp_path / "dataset"
+    dataset.mkdir(parents=True, exist_ok=True)
+    (dataset / "case_0001.json").write_text("{\n  \"id\": 1,\n  \"name\": \"case\"\n}\n", encoding="utf-8")
+    (dataset / "case_0002.json").write_text("{\n  \"id\": 2,\n  \"name\": \"case\"\n}\n", encoding="utf-8")
+
+    agent = {
+        "id": "agent_ds",
+        "root": ".",
+        "source_roots": ["src", "dataset"],
+        "test_roots": ["src"],
+        "test_dataset_roots": ["dataset"],
+        "browser_roots": [],
+        "plugin_roots": [],
+        "gateway_roots": [],
+        "cli_roots": [],
+        "mobile_roots": ["."],
+        "cli": {"fixed_top_level_commands": 1, "fixed_subcommand_depth": {"x": 1}},
+        "strict_checks": [],
+        "benchmark_scorecard_globs": [],
+        "benchmark_aliases": [],
+    }
+    payload = suite._collect_agent_metrics(agent, tracked_commands=["x"], suite_root=tmp_path)
+    metrics = dict(payload.get("metrics") or {})
+    assert int(metrics.get("tests.files") or 0) == 2
+    assert int(metrics.get("tests.dataset_files") or 0) == 2
+    assert int(metrics.get("tests.dataset_loc") or 0) > 0
+    assert float(metrics.get("tests.to_code_loc_ratio") or 0.0) > 0.0
 
 
 def test_collect_model_snapshot_command_records_daily_model() -> None:
@@ -535,9 +720,18 @@ def test_build_suite_result_end_to_end_with_small_local_agents(tmp_path: Path) -
     assert int(dict(contract["runtime_metrics"]).get("total") or 0) > 0
     assert "scores" in contract
     assert "overall_suite_scoreboard" in result
+    assert "benchmark_program" in result
+    benchmark = dict(result["benchmark_program"])
+    assert "ranking" in benchmark
     overall_rows = list(dict(result["overall_suite_scoreboard"]).get("ranking") or [])
     assert len(overall_rows) == 2
     assert isinstance(overall_rows[0].get("overall_suite_score"), float)
+    assert "head_to_head_decisive_score" in overall_rows[0]
+    assert isinstance(overall_rows[0].get("quick_suite_score"), float)
+    assert isinstance(overall_rows[0].get("dynamic_suite_score"), float)
+    assert isinstance(overall_rows[0].get("human_suite_score"), float)
+    assert "overall_benchmark_capability_score" in overall_rows[0]
+    assert "governance_verdict" in overall_rows[0]
     policy = dict(result["suite"]["execution_policy"])
     assert policy["quality_is_king"] is True
     assert policy["cycle_limit_disabled"] is True

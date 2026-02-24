@@ -3,7 +3,7 @@
 
 # Default model profile to use.
 # Cloud model (anthropic/openai) for reasoning; local models handle delegated subtasks.
-default_model = "gemini-3-1-pro"
+default_model = "codex"
 # Maximum agent loop iterations per query
 max_agent_iterations = 10
 
@@ -32,12 +32,12 @@ require_monolith_guard_for_coding = true
 # Model Profiles
 # -----------------------------------------------------------------------------
 
-[models.gemini-3-1-pro]
+[models.gemini]
 provider = "openai_compat"
 base_url = "https://generativelanguage.googleapis.com/v1beta/openai/"
-model = "gemini-1.5-pro-latest"
+model = "gemini-2.5-pro"
 max_tokens = 8192
-context_window = 128000
+context_window = 1048576
 temperature = 0.5
 
 [models.local]
@@ -61,8 +61,9 @@ timeout_s = 120.0
 # to confirm what's available.
 
 [models.codex]
-provider = "codex"
-model = "gpt-5.2-codex"             # or gpt-5.1-codex-max, gpt-5.2, gpt-5.1-codex-mini
+provider = "codex"                   # base_url not used -- routes through codex app-server subprocess
+model = "gpt-5.3-codex"             # or gpt-5.2-codex, gpt-5.1-codex-max, gpt-5.2, gpt-5.1-codex-mini
+reasoning_effort = "medium"          # low | medium | high | xhigh (xhigh is slowest but most capable)
 max_tokens = 16384
 context_window = 200000
 temperature = 0.1
@@ -197,10 +198,10 @@ temperature = 0.1
 # Env override: THOMAS_MODELS_GLM_API_KEY=your_key_here
 #
 # Available models (change model = below to switch):
-#   glm-5          Ã¢â‚¬â€ flagship, 744B MoE (40B active), released Feb 2026, best for coding/agents
-#   glm-4.5-air    Ã¢â‚¬â€ fast, low-cost, strong tool-calling
-#   glm-4.5        Ã¢â‚¬â€ previous full-power model
-#   glm-4.5-flash  Ã¢â‚¬â€ ultra-fast, cheapest
+#   glm-5          -- flagship, 744B MoE (40B active), released Feb 2026, best for coding/agents
+#   glm-4.5-air    -- fast, low-cost, strong tool-calling
+#   glm-4.5        -- previous full-power model
+#   glm-4.5-flash  -- ultra-fast, cheapest
 #
 # For the dedicated GLM Coding Plan endpoint, change base_url to:
 #   https://api.z.ai/api/coding/paas/v4

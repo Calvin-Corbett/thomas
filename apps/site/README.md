@@ -77,6 +77,21 @@ Without `DATABASE_URL`, the site still works; it just skips event persistence.
 
 ## Deployment
 
+### Safe release flow (recommended)
+
+- Personal/staging work: `dev` branch
+- Public production website: `main` or `master` branch
+- CI/CD workflow: `.github/workflows/site-release.yml`
+  - PR to production branch (`main`/`master`, `apps/site/**`): checks only
+  - Push to `dev`: deploy preview (`thomas-site-preview`)
+  - Push to `main`/`master`: deploy production (`thomas-site`) through GitHub `production` environment
+- Deploy lock switch: repository variable `THOMAS_SITE_DEPLOY_ENABLED`
+  - `false`/unset: no deploys (checks only)
+  - `true`: deploy jobs enabled
+
+Full setup guide:
+- `docs/WEBSITE_RELEASE_FLOW.md`
+
 ### Vercel
 
 1. Import `apps/site` as the project root.
@@ -87,6 +102,16 @@ Without `DATABASE_URL`, the site still works; it just skips event persistence.
 
 Use Next.js support and set build root to `apps/site`.
 Set env vars in Pages project settings.
+
+### Cloudflare Workers (recommended for this Next.js app)
+
+```bash
+cd apps/site
+npm run deploy
+```
+
+This uses the official Cloudflare Next.js adapter (`@opennextjs/cloudflare`).
+Set `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` before running deploy.
 
 ## Runbook
 

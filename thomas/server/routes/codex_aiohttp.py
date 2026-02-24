@@ -36,6 +36,8 @@ def register_codex_routes(
                 {
                     "logged_in": acct.logged_in,
                     "email": acct.email,
+                    "display_name": acct.display_name,
+                    "avatar_url": acct.avatar_url,
                     "plan_type": acct.plan_type,
                     "auth_type": acct.auth_type,
                 }
@@ -54,6 +56,8 @@ def register_codex_routes(
                         "ok": True,
                         "already": True,
                         "email": acct.email,
+                        "display_name": acct.display_name,
+                        "avatar_url": acct.avatar_url,
                         "plan_type": acct.plan_type,
                     }
                 )
@@ -63,6 +67,8 @@ def register_codex_routes(
                     "ok": True,
                     "already": False,
                     "email": acct.email,
+                    "display_name": acct.display_name,
+                    "avatar_url": acct.avatar_url,
                     "plan_type": acct.plan_type,
                 }
             )

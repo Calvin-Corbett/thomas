@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import os
@@ -10,7 +11,7 @@ import secrets
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Awaitable, Callable, Dict, List, Optional
 
 from aiohttp import web
 
@@ -31,6 +32,8 @@ class BatchModeDeps:
     extract_result_text: Callable[[Dict[str, Any]], Any]
     evaluate_rules: Callable[..., Dict[str, Any]]
     load_config: Callable[[Path], Any]
+    apply_usage_budget: Optional[Callable[[int], Awaitable[Optional[Dict[str, Any]]]]] = None
+    on_complete: Optional[Callable[[Dict[str, Any]], Any]] = None
 
 
 async def handle_batch_mode_chat(
@@ -227,6 +230,13 @@ async def handle_batch_mode_chat(
             "token_economy": token_economy_meta,
             "rules_of_road": rules_report,
         }
+        if callable(deps.apply_usage_budget):
+            try:
+                budget_report = await deps.apply_usage_budget(int(usage_obj.get("total_tokens", 0) or 0))
+                if isinstance(budget_report, dict):
+                    token_report["budget"] = budget_report
+            except Exception as budget_err:
+                log.debug("Batch budget report hook failed: %s", budget_err)
 
         run_done["ok"] = True
         run_done["error"] = None
@@ -257,6 +267,13 @@ async def handle_batch_mode_chat(
         except Exception as send_err:
             log.debug("Failed to stream batch-mode error payload: %s", send_err)
     finally:
+        if callable(deps.on_complete):
+            try:
+                maybe = deps.on_complete(dict(run_done))
+                if inspect.isawaitable(maybe):
+                    await maybe
+            except Exception as e:
+                log.debug("Batch completion hook failed: %s", e)
         if batch_client is not None:
             try:
                 await batch_client.close()

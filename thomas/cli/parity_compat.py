@@ -20,341 +20,41 @@ from typing import Any, Optional
 import click
 
 from thomas.cli.pack_bridge import register_pack_proxy_commands
+from thomas.cli.parity_support import (
+    annotate_skill_rows as _annotate_skill_rows,
+    compat_group as _compat_group,
+    emit_json_or_text as _emit_json_or_text,
+    find_mcp_server as _find_mcp_server,
+    forward_main_cli as _forward_main_cli,
+    forward_passthrough as _forward_passthrough,
+    gateway_log_file as _gateway_log_file,
+    gateway_state_file as _gateway_state_file,
+    load_devices as _load_devices,
+    load_gateway_state as _load_gateway_state,
+    load_mcp_registry as _load_mcp_registry,
+    load_messages as _load_messages,
+    load_skills_state as _load_skills_state,
+    load_token_store as _load_token_store,
+    mark_skill_usage as _mark_skill_usage,
+    mask_secret as _mask_secret,
+    mcp_registry_path as _mcp_registry_path,
+    messages_store_path as _messages_store_path,
+    normalize_skill_name as _normalize_skill_name,
+    save_mcp_registry as _save_mcp_registry,
+    save_messages as _save_messages,
+    save_skills_state as _save_skills_state,
+    save_token_store as _save_token_store,
+    send_channel_message as _send_channel_message,
+    skill_conflicts as _skill_conflicts,
+    skill_row_key as _skill_row_key,
+    skills_find_rows as _skills_find_rows,
+    skills_state_path as _skills_state_path,
+    skills_sync_state as _skills_sync_state,
+    tail_file as _tail_file,
+    token_store_path as _token_store_path,
+    utc_iso as _utc_iso,
+)
 from thomas.core.config import AppConfig, load_config
-
-
-def _utc_iso() -> str:
-    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
-
-
-def _state_dir(config: AppConfig) -> Path:
-    path = config.memory.root_path / ".thomas" / "cli"
-    path.mkdir(parents=True, exist_ok=True)
-    return path
-
-
-def _read_json(path: Path, default: Any) -> Any:
-    if not path.exists():
-        return default
-    try:
-        return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
-        return default
-
-
-def _write_json(path: Path, payload: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
-    tmp.replace(path)
-
-
-def _tail_file(path: Path, lines: int) -> str:
-    if not path.exists():
-        return ""
-    data = path.read_text(encoding="utf-8", errors="replace").splitlines()
-    return "\n".join(data[-max(1, int(lines)) :])
-
-
-def _gateway_state_file(config: AppConfig) -> Path:
-    return _state_dir(config) / "gateway_state.json"
-
-
-def _gateway_log_file(config: AppConfig) -> Path:
-    return _state_dir(config) / "gateway.log"
-
-
-def _load_gateway_state(config: AppConfig) -> dict[str, Any]:
-    payload = _read_json(_gateway_state_file(config), {})
-    return payload if isinstance(payload, dict) else {}
-
-
-def _load_devices(config: AppConfig) -> list[dict[str, Any]]:
-    state = _load_gateway_state(config)
-    rows = state.get("devices")
-    if isinstance(rows, list):
-        out: list[dict[str, Any]] = []
-        for row in rows:
-            if isinstance(row, dict):
-                out.append(dict(row))
-        return out
-
-    rows = state.get("paired_devices")
-    if isinstance(rows, list):
-        out = []
-        for row in rows:
-            if isinstance(row, dict):
-                out.append(dict(row))
-        return out
-
-    return []
-
-
-def _emit_json_or_text(payload: dict[str, Any], as_json: bool) -> None:
-    if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
-        return
-    for key, value in payload.items():
-        click.echo(f"{key}: {value}")
-
-
-def _forward_main_cli(ctx: click.Context, args: list[str]) -> int:
-    cmd = [sys.executable, "-m", "thomas.cli.main"]
-    config_path = str((ctx.obj or {}).get("config_path") or "").strip()
-    if config_path:
-        cmd.extend(["-c", config_path])
-    cmd.extend([str(a) for a in args])
-    done = subprocess.run(cmd, check=False)
-    return int(done.returncode or 0)
-
-
-def _messages_store_path(config: AppConfig) -> Path:
-    return _state_dir(config) / "messages.json"
-
-
-def _mcp_registry_path(config: AppConfig) -> Path:
-    return _state_dir(config) / "mcp_servers.json"
-
-
-def _load_mcp_registry(config: AppConfig) -> list[dict[str, Any]]:
-    payload = _read_json(_mcp_registry_path(config), {"servers": []})
-    if not isinstance(payload, dict):
-        return []
-    rows = payload.get("servers")
-    if not isinstance(rows, list):
-        return []
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        if isinstance(row, dict):
-            out.append(dict(row))
-    return out
-
-
-def _save_mcp_registry(config: AppConfig, rows: list[dict[str, Any]]) -> None:
-    _write_json(_mcp_registry_path(config), {"servers": rows, "updated_at": _utc_iso()})
-
-
-def _find_mcp_server(rows: list[dict[str, Any]], name: str) -> dict[str, Any] | None:
-    target = str(name or "").strip().lower()
-    if not target:
-        return None
-    for row in rows:
-        if str((row or {}).get("name") or "").strip().lower() == target:
-            return row
-    return None
-
-
-def _token_store_path(config: AppConfig) -> Path:
-    return _state_dir(config) / "tokens.json"
-
-
-def _load_token_store(config: AppConfig) -> dict[str, Any]:
-    payload = _read_json(_token_store_path(config), {})
-    return payload if isinstance(payload, dict) else {}
-
-
-def _save_token_store(config: AppConfig, payload: dict[str, Any]) -> None:
-    _write_json(_token_store_path(config), payload)
-
-
-def _mask_secret(value: str) -> str:
-    token = str(value or "")
-    if not token:
-        return ""
-    if len(token) <= 8:
-        return "*" * len(token)
-    return f"{token[:4]}...{token[-4:]}"
-
-
-def _load_messages(config: AppConfig) -> list[dict[str, Any]]:
-    payload = _read_json(_messages_store_path(config), {"messages": []})
-    if not isinstance(payload, dict):
-        return []
-    rows = payload.get("messages")
-    if not isinstance(rows, list):
-        return []
-    out: list[dict[str, Any]] = []
-    for row in rows:
-        if isinstance(row, dict):
-            out.append(dict(row))
-    return out
-
-
-def _save_messages(config: AppConfig, rows: list[dict[str, Any]]) -> None:
-    _write_json(_messages_store_path(config), {"messages": rows, "updated_at": _utc_iso()})
-
-
-def _provider_env_map(name: str) -> dict[str, str]:
-    if name == "telegram":
-        return {"token": "THOMAS_TELEGRAM_BOT_TOKEN"}
-    if name == "discord":
-        return {"token": "THOMAS_DISCORD_BOT_TOKEN", "webhook": "THOMAS_DISCORD_WEBHOOK_URL"}
-    if name == "slack":
-        return {"token": "THOMAS_SLACK_BOT_TOKEN", "webhook": "THOMAS_SLACK_WEBHOOK_URL"}
-    return {}
-
-
-def _resolve_provider_secrets(config: AppConfig, name: str) -> dict[str, str]:
-    from thomas.cli.commands.channels import _load_channels_store  # local import to avoid circular startup cost
-
-    store = _load_channels_store(config)
-    providers = store.get("providers", {})
-    row = providers.get(name, {}) if isinstance(providers, dict) else {}
-    if not isinstance(row, dict):
-        row = {}
-    env_map = _provider_env_map(name)
-
-    def _resolve(field: str) -> str:
-        env_key = env_map.get(field, "")
-        env_val = str(os.environ.get(env_key) or "").strip() if env_key else ""
-        if env_val:
-            return env_val
-        return str(row.get(field) or "").strip()
-
-    return {"token": _resolve("token"), "webhook": _resolve("webhook")}
-
-
-def _http_post_json(url: str, payload: dict[str, Any], *, headers: dict[str, str] | None = None, timeout_s: float = 8.0) -> dict[str, Any]:
-    body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    req_headers = {"Content-Type": "application/json"}
-    if headers:
-        req_headers.update(headers)
-    req = urllib.request.Request(url=url, data=body, method="POST", headers=req_headers)
-    try:
-        with urllib.request.urlopen(req, timeout=float(timeout_s)) as resp:
-            status = int(getattr(resp, "status", 0) or 0)
-            raw = resp.read().decode("utf-8", errors="replace")
-        parsed: Any
-        try:
-            parsed = json.loads(raw) if raw else {}
-        except Exception:
-            parsed = {"raw": raw[:2000]}
-        return {"ok": 200 <= status < 300, "status": status, "payload": parsed}
-    except urllib.error.HTTPError as e:
-        body_text = ""
-        try:
-            body_text = e.read().decode("utf-8", errors="replace")
-        except Exception:
-            body_text = ""
-        parsed: Any
-        try:
-            parsed = json.loads(body_text) if body_text else {}
-        except Exception:
-            parsed = {"raw": body_text[:2000]}
-        return {"ok": False, "status": int(getattr(e, "code", 0) or 0), "payload": parsed, "error": str(e)}
-    except Exception as e:
-        return {"ok": False, "status": 0, "payload": {}, "error": f"{type(e).__name__}: {e}"}
-
-
-def _send_channel_message(
-    config: AppConfig,
-    *,
-    channel: str,
-    target: str,
-    text: str,
-    timeout_s: float = 8.0,
-) -> dict[str, Any]:
-    provider = str(channel or "").strip().lower()
-    if provider == "local":
-        return {"ok": True, "status": 0, "provider": provider, "delivery": "local_noop", "message_id": ""}
-
-    secrets_row = _resolve_provider_secrets(config, provider)
-    token = str(secrets_row.get("token") or "").strip()
-    webhook = str(secrets_row.get("webhook") or "").strip()
-    target_text = str(target or "").strip()
-    body_text = str(text or "")
-
-    if provider == "telegram":
-        if not token:
-            return {"ok": False, "status": 0, "provider": provider, "error": "telegram token missing"}
-        if not target_text:
-            return {"ok": False, "status": 0, "provider": provider, "error": "telegram target chat id required"}
-        res = _http_post_json(
-            f"https://api.telegram.org/bot{token}/sendMessage",
-            {"chat_id": target_text, "text": body_text},
-            timeout_s=timeout_s,
-        )
-        payload = res.get("payload") if isinstance(res.get("payload"), dict) else {}
-        result = payload.get("result") if isinstance(payload.get("result"), dict) else {}
-        provider_ok = bool(payload.get("ok") is True and result)
-        return {
-            "ok": bool(res.get("ok") and provider_ok),
-            "status": int(res.get("status") or 0),
-            "provider": provider,
-            "message_id": str(result.get("message_id") or ""),
-            "payload": payload,
-            "error": str(res.get("error") or ""),
-        }
-
-    if provider == "discord":
-        if webhook:
-            url = webhook
-            if "wait=true" not in url:
-                joiner = "&" if "?" in url else "?"
-                url = f"{url}{joiner}wait=true"
-            res = _http_post_json(url, {"content": body_text}, timeout_s=timeout_s)
-            payload = res.get("payload") if isinstance(res.get("payload"), dict) else {}
-            provider_ok = bool(res.get("ok") and str(payload.get("id") or "").strip())
-            return {
-                "ok": provider_ok,
-                "status": int(res.get("status") or 0),
-                "provider": provider,
-                "message_id": str(payload.get("id") or ""),
-                "payload": payload,
-                "error": str(res.get("error") or ""),
-            }
-        if token and target_text:
-            res = _http_post_json(
-                f"https://discord.com/api/v10/channels/{target_text}/messages",
-                {"content": body_text},
-                headers={"Authorization": f"Bot {token}"},
-                timeout_s=timeout_s,
-            )
-            payload = res.get("payload") if isinstance(res.get("payload"), dict) else {}
-            provider_ok = bool(res.get("ok") and str(payload.get("id") or "").strip())
-            return {
-                "ok": provider_ok,
-                "status": int(res.get("status") or 0),
-                "provider": provider,
-                "message_id": str(payload.get("id") or ""),
-                "payload": payload,
-                "error": str(res.get("error") or ""),
-            }
-        return {"ok": False, "status": 0, "provider": provider, "error": "discord webhook or token+target required"}
-
-    if provider == "slack":
-        if webhook:
-            res = _http_post_json(webhook, {"text": body_text}, timeout_s=timeout_s)
-            payload = res.get("payload") if isinstance(res.get("payload"), dict) else {}
-            provider_ok = bool(res.get("ok"))
-            return {
-                "ok": provider_ok,
-                "status": int(res.get("status") or 0),
-                "provider": provider,
-                "message_id": str(payload.get("ts") or ""),
-                "payload": payload,
-                "error": str(res.get("error") or ""),
-            }
-        if token and target_text:
-            res = _http_post_json(
-                "https://slack.com/api/chat.postMessage",
-                {"channel": target_text, "text": body_text},
-                headers={"Authorization": f"Bearer {token}"},
-                timeout_s=timeout_s,
-            )
-            payload = res.get("payload") if isinstance(res.get("payload"), dict) else {}
-            provider_ok = bool(payload.get("ok") is True and str(payload.get("ts") or "").strip())
-            return {
-                "ok": bool(res.get("ok") and provider_ok),
-                "status": int(res.get("status") or 0),
-                "provider": provider,
-                "message_id": str(payload.get("ts") or ""),
-                "payload": payload,
-                "error": str(res.get("error") or ""),
-            }
-        return {"ok": False, "status": 0, "provider": provider, "error": "slack webhook or token+target required"}
-
-    return {"ok": False, "status": 0, "provider": provider, "error": f"unsupported channel: {provider}"}
 
 
 @click.group(name="help", invoke_without_command=True)
@@ -1354,62 +1054,6 @@ register_pack_proxy_commands(
 )
 
 
-def _compat_emit(command: str, action: str, note: str, target: str, as_json: bool, ctx: click.Context) -> None:
-    payload: dict[str, Any] = {
-        "command": command,
-        "action": action,
-        "note": note,
-        "target": target,
-        "timestamp_utc": _utc_iso(),
-    }
-    if command == "directory" and action == "list":
-        config: AppConfig = ctx.obj["config"]
-        payload["count"] = len(_load_devices(config))
-    if command == "memory" and action == "status":
-        config = ctx.obj["config"]
-        root = config.memory.root_path / ".thomas"
-        payload["root"] = str(root)
-        payload["chat_files"] = len(list((root / "chats").glob("*.json"))) if (root / "chats").exists() else 0
-    if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
-        return
-    click.echo(f"{command} {action}: {note}")
-    if target:
-        click.echo(f"- target: {target}")
-    if "count" in payload:
-        click.echo(f"- count: {payload['count']}")
-
-
-def _compat_action(command: str, action: str, note: str) -> click.Command:
-    @click.command(name=action)
-    @click.argument("target", required=False, default="")
-    @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-    @click.pass_context
-    def _cmd(ctx: click.Context, target: str, as_json: bool) -> None:
-        _compat_emit(command, action, note, str(target or "").strip(), as_json, ctx)
-
-    return _cmd
-
-
-def _compat_group(name: str, actions: list[tuple[str, str]]) -> click.Group:
-    @click.group(name=name)
-    @click.pass_context
-    def _group(ctx: click.Context) -> None:
-        _ = ctx
-
-    for action, note in actions:
-        _group.add_command(_compat_action(name, action, note))
-    return _group
-
-
-def _forward_passthrough(ctx: click.Context, base_args: list[str], extra_args: tuple[Any, ...]) -> None:
-    args = [str(x) for x in base_args]
-    args.extend(str(x) for x in extra_args)
-    rc = _forward_main_cli(ctx, args)
-    if rc != 0:
-        raise SystemExit(rc)
-
-
 @click.group(name="acp")
 @click.pass_context
 def acp(ctx: click.Context) -> None:
@@ -1612,6 +1256,7 @@ memory = _compat_group(
         ("status", "Memory store is available."),
         ("list", "List memory snapshots."),
         ("search", "Search memory snapshots."),
+        ("index", "Index maintenance workflow is available."),
         ("compact", "Compaction hook is wired."),
     ],
 )
@@ -1622,6 +1267,9 @@ system = _compat_group(
         ("health", "Health endpoints are reachable through gateway commands."),
         ("doctor", "Use `doctor` for full diagnostics."),
         ("env", "Environment variable presence map."),
+        ("event", "Event stream is exposed by observability pipelines."),
+        ("heartbeat", "Heartbeat checks are available through health flows."),
+        ("presence", "Presence telemetry is available through status channels."),
     ],
 )
 approvals = _compat_group(
@@ -1629,6 +1277,9 @@ approvals = _compat_group(
     [
         ("list", "Approval queue is exposed through nodes pending-approvals."),
         ("status", "Approval workflow is wired."),
+        ("get", "Approval detail lookup is available through mission APIs."),
+        ("set", "Approval policy state can be set through guardrail controls."),
+        ("allowlist", "Allowlist policy is enforced by guardrail layers."),
         ("approve", "Use node action commands for execution-level approvals."),
         ("reject", "Use node action commands for execution-level rejections."),
     ],
@@ -1646,28 +1297,349 @@ pairing = _compat_group(
     [
         ("start", "Use devices pair --name <name> for full pairing."),
         ("status", "Pairing support is active through devices commands."),
+        ("list", "List paired identities through devices directory."),
+        ("approve", "Approve pairing intents through device/approval flows."),
         ("reset", "Revoke old tokens and re-run devices pair."),
     ],
 )
-skills = _compat_group(
-    "skills",
-    [
-        ("list", "Skill docs are available through local AGENTS/skill files."),
-        ("show", "Skill resolution is environment-managed."),
-        ("sync", "Skill sync is a no-op in compatibility mode."),
-    ],
-)
+def _skills_summary_payload(config: AppConfig, state: dict[str, Any]) -> dict[str, Any]:
+    rows = [dict(row) for row in (state.get("skills") or []) if isinstance(row, dict)]
+    conflicts = _skill_conflicts(rows)
+    pinned = sorted({str(x).strip().lower() for x in (state.get("pinned") or []) if str(x).strip()})
+    return {
+        "count": len(rows),
+        "unique_names": len({str(row.get("name") or "").strip().lower() for row in rows if str(row.get("name") or "").strip()}),
+        "pinned_count": len(pinned),
+        "conflict_count": len(conflicts),
+        "state_file": str(_skills_state_path(config)),
+        "sync": dict(state.get("sync") or {}),
+    }
+
+
+@click.group(name="skills", invoke_without_command=True)
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills(ctx: click.Context, as_json: bool) -> None:
+    """Manage local Codex/Thomas skills registry and diagnostics."""
+    if ctx.invoked_subcommand is not None:
+        return
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config)
+    payload = _skills_summary_payload(config, state)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Skills: {payload['count']} (pinned={payload['pinned_count']}, conflicts={payload['conflict_count']})")
+    click.echo(f"State file: {payload['state_file']}")
+
+
+@skills.command("list")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_list(ctx: click.Context, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config)
+    rows = [dict(row) for row in (state.get("skills") or []) if isinstance(row, dict)]
+    payload = {"count": len(rows), "skills": rows}
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Skills: {len(rows)}")
+    for row in rows:
+        click.echo(
+            f"- {row.get('name')} | pinned={bool(row.get('pinned'))} | "
+            f"runs={int(row.get('run_count') or 0)} | path={row.get('path')}"
+        )
+
+
+def _skills_show_payload(config: AppConfig, name: str) -> dict[str, Any]:
+    state = _skills_sync_state(config)
+    rows = _skills_find_rows(state, name)
+    if not rows:
+        raise click.ClickException(f"skill not found: {name}")
+    _mark_skill_usage(state, rows)
+    _save_skills_state(config, state)
+    rows = _skills_find_rows(state, name)
+    return {
+        "name": str(name or "").strip(),
+        "match_count": len(rows),
+        "entries": rows,
+        "conflict": len(rows) > 1,
+    }
+
+
+@skills.command("show")
+@click.argument("name")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_show(ctx: click.Context, name: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    payload = _skills_show_payload(config, name)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Skill: {payload['name']} (matches={payload['match_count']})")
+    for row in payload["entries"]:
+        click.echo(
+            f"- path={row.get('path')} | pinned={bool(row.get('pinned'))} | "
+            f"runs={int(row.get('run_count') or 0)}"
+        )
+        desc = str(row.get("description") or "").strip()
+        if desc:
+            click.echo(f"  {desc}")
+
+
+@skills.command("info")
+@click.argument("name")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_info(ctx: click.Context, name: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    payload = _skills_show_payload(config, name)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Skill info: {payload['name']}")
+    for row in payload["entries"]:
+        click.echo(f"- file={row.get('skill_file')} | source={row.get('source_root')}")
+
+
+@skills.command("sync")
+@click.option("--root", "include_root", default="", help="Optional extra root to scan for skills.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_sync(ctx: click.Context, include_root: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config, include_root=include_root)
+    payload = _skills_summary_payload(config, state)
+    payload["roots"] = list((state.get("sync") or {}).get("roots") or [])
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(
+        f"Skill sync complete: {payload['count']} discovered "
+        f"across {len(payload.get('roots') or [])} roots."
+    )
+
+
+@skills.command("pin")
+@click.argument("name")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_pin(ctx: click.Context, name: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config)
+    rows = _skills_find_rows(state, name)
+    if not rows:
+        raise click.ClickException(f"skill not found: {name}")
+    target = _normalize_skill_name(name)
+    pinned = sorted({str(x).strip().lower() for x in (state.get("pinned") or []) if str(x).strip()} | {target})
+    state["pinned"] = pinned
+    _annotate_skill_rows(state)
+    _save_skills_state(config, state)
+    payload = {"ok": True, "name": target, "pinned_count": len(pinned)}
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Pinned skill: {target}")
+
+
+@skills.command("unpin")
+@click.argument("name")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_unpin(ctx: click.Context, name: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config)
+    target = _normalize_skill_name(name)
+    pinned = sorted({str(x).strip().lower() for x in (state.get("pinned") or []) if str(x).strip() and str(x).strip().lower() != target})
+    removed = len(pinned) != len({str(x).strip().lower() for x in (state.get("pinned") or []) if str(x).strip()})
+    state["pinned"] = pinned
+    _annotate_skill_rows(state)
+    _save_skills_state(config, state)
+    payload = {"ok": removed, "name": target, "pinned_count": len(pinned)}
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    if removed:
+        click.echo(f"Unpinned skill: {target}")
+    else:
+        click.echo(f"Skill not pinned: {target}")
+        raise SystemExit(1)
+
+
+@skills.command("conflicts")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_conflicts(ctx: click.Context, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config)
+    rows = [dict(row) for row in (state.get("skills") or []) if isinstance(row, dict)]
+    conflicts = _skill_conflicts(rows)
+    payload = {"count": len(conflicts), "conflicts": conflicts}
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Skill conflicts: {len(conflicts)}")
+    for row in conflicts:
+        click.echo(f"- {row.get('name')} ({row.get('count')})")
+        for path in row.get("paths") or []:
+            click.echo(f"  {path}")
+
+
+@skills.command("analytics")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_analytics(ctx: click.Context, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config)
+    rows = [dict(row) for row in (state.get("skills") or []) if isinstance(row, dict)]
+    conflicts = _skill_conflicts(rows)
+    total_runs = sum(int(row.get("run_count") or 0) for row in rows)
+    top_used = sorted(
+        [
+            {
+                "name": str(row.get("name") or ""),
+                "path": str(row.get("path") or ""),
+                "run_count": int(row.get("run_count") or 0),
+                "last_used_at": str(row.get("last_used_at") or ""),
+            }
+            for row in rows
+        ],
+        key=lambda item: (-int(item.get("run_count") or 0), str(item.get("name") or "").lower()),
+    )[:10]
+    payload = {
+        "ok": True,
+        "total_skills": len(rows),
+        "pinned_count": len({str(x).strip().lower() for x in (state.get("pinned") or []) if str(x).strip()}),
+        "conflict_count": len(conflicts),
+        "total_runs": int(total_runs),
+        "top_used": top_used,
+        "roots": list((state.get("sync") or {}).get("roots") or []),
+        "last_sync_at": str((state.get("sync") or {}).get("last_sync_at") or ""),
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(
+        f"Skills analytics: total={payload['total_skills']} "
+        f"pinned={payload['pinned_count']} conflicts={payload['conflict_count']} runs={payload['total_runs']}"
+    )
+
+
+@skills.command("check")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_check(ctx: click.Context, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    state = _skills_sync_state(config)
+    rows = [dict(row) for row in (state.get("skills") or []) if isinstance(row, dict)]
+    conflicts = _skill_conflicts(rows)
+    issues: list[dict[str, Any]] = []
+    for row in rows:
+        file_path = Path(str(row.get("skill_file") or ""))
+        if not file_path.exists():
+            issues.append(
+                {
+                    "code": "missing_skill_file",
+                    "name": str(row.get("name") or ""),
+                    "path": str(file_path),
+                }
+            )
+    if conflicts:
+        for conflict in conflicts:
+            issues.append(
+                {
+                    "code": "name_conflict",
+                    "name": str(conflict.get("name") or ""),
+                    "count": int(conflict.get("count") or 0),
+                }
+            )
+    payload = {
+        "ok": len(issues) == 0,
+        "issues": issues,
+        "summary": _skills_summary_payload(config, state),
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        if payload["ok"]:
+            click.echo("Skills check passed.")
+        else:
+            click.echo(f"Skills check failed: {len(issues)} issue(s).")
+            for issue in issues:
+                click.echo(f"- {issue.get('code')}: {issue.get('name')}")
+    if not payload["ok"]:
+        raise SystemExit(1)
+
+
+@skills.command("resolve")
+@click.option("--prompt", required=True, help="Prompt text to resolve runtime skills for.")
+@click.option("--route-path", default="coding_task", show_default=True, help="Route path hint (for relevance scoring).")
+@click.option("--cwd", default="", help="Optional working directory used for skill discovery roots.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_resolve(
+    ctx: click.Context,
+    prompt: str,
+    route_path: str,
+    cwd: str,
+    as_json: bool,
+) -> None:
+    """Resolve runtime skill selection for a prompt (model-agnostic)."""
+    from thomas.agent.skills_runtime import (
+        format_runtime_skills_context,
+        resolve_runtime_skills,
+    )
+
+    config: AppConfig = ctx.obj["config"]
+    cwd_text = str(cwd or "").strip()
+    if cwd_text:
+        try:
+            run_cwd = Path(cwd_text).expanduser().resolve()
+        except Exception:
+            run_cwd = Path.cwd()
+    else:
+        run_cwd = Path.cwd()
+
+    selection = resolve_runtime_skills(
+        config,
+        prompt_text=str(prompt or ""),
+        relevance_text=str(prompt or ""),
+        route_path=str(route_path or ""),
+        cwd=run_cwd,
+    )
+    payload = selection.to_event_payload()
+    payload["context"] = format_runtime_skills_context(selection)
+
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+
+    click.echo(
+        f"Runtime skills resolved: selected={int(payload.get('selected_count') or 0)} "
+        f"discovered={int(payload.get('discovered_count') or 0)}"
+    )
+    for row in payload.get("selected") or []:
+        click.echo(
+            f"- {row.get('name')} | reason={row.get('reason')} | path={row.get('path')}"
+        )
+
+
 security = _compat_group(
     "security",
     [
         ("status", "Security posture is enforced by guardrail scripts."),
         ("scan", "Use dedicated security skills/scripts for deep analysis."),
+        ("audit", "Run aggregated security governance/dependency/cadence audit."),
     ],
 )
 update = _compat_group(
     "update",
     [
         ("check", "Use doppelganger + release hygiene checks for full verification."),
+        ("status", "Release channel readiness can be inspected through quality gates."),
+        ("wizard", "Upgrade wizard flow is tracked through release playbooks."),
         ("apply", "Use doppelganger rollout commands for real apply operations."),
     ],
 )

@@ -37,6 +37,16 @@ Durable research/reference library for Thomas.
   - File: `entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md`
 
 ## research-notes
+- `1771877133-research-this-topic-and-compare-the-best-options-with-tradeoffs-and-a-recommenda`: Research this topic and compare the best options with tradeoffs and a recommendation.
+  - Summary: Please share the specific topic you want researched. To give you a solid comparison with tradeoffs and a recommendation, I need: 1. The exact topic/problem space 2. Your constraints (budget, timeline, team size, tech stack, risk tolerance) 3. What “best” means
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771877133-research-this-topic-and-compare-the-best-options-with-tradeoffs-and-a-recommenda.md`
+- `1771786305-list-assumptions-and-what-to-validate-first.-context---user-context-whats-yout-m`: List assumptions and what to validate first. Context: - User context: whats yout mom - Latest response: I’m not going to
+  - Summary: Actions taken: 1. No new tool actions were needed on this retry; I used the already-loaded startup guidance and context from the prior run in this session. Assumptions: 1. “whats yout mom” is a typo for “what’s your mom,” likely intended as a taunt/insult. 2.
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771786305-list-assumptions-and-what-to-validate-first.-context---user-context-whats-yout-m.md`
 - `1771642591-my-settings-keep-resetting-every-restart.-where-should-i-look-first`: my settings keep resetting every restart. where should i look first?
   - Summary: To troubleshoot why your settings are resetting every time you restart, you should start by checking the following: 1. **Configuration Files**: Look for configuration files in your project or user directory that might be responsible for saving and loading sett
   - Source: thomas:local
@@ -148,4 +158,4 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md`
 
-_Total entries: 28_
+_Total entries: 30_

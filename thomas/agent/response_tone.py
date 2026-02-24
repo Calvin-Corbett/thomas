@@ -79,14 +79,15 @@ _REASONING_PREFIX_RE = re.compile(
     r"(?is)^\s*(?:(?:ok(?:ay)?|alright|right|well|sure)\s*[,:\-]\s*)?"
     r"(?:let me|lemme|i(?:'m| am| will|\'ll| am going to))\s+"
     r"(?:think(?: this through)?|reason(?: this out)?|walk through (?:my )?(?:thinking|reasoning)|"
-    r"break(?: this)? down|analy[sz]e(?: this)?|figure (?:this )?out)\b[^.!?\n]*(?:[.!?]|$)\s*"
+    r"break(?: this)? down|analy[sz]e(?: this)?|figure (?:this )?out|"
+    r"inspect|check|look(?: into)?|search|scan|read|open)\b[^.!?\n]*(?:[.!?]|$)\s*"
 )
 
 _REASONING_LINE_PATTERNS = (
     r"^\s*(?:thinking out loud|internal reasoning|chain of thought)\b.*$",
-    r"^\s*(?:let me|lemme)\s+(?:think|reason|walk through|break(?: this)? down|analy[sz]e)\b.*$",
+    r"^\s*(?:let me|lemme)\s+(?:think|reason|walk through|break(?: this)? down|analy[sz]e|inspect|check|look(?: into)?|search|scan|read|open)\b.*$",
     r"^\s*i(?:'m| am)\s+(?:thinking|reasoning|analyzing)\b.*$",
-    r"^\s*i(?:'ll| will| am going to)\s+(?:think|reason|analy[sz]e)\b.*$",
+    r"^\s*i(?:'ll| will| am going to)\s+(?:think|reason|analy[sz]e|inspect|check|look(?: into)?|search|scan|read|open)\b.*$",
 )
 _META_REASONING_PHRASE_RE = re.compile(
     r"(?i)\b(?:here(?:'s| is)\s+)?(?:my\s+)?(?:thought process|chain of thought|internal reasoning)\b[:\-]?\s*"

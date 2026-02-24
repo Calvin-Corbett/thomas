@@ -17,6 +17,7 @@ from .media_agents import (
     _extract_text,
     _extract_video_meta,
 )
+from .nl_workflow_compiler import compile_nl_workflow_payload
 from .scheduler import EngineTiming, compute_next_run
 from .workflows import WorkflowExecutionError, WorkflowRunner, summarize_workflow_telemetry
 from thomas.core.autonomy import clamp_autonomy_level
@@ -332,7 +333,8 @@ class AutonomyEngine:
         if self.chat_adapter is None:
             raise AutonomyTransientError("no chat adapter configured for workflow_task")
 
-        payload = self._as_dict(job.payload)
+        raw_payload = self._as_dict(job.payload)
+        payload, compile_meta = compile_nl_workflow_payload(raw_payload)
         workflow = str(payload.get("workflow") or payload.get("pattern") or "chain").strip().lower()
         policy = self._workflow_policy_for_payload(payload)
 
@@ -354,6 +356,8 @@ class AutonomyEngine:
         out = self._as_dict(result)
         out["telemetry"] = telemetry
         out["workflow_policy"] = policy
+        if isinstance(compile_meta, dict):
+            out["workflow_compile"] = compile_meta
         return out
 
     def _media_client_for_job(self, job: Job) -> OpenAICompatMediaClient:

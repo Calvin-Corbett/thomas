@@ -18,18 +18,98 @@ This is the repeatable benchmark system for comparing Thomas against any competi
 - Reliability: score variability across repeated benchmark runs and raw latency variance.
 - Competitor pressure board: which competitors are beating the focus agent the most.
 - Prediction Evo Scope: competitor delta analysis from last tested version to current version, with predicted next focus and recommended Thomas counter-moves.
+- Benchmark program lanes:
+  - `quick`: fast structural + correctness + interface checks.
+  - `dynamic`: long-running behavior, resilience, safety, benchmark, and governance checks.
+  - `human`: human-adjudicated quality checks when evidence is provided.
 
 ## Scoring Model
 
 Head-to-head testing uses two explicit scores per agent:
 
 - `head_to_head_score`: pairwise score (focus vs competitor) across metrics where either side has data.
+- `head_to_head_decisive_score`: decisive 1v1 score where ties are always excluded.
+- `token_efficiency_score`: dedicated token-cost efficiency score with its own 1v1 and overall ranking.
 - `overall_suite_score`: all applicable checks (runtime metric checks + applicable full-coverage contract checks).
+- `quick_suite_score`, `dynamic_suite_score`, `human_suite_score`: lane-specific full-suite scores by test mode.
 - Head-to-head is pairwise (focus agent vs one competitor) and counts metrics where either side has data.
 - Metrics where neither side has data are excluded from head-to-head.
+- Tie handling is controlled by `head_to_head_tie_policy` in suite config:
+  - `half_point` (default): tie gives `0.5` to each side.
+  - `exclude`: tied metrics are not counted in the denominator.
+- Token efficiency head-to-head is computed separately from runtime head-to-head using:
+  - blended token efficiency score,
+  - effective tokens per success (lower is better),
+  - token telemetry coverage.
+- Token efficiency scores are only emitted when real token telemetry exists (`prompt/completion/total` or derived `tokens_per_success`).
 - Head-to-head is explicit 1v1 only and should be set with `--h2h-a <agent>` and `--h2h-b <agent>`.
 
 This is the required method for conducting head-to-head benchmarking.
+
+## Score Definitions (Exact)
+
+- `head_to_head_score` (runtime 1v1 only):
+  - Count a runtime metric if either side has numeric data.
+  - Exclude a runtime metric if neither side has data.
+  - Per counted metric: winner gets `1.0`; tie handling follows `head_to_head_tie_policy`.
+  - With `half_point`: tie gets `0.5` each.
+  - With `exclude`: ties are not counted.
+  - Final score: `(agent_points / counted_metrics) * 100`.
+- `head_to_head_decisive_score`:
+  - Count only non-tied runtime 1v1 metrics where either side has numeric data.
+  - Winner gets `1.0`, loser gets `0.0`.
+  - Final score: `(wins / non_tied_counted_metrics) * 100`.
+- `token_efficiency_score` (separate from runtime head-to-head):
+  - Built from token efficiency telemetry and quality signals:
+    - effective tokens per success,
+    - mean token density,
+    - benchmark success rate,
+    - cost probe pass-rate.
+  - Uses telemetry coverage weighting so sparse token data cannot look better than complete token data.
+  - Token 1v1 is a separate score block and compares:
+    - `token_efficiency_score` (higher better),
+    - `effective_tokens_per_success` (lower better),
+    - `telemetry_coverage` (higher better).
+  - If neither side has token evidence, token 1v1 counted metrics are `0` and scores are `n/a`.
+- `overall_suite_score` (per model across entire suite):
+  - `runtime_applicable`: runtime metrics where that agent has data.
+  - `runtime_passed`: runtime_applicable metrics where that agent is in `winners`.
+  - `catalog_applicable`: full-coverage catalog checks applicable to the agent.
+  - `catalog_passed`: applicable catalog checks that pass.
+  - Final score:
+    - `(runtime_passed + catalog_passed) / (runtime_applicable + catalog_applicable) * 100`.
+- `quick_suite_score` / `dynamic_suite_score` / `human_suite_score`:
+  - Same formula as `overall_suite_score`, but only checks tagged to that lane (`test_mode`).
+
+Interpretation note:
+- The earlier "`90%+`" numbers were runtime `head_to_head_score` values from strict 1v1 comparisons (Thomas vs one competitor at a time), not `overall_suite_score`.
+
+## Benchmark Program
+
+- The suite now emits `benchmark_program` in JSON output.
+- This produces:
+  - `overall_benchmark_capability_score` per agent (weighted lane score).
+  - `quick_lane_score` and `dynamic_lane_score`.
+  - `family_catalog` and per-agent `family_scores` for named benchmark families.
+  - `governance_verdict`: `GO`, `LIMITED_GO`, `NO_GO`.
+- Lane defaults come from contract `benchmark_program.lane_weights`.
+- Missing dynamic evidence counts against capability score by design.
+
+### Dynamic Evidence Format
+
+To feed long-running / advanced checks, provide JSON files via agent `benchmark_evidence_globs`:
+
+```json
+{
+  "checks": {
+    "prog.001": { "pass": true, "score": 100, "notes": "..." },
+    "prog.002": { "pass": false, "score": 42, "notes": "..." }
+  }
+}
+```
+
+- `prog.*` ids come from `demo/baselines/agent_test_suite_full_coverage.contract.json`.
+- If `pass` is omitted, `score >= pass_score_gte` is used.
 
 ## Run It
 
@@ -60,6 +140,7 @@ Default config:
 To add a new competitor, add a new entry under `agents` with:
 
 - `id`, `root`, and source/test/subsystem roots.
+- `test_dataset_roots` (optional) for structured eval corpora that should count as executable test assets even if filenames are not `test_*`.
 - CLI adapter (`cli.command` or fixed CLI baselines).
 - `strict_checks` for production-ready validations.
 - `performance_probes`, `resilience_probes`, `security_probes`, `cost_probes` for runtime evidence.

@@ -33,6 +33,8 @@ class CodexAccount:
     logged_in: bool = False
     auth_type: str = ""  # "chatgpt" | "apiKey" | ""
     email: str = ""
+    display_name: str = ""
+    avatar_url: str = ""
     plan_type: str = ""  # "free" | "plus" | "pro" | "team" | ""
 
 
@@ -173,10 +175,33 @@ class CodexBridge:
         acct = result.get("account")
         if not acct:
             return CodexAccount(logged_in=False)
+        profile = acct.get("profile") if isinstance(acct.get("profile"), dict) else {}
+        display_name = (
+            str(
+                acct.get("displayName")
+                or acct.get("name")
+                or profile.get("displayName")
+                or profile.get("name")
+                or ""
+            ).strip()
+        )
+        avatar_url = (
+            str(
+                acct.get("avatarUrl")
+                or acct.get("imageUrl")
+                or acct.get("picture")
+                or profile.get("avatarUrl")
+                or profile.get("imageUrl")
+                or profile.get("picture")
+                or ""
+            ).strip()
+        )
         return CodexAccount(
             logged_in=True,
             auth_type=acct.get("type", ""),
             email=acct.get("email", ""),
+            display_name=display_name,
+            avatar_url=avatar_url,
             plan_type=acct.get("planType", ""),
         )
 
@@ -259,6 +284,7 @@ class CodexBridge:
         model: str = "",
         cwd: Optional[str] = None,
         effort: str = "medium",
+        allow_tools: bool = True,
     ) -> AsyncIterator[Dict[str, Any]]:
         """Send a message and stream back events.
 
@@ -271,12 +297,13 @@ class CodexBridge:
         """
         # Ensure we have a thread
         if not self._thread_id:
-            await self._start_thread(model=model, cwd=cwd or self._cwd)
+            await self._start_thread(model=model, cwd=cwd or self._cwd, allow_tools=allow_tools)
 
         # Start a turn
         turn_done: asyncio.Future = asyncio.get_event_loop().create_future()
         events_queue: asyncio.Queue = asyncio.Queue()
         self._current_turn_text = ""
+        tools_blocked = {"triggered": False}
 
         def on_turn_completed(params: Dict[str, Any]) -> None:
             if not turn_done.done():
@@ -299,6 +326,18 @@ class CodexBridge:
         def on_item_started(params: Dict[str, Any]) -> None:
             item = params.get("item", {})
             itype = item.get("type", "")
+            is_tool_item = itype in {"commandExecution", "fileChange", "mcpToolCall"}
+            if not is_tool_item:
+                return
+
+            if not allow_tools:
+                if not tools_blocked["triggered"]:
+                    tools_blocked["triggered"] = True
+                    asyncio.get_event_loop().call_soon(
+                        lambda: asyncio.ensure_future(self.interrupt())
+                    )
+                return
+
             if itype == "commandExecution":
                 events_queue.put_nowait({
                     "type": "tool_start",
@@ -321,6 +360,8 @@ class CodexBridge:
         def on_item_completed(params: Dict[str, Any]) -> None:
             item = params.get("item", {})
             itype = item.get("type", "")
+            if not allow_tools and itype in {"commandExecution", "fileChange", "mcpToolCall"}:
+                return
             if itype == "commandExecution":
                 events_queue.put_nowait({
                     "type": "tool_output",
@@ -336,24 +377,30 @@ class CodexBridge:
                 })
 
         def on_cmd_approval(params: Dict[str, Any]) -> None:
-            # Auto-approve commands (Thomas handles its own sandboxing)
             req_id = params.get("_request_id")
             if req_id is not None:
+                decision_payload: Dict[str, Any]
+                if allow_tools:
+                    # Auto-approve commands (Thomas handles its own sandboxing)
+                    decision_payload = {
+                        "decision": "accept",
+                        "acceptSettings": {"trustCommandClass": True},
+                    }
+                else:
+                    decision_payload = {"decision": "decline"}
                 asyncio.get_event_loop().call_soon(
                     lambda: asyncio.ensure_future(
-                        self._respond(req_id, {
-                            "decision": "accept",
-                            "acceptSettings": {"trustCommandClass": True},
-                        })
+                        self._respond(req_id, decision_payload)
                     )
                 )
 
         def on_file_approval(params: Dict[str, Any]) -> None:
             req_id = params.get("_request_id")
             if req_id is not None:
+                decision_payload = {"decision": "accept"} if allow_tools else {"decision": "decline"}
                 asyncio.get_event_loop().call_soon(
                     lambda: asyncio.ensure_future(
-                        self._respond(req_id, {"decision": "accept"})
+                        self._respond(req_id, decision_payload)
                     )
                 )
 
@@ -375,11 +422,18 @@ class CodexBridge:
             if model:
                 turn_params["model"] = model
             # Auto-approve everything — Thomas handles its own sandboxing
-            turn_params["approvalPolicy"] = "never"
-            turn_params["sandboxPolicy"] = {
-                "type": "dangerFullAccess",
-                "networkAccess": True,
-            }
+            if allow_tools:
+                turn_params["approvalPolicy"] = "never"
+                turn_params["sandboxPolicy"] = {
+                    "type": "dangerFullAccess",
+                    "networkAccess": True,
+                }
+            else:
+                turn_params["approvalPolicy"] = "untrusted"
+                turn_params["sandboxPolicy"] = {
+                    "type": "readOnly",
+                    "networkAccess": False,
+                }
 
             result = await self._request("turn/start", turn_params)
             turn = result.get("turn", {})
@@ -418,12 +472,16 @@ class CodexBridge:
                 "turnId": self._active_turn_id,
             })
 
-    async def _start_thread(self, model: str = "", cwd: str = "") -> str:
+    async def _start_thread(self, model: str = "", cwd: str = "", allow_tools: bool = True) -> str:
         params: Dict[str, Any] = {"cwd": cwd or self._cwd}
         if model:
             params["model"] = model
-        params["approvalPolicy"] = "never"
-        params["sandbox"] = "danger-full-access"
+        if allow_tools:
+            params["approvalPolicy"] = "never"
+            params["sandbox"] = "danger-full-access"
+        else:
+            params["approvalPolicy"] = "untrusted"
+            params["sandbox"] = "read-only"
 
         result = await self._request("thread/start", params)
         thread = result.get("thread", {})

@@ -14,9 +14,9 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
 
     def tearDown(self) -> None:
         try:
-            self._tmpdir.cleanup()
-        finally:
             super().tearDown()
+        finally:
+            self._tmpdir.cleanup()
 
     async def get_application(self):
         cfg = AppConfig(
@@ -31,6 +31,7 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
         payload = {
             "id": "chat-1",
             "title": "Hello",
+            "model": "local",
             "messages": [
                 {"id": "m1", "role": "user", "content": "hi", "createdAt": 1},
                 {"id": "m2", "role": "assistant", "content": "hello", "createdAt": 2},
@@ -46,6 +47,7 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
         put_body = await put_resp.json()
         self.assertTrue(put_body.get("ok"))
         self.assertEqual(put_body.get("chat", {}).get("id"), "chat-1")
+        self.assertEqual(put_body.get("chat", {}).get("model"), "local")
 
         list_resp = await self.client.get("/api/chats")
         self.assertEqual(list_resp.status, 200)
@@ -54,6 +56,7 @@ class TestServerChatsApiLocal(AioHTTPTestCase):
         self.assertEqual(len(chats), 1)
         self.assertEqual(chats[0].get("id"), "chat-1")
         self.assertEqual(chats[0].get("title"), "Hello")
+        self.assertEqual(chats[0].get("model"), "local")
 
         del_resp = await self.client.delete("/api/chats/chat-1")
         self.assertEqual(del_resp.status, 200)
@@ -78,9 +81,9 @@ class TestServerChatsApiRemoteAuth(AioHTTPTestCase):
 
     def tearDown(self) -> None:
         try:
-            self._tmpdir.cleanup()
-        finally:
             super().tearDown()
+        finally:
+            self._tmpdir.cleanup()
 
     async def get_application(self):
         cfg = AppConfig(

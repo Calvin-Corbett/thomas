@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.check_repo_hygiene import evaluate_hygiene
+from scripts.check_repo_hygiene import evaluate_hygiene, evaluate_worktree_clean
 
 
 def test_repo_hygiene_detects_unexpected_root_and_forbidden_prefix() -> None:
@@ -44,3 +44,31 @@ def test_repo_hygiene_passes_clean_layout() -> None:
     result = evaluate_hygiene(tracked, baseline)
     assert result["ok"] is True
     assert not result["violations"]
+
+
+def test_repo_hygiene_worktree_clean_passes() -> None:
+    result = evaluate_worktree_clean([])
+    assert result["ok"] is True
+    assert result["entry_count"] == 0
+    assert result["summary"]["staged_count"] == 0
+    assert result["summary"]["unstaged_count"] == 0
+    assert result["summary"]["untracked_count"] == 0
+
+
+def test_repo_hygiene_worktree_dirty_classifies_paths() -> None:
+    status_lines = [
+        "M  scripts/check_repo_hygiene.py",
+        " M thomas/core/config.py",
+        "MM thomas/cli/main.py",
+        "?? scratch/local.txt",
+    ]
+    result = evaluate_worktree_clean(status_lines)
+    assert result["ok"] is False
+    assert result["summary"]["staged_count"] == 2
+    assert result["summary"]["unstaged_count"] == 2
+    assert result["summary"]["untracked_count"] == 1
+    assert "scripts/check_repo_hygiene.py" in result["staged_paths"]
+    assert "thomas/core/config.py" in result["unstaged_paths"]
+    assert "thomas/cli/main.py" in result["staged_paths"]
+    assert "thomas/cli/main.py" in result["unstaged_paths"]
+    assert "scratch/local.txt" in result["untracked_paths"]

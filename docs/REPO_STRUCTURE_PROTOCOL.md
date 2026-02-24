@@ -126,4 +126,7 @@ These may exist as pointers and are intentional:
 
 - `.pre-commit-config.yaml`
   - mirrors structure/release gates for local commit-time enforcement
-  - install with `pre-commit install`
+  - includes repo hygiene clean-worktree enforcement at pre-push time
+  - install with:
+    - `pre-commit install`
+    - `pre-commit install --hook-type pre-push`

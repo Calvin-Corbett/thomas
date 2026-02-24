@@ -27,7 +27,7 @@ class ModelConfig:
 
     name: str
     provider: str = "openai_compat"
-    base_url: str = "http://localhost:11434/v1"
+    base_url: str = ""
     api_key: str = ""
     # OpenAI-compatible services vary slightly (Azure, proxies, etc). Keep these
     # configurable so Thomas can talk to many providers without hardcoding.
@@ -43,6 +43,7 @@ class ModelConfig:
     temperature: float = 0.1
     top_p: float = 0.95
     timeout_s: float = 120.0
+    reasoning_effort: str = ""  # codex: low|medium|high|xhigh (empty = provider default)
 
     def validate(self) -> list[str]:
         errors: list[str] = []
@@ -60,6 +61,8 @@ class ModelConfig:
             errors.append(f"models.{self.name}: chat_path should start with '/'")
         if self.models_path and not self.models_path.startswith("/"):
             errors.append(f"models.{self.name}: models_path should start with '/'")
+        if self.provider == "openai_compat" and not self.base_url:
+            errors.append(f"models.{self.name}: base_url is required for openai_compat provider")
         return errors
 
 
@@ -269,6 +272,34 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
 
       THOMAS_MEMORY_ROOT=./runtime
     """
+    model_fields = set(getattr(ModelConfig, "__dataclass_fields__", {}).keys()) - {"name"}
+    core_section_fields: Dict[str, set[str]] = {
+        "memory": set(getattr(MemoryConfig, "__dataclass_fields__", {}).keys()),
+        "tools": set(getattr(ToolsConfig, "__dataclass_fields__", {}).keys()),
+        "embed": set(getattr(EmbedConfig, "__dataclass_fields__", {}).keys()),
+        "failover": set(getattr(FailoverConfig, "__dataclass_fields__", {}).keys()),
+        "server": set(getattr(ServerConfig, "__dataclass_fields__", {}).keys()),
+        "journal": set(getattr(JournalConfig, "__dataclass_fields__", {}).keys()),
+        "quality": set(getattr(QualityConfig, "__dataclass_fields__", {}).keys()),
+    }
+    extension_sections = {
+        # Extension sections intentionally allowed here so env overrides remain usable
+        # without polluting unknown core-key validation.
+        "watcher",
+        "dep_scanner",
+        "autonomy",
+        "library",
+        "realtime",
+        "policy",
+        "notifications",
+        "workspace",
+        "workspaces",
+        "costs",
+        "spend",
+        "batching",
+    }
+    allowed_sections = set(core_section_fields.keys()) | extension_sections
+
     for key, value in os.environ.items():
         if not key.startswith(prefix + "_"):
             continue
@@ -290,6 +321,8 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
         if parts[0] == "models" and len(parts) >= 3:
             _, profile, *rest = parts
             field = "_".join(rest)
+            if field not in model_fields:
+                continue
             data.setdefault("models", {}).setdefault(profile, {})[field] = value
             continue
 
@@ -298,22 +331,13 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
         # THOMAS_EMBED_<field...> -> data["embed"][field]
         # THOMAS_FAILOVER_<field...> -> data["failover"][field]
         # THOMAS_SERVER_<field...> -> data["server"][field]
-        if parts[0] in ("memory", "tools", "embed", "failover", "server", "journal", "quality") and len(parts) >= 2:
+        if parts[0] in allowed_sections and len(parts) >= 2:
             section, *rest = parts
             field = "_".join(rest)
+            if section in core_section_fields and field not in core_section_fields[section]:
+                continue
             data.setdefault(section, {})[field] = value
             continue
-
-        # Fallback: nested dict override (THOMAS_FOO_BAR -> data["foo"]["bar"]).
-        d = data
-        for part in parts[:-1]:
-            if part not in d:
-                d[part] = {}
-            if not isinstance(d[part], dict):
-                break
-            d = d[part]
-        else:
-            d[parts[-1]] = value
 
 
 def _coerce_types(data: Dict[str, Any]) -> None:
@@ -354,7 +378,7 @@ def _build_model_config(name: str, d: Dict[str, Any]) -> ModelConfig:
     return ModelConfig(
         name=name,
         provider=d.get("provider", "openai_compat"),
-        base_url=d.get("base_url", "http://localhost:11434/v1"),
+        base_url=d.get("base_url", ""),
         api_key=d.get("api_key", ""),
         api_key_header=d.get("api_key_header", "Authorization"),
         api_key_prefix=d.get("api_key_prefix", "Bearer "),
@@ -368,6 +392,7 @@ def _build_model_config(name: str, d: Dict[str, Any]) -> ModelConfig:
         temperature=d.get("temperature", 0.1),
         top_p=d.get("top_p", 0.95),
         timeout_s=d.get("timeout_s", 120.0),
+        reasoning_effort=d.get("reasoning_effort", ""),
     )
 
 
@@ -464,6 +489,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             path = Path(env_path)
         else:
             path = Path("thomas.toml")
+    resolved_path = path.resolve()
 
     data: Dict[str, Any] = {}
     if path.exists():
@@ -561,7 +587,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         ),
     )
 
-    return AppConfig(
+    cfg = AppConfig(
         models=models,
         embed=embed,
         memory=memory,
@@ -574,3 +600,6 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         default_model=data.get("default_model", "local"),
         max_agent_iterations=data.get("max_agent_iterations", 10),
     )
+    # Non-schema runtime attribute used by CLI/reporting surfaces.
+    setattr(cfg, "config_path", resolved_path)
+    return cfg

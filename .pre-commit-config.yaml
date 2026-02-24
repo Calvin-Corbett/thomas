@@ -3,7 +3,7 @@ repos:
     hooks:
       - id: thomas-active-folder-guard
         name: Thomas Active Folder Guard
-        entry: python scripts/active_folders.py guard-staged --require-explicit-agent
+        entry: python scripts/active_folders.py guard-staged --auto-claim-staged --no-require-explicit-agent
         language: system
         pass_filenames: false
 
@@ -12,6 +12,20 @@ repos:
         entry: python scripts/check_plan_structure_gate.py
         language: system
         pass_filenames: false
+
+      - id: thomas-repo-hygiene-gate
+        name: Thomas Repo Hygiene Gate
+        entry: python scripts/check_repo_hygiene.py --no-require-clean-worktree
+        language: system
+        pass_filenames: false
+
+      - id: thomas-repo-clean-worktree-gate
+        name: Thomas Repo Clean Worktree Gate
+        entry: python scripts/check_repo_hygiene.py
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-push]
 
       - id: thomas-release-hygiene-gate
         name: Thomas Release Hygiene Gate
@@ -25,10 +39,20 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-site-visual-proof-gate
+        name: Thomas Site Visual Proof Gate
+        entry: python scripts/check_site_visual_proof.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-architecture
+        name: Architecture fitness check
+        entry: python -m pytest tests/test_architecture.py -x --tb=short -q
+        language: system
+        pass_filenames: false
+
       - id: thomas-auto-checks-quick
         name: Thomas Auto Checks (Quick)
         entry: python scripts/auto_checks.py --quick
         language: system
         pass_filenames: false
-
-

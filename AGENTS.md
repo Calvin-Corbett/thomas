@@ -1,87 +1,133 @@
-﻿# Thomas Agent Instructions
+# Thomas Agent Instructions
 
-## Startup Guidance Contract
+Thomas is an AI coding agent with intentionally broad scope.
+The breadth is a feature — don't reduce scope without explicit user request.
 
-- Never block the user asking where instructions are.
-- Resolve startup guidance in this order:
-  1. `AGENTS.md`
-  2. `IDENTITY.md`
-  3. `USER.md`
-  4. `SOUL.md`
-  5. `definitions/model-vs-os.md`
-  6. `definitions/autopoietic.md`
-  7. `definitions/change-classification.md`
-- If a file is missing, skip it silently and continue.
+## Start Here
+1. **`PROJECT_INDEX.md`** — How the project boots, where things live, process model,
+   config flow, logging, data files, verification checklist, gotchas. **Read this first**
+   when you need to understand how anything connects or runs.
+2. **`thomas/_architecture.py`** — Module map, dependency rules, constraints, known debt.
+   The single source of truth for architecture fitness.
+3. **`KNOWN_ISSUES.md`** — Common problems and their fixes. **Read at session start.**
+   Update when you find a new recurring issue that cost debugging time.
 
-## Plan and Structure Contract
+**Keep both files updated.** When you change boot paths, add entry points, move key files,
+or discover a gotcha that cost significant debugging time — update `PROJECT_INDEX.md`.
+When you add/remove modules or change dependencies — update `_architecture.py`.
 
-- Active execution plans live in `plans/` only.
-- Start plan discovery at:
-  1. `plans/thomas/WORKBOARD.md`
-  2. `plans/thomas/README.md`
-  3. relevant plan file under `plans/thomas/...`
-- Treat `docs/` as stable specs/protocols, not active sprint planning.
-- Treat `tasks/` as historical notes, not plan source of truth.
-- Treat `Inbox/`, `docs/inbox/`, and `.inbox_extract_*` as intake/archive, not active project source of truth.
-- Follow `docs/REPO_STRUCTURE_PROTOCOL.md` for repository organization rules.
+## Changelog & Versioning (Dev Agent Responsibility)
 
-## Behavior
+**You own the changelog.** This is your development log — update it as you work, not at the end.
 
-- Explain unusual behavior by citing the exact local source file/rule.
-- Prefer direct execution over long back-and-forth planning.
-- Use lightweight behavior for casual chat and full engineering behavior for coding/debug/audit tasks.
-- Keep responses natural and avoid repetitive helper cliches.
-- For setup/integration asks, execute-first: do the work directly via tools and report status.
-- Scope alignment is mandatory: Thomas is hybrid (local + remote) and hybrid-model (local + cloud), not localhost-only.
-- Only ask for the minimum missing secret/input when needed.
-- Do not default to command checklists unless the user asks for manual steps.
-- If you requested a token/ID and the next user message provides it, acknowledge and proceed instead of re-asking.
-- Do not ask "what next" or "anything else" until the current requested task is complete or blocked.
+1. **When to write entries:** After each logical unit of work (a bug fix, a new feature, a
+   refactor). Don't batch them. Don't wait for "before commit." Write it while the context
+   is fresh.
+2. **Version bump:** Any behavioral change (bug fix, new feature, changed behavior) needs a
+   version bump in **both** `pyproject.toml` and `thomas/__init__.py`. Bump once per session,
+   not once per change.
+3. **Format:** Follow Keep a Changelog categories: `### Added`, `### Changed`, `### Fixed`,
+   `### Removed`. Be specific — name the files, endpoints, or behaviors affected.
+4. **What counts:** Code changes, new files, config changes, architectural changes, bug fixes.
+   Pure docs-only changes (README, comments) don't need a version bump but still get a
+   changelog entry under `[Unreleased]` if notable.
 
-## Versioning
+**The changelog is the project's memory across sessions.** Future agents (including you in a
+new context window) rely on it to understand what changed and why. Sloppy changelog = lost
+context = repeated mistakes.
 
-- Any behavioral or user-visible change must bump the version in `pyproject.toml` and `thomas/__init__.py`.
-- Add a `CHANGELOG.md` entry under the new version with `Added`, `Changed`, or `Fixed` bullets.
+## Before You Commit
+Run `python -m pytest tests/test_architecture.py -x --tb=short -q`.
+It checks dependency direction, file sizes, forbidden patterns, extension
+isolation, module coverage, test coverage, health annotations, and cycles.
 
-## Build Reliability Gates
+## Before You Delete Code
+Never bulk-delete. For EVERY file or function you want to remove:
+1. `grep -r '<name>' thomas/ tests/ scripts/ --include='*.py'` — find ALL references
+2. If anything imports it: don't delete. Refactor or replace instead.
+3. If only lazy/conditional imports: stub with safe fallbacks first.
+4. After deletion: verify server boots (`python -m thomas serve --port 0`) and tests pass.
 
-- For coding tasks that modify files, run:
-  - `python scripts/check_monolith_guard.py`
-  - `python scripts/check_repo_hygiene.py`
-  - `python scripts/check_plan_structure_gate.py`
-  - `python scripts/sync_feature_master_list.py --check`
-  - `python scripts/check_release_hygiene.py`
-  - `python scripts/check_release_update_gate.py`
-- If any gate fails, continue work until fixed before declaring completion.
-- Do not hand-maintain `docs/FEATURE_MASTER_LIST.md`; update `docs/feature_master_manifest.json` and regenerate.
+## Deep Context (read only when your task touches these areas)
+- UI/tabs: `docs/WORKBENCH_OPERATOR_PROTOCOL.md`
+- Workbench framing: tabs are AI-first operator control surfaces.
+- Risky changes: `definitions/change-classification.md`
+- Agent loop internals: `SOUL.md`
+- Current priorities: `plans/thomas/WORKBOARD.md`
+- Website releases: deploy via CI (`site-release.yml`), not ad-hoc
 
-## Memory
+## Website Dev Shortcut (Dev-Only)
+If a task mentions website/site/homepage/domain/Spline or the user asks for web changes:
+1. Start in `apps/site` immediately.
+2. Read `apps/site/README_DEV.md` first for current URLs and workflow.
+3. Run website commands from `apps/site` (`npm run dev`, `npm run typecheck`, deploy scripts).
 
-- Thread episodic memory is channel-scoped by default.
-- Curated global facts/profile are shared across channels.
+## Runtime Skills (Model-Agnostic)
+Thomas resolves runtime skills at the orchestrator layer before model calls.
+This applies across providers (Codex, Anthropic, OpenAI-compatible), not just Codex.
 
-## Security Gate
+Selection order is:
+1. Explicit skill mention in prompt (`$skill-name`, inline mention, or `skill <name>`)
+2. Pinned skills from `.thomas/cli/skills.json`
+3. Relevance-ranked skills from discovered roots
 
-- `suspicious_prompt_gate_mode: "log_only"` *(default)*
-- Options: `"log_only"` | `"block"` | `"off"`
-- `log_only`: matches are logged but never block the user's own messages.
-- `block`: require Windows PIN for flagged prompts (use only when Thomas is remote/API-exposed).
+Discovery roots:
+- `$CODEX_HOME/skills`
+- `~/.codex/skills`
+- `<memory_root>/.codex/skills`
+- `<cwd>/.codex/skills`
+- `<cwd>/skills`
+- Optional: `THOMAS_SKILLS_EXTRA_DIRS` (`os.pathsep`-separated)
 
-## New Core Modules (0.11.28)
+## Hard Gate: Website Visual Proof (All Agents)
+This rule applies to Thomas and any external/competing agent editing this repo.
 
-- **Persistence** (`thomas/core/persistence.py`): autoâ€‘saves state every turn â†’ `thomas_state.json`.
-  Wireâ€‘in: `from thomas.core.persistence import get_persistence; pe = get_persistence()`
-- **Tool Factory** (`thomas/core/tool_factory.py`): extracts a reusable `GeneratedTool` after every multiâ€‘step task; saves to `thomas_tool_registry.json`.
-  Wireâ€‘in: `from thomas.core.tool_factory import get_tool_factory; factory = get_tool_factory(live_registry=registry); factory.extract_from_turn(desc, calls, summary)`
-- **Initiative Engine** (`thomas/core/initiative.py`): fires when idle >30 min + open goals exist; notifies only on completion/blocker/daily summary.
-  Wireâ€‘in: `from thomas.core.initiative import get_initiative_engine; get_initiative_engine().start(executor_fn, notify_fn)`
-- **Testing Suite** (`thomas/core/testing_suite.py`): background quality cycles (PIR, AA, PS, CE); 10â€‘cycle reports; autoâ€‘improve recs when composite >85.
-  Wireâ€‘in: `from thomas.core.testing_suite import get_testing_suite; get_testing_suite().start(executor_fn, notify_fn)`
+When UI files change in:
+- `apps/site/src/app/**`
+- `apps/site/src/components/**`
 
-## Background Engines
+you must update:
+- `apps/site/verification/ui-proof.json`
+- `apps/site/verification/runtime-report.json`
+- `apps/site/verification/screenshots/full-page.png`
+- `apps/site/verification/screenshots/footer-focus.png`
+- `apps/site/verification/baselines/full-page.png`
+- `apps/site/verification/baselines/footer-focus.png`
+- `apps/site/verification/diffs/full-page-diff.png`
+- `apps/site/verification/diffs/footer-focus-diff.png`
 
-- **Tool Factory**: auto-registers reusable tools after each completed task with 2+ tool calls.
-- **Initiative Engine**: acts autonomously when idle >30 min; picks highest-ROI next step from open goals.
-- **Testing Suite**: runs security/quality tests when idle; generates reports every 10 cycles.
-- All engines respect daily token budgets and action limits.
+and run:
+- `python scripts/refresh_site_visual_proof.py`
+- `python scripts/check_site_visual_proof.py`
 
+Enforcement is hard-coded via:
+- pre-commit hook `thomas-site-visual-proof-gate`
+- CI workflow `.github/workflows/site-release.yml`
+- runtime browser verifier `scripts/verify_site_visual_runtime.mjs` (auto screenshots + DOM assertions)
+- proof refresh script `scripts/refresh_site_visual_proof.py` (pixel-diff baseline comparisons)
+
+## LOC Counting Protocol (Default)
+When a user asks for LOC/SLOC counts, run the full sweep by default.
+
+Required method:
+1. Count git-tracked files only (`git ls-files -z`) so local build artifacts do not skew totals.
+2. For each tracked file present on disk, run language-aware analysis with UTF-8 fallback.
+3. Report commit hash + branch with the results.
+4. Report file coverage stats:
+   - tracked files
+   - present files
+   - missing files
+   - analyzer state counts (analyzed/unknown/binary/generated/empty)
+5. Report SLOC buckets:
+   - `prod_app`
+   - `tests`
+   - `docs_config_data`
+   - `total_buckets`
+6. Report physical line totals:
+   - all present files
+   - text files only
+   - binary/text file counts
+7. Report top languages by SLOC:
+   - total repo
+   - `prod_app` subset
+8. Call out when JSON/config/docs dominate totals, and offer a stricter "pure app code" rerun (exclude JSON/lock/docs/diff) when needed.

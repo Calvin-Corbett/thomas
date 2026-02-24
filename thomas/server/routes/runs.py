@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hmac
 import io
 import ipaddress
@@ -13,7 +14,7 @@ import sys
 import zipfile
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple
 
 from aiohttp import web
 
@@ -361,13 +362,18 @@ def _export_readme(request: web.Request, run_meta: Dict[str, Any]) -> str:
     )
 
 
-def _connect_db(request: web.Request) -> sqlite3.Connection:
+@contextlib.contextmanager
+def _connect_db(request: web.Request) -> Iterator[sqlite3.Connection]:
     db_path = str(request.app.get(RUNS_DB_PATH_KEY) or "").strip()
     if not db_path:
         raise RuntimeError("runs db path unavailable")
     conn = sqlite3.connect(db_path, timeout=8, isolation_level=None)
-    conn.row_factory = sqlite3.Row
-    return conn
+    try:
+        conn.row_factory = sqlite3.Row
+        yield conn
+    finally:
+        with contextlib.suppress(Exception):
+            conn.close()
 
 
 def _ensure_run_exists(request: web.Request, run_id: str) -> None:

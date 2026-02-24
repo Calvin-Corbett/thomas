@@ -84,6 +84,9 @@ class LLMClient:
         failover_enabled: bool = False,
         failover_cooldown_s: int = 300,
         failover_on_auth_error: bool = False,
+        max_retries: int = _MAX_RETRIES,
+        base_retry_delay_s: float = _BASE_DELAY,
+        request_overrides: Optional[Dict[str, Any]] = None,
     ):
         self.config = config
         self._primary_config = config
@@ -96,6 +99,9 @@ class LLMClient:
         self._failover_enabled = bool(failover_enabled) and len(self._fallback_configs) > 0
         self._failover_cooldown_s = max(0, int(failover_cooldown_s))
         self._failover_on_auth_error = bool(failover_on_auth_error)
+        self._max_retries = max(1, int(max_retries))
+        self._base_retry_delay = max(0.0, float(base_retry_delay_s))
+        self._request_overrides = dict(request_overrides or {})
         self._attempt_trace: List[Dict[str, Any]] = []
 
     async def _get_client(self) -> httpx.AsyncClient:
@@ -262,6 +268,22 @@ class LLMClient:
         }
         if self.config.top_p < 1.0:
             body["top_p"] = self.config.top_p
+        freq_pen = self._request_overrides.get("frequency_penalty")
+        if freq_pen is not None:
+            body["frequency_penalty"] = float(freq_pen)
+        pres_pen = self._request_overrides.get("presence_penalty")
+        if pres_pen is not None:
+            body["presence_penalty"] = float(pres_pen)
+        seed = self._request_overrides.get("seed")
+        if seed is not None:
+            body["seed"] = int(seed)
+        if bool(self._request_overrides.get("json_mode", False)):
+            body["response_format"] = {"type": "json_object"}
+        stop = self._request_overrides.get("stop")
+        if isinstance(stop, list) and stop:
+            body["stop"] = [str(x) for x in stop if str(x)]
+        elif isinstance(stop, str) and stop.strip():
+            body["stop"] = stop.strip()
         if tools:
             sanitized_tools = []
             for t in tools:
@@ -406,6 +428,11 @@ class LLMClient:
         }
         if system_text:
             body["system"] = system_text.strip()
+        stop = self._request_overrides.get("stop")
+        if isinstance(stop, list) and stop:
+            body["stop_sequences"] = [str(x) for x in stop if str(x)]
+        elif isinstance(stop, str) and stop.strip():
+            body["stop_sequences"] = [stop.strip()]
         if tools:
             # Convert OpenAI tool format to Anthropic tool format.
             # Anthropic tool names must match [a-zA-Z0-9_-]; replace dots.
@@ -610,8 +637,10 @@ class LLMClient:
         client = await self._get_client()
         params = self.config.query or None
         last_error: Optional[Exception] = None
+        max_retries = max(1, int(self._max_retries))
+        base_delay = max(0.0, float(self._base_retry_delay))
 
-        for attempt in range(_MAX_RETRIES):
+        for attempt in range(max_retries):
             try:
                 async with client.stream("POST", url, json=body, params=params) as resp:
                     if resp.status_code != 200:
@@ -636,12 +665,13 @@ class LLMClient:
                                 status=resp.status_code,
                                 retryable=True,
                             )
-                            delay = _BASE_DELAY * (2**attempt)
+                            delay = base_delay * (2**attempt)
                             log.warning(
                                 "LLM request failed (attempt %d/%d), retrying in %.1fs: %s",
-                                attempt + 1, _MAX_RETRIES, delay, last_error,
+                                attempt + 1, max_retries, delay, last_error,
                             )
-                            await asyncio.sleep(delay)
+                            if delay > 0:
+                                await asyncio.sleep(delay)
                             continue
                         raise LLMError(
                             f"HTTP {resp.status_code}: {error_body.decode(errors='replace')[:500]}",
@@ -795,19 +825,21 @@ class LLMClient:
                     return
 
             except httpx.HTTPStatusError as e:
-                if e.response.status_code in _RETRYABLE and attempt < _MAX_RETRIES - 1:
-                    delay = _BASE_DELAY * (2**attempt)
+                if e.response.status_code in _RETRYABLE and attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
                     log.warning("HTTP error %d, retrying in %.1fs", e.response.status_code, delay)
-                    await asyncio.sleep(delay)
+                    if delay > 0:
+                        await asyncio.sleep(delay)
                     continue
                 raise LLMError(str(e), status=e.response.status_code)
             except (httpx.ConnectError, httpx.ReadTimeout) as e:
-                if attempt < _MAX_RETRIES - 1:
-                    delay = _BASE_DELAY * (2**attempt)
+                if attempt < max_retries - 1:
+                    delay = base_delay * (2**attempt)
                     log.warning("Connection error, retrying in %.1fs: %s", delay, e)
-                    await asyncio.sleep(delay)
+                    if delay > 0:
+                        await asyncio.sleep(delay)
                     continue
-                raise LLMError(f"Connection failed after {_MAX_RETRIES} attempts: {e}")
+                raise LLMError(f"Connection failed after {max_retries} attempts: {e}")
 
         raise last_error or LLMError("Request failed after retries")
 
@@ -830,8 +862,10 @@ class LLMClient:
 
         client = await self._get_client()
         last_error: Optional[Exception] = None
+        max_retries = max(1, int(self._max_retries))
+        base_delay = max(0.0, float(self._base_retry_delay))
 
-        for attempt in range(_MAX_RETRIES):
+        for attempt in range(max_retries):
             try:
                 async with client.stream("POST", url, json=body) as resp:
                     if resp.status_code != 200:
@@ -857,12 +891,13 @@ class LLMClient:
                                 status=resp.status_code,
                                 retryable=True,
                             )
-                            delay = _BASE_DELAY * (2**attempt)
+                            delay = base_delay * (2**attempt)
                             log.warning(
                                 "Anthropic request failed (attempt %d/%d), retrying in %.1fs: %s",
-                                attempt + 1, _MAX_RETRIES, delay, last_error,
+                                attempt + 1, max_retries, delay, last_error,
                             )
-                            await asyncio.sleep(delay)
+                            if delay > 0:
+                                await asyncio.sleep(delay)
                             continue
                         raise LLMError(
                             f"Anthropic HTTP {resp.status_code}: "
@@ -910,11 +945,17 @@ class LLMClient:
                                     type="tool_call_start",
                                     data={"id": current_tool_id, "name": current_tool_name},
                                 )
+                            elif block.get("type") == "thinking":
+                                # Extended thinking content block (Claude 3.7+)
+                                yield StreamEvent(type="thinking", data={"text": ""})
 
                         elif event_type == "content_block_delta":
                             delta = event_data.get("delta", {})
                             if delta.get("type") == "text_delta":
                                 yield StreamEvent(type="token", data={"text": delta.get("text", "")})
+                            elif delta.get("type") == "thinking_delta":
+                                # Extended thinking token stream
+                                yield StreamEvent(type="thinking", data={"text": delta.get("thinking", "")})
                             elif delta.get("type") == "input_json_delta":
                                 partial = delta.get("partial_json", "")
                                 current_tool_args += partial
@@ -967,15 +1008,16 @@ class LLMClient:
 
             except httpx.ConnectError as e:
                 last_error = e
-                delay = _BASE_DELAY * (2**attempt)
+                delay = base_delay * (2**attempt)
                 log.warning(
                     "Anthropic connection failed (attempt %d/%d), retrying in %.1fs",
-                    attempt + 1, _MAX_RETRIES, delay,
+                    attempt + 1, max_retries, delay,
                 )
-                await asyncio.sleep(delay)
+                if delay > 0:
+                    await asyncio.sleep(delay)
 
         raise LLMError(
-            f"Anthropic request failed after {_MAX_RETRIES} attempts: {last_error}",
+            f"Anthropic request failed after {max_retries} attempts: {last_error}",
             retryable=False,
         )
 

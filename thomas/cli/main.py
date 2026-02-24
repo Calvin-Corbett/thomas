@@ -14,7 +14,6 @@ import asyncio
 import json
 import logging
 import os
-import socket
 import sys
 from dataclasses import asdict
 from pathlib import Path
@@ -36,8 +35,16 @@ from thomas.tools.shell import register_shell_tools
 from thomas.tools.git import register_git_tools
 from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
-from thomas.agent.guidance import guidance_bootstrap_report
 from thomas.agent.loop import AgentLoop
+from thomas.cli.main_runtime_ops import (
+    doctor_cmd as _doctor_cmd,
+    live_browser_smoke_cmd as _live_browser_smoke_cmd,
+    repo_clean_cmd as _repo_clean_cmd,
+    resolved_config_path as _resolved_config_path,
+    run_provider_checks as _run_provider_checks_impl,
+    status_cmd as _status_cmd,
+    telegram_run_cmd as _telegram_run_cmd,
+)
 
 log = logging.getLogger(__name__)
 
@@ -113,6 +120,14 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     register_git_tools(registry, sandbox)
     register_code_search_tools(registry, sandbox)
     register_diff_tools(registry, sandbox)
+
+    # Investigation tools — registered only if investigation DB has cases
+    try:
+        from thomas.tools.investigation import register_investigation_tools
+        register_investigation_tools(registry)
+    except Exception:
+        pass
+
     return registry
 
 
@@ -506,98 +521,78 @@ def config_unset(ctx: click.Context, key: str, as_json: bool) -> None:
         raise SystemExit(1)
 
 
+@config_cmd.command("validate")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.option("--strict", is_flag=True, help="Exit non-zero when validation reports errors.")
+@click.pass_context
+def config_validate(ctx: click.Context, as_json: bool, strict: bool) -> None:
+    """Validate runtime configuration with support-focused diagnostics."""
+    from thomas.system.config_validator import build_report_for_config
+
+    config: AppConfig = ctx.obj["config"]
+    report = build_report_for_config(config, config_path=getattr(config, "config_path", None))
+    if as_json:
+        click.echo(json.dumps(report, ensure_ascii=False))
+    else:
+        click.echo(f"ok: {bool(report.get('ok', False))}")
+        summary = dict(report.get("summary") or {})
+        click.echo(f"errors: {int(summary.get('error_count', 0) or 0)}")
+        click.echo(f"warnings: {int(summary.get('warning_count', 0) or 0)}")
+    if strict and not bool(report.get("ok", False)):
+        raise SystemExit(2)
+
+
+@config_cmd.command("path")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def config_path(ctx: click.Context, as_json: bool) -> None:
+    """Print the resolved config file path currently in use."""
+    config: AppConfig = ctx.obj["config"]
+    path = _resolved_config_path(config)
+    payload = {
+        "ok": True,
+        "config_path": str(path),
+        "exists": path.exists(),
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False))
+        return
+    click.echo(str(path))
+
+
+@cli.command("status")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.option("--strict", is_flag=True, help="Exit non-zero when config validation reports errors.")
+@click.option("--strict-worktree", is_flag=True, help="Exit non-zero when git worktree is dirty.")
+@click.pass_context
+def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree: bool) -> None:
+    """Show a concise runtime/config status summary."""
+    _status_cmd(ctx, as_json, strict, strict_worktree)
+
+
+@cli.command("repo-clean")
+@click.option("--apply", is_flag=True, help="Delete known local junk artifacts.")
+@click.option(
+    "--ignored/--no-ignored",
+    "include_ignored",
+    default=True,
+    show_default=True,
+    help="Include ignored paths while scanning junk artifacts.",
+)
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.option("--strict", is_flag=True, help="Exit non-zero when worktree is still dirty after cleanup.")
+def repo_clean_cmd(apply: bool, include_ignored: bool, as_json: bool, strict: bool) -> None:
+    """Clean known local junk and report current git worktree cleanliness."""
+    _repo_clean_cmd(apply, include_ignored, as_json, strict)
+
+
 @cli.command()
 @click.option("--port", default=8899, show_default=True, type=int, help="UI server port to check")
 @click.option("--full", is_flag=True, help="Test all cloud provider API keys (requires network)")
 @click.pass_context
 def doctor(ctx: click.Context, port: int, full: bool) -> None:
     """Diagnose common setup issues and print the UI URL to open."""
-    from thomas import __version__
-
-    config: AppConfig = ctx.obj["config"]
-
-    click.echo(f"Thomas {__version__}")
-
-    errors = config.validate()
-    if errors:
-        click.echo("\nConfig issues:")
-        for e in errors:
-            click.echo(f"  - {e}")
-    else:
-        click.echo("\nConfig: OK")
-
-    # Startup guidance visibility
-    try:
-        report = guidance_bootstrap_report()
-        selected = list(report.get("selected_sources") or [])
-        click.echo("\nStartup guidance:")
-        if selected:
-            click.echo("  Active sources: " + ", ".join(selected))
-        else:
-            click.echo("  Active sources: none (using built-in behavior)")
-        for row in list(report.get("sources") or []):
-            path = str(row.get("path", ""))
-            found = bool(row.get("exists", False))
-            used = bool(row.get("selected", False))
-            bullet_count = int(row.get("bullet_count", 0) or 0)
-            click.echo(
-                f"  - {path}: "
-                f"{'FOUND' if found else 'missing'}, "
-                f"{'used' if used else 'skipped'}, "
-                f"bullets={bullet_count}"
-            )
-    except Exception as e:
-        click.echo(f"\nStartup guidance: unavailable ({type(e).__name__}: {e})")
-
-    # Server deps
-    try:
-        import aiohttp  # noqa: F401
-        click.echo("Server deps (aiohttp): OK")
-    except Exception as e:
-        click.echo(f"Server deps (aiohttp): MISSING ({e})")
-        click.echo("  Fix: pip install -e \".[server]\"")
-
-    # Port check
-    in_use = False
-    try:
-        with socket.create_connection(("127.0.0.1", int(port)), timeout=0.35):
-            in_use = True
-    except OSError:
-        in_use = False
-
-    click.echo(f"\nUI URL: http://127.0.0.1:{int(port)}/")
-    click.echo(f"Port {int(port)}: " + ("IN USE (server already running?)" if in_use else "free"))
-
-    # Local model endpoint quick check (best effort)
-    local = config.models.get("local")
-    if local:
-        base = (local.base_url or "").rstrip("/")
-        if base.endswith("/v1"):
-            base = base[:-3]
-        tags_url = base.rstrip("/") + "/api/tags"
-
-        try:
-            import httpx
-
-            r = httpx.get(tags_url, timeout=1.5)
-            if r.status_code == 200:
-                data = r.json()
-                model_count = len(data.get("models", []))
-                click.echo(f"Local endpoint (Ollama): OK ({model_count} models)")
-            else:
-                click.echo(f"Local endpoint (Ollama): {r.status_code} (check Ollama)")
-        except Exception as e:
-            click.echo(f"Local endpoint (Ollama): not reachable ({type(e).__name__}: {e})")
-            click.echo("  Fix: start Ollama (Windows): open Ollama or run `ollama serve`")
-
-    # Full provider key check
-    if full:
-        click.echo("\n--- Provider Key Test ---")
-        _run_provider_checks(config)
-
-    click.echo("\nQuick start (Windows): run-ui.cmd")
-    if not full:
-        click.echo("Run `thomas doctor --full` to test all provider API keys.")
+    _doctor_cmd(ctx, port, full)
 
 
 @cli.command("live-browser-smoke")
@@ -672,119 +667,23 @@ def live_browser_smoke_cmd(
     show_driver_logs: bool,
 ) -> None:
     """Drive your real browser tab and verify a visible end-to-end chat response."""
-    from thomas.cli.live_browser import LiveBrowserSmokeError, run_live_browser_smoke
-
-    config: AppConfig = ctx.obj["config"]
-    runtime_root = config.memory.root_path
-
-    click.echo("Live browser smoke test")
-    click.echo(f"  app_url: {app_url}")
-    click.echo(f"  cdp_url: {cdp_url}")
-    click.echo(f"  browser: {browser}")
-
-    try:
-        result = run_live_browser_smoke(
-            app_url=app_url,
-            cdp_url=cdp_url,
-            prompt=prompt,
-            expect=expect,
-            type_delay_ms=int(type_delay_ms),
-            wait_timeout_s=float(reply_timeout),
-            launch_browser=bool(launch_browser),
-            browser=str(browser).strip().lower(),
-            runtime_root=runtime_root,
-        )
-    except LiveBrowserSmokeError as e:
-        click.echo(f"Live browser smoke failed: {e}", err=True)
-        click.echo(
-            "Tip: Start your browser with remote debugging, for example:",
-            err=True,
-        )
-        click.echo(
-            '  chrome --remote-debugging-port=9222 --remote-allow-origins=* --new-window "http://127.0.0.1:8899/"',
-            err=True,
-        )
-        sys.exit(2)
-
-    click.echo("")
-    click.echo("Result:")
-    click.echo(f"  ok: {result.ok}")
-    click.echo(f"  launched_browser: {result.launched_browser}")
-    click.echo(f"  page_url: {result.page_url}")
-    click.echo(f"  expected: {result.expected}")
-    click.echo(f"  matched_expected: {result.matched_expected}")
-    click.echo(f"  final_text: {result.final_text}")
-
-    if show_driver_logs:
-        click.echo("")
-        click.echo("--- driver stdout ---")
-        click.echo(result.stdout.rstrip() or "(empty)")
-        click.echo("--- driver stderr ---")
-        click.echo(result.stderr.rstrip() or "(empty)")
-
-    if not result.ok:
-        sys.exit(2)
+    _live_browser_smoke_cmd(
+        ctx,
+        app_url,
+        cdp_url,
+        prompt,
+        expect,
+        type_delay_ms,
+        reply_timeout,
+        launch_browser,
+        browser,
+        show_driver_logs,
+    )
 
 
 def _run_provider_checks(config: AppConfig) -> None:
     """Test all cloud provider API keys by hitting their /models endpoint."""
-    from thomas.models.discovery import handshake_models_async
-    from thomas.server.secrets import SecretStore
-    from dataclasses import replace
-
-    secret_store = SecretStore(config.memory.root_path / ".thomas")
-
-    async def _check_all():
-        import httpx
-
-        results = []
-        for name, mcfg in config.models.items():
-            if name == "local":
-                continue
-
-            # Check if we have a key from secret store or config
-            stored_key = secret_store.get(name)
-            effective_cfg = mcfg
-            if stored_key:
-                effective_cfg = replace(mcfg, api_key=stored_key)
-
-            has_key = bool(effective_cfg.api_key)
-            if not has_key:
-                results.append((name, "skip", "No API key set"))
-                continue
-
-            click.echo(f"  {name}: testing...", nl=False)
-            try:
-                hs = await handshake_models_async(effective_cfg, timeout_s=5.0)
-                if hs.ok:
-                    count = len(hs.models or [])
-                    msg = f"OK ({count} models)" if count else "OK (connected)"
-                    click.echo(f"\r  {name}: \033[32m{msg}\033[0m")
-                    results.append((name, "ok", msg))
-                elif hs.status == "auth_error":
-                    click.echo(f"\r  {name}: \033[31mAUTH FAILED\033[0m — check/refresh your API key")
-                    results.append((name, "auth_error", hs.error or "auth failed"))
-                elif hs.status == "unsupported":
-                    click.echo(f"\r  {name}: \033[33mNo /models endpoint\033[0m (may still work for chat)")
-                    results.append((name, "unsupported", "no /models"))
-                elif hs.status == "offline":
-                    click.echo(f"\r  {name}: \033[31mOFFLINE\033[0m — endpoint unreachable")
-                    results.append((name, "offline", hs.error or "offline"))
-                else:
-                    click.echo(f"\r  {name}: \033[31mERROR\033[0m — {hs.error or hs.status}")
-                    results.append((name, "error", hs.error or hs.status))
-            except Exception as e:
-                click.echo(f"\r  {name}: \033[31mERROR\033[0m — {type(e).__name__}: {e}")
-                results.append((name, "error", str(e)))
-
-        # Summary
-        ok = sum(1 for _, s, _ in results if s == "ok")
-        skip = sum(1 for _, s, _ in results if s == "skip")
-        fail = len(results) - ok - skip
-        click.echo(f"\n  Summary: {ok} connected, {fail} failed, {skip} no key set")
-        click.echo("  Tip: run `thomas models validate` for handshake + tool-call smoke checks.")
-
-    asyncio.run(_check_all())
+    _run_provider_checks_impl(config)
 
 
 @cli.group()
@@ -1377,93 +1276,21 @@ def telegram_run(
     no_session_persist: bool,
 ) -> None:
     """Run a Telegram bot that routes messages through Thomas."""
-    config: AppConfig = ctx.obj["config"]
-    errors = config.validate()
-    if errors:
-        for e in errors:
-            click.echo(f"Config error: {e}", err=True)
-        sys.exit(1)
-
-    selected_model = model_name or config.default_model
-    if selected_model not in config.models:
-        click.echo(
-            f"Unknown model profile '{selected_model}'. "
-            f"Available: {', '.join(config.models.keys())}",
-            err=True,
-        )
-        sys.exit(2)
-
-    token_value = str(token or os.environ.get("THOMAS_TELEGRAM_BOT_TOKEN") or "").strip()
-    if not token_value:
-        click.echo("Telegram token missing.", err=True)
-        click.echo("Set THOMAS_TELEGRAM_BOT_TOKEN or pass --token.", err=True)
-        sys.exit(2)
-
-    try:
-        from thomas.integrations.telegram import (
-            default_sessions_path,
-            parse_allowed_chat_ids,
-            run_telegram_polling,
-        )
-    except Exception as e:
-        click.echo(f"Telegram integration unavailable: {type(e).__name__}: {e}", err=True)
-        sys.exit(1)
-
-    allowlisted: set[int] = set(int(x) for x in allow_chat_ids)
-    allowlisted.update(parse_allowed_chat_ids(os.environ.get("THOMAS_TELEGRAM_ALLOWED_CHAT_IDS")))
-    allowlisted.update(parse_allowed_chat_ids(allow_chats_csv))
-
-    env_sessions = os.environ.get("THOMAS_TELEGRAM_SESSIONS_FILE")
-    if sessions_file is None and env_sessions:
-        sessions_file = Path(env_sessions)
-    session_store = None if no_session_persist else (sessions_file or default_sessions_path(config))
-
-    tools_registry = _build_tools(config)
-    memory = _build_memory(config)
-
-    click.echo(f"Starting Telegram bot with model profile '{selected_model}'...")
-    if allowlisted:
-        click.echo("Allowlisted chat ids: " + ", ".join(str(x) for x in sorted(allowlisted)))
-    else:
-        click.echo("Allowlisted chat ids: none (all chats accepted).")
-    click.echo(
-        "Shared memory mode: "
-        + (f"enabled (thread telegram:global)" if shared_memory else "disabled (per-chat thread ids, recommended)")
+    _telegram_run_cmd(
+        ctx,
+        token,
+        allow_chat_ids,
+        allow_chats_csv,
+        model_name,
+        shared_memory,
+        all_memories,
+        profile_memory,
+        sessions_file,
+        no_session_persist,
+        build_tools=_build_tools,
+        build_memory=_build_memory,
+        logger=log,
     )
-    click.echo(
-        "Memory retrieval policy: "
-        + (
-            "thread episodic + global facts"
-            if all_memories
-            else "thread episodic only"
-        )
-    )
-    click.echo("Profile memory: " + ("enabled" if profile_memory else "disabled"))
-    click.echo("Session persistence: " + (str(session_store) if session_store is not None else "disabled"))
-
-    try:
-        run_telegram_polling(
-            config,
-            token=token_value,
-            tools=tools_registry,
-            memory=memory,
-            model_name=selected_model,
-            allowed_chat_ids=allowlisted or None,
-            sessions_path=session_store,
-            shared_memory=shared_memory,
-            memory_retrieval_scope="thread",
-            include_global_memory=all_memories,
-            include_profile_memory=profile_memory,
-        )
-    except RuntimeError as e:
-        click.echo(str(e), err=True)
-        sys.exit(1)
-    finally:
-        if memory is not None:
-            try:
-                memory.close()
-            except Exception as e:
-                log.debug("Failed to close memory engine after telegram stop: %s", e)
 
 
 @cli.command()
@@ -1712,6 +1539,58 @@ def repl(ctx: click.Context, model_name: Optional[str]) -> None:
     asyncio.run(repl_instance.run())
 
 
+@cli.command("onboarding-outcomes")
+@click.option("--db", "db_path", type=click.Path(exists=False, dir_okay=False), default="", help="Runs DB path.")
+@click.option("--days", "window_days", type=int, default=7, show_default=True, help="Lookback window in days.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def onboarding_outcomes_cmd(db_path: str, window_days: int, as_json: bool) -> None:
+    """Generate onboarding outcome metrics from observability events."""
+    from thomas.observability.onboarding_outcomes import (
+        build_onboarding_outcome_report,
+        get_outcomes_report,
+    )
+
+    days = max(1, int(window_days))
+    if str(db_path or "").strip():
+        report = build_onboarding_outcome_report(Path(str(db_path).strip()), since_days=days)
+    else:
+        report = get_outcomes_report(since_days=days)
+
+    if as_json:
+        click.echo(json.dumps(report, ensure_ascii=False))
+        return
+    summary = dict(report.get("summary") or {})
+    click.echo(f"events: {int(summary.get('events', 0) or 0)}")
+    click.echo(f"wizard_opened: {int(summary.get('wizard_opened', 0) or 0)}")
+    click.echo(f"onboarding_completed: {int(summary.get('onboarding_completed', 0) or 0)}")
+
+
+@cli.group("release-contracts")
+def release_contracts_group() -> None:
+    """Release contract governance checks."""
+
+
+@release_contracts_group.command("check")
+@click.option("--registry", "registry_path", type=click.Path(exists=False, dir_okay=False), default="")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.option("--strict", is_flag=True, help="Exit non-zero when checks fail.")
+def release_contracts_check_cmd(registry_path: str, as_json: bool, strict: bool) -> None:
+    """Validate the release contract registry."""
+    from thomas.system.release_contracts import build_release_contract_report
+
+    report = build_release_contract_report(Path(registry_path).resolve() if registry_path else None)
+    if as_json:
+        click.echo(json.dumps(report, ensure_ascii=False))
+    else:
+        summary = dict(report.get("summary") or {})
+        click.echo(f"ok: {bool(report.get('ok', False))}")
+        click.echo(f"contract_count: {int(summary.get('contract_count', 0) or 0)}")
+        click.echo(f"errors: {int(summary.get('error_count', 0) or 0)}")
+        click.echo(f"warnings: {int(summary.get('warning_count', 0) or 0)}")
+    if strict and not bool(report.get("ok", False)):
+        raise SystemExit(2)
+
+
 # Public root app alias used by external loaders/tests.
 app = cli
 
@@ -1749,6 +1628,50 @@ try:
     register_quality_ops(cli)
 except Exception as e:
     log.debug("Failed to register quality ops commands: %s", e)
+
+
+# --- Architecture tools ---
+try:
+    from thomas.cli.doctor import doctor_command
+    cli.add_command(doctor_command)
+except Exception:
+    pass
+
+try:
+    from thomas.cli.why import why_command
+    cli.add_command(why_command)
+except Exception:
+    pass
+
+try:
+    from thomas.cli.scaffold import scaffold_group
+    cli.add_command(scaffold_group)
+except Exception:
+    pass
+
+try:
+    from thomas.cli.generate_agent_docs import generate_agent_docs_command
+    cli.add_command(generate_agent_docs_command)
+except Exception:
+    pass
+
+try:
+    from thomas.cli.sweep import sweep_command
+    cli.add_command(sweep_command)
+except Exception:
+    pass
+
+try:
+    from thomas.cli.heartbeat_cmd import heartbeat_command
+    cli.add_command(heartbeat_command)
+except Exception:
+    pass
+
+try:
+    from thomas.cli.commands.investigate import register_investigate_commands
+    register_investigate_commands(cli)
+except Exception:
+    pass
 
 
 if __name__ == "__main__":

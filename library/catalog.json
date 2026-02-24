@@ -522,6 +522,42 @@
       "fingerprint": "50c486792888e06c705f05160ff522fc19608b7a8743c6be704e2b2ee3d80615",
       "query": "my settings keep resetting every restart. where should i look first?",
       "auto_captured": true
+    },
+    {
+      "id": "1771786305-list-assumptions-and-what-to-validate-first.-context---user-context-whats-yout-m",
+      "title": "List assumptions and what to validate first. Context: - User context: whats yout mom - Latest response: I’m not going to",
+      "category": "research-notes",
+      "summary": "Actions taken: 1. No new tool actions were needed on this retry; I used the already-loaded startup guidance and context from the prior run in this session. Assumptions: 1. “whats yout mom” is a typo for “what’s your mom,” likely intended as a taunt/insult. 2.",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771786305-list-assumptions-and-what-to-validate-first.-context---user-context-whats-yout-m.md",
+      "created_ts_utc": 1771786305,
+      "updated_ts_utc": 1771786305,
+      "fingerprint": "e6722bf85c09bbe2236822fe779db2b207d2a96565fc006b73c90ba7fe4ceb9e",
+      "query": "List assumptions and what to validate first. Context: - User context: whats yout mom - Latest response: I’m not going to engage with that. If you have a real question or task, I’m here to help.",
+      "auto_captured": true
+    },
+    {
+      "id": "1771877133-research-this-topic-and-compare-the-best-options-with-tradeoffs-and-a-recommenda",
+      "title": "Research this topic and compare the best options with tradeoffs and a recommendation.",
+      "category": "research-notes",
+      "summary": "Please share the specific topic you want researched. To give you a solid comparison with tradeoffs and a recommendation, I need: 1. The exact topic/problem space 2. Your constraints (budget, timeline, team size, tech stack, risk tolerance) 3. What “best” means",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771877133-research-this-topic-and-compare-the-best-options-with-tradeoffs-and-a-recommenda.md",
+      "created_ts_utc": 1771877133,
+      "updated_ts_utc": 1771877133,
+      "fingerprint": "dbdc55b0fb8ce759e4717660368e707785cbd37f5bd5c4476e596b073b1863de",
+      "query": "Research this topic and compare the best options with tradeoffs and a recommendation.",
+      "auto_captured": true
     }
   ]
 }
