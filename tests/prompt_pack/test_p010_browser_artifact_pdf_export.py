@@ -152,6 +152,10 @@ def test_cli_json_success_zip(tmp_path: Path) -> None:
     assert payload["ok"] is True
     assert payload["output_format"] == "zip"
     assert Path(payload["output_path"]).exists()
+    assert payload["pages"] == 2
+    assert payload["images"] == 2
+    assert isinstance(payload.get("sha256"), str)
+    assert len(str(payload["sha256"])) == 64
 
 
 def test_cli_json_failure(tmp_path: Path) -> None:

@@ -122,20 +122,36 @@ def _invoke_click_command(
             obj=ctx_obj,
         )
         code = int(rv) if isinstance(rv, int) else 0
-        return {
+        payload: dict[str, Any] = {
             "ok": code == 0,
             "mode": "click",
             "exit_code": code,
             "entrypoint": str(getattr(command, "name", "") or command.__class__.__name__),
         }
+        if code != 0:
+            payload.update(
+                {
+                    "error": f"click command exited with code {code}",
+                    "message": f"click command exited with code {code}",
+                }
+            )
+        return payload
     except SystemExit as exc:
         code = int(exc.code or 0)
-        return {
+        payload = {
             "ok": code == 0,
             "mode": "click",
             "exit_code": code,
             "entrypoint": str(getattr(command, "name", "") or command.__class__.__name__),
         }
+        if code != 0:
+            payload.update(
+                {
+                    "error": f"click command exited with code {code}",
+                    "message": f"click command exited with code {code}",
+                }
+            )
+        return payload
     except Exception as exc:
         return {
             "ok": False,
@@ -193,20 +209,36 @@ def _invoke_main(
         else:
             rv = main_fn()
         code = int(rv) if isinstance(rv, int) else 0
-        return {
+        payload: dict[str, Any] = {
             "ok": code == 0,
             "mode": "main",
             "exit_code": code,
             "entrypoint": "main",
         }
+        if code != 0:
+            payload.update(
+                {
+                    "error": f"main exited with code {code}",
+                    "message": f"main exited with code {code}",
+                }
+            )
+        return payload
     except SystemExit as exc:
         code = int(exc.code or 0)
-        return {
+        payload = {
             "ok": code == 0,
             "mode": "main",
             "exit_code": code,
             "entrypoint": "main",
         }
+        if code != 0:
+            payload.update(
+                {
+                    "error": f"main exited with code {code}",
+                    "message": f"main exited with code {code}",
+                }
+            )
+        return payload
     except Exception as exc:
         return {
             "ok": False,
@@ -305,7 +337,12 @@ def _build_pack_proxy_command(
                 click.echo(f"{command_name}: executed via {mode}")
             else:
                 click.echo(f"{command_name}: failed via {mode}", err=True)
-                click.echo(str(payload.get("error") or "unknown error"), err=True)
+                detail = (
+                    payload.get("error")
+                    or payload.get("message")
+                    or f"command exited with code {int(payload.get('exit_code') or 1)}"
+                )
+                click.echo(str(detail), err=True)
 
         if not bool(payload.get("ok", False)):
             raise SystemExit(int(payload.get("exit_code") or 1))

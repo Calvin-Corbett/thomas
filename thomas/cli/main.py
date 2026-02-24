@@ -717,12 +717,23 @@ def models_list(ctx: click.Context) -> None:
 @click.pass_context
 def models_discover(ctx: click.Context, model_name: Optional[str], timeout_s: float) -> None:
     """Discover model ids available at an endpoint (best effort)."""
+    _run_models_discover(ctx, model_name=model_name, timeout_s=timeout_s)
+
+
+def _run_models_discover(ctx: click.Context, model_name: Optional[str], timeout_s: float) -> None:
+    """Run discovery for both ``models discover`` and its compatibility aliases."""
     config: AppConfig = ctx.obj["config"]
     cfg = config.get_model(model_name)
 
     from thomas.models.discovery import discover_models
 
-    found = discover_models(cfg, timeout_s=timeout_s)
+    try:
+        found = discover_models(cfg, timeout_s=timeout_s)
+    except click.ClickException:
+        raise
+    except Exception as exc:
+        raise click.ClickException(f"model discovery failed: {exc}") from None
+
     if not found:
         click.echo(f"No models discovered at {cfg.base_url}.")
         return
@@ -895,7 +906,7 @@ def models_status(ctx: click.Context, as_json: bool) -> None:
 @click.pass_context
 def models_scan(ctx: click.Context, timeout_s: float) -> None:
     """Compatibility alias for model discovery scans."""
-    models_discover(ctx, model_name=None, timeout_s=timeout_s)
+    _run_models_discover(ctx, model_name=None, timeout_s=timeout_s)
 
 
 @models.command("set")

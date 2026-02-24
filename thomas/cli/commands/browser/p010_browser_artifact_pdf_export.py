@@ -25,6 +25,10 @@ def _emit_json(payload: dict[str, object]) -> None:
     print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
 
 
+def _emit_human_error(*, code: str, message: str) -> None:
+    print(f"Error [{code}]: {message}", file=sys.stderr)
+
+
 def _run_export(
     *,
     artifact_ref: str,
@@ -73,13 +77,13 @@ def _run_cli_common(
         if json_output:
             _emit_json({"ok": False, "error": e.to_dict()})
         else:
-            print(f"Error: {e}", file=sys.stderr)
+            _emit_human_error(code=e.code, message=str(e))
         return e.exit_code
     except Exception as e:  # noqa: BLE001
         if json_output:
             _emit_json({"ok": False, "error": {"code": "UNHANDLED_ERROR", "message": str(e)}})
         else:
-            print(f"Error: {e}", file=sys.stderr)
+            _emit_human_error(code="UNHANDLED_ERROR", message=str(e))
         return 1
 
     if json_output:
@@ -158,16 +162,8 @@ if typer is not None and _browser_app is not None:
 
 # --- Argparse integration (fallback) --------------------------------------------------------------
 
-def register(subparsers: argparse._SubParsersAction) -> None:
-    """
-    Register the command with an argparse-based CLI.
 
-    This is a no-op unless the Thomas CLI uses argparse and calls command-module `register()` hooks.
-    """
-    parser = subparsers.add_parser(
-        _COMMAND_NAME,
-        help="Export a browser artifact (screenshots) to a multi-page PDF or a ZIP bundle.",
-    )
+def _add_common_argparse_args(parser: argparse.ArgumentParser) -> None:
     parser.add_argument("artifact_ref", help="Artifact id or filesystem path.")
     parser.add_argument("--output", "-o", default=None, help="Output .pdf or .zip path.")
     parser.add_argument("--overwrite", action="store_true", help="Overwrite output if it exists.")
@@ -182,6 +178,19 @@ def register(subparsers: argparse._SubParsersAction) -> None:
         help="When producing a ZIP bundle, include original images under images/.",
     )
     parser.add_argument("--json", dest="json_output", action="store_true", help="JSON output.")
+
+
+def register(subparsers: argparse._SubParsersAction) -> None:
+    """
+    Register the command with an argparse-based CLI.
+
+    This is a no-op unless the Thomas CLI uses argparse and calls command-module `register()` hooks.
+    """
+    parser = subparsers.add_parser(
+        _COMMAND_NAME,
+        help="Export a browser artifact (screenshots) to a multi-page PDF or a ZIP bundle.",
+    )
+    _add_common_argparse_args(parser)
     parser.set_defaults(func=_run_argparse)
 
 
@@ -209,20 +218,7 @@ def _build_standalone_parser() -> argparse.ArgumentParser:
         prog=_COMMAND_NAME,
         description="Export a browser artifact to a multi-page PDF or ZIP bundle.",
     )
-    parser.add_argument("artifact_ref", help="Artifact id or filesystem path.")
-    parser.add_argument("--output", "-o", default=None, help="Output .pdf or .zip path.")
-    parser.add_argument("--overwrite", action="store_true", help="Overwrite output if it exists.")
-    parser.add_argument("--page-size", default="letter", help="letter | a4 | auto")
-    parser.add_argument("--artifacts-root", default=None, help="Artifacts root for resolving ids.")
-    parser.add_argument("--format", default="auto", help="auto | pdf | zip")
-    parser.add_argument("--zip", dest="zip_output", action="store_true", help="Shortcut for --format zip")
-    parser.add_argument(
-        "--include-images",
-        dest="include_images_in_zip",
-        action="store_true",
-        help="When producing a ZIP bundle, include original images under images/.",
-    )
-    parser.add_argument("--json", dest="json_output", action="store_true", help="JSON output.")
+    _add_common_argparse_args(parser)
     return parser
 
 

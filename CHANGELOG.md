@@ -7,6 +7,16 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.11.77] - 2026-02-24
+
+### Fixed
+- Memory compatibility operational commands now separate describe-mode output from execution attempts, and execution mode returns explicit structured `not_implemented` errors for stubbed actions.
+- Browser parity command contract behavior for artifact PDF export and DOM snapshot paths now matches async runtime expectations.
+- `models scan` alias command flow no longer crashes on compatibility-path invocation.
+
+### Added
+- Added regression coverage for memory compatibility command surfaces and expanded compatibility tests for chain/crews/flows/loaders/memory/parsers/prompts modules.
+
 ## [0.11.76] - 2026-02-24
 
 ### Added
