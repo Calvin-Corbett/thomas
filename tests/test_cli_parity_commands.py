@@ -29,6 +29,29 @@ def _fake_config(tmp_path: Path) -> SimpleNamespace:
     )
 
 
+def _memory_cli_context(tmp_path: Path) -> tuple[click.Group, CliRunner, SimpleNamespace]:
+    root = _build_root_cli()
+    register_compat_commands(root)
+    runner = CliRunner()
+    cfg = _fake_config(tmp_path)
+    return root, runner, cfg
+
+
+def _assert_memory_payload(
+    payload: dict[str, object],
+    *,
+    action: str,
+    mode: str,
+    ok: bool,
+    executed: bool,
+) -> None:
+    assert payload["ok"] is ok
+    assert payload["command"] == "memory"
+    assert payload["action"] == action
+    assert payload["mode"] == mode
+    assert payload["executed"] is executed
+
+
 def test_plugins_command_module_importable() -> None:
     from thomas.cli.commands.plugins import p113_plugin_tool_provider_injection as mod
 
@@ -215,3 +238,102 @@ def test_skills_resolve_returns_runtime_selection(tmp_path: Path, monkeypatch) -
     selected_names = {str(row.get("name") or "") for row in payload.get("selected") or []}
     assert skill_name in selected_names
     assert "--- Runtime Skills ---" in str(payload.get("context") or "")
+
+
+def _block_memory_backend_imports(monkeypatch) -> None:  # noqa: ANN001
+    import thomas.cli.parity_compat as parity_compat
+
+    blocked = {
+        "thomas.memory.search",
+        "thomas.memory.indexer",
+        "thomas.memory.compaction",
+    }
+    original_import_module = parity_compat.importlib.import_module
+
+    def _patched_import_module(name: str, package: str | None = None):  # noqa: ANN001
+        if name in blocked:
+            raise ModuleNotFoundError(f"blocked import for parity memory test: {name}", name=name)
+        return original_import_module(name, package)
+
+    monkeypatch.setattr(parity_compat.importlib, "import_module", _patched_import_module)
+
+
+def test_memory_help_lists_stable_operational_actions(tmp_path: Path) -> None:
+    root, runner, cfg = _memory_cli_context(tmp_path)
+
+    res = runner.invoke(root, ["memory", "--help"], obj={"config": cfg})
+    assert res.exit_code == 0, res.output
+    for action in ("status", "list", "search", "index", "compact"):
+        assert action in res.output
+
+
+def test_memory_status_json_remains_operational(tmp_path: Path) -> None:
+    root, runner, cfg = _memory_cli_context(tmp_path)
+
+    res = runner.invoke(root, ["memory", "status", "--json"], obj={"config": cfg})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["ok"] is True
+    assert payload["root"].endswith(".thomas")
+    assert "chat_files" in payload
+
+
+def test_memory_operational_actions_default_to_describe_mode(tmp_path: Path) -> None:
+    root, runner, cfg = _memory_cli_context(tmp_path)
+
+    cases = (
+        (["memory", "search", "test", "--json"], "search"),
+        (["memory", "list", "--json"], "list"),
+        (["memory", "index", "--json"], "index"),
+        (["memory", "compact", "--json"], "compact"),
+    )
+    for argv, action in cases:
+        res = runner.invoke(root, argv, obj={"config": cfg})
+        assert res.exit_code == 0, res.output
+        payload = json.loads(res.output)
+        _assert_memory_payload(payload, action=action, mode="describe", ok=False, executed=False)
+        assert "run_hint" in payload
+
+
+def test_memory_operational_actions_run_mode_fail_structured_non_zero(tmp_path: Path, monkeypatch) -> None:
+    _block_memory_backend_imports(monkeypatch)
+    root, runner, cfg = _memory_cli_context(tmp_path)
+
+    cases = (
+        (["memory", "search", "test", "--run", "--json"], "search"),
+        (["memory", "list", "--run", "--json"], "list"),
+        (["memory", "index", "--run", "--json"], "index"),
+        (["memory", "compact", "--run", "--json"], "compact"),
+    )
+    for argv, action in cases:
+        res = runner.invoke(root, argv, obj={"config": cfg})
+        assert res.exit_code == 2, res.output
+        payload = json.loads(res.output)
+        _assert_memory_payload(payload, action=action, mode="run", ok=False, executed=False)
+        error = payload["error"]
+        assert error["category"] == "not_implemented"
+        assert error["code"] == "memory_operation_not_implemented"
+        assert "no executable backend implementation" in error["message"]
+        assert "hint" in error
+
+
+def test_memory_search_run_mode_distinguishes_nested_import_failure(tmp_path: Path, monkeypatch) -> None:
+    import thomas.cli.parity_compat as parity_compat
+
+    root, runner, cfg = _memory_cli_context(tmp_path)
+    original_import_module = parity_compat.importlib.import_module
+
+    def _patched_import_module(name: str, package: str | None = None):  # noqa: ANN001
+        if name == "thomas.memory.search":
+            raise ModuleNotFoundError("No module named 'missing_dependency'", name="missing_dependency")
+        return original_import_module(name, package)
+
+    monkeypatch.setattr(parity_compat.importlib, "import_module", _patched_import_module)
+
+    res = runner.invoke(root, ["memory", "search", "test", "--run", "--json"], obj={"config": cfg})
+    assert res.exit_code == 1, res.output
+    payload = json.loads(res.output)
+    _assert_memory_payload(payload, action="search", mode="run", ok=False, executed=False)
+    error = payload["error"]
+    assert error["category"] == "runtime_error"
+    assert error["code"] == "memory_operation_failed"
