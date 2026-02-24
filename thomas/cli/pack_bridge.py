@@ -1,3 +1,4 @@
+"""Pack bridge module."""
 from __future__ import annotations
 
 import importlib
@@ -158,10 +159,34 @@ def _main_accepts_argv(main_fn: Any) -> bool:
     return first.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
 
 
-def _invoke_main(module: Any, argv: Sequence[str]) -> dict[str, Any]:
+def _invoke_main(
+    module: Any,
+    argv: Sequence[str],
+    *,
+    strict_missing_main: bool = False,
+) -> dict[str, Any]:
     main_fn = getattr(module, "main", None)
     if not callable(main_fn):
-        return {"ok": True, "mode": "noop", "exit_code": 0}
+        msg = (
+            f"Module {getattr(module, '__name__', '?')} has no callable main(); "
+            "command is not implemented."
+        )
+        if not strict_missing_main:
+            return {
+                "ok": True,
+                "mode": "noop",
+                "exit_code": 0,
+                "message": msg,
+            }
+        return {
+            "ok": False,
+            "mode": "noop",
+            "exit_code": 1,
+            "error": msg,
+            "error_code": "entrypoint_missing",
+            "error_category": "not_implemented",
+            "message": msg,
+        }
     try:
         if _main_accepts_argv(main_fn):
             rv = main_fn(list(argv))
@@ -196,8 +221,10 @@ def invoke_pack_module(
     argv: Sequence[str],
     *,
     prog_name: str,
+    strict_missing_main: bool = False,
     ctx_obj: Any | None = None,
 ) -> dict[str, Any]:
+    """Run invoke pack module."""
     try:
         module = importlib.import_module(module_name)
     except Exception as exc:
@@ -211,7 +238,7 @@ def invoke_pack_module(
     commands = _discover_click_commands(module)
     if commands:
         return _invoke_click_command(commands[0], argv, prog_name=prog_name, ctx_obj=ctx_obj)
-    return _invoke_main(module, argv)
+    return _invoke_main(module, argv, strict_missing_main=strict_missing_main)
 
 
 def _build_pack_proxy_command(
@@ -219,6 +246,7 @@ def _build_pack_proxy_command(
     command_name: str,
     module_name: str,
     prompt_id: str,
+    strict_run_missing_entrypoint: bool = False,
 ) -> click.Command:
     @click.command(
         name=command_name,
@@ -243,6 +271,7 @@ def _build_pack_proxy_command(
                 module_name,
                 forwarded_args,
                 prog_name=str(ctx.command_path),
+                strict_missing_main=strict_run_missing_entrypoint,
                 ctx_obj=ctx.obj,
             )
             payload.update({"module": module_name, "prompt_id": prompt_id, "args": forwarded_args})
@@ -250,6 +279,7 @@ def _build_pack_proxy_command(
             payload = {
                 "ok": True,
                 "mode": "describe",
+                "exit_code": 0,
                 "module": module_name,
                 "prompt_id": prompt_id,
                 "command": command_name,
@@ -257,8 +287,11 @@ def _build_pack_proxy_command(
             }
 
         if as_json and should_run:
-            # Let the invoked module own JSON output to avoid mixed JSON payloads.
-            pass
+            # Let invoked modules own JSON output. If execution never reached a
+            # real module entrypoint, emit the proxy payload so callers still get
+            # machine-readable failure details.
+            if not bool(payload.get("ok", False)) and str(payload.get("mode") or "") in {"noop", "import"}:
+                click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         elif as_json:
             click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         elif suppress_text and should_run:
@@ -286,8 +319,10 @@ def register_pack_proxy_commands(
     package: str,
     family_hint: str = "",
     include_prefix: str = "",
+    strict_run_missing_entrypoint: bool = False,
     exclude_modules: Iterable[str] | None = None,
 ) -> int:
+    """Run register pack proxy commands."""
     excluded = {str(x).strip() for x in (exclude_modules or []) if str(x).strip()}
     used = set(str(name).strip() for name in group.commands.keys())
     added = 0
@@ -315,6 +350,7 @@ def register_pack_proxy_commands(
                 command_name=command_name,
                 module_name=module_name,
                 prompt_id=prompt_id,
+                strict_run_missing_entrypoint=strict_run_missing_entrypoint,
             )
         )
         used.add(command_name)
