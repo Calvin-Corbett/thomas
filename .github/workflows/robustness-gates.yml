@@ -67,6 +67,57 @@ jobs:
         run: |
           python scripts/check_workboard_claims.py
 
+      - name: Workboard agent accountability gate
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+          import subprocess
+          import sys
+          from scripts import check_workboard_claims as claims_gate
+
+          workboard = Path("plans/thomas/WORKBOARD.md")
+          violations, claims = claims_gate.evaluate_claims(workboard)
+          if violations:
+              print("Workboard agent accountability gate: FAIL")
+              for item in violations:
+                  print(f"- {item}")
+              raise SystemExit(1)
+
+          agents = sorted(
+              {
+                  str(claim.agent).strip()
+                  for claim in claims
+                  if str(claim.agent).strip()
+              },
+              key=str.lower,
+          )
+          if not agents:
+              print("Workboard agent accountability gate: PASS (no active claims)")
+              raise SystemExit(0)
+
+          for agent in agents:
+              cmd = [
+                  sys.executable,
+                  "scripts/check_workboard_agent_claim.py",
+                  "--workboard",
+                  str(workboard),
+                  "--agent",
+                  agent,
+              ]
+              proc = subprocess.run(cmd, capture_output=True, text=True)
+              output = (proc.stdout or "").strip()
+              if output:
+                  print(output)
+              if proc.returncode != 0:
+                  stderr = (proc.stderr or "").strip()
+                  if stderr:
+                      print(stderr)
+                  print(f"Workboard agent accountability gate: FAIL for agent '{agent}'")
+                  raise SystemExit(proc.returncode)
+
+          print(f"Workboard agent accountability gate: PASS ({len(agents)} agents checked)")
+          PY
+
       - name: Workboard issue tooling smoke
         run: |
           python scripts/workboard_issue.py --help
