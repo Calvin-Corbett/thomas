@@ -26,10 +26,51 @@ log = logging.getLogger(__name__)
 _RETRYABLE = {429, 500, 502, 503, 504}
 _MAX_RETRIES = 3
 _BASE_DELAY = 1.0
-_FAILOVER_COOLDOWN_UNTIL: Dict[str, float] = {}
-_RATE_LIMIT_COOLDOWN_UNTIL: Dict[str, float] = {}
 _DEFAULT_RATE_LIMIT_COOLDOWN_S = 20.0
 _MAX_RETRY_AFTER_S = 300.0
+_AUTH_FAILURE_BASE_S = 18_000.0  # 5 hours (billing/auth failures)
+_SERVER_FAILURE_BASE_S = 300.0   # 5 minutes (general server errors)
+_MAX_BACKOFF_S = 86_400.0        # 24 hours cap
+_RATE_LIMIT_BACKOFF_CAP_S = 600.0  # 10 minutes cap for rate limits
+
+
+@dataclass
+class _ProviderCooldown:
+    """Tracks per-provider cooldown with exponential backoff."""
+
+    until: float = 0.0
+    failure_count: int = 0
+    failure_type: str = ""  # "rate_limit" | "auth" | "server" | "connect"
+
+    def mark(self, failure_type: str, base_s: float = _SERVER_FAILURE_BASE_S) -> None:
+        self.failure_type = failure_type
+        self.failure_count += 1
+        wait = base_s * (2 ** min(self.failure_count - 1, 7))
+        wait = min(wait, _MAX_BACKOFF_S)
+        if failure_type == "rate_limit":
+            wait = min(wait, _RATE_LIMIT_BACKOFF_CAP_S)
+        self.until = time.monotonic() + wait
+
+    def remaining(self) -> float:
+        rem = self.until - time.monotonic()
+        return rem if rem > 0 else 0.0
+
+    def is_active(self) -> bool:
+        return self.remaining() > 0
+
+    def clear(self) -> None:
+        self.until = 0.0
+        self.failure_count = 0
+        self.failure_type = ""
+
+
+_PROVIDER_COOLDOWNS: Dict[str, _ProviderCooldown] = {}
+
+
+def _get_cooldown(key: str) -> _ProviderCooldown:
+    if key not in _PROVIDER_COOLDOWNS:
+        _PROVIDER_COOLDOWNS[key] = _ProviderCooldown()
+    return _PROVIDER_COOLDOWNS[key]
 
 
 class LLMError(Exception):
@@ -101,6 +142,7 @@ class LLMClient:
         self._failover_on_auth_error = bool(failover_on_auth_error)
         self._max_retries = max(1, int(max_retries))
         self._base_retry_delay = max(0.0, float(base_retry_delay_s))
+        self._session_pinned_key: Optional[str] = None  # set on first success
         self._request_overrides = dict(request_overrides or {})
         self._attempt_trace: List[Dict[str, Any]] = []
 
@@ -156,17 +198,25 @@ class LLMClient:
     def _cooldown_key(cfg: ModelConfig) -> str:
         return str(cfg.name or cfg.model or "unknown")
 
-    def _mark_cooldown(self, cfg: ModelConfig) -> None:
+    def _mark_cooldown(self, cfg: ModelConfig, failure_type: str = "server") -> None:
         if self._failover_cooldown_s <= 0:
             return
         key = self._cooldown_key(cfg)
-        _FAILOVER_COOLDOWN_UNTIL[key] = time.monotonic() + float(self._failover_cooldown_s)
+        cd = _get_cooldown(key)
+        base = _AUTH_FAILURE_BASE_S if failure_type == "auth" else float(self._failover_cooldown_s)
+        cd.mark(failure_type, base_s=base)
+
+    def _clear_cooldown(self, cfg: ModelConfig) -> None:
+        key = self._cooldown_key(cfg)
+        cd = _get_cooldown(key)
+        cd.clear()
+        # Also clear session pin tracking on explicit clear.
+        if hasattr(self, "_session_pinned_key") and self._session_pinned_key == key:
+            pass  # keep pin; it succeeded
 
     def _cooldown_remaining(self, cfg: ModelConfig) -> float:
         key = self._cooldown_key(cfg)
-        until = float(_FAILOVER_COOLDOWN_UNTIL.get(key, 0.0) or 0.0)
-        rem = until - time.monotonic()
-        return rem if rem > 0 else 0.0
+        return _get_cooldown(key).remaining()
 
     @staticmethod
     def _retry_after_seconds(headers: Any) -> Optional[float]:
@@ -201,16 +251,21 @@ class LLMClient:
 
     def _mark_rate_limited(self, cfg: ModelConfig, retry_after_s: Optional[float]) -> None:
         key = self._cooldown_key(cfg)
-        base = float(_DEFAULT_RATE_LIMIT_COOLDOWN_S)
-        wait = float(retry_after_s) if retry_after_s is not None else base
-        wait = max(base, min(wait, _MAX_RETRY_AFTER_S))
-        _RATE_LIMIT_COOLDOWN_UNTIL[key] = time.monotonic() + wait
+        cd = _get_cooldown(key)
+        if retry_after_s is not None and retry_after_s > 0:
+            # Use server-provided Retry-After directly (capped).
+            cd.until = time.monotonic() + min(float(retry_after_s), _MAX_RETRY_AFTER_S)
+            cd.failure_type = "rate_limit"
+            cd.failure_count = max(cd.failure_count, 1)
+        else:
+            cd.mark("rate_limit", base_s=float(_DEFAULT_RATE_LIMIT_COOLDOWN_S))
 
     def _rate_limit_remaining(self, cfg: ModelConfig) -> float:
         key = self._cooldown_key(cfg)
-        until = float(_RATE_LIMIT_COOLDOWN_UNTIL.get(key, 0.0) or 0.0)
-        rem = until - time.monotonic()
-        return rem if rem > 0 else 0.0
+        cd = _get_cooldown(key)
+        if cd.failure_type == "rate_limit":
+            return cd.remaining()
+        return 0.0
 
     @staticmethod
     def _cfg_snapshot(cfg: ModelConfig) -> Dict[str, Any]:
@@ -530,6 +585,19 @@ class LLMClient:
 
         primary_cfg = self._primary_config
         candidates = [primary_cfg] + [cfg for cfg in self._fallback_configs]
+
+        # Session pinning: if a provider succeeded before in this session,
+        # move it to the front of candidates (if not in cooldown).
+        if self._session_pinned_key:
+            pinned_cd = _get_cooldown(self._session_pinned_key)
+            if not pinned_cd.is_active():
+                pinned_idx = next(
+                    (i for i, c in enumerate(candidates) if self._cooldown_key(c) == self._session_pinned_key),
+                    -1,
+                )
+                if pinned_idx > 0:
+                    candidates.insert(0, candidates.pop(pinned_idx))
+
         last_error: Optional[Exception] = None
 
         for idx, cfg in enumerate(candidates):
@@ -569,6 +637,12 @@ class LLMClient:
                 async for event in self._stream_current_provider(messages, tools):
                     yield event
                 attempt["status"] = "success"
+                # On success, clear backoff and pin provider for this session.
+                self._clear_cooldown(cfg)
+                # Only pin when cooldowns are enabled; otherwise always
+                # start from primary on the next turn.
+                if self._failover_cooldown_s > 0:
+                    self._session_pinned_key = self._cooldown_key(cfg)
                 return
             except LLMError as e:
                 last_error = e
@@ -578,12 +652,14 @@ class LLMClient:
                 auth_error = e.status in (401, 403)
                 if auth_error and not self._failover_on_auth_error:
                     raise
-                self._mark_cooldown(cfg)
+                failure_type = "auth" if auth_error else "server"
+                self._mark_cooldown(cfg, failure_type=failure_type)
                 if idx < len(candidates) - 1:
                     log.warning(
-                        "LLM profile '%s' failed (%s). Trying failover profile.",
+                        "LLM profile '%s' failed (%s, type=%s). Trying failover profile.",
                         cfg.name,
                         e,
+                        failure_type,
                     )
                     continue
                 raise
@@ -591,7 +667,7 @@ class LLMClient:
                 last_error = e
                 attempt["status"] = "error"
                 attempt["error"] = f"{type(e).__name__}: {e}"
-                self._mark_cooldown(cfg)
+                self._mark_cooldown(cfg, failure_type="connect")
                 if idx < len(candidates) - 1:
                     log.warning(
                         "LLM profile '%s' connection failed (%s). Trying failover profile.",

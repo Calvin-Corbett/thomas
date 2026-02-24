@@ -22,6 +22,8 @@ REQUIRED_ASSERTIONS = (
     "no_console_runtime_errors",
     "no_broken_images",
     "pixel_diff_within_threshold",
+    "nav_persistent_all_routes",
+    "unknown_route_theme_integrity",
     "band_on_footer_border",
     "no_band_strip_height",
     "riders_mounted_on_back",
@@ -370,6 +372,78 @@ def _validate_proof_payload(
                     f"metrics.riders[{index}] visibility failed: robot bounds [{robot_top:.2f}, {robot_bottom:.2f}] "
                     f"must intersect track [{track_top:.2f}, {track_bottom:.2f}]"
                 )
+
+    route_matrix = metrics.get("route_matrix")
+    if not isinstance(route_matrix, list) or not route_matrix:
+        errors.append("metrics.route_matrix must be a non-empty list")
+    else:
+        saw_probe_route = False
+        for index, raw_route in enumerate(route_matrix):
+            if not isinstance(raw_route, dict):
+                errors.append(f"metrics.route_matrix[{index}] must be an object")
+                continue
+            route_path = _normalize(str(raw_route.get("route") or ""))
+            if not route_path.startswith("/"):
+                errors.append(f"metrics.route_matrix[{index}].route must start with '/'")
+            if route_path == "/__ui-route-smoke__":
+                saw_probe_route = True
+            nav_position = _normalize(str(raw_route.get("nav_position") or "")).lower()
+            if nav_position not in {"fixed", "sticky"}:
+                errors.append(
+                    f"metrics.route_matrix[{index}].nav_position must be fixed or sticky "
+                    f"(got {nav_position or 'missing'})"
+                )
+            nav_top = _read_number(raw_route, "nav_top", errors, label=f"metrics.route_matrix[{index}]")
+            nav_top_after_scroll = _read_number(
+                raw_route,
+                "nav_top_after_scroll",
+                errors,
+                label=f"metrics.route_matrix[{index}]",
+            )
+            route_viewport_width = _read_number(
+                raw_route,
+                "viewport_width",
+                errors,
+                label=f"metrics.route_matrix[{index}]",
+            )
+            route_root_scroll_width = _read_number(
+                raw_route,
+                "root_scroll_width",
+                errors,
+                label=f"metrics.route_matrix[{index}]",
+            )
+            route_broken_images = _read_number(
+                raw_route,
+                "broken_image_count",
+                errors,
+                label=f"metrics.route_matrix[{index}]",
+            )
+            if nav_top is not None and abs(nav_top) > 2:
+                errors.append(
+                    f"metrics.route_matrix[{index}] nav top drift too high at load "
+                    f"(got {nav_top:.2f}, expected <= 2px)"
+                )
+            if nav_top_after_scroll is not None and abs(nav_top_after_scroll) > 2:
+                errors.append(
+                    f"metrics.route_matrix[{index}] nav top drift too high after scroll "
+                    f"(got {nav_top_after_scroll:.2f}, expected <= 2px)"
+                )
+            if (
+                route_viewport_width is not None
+                and route_root_scroll_width is not None
+                and route_root_scroll_width > route_viewport_width + 1
+            ):
+                errors.append(
+                    f"metrics.route_matrix[{index}] horizontal overflow: root_scroll_width must be <= viewport_width + 1 "
+                    f"(got {route_root_scroll_width:.2f} vs {route_viewport_width:.2f})"
+                )
+            if route_broken_images is not None and route_broken_images > 0:
+                errors.append(
+                    f"metrics.route_matrix[{index}] broken_image_count must be 0 "
+                    f"(got {route_broken_images:.2f})"
+                )
+        if not saw_probe_route:
+            errors.append("metrics.route_matrix must include /__ui-route-smoke__ route entry")
 
     assertions = payload.get("assertions")
     if not isinstance(assertions, dict):

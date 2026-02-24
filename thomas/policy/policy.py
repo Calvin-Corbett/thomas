@@ -13,12 +13,18 @@ class PolicyEngine:
     rules: List[Rule]
 
     @staticmethod
-    def from_config(cfg: PolicyConfig) -> "PolicyEngine":
+    def from_config(
+        cfg: PolicyConfig,
+        *,
+        tool_categories: Optional[Dict[str, str]] = None,
+    ) -> "PolicyEngine":
         rules = default_rules(
             allow_tools=cfg.allow_tools,
             deny_tools=cfg.deny_tools,
             deny_roots=cfg.deny_roots,
             deny_paths=cfg.deny_paths,
+            deny_groups=cfg.deny_groups,
+            tool_categories=tool_categories or {},
         )
         return PolicyEngine(cfg, rules)
 

@@ -27,3 +27,11 @@ Pixel-diff policy:
   `python scripts/refresh_site_visual_proof.py --init-pixel-baseline`
 
 The gate is enforced by pre-commit and CI.
+
+Runtime assertions include:
+
+- core layout present across route matrix
+- nav persistence while scrolling on each core page
+- unknown-route themed page integrity
+- no horizontal overflow
+- footer rider mount/seat checks

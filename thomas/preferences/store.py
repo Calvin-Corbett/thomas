@@ -113,7 +113,7 @@ class NotificationPrefs(BaseModel):
 
 
 class AutonomyPrefs(BaseModel):
-    default_level: AutonomyLevel = "L2"
+    default_level: AutonomyLevel = "L3"
     concurrency_limit: int = Field(default=2, ge=1, le=64)
 
 

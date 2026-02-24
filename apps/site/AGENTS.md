@@ -2,6 +2,11 @@
 
 These rules are hard requirements for **all** agents (Thomas + external agents) changing `apps/site`.
 
+## Required Skill
+
+For UI edits, use `ui-precision-guard` (`.codex/skills/ui-precision-guard/SKILL.md`).
+This is mandatory for small alignment, spacing, animation, footer/header, and layout fixes.
+
 ## Mandatory Visual-Proof Gate
 
 If any UI file changes under:

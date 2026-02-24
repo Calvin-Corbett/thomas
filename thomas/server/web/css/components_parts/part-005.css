@@ -320,6 +320,9 @@
     min-height: 28px;
     flex-wrap: wrap; /* allow thinking-details to drop to next line */
 }
+.chat-robot-status.chat-robot-status-staging .chat-robot-portal-wrap {
+    transform: translateX(-4px);
+}
 
 .chat-robot-agent {
     --agent-primary: #9ad8ff;
@@ -470,10 +473,10 @@
 
 /* Robot materializing inside portal */
 .chat-robot-enter {
-    animation: chatRobotMaterialize 0.48s cubic-bezier(0.22, 1, 0.36, 1) 0.34s both;
+    animation: chatRobotMaterialize 0.5s cubic-bezier(0.22, 1, 0.36, 1) 0.56s both;
 }
 .chat-robot-enter-step {
-    animation: chatRobotStepIn 0.34s cubic-bezier(0.2, 0.85, 0.28, 1) 0.82s both;
+    animation: chatRobotStepIn 0.38s cubic-bezier(0.2, 0.85, 0.28, 1) 1.18s both;
 }
 @keyframes chatRobotMaterialize {
     0%   { transform: scale(0); opacity: 0; }
@@ -623,8 +626,8 @@
 /* ── Landed robot portal-out wrapper ── */
 .chat-robot-dock {
     position: fixed;
-    width: 16px;
-    height: 14px;
+    width: 20px;
+    height: 18px;
     z-index: 120;
     pointer-events: none;
 }
@@ -644,10 +647,10 @@
     display: inline-block;
 }
 .chat-robot-landed-exit .chat-robot-portal {
-    width: 22px;
-    height: 22px;
-    left: -5px;
-    top: 8px;
+    width: 26px;
+    height: 26px;
+    left: -3px;
+    top: 9px;
 }
 .chat-robot-landed-exit .chat-robot-landed {
     animation: chatRobotDiveIntoPortal 0.42s cubic-bezier(0.22, 0.8, 0.24, 1) 0.16s forwards !important;
@@ -803,8 +806,8 @@
     z-index: 10;
     pointer-events: none;
     transform-origin: bottom center;
-    animation: chatRobotExitJump 0.35s cubic-bezier(0.2, 0, 0.8, 1) forwards,
-               chatRobotExitFall 1.2s cubic-bezier(0.4, 0, 1, 1) 0.35s forwards;
+    animation: chatRobotExitWalk 0.72s cubic-bezier(0.22, 0.64, 0.28, 1) forwards,
+               chatRobotExitFall 1.26s cubic-bezier(0.35, 0, 0.95, 1) 0.72s forwards;
 }
 /* Kill any pseudo-element props (fishing rod, zzz) on exit clone */
 .robot-exit-run::after,
@@ -813,41 +816,36 @@
 }
 .robot-exit-run .office-agent-leg-left,
 .robot-exit-run .office-agent-leg-right {
-    animation: chatRobotLegScurry 0.08s linear infinite alternate;
+    animation: chatRobotLegWalk 0.21s linear infinite alternate;
 }
 .robot-exit-run .office-agent-leg-right {
-    animation-delay: 0.04s;
+    animation-delay: 0.1s;
 }
-/* Phase 1: Startled hop to the left (0.35s) */
-@keyframes chatRobotExitJump {
+/* Phase 1: Walk across the message body with a subtle push-up */
+@keyframes chatRobotExitWalk {
     0%   { transform: translateX(0) translateY(0) scaleX(-1); opacity: 1; }
-    /* Surprise squat */
-    25%  { transform: translateX(0) translateY(2px) scaleX(-1) scaleY(0.82); opacity: 1; }
-    /* Jump up and left */
-    65%  { transform: translateX(-18px) translateY(-14px) scaleX(-1) scaleY(1.05) rotate(8deg); opacity: 1; }
-    /* Peak of jump */
-    100% { transform: translateX(-30px) translateY(-10px) scaleX(-1) rotate(5deg); opacity: 1; }
+    22%  { transform: translateX(0) translateY(-8px) scaleX(-1) rotate(-2deg); opacity: 1; }
+    70%  { transform: translateX(var(--robot-exit-walk-dx, -38px)) translateY(-10px) scaleX(-1) rotate(2deg); opacity: 1; }
+    100% { transform: translateX(var(--robot-exit-walk-dx, -38px)) translateY(-8px) scaleX(-1) rotate(1deg); opacity: 1; }
 }
-/* Phase 2: Fall down with gentle tumble (1.2s, starts after jump) */
+/* Phase 2: Fall to the dock target */
 @keyframes chatRobotExitFall {
-    0%   { transform: translateX(-30px) translateY(-10px) scaleX(-1) rotate(5deg); opacity: 1; }
-    15%  { transform: translateX(-34px) translateY(40px) scaleX(-1) rotate(-10deg); opacity: 0.9; }
-    35%  { transform: translateX(-38px) translateY(150px) scaleX(-1) rotate(15deg); opacity: 0.75; }
-    55%  { transform: translateX(-41px) translateY(300px) scaleX(-1) rotate(-8deg); opacity: 0.5; }
-    75%  { transform: translateX(-43px) translateY(450px) scaleX(-1) rotate(12deg); opacity: 0.3; }
-    100% { transform: translateX(-45px) translateY(600px) scaleX(-1) rotate(-5deg); opacity: 0; }
+    0%   { transform: translateX(var(--robot-exit-walk-dx, -38px)) translateY(-8px) scaleX(-1) rotate(1deg); opacity: 1; }
+    24%  { transform: translateX(var(--robot-exit-walk-dx, -38px)) translateY(calc(var(--robot-exit-fall-dy, 520px) * 0.32)) scaleX(-1) rotate(-8deg); opacity: 0.9; }
+    56%  { transform: translateX(var(--robot-exit-walk-dx, -38px)) translateY(calc(var(--robot-exit-fall-dy, 520px) * 0.74)) scaleX(-1) rotate(10deg); opacity: 0.6; }
+    100% { transform: translateX(var(--robot-exit-walk-dx, -38px)) translateY(var(--robot-exit-fall-dy, 520px)) scaleX(-1) rotate(-5deg); opacity: 0; }
 }
-@keyframes chatRobotLegScurry {
-    0%   { transform: rotate(-8deg); }
-    100% { transform: rotate(8deg); }
+@keyframes chatRobotLegWalk {
+    0%   { transform: rotate(-5deg); }
+    100% { transform: rotate(5deg); }
 }
 
 /* ── Robot Landing (drops from above with bounce) ── */
 .chat-robot-landed {
     display: block;
-    margin-top: 10px;
-    width: 16px;
-    height: 14px;
+    margin-top: 6px;
+    width: 20px;
+    height: 18px;
     position: relative;
     image-rendering: pixelated;
     animation: chatRobotLandDrop 0.5s cubic-bezier(0.34, 1.56, 0.64, 1) forwards,
@@ -857,14 +855,14 @@
     position: absolute;
     left: 0;
     top: 0;
-    width: 16px;
-    height: 14px;
+    width: 20px;
+    height: 18px;
 }
 .chat-robot-landed-entry-wrap .chat-robot-portal {
-    width: 22px;
-    height: 22px;
-    left: -5px;
-    top: 8px;
+    width: 26px;
+    height: 26px;
+    left: -3px;
+    top: 9px;
 }
 .chat-robot-landed-entry {
     opacity: 0;
@@ -881,40 +879,40 @@
 .chat-robot-landed .office-agent-head {
     position: absolute;
     top: 0;
-    left: 4px;
-    width: 8px;
-    height: 5px;
+    left: 5px;
+    width: 10px;
+    height: 6px;
     border: 1px solid #0d1117;
     background: #9ad8ff;
 }
 .chat-robot-landed .office-agent-eye {
     position: absolute;
-    top: 1px;
-    width: 1px;
-    height: 1px;
+    top: 2px;
+    width: 2px;
+    height: 2px;
     background: #0b1726;
 }
 .chat-robot-landed .office-agent-eye-left { left: 1px; }
-.chat-robot-landed .office-agent-eye-right { left: 5px; }
+.chat-robot-landed .office-agent-eye-right { left: 6px; }
 .chat-robot-landed .office-agent-body {
     position: absolute;
-    top: 5px;
-    left: 3px;
-    width: 10px;
-    height: 5px;
+    top: 7px;
+    left: 4px;
+    width: 12px;
+    height: 7px;
     border: 1px solid #0d1117;
     background: linear-gradient(to bottom, #9ad8ff 44%, #5aaeff 45%);
 }
 .chat-robot-landed .office-agent-leg {
     position: absolute;
-    top: 11px;
-    width: 3px;
+    top: 15px;
+    width: 4px;
     height: 3px;
     border: 1px solid #0d1117;
     background: #5aaeff;
 }
-.chat-robot-landed .office-agent-leg-left { left: 5px; }
-.chat-robot-landed .office-agent-leg-right { left: 9px; }
+.chat-robot-landed .office-agent-leg-left { left: 6px; }
+.chat-robot-landed .office-agent-leg-right { left: 11px; }
 
 /* Landing: falls from above, squish on impact, settles */
 @keyframes chatRobotLandDrop {

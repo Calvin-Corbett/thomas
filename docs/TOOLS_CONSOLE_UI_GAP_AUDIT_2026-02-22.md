@@ -47,7 +47,7 @@ These are implemented server features that are strong Tools Console candidates:
 
 - Replay debugger entry + export quick actions:
   - `/api/runs/{run_id}/events`, `.../replay/*`, `.../export`, `.../export.json`
-  - Ref: `thomas/server/routes/runs.py`, `thomas/server/routes/replay_debugger.py`
+  - Ref: `thomas/server/routes/runs.py`
 
 - Secrets + local model pull controls:
   - `/api/secrets` (inventory), `/api/secrets/{profile}` (set/clear), `/api/local/pull`

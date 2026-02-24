@@ -274,10 +274,43 @@ def create_app(config: Optional[AppConfig] = None):
         from thomas.server.guardrails_api import install_guardrails_routes
 
         policy_cfg = load_policy_config(str(config.memory.root_path))
+
+        # Wire AdvancedToolsPrefs boolean toggles into policy deny_groups.
+        try:
+            _prefs_store = PreferencesStore(get_db_path(config))
+            _tool_prefs = _prefs_store.get().advanced.tools
+            _deny = list(policy_cfg.deny_groups)
+            if not _tool_prefs.allow_shell and "shell" not in _deny:
+                _deny.append("shell")
+            if not _tool_prefs.allow_file_write and "file_write" not in _deny:
+                _deny.append("file_write")
+            if not _tool_prefs.allow_network and "network" not in _deny:
+                _deny.append("network")
+            if not _tool_prefs.allow_browser and "browser" not in _deny:
+                _deny.append("browser")
+            if not _tool_prefs.allow_channels and "channels" not in _deny:
+                _deny.append("channels")
+            if not _tool_prefs.allow_git and "git" not in _deny:
+                _deny.append("git")
+            policy_cfg.deny_groups = _deny
+        except Exception as _pe:
+            log.debug("Tool prefs -> deny_groups merge skipped: %s", _pe)
+
         approvals = ApprovalBroker()
         redactor = Redactor(additional_patterns=policy_cfg.redact_additional_patterns)
         audit = app.get(APP_ACTION_AUDIT)
-        policy = PolicyEngine.from_config(policy_cfg)
+
+        # Build tool category map from registry for group deny fallback matching.
+        _tool_cats: dict = {}
+        try:
+            for t in app.get(APP_TOOLS) or []:
+                tname = getattr(t, "name", "") or ""
+                tcat = getattr(t, "category", "") or ""
+                if tname and tcat:
+                    _tool_cats[tname] = tcat
+        except Exception:
+            pass
+        policy = PolicyEngine.from_config(policy_cfg, tool_categories=_tool_cats)
         guarded_runner = GuardedToolRunner(
             policy=policy,
             approvals=approvals,
@@ -381,7 +414,7 @@ def create_app(config: Optional[AppConfig] = None):
         "Referrer-Policy": "strict-origin-when-cross-origin",
         "Content-Security-Policy": (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
+            "script-src 'self' 'unsafe-inline' blob: https://cdn.jsdelivr.net https://unpkg.com; "
             "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://unpkg.com; "
             "img-src 'self' data: blob:; "
             "font-src 'self' https://cdn.jsdelivr.net https://unpkg.com; "
@@ -1129,6 +1162,7 @@ def create_app(config: Optional[AppConfig] = None):
     from thomas.server.routes.preferences_aiohttp import register_preferences_routes
     from thomas.server.routes.memory_aiohttp import register_memory_routes
     from thomas.server.routes.mission import register_mission_routes
+    from thomas.server.routes.engine_actions_aiohttp import register_engine_actions_routes
     from thomas.server.routes.ui_engine_aiohttp import register_ui_engine_routes
 
     register_codex_routes(
@@ -1188,6 +1222,11 @@ def create_app(config: Optional[AppConfig] = None):
     register_search_routes(app, require_api_access=_require_api_access)
     register_asset_studio_routes(app, require_api_access=_require_api_access, read_json=_read_json)
     register_ui_engine_routes(app, require_api_access=_require_api_access, read_json=_read_json)
+    register_engine_actions_routes(
+        app,
+        require_api_access=_require_api_access,
+        read_json=_read_json,
+    )
     register_memory_routes(
         app,
         require_api_access=_require_api_access,

@@ -49,6 +49,13 @@ from thomas.server.app_keys import (
     ChatSession,
 )
 log = logging.getLogger(__name__)
+
+# Per-session message queues for mid-run interruption.
+# When a session has an active run, incoming messages are pushed here
+# instead of being rejected. The AgentLoop checks this queue between
+# tool completions and injects the message as a new user turn.
+_SESSION_MSG_QUEUES: Dict[str, "asyncio.Queue[Optional[str]]"] = {}
+
 # ---------------------------------------------------------------------------
 # Dependency bundle
 # ---------------------------------------------------------------------------
@@ -88,6 +95,23 @@ def register_chat_routes(
             # a session up front (Claude/OpenAI-style payloads).
             sid = secrets.token_urlsafe(18)
         if not await deps.begin_session_run(sid):
+            # Session has an active run. Try to push the message into the
+            # interrupt queue so the agent loop can pick it up between
+            # tool calls instead of rejecting outright.
+            msg_text = str(
+                payload.get("text") or payload.get("message") or payload.get("prompt") or ""
+            ).strip()
+            q = _SESSION_MSG_QUEUES.get(sid)
+            if q is not None and msg_text:
+                try:
+                    q.put_nowait(msg_text)
+                    log.info("Queued interrupt message for active session %s", sid[:12])
+                    return web.json_response(
+                        {"ok": True, "queued": True, "detail": "Message queued for active run."},
+                        status=202,
+                    )
+                except asyncio.QueueFull:
+                    pass
             raise web.HTTPConflict(text="session is already processing another request")
         session_run_guard_active = True
         try:
@@ -308,7 +332,7 @@ def register_chat_routes(
                 session_id=sid,
                 profile=profile,
                 model_id=session.model_id,
-                autonomy_level=int(getattr(session, "autonomy_level", 4) or 4),
+                autonomy_level=int(getattr(session, "autonomy_level", 3) or 3),
             )
         ledger = request.app.get(APP_TASK_LEDGER)
         if ledger is not None:
@@ -659,6 +683,9 @@ def register_chat_routes(
             "model": str(model_cfg.model or ""),
             "base_url": str(model_cfg.base_url or ""),
         }
+        # Create per-run message queue for mid-run interruption support.
+        msg_queue: asyncio.Queue[Optional[str]] = asyncio.Queue(maxsize=4)
+        _SESSION_MSG_QUEUES[sid] = msg_queue
         agent = AgentLoop(
             run_cfg,
             llm,
@@ -675,6 +702,7 @@ def register_chat_routes(
             autonomy_level=int(getattr(session, "autonomy_level", 3) or 3),
             max_parallel_tools=int(getattr(advanced_tools, "max_parallel_tools", 6) or 6),
             tool_timeout_s=int(getattr(advanced_tools, "tool_timeout_s", 120) or 120),
+            message_queue=msg_queue,
         )
         journal: Optional[Any] = None
         try:
@@ -769,6 +797,8 @@ def register_chat_routes(
                     writer.close()
                 except Exception as e:
                     log.warning("Run writer close failed: %s", e)
+            # Clean up per-session interrupt queue.
+            _SESSION_MSG_QUEUES.pop(sid, None)
             try:
                 await resp.write_eof()
             except Exception as eof_err:

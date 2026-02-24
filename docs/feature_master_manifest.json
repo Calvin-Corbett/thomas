@@ -248,9 +248,9 @@
     },
     {
       "name": "Audit Log / Time Travel",
-      "location": "thomas/server/routes/replay_debugger.py",
+      "location": "thomas/server/routes/runs.py",
       "code_paths": [
-        "thomas/server/routes/replay_debugger.py",
+        "thomas/server/routes/runs.py",
         "thomas/observability/run_store_replay.py"
       ],
       "inbox_globs": [

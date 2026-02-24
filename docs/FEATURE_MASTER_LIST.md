@@ -46,7 +46,7 @@
 | Feature | Status | Source ZIP |
 | :--- | :--- | :--- |
 | **Swarm Mode** | ✅ DONE | Implemented at `thomas/agent/swarm.py` |
-| **Audit Log / Time Travel** | ✅ DONE | Implemented at `thomas/server/routes/replay_debugger.py` |
+| **Audit Log / Time Travel** | ✅ DONE | Implemented at `thomas/server/routes/runs.py` (replay via `/api/runs/*/replay`) |
 | **Guardrails** | ✅ DONE | Implemented at `thomas/policy/policy.py` |
 | **Plugin Loader** | ✅ DONE | Implemented at `thomas/autonomy/plugin.py` |
 | **User Preferences** | ✅ DONE | Implemented at `thomas/preferences/store.py` |

@@ -558,6 +558,51 @@
       "fingerprint": "dbdc55b0fb8ce759e4717660368e707785cbd37f5bd5c4476e596b073b1863de",
       "query": "Research this topic and compare the best options with tradeoffs and a recommendation.",
       "auto_captured": true
+    },
+    {
+      "id": "1771907866-openclaw-architecture-overview",
+      "title": "OpenClaw Architecture Overview",
+      "category": "competitive-research",
+      "summary": "Complete architecture research on OpenClaw AI agent runtime. Covers skills system (markdown-first), tool policy groups, Lobster pipeline engine, model failover with exponential backoff, browser automation, security model, multi-agent routing, and session persistence.",
+      "source": "https://github.com/openclaw/openclaw",
+      "tags": [
+        "openclaw",
+        "ai-agent",
+        "architecture",
+        "competitive-research",
+        "skills",
+        "tool-policy",
+        "failover",
+        "workflows"
+      ],
+      "path": "entries/competitive-research/1771907866-openclaw-architecture-overview.md",
+      "created_ts_utc": 1771907866,
+      "updated_ts_utc": 1771907866,
+      "fingerprint": "32eb36ff4c1c4688b98e99eb105e0d9d22197e803315a00c7432e16c329982fa",
+      "query": "",
+      "auto_captured": false
+    },
+    {
+      "id": "1771907866-openclaw-patterns-applied-to-thomas",
+      "title": "OpenClaw Patterns Applied to Thomas",
+      "category": "competitive-research",
+      "summary": "Maps 5 specific OpenClaw architectural patterns to Thomas improvement opportunities: tool policy groups, exponential backoff cooldowns, workflow approval gates, message interruption, and markdown-first skills.",
+      "source": "https://github.com/openclaw/openclaw",
+      "tags": [
+        "openclaw",
+        "thomas",
+        "upgrades",
+        "tool-policy",
+        "failover",
+        "workflows",
+        "architecture"
+      ],
+      "path": "entries/competitive-research/1771907866-openclaw-patterns-applied-to-thomas.md",
+      "created_ts_utc": 1771907866,
+      "updated_ts_utc": 1771907866,
+      "fingerprint": "5c0da88e9397289070f87b089677a00335971dacc3f2f69a2e8cbbeadcc47c28",
+      "query": "",
+      "auto_captured": false
     }
   ]
 }

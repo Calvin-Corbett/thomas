@@ -7,6 +7,35 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.11.76] - 2026-02-24
+
+### Added
+- **Tool Policy Groups** — `AdvancedToolsPrefs` boolean toggles (`allow_shell`, `allow_file_write`, `allow_network`, `allow_browser`, `allow_channels`, `allow_git`) now enforce via `DenyToolGroupRule` in the PolicyEngine. Added `_GROUP_TOOL_PATTERNS` and `_GROUP_CATEGORY_MAP` to `thomas/policy/rules.py`, wired through `thomas/policy/config.py` and `thomas/server/app.py`. Six dead UI toggles are now functional.
+- **Smart Provider Cooldowns** — replaced flat 300s failover cooldown in `thomas/core/llm.py` with `_ProviderCooldown` dataclass supporting exponential backoff (base × 2^failures, 24hr cap). Separate cooldown types: `rate_limit` (10min cap), `auth` (5hr base), `server` (5min base), `connect`. Session pinning moves first-successful provider to front of candidates.
+- **Workflow Approval Gates** — added `approval_required` field to `_StepSpec` in `thomas/autonomy/workflows.py`. Steps marked with `approval: true` in workflow definitions now halt execution and require explicit approval via `ApprovalBroker` before continuing.
+- **Message Interruption Between Tool Calls** — added `message_queue` to `AgentLoop` in `thomas/agent/loop.py`. Between tool completions, the loop checks for queued user messages and defers remaining tools to the next LLM turn. Wired per-session `asyncio.Queue` in `thomas/server/routes/chat_aiohttp.py`; incoming messages during active runs return 202 with `queued: true` instead of 409 conflict.
+- **Library auto-capture** widened from `research` route only to also capture `planning`, `debug_audit`, and `coding_task` routes with per-route minimum character thresholds in `thomas/agent/loop.py`.
+
+### Fixed
+- Autonomy default mismatch: changed `AutonomyPrefs.default_level` from L2 to L3 in `thomas/preferences/store.py`, tightened L3 system directive to explicitly discourage clarifying questions, added zero clarification cap for explicit action at L3+ in `thomas/agent/loop.py`, fixed stale fallback default 4→3 in `thomas/server/routes/chat_aiohttp.py`.
+
+## [0.11.75] - 2026-02-24
+
+### Changed
+- Reworked chat robot motion timing and sequencing in [thomas/server/web/js/app_parts/part-002.js], [thomas/server/web/js/app_parts/part-008.js], and [thomas/server/web/css/components_parts/part-005.css] so the reply robot now exits with a slower walk-across-text phase before falling, and the next loading phase waits for a clearer portal-first handoff before robot materialization.
+- Updated robot dock anchoring and portal pacing by increasing dock gap/size constants and portal lead delays in [thomas/server/web/js/app_parts/part-002.js], so the docked robot sits farther left of composer controls and transitions happen in the requested order.
+
+### Fixed
+- Fixed mismatched robot scale between the inline status robot and dock robot in [thomas/server/web/css/components_parts/part-005.css] by enlarging the dock robot dimensions and sprite proportions.
+- Fixed landing accuracy from reply bubble to dock in [thomas/server/web/js/app_parts/part-008.js] by targeting walk/fall animation vectors to the live dock coordinates before swap-in, ensuring the animation lands exactly on the dock position.
+
+## [0.11.74] - 2026-02-24
+
+### Fixed
+- Fixed chat robot exit continuity in [thomas/server/web/js/app_parts/part-008.js] by anchoring the falling clone to the robot's real on-screen position instead of hardcoded coordinates, eliminating the visible teleport jump before fall.
+- Fixed chat robot landing trigger in [thomas/server/web/js/app_parts/part-008.js] by waiting for `chatRobotExitFall` completion (with timeout fallback) instead of counting generic animation-end events, preventing premature despawn/replace behavior.
+- Restored docked robot presence after chat/session refresh in [thomas/server/web/js/app_parts/part-030.js] by re-positioning and re-landing the dock robot when initial state and historical sessions are loaded.
+
 ## [0.11.73] - 2026-02-23
 
 ### Changed
@@ -61,6 +90,7 @@ Versioning: Semantic Versioning.
 - Updated monolith baseline policy in `docs/monolith_guard_baseline.json` to treat large-file waivers as temporary debt (`owner`, `expires_on`, zero-growth default), not permanent legacy carve-outs.
 
 ### Fixed
+- **Fixed agent asking unnecessary questions instead of executing**: root cause was `AutonomyPrefs.default_level` defaulting to `"L2"` (Guarded Assist → "ask before risky actions") while `DEFAULT_AUTONOMY_LEVEL` and session init both use `3` (Tool-Bounded Auto). Changed preference default to `"L3"`, tightened L3 system directive to explicitly discourage clarifying questions, zeroed clarification budget for explicit-action turns at L3+, and aligned stale fallback default in `chat_aiohttp.py` from `4` to `3`.
 - Fixed speech-to-text composer repopulation race in `thomas/server/web/js/app.js` by suppressing late transcript writes after manual send and resetting mic draft state before dispatch.
 - Reduced visible thought-leak scaffolding in `thomas/agent/response_tone.py` by stripping additional pre-action narration patterns (for example, "I'm going to inspect/check/search...") from final assistant output.
 - Fixed startup autonomy-level hydration in `thomas/server/web/js/app.js` (`refreshIdentityState()`): the UI now applies `preferences.autonomy.default_level` to `activeAutonomyLevel` before first chat sends, so saved L4 no longer gets overwritten by stale L3 payload defaults.
@@ -103,8 +133,12 @@ Versioning: Semantic Versioning.
 - **Wired orphaned search routes**: converted `server/routes/search.py` from FastAPI to aiohttp (12 endpoints: full-text search, autocomplete, context, channels, status, reindex, bookmark CRUD, saved search CRUD), registered in app.py -- makes the 830-line FTS5 search engine (`core/search_history.py`) accessible via API for agent tools and future UI integration
 - **Created search route tests**: `tests/test_server_search_routes.py` (16 tests) covering search, suggest, context, channels, status, bookmark CRUD cycle, saved search CRUD cycle, validation, and remote auth enforcement
 - **Fixed CLI architecture dep**: added `security` to CLI module's `depends_on` in `_architecture.py` -- `parity_support.py` imports `thomas.security`, was previously undeclared
+- **Fixed broken CLI test**: updated `tests/test_cli_support_surfaces.py` monkeypatch targets from `cli_main._git_status_porcelain_lines` / `cli_main._run_repo_cleanup` to `cli_runtime_ops.git_status_porcelain_lines` / `cli_runtime_ops.run_repo_cleanup` (functions were renamed and moved during CLI decomposition) -- all 12 tests now pass
+- **Lit up 10 KPI signals**: updated `moduleCollectSignals()` in `part-019.js` -- 3 signals now computed from snapshot data (`webhook_rate`, `research_docs`, `webhooks_live`), 7 changed from `null` to `0` (`brand_kits`, `assets_total`, `roles_total`, `materials_total`, `market_private`, `market_saves`, `devices_paired`); 3 remain `null` pending backend integration (`printer_uptime`, `vault_retention`, `push_routes`)
 
 ### Removed
+- **Deleted orphaned TTS module**: removed `server/routes/tts.py` (103 LOC, FastAPI) and `server/tts_service.py` (401 LOC) -- zero imports, never registered in app.py, and tts_service.py contained unsafe `subprocess.check_call(["pip", "install", ...])` calls
+- **Cleaned replay_debugger artifacts**: removed 22 tracked files left behind by the deleted replay_debugger feature pack -- `apply_feature_pack.py`, `rollback_feature_pack.py`, `ROLLBACK_STEPS.md`, `PATCH.diff`, `FILE_MANIFEST.md`, `APPLY_STEPS.md`, entire `pack/` dir, `docs/FEATURE_CATALOG.md.append`, `docs/ops/run_replay_debugger.md`; updated references in `runs.py`, `FEATURE_CATALOG.md`, `FEATURE_MASTER_LIST.md`, `feature_master_manifest.json`, and `TOOLS_CONSOLE_UI_GAP_AUDIT`
 - **Deleted redundant `replay_debugger.py`**: `server/routes/replay_debugger.py` (186 LOC) duplicated every endpoint in `runs_aiohttp.py` (events, seek, step, stream, export) and was never registered -- deleted along with `tests/test_replay_debugger_api.py`; determinism and redaction tests kept (they import from `run_store_replay`, not the dead module)
 - Removed stale FastAPI-based `tests/test_spend_routes.py` and `tests/test_goals_routes.py` (replaced by aiohttp-based versions above)
 
