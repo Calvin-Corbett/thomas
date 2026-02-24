@@ -184,3 +184,31 @@ def test_non_browser_proxy_run_missing_main_keeps_legacy_noop_success(
     result = CliRunner().invoke(group, ["missing-entrypoint", "--run"])
     assert result.exit_code == 0
     assert "executed via noop" in result.output
+
+
+def test_proxy_run_main_nonzero_reports_meaningful_error(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.syspath_prepend(str(tmp_path))
+    package_name = _write_pack_package(
+        tmp_path,
+        f"pkg_{uuid.uuid4().hex}",
+        {
+            "p001_browser_nonzero_main": """
+def main(argv=None):
+    return 2
+""",
+        },
+    )
+    group = click.Group("browser")
+    added = register_pack_proxy_commands(
+        group,
+        package=package_name,
+        family_hint="browser",
+        strict_run_missing_entrypoint=True,
+    )
+    assert added == 1
+
+    result = CliRunner().invoke(group, ["nonzero-main", "--run"])
+    assert result.exit_code == 2
+    assert "failed via main" in result.output
+    assert "main exited with code 2" in result.output
+    assert "unknown error" not in result.output

@@ -1,15 +1,102 @@
-﻿<!DOCTYPE html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Thomas Companion Builder</title>
+  <title>Thomas Infinite Companion</title>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/css/companion.css?v=__THOMAS_VERSION__">
 </head>
 <body>
-  <main>
-    <h1>Companion Builder</h1>
-    <p>Ship device-safe companion bundles through the Thomas control plane.</p>
-    <p>API root: <code>/api/companion/v1</code></p>
+  <main class="companion-shell">
+    <header class="companion-header">
+      <div class="companion-header-copy">
+        <p class="companion-kicker">Thomas Infinite</p>
+        <h1>Companion Builder</h1>
+        <p>Ship device-safe companion bundles through the Thomas control plane.</p>
+      </div>
+      <div class="companion-header-meta">
+        <span class="mission-meta-pill neutral">
+          API root <code>/api/companion/v1</code>
+        </span>
+        <span class="content-plan-pill status-planned" id="connectionPill">Local mode</span>
+      </div>
+    </header>
+
+    <section class="companion-layout">
+      <aside class="companion-panel">
+        <div class="companion-panel-head">
+          <h2>Homescreen</h2>
+          <span class="companion-count" id="appCount">0 apps</span>
+        </div>
+        <div class="companion-app-grid" id="appGrid" aria-live="polite"></div>
+        <p class="companion-empty hidden" id="emptyState">
+          No apps yet. Push one from Thomas or add manually.
+        </p>
+      </aside>
+
+      <section class="companion-panel companion-panel-stage">
+        <div class="companion-panel-head companion-stage-head">
+          <h2 id="stageTitle">Launch Surface</h2>
+          <div class="companion-stage-actions">
+            <button class="settings-mini-btn" id="openExternalBtn" type="button" disabled>Open</button>
+            <button class="settings-mini-btn danger" id="deleteBtn" type="button" disabled>Delete</button>
+            <button class="btn-primary" id="launchBtn" type="button" disabled>Launch on Thomas</button>
+          </div>
+        </div>
+
+        <div class="companion-stream-shell">
+          <iframe
+            id="streamFrame"
+            title="Thomas Stream Surface"
+            sandbox="allow-same-origin allow-scripts allow-popups allow-forms"
+            referrerpolicy="no-referrer"
+          ></iframe>
+          <div class="companion-stream-placeholder" id="streamPlaceholder">
+            Select an app tile to launch a Thomas stream.
+          </div>
+        </div>
+
+        <form class="companion-form" id="appForm">
+          <div class="companion-form-head">
+            <h3>Add App Tile</h3>
+            <span>Saved to local storage when launcher API is offline.</span>
+          </div>
+          <div class="companion-form-grid">
+            <label class="form-group" for="appName">
+              <span>Name</span>
+              <input class="form-control" id="appName" name="name" type="text" required maxlength="48" placeholder="Order Portal">
+            </label>
+            <label class="form-group" for="appIcon">
+              <span>Icon</span>
+              <input class="form-control" id="appIcon" name="icon" type="text" maxlength="2" placeholder="O">
+            </label>
+            <label class="form-group" for="appColor">
+              <span>Accent</span>
+              <input class="form-control" id="appColor" name="color" type="color" value="#58a6ff">
+            </label>
+            <label class="form-group companion-url-group" for="appUrl">
+              <span>Website URL</span>
+              <input class="form-control" id="appUrl" name="url" type="url" required placeholder="https://example.com/app">
+            </label>
+          </div>
+          <div class="companion-form-actions">
+            <button class="btn-primary" type="submit">Save Tile</button>
+          </div>
+        </form>
+
+        <section class="companion-log-shell">
+          <div class="companion-log-head">
+            <h3>Live Feed</h3>
+          </div>
+          <div class="companion-log" id="eventLog"></div>
+        </section>
+      </section>
+    </section>
   </main>
+
+  <script type="module" src="/static/js/companion.js?v=__THOMAS_VERSION__"></script>
 </body>
 </html>

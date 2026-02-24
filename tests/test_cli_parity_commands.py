@@ -337,3 +337,47 @@ def test_memory_search_run_mode_distinguishes_nested_import_failure(tmp_path: Pa
     error = payload["error"]
     assert error["category"] == "runtime_error"
     assert error["code"] == "memory_operation_failed"
+
+
+def test_memory_search_run_mode_success_contract(tmp_path: Path, monkeypatch) -> None:
+    import thomas.cli.parity_compat as parity_compat
+
+    root, runner, cfg = _memory_cli_context(tmp_path)
+
+    def _fake_search(_config, query: str, limit: int):  # noqa: ANN001
+        return [{"id": "m1", "text": f"hit:{query}:{limit}"}]
+
+    monkeypatch.setattr(
+        parity_compat,
+        "_resolve_memory_backend",
+        lambda *_args, **_kwargs: (_fake_search, None),
+    )
+
+    res = runner.invoke(root, ["memory", "search", "needle", "--run", "--limit", "5", "--json"], obj={"config": cfg})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    _assert_memory_payload(payload, action="search", mode="run", ok=True, executed=True)
+    assert payload["query"] == "needle"
+    assert payload["count"] == 1
+    assert payload["results"][0]["id"] == "m1"
+
+
+def test_memory_index_run_mode_success_contract(tmp_path: Path, monkeypatch) -> None:
+    import thomas.cli.parity_compat as parity_compat
+
+    root, runner, cfg = _memory_cli_context(tmp_path)
+
+    def _fake_index(_config):  # noqa: ANN001
+        return {"ok": True, "indexed": 42}
+
+    monkeypatch.setattr(
+        parity_compat,
+        "_resolve_memory_backend",
+        lambda *_args, **_kwargs: (_fake_index, None),
+    )
+
+    res = runner.invoke(root, ["memory", "index", "--run", "--json"], obj={"config": cfg})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    _assert_memory_payload(payload, action="index", mode="run", ok=True, executed=True)
+    assert payload["indexed"] == 42

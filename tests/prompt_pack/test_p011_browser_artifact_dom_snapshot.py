@@ -1,5 +1,7 @@
 import json
 from pathlib import Path
+import types
+import warnings
 
 import pytest
 from typer.testing import CliRunner
@@ -150,3 +152,98 @@ def test_cli_json_failure_missing_browser(tmp_path: Path, monkeypatch: pytest.Mo
     payload = json.loads(result.stdout.strip())
     assert payload["ok"] is False
     assert payload["error_code"] == "THOMAS_BROWSER_DOM_SNAPSHOT_MISSING_CONFIG"
+
+
+def test_resolve_active_browser_awaits_async_getter_without_runtime_warning(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    sentinel = object()
+
+    async def get_active_browser():
+        return sentinel
+
+    live_mod = types.SimpleNamespace(get_active_browser=get_active_browser)
+
+    def _import_module(name: str):
+        if name == "thomas.cli.live_browser":
+            return live_mod
+        raise ImportError(name)
+
+    monkeypatch.setattr(cli_mod.importlib, "import_module", _import_module)
+
+    with warnings.catch_warnings(record=True) as caught:
+        warnings.simplefilter("always", RuntimeWarning)
+        resolved = cli_mod._resolve_active_browser()
+
+    assert resolved is sentinel
+    assert not any(
+        warning.category is RuntimeWarning and "never awaited" in str(warning.message).lower()
+        for warning in caught
+    )
+
+
+def test_resolve_active_browser_does_not_spawn_tools_browser_without_active_page(
+    monkeypatch: pytest.MonkeyPatch,
+):
+    calls = {"get_browser": 0}
+
+    async def get_browser():
+        calls["get_browser"] += 1
+        return object()
+
+    fake_state = types.SimpleNamespace(active_session="default", sessions={})
+    tools_mod = types.SimpleNamespace(_STATE=fake_state, get_browser=get_browser)
+
+    def _import_module(name: str):
+        if name == "thomas.tools.browser":
+            return tools_mod
+        raise ImportError(name)
+
+    monkeypatch.setattr(cli_mod.importlib, "import_module", _import_module)
+
+    with pytest.raises(cli_mod.BrowserDomSnapshotError) as ei:
+        cli_mod._resolve_active_browser()
+
+    assert ei.value.code == "THOMAS_BROWSER_DOM_SNAPSHOT_MISSING_CONFIG"
+    assert calls["get_browser"] == 0
+
+
+def test_main_argv_json_missing_browser(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]):
+    def _missing_browser():
+        raise cli_mod.BrowserDomSnapshotError(
+            code="THOMAS_BROWSER_DOM_SNAPSHOT_MISSING_CONFIG",
+            category="missing_config",
+            message="No active browser session found. Start or attach a browser first.",
+        )
+
+    monkeypatch.setattr(cli_mod, "_resolve_active_browser", _missing_browser)
+
+    exit_code = cli_mod.main(["--json"])
+    payload = json.loads(capsys.readouterr().out.strip())
+
+    assert exit_code == 2
+    assert payload["ok"] is False
+    assert payload["error_code"] == "THOMAS_BROWSER_DOM_SNAPSHOT_MISSING_CONFIG"
+    assert payload["category"] == "missing_config"
+
+
+def test_main_argv_invalid_timeout_is_invalid_input(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+):
+    called = {"resolver": False}
+
+    def _resolver():
+        called["resolver"] = True
+        return object()
+
+    monkeypatch.setattr(cli_mod, "_resolve_active_browser", _resolver)
+
+    exit_code = cli_mod.main(["--json", "--timeout-ms", "0"])
+    payload = json.loads(capsys.readouterr().out.strip())
+
+    assert exit_code == 2
+    assert payload["ok"] is False
+    assert payload["error_code"] == "THOMAS_BROWSER_DOM_SNAPSHOT_INVALID_INPUT"
+    assert payload["category"] == "invalid_input"
+    assert called["resolver"] is False
