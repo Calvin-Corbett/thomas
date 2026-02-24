@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Require an active workboard claim for the current agent."""
+"""Require an active workboard claim and owned issue accountability."""
 
 from __future__ import annotations
 
@@ -24,9 +24,16 @@ def _resolve_agent(explicit_agent: str | None) -> str | None:
     return agent_identity.resolve_agent(explicit_agent, include_name_fallback=True)
 
 
+def _norm(value: str) -> str:
+    return str(value or "").strip().lower()
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description="Require an active WORKBOARD claim matching the current agent id."
+        description=(
+            "Require an active WORKBOARD claim matching the current agent id and no "
+            "unresolved Issues / Blockers owned by that agent."
+        )
     )
     parser.add_argument(
         "--workboard",
@@ -70,7 +77,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- {message}")
         return 1
 
-    violations, claims = claims_gate.evaluate_claims(workboard_path)
+    violations, claims, _tasks, _grab, issues = claims_gate.evaluate_board(workboard_path)
     if violations:
         if args.json:
             payload = {
@@ -89,8 +96,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print(f"- {item}")
         return 1
 
-    normalized = str(agent).strip().lower()
-    mine = [claim for claim in claims if str(claim.agent).strip().lower() == normalized]
+    normalized = _norm(agent)
+    mine = [claim for claim in claims if _norm(claim.agent) == normalized]
     if not mine:
         message = (
             f"no active workboard claim found for '{agent}'. "
@@ -112,6 +119,37 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- {message}")
         return 1
 
+    unresolved_owned = [
+        issue
+        for issue in issues
+        if _norm(issue.owner) == normalized and _norm(issue.state) != "resolved"
+    ]
+    if unresolved_owned:
+        issue_ids = [str(issue.issue_id).strip() for issue in unresolved_owned if str(issue.issue_id).strip()]
+        issue_ids = sorted(set(issue_ids))
+        issue_list = ", ".join(issue_ids) if issue_ids else "unknown issue ids"
+        message = (
+            f"agent '{agent}' owns unresolved workboard issue(s): {issue_list}. "
+            "Resolve or reassign them before committing."
+        )
+        if args.json:
+            payload = {
+                "gate": "workboard_agent_claim",
+                "ok": False,
+                "agent": agent,
+                "active_claim_count": len(claims),
+                "matching_claim_count": len(mine),
+                "unresolved_issue_count": len(unresolved_owned),
+                "unresolved_issue_ids": issue_ids,
+                "workboard": str(workboard_path),
+                "error": message,
+            }
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print("Workboard agent claim gate: FAIL")
+            print(f"- {message}")
+        return 1
+
     scopes = sorted({scope for claim in mine for scope in claim.scopes})
     if args.json:
         payload = {
@@ -120,6 +158,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             "agent": agent,
             "active_claim_count": len(claims),
             "matching_claim_count": len(mine),
+            "unresolved_issue_count": 0,
+            "unresolved_issue_ids": [],
             "scopes": scopes,
             "workboard": str(workboard_path),
         }

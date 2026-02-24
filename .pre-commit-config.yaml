@@ -3,13 +3,31 @@ repos:
     hooks:
       - id: thomas-active-folder-guard
         name: Thomas Active Folder Guard
-        entry: python scripts/active_folders.py guard-staged --auto-claim-staged --no-require-explicit-agent
+        entry: python scripts/active_folders.py guard-staged --auto-claim-staged --require-explicit-agent
         language: system
         pass_filenames: false
 
       - id: thomas-plan-structure-gate
         name: Thomas Plan Structure Gate
         entry: python scripts/check_plan_structure_gate.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-claims-gate
+        name: Thomas Workboard Claims Gate
+        entry: python scripts/check_workboard_claims.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-agent-claim-gate
+        name: Thomas Workboard Agent Claim Gate
+        entry: python scripts/check_workboard_agent_claim.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-issue-tool-smoke
+        name: Thomas Workboard Issue Tool Smoke
+        entry: python scripts/workboard_issue.py --help
         language: system
         pass_filenames: false
 
@@ -47,7 +65,7 @@ repos:
 
       - id: thomas-architecture
         name: Architecture fitness check
-        entry: python -m pytest tests/test_architecture.py -x --tb=short -q
+        entry: python -m pytest -p no:cacheprovider tests/test_architecture.py -x --tb=short -q
         language: system
         pass_filenames: false
 
