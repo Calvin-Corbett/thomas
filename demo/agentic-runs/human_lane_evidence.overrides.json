@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "updated_at_utc": "2026-02-25T19:32:00Z",
+  "notes": "Manual human-lane adjudication overrides for evidence-required checks.",
+  "tracks": {
+    "thomas_os": {
+      "prog.004": {
+        "score": 72.0,
+        "pass": true,
+        "notes": "Human rubric review: solution quality and rationale completeness meet baseline.",
+        "evidence": "demo/agentic-runs/human_lane_evidence.overrides.json#tracks.thomas_os.prog.004",
+        "updated_at_utc": "2026-02-25T19:32:00Z"
+      },
+      "prog.034": {
+        "score": 64.0,
+        "pass": false,
+        "notes": "Readability and maintainability review: below pass threshold on clarity and structure.",
+        "evidence": "demo/agentic-runs/human_lane_evidence.overrides.json#tracks.thomas_os.prog.034",
+        "updated_at_utc": "2026-02-25T19:32:00Z"
+      },
+      "prog.035": {
+        "score": 67.0,
+        "pass": true,
+        "notes": "Handoff quality review: instructions and context are sufficient for downstream continuation.",
+        "evidence": "demo/agentic-runs/human_lane_evidence.overrides.json#tracks.thomas_os.prog.035",
+        "updated_at_utc": "2026-02-25T19:32:00Z"
+      }
+    }
+  }
+}
