@@ -7,6 +7,12 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-precommit-skip-policy-gate
+        name: Thomas Pre-commit Skip Policy Gate
+        entry: python scripts/check_precommit_skip_policy.py
+        language: system
+        pass_filenames: false
+
       - id: thomas-plan-structure-gate
         name: Thomas Plan Structure Gate
         entry: python scripts/check_plan_structure_gate.py
@@ -53,7 +59,7 @@ repos:
 
       - id: thomas-release-update-gate
         name: Thomas Release Update Gate
-        entry: python scripts/check_release_update_gate.py
+        entry: python scripts/check_release_update_gate.py --no-include-untracked
         language: system
         pass_filenames: false
 

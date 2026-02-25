@@ -46,6 +46,8 @@ def test_robustness_gates_has_explicit_ruff_install_and_full_matrix_barrier() ->
     assert "python scripts/check_workboard_claims.py" in text
     assert "Workboard agent accountability gate" in text
     assert "scripts/check_workboard_agent_claim.py" in text
+    assert "Workboard claim freshness gate" in text
+    assert "python scripts/check_workboard_claim_freshness.py --max-age-hours 72" in text
     assert "Workboard issue tooling smoke" in text
     assert "python scripts/workboard_issue.py --help" in text
     assert "full-test-matrix:" in text
@@ -56,6 +58,7 @@ def test_robustness_gates_has_explicit_ruff_install_and_full_matrix_barrier() ->
     assert "python -m pytest -q tests/test_check_onboarding_outcomes_gate_script.py" in text
     assert "python -m pytest -q tests/test_dev_artifact_tracking_guard.py" in text
     assert "python -m pytest -q tests/test_check_workboard_claims_gate.py" in text
+    assert "python -m pytest -q tests/test_check_workboard_claim_freshness.py" in text
     assert "python -m pytest -q tests/test_workboard_claim_script.py" in text
     assert "python -m pytest -q tests/test_check_workboard_agent_claim_gate.py" in text
     assert "python -m pytest -q tests/test_agent_bootstrap_claim_script.py" in text
@@ -89,6 +92,9 @@ def test_pre_commit_includes_workboard_claims_gate_hook() -> None:
         "entry: python scripts/active_folders.py guard-staged --auto-claim-staged --require-explicit-agent"
         in text
     )
+    assert "id: thomas-precommit-skip-policy-gate" in text
+    assert "name: Thomas Pre-commit Skip Policy Gate" in text
+    assert "entry: python scripts/check_precommit_skip_policy.py" in text
     assert "id: thomas-workboard-claims-gate" in text
     assert "name: Thomas Workboard Claims Gate" in text
     assert "entry: python scripts/check_workboard_claims.py" in text

@@ -78,7 +78,12 @@ def _normalize(path: str) -> str:
 
 
 
-def _git_changed_files(base: str | None, head: str | None) -> Tuple[List[str], str, str]:
+def _git_changed_files(
+    base: str | None,
+    head: str | None,
+    *,
+    include_untracked: bool = True,
+) -> Tuple[List[str], str, str]:
     resolved_head = (head or "HEAD").strip() or "HEAD"
     if base and str(base).strip("0"):
         resolved_base = str(base)
@@ -122,17 +127,18 @@ def _git_changed_files(base: str | None, head: str | None) -> Tuple[List[str], s
                 if p:
                     changed.add(p)
 
-    untracked = subprocess.run(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        cwd=ROOT,
-        capture_output=True,
-        text=True,
-    )
-    if untracked.returncode == 0:
-        for line in untracked.stdout.splitlines():
-            p = _normalize(line)
-            if p:
-                changed.add(p)
+    if include_untracked:
+        untracked = subprocess.run(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        )
+        if untracked.returncode == 0:
+            for line in untracked.stdout.splitlines():
+                p = _normalize(line)
+                if p:
+                    changed.add(p)
 
     return sorted(changed), resolved_base, resolved_head
 
@@ -205,6 +211,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         default=[],
         help="Explicit changed path (repeatable); skips git diff resolution if present.",
     )
+    parser.add_argument(
+        "--include-untracked",
+        dest="include_untracked",
+        action=argparse.BooleanOptionalAction,
+        default=True,
+        help="Include untracked files in change detection (default: enabled).",
+    )
     args = parser.parse_args(argv)
 
     if args.changed_file:
@@ -213,7 +226,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         resolved_head = "<manual>"
     else:
         try:
-            changed, resolved_base, resolved_head = _git_changed_files(args.base, args.head)
+            changed, resolved_base, resolved_head = _git_changed_files(
+                args.base,
+                args.head,
+                include_untracked=bool(args.include_untracked),
+            )
         except Exception as exc:
             print(f"Release update gate: FAIL (diff resolution error: {exc})")
             return 1
