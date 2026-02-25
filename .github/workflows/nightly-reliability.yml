@@ -61,6 +61,8 @@ jobs:
         run: |
           python scripts/onboarding_outcomes_report.py --days 7 --json > artifacts/nightly_reliability/onboarding_outcomes_report.json
           python scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning > artifacts/nightly_reliability/onboarding_outcomes_gate.json
+          python scripts/check_workboard_claims.py --json > artifacts/nightly_reliability/workboard_claims_gate.json
+          python scripts/workboard_issue.py --help > artifacts/nightly_reliability/workboard_issue_tool_help.txt
           python scripts/focus_scorecard.py --days 7 --json > artifacts/nightly_reliability/focus_scorecard.json
 
       - name: Security posture snapshot
