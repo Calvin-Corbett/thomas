@@ -176,3 +176,29 @@ def test_run_normalizes_single_string_benchmark_lists(monkeypatch, tmp_path: Pat
     monkeypatch.setattr(mod._suite, "main", fake_main)
     rc = mod.run(["--suite-config", str(suite_config)])
     assert rc == 0
+
+
+def test_default_suite_config_includes_resilience_soak_probe_with_streak_limits() -> None:
+    payload = json.loads(Path(mod.DEFAULT_SUITE_CONFIG).read_text(encoding="utf-8"))
+    agents = {
+        str(agent.get("id") or "").strip(): dict(agent)
+        for agent in list(payload.get("agents") or [])
+        if str(agent.get("id") or "").strip()
+    }
+    thomas = dict(agents["thomas"])
+    probes = list(thomas.get("resilience_probes") or [])
+    soak = next((row for row in probes if str(row.get("id") or "") == "resilience_soak_models_status"), None)
+    assert soak is not None
+
+    command = [str(item) for item in list(soak.get("command") or [])]
+    assert "scripts/soak_runner.py" in command
+    assert _arg_value(command, "--iterations") == "5"
+    assert _arg_value(command, "--max-consecutive-failures") == "1"
+    assert _arg_value(command, "--max-consecutive-probe-failures") == "1"
+    assert _arg_value(command, "--max-failure-rate") == "0.2"
+    assert _arg_value(command, "--max-probe-failure-rate") == "0.2"
+
+    assertions = list(soak.get("assertions") or [])
+    paths = {str(item.get("path") or "") for item in assertions if isinstance(item, dict)}
+    assert "summary.max_consecutive_failures" in paths
+    assert "summary.max_consecutive_probe_failures" in paths

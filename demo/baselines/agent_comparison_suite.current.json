@@ -8,6 +8,13 @@
     "cycle_limit_disabled": true,
     "stop_condition": "Continue until no known meaningful gaps remain or user explicitly stops."
   },
+  "artifact_paths": {
+    "latest_json": "docs/openclaw_gap_runs/latest_full_suite_compare.json",
+    "latest_markdown": "docs/openclaw_gap_runs/latest_full_suite_compare.md",
+    "latest_legacy_json": "docs/openclaw_gap_runs/latest_compare.json",
+    "registry_json": "docs/openclaw_gap_runs/competitor_registry.json",
+    "registry_markdown": "docs/openclaw_gap_runs/competitor_registry.md"
+  },
   "head_to_head_pair": [
     "thomas",
     "openclaw"
@@ -430,6 +437,49 @@
           ]
         },
         {
+          "id": "resilience_soak_models_status",
+          "command": [
+            "{python}",
+            "scripts/soak_runner.py",
+            "--command",
+            "{python} -m thomas models status --json",
+            "--iterations",
+            "5",
+            "--interval-seconds",
+            "0",
+            "--probe-command",
+            "{python} -m thomas models status --json",
+            "--probe-every",
+            "1",
+            "--max-failure-rate",
+            "0.2",
+            "--max-probe-failure-rate",
+            "0.2",
+            "--max-consecutive-failures",
+            "1",
+            "--max-consecutive-probe-failures",
+            "1",
+            "--json"
+          ],
+          "assertions": [
+            {
+              "path": "summary.total_runs",
+              "op": "gte",
+              "value": 5
+            },
+            {
+              "path": "summary.max_consecutive_failures",
+              "op": "lte",
+              "value": 1
+            },
+            {
+              "path": "summary.max_consecutive_probe_failures",
+              "op": "lte",
+              "value": 1
+            }
+          ]
+        },
+        {
           "id": "resilience_parity_tests",
           "command": [
             "{python}",
@@ -470,6 +520,9 @@
         "demo/agentic-runs/*/scorecard.json"
       ],
       "benchmark_raw_globs": [
+        "demo/agentic-runs/*/benchmark_results.raw.json"
+      ],
+      "benchmark_evidence_globs": [
         "demo/agentic-runs/*/benchmark_results.raw.json"
       ],
       "benchmark_aliases": [
@@ -569,6 +622,9 @@
         "demo/agentic-runs/*/scorecard.json"
       ],
       "benchmark_raw_globs": [
+        "demo/agentic-runs/*/benchmark_results.raw.json"
+      ],
+      "benchmark_evidence_globs": [
         "demo/agentic-runs/*/benchmark_results.raw.json"
       ],
       "benchmark_aliases": [
