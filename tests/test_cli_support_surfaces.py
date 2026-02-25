@@ -82,6 +82,19 @@ def test_cli_status_json(tmp_path: Path) -> None:
         assert "untracked_count" in summary
 
 
+def test_cli_library_group_help_surfaces_expected_subcommands(tmp_path: Path) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+    root_help = runner.invoke(cli, ["-c", str(cfg), "--help"])
+    assert root_help.exit_code == 0, root_help.output
+    assert "library" in root_help.output
+
+    library_help = runner.invoke(cli, ["-c", str(cfg), "library", "--help"])
+    assert library_help.exit_code == 0, library_help.output
+    for name in ("add", "curate", "list", "reindex", "show", "where"):
+        assert name in library_help.output
+
+
 def test_cli_config_validate_strict_exits_on_errors(tmp_path: Path) -> None:
     cfg = tmp_path / "thomas.toml"
     cfg.write_text(

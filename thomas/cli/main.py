@@ -15,6 +15,7 @@ import json
 import logging
 import os
 import sys
+from datetime import datetime, timezone
 from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Optional
@@ -22,8 +23,7 @@ from typing import Any, Optional
 try:
     import click
 except ImportError:
-    print("Thomas requires 'click'. Install with: pip install click")
-    sys.exit(1)
+    from thomas._vendor import click_shim as click  # type: ignore[assignment]
 
 from thomas.core.config import load_config, AppConfig
 from thomas.core.autonomy import clamp_autonomy_level
@@ -45,6 +45,8 @@ from thomas.cli.main_runtime_ops import (
     status_cmd as _status_cmd,
     telegram_run_cmd as _telegram_run_cmd,
 )
+from thomas.cli.main_library_commands import register_library_commands
+from thomas.cli.main_chatops import register_chatops_commands
 
 log = logging.getLogger(__name__)
 
@@ -305,6 +307,33 @@ def cli(ctx: click.Context, verbose: bool, config_path: Optional[str]) -> None:
     ctx.ensure_object(dict)
     ctx.obj["config"] = load_config(path)
     ctx.obj["verbose"] = verbose
+
+    # First-run nudge: suggest setup if no config exists
+    if ctx.invoked_subcommand not in ("setup", "quickstart"):
+        if not getattr(cli, "_first_run_checked", False):
+            cli._first_run_checked = True  # type: ignore[attr-defined]
+            try:
+                from thomas.cli.commands.setup_wizard import _detect_existing_config
+                if _detect_existing_config() is None:
+                    click.echo(click.style(
+                        "  Thomas isn't configured yet. "
+                        "Run `thomas setup` to get started.\n",
+                        fg="yellow",
+                    ))
+            except Exception:
+                pass
+
+    # Auto-update check (silent, background, once per day)
+    if ctx.invoked_subcommand not in ("update", "version"):
+        if not getattr(cli, "_update_checked", False):
+            cli._update_checked = True  # type: ignore[attr-defined]
+            try:
+                from thomas.cli.commands.updater import check_and_auto_update
+                update_msg = check_and_auto_update(silent=True)
+                if update_msg:
+                    click.echo(click.style(f"  {update_msg}", fg="green"))
+            except Exception:
+                pass
 
     if ctx.invoked_subcommand is None:
         click.echo(ctx.get_help())
@@ -686,6 +715,22 @@ def _run_provider_checks(config: AppConfig) -> None:
     _run_provider_checks_impl(config)
 
 
+register_chatops_commands(
+    cli,
+    build_tools=_build_tools,
+    build_memory=_build_memory,
+    telegram_run_cmd=_telegram_run_cmd,
+    logger=log,
+)
+
+register_library_commands(
+    cli,
+    build_library=_build_library,
+    build_memory=_build_memory,
+    logger=log,
+)
+
+
 @cli.group()
 @click.pass_context
 def models(ctx: click.Context) -> None:
@@ -722,8 +767,18 @@ def models_discover(ctx: click.Context, model_name: Optional[str], timeout_s: fl
 
 def _run_models_discover(ctx: click.Context, model_name: Optional[str], timeout_s: float) -> None:
     """Run discovery for both ``models discover`` and its compatibility aliases."""
+    if float(timeout_s) <= 0:
+        raise click.UsageError("Invalid value for --timeout: must be greater than 0")
+
     config: AppConfig = ctx.obj["config"]
-    cfg = config.get_model(model_name)
+    try:
+        cfg = config.get_model(model_name)
+    except KeyError:
+        profile = str(model_name or "")
+        available = ", ".join(config.models.keys())
+        raise click.UsageError(
+            f"Invalid value for --model: unknown model profile '{profile}'. Available: {available}"
+        ) from None
 
     from thomas.models.discovery import discover_models
 
@@ -732,7 +787,8 @@ def _run_models_discover(ctx: click.Context, model_name: Optional[str], timeout_
     except click.ClickException:
         raise
     except Exception as exc:
-        raise click.ClickException(f"model discovery failed: {exc}") from None
+        detail = str(exc).strip() or "unexpected discovery failure"
+        raise click.ClickException(f"model discovery failed ({type(exc).__name__}): {detail}") from None
 
     if not found:
         click.echo(f"No models discovered at {cfg.base_url}.")
@@ -882,6 +938,103 @@ def _emit_models_compat(action: str, note: str, as_json: bool) -> None:
     click.echo(f"models {action}: {note}")
 
 
+def _models_state_path(config: AppConfig) -> Path:
+    path = config.memory.root_path / ".thomas" / "cli" / "models_state.json"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _models_state_now_utc() -> str:
+    return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+def _load_models_state(config: AppConfig) -> dict[str, Any]:
+    path = _models_state_path(config)
+    default: dict[str, Any] = {
+        "aliases": {},
+        "image": {},
+        "image_fallback_profiles": [],
+        "updated_at": "",
+    }
+    if not path.exists():
+        return default
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return default
+    if not isinstance(raw, dict):
+        return default
+    aliases = raw.get("aliases")
+    image = raw.get("image")
+    image_fallback_profiles = raw.get("image_fallback_profiles")
+    return {
+        "aliases": dict(aliases) if isinstance(aliases, dict) else {},
+        "image": dict(image) if isinstance(image, dict) else {},
+        "image_fallback_profiles": list(image_fallback_profiles) if isinstance(image_fallback_profiles, list) else [],
+        "updated_at": str(raw.get("updated_at") or ""),
+    }
+
+
+def _save_models_state(config: AppConfig, state: dict[str, Any]) -> Path:
+    path = _models_state_path(config)
+    aliases_raw = state.get("aliases")
+    image_raw = state.get("image")
+    image_fallback_raw = state.get("image_fallback_profiles")
+    aliases = {
+        str(k).strip().lower(): str(v).strip()
+        for k, v in (aliases_raw.items() if isinstance(aliases_raw, dict) else [])
+        if str(k).strip() and str(v).strip()
+    }
+    image = dict(image_raw) if isinstance(image_raw, dict) else {}
+    fallback_profiles = [
+        str(x).strip()
+        for x in (image_fallback_raw if isinstance(image_fallback_raw, list) else [])
+        if str(x).strip()
+    ]
+    payload = {
+        "aliases": aliases,
+        "image": image,
+        "image_fallback_profiles": fallback_profiles,
+        "updated_at": _models_state_now_utc(),
+    }
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return path
+
+
+def _provider_env_keys(provider: str) -> list[str]:
+    key = str(provider or "").strip().lower()
+    mapping: dict[str, list[str]] = {
+        "openai_compat": ["OPENAI_API_KEY"],
+        "openai": ["OPENAI_API_KEY"],
+        "anthropic": ["ANTHROPIC_API_KEY"],
+        "google": ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+        "gemini": ["GOOGLE_API_KEY", "GEMINI_API_KEY"],
+        "groq": ["GROQ_API_KEY"],
+        "mistral": ["MISTRAL_API_KEY"],
+        "xai": ["XAI_API_KEY"],
+        "deepseek": ["DEEPSEEK_API_KEY"],
+        "perplexity": ["PERPLEXITY_API_KEY"],
+    }
+    return list(mapping.get(key, []))
+
+
+def _runtime_model_error(*, as_json: bool, message: str, profile: str = "") -> None:
+    payload = {
+        "ok": False,
+        "error": "invalid_request",
+        "message": str(message),
+    }
+    if profile:
+        payload["profile"] = profile
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+    else:
+        click.echo(str(message), err=True)
+    raise SystemExit(2)
+
+
 @models.command("status")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
 @click.pass_context
@@ -940,559 +1093,423 @@ def models_set(ctx: click.Context, model_id: str, profile_name: Optional[str], a
 
 
 @models.command("set-image")
+@click.option("--profile", "profile_name", default="", help="Model profile to bind as the image profile.")
+@click.option("--model", "model_id", default="", help="Optional model id override for the image profile.")
+@click.option("--clear", is_flag=True, help="Clear runtime image profile override and use default profile/model.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def models_set_image(as_json: bool) -> None:
-    """Compatibility placeholder for image model assignment."""
-    _emit_models_compat("set-image", "Use model profile configuration for image-capable providers.", as_json)
+@click.pass_context
+def models_set_image(
+    ctx: click.Context,
+    profile_name: str,
+    model_id: str,
+    clear: bool,
+    as_json: bool,
+) -> None:
+    """Set or inspect runtime image model assignment."""
+    config: AppConfig = ctx.obj["config"]
+    state = _load_models_state(config)
+    changed = False
+    if clear:
+        state["image"] = {}
+        changed = True
+
+    profile_text = str(profile_name or "").strip()
+    model_text = str(model_id or "").strip()
+    if profile_text or model_text:
+        selected_profile = profile_text or str(config.default_model)
+        if selected_profile not in config.models:
+            _runtime_model_error(
+                as_json=as_json,
+                profile=selected_profile,
+                message=f"Unknown profile '{selected_profile}'. Available: {', '.join(config.models.keys())}",
+            )
+        selected_model = model_text or str(config.models[selected_profile].model)
+        state["image"] = {
+            "profile": selected_profile,
+            "model": selected_model,
+            "updated_at": _models_state_now_utc(),
+        }
+        changed = True
+
+    if changed:
+        _save_models_state(config, state)
+
+    image_row = dict(state.get("image") or {})
+    image_profile = str(image_row.get("profile") or "").strip()
+    image_model = str(image_row.get("model") or "").strip()
+    source = "state"
+    if not image_profile or image_profile not in config.models:
+        image_profile = str(config.default_model)
+        image_model = str(config.models[image_profile].model)
+        source = "default_profile"
+    elif not image_model:
+        image_model = str(config.models[image_profile].model)
+
+    payload = {
+        "ok": True,
+        "action": "set-image",
+        "profile": image_profile,
+        "model": image_model,
+        "source": source,
+        "state_file": str(_models_state_path(config)),
+        "available_profiles": sorted(config.models.keys()),
+        "note": "Runtime-only mapping (does not rewrite thomas.toml).",
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"image profile: {payload['profile']}")
+    click.echo(f"image model: {payload['model']}")
+    click.echo(f"source: {payload['source']}")
+    click.echo(payload["note"])
 
 
 @models.command("aliases")
+@click.option("--set", "set_pairs", multiple=True, help="Set alias mapping as alias=profile_or_model (repeatable).")
+@click.option("--remove", "remove_aliases", multiple=True, help="Remove alias mapping by alias key (repeatable).")
+@click.option("--resolve", "resolve_alias", default="", help="Resolve one alias/profile to effective profile+model.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def models_aliases(as_json: bool) -> None:
-    """Compatibility placeholder for model aliases."""
-    _emit_models_compat("aliases", "Model alias management is not yet first-class in Thomas CLI.", as_json)
+@click.pass_context
+def models_aliases(
+    ctx: click.Context,
+    set_pairs: tuple[str, ...],
+    remove_aliases: tuple[str, ...],
+    resolve_alias: str,
+    as_json: bool,
+) -> None:
+    """Manage runtime model aliases."""
+    config: AppConfig = ctx.obj["config"]
+    state = _load_models_state(config)
+    aliases = {
+        str(k).strip().lower(): str(v).strip()
+        for k, v in dict(state.get("aliases") or {}).items()
+        if str(k).strip() and str(v).strip()
+    }
+    changed = False
+
+    for raw in set_pairs:
+        text = str(raw or "").strip()
+        if "=" not in text:
+            _runtime_model_error(as_json=as_json, message=f"Invalid --set '{text}'. Expected alias=profile_or_model.")
+        alias_raw, target_raw = text.split("=", 1)
+        alias = str(alias_raw or "").strip().lower()
+        target = str(target_raw or "").strip()
+        if not alias or not target:
+            _runtime_model_error(as_json=as_json, message=f"Invalid --set '{text}'. Alias and target are required.")
+        aliases[alias] = target
+        changed = True
+
+    for raw in remove_aliases:
+        key = str(raw or "").strip().lower()
+        if key and key in aliases:
+            aliases.pop(key, None)
+            changed = True
+
+    if changed:
+        state["aliases"] = aliases
+        _save_models_state(config, state)
+
+    rows: list[dict[str, Any]] = []
+    for alias, target in sorted(aliases.items(), key=lambda item: item[0]):
+        target_type = "profile" if target in config.models else "model"
+        model = str(config.models[target].model) if target_type == "profile" else str(target)
+        rows.append(
+            {
+                "alias": alias,
+                "target": target,
+                "target_type": target_type,
+                "model": model,
+            }
+        )
+
+    resolved_payload: dict[str, Any] | None = None
+    resolve_text = str(resolve_alias or "").strip()
+    if resolve_text:
+        key = resolve_text.lower()
+        if key in aliases:
+            target = str(aliases[key])
+            if target in config.models:
+                resolved_payload = {
+                    "query": resolve_text,
+                    "source": "alias",
+                    "profile": target,
+                    "model": str(config.models[target].model),
+                }
+            else:
+                resolved_payload = {
+                    "query": resolve_text,
+                    "source": "alias",
+                    "profile": "",
+                    "model": target,
+                }
+        elif resolve_text in config.models:
+            resolved_payload = {
+                "query": resolve_text,
+                "source": "profile",
+                "profile": resolve_text,
+                "model": str(config.models[resolve_text].model),
+            }
+        else:
+            for profile_name in config.models:
+                if str(profile_name).lower() == key:
+                    resolved_payload = {
+                        "query": resolve_text,
+                        "source": "profile",
+                        "profile": profile_name,
+                        "model": str(config.models[profile_name].model),
+                    }
+                    break
+
+    payload = {
+        "ok": True,
+        "action": "aliases",
+        "count": len(rows),
+        "aliases": rows,
+        "state_file": str(_models_state_path(config)),
+    }
+    if resolved_payload is not None:
+        payload["resolved"] = resolved_payload
+
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"aliases: {payload['count']}")
+    for row in rows:
+        click.echo(f"  {row['alias']} -> {row['target']} ({row['target_type']})")
+    if resolved_payload is not None:
+        click.echo(
+            "resolved: "
+            f"{resolved_payload.get('query')} -> "
+            f"profile={resolved_payload.get('profile') or '(none)'} "
+            f"model={resolved_payload.get('model')}"
+        )
 
 
 @models.command("auth")
+@click.option("--profile", "profile_name", default="", help="Inspect one model profile (default: all).")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def models_auth(as_json: bool) -> None:
-    """Compatibility placeholder for model auth profiles."""
-    _emit_models_compat("auth", "Use provider secrets and doctor/validate flows for auth checks.", as_json)
+@click.pass_context
+def models_auth(ctx: click.Context, profile_name: str, as_json: bool) -> None:
+    """Show effective auth readiness per model profile."""
+    from thomas.server.secrets import SecretStore
+
+    config: AppConfig = ctx.obj["config"]
+    selected_profile = str(profile_name or "").strip()
+    if selected_profile:
+        if selected_profile not in config.models:
+            _runtime_model_error(
+                as_json=as_json,
+                profile=selected_profile,
+                message=f"Unknown profile '{selected_profile}'. Available: {', '.join(config.models.keys())}",
+            )
+        profiles = [selected_profile]
+    else:
+        profiles = sorted(config.models.keys())
+
+    secret_store = SecretStore(config.memory.root_path / ".thomas")
+    local_providers = {"ollama", "local"}
+    rows: list[dict[str, Any]] = []
+    for profile in profiles:
+        model_cfg = config.models[profile]
+        provider = str(model_cfg.provider or "").strip().lower()
+        env_keys = _provider_env_keys(provider)
+        env_present = [key for key in env_keys if str(os.environ.get(key) or "").strip()]
+        has_config_key = bool(str(model_cfg.api_key or "").strip())
+        has_secret = bool(secret_store.has(profile))
+        auth_required = provider not in local_providers
+        auth_ready = (not auth_required) or has_config_key or has_secret or bool(env_present)
+        rows.append(
+            {
+                "profile": profile,
+                "provider": provider,
+                "auth_required": auth_required,
+                "auth_ready": auth_ready,
+                "sources": {
+                    "config_api_key": has_config_key,
+                    "secret_store": has_secret,
+                    "secret_persisted": bool(secret_store.is_persisted(profile)),
+                    "env": bool(env_present),
+                },
+                "env_keys": env_keys,
+                "env_keys_present": env_present,
+            }
+        )
+
+    payload = {
+        "ok": True,
+        "action": "auth",
+        "profile_count": len(rows),
+        "ready_count": sum(1 for row in rows if bool(row.get("auth_ready"))),
+        "rows": rows,
+        "secret_store_path": str(secret_store.storage_info.path),
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"profiles: {payload['profile_count']} (ready: {payload['ready_count']})")
+    for row in rows:
+        click.echo(
+            f"  {row['profile']}: provider={row['provider']} "
+            f"auth_ready={row['auth_ready']} required={row['auth_required']}"
+        )
 
 
 @models.command("fallbacks")
+@click.option("--for-profile", "primary_profile", default="", help="Primary profile to compute effective chain for.")
+@click.option("--set-profile", "set_profiles", multiple=True, help="Set ordered fallback profiles (repeatable).")
+@click.option("--enable/--disable", "enabled", default=None, help="Toggle failover enabled.")
+@click.option(
+    "--chat-auto-failover/--no-chat-auto-failover",
+    "chat_auto_failover",
+    default=None,
+    help="Toggle automatic chat failover.",
+)
+@click.option("--cooldown-seconds", type=int, default=None, help="Set runtime failover cooldown seconds.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def models_fallbacks(as_json: bool) -> None:
-    """Compatibility placeholder for fallback policy management."""
-    _emit_models_compat("fallbacks", "Fallback policy is configured in Thomas failover settings.", as_json)
+@click.pass_context
+def models_fallbacks(
+    ctx: click.Context,
+    primary_profile: str,
+    set_profiles: tuple[str, ...],
+    enabled: Optional[bool],
+    chat_auto_failover: Optional[bool],
+    cooldown_seconds: Optional[int],
+    as_json: bool,
+) -> None:
+    """Inspect or update runtime failover profile chain."""
+    config: AppConfig = ctx.obj["config"]
+    primary = str(primary_profile or config.default_model).strip()
+    if primary not in config.models:
+        _runtime_model_error(
+            as_json=as_json,
+            profile=primary,
+            message=f"Unknown profile '{primary}'. Available: {', '.join(config.models.keys())}",
+        )
+
+    if set_profiles:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for raw in set_profiles:
+            name = str(raw or "").strip()
+            if not name:
+                continue
+            if name not in config.models:
+                _runtime_model_error(
+                    as_json=as_json,
+                    profile=name,
+                    message=f"Unknown fallback profile '{name}'. Available: {', '.join(config.models.keys())}",
+                )
+            if name in seen:
+                continue
+            seen.add(name)
+            ordered.append(name)
+        config.failover.profiles = ordered
+    if enabled is not None:
+        config.failover.enabled = bool(enabled)
+    if chat_auto_failover is not None:
+        config.failover.chat_auto_failover = bool(chat_auto_failover)
+    if cooldown_seconds is not None:
+        if int(cooldown_seconds) < 0:
+            _runtime_model_error(as_json=as_json, message="cooldown_seconds must be >= 0")
+        config.failover.cooldown_seconds = int(cooldown_seconds)
+
+    chain = [cfg.name for cfg in config.failover_chain(primary)]
+    payload = {
+        "ok": True,
+        "action": "fallbacks",
+        "primary_profile": primary,
+        "enabled": bool(config.failover.enabled),
+        "chat_auto_failover": bool(config.failover.chat_auto_failover),
+        "fallback_on_auth_error": bool(config.failover.fallback_on_auth_error),
+        "cooldown_seconds": int(config.failover.cooldown_seconds),
+        "configured_profiles": list(config.failover.profiles),
+        "effective_chain": chain,
+        "note": "Runtime-only updates (does not rewrite thomas.toml).",
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"primary: {payload['primary_profile']}")
+    click.echo(f"enabled: {payload['enabled']}")
+    click.echo(f"chat_auto_failover: {payload['chat_auto_failover']}")
+    click.echo(f"configured_profiles: {', '.join(payload['configured_profiles']) or '(none)'}")
+    click.echo(f"effective_chain: {', '.join(payload['effective_chain']) or '(none)'}")
+    click.echo(payload["note"])
 
 
 @models.command("image-fallbacks")
+@click.option("--for-profile", "primary_profile", default="", help="Primary profile to derive default image fallback chain.")
+@click.option("--set-profile", "set_profiles", multiple=True, help="Set ordered image fallback profiles (repeatable).")
+@click.option("--clear", is_flag=True, help="Clear configured image fallback profiles.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def models_image_fallbacks(as_json: bool) -> None:
-    """Compatibility placeholder for image fallback policy management."""
-    _emit_models_compat(
-        "image-fallbacks",
-        "Image fallback policy is provider/profile-driven in current Thomas runtime.",
-        as_json,
-    )
-
-
-@cli.group()
 @click.pass_context
-def codex(ctx: click.Context) -> None:
-    """Codex integration — use your ChatGPT subscription with Thomas."""
-
-
-@codex.command("login")
-@click.pass_context
-def codex_login(ctx: click.Context) -> None:
-    """Sign in to ChatGPT (opens browser). Uses your ChatGPT Plus/Pro subscription."""
-    async def _login() -> None:
-        from thomas.codex.bridge import CodexBridge
-        bridge = CodexBridge()
-        try:
-            await bridge.start()
-            click.echo("Checking auth status...")
-            acct = await bridge.check_auth()
-            if acct.logged_in:
-                click.echo(f"Already signed in: {acct.email} ({acct.plan_type} plan)")
-                return
-            click.echo("Opening browser to sign in with ChatGPT...")
-            acct = await bridge.login_chatgpt()
-            click.echo(f"Signed in: {acct.email} ({acct.plan_type} plan)")
-            click.echo("You can now use: thomas chat -m codex \"your prompt\"")
-            click.echo("Or set default_model = \"codex\" in thomas.toml")
-        finally:
-            await bridge.stop()
-
-    asyncio.run(_login())
-
-
-@codex.command("status")
-@click.pass_context
-def codex_status(ctx: click.Context) -> None:
-    """Check ChatGPT authentication status."""
-    async def _status() -> None:
-        from thomas.codex.bridge import CodexBridge
-        bridge = CodexBridge()
-        try:
-            await bridge.start()
-            acct = await bridge.check_auth()
-            if acct.logged_in:
-                click.echo(f"Signed in: {acct.email}")
-                click.echo(f"  Plan: {acct.plan_type}")
-                click.echo(f"  Auth: {acct.auth_type}")
-                # List available models
-                try:
-                    models_list = await bridge.list_models()
-                    if models_list:
-                        click.echo("  Models:")
-                        for m in models_list:
-                            d = " (default)" if m.is_default else ""
-                            click.echo(f"    {m.id}{d}")
-                except Exception as e:
-                    log.debug("Failed to list codex models in status: %s", e)
-            else:
-                click.echo("Not signed in. Run: thomas codex login")
-        finally:
-            await bridge.stop()
-
-    asyncio.run(_status())
-
-
-@codex.command("logout")
-@click.pass_context
-def codex_logout(ctx: click.Context) -> None:
-    """Sign out of ChatGPT."""
-    async def _logout() -> None:
-        from thomas.codex.bridge import CodexBridge
-        bridge = CodexBridge()
-        try:
-            await bridge.start()
-            await bridge.logout()
-            click.echo("Signed out.")
-        finally:
-            await bridge.stop()
-
-    asyncio.run(_logout())
-
-
-@codex.command("models")
-@click.pass_context
-def codex_models(ctx: click.Context) -> None:
-    """List models available through your ChatGPT plan."""
-    async def _models() -> None:
-        from thomas.codex.bridge import CodexBridge
-        bridge = CodexBridge()
-        try:
-            await bridge.start()
-            acct = await bridge.check_auth()
-            if not acct.logged_in:
-                click.echo("Not signed in. Run: thomas codex login")
-                return
-            models_found = await bridge.list_models()
-            if not models_found:
-                click.echo("No models found.")
-                return
-            click.echo(f"Models available ({acct.plan_type} plan):")
-            for m in models_found:
-                d = " (default)" if m.is_default else ""
-                name = f" — {m.display_name}" if m.display_name else ""
-                click.echo(f"  {m.id}{name}{d}")
-        finally:
-            await bridge.stop()
-
-    asyncio.run(_models())
-
-
-@cli.group()
-@click.pass_context
-def doppelganger(ctx: click.Context) -> None:
-    """Blue/green upgrade sandbox utilities (Doppelganger Protocol)."""
-
-
-@doppelganger.command("status")
-@click.pass_context
-def dg_status(ctx: click.Context) -> None:
-    """Show blue/green paths and whether the green slot is present."""
-    from thomas.upgrade.doppelganger import get_paths
-
-    p = get_paths()
-    click.echo("Doppelganger paths:")
-    click.echo(f"  blue_root      : {p.blue_root}")
-    click.echo(f"  dg_root        : {p.dg_root}")
-    click.echo(f"  green_root     : {p.green_root} ({'present' if p.green_root.exists() else 'missing'})")
-    click.echo(f"  green_runtime  : {p.green_runtime}")
-    click.echo(f"  green_venv     : {p.green_venv} ({'present' if p.green_venv.exists() else 'missing'})")
-    click.echo(f"  backups_root   : {p.backups_root}")
-
-
-@doppelganger.command("sync")
-@click.pass_context
-def dg_sync(ctx: click.Context) -> None:
-    """Sync Blue -> Green (creates/updates the green sandbox working copy)."""
-    from thomas.upgrade.doppelganger import get_paths, sync_blue_to_green
-
-    p = get_paths()
-    p.dg_root.mkdir(parents=True, exist_ok=True)
-    sync_blue_to_green(p)
-    click.echo(f"Synced Blue -> Green at: {p.green_root}")
-
-
-@doppelganger.command("test")
-@click.option(
-    "--sync-from-blue",
-    is_flag=True,
-    help="Sync Blue -> Green before running tests (WARNING: overwrites green).",
-)
-@click.pass_context
-def dg_test(ctx: click.Context, sync_from_blue: bool) -> None:
-    """Run tests in Green (uses isolated green venv)."""
-    from thomas.upgrade.doppelganger import get_paths, run_green_tests, sync_blue_to_green
-
-    p = get_paths()
-    if sync_from_blue:
-        sync_blue_to_green(p)
-    if not p.green_root.exists():
-        click.echo("Green slot not found. Run: thomas doppelganger sync", err=True)
-        sys.exit(2)
-    run_green_tests(p)
-    click.echo("Green tests: OK")
-
-
-@doppelganger.command("serve-green")
-@click.option("--host", default="127.0.0.1", show_default=True)
-@click.option("--port", default=8902, show_default=True, type=int)
-@click.option(
-    "--sync-from-blue",
-    is_flag=True,
-    help="Sync Blue -> Green before serving (WARNING: overwrites green).",
-)
-@click.pass_context
-def dg_serve_green(ctx: click.Context, host: str, port: int, sync_from_blue: bool) -> None:
-    """Run the server from Green using an isolated runtime root (no real memory/secrets)."""
-    from thomas.upgrade.doppelganger import get_paths, run_green_server, sync_blue_to_green
-
-    p = get_paths()
-    if sync_from_blue:
-        sync_blue_to_green(p)
-    if not p.green_root.exists():
-        click.echo("Green slot not found. Run: thomas doppelganger sync", err=True)
-        sys.exit(2)
-    click.echo(f"Green UI: http://{host}:{int(port)}/ (memory root: {p.green_runtime})")
-    run_green_server(p, host=host, port=int(port))
-
-
-@doppelganger.command("promote")
-@click.option(
-    "--stop-port",
-    default=8899,
-    show_default=True,
-    type=int,
-    help="If a Thomas server is listening on this port, attempt to stop it before promotion.",
-)
-@click.pass_context
-def dg_promote(ctx: click.Context, stop_port: int) -> None:
-    """Promote Green -> Blue (with backup)."""
-    from thomas.upgrade.doppelganger import get_paths, latest_backup, promote_green_to_blue
-
-    p = get_paths()
-    if not p.green_root.exists():
-        click.echo("Green slot not found. Run: thomas doppelganger sync", err=True)
-        sys.exit(2)
-
-    before = latest_backup(p)
-    backup = promote_green_to_blue(p, stop_port=int(stop_port))
-    click.echo(f"Promoted Green -> Blue. Backup created at: {backup}")
-    if before:
-        click.echo(f"Previous latest backup was: {before}")
-
-
-@doppelganger.command("rollback")
-@click.option(
-    "--backup",
-    "backup_path",
-    type=click.Path(exists=False),
-    help="Specific backup directory to restore (default: latest).",
-)
-@click.pass_context
-def dg_rollback(ctx: click.Context, backup_path: Optional[str]) -> None:
-    """Rollback Blue to the latest (or specified) backup snapshot."""
-    from thomas.upgrade.doppelganger import get_paths, rollback
-
-    p = get_paths()
-    b = Path(backup_path).resolve() if backup_path else None
-    restored = rollback(p, backup_dir=b)
-    click.echo(f"Restored Blue from backup: {restored}")
-
-
-@cli.group()
-@click.pass_context
-def telegram(ctx: click.Context) -> None:
-    """Telegram bot integration."""
-
-
-@telegram.command("run")
-@click.option(
-    "--token",
-    "token",
-    default="",
-    help="Telegram bot token (or set THOMAS_TELEGRAM_BOT_TOKEN).",
-)
-@click.option(
-    "--allow-chat",
-    "allow_chat_ids",
-    multiple=True,
-    type=int,
-    help="Allow this Telegram chat id (repeatable).",
-)
-@click.option(
-    "--allow-chats",
-    "allow_chats_csv",
-    default="",
-    help="Additional allowlisted chat ids as CSV (e.g. 123,456).",
-)
-@click.option(
-    "-m",
-    "--model",
-    "model_name",
-    help="Model profile for Telegram chats (default: current default model).",
-)
-@click.option(
-    "--shared-memory/--isolated-memory",
-    "shared_memory",
-    default=False,
-    show_default=True,
-    help="Share one long-term memory stream across all Telegram chats.",
-)
-@click.option(
-    "--all-memories/--chat-memories-only",
-    "all_memories",
-    default=True,
-    show_default=True,
-    help="Include curated global memory (facts/profile) in addition to this chat thread.",
-)
-@click.option(
-    "--profile-memory/--no-profile-memory",
-    "profile_memory",
-    default=True,
-    show_default=True,
-    help="Include long-term profile hints in Telegram memory retrieval.",
-)
-@click.option(
-    "--sessions-file",
-    "sessions_file",
-    type=click.Path(dir_okay=False, path_type=Path),
-    default=None,
-    help="Path for persisted Telegram session state.",
-)
-@click.option(
-    "--no-session-persist",
-    "no_session_persist",
-    is_flag=True,
-    help="Disable on-disk Telegram session persistence.",
-)
-@click.pass_context
-def telegram_run(
+def models_image_fallbacks(
     ctx: click.Context,
-    token: str,
-    allow_chat_ids: tuple[int, ...],
-    allow_chats_csv: str,
-    model_name: Optional[str],
-    shared_memory: bool,
-    all_memories: bool,
-    profile_memory: bool,
-    sessions_file: Optional[Path],
-    no_session_persist: bool,
+    primary_profile: str,
+    set_profiles: tuple[str, ...],
+    clear: bool,
+    as_json: bool,
 ) -> None:
-    """Run a Telegram bot that routes messages through Thomas."""
-    _telegram_run_cmd(
-        ctx,
-        token,
-        allow_chat_ids,
-        allow_chats_csv,
-        model_name,
-        shared_memory,
-        all_memories,
-        profile_memory,
-        sessions_file,
-        no_session_persist,
-        build_tools=_build_tools,
-        build_memory=_build_memory,
-        logger=log,
-    )
-
-
-@cli.command()
-@click.pass_context
-def tools(ctx: click.Context) -> None:
-    """List available tools."""
+    """Inspect or update runtime image fallback profile chain."""
     config: AppConfig = ctx.obj["config"]
-    registry = _build_tools(config)
+    state = _load_models_state(config)
+    configured = [str(x).strip() for x in state.get("image_fallback_profiles", []) if str(x).strip()]
+    changed = False
 
-    for cat in registry.list_categories():
-        click.echo(f"\n{cat}:")
-        for tool in registry.list_tools(cat):
-            click.echo(f"  {tool.name} - {tool.description[:80]}")
+    if clear:
+        configured = []
+        changed = True
+    if set_profiles:
+        ordered: list[str] = []
+        seen: set[str] = set()
+        for raw in set_profiles:
+            name = str(raw or "").strip()
+            if not name:
+                continue
+            if name not in config.models:
+                _runtime_model_error(
+                    as_json=as_json,
+                    profile=name,
+                    message=f"Unknown image fallback profile '{name}'. Available: {', '.join(config.models.keys())}",
+                )
+            if name in seen:
+                continue
+            seen.add(name)
+            ordered.append(name)
+        configured = ordered
+        changed = True
 
+    if changed:
+        state["image_fallback_profiles"] = configured
+        _save_models_state(config, state)
 
-@cli.group()
-@click.pass_context
-def library(ctx: click.Context) -> None:
-    """Manage the durable research library (separate from chat memory)."""
+    primary = str(primary_profile or config.default_model).strip()
+    if primary not in config.models:
+        _runtime_model_error(
+            as_json=as_json,
+            profile=primary,
+            message=f"Unknown profile '{primary}'. Available: {', '.join(config.models.keys())}",
+        )
+    effective = list(configured) if configured else [cfg.name for cfg in config.failover_chain(primary)]
 
-
-@library.command("where")
-@click.pass_context
-def library_where(ctx: click.Context) -> None:
-    """Show library root path and key files."""
-    config: AppConfig = ctx.obj["config"]
-    store = _build_library(config)
-    if store is None:
-        click.echo("Library unavailable.", err=True)
-        sys.exit(1)
-    click.echo(f"Library root: {store.root}")
-    click.echo(f"Catalog: {store.index_path}")
-    click.echo(f"Index: {store.toc_path}")
-
-
-@library.command("list")
-@click.option("--category", "category", default="", help="Filter by category.")
-@click.option("--query", "query", default="", help="Search query.")
-@click.option("--limit", "limit", type=int, default=25, show_default=True)
-@click.pass_context
-def library_list(ctx: click.Context, category: str, query: str, limit: int) -> None:
-    """List library entries."""
-    config: AppConfig = ctx.obj["config"]
-    store = _build_library(config)
-    if store is None:
-        click.echo("Library unavailable.", err=True)
-        sys.exit(1)
-    rows = store.list_entries(
-        category=(category.strip() or None),
-        query=(query.strip() or None),
-        limit=max(1, int(limit)),
-    )
-    if not rows:
-        click.echo("No library entries found.")
+    payload = {
+        "ok": True,
+        "action": "image-fallbacks",
+        "primary_profile": primary,
+        "configured_profiles": configured,
+        "effective_chain": effective,
+        "source": "state" if configured else "derived_from_failover",
+        "state_file": str(_models_state_path(config)),
+        "note": "Runtime-only updates (does not rewrite thomas.toml).",
+    }
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
-    click.echo(f"Found {len(rows)} entries:")
-    for row in rows:
-        rid = str(row.get("id", ""))
-        title = str(row.get("title", rid))
-        cat = str(row.get("category", "uncategorized"))
-        src = str(row.get("source", ""))
-        click.echo(f"- {rid} [{cat}] {title}")
-        if src:
-            click.echo(f"  source: {src}")
-
-
-@library.command("show")
-@click.argument("entry_id")
-@click.pass_context
-def library_show(ctx: click.Context, entry_id: str) -> None:
-    """Show one library entry (metadata + content)."""
-    config: AppConfig = ctx.obj["config"]
-    store = _build_library(config)
-    if store is None:
-        click.echo("Library unavailable.", err=True)
-        sys.exit(1)
-    row = store.get_entry(entry_id)
-    if row is None:
-        click.echo(f"Entry not found: {entry_id}", err=True)
-        sys.exit(2)
-    click.echo(f"id: {row.get('id')}")
-    click.echo(f"title: {row.get('title')}")
-    click.echo(f"category: {row.get('category')}")
-    click.echo(f"source: {row.get('source')}")
-    tags = row.get("tags") or []
-    if isinstance(tags, list) and tags:
-        click.echo("tags: " + ", ".join(str(t) for t in tags))
-    click.echo("")
-    click.echo(str(row.get("content", "")))
-
-
-@library.command("add")
-@click.option("--title", "title", required=True, help="Entry title.")
-@click.option("--category", "category", default="research-notes", show_default=True)
-@click.option("--summary", "summary", default="", help="Short summary.")
-@click.option("--source", "source", default="", help="Source URL or citation note.")
-@click.option("--tags", "tags", default="", help="Comma-separated tags.")
-@click.option("--content", "content", default="", help="Inline content text.")
-@click.option("--content-file", "content_file", type=click.Path(exists=True, dir_okay=False), default="")
-@click.option("--query", "query", default="", help="Original research query.")
-@click.pass_context
-def library_add(
-    ctx: click.Context,
-    title: str,
-    category: str,
-    summary: str,
-    source: str,
-    tags: str,
-    content: str,
-    content_file: str,
-    query: str,
-) -> None:
-    """Add a new library entry."""
-    config: AppConfig = ctx.obj["config"]
-    store = _build_library(config)
-    if store is None:
-        click.echo("Library unavailable.", err=True)
-        sys.exit(1)
-
-    payload = str(content or "").strip()
-    if content_file:
-        payload = Path(content_file).read_text(encoding="utf-8", errors="replace").strip()
-    if not payload:
-        click.echo("Missing content. Use --content or --content-file.", err=True)
-        sys.exit(2)
-
-    tag_list = [x.strip() for x in str(tags or "").split(",") if x.strip()]
-    row = store.add_entry(
-        title=title,
-        category=category,
-        content=payload,
-        summary=summary,
-        source=source,
-        tags=tag_list,
-        query=query,
-        auto_captured=False,
-        dedupe=True,
-    )
-    click.echo(f"Saved: {row.get('id')} -> {row.get('path')}")
-
-
-@library.command("reindex")
-@click.pass_context
-def library_reindex(ctx: click.Context) -> None:
-    """Rebuild table of contents from catalog."""
-    config: AppConfig = ctx.obj["config"]
-    store = _build_library(config)
-    if store is None:
-        click.echo("Library unavailable.", err=True)
-        sys.exit(1)
-    store.rebuild_toc()
-    click.echo(f"Rebuilt: {store.toc_path}")
-
-
-@library.command("curate")
-@click.option("--force", is_flag=True, help="Ignore curator interval cooldown.")
-@click.pass_context
-def library_curate(ctx: click.Context, force: bool) -> None:
-    """Run one memory curator pass (promote chat/library knowledge into durable memory)."""
-    config: AppConfig = ctx.obj["config"]
-    memory = _build_memory(config)
-    if memory is None:
-        click.echo("Memory engine unavailable.", err=True)
-        sys.exit(1)
-    try:
-        runner = getattr(memory, "run_curator", None)
-        if not callable(runner):
-            click.echo("Curator unavailable for current memory backend.", err=True)
-            sys.exit(2)
-        result = runner(force=bool(force))
-        if not isinstance(result, dict):
-            result = {"ran": False, "reason": "invalid_result"}
-        click.echo("Curator run:")
-        for key in (
-            "ran",
-            "reason",
-            "episodes_scanned",
-            "library_entries_scanned",
-            "hints_promoted",
-            "facts_promoted",
-            "duplicates_skipped",
-            "last_episode_id",
-            "last_library_ts_utc",
-        ):
-            if key in result:
-                click.echo(f"- {key}: {result.get(key)}")
-    finally:
-        try:
-            memory.close()
-        except Exception as e:
-            log.debug("Failed to close memory engine after library curate: %s", e)
+    click.echo(f"primary: {payload['primary_profile']}")
+    click.echo(f"configured_profiles: {', '.join(payload['configured_profiles']) or '(none)'}")
+    click.echo(f"effective_chain: {', '.join(payload['effective_chain']) or '(none)'}")
+    click.echo(f"source: {payload['source']}")
+    click.echo(payload["note"])
 
 
 @cli.command()
@@ -1616,6 +1633,11 @@ for _module_name, _register_name in (
     ("thomas.cli.commands.sessions", "register_sessions_commands"),
     ("thomas.cli.commands.webhooks", "register_webhooks_commands"),
     ("thomas.cli.commands.companion", "register_companion_commands"),
+    ("thomas.cli.commands.setup_wizard", "register_setup_commands"),
+    ("thomas.cli.commands.quickstart", "register_quickstart_commands"),
+    ("thomas.cli.commands.shortcuts", "register_shortcuts_commands"),
+    ("thomas.cli.commands.updater", "register_update_commands"),
+    ("thomas.cli.commands.release", "register_release_commands"),
 ):
     try:
         _mod = __import__(_module_name, fromlist=[_register_name])
