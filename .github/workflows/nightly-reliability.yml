@@ -64,6 +64,7 @@ jobs:
           python scripts/check_workboard_claims.py --json > artifacts/nightly_reliability/workboard_claims_gate.json
           python scripts/workboard_audit_backstop.py --json > artifacts/nightly_reliability/workboard_audit_backstop.json
           python scripts/workboard_claim_cleanup.py --max-age-hours 72 --json > artifacts/nightly_reliability/workboard_claim_cleanup.json
+          python scripts/check_competitor_freshness_guard.py --max-age-days 7 --json > artifacts/nightly_reliability/competitor_freshness_guard.json
           python scripts/workboard_issue.py --help > artifacts/nightly_reliability/workboard_issue_tool_help.txt
           python scripts/module_audit_status.py --max-age-hours 24 --json > artifacts/nightly_reliability/module_audit_status_24h.json
           python scripts/focus_scorecard.py --days 7 --json > artifacts/nightly_reliability/focus_scorecard.json
@@ -94,6 +95,7 @@ jobs:
           gate = load("onboarding_outcomes_gate.json")
           audit_backstop = load("workboard_audit_backstop.json")
           claim_cleanup = load("workboard_claim_cleanup.json")
+          competitor_freshness = load("competitor_freshness_guard.json")
           module_audit = load("module_audit_status_24h.json")
           scorecard = load("focus_scorecard.json")
           security = load("security_audit.json")
@@ -116,6 +118,8 @@ jobs:
               f"- onboarding median ready seconds: {float(gate_summary.get('median_time_to_ready_seconds', 0.0)):.3f}",
               f"- workboard audit backstop ok: {bool(audit_backstop.get('ok', False))}",
               f"- workboard stale claims: {int(claim_cleanup.get('stale_claim_count', 0))}",
+              f"- competitor freshness ok: {bool(competitor_freshness.get('ok', False))}",
+              f"- competitor latest run age days: {float(competitor_freshness.get('latest_run_age_days') or 0.0):.4f}",
               f"- module audits stale (24h): {int(module_audit.get('stale_count', 0))}",
               f"- module audits total issues: {int(module_audit.get('total_issue_count', 0))}",
               f"- security audit ok: {bool(security.get('ok', False))}",
