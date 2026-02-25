@@ -118,6 +118,10 @@ jobs:
           print(f"Workboard agent accountability gate: PASS ({len(agents)} agents checked)")
           PY
 
+      - name: Workboard claim freshness gate
+        run: |
+          python scripts/check_workboard_claim_freshness.py --max-age-hours 72
+
       - name: Workboard issue tooling smoke
         run: |
           python scripts/workboard_issue.py --help
@@ -194,6 +198,7 @@ jobs:
           python -m pytest -q tests/test_monolith_baseline_approval_gate.py
           python -m pytest -q tests/test_dev_artifact_tracking_guard.py
           python -m pytest -q tests/test_check_workboard_claims_gate.py
+          python -m pytest -q tests/test_check_workboard_claim_freshness.py
           python -m pytest -q tests/test_workboard_claim_script.py
           python -m pytest -q tests/test_check_workboard_agent_claim_gate.py
           python -m pytest -q tests/test_agent_bootstrap_claim_script.py
