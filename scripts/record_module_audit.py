@@ -4,11 +4,17 @@ from __future__ import annotations
 
 import argparse
 import os
+import sys
 from pathlib import Path
 from typing import Iterable, List, Set
 
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
 from thomas.observability.module_audit import (
     MAJOR_MODULES,
+    build_file_hashes,
     default_registry_path,
     module_for_path,
     normalize_path,
@@ -77,6 +83,12 @@ def run(argv: List[str] | None = None) -> int:
     parser.add_argument("--auditor", default="doctor-bot", help="Auditor identity (default: doctor-bot)")
     parser.add_argument("--status", default="pass", choices=["pass", "warn", "fail", "pending_review"])
     parser.add_argument("--summary", default="", help="Short audit summary")
+    parser.add_argument(
+        "--issue",
+        action="append",
+        default=[],
+        help="Issue/finding captured in the audit entry (repeatable).",
+    )
     parser.add_argument("--run-id", default="", help="Optional run identifier")
     parser.add_argument("--registry", default="", help="Registry path (default: docs/ops/module_audit_log.json)")
     parser.add_argument("--changelog", default="CHANGELOG.md", help="Changelog path relative to repo root")
@@ -100,6 +112,14 @@ def run(argv: List[str] | None = None) -> int:
         return 2
 
     for module in modules:
+        module_files = sorted(
+            {
+                normalize_path(p)
+                for p in args.file
+                if module_for_path(p) == module and normalize_path(p)
+            }
+        )
+        file_hashes = build_file_hashes(root, module_files)
         entry = record_audit(
             registry_path=registry_path,
             module=module,
@@ -107,7 +127,9 @@ def run(argv: List[str] | None = None) -> int:
             status=args.status,
             summary=args.summary,
             run_id=args.run_id,
-            files_touched=[p for p in args.file if module_for_path(p) == module],
+            files_touched=module_files,
+            file_hashes=file_hashes,
+            issues=args.issue,
             signing_key=signing_key,
         )
         sig_short = str(entry.get("signature", ""))[:12]

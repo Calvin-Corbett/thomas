@@ -12,7 +12,7 @@ import json
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Optional, Set
+from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set
 
 SCHEMA_VERSION = 1
 
@@ -117,6 +117,8 @@ def _entry_payload_for_sig(entry: Dict[str, Any], prev_signature: str) -> bytes:
         "summary": entry.get("summary", ""),
         "run_id": entry.get("run_id", ""),
         "files_touched": entry.get("files_touched", []),
+        "file_hashes": entry.get("file_hashes", {}),
+        "issues": entry.get("issues", []),
         "prev_signature": prev_signature or "",
     }
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
@@ -129,6 +131,34 @@ def sign_entry(entry: Dict[str, Any], *, prev_signature: str, signing_key: Optio
     return hashlib.sha256(payload).hexdigest()
 
 
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        while True:
+            chunk = handle.read(1024 * 1024)
+            if not chunk:
+                break
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def build_file_hashes(repo_root: Path, files_touched: Sequence[str]) -> Dict[str, str]:
+    hashes: Dict[str, str] = {}
+    for raw in files_touched:
+        normalized = normalize_path(raw)
+        if not normalized:
+            continue
+        abs_path = (repo_root / normalized).resolve()
+        try:
+            if abs_path.is_file():
+                hashes[normalized] = sha256_file(abs_path)
+            else:
+                hashes[normalized] = "deleted"
+        except Exception:
+            hashes[normalized] = "unreadable"
+    return hashes
+
+
 def record_audit(
     *,
     registry_path: Path,
@@ -138,6 +168,8 @@ def record_audit(
     summary: str,
     run_id: str = "",
     files_touched: Optional[Iterable[str]] = None,
+    file_hashes: Optional[Mapping[str, str]] = None,
+    issues: Optional[Iterable[str]] = None,
     signing_key: Optional[str] = None,
 ) -> Dict[str, Any]:
     mod = str(module or "").strip()
@@ -155,6 +187,14 @@ def record_audit(
     prev_sig = str(latest.get("signature") or "")
 
     touched = sorted({normalize_path(p) for p in (files_touched or []) if normalize_path(p)})
+    normalized_hashes: Dict[str, str] = {}
+    for raw_path, raw_hash in dict(file_hashes or {}).items():
+        key = normalize_path(raw_path)
+        value = str(raw_hash or "").strip().lower()
+        if key and value:
+            normalized_hashes[key] = value
+    normalized_issues = [str(item).strip() for item in (issues or []) if str(item).strip()]
+
     entry: Dict[str, Any] = {
         "id": uuid.uuid4().hex,
         "module": mod,
@@ -164,6 +204,9 @@ def record_audit(
         "summary": str(summary or "").strip(),
         "run_id": str(run_id or "").strip(),
         "files_touched": touched,
+        "file_hashes": normalized_hashes,
+        "issues": normalized_issues,
+        "issue_count": len(normalized_issues),
         "prev_signature": prev_sig,
         "signature_scheme": "hmac-sha256" if signing_key else "sha256",
     }
@@ -184,4 +227,3 @@ def record_audit(
     registry["history"] = history
     save_registry(registry_path, registry)
     return entry
-

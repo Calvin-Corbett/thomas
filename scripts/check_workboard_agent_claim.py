@@ -4,7 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import fnmatch
 import json
+import subprocess
 from pathlib import Path
 from typing import Sequence
 
@@ -28,6 +30,53 @@ def _norm(value: str) -> str:
     return str(value or "").strip().lower()
 
 
+def _normalize_path(value: str) -> str:
+    path = str(value or "").strip().replace("\\", "/")
+    while path.startswith("./"):
+        path = path[2:]
+    while "//" in path:
+        path = path.replace("//", "/")
+    return path.strip("/")
+
+
+def _scope_matches_path(scope: str, rel_path: str) -> bool:
+    scope_norm = _normalize_path(scope).lower()
+    path_norm = _normalize_path(rel_path).lower()
+    if not scope_norm or not path_norm:
+        return False
+    if scope_norm in {".", "*", "**"}:
+        return True
+    if any(ch in scope_norm for ch in "*?["):
+        if fnmatch.fnmatchcase(path_norm, scope_norm):
+            return True
+        if scope_norm.endswith("/**"):
+            base = scope_norm[:-3].rstrip("/")
+            return bool(base) and (path_norm == base or path_norm.startswith(base + "/"))
+        return False
+    return path_norm == scope_norm or path_norm.startswith(scope_norm + "/")
+
+
+def _staged_files() -> list[str]:
+    try:
+        proc = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0:
+        return []
+    rows: list[str] = []
+    for raw in str(proc.stdout or "").splitlines():
+        item = _normalize_path(raw)
+        if item:
+            rows.append(item)
+    return sorted(set(rows))
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -46,6 +95,14 @@ def run(argv: Sequence[str] | None = None) -> int:
         help=(
             "Agent id override (otherwise resolved from "
             f"{agent_identity.resolution_help(include_name_fallback=True)})."
+        ),
+    )
+    parser.add_argument(
+        "--enforce-staged-scope",
+        action="store_true",
+        help=(
+            "Require all staged files to be covered by the current agent's active "
+            "claim scope."
         ),
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
@@ -151,6 +208,46 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 1
 
     scopes = sorted({scope for claim in mine for scope in claim.scopes})
+    staged_files: list[str] = []
+    unclaimed_staged_files: list[str] = []
+    if args.enforce_staged_scope:
+        staged_files = _staged_files()
+        for rel_path in staged_files:
+            if not any(_scope_matches_path(scope, rel_path) for scope in scopes):
+                unclaimed_staged_files.append(rel_path)
+    if unclaimed_staged_files:
+        message = (
+            f"agent '{agent}' has staged files outside claimed scope. "
+            "Update the WORKBOARD claim scope before committing."
+        )
+        if args.json:
+            payload = {
+                "gate": "workboard_agent_claim",
+                "ok": False,
+                "agent": agent,
+                "active_claim_count": len(claims),
+                "matching_claim_count": len(mine),
+                "unresolved_issue_count": 0,
+                "unresolved_issue_ids": [],
+                "scopes": scopes,
+                "workboard": str(workboard_path),
+                "error": message,
+                "enforce_staged_scope": True,
+                "staged_file_count": len(staged_files),
+                "staged_files_outside_scope_count": len(unclaimed_staged_files),
+                "staged_files_outside_scope": unclaimed_staged_files,
+            }
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print("Workboard agent claim gate: FAIL")
+            print(f"- {message}")
+            print("- claimed scopes:")
+            for scope in scopes:
+                print(f"  - {scope}")
+            print("- staged files outside scope:")
+            for path in unclaimed_staged_files:
+                print(f"  - {path}")
+        return 1
     if args.json:
         payload = {
             "gate": "workboard_agent_claim",
@@ -161,6 +258,10 @@ def run(argv: Sequence[str] | None = None) -> int:
             "unresolved_issue_count": 0,
             "unresolved_issue_ids": [],
             "scopes": scopes,
+            "enforce_staged_scope": bool(args.enforce_staged_scope),
+            "staged_file_count": len(staged_files),
+            "staged_files_outside_scope_count": 0,
+            "staged_files_outside_scope": [],
             "workboard": str(workboard_path),
         }
         print(json.dumps(payload, sort_keys=True))
