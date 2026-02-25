@@ -15,6 +15,14 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 
 REQUIRED_CLAIM_FIELDS: Tuple[str, ...] = ("agent", "scope", "task")
+REQUIRED_CLAIM_FIELDS_WITH_IDENTITY: Tuple[str, ...] = (
+    "agent",
+    "name",
+    "role",
+    "parent",
+    "scope",
+    "task",
+)
 REQUIRED_ACTIVE_TASK_FIELDS: Tuple[str, ...] = ("task_id", "agent", "scope", "summary", "status")
 REQUIRED_UP_FOR_GRABS_FIELDS: Tuple[str, ...] = ("task_id", "scope", "summary", "reported_by")
 REQUIRED_ISSUE_FIELDS: Tuple[str, ...] = (
@@ -30,12 +38,26 @@ ACTIVE_TASK_STATES: Tuple[str, ...] = ("active", "blocked")
 ISSUE_STATES: Tuple[str, ...] = ("open", "triaged", "resolved")
 
 NONE_TOKENS = {"none", "_none_", "`none`", "`_none_`"}
+PARENT_NONE_TOKENS = {
+    "none",
+    "_none_",
+    "`none`",
+    "`_none_`",
+    "null",
+    "n/a",
+    "na",
+    "",
+}
+AGENT_ROLES = {"solo", "parent", "worker"}
 
 
 @dataclass(frozen=True)
 class Claim:
     line_no: int
     agent: str
+    name: str
+    role: str
+    parent: str
     scopes: Tuple[str, ...]
     task: str
 
@@ -57,6 +79,8 @@ class UpForGrabTask:
     scopes: Tuple[str, ...]
     summary: str
     reported_by: str
+    depends_on: Tuple[str, ...]
+    has_explicit_depends_on: bool
 
 
 @dataclass(frozen=True)
@@ -216,8 +240,39 @@ def _parse_scope_field(line_no: int, scope: str) -> Tuple[Tuple[str, ...] | None
     return scopes, None
 
 
-def _parse_claim_entry(line_no: int, entry: str) -> Tuple[Claim | None, str | None]:
-    fields, err = _parse_kv_fields(line_no, entry, required_fields=REQUIRED_CLAIM_FIELDS)
+def _parse_dependency_field(line_no: int, raw: str) -> Tuple[Tuple[str, ...] | None, str | None]:
+    tokens = [str(item or "").strip() for item in str(raw or "").split(",") if str(item or "").strip()]
+    if not tokens:
+        return None, f"line {line_no}: depends_on must include at least one task id or `none`"
+
+    if len(tokens) == 1 and tokens[0].lower() in NONE_TOKENS:
+        return tuple(), None
+
+    out: List[str] = []
+    seen: set[str] = set()
+    for token in tokens:
+        if token.lower() in NONE_TOKENS:
+            return None, f"line {line_no}: depends_on cannot mix `none` with task ids"
+        key = token.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(token)
+    return tuple(out), None
+
+
+def _parse_claim_entry(
+    line_no: int,
+    entry: str,
+    *,
+    require_identity_metadata: bool = False,
+) -> Tuple[Claim | None, str | None]:
+    required_fields = (
+        REQUIRED_CLAIM_FIELDS_WITH_IDENTITY
+        if require_identity_metadata
+        else REQUIRED_CLAIM_FIELDS
+    )
+    fields, err = _parse_kv_fields(line_no, entry, required_fields=required_fields)
     if err:
         return None, err
     if fields is None:
@@ -226,9 +281,19 @@ def _parse_claim_entry(line_no: int, entry: str) -> Tuple[Claim | None, str | No
     if scope_err:
         return None, scope_err
 
+    name = str(fields.get("name", "")).strip()
+    role = str(fields.get("role", "")).strip().lower()
+    parent_raw = str(fields.get("parent", "")).strip()
+    parent = ""
+    if parent_raw.lower() not in PARENT_NONE_TOKENS:
+        parent = parent_raw
+
     claim = Claim(
         line_no=line_no,
         agent=fields["agent"],
+        name=name,
+        role=role,
+        parent=parent,
         scopes=scopes or tuple(),
         task=fields["task"],
     )
@@ -269,6 +334,12 @@ def _parse_up_for_grabs_entry(line_no: int, entry: str) -> Tuple[UpForGrabTask |
     scopes, scope_err = _parse_scope_field(line_no, fields["scope"])
     if scope_err:
         return None, scope_err
+    depends_on = tuple()
+    has_explicit_depends_on = "depends_on" in fields
+    if has_explicit_depends_on:
+        depends_on, dep_err = _parse_dependency_field(line_no, fields.get("depends_on", ""))
+        if dep_err:
+            return None, dep_err
 
     item = UpForGrabTask(
         line_no=line_no,
@@ -276,6 +347,8 @@ def _parse_up_for_grabs_entry(line_no: int, entry: str) -> Tuple[UpForGrabTask |
         scopes=scopes or tuple(),
         summary=fields["summary"],
         reported_by=fields["reported_by"],
+        depends_on=depends_on or tuple(),
+        has_explicit_depends_on=has_explicit_depends_on,
     )
     return item, None
 
@@ -306,6 +379,8 @@ def _parse_issue_entry(line_no: int, entry: str) -> Tuple[WorkboardIssue | None,
 
 def _evaluate_board(
     workboard_path: Path = DEFAULT_WORKBOARD,
+    *,
+    require_identity_metadata: bool = False,
 ) -> Tuple[List[str], List[Claim], List[ActiveTask], List[UpForGrabTask], List[WorkboardIssue]]:
     violations: List[str] = []
     claims: List[Claim] = []
@@ -325,7 +400,11 @@ def _evaluate_board(
     )
     violations.extend(claim_errors)
     for line_no, entry in claim_lines:
-        claim, err = _parse_claim_entry(line_no, entry)
+        claim, err = _parse_claim_entry(
+            line_no,
+            entry,
+            require_identity_metadata=require_identity_metadata,
+        )
         if err:
             violations.append(err)
             continue
@@ -375,6 +454,7 @@ def _evaluate_board(
             issues.append(item)
 
     claims_by_agent: Dict[str, List[Claim]] = {}
+    claims_by_name: Dict[str, Claim] = {}
     for claim in claims:
         key = _normalize_agent(claim.agent)
         prior = claims_by_agent.get(key)
@@ -384,6 +464,40 @@ def _evaluate_board(
                 f"`{claim.agent}` (lines {prior[0].line_no} and {claim.line_no})"
             )
         claims_by_agent.setdefault(key, []).append(claim)
+
+        if claim.name:
+            name_key = _normalize_agent(claim.name)
+            prior_name = claims_by_name.get(name_key)
+            if prior_name is not None and _normalize_agent(prior_name.agent) != key:
+                violations.append(
+                    "duplicate active claim name "
+                    f"`{claim.name}` (lines {prior_name.line_no} and {claim.line_no})"
+                )
+            else:
+                claims_by_name[name_key] = claim
+
+        role = claim.role or ("worker" if claim.parent else "solo")
+        if role not in AGENT_ROLES:
+            allowed = ", ".join(sorted(AGENT_ROLES))
+            violations.append(
+                f"line {claim.line_no}: invalid role `{claim.role}` for `{claim.agent}` (allowed: {allowed})"
+            )
+        if role == "worker" and not claim.parent:
+            violations.append(
+                f"line {claim.line_no}: worker claim `{claim.agent}` must include a non-empty parent"
+            )
+        if role in {"solo", "parent"} and claim.parent:
+            violations.append(
+                f"line {claim.line_no}: role `{role}` for `{claim.agent}` cannot include parent `{claim.parent}`"
+            )
+        if claim.parent and _normalize_agent(claim.parent) == key:
+            violations.append(f"line {claim.line_no}: claim `{claim.agent}` cannot parent itself")
+
+    for claim in claims:
+        if claim.parent and _normalize_agent(claim.parent) not in claims_by_agent:
+            violations.append(
+                f"line {claim.line_no}: claim `{claim.agent}` references unknown parent `{claim.parent}`"
+            )
 
     for idx in range(len(claims)):
         left = claims[idx]
@@ -436,6 +550,26 @@ def _evaluate_board(
             "task_id appears in both active tasks and up-for-grabs: "
             f"`{active.task_id}` (lines {active.line_no} and {grab.line_no})"
         )
+
+    all_known_task_ids = set(active_task_ids).union(up_for_grabs_ids)
+    for item in up_for_grabs:
+        is_p0 = "[p0" in str(item.summary or "").lower()
+        if is_p0 and not item.has_explicit_depends_on:
+            violations.append(
+                f"line {item.line_no}: P0 up-for-grabs task `{item.task_id}` must declare depends_on=none or task ids"
+            )
+        for dep in item.depends_on:
+            dep_key = str(dep or "").strip().lower()
+            task_key = str(item.task_id or "").strip().lower()
+            if dep_key == task_key:
+                violations.append(
+                    f"line {item.line_no}: task `{item.task_id}` cannot depend on itself"
+                )
+                continue
+            if dep_key not in all_known_task_ids:
+                violations.append(
+                    f"line {item.line_no}: task `{item.task_id}` depends_on unknown task_id `{dep}`"
+                )
 
     issue_ids: Dict[str, WorkboardIssue] = {}
     for item in issues:
@@ -507,25 +641,51 @@ def _evaluate_board(
     return violations, claims, active_tasks, up_for_grabs, issues
 
 
-def _evaluate_claims(workboard_path: Path = DEFAULT_WORKBOARD) -> Tuple[List[str], List[Claim]]:
-    violations, claims, _tasks, _grab, _issues = _evaluate_board(workboard_path)
+def _evaluate_claims(
+    workboard_path: Path = DEFAULT_WORKBOARD,
+    *,
+    require_identity_metadata: bool = False,
+) -> Tuple[List[str], List[Claim]]:
+    violations, claims, _tasks, _grab, _issues = _evaluate_board(
+        workboard_path,
+        require_identity_metadata=require_identity_metadata,
+    )
     return violations, claims
 
 
-def evaluate_claims(workboard_path: Path = DEFAULT_WORKBOARD) -> Tuple[List[str], List[Claim]]:
+def evaluate_claims(
+    workboard_path: Path = DEFAULT_WORKBOARD,
+    *,
+    require_identity_metadata: bool = False,
+) -> Tuple[List[str], List[Claim]]:
     """Public claims-only evaluation helper for other coordination scripts."""
-    return _evaluate_claims(workboard_path)
+    return _evaluate_claims(
+        workboard_path,
+        require_identity_metadata=require_identity_metadata,
+    )
 
 
 def evaluate_board(
     workboard_path: Path = DEFAULT_WORKBOARD,
+    *,
+    require_identity_metadata: bool = False,
 ) -> Tuple[List[str], List[Claim], List[ActiveTask], List[UpForGrabTask], List[WorkboardIssue]]:
     """Public full-board evaluation helper for coordination gates."""
-    return _evaluate_board(workboard_path)
+    return _evaluate_board(
+        workboard_path,
+        require_identity_metadata=require_identity_metadata,
+    )
 
 
-def evaluate(workboard_path: Path = DEFAULT_WORKBOARD) -> List[str]:
-    violations, _claims = evaluate_claims(workboard_path)
+def evaluate(
+    workboard_path: Path = DEFAULT_WORKBOARD,
+    *,
+    require_identity_metadata: bool = False,
+) -> List[str]:
+    violations, _claims = evaluate_claims(
+        workboard_path,
+        require_identity_metadata=require_identity_metadata,
+    )
     return violations
 
 
@@ -538,6 +698,14 @@ def run(argv: Sequence[str] | None = None) -> int:
         default=str(DEFAULT_WORKBOARD),
         help="Path to workboard markdown file (default: plans/thomas/WORKBOARD.md)",
     )
+    parser.add_argument(
+        "--require-identity-metadata",
+        action="store_true",
+        help=(
+            "Require claim identity metadata fields: "
+            "name, role, and parent."
+        ),
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)
 
@@ -545,13 +713,17 @@ def run(argv: Sequence[str] | None = None) -> int:
     if not workboard_path.is_absolute():
         workboard_path = (ROOT / workboard_path).resolve()
 
-    violations, claims, active_tasks, up_for_grabs, issues = _evaluate_board(workboard_path)
+    violations, claims, active_tasks, up_for_grabs, issues = _evaluate_board(
+        workboard_path,
+        require_identity_metadata=bool(args.require_identity_metadata),
+    )
     ok = not violations
     if args.json:
         payload = {
             "active_claim_count": len(claims),
             "active_task_count": len(active_tasks),
             "gate": "workboard_claims",
+            "require_identity_metadata": bool(args.require_identity_metadata),
             "issue_count": len(issues),
             "ok": ok,
             "up_for_grabs_count": len(up_for_grabs),
@@ -569,7 +741,10 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 1
 
     print("Workboard claims gate: PASS")
-    print("- claims, active tasks, issues, and up-for-grabs are consistent")
+    summary = "claims, active tasks, issues, and up-for-grabs are consistent"
+    if args.require_identity_metadata:
+        summary += "; identity metadata fields are present"
+    print(f"- {summary}")
     return 0
 
 
