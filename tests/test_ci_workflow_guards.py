@@ -79,6 +79,7 @@ def test_nightly_reliability_workflow_runs_schedule_and_uploads_artifacts() -> N
     assert "scripts/perf_probe.py" in text
     assert "scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning" in text
     assert "scripts/check_workboard_claims.py --json > artifacts/nightly_reliability/workboard_claims_gate.json" in text
+    assert "scripts/workboard_claim_cleanup.py --max-age-hours 72 --json > artifacts/nightly_reliability/workboard_claim_cleanup.json" in text
     assert "scripts/workboard_issue.py --help > artifacts/nightly_reliability/workboard_issue_tool_help.txt" in text
     assert "scripts/security_audit.py --repo-root . --json" in text
     assert "actions/upload-artifact@v4" in text
