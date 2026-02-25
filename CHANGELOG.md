@@ -7,6 +7,42 @@ Versioning: Semantic Versioning.
 
 ## [Unreleased]
 
+## [0.11.80] - 2026-02-25
+
+### Fixed
+- Fixed `thomas agents` lifecycle behavior so runtime engines are persistent by default:
+  - `agents start` now defaults to detached gateway-backed runtime instead of one-shot in-process startup
+  - `agents status` now reports detached runtime state and source selection explicitly
+  - `agents stop` now stops tracked detached runtimes and returns explicit non-success payloads for untracked external runtimes
+- Fixed detached gateway spawn command in parity support to use valid `serve` flags.
+
+### Added
+- Added `thomas/cli/agents_runtime.py` to centralize agent runtime start/status/stop payload logic.
+- Added targeted regression coverage:
+  - `tests/test_cli_agents_runtime.py`
+  - `tests/test_cli_parity_gateway_support.py`
+
+## [0.11.79] - 2026-02-24
+
+### Added
+- Added strict issue-ownership quality signals in `thomas/core/rules_of_road.py`:
+  - new unresolved-issue/workaround language detector
+  - required `issue_ownership` check when strict mode is enabled
+  - `strict_issue_ownership` and `unresolved_issue_detected` signals in rules report metadata
+
+### Changed
+- Updated non-coder best-practice guidance in `thomas/agent/response_tone.py` to explicitly forbid workaround-only closeouts and require issue ownership through completion.
+- Updated `thomas/agent/loop.py` quality enforcement:
+  - strict issue-ownership mode now auto-enables for non-coder / best-practice-gated runs
+  - strict mode now forces quality gate enforcement on, even if runtime quality toggles were disabled
+  - strict mode raises retry floor to 2 quality remediation retries
+  - when required checks still fail after retries in strict mode, the loop emits `AGENT_ERROR` (blocked) instead of `AGENT_DONE`
+
+### Fixed
+- Added regression coverage for strict issue-ownership gating and non-coder hard-block behavior:
+  - `tests/test_rules_of_road.py`
+  - `tests/test_agent_loop_rules_of_road.py`
+
 ## [0.11.78] - 2026-02-24
 
 ### Changed

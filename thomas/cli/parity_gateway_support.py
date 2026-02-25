@@ -192,7 +192,7 @@ def gateway_spawn(
     cfg = str(config_path or "").strip()
     if cfg:
         cmd.extend(["-c", cfg])
-    cmd.extend(["serve", "--host", str(host), "--port", str(int(port)), "--strict-port"])
+    cmd.extend(["serve", "--host", str(host), "--port", str(int(port))])
 
     log_path.parent.mkdir(parents=True, exist_ok=True)
     out = log_path.open("a", encoding="utf-8")
