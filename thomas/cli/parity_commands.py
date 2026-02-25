@@ -15,6 +15,12 @@ from typing import Any, Optional
 
 import click
 
+from thomas.cli.agents_runtime import (
+    engine_snapshot as _engine_snapshot,
+    start_payload as _agents_start_payload,
+    status_payload as _agents_status_payload,
+    stop_payload as _agents_stop_payload,
+)
 from thomas.cli.parity_gateway_support import (
     active_gateway_target as _active_gateway_target,
     clear_gateway_state as _clear_gateway_state,
@@ -47,20 +53,6 @@ def agents(ctx: click.Context) -> None:
     """Manage internal agent engines and role visibility."""
     _ = ctx
 
-
-def _engine_snapshot() -> dict[str, Any]:
-    try:
-        from thomas.core.engine_manager import get_engine_manager
-
-        manager = get_engine_manager()
-        payload = manager.status()
-        if isinstance(payload, dict):
-            return payload
-        return {"running": False, "error": "invalid engine status payload", "engines": {}}
-    except Exception as e:
-        return {"running": False, "error": f"{type(e).__name__}: {e}", "engines": {}}
-
-
 @agents.command("list")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
 def agents_list(as_json: bool) -> None:
@@ -89,45 +81,72 @@ def agents_list(as_json: bool) -> None:
 
 
 @agents.command("status")
+@click.option("--host", default=None, help="Override probe host.")
+@click.option("--port", default=None, type=int, help="Override probe port.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def agents_status(as_json: bool) -> None:
+@click.pass_context
+def agents_status(ctx: click.Context, host: Optional[str], port: Optional[int], as_json: bool) -> None:
     """Show internal agent engine status."""
-    payload = _engine_snapshot()
+    config: AppConfig = ctx.obj["config"]
+    payload = _agents_status_payload(config, host=host, port=port)
+    source = str(payload.get("source") or "")
+    engines = payload.get("engines")
+    if not isinstance(engines, dict):
+        engines = {}
     if as_json:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
-    click.echo(f"manager_running: {bool(payload.get('running', False))}")
-    engines = payload.get("engines")
-    if isinstance(engines, dict):
-        for name, row in engines.items():
-            if isinstance(row, dict):
-                click.echo(
-                    f"- {name}: running={bool(row.get('running', False))}, "
-                    f"cycles={int(row.get('cycles_completed', 0) or 0)}, "
-                    f"error={str(row.get('error') or '')}"
-                )
-    err = str(payload.get("error") or "").strip()
-    if err:
-        click.echo(f"error: {err}")
+    click.echo(f"running: {bool(payload.get('running', False))}")
+    click.echo(f"source: {source}")
+    gateway = payload.get("gateway_detached", {})
+    if isinstance(gateway, dict):
+        click.echo(f"gateway_url: {gateway.get('url')}")
+        click.echo(f"gateway_process_running: {gateway.get('process_running')}")
+        click.echo(f"gateway_healthy: {bool((gateway.get('probe') or {}).get('healthy', False))}")
+    for name, row in engines.items():
+        if isinstance(row, dict):
+            click.echo(
+                f"- {name}: running={bool(row.get('running', False))}, "
+                f"cycles={int(row.get('cycles_completed', 0) or 0)}, "
+                f"error={str(row.get('error') or '')}"
+            )
 
 
 @agents.command("start")
+@click.option("--detach/--in-process", default=True, show_default=True, help="Run detached via gateway for persistent runtime.")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8899, show_default=True, type=int)
+@click.option("--auto-port/--strict-port", default=True, show_default=True)
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def agents_start(as_json: bool) -> None:
+@click.pass_context
+def agents_start(
+    ctx: click.Context,
+    detach: bool,
+    host: str,
+    port: int,
+    auto_port: bool,
+    as_json: bool,
+) -> None:
     """Start all internal background agent engines."""
-    try:
-        from thomas.core.engine_manager import get_engine_manager
-
-        manager = get_engine_manager()
-        result = manager.start_all()
-        payload = {"ok": True, "started": result, "status": manager.status()}
-    except Exception as e:
-        payload = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    config: AppConfig = ctx.obj["config"]
+    payload = _agents_start_payload(
+        config,
+        config_path=str(ctx.obj.get("config_path") or ""),
+        detach=bool(detach),
+        host=str(host),
+        port=int(port),
+        auto_port=bool(auto_port),
+    )
     if as_json:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
     click.echo(f"ok: {bool(payload.get('ok', False))}")
-    if payload.get("ok"):
+    click.echo(f"mode: {payload.get('mode')}")
+    if payload.get("mode") == "gateway_detached":
+        click.echo(f"pid: {payload.get('pid')}")
+        click.echo(f"url: {payload.get('url')}")
+        click.echo(f"healthy: {payload.get('healthy')}")
+    elif payload.get("ok"):
         started = payload.get("started", {})
         if isinstance(started, dict):
             for name, ok in started.items():
@@ -137,21 +156,25 @@ def agents_start(as_json: bool) -> None:
 
 
 @agents.command("stop")
+@click.option("--detach/--in-process", default=True, show_default=True, help="Stop detached gateway runtime or in-process engines.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
-def agents_stop(as_json: bool) -> None:
+@click.pass_context
+def agents_stop(ctx: click.Context, detach: bool, as_json: bool) -> None:
     """Stop all internal background agent engines."""
-    try:
-        from thomas.core.engine_manager import get_engine_manager
-
-        manager = get_engine_manager()
-        manager.stop_all()
-        payload = {"ok": True, "status": manager.status()}
-    except Exception as e:
-        payload = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    config: AppConfig = ctx.obj["config"]
+    payload = _agents_stop_payload(config, detach=bool(detach))
     if as_json:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
         return
     click.echo(f"ok: {bool(payload.get('ok', False))}")
+    click.echo(f"mode: {payload.get('mode')}")
+    if payload.get("mode") == "gateway_detached":
+        if "pid" in payload:
+            click.echo(f"pid: {payload.get('pid')}")
+        if "was_running" in payload:
+            click.echo(f"was_running: {payload.get('was_running')}")
+        if "killed" in payload:
+            click.echo(f"killed: {payload.get('killed')}")
     if not payload.get("ok"):
         click.echo(f"error: {payload.get('error')}")
 
