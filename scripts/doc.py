@@ -22,6 +22,8 @@ GATE_COMMANDS: Sequence[Tuple[str, Sequence[str]]] = (
     ("Model onboarding gate", (PY, "scripts/check_model_onboarding_gate.py")),
     ("Module audit gate", (PY, "scripts/check_module_audit_gate.py")),
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
+    ("Workboard claims gate", (PY, "scripts/check_workboard_claims.py")),
+    ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
     ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
     ("Release hygiene gate", (PY, "scripts/check_release_hygiene.py")),
     ("Surface parity gate", (PY, "scripts/check_surface_parity.py")),

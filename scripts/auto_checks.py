@@ -15,6 +15,7 @@ from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
+CLEAN_DEV_VERIFY_PRESETS: tuple[str, ...] = ("strict-worktree",)
 
 CORE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Python compile check", (PY, "-m", "compileall", "-q", "thomas", "tests")),
@@ -37,6 +38,8 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Monolith guard gate", (PY, "scripts/check_monolith_guard.py")),
     ("Repo hygiene gate", (PY, "scripts/check_repo_hygiene.py")),
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
+    ("Workboard claims gate", (PY, "scripts/check_workboard_claims.py")),
+    ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
     ("Feature master sync gate", (PY, "scripts/sync_feature_master_list.py", "--check")),
     ("Release hygiene gate", (PY, "scripts/check_release_hygiene.py")),
     ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
@@ -89,6 +92,30 @@ def _warn_missing_optional_modules() -> None:
 def run(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run automated Thomas repository checks.")
     parser.add_argument("--quick", action="store_true", help="Run syntax/lint only.")
+    cleanup_group = parser.add_mutually_exclusive_group()
+    cleanup_group.add_argument(
+        "--clean-dev-artifacts",
+        action="store_true",
+        help="Audit local dev-artifact candidates before checks (dry-run).",
+    )
+    cleanup_group.add_argument(
+        "--clean-dev-artifacts-apply",
+        action="store_true",
+        help="Delete local dev-artifact candidates before checks (requires verification commands).",
+    )
+    parser.add_argument(
+        "--clean-dev-verify-command",
+        action="append",
+        default=[],
+        help="End-to-end verification command for --clean-dev-artifacts-apply (repeatable).",
+    )
+    parser.add_argument(
+        "--clean-dev-verify-preset",
+        action="append",
+        choices=CLEAN_DEV_VERIFY_PRESETS,
+        default=[],
+        help="Named verification preset for --clean-dev-artifacts-apply (repeatable).",
+    )
     parser.add_argument("--skip-gates", action="store_true", help="Skip gate scripts.")
     parser.add_argument("--skip-tests", action="store_true", help="Skip pytest suite.")
     parser.add_argument(
@@ -98,7 +125,19 @@ def run(argv: Iterable[str] | None = None) -> int:
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
 
-    steps: list[tuple[str, tuple[str, ...]]] = list(CORE_STEPS)
+    steps: list[tuple[str, tuple[str, ...]]] = []
+    if args.clean_dev_artifacts:
+        steps.append(("Dev artifact cleanup (dry-run)", (PY, "scripts/clean_dev_artifacts.py")))
+    if args.clean_dev_artifacts_apply:
+        cleanup_cmd: list[str] = [PY, "scripts/clean_dev_artifacts.py", "--apply"]
+        for preset in [str(item or "").strip() for item in list(args.clean_dev_verify_preset or [])]:
+            if preset:
+                cleanup_cmd.extend(["--verify-preset", preset])
+        for command in [str(item or "").strip() for item in list(args.clean_dev_verify_command or [])]:
+            if command:
+                cleanup_cmd.extend(["--verify-command", command])
+        steps.append(("Dev artifact cleanup (apply)", tuple(cleanup_cmd)))
+    steps.extend(CORE_STEPS)
     if not args.quick and not args.skip_gates:
         steps.extend(GATE_STEPS)
     if not args.quick and not args.skip_tests:

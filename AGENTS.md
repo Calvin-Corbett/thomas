@@ -56,6 +56,40 @@ Never bulk-delete. For EVERY file or function you want to remove:
 - Current priorities: `plans/thomas/WORKBOARD.md`
 - Website releases: deploy via CI (`site-release.yml`), not ad-hoc
 
+## Multi-Agent Handshake Protocol (Required)
+When multiple agents are active, use a double-handshake before bundling commits.
+This applies to every agent identity that touches the repo (Codex, Claude, Grok, Thomas, or human contributors).
+
+1. Claim scope at start:
+   - Set explicit id first (PowerShell): `$env:AGENT_ID="<name>"` (or `$env:THOMAS_AGENT_ID="<name>"`)
+   - Optional one-shot bootstrap: `python scripts/agent_bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>"`
+   - `python scripts/workboard_claim.py --claim --agent "<name>" --scope "<path[,path...]>" --task "[WIP][HSK-<id>] <short task>"`
+2. Mark ready when code/tests are complete:
+   - `python scripts/workboard_claim.py --claim --agent "<name>" --scope "<path[,path...]>" --task "[READY][HSK-<id>] <summary>"`
+3. Report execution issues:
+   - Add blocked tasks to `## Active Tasks` with `status=blocked`.
+   - Add/maintain a matching entry in `## Issues / Blockers` until resolved.
+   - If you cannot continue, move task details into `## Up For Grabs`.
+   - Use helper commands:
+     - `python scripts/workboard_issue.py --block --task-id "<task_id>" --reporter "<agent>" --summary "<blocker summary>"`
+     - `python scripts/workboard_issue.py --triage --issue-id "<issue_id>" --owner "<agent|team>"`
+     - `python scripts/workboard_issue.py --resolve --issue-id "<issue_id>"`
+     - `python scripts/workboard_issue.py --up-for-grabs --task-id "<task_id>" --reported-by "<agent>"`
+4. Acknowledge handoff in the log:
+   - `python scripts/append_handoff.py --title "ACK HSK-<id>" --note "<agent> marked READY" --note "<integrator> will bundle"`
+5. Integrator bundles only after READY+ACK.
+6. Release claims after commit/push:
+   - `python scripts/workboard_claim.py --release --agent "<name>"`
+
+Optional hard lock for active edits:
+- `python scripts/active_folders.py claim --agent "<name>" --path <folder> --ttl 1800 --note "HSK-<id>"`
+- `python scripts/active_folders.py release --agent "<name>"`
+
+Guard rails:
+- Check active claims: `python scripts/workboard_claim.py --list`
+- Validate claims gate: `python scripts/check_workboard_claims.py`
+- Never commit another agent's scope unless they are marked `[READY]` and ACK is logged.
+
 ## Website Dev Shortcut (Dev-Only)
 If a task mentions website/site/homepage/domain/Spline or the user asks for web changes:
 1. Start in `apps/site` immediately.
