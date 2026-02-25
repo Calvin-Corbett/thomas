@@ -104,6 +104,7 @@ Omitting `--task` uses the current git branch name.
 - agent=Codex Demo; scope=thomas/cli/main.py,tests/test_models_cli_scan_alias.py; task=[WIP][HSK-DEMO] models reliability
 - agent=agent-04; scope=output/benchmark_research; task=[WIP][HSK-04] HumanEval MBPP benchmark research
 
+- agent=corbe@Bobs_Chromebook-ppid23040; scope=scripts/workboard_claim_cleanup.py,tests/test_workboard_claim_cleanup_script.py,.github/workflows/nightly-reliability.yml,tests/test_ci_workflow_guards.py,thomas/_architecture.py; task=stale-claim cleanup automation
 ## Active Tasks
 
 Task format:
@@ -112,6 +113,7 @@ Task format:
 - task_id=models-reliability; agent=Codex Demo; scope=thomas/cli/main.py,tests/test_models_cli_scan_alias.py; summary=models reliability; status=active
 - task_id=benchmark-research; agent=agent-04; scope=output/benchmark_research; summary=HumanEval MBPP benchmark research; status=active
 
+- task_id=corbe-bobs-chromebook-ppid23040-task; agent=corbe@Bobs_Chromebook-ppid23040; scope=scripts/workboard_claim_cleanup.py,tests/test_workboard_claim_cleanup_script.py,.github/workflows/nightly-reliability.yml,tests/test_ci_workflow_guards.py,thomas/_architecture.py; summary=stale-claim cleanup automation; status=active
 ## Issues / Blockers
 
 Issue format:
