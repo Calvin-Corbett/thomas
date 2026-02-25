@@ -158,6 +158,10 @@ jobs:
         run: |
           python scripts/check_openclaw_metric_parity_gate.py
 
+      - name: Competitor freshness guard
+        run: |
+          python scripts/check_competitor_freshness_guard.py --max-age-days 7
+
       - name: Chat control protocol gate
         run: |
           python scripts/check_chat_control_protocol.py
@@ -174,6 +178,7 @@ jobs:
           python -m pytest -q tests/test_companion_policy_compliance.py
           python -m pytest -q tests/test_server_companion_api.py
           python -m pytest -q tests/test_openclaw_metric_parity_gate.py
+          python -m pytest -q tests/test_competitor_freshness_guard.py
           python -m pytest -q tests/prompt_pack/test_p127_gateway_restart_command.py
           python -m pytest -q tests/prompt_pack/test_p136_gateway_auth_policy_enforcement.py
           python -m pytest -q tests/test_system_config_validator.py
