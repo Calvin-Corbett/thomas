@@ -9,7 +9,17 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterable, List, Sequence, Set
 
-from thomas.observability.module_audit import MAJOR_MODULES, load_registry, touched_modules
+_ROOT = Path(__file__).resolve().parent.parent
+if str(_ROOT) not in sys.path:
+    sys.path.insert(0, str(_ROOT))
+
+from thomas.observability.module_audit import (
+    MAJOR_MODULES,
+    load_registry,
+    normalize_path,
+    sha256_file,
+    touched_modules,
+)
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -19,9 +29,7 @@ READY_STATUSES = {"pass", "warn", "fail"}
 
 
 def _normalize_path(path: str) -> str:
-    p = str(path).strip().replace("\\", "/")
-    if p.startswith("./"):
-        p = p[2:]
+    p = normalize_path(path)
     prefix = ROOT_DIRNAME + "/"
     if p.startswith(prefix):
         p = p[len(prefix):]
@@ -77,6 +85,23 @@ def _age_days(raw_iso: str) -> float | None:
         return None
     now = datetime.now(timezone.utc)
     return max(0.0, (now - dt).total_seconds() / 86400.0)
+
+
+def _module_files(changed: Iterable[str], module: str) -> List[str]:
+    prefix = f"thomas/{module}/"
+    out = [
+        _normalize_path(path)
+        for path in changed
+        if _normalize_path(path).startswith(prefix)
+    ]
+    return sorted(set(out), key=str.lower)
+
+
+def _file_hash_for_gate(path: str) -> str:
+    abs_path = (ROOT / path).resolve()
+    if abs_path.is_file():
+        return sha256_file(abs_path)
+    return "deleted"
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -135,6 +160,16 @@ def run(argv: Sequence[str] | None = None) -> int:
         status = str(row.get("status") or "").strip().lower()
         audited_at = str(row.get("audited_at") or "").strip()
         signature = str(row.get("signature") or "").strip()
+        files_touched = {
+            _normalize_path(item)
+            for item in (row.get("files_touched") or [])
+            if _normalize_path(item)
+        }
+        file_hashes = {
+            _normalize_path(key): str(value or "").strip().lower()
+            for key, value in dict(row.get("file_hashes") or {}).items()
+            if _normalize_path(key)
+        }
 
         if not auditor:
             failed = True
@@ -158,6 +193,30 @@ def run(argv: Sequence[str] | None = None) -> int:
                 f"\nStale audit entry for module={module}: "
                 f"age_days={age:.1f} > max_age_days={float(args.max_age_days):.1f}"
             )
+
+        changed_module_files = _module_files(changed_set, module)
+        missing_coverage = [path for path in changed_module_files if path not in files_touched]
+        if missing_coverage:
+            failed = True
+            print(f"\nAudit entry for module={module} does not cover changed file(s):")
+            for path in missing_coverage:
+                print(f"  - {path}")
+
+        for path in changed_module_files:
+            expected_hash = str(file_hashes.get(path) or "").strip().lower()
+            if not expected_hash:
+                failed = True
+                print(
+                    f"\nAudit entry for module={module} missing file hash for changed file: {path}"
+                )
+                continue
+            actual_hash = _file_hash_for_gate(path)
+            if expected_hash != actual_hash:
+                failed = True
+                print(
+                    f"\nAudit entry for module={module} has stale hash for {path}: "
+                    f"expected {expected_hash}, actual {actual_hash}"
+                )
 
     if failed:
         return 1

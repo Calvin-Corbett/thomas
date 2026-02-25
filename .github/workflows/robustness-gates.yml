@@ -126,6 +126,10 @@ jobs:
         run: |
           python scripts/workboard_issue.py --help
 
+      - name: Workboard audit backstop gate
+        run: |
+          python scripts/workboard_audit_backstop.py
+
       - name: Release update gate
         run: |
           python scripts/check_release_update_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
@@ -203,6 +207,12 @@ jobs:
           python -m pytest -q tests/test_check_workboard_agent_claim_gate.py
           python -m pytest -q tests/test_agent_bootstrap_claim_script.py
           python -m pytest -q tests/test_workboard_issue_script.py
+          python -m pytest -q tests/test_workboard_audit_backstop_script.py
+          python -m pytest -q tests/test_module_audit_registry.py
+          python -m pytest -q tests/test_check_module_audit_gate_script.py
+          python -m pytest -q tests/test_record_module_audit_script.py
+          python -m pytest -q tests/test_module_audit_status_script.py
+          python -m pytest -q tests/test_module_audit_sweep_script.py
           python -m pytest -q tests/test_models_cli_subprocess_smoke.py
           python -m pytest -q tests/test_ci_workflow_guards.py
 
@@ -214,6 +224,8 @@ jobs:
           python scripts/onboarding_outcomes_report.py --days 7 --json
           python scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning
           python scripts/focus_scorecard.py --days 7 --json
+          python scripts/workboard_audit_backstop.py --json
+          python scripts/module_audit_status.py --max-age-hours 24 --json
           python scripts/release_contract_check.py --json --strict
           python scripts/extension_certify.py --json --strict
 

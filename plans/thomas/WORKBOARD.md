@@ -104,7 +104,7 @@ Omitting `--task` uses the current git branch name.
 - agent=Codex Demo; scope=thomas/cli/main.py,tests/test_models_cli_scan_alias.py; task=[WIP][HSK-DEMO] models reliability
 - agent=agent-04; scope=output/benchmark_research; task=[WIP][HSK-04] HumanEval MBPP benchmark research
 
-- agent=corbe@Bobs_Chromebook-ppid23040; scope=scripts/workboard_claim_cleanup.py,tests/test_workboard_claim_cleanup_script.py,.github/workflows/nightly-reliability.yml,tests/test_ci_workflow_guards.py,thomas/_architecture.py; task=stale-claim cleanup automation
+- agent=corbe@Bobs_Chromebook-ppid23040; scope=scripts/check_module_audit_gate.py,scripts/record_module_audit.py,scripts/module_audit_status.py,scripts/module_audit_sweep.py,scripts/workboard_audit_backstop.py,scripts/check_release_update_gate.py,scripts/check_workboard_agent_claim.py,thomas/observability/module_audit.py,tests/test_module_audit_registry.py,tests/test_check_module_audit_gate_script.py,tests/test_record_module_audit_script.py,tests/test_module_audit_status_script.py,tests/test_module_audit_sweep_script.py,tests/test_workboard_audit_backstop_script.py,tests/test_ci_workflow_guards.py,tests/test_check_release_update_gate_script.py,docs/ops/module_audit.md,docs/ops/module_audit_log.json,plans/thomas/WORKBOARD.md,.github/workflows/robustness-gates.yml,.github/workflows/nightly-reliability.yml,.pre-commit-config.yaml; task=module audit + workboard backstop hardening
 ## Active Tasks
 
 Task format:
@@ -113,7 +113,7 @@ Task format:
 - task_id=models-reliability; agent=Codex Demo; scope=thomas/cli/main.py,tests/test_models_cli_scan_alias.py; summary=models reliability; status=active
 - task_id=benchmark-research; agent=agent-04; scope=output/benchmark_research; summary=HumanEval MBPP benchmark research; status=active
 
-- task_id=corbe-bobs-chromebook-ppid23040-task; agent=corbe@Bobs_Chromebook-ppid23040; scope=scripts/workboard_claim_cleanup.py,tests/test_workboard_claim_cleanup_script.py,.github/workflows/nightly-reliability.yml,tests/test_ci_workflow_guards.py,thomas/_architecture.py; summary=stale-claim cleanup automation; status=active
+- task_id=corbe-bobs-chromebook-ppid23040-task; agent=corbe@Bobs_Chromebook-ppid23040; scope=scripts/check_module_audit_gate.py,scripts/record_module_audit.py,scripts/module_audit_status.py,scripts/module_audit_sweep.py,scripts/workboard_audit_backstop.py,scripts/check_release_update_gate.py,scripts/check_workboard_agent_claim.py,thomas/observability/module_audit.py,tests/test_module_audit_registry.py,tests/test_check_module_audit_gate_script.py,tests/test_record_module_audit_script.py,tests/test_module_audit_status_script.py,tests/test_module_audit_sweep_script.py,tests/test_workboard_audit_backstop_script.py,tests/test_ci_workflow_guards.py,tests/test_check_release_update_gate_script.py,docs/ops/module_audit.md,docs/ops/module_audit_log.json,plans/thomas/WORKBOARD.md,.github/workflows/robustness-gates.yml,.github/workflows/nightly-reliability.yml,.pre-commit-config.yaml; summary=module audit + workboard backstop hardening; status=active
 ## Issues / Blockers
 
 Issue format:
@@ -126,8 +126,8 @@ Issue format:
 Task format:
 `- \`task_id=<id>; scope=<path[,path...]>; summary=<short text>; reported_by=<id>\``
 
-- none
 
+- task_id=audit-24h-backstop; scope=thomas; summary=ensure every major module is audited in last 24h and fix findings; reported_by=workboard-bot
 ## Supporting Docs (Not Plan Sources)
 
 - `docs/COMPANION_PLATFORM_SCOPE.md`

@@ -64,6 +64,7 @@ IGNORE_EXACT: Set[str] = {
     "pyproject.toml",
     "thomas/__init__.py",
     "thomas/_architecture.py",
+    "thomas/observability/module_audit.py",
 }
 
 

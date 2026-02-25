@@ -50,6 +50,8 @@ def test_robustness_gates_has_explicit_ruff_install_and_full_matrix_barrier() ->
     assert "python scripts/check_workboard_claim_freshness.py --max-age-hours 72" in text
     assert "Workboard issue tooling smoke" in text
     assert "python scripts/workboard_issue.py --help" in text
+    assert "Workboard audit backstop gate" in text
+    assert "python scripts/workboard_audit_backstop.py" in text
     assert "full-test-matrix:" in text
     assert "required-gates:" in text
     assert "needs: [protocol-parity, codebase-auto-checks, security-regression, full-test-matrix, docker-smoke]" in text
@@ -63,9 +65,16 @@ def test_robustness_gates_has_explicit_ruff_install_and_full_matrix_barrier() ->
     assert "python -m pytest -q tests/test_check_workboard_agent_claim_gate.py" in text
     assert "python -m pytest -q tests/test_agent_bootstrap_claim_script.py" in text
     assert "python -m pytest -q tests/test_workboard_issue_script.py" in text
+    assert "python -m pytest -q tests/test_workboard_audit_backstop_script.py" in text
+    assert "python -m pytest -q tests/test_module_audit_registry.py" in text
+    assert "python -m pytest -q tests/test_check_module_audit_gate_script.py" in text
+    assert "python -m pytest -q tests/test_record_module_audit_script.py" in text
+    assert "python -m pytest -q tests/test_module_audit_status_script.py" in text
+    assert "python -m pytest -q tests/test_module_audit_sweep_script.py" in text
     assert "python -m pytest -q tests/test_models_cli_subprocess_smoke.py" in text
     assert "python scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning" in text
     assert "python scripts/check_mutating_route_policy_exceptions.py --json --strict" in text
+    assert "python scripts/module_audit_status.py --max-age-hours 24 --json" in text
 
 
 def test_nightly_reliability_workflow_runs_schedule_and_uploads_artifacts() -> None:
@@ -79,7 +88,9 @@ def test_nightly_reliability_workflow_runs_schedule_and_uploads_artifacts() -> N
     assert "scripts/perf_probe.py" in text
     assert "scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning" in text
     assert "scripts/check_workboard_claims.py --json > artifacts/nightly_reliability/workboard_claims_gate.json" in text
+    assert "scripts/workboard_audit_backstop.py --json > artifacts/nightly_reliability/workboard_audit_backstop.json" in text
     assert "scripts/workboard_claim_cleanup.py --max-age-hours 72 --json > artifacts/nightly_reliability/workboard_claim_cleanup.json" in text
+    assert "scripts/module_audit_status.py --max-age-hours 24 --json > artifacts/nightly_reliability/module_audit_status_24h.json" in text
     assert "scripts/workboard_issue.py --help > artifacts/nightly_reliability/workboard_issue_tool_help.txt" in text
     assert "scripts/security_audit.py --repo-root . --json" in text
     assert "actions/upload-artifact@v4" in text
@@ -101,7 +112,10 @@ def test_pre_commit_includes_workboard_claims_gate_hook() -> None:
     assert "entry: python scripts/check_workboard_claims.py" in text
     assert "id: thomas-workboard-agent-claim-gate" in text
     assert "name: Thomas Workboard Agent Claim Gate" in text
-    assert "entry: python scripts/check_workboard_agent_claim.py" in text
+    assert "entry: python scripts/check_workboard_agent_claim.py --enforce-staged-scope" in text
     assert "id: thomas-workboard-issue-tool-smoke" in text
     assert "name: Thomas Workboard Issue Tool Smoke" in text
     assert "entry: python scripts/workboard_issue.py --help" in text
+    assert "id: thomas-workboard-audit-backstop-gate" in text
+    assert "name: Thomas Workboard Audit Backstop Gate" in text
+    assert "entry: python scripts/workboard_audit_backstop.py" in text
