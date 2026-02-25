@@ -1,8 +1,7 @@
 from __future__ import annotations
-import random
 import time
 from dataclasses import dataclass
-from typing import Dict, List, Tuple
+from typing import List
 
 from agent_memory.app import AgentMemoryApp
 
@@ -46,6 +45,25 @@ def mode_stability_test(app: AgentMemoryApp, thread: str) -> EvalResult:
     ok2 = ("python 3.12" in out2["packed"].lower()) or ("type hints" in out2["packed"].lower())
     return EvalResult("mode_stability", bool(ok and ok2), "fast and deep both should surface core preferences")
 
+
+def handoff_continuity_test(app: AgentMemoryApp, thread: str) -> EvalResult:
+    app.log_event(thread=thread, etype="note", text="handoff owner is alex and retry budget is 3")
+    _plant(app, thread, 45)
+    app.log_event(thread=thread, etype="note", text="handoff owner is sam and rollback budget is 2")
+    out = app.query(thread=thread, mode="deep", text="who owns handoff and what is rollback budget")
+    packed = out["packed"].lower()
+    ok = ("sam" in packed) and ("rollback" in packed)
+    return EvalResult("handoff_continuity", ok, "latest handoff owner and rollback budget should remain retrievable")
+
+
+def no_memory_guardrail_test(app: AgentMemoryApp, thread: str) -> EvalResult:
+    app.log_event(thread=thread, etype="note", text="secret token is ORANGE-DELTA")
+    out = app.query(thread=thread, mode="no_memory", text="what is my secret token")
+    packed = out["packed"].lower()
+    ok = ("orange-delta" not in packed) and (out.get("selected") == [])
+    return EvalResult("no_memory_guardrail", ok, "no_memory mode must not surface memory receipts")
+
+
 def latency_smoke_test(app: AgentMemoryApp, thread: str) -> EvalResult:
     t0 = time.time()
     _ = app.query(thread=thread, mode="fast", text="ping")
@@ -59,6 +77,8 @@ def run_all(app: AgentMemoryApp) -> List[EvalResult]:
         needle_test(app, thread),
         temporal_contradiction_test(app, thread),
         mode_stability_test(app, thread),
+        handoff_continuity_test(app, thread),
+        no_memory_guardrail_test(app, thread),
         latency_smoke_test(app, thread),
     ]
     return results
