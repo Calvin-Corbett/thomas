@@ -19,7 +19,7 @@ def _write_workboard(
         "## Agent Claims (Active)\n\n"
         "Use this section to announce active ownership and prevent conflicting edits.\n"
         "Claim format:\n"
-        "`- \\`agent=<id>; scope=<path[,path...]>; task=<short text>\\``\n\n"
+        "`- \\`agent=<id>; name=<callsign>; role=<solo|parent|worker>; parent=<id|none>; scope=<path[,path...]>; task=<short text>\\``\n\n"
         f"{claims_block}\n\n"
         "## Active Tasks\n\n"
         "Task format:\n"
@@ -128,6 +128,34 @@ def test_workboard_claims_gate_json_fail_payload(tmp_path: Path, capsys) -> None
     assert "missing required field(s): scope" in payload["violations"][0]
 
 
+def test_workboard_claims_gate_strict_identity_metadata_fails_legacy_claim(
+    tmp_path: Path, capsys
+) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; scope=thomas/cli/main.py; task=main lane",
+        active_tasks_block="- task_id=main-lane; agent=Codex 3; scope=thomas/cli/main.py; summary=main lane; status=active",
+    )
+    rc = mod.run(["--workboard", str(workboard), "--require-identity-metadata"])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "missing required field(s): name, role, parent" in out
+
+
+def test_workboard_claims_gate_strict_identity_metadata_passes(
+    tmp_path: Path, capsys
+) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=thomas/cli/main.py; task=main lane",
+        active_tasks_block="- task_id=main-lane; agent=Codex 3; scope=thomas/cli/main.py; summary=main lane; status=active",
+    )
+    rc = mod.run(["--workboard", str(workboard), "--require-identity-metadata"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "identity metadata fields are present" in out
+
+
 def test_claim_requires_matching_active_task(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
@@ -163,3 +191,73 @@ def test_blocked_task_requires_open_issue(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert rc == 1
     assert "blocked task `blocked-lane` must have an open/triaged entry" in out
+
+
+def test_workboard_claims_gate_fails_for_worker_without_parent(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3-Worker-1; name=Worker; role=worker; parent=none; scope=thomas/core; task=worker lane",
+        active_tasks_block="- task_id=worker-lane; agent=Codex 3-Worker-1; scope=thomas/core; summary=worker lane; status=active",
+    )
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "worker claim" in out
+    assert "must include a non-empty parent" in out
+
+
+def test_workboard_claims_gate_fails_for_unknown_worker_parent(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3-Worker-1; name=Worker; role=worker; parent=Codex 3; scope=thomas/core; task=worker lane",
+        active_tasks_block="- task_id=worker-lane; agent=Codex 3-Worker-1; scope=thomas/core; summary=worker lane; status=active",
+    )
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "references unknown parent `Codex 3`" in out
+
+
+def test_up_for_grabs_p0_requires_explicit_depends_on(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- none",
+        up_for_grabs_block=(
+            "- task_id=p0-lane; scope=scripts/check_workboard_claims.py; "
+            "summary=[P0][NOW] task without dependency declaration; reported_by=task-manager-agent"
+        ),
+    )
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "must declare depends_on=none or task ids" in out
+
+
+def test_up_for_grabs_dependency_must_reference_known_task(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- none",
+        up_for_grabs_block=(
+            "- task_id=lane-a; scope=scripts/check_workboard_claims.py; "
+            "summary=[P1][NEXT] lane a; reported_by=task-manager-agent; depends_on=missing-lane"
+        ),
+    )
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "depends_on unknown task_id `missing-lane`" in out
+
+
+def test_up_for_grabs_allows_p0_with_depends_on_none(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- none",
+        up_for_grabs_block=(
+            "- task_id=p0-lane; scope=scripts/check_workboard_claims.py; "
+            "summary=[P0][NOW] explicit no dependency; reported_by=task-manager-agent; depends_on=none"
+        ),
+    )
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Workboard claims gate: PASS" in out
