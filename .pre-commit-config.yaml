@@ -32,6 +32,12 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-workboard-task-problems-gate
+        name: Thomas Workboard Task Problems Gate
+        entry: python scripts/check_workboard_task_problems.py
+        language: system
+        pass_filenames: false
+
       - id: thomas-workboard-changed-files-gate
         name: Thomas Workboard Changed Files Gate
         entry: python scripts/check_workboard_changed_files.py --staged --require-identity-metadata
@@ -59,6 +65,12 @@ repos:
       - id: thomas-repo-hygiene-gate
         name: Thomas Repo Hygiene Gate
         entry: python scripts/check_repo_hygiene.py --no-require-clean-worktree
+        language: system
+        pass_filenames: false
+
+      - id: thomas-repo-identity-gate
+        name: Thomas Repo Identity Gate
+        entry: python scripts/check_repo_identity.py
         language: system
         pass_filenames: false
 

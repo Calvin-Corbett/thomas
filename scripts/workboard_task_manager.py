@@ -2,7 +2,7 @@
 """Task-manager automation for WORKBOARD execution protocol.
 
 This script provides seven operations:
-1) Ensure every active/up-for-grabs task has a durable PLAN.md scaffold.
+1) Ensure every active/up-for-grabs task has durable PLAN.md and PROBLEM.md scaffolds.
 2) Detect stale/offline agents and move their work to a recoverable state.
 3) Reactivate a parked task for an agent.
 4) Sync visible agent session registry (alias + session id lifecycle).
@@ -46,6 +46,7 @@ except Exception:  # pragma: no cover
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_PLAN_ROOT = "plans/thomas/tasks"
+DEFAULT_PROBLEM_ROOT = "plans/thomas/problems"
 DEFAULT_TASK_MANAGER_AGENT = "task-manager-agent"
 DEFAULT_MAX_IDLE_MINUTES = 1.0
 DEFAULT_MONITOR_INTERVAL_SECONDS = 30.0
@@ -54,6 +55,7 @@ DEFAULT_MAX_AGENT_SILENCE_MINUTES = 5.0
 DEFAULT_MAX_DISPATCH_PER_CYCLE = 2
 DEFAULT_SESSION_LEASE_MINUTES = 5.0
 TASK_PLANS_HEADING = "Task Plans"
+TASK_PROBLEMS_HEADING = "Task Problems"
 INACTIVE_AGENTS_HEADING = "Inactive Agents"
 AGENT_SESSIONS_HEADING = "Agent Sessions"
 TASK_SPECIALIST_HEADING = "Task Specialist Routing"
@@ -213,8 +215,7 @@ def set_task_status(
         if target_status not in allowed_next:
             return False, {
                 "error": (
-                    f"invalid task status transition `{current_status}` -> `{target_status}` "
-                    f"for task `{task_clean}`"
+                    f"invalid task status transition `{current_status}` -> `{target_status}` for task `{task_clean}`"
                 ),
                 "allowed_next": sorted(allowed_next),
             }
@@ -617,8 +618,7 @@ def _ping_silent_active_agents(
             sender=task_manager_agent,
             recipient=task.agent,
             summary=(
-                f"idle monitor: no status update for `{task.task_id}` in "
-                f"{float(max_agent_silence_minutes):.2f} minutes"
+                f"idle monitor: no status update for `{task.task_id}` in {float(max_agent_silence_minutes):.2f} minutes"
             ),
             task_id=task.task_id,
             kind="ping",
@@ -1044,6 +1044,7 @@ def _run_monitor_cycle(
     *,
     workboard_path: Path,
     plan_root: str,
+    problem_root: str,
     task_manager_agent: str,
     max_idle_minutes: float,
     max_agent_silence_minutes: float,
@@ -1061,6 +1062,7 @@ def _run_monitor_cycle(
     ok_plans, payload_plans = _sync_task_plans(
         workboard_path=workboard_path,
         plan_root=plan_root,
+        problem_root=problem_root,
         apply=apply,
         now=now,
     )
@@ -1153,6 +1155,7 @@ def _monitor_loop(
     *,
     workboard_path: Path,
     plan_root: str,
+    problem_root: str,
     task_manager_agent: str,
     max_idle_minutes: float,
     max_agent_silence_minutes: float,
@@ -1183,6 +1186,7 @@ def _monitor_loop(
         ok_cycle, payload_cycle = _run_monitor_cycle(
             workboard_path=workboard_path,
             plan_root=plan_root,
+            problem_root=problem_root,
             task_manager_agent=task_manager_agent,
             max_idle_minutes=max_idle_minutes,
             max_agent_silence_minutes=max_agent_silence_minutes,
@@ -1696,6 +1700,12 @@ def _default_plan_path(task_id: str, plan_root: str) -> str:
     return str(rel).replace("\\", "/")
 
 
+def _default_problem_path(task_id: str, problem_root: str) -> str:
+    safe_task_id = re.sub(r"[^A-Za-z0-9._-]+", "-", str(task_id or "").strip()).strip("-") or "task"
+    rel = Path(problem_root) / safe_task_id / "PROBLEM.md"
+    return str(rel).replace("\\", "/")
+
+
 def _build_plan_template(
     *,
     task_id: str,
@@ -1728,10 +1738,44 @@ def _build_plan_template(
     )
 
 
+def _build_problem_template(
+    *,
+    task_id: str,
+    owner: str,
+    summary: str,
+    scope: str,
+    status: str,
+    now_iso: str,
+) -> str:
+    return (
+        f"# Task Problem Record: {task_id}\n\n"
+        f"- task_id: `{task_id}`\n"
+        f"- owner: `{owner}`\n"
+        f"- status: `{status}`\n"
+        f"- scope: `{scope}`\n"
+        f"- summary: {summary}\n"
+        f"- created_at_utc: `{now_iso}`\n"
+        f"- last_synced_at_utc: `{now_iso}`\n\n"
+        "## Problem Statement\n\n"
+        "- Describe what is broken, missing, or risky.\n\n"
+        "## Evidence\n\n"
+        "- Link logs, failing tests, screenshots, or message ids.\n\n"
+        "## Root Cause Hypothesis\n\n"
+        "- Capture the current best explanation before coding.\n\n"
+        "## Fix Plan\n\n"
+        "1. Implement the smallest root-cause fix.\n"
+        "2. Validate using focused tests and runtime checks.\n"
+        "3. Record final outcome and residual risk.\n\n"
+        "## Outcome\n\n"
+        "- Pending implementation.\n"
+    )
+
+
 def _sync_task_plans(
     *,
     workboard_path: Path,
     plan_root: str,
+    problem_root: str,
     apply: bool,
     now: datetime,
 ) -> tuple[bool, dict[str, object]]:
@@ -1763,8 +1807,10 @@ def _sync_task_plans(
     text = workboard_path.read_text(encoding="utf-8")
     lines = text.splitlines()
     section_start, section_end = _ensure_section(lines, heading=TASK_PLANS_HEADING)
+    problems_start, problems_end = _ensure_section(lines, heading=TASK_PROBLEMS_HEADING)
 
-    existing: dict[str, dict[str, str]] = {}
+    existing_plans: dict[str, dict[str, str]] = {}
+    existing_problems: dict[str, dict[str, str]] = {}
     parse_errors: list[str] = []
     for idx in _bullet_indices(lines, section_start, section_end):
         entry, fields, err = _parse_kv_entry(idx + 1, lines[idx])
@@ -1779,23 +1825,44 @@ def _sync_task_plans(
         if not task_id:
             parse_errors.append(f"line {idx + 1}: missing task_id")
             continue
-        existing[_norm(task_id)] = fields
+        existing_plans[_norm(task_id)] = fields
+
+    for idx in _bullet_indices(lines, problems_start, problems_end):
+        entry, fields, err = _parse_kv_entry(idx + 1, lines[idx])
+        if err:
+            parse_errors.append(err)
+            continue
+        if entry is not None and entry.lower() in claims_gate.NONE_TOKENS:
+            continue
+        if not fields:
+            continue
+        task_id = str(fields.get("task_id", "")).strip()
+        if not task_id:
+            parse_errors.append(f"line {idx + 1}: missing task_id")
+            continue
+        existing_problems[_norm(task_id)] = fields
 
     if parse_errors:
-        return False, {"error": "task plan section parse failed", "violations": parse_errors}
+        return False, {"error": "task artifact section parse failed", "violations": parse_errors}
 
     created_plans: list[str] = []
     missing_plans: list[str] = []
-    updated_entries: list[str] = []
+    created_problems: list[str] = []
+    missing_problems: list[str] = []
+    updated_plan_entries: list[str] = []
+    updated_problem_entries: list[str] = []
     now_iso = now.astimezone(timezone.utc).replace(microsecond=0).isoformat()
 
     for task_id in tracked_task_ids:
-        row = existing.get(_norm(task_id), {})
-        plan_path = str(row.get("plan", "")).strip() or _default_plan_path(task_id, plan_root)
+        plan_row = existing_plans.get(_norm(task_id), {})
+        problem_row = existing_problems.get(_norm(task_id), {})
+        plan_path = str(plan_row.get("plan", "")).strip() or _default_plan_path(task_id, plan_root)
+        problem_path = str(problem_row.get("problem", "")).strip() or _default_problem_path(task_id, problem_root)
         owner = owner_by_task[task_id]
         summary = summary_by_task[task_id]
         scope = scope_by_task[task_id]
         status = status_by_task[task_id]
+
         plan_abs = (ROOT / plan_path).resolve()
         if not plan_abs.exists():
             missing_plans.append(plan_path)
@@ -1813,23 +1880,60 @@ def _sync_task_plans(
                     encoding="utf-8",
                 )
                 created_plans.append(plan_path)
-        updated_entries.append(
+        updated_plan_entries.append(
             f"- task_id={_sanitize('task_id', task_id)}; plan={_sanitize('plan', plan_path)}; "
             f"owner={_sanitize('owner', owner)}; status={_sanitize('status', status)}; "
             f"updated_at={_sanitize('updated_at', now_iso)}; "
             f"summary={_sanitize('summary', summary)}"
         )
 
-    if missing_plans and not apply:
+        problem_abs = (ROOT / problem_path).resolve()
+        if not problem_abs.exists():
+            missing_problems.append(problem_path)
+            if apply:
+                problem_abs.parent.mkdir(parents=True, exist_ok=True)
+                problem_abs.write_text(
+                    _build_problem_template(
+                        task_id=task_id,
+                        owner=owner,
+                        summary=summary,
+                        scope=scope,
+                        status=status,
+                        now_iso=now_iso,
+                    ),
+                    encoding="utf-8",
+                )
+                created_problems.append(problem_path)
+        updated_problem_entries.append(
+            f"- task_id={_sanitize('task_id', task_id)}; problem={_sanitize('problem', problem_path)}; "
+            f"owner={_sanitize('owner', owner)}; status={_sanitize('status', status)}; "
+            f"updated_at={_sanitize('updated_at', now_iso)}; "
+            f"summary={_sanitize('summary', summary)}"
+        )
+
+    if (missing_plans or missing_problems) and not apply:
         return False, {
-            "error": "missing task plan files",
+            "error": "missing task artifact files",
             "missing_plan_count": len(missing_plans),
             "missing_plans": missing_plans,
+            "missing_problem_count": len(missing_problems),
+            "missing_problems": missing_problems,
             "tracked_task_count": len(tracked_task_ids),
         }
 
     if apply:
-        _write_section_entries(lines, section_start=section_start, section_end=section_end, entries=updated_entries)
+        _write_section_entries(
+            lines, section_start=section_start, section_end=section_end, entries=updated_plan_entries
+        )
+        refreshed_problems = _find_section(lines, heading_prefix=TASK_PROBLEMS_HEADING)
+        if refreshed_problems is None:
+            return False, {"error": f"missing `## {TASK_PROBLEMS_HEADING}` section after sync update"}
+        _write_section_entries(
+            lines,
+            section_start=refreshed_problems[0],
+            section_end=refreshed_problems[1],
+            entries=updated_problem_entries,
+        )
         new_text = "\n".join(lines) + ("\n" if text.endswith("\n") else "")
         ok, violations_after = workboard_issue._validate_and_write(  # type: ignore[attr-defined]
             workboard_path, text, new_text
@@ -1839,11 +1943,16 @@ def _sync_task_plans(
 
     return True, {
         "tracked_task_count": len(tracked_task_ids),
-        "plan_entry_count": len(updated_entries),
+        "plan_entry_count": len(updated_plan_entries),
         "created_plan_count": len(created_plans),
         "created_plans": created_plans,
         "missing_plan_count": len(missing_plans),
         "missing_plans": missing_plans,
+        "problem_entry_count": len(updated_problem_entries),
+        "created_problem_count": len(created_problems),
+        "created_problems": created_problems,
+        "missing_problem_count": len(missing_problems),
+        "missing_problems": missing_problems,
         "applied": bool(apply),
     }
 
@@ -2106,7 +2215,7 @@ def _sweep_inactive(
                 workboard_path,
                 sender=task_manager_agent,
                 recipient=agent,
-                summary=(f"inactivity detected for `{agent}`, " "confirm active status or allow task reassignment"),
+                summary=(f"inactivity detected for `{agent}`, confirm active status or allow task reassignment"),
                 task_id="none",
                 kind="ping",
                 priority="p0",
@@ -2497,6 +2606,11 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--now", default="", help="Optional ISO now override for deterministic checks.")
 
     parser.add_argument("--plan-root", default=DEFAULT_PLAN_ROOT, help="Plan root path for generated PLAN.md files.")
+    parser.add_argument(
+        "--problem-root",
+        default=DEFAULT_PROBLEM_ROOT,
+        help="Problem root path for generated PROBLEM.md files.",
+    )
 
     parser.add_argument(
         "--max-idle-minutes",
@@ -2672,6 +2786,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         ok, details = _monitor_loop(
             workboard_path=workboard_path,
             plan_root=str(args.plan_root),
+            problem_root=str(args.problem_root),
             task_manager_agent=str(args.task_manager_agent),
             max_idle_minutes=float(args.max_idle_minutes),
             max_agent_silence_minutes=float(args.max_agent_silence_minutes),
@@ -2701,6 +2816,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         ok, details = _sync_task_plans(
             workboard_path=workboard_path,
             plan_root=str(args.plan_root),
+            problem_root=str(args.problem_root),
             apply=bool(args.apply),
             now=now,
         )
@@ -2713,7 +2829,9 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print(
                     f"- tracked tasks: {payload.get('tracked_task_count', 0)}; "
                     f"plan entries: {payload.get('plan_entry_count', 0)}; "
-                    f"created plans: {payload.get('created_plan_count', 0)}"
+                    f"created plans: {payload.get('created_plan_count', 0)}; "
+                    f"problem entries: {payload.get('problem_entry_count', 0)}; "
+                    f"created problems: {payload.get('created_problem_count', 0)}"
                 )
             else:
                 print(f"- {payload.get('error', 'sync plans failed')}")
@@ -2773,9 +2891,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         else:
             print("Workboard task manager: PASS" if ok else "Workboard task manager: FAIL")
             if ok:
-                print(
-                    f"- task `{payload.get('task_id')}` -> " f"{payload.get('task_type')} / {payload.get('specialist')}"
-                )
+                print(f"- task `{payload.get('task_id')}` -> {payload.get('task_type')} / {payload.get('specialist')}")
             else:
                 print(f"- {payload.get('error', 'specialist resolution failed')}")
         return 0 if ok else 1
@@ -2794,8 +2910,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         else:
             print("Workboard task manager: PASS" if ok else "Workboard task manager: FAIL")
             print(
-                f"- stale claims: {payload.get('stale_claim_count', 0)} "
-                f"(threshold {float(args.max_idle_minutes):.2f}m)"
+                f"- stale claims: {payload.get('stale_claim_count', 0)} (threshold {float(args.max_idle_minutes):.2f}m)"
             )
             if args.apply:
                 print(

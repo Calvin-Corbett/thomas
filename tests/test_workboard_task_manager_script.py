@@ -54,6 +54,7 @@ def test_sync_plans_apply_scaffolds_missing_plan_files(tmp_path: Path, capsys) -
         active_tasks_block="- task_id=models-lane; agent=Codex 1; scope=thomas/cli/main.py; summary=[WIP] models lane; status=active",
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
 
     rc = mod.run(
         [
@@ -62,21 +63,100 @@ def test_sync_plans_apply_scaffolds_missing_plan_files(tmp_path: Path, capsys) -
             "--sync-plans",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--apply",
             "--json",
         ]
     )
     payload = json.loads(capsys.readouterr().out)
     plan_path = plan_root / "models-lane" / "PLAN.md"
+    problem_path = problem_root / "models-lane" / "PROBLEM.md"
     text = workboard.read_text(encoding="utf-8")
 
     assert rc == 0
     assert payload["ok"] is True
     assert payload["created_plan_count"] == 1
+    assert payload["created_problem_count"] == 1
     assert plan_path.exists()
+    assert problem_path.exists()
     assert "## Task Plans" in text
+    assert "## Task Problems" in text
     assert "task_id=models-lane;" in text
     assert gate.evaluate(workboard) == []
+
+
+def test_sync_plans_fails_without_apply_when_problem_and_plan_missing(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block="- agent=Codex 1; scope=thomas/cli/main.py; task=[WIP] models lane",
+        active_tasks_block="- task_id=models-lane; agent=Codex 1; scope=thomas/cli/main.py; summary=[WIP] models lane; status=active",
+    )
+    plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--sync-plans",
+            "--plan-root",
+            str(plan_root),
+            "--problem-root",
+            str(problem_root),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["missing_plan_count"] == 1
+    assert payload["missing_problem_count"] == 1
+    missing_plan = list(payload["missing_plans"])[0]
+    missing_problem = list(payload["missing_problems"])[0]
+    assert missing_plan.replace("\\", "/").endswith("/task-plans/models-lane/PLAN.md")
+    assert missing_problem.replace("\\", "/").endswith("/task-problems/models-lane/PROBLEM.md")
+
+
+def test_sync_plans_places_problem_entries_inside_task_problems_section(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block="- agent=Codex 1; scope=thomas/cli/main.py; task=[WIP] models lane",
+        active_tasks_block="- task_id=models-lane; agent=Codex 1; scope=thomas/cli/main.py; summary=[WIP] models lane; status=active",
+    )
+    plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--sync-plans",
+            "--plan-root",
+            str(plan_root),
+            "--problem-root",
+            str(problem_root),
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text = workboard.read_text(encoding="utf-8")
+    lines = text.splitlines()
+
+    assert rc == 0
+    assert payload["ok"] is True
+    heading_idx = lines.index("## Task Problems")
+    next_heading = next(
+        (idx for idx in range(heading_idx + 1, len(lines)) if lines[idx].startswith("## ")),
+        len(lines),
+    )
+    section_lines = lines[heading_idx + 1 : next_heading]
+    assert not any(line.strip() == "- none" for line in section_lines)
+    assert any("task_id=models-lane; problem=" in line for line in section_lines)
+    first_problem_idx = next(idx for idx, line in enumerate(lines) if "task_id=models-lane; problem=" in line)
+    assert first_problem_idx > heading_idx
 
 
 def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(tmp_path: Path, monkeypatch, capsys) -> None:
@@ -554,6 +634,7 @@ def test_monitor_dispatches_online_idle_agent_to_up_for_grabs(tmp_path: Path, ca
         ),
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
 
     ok_msg, payload_msg = msg_mod.send_message(
         workboard,
@@ -575,6 +656,8 @@ def test_monitor_dispatches_online_idle_agent_to_up_for_grabs(tmp_path: Path, ca
             "--monitor",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--cycles",
             "1",
             "--interval-seconds",
@@ -614,6 +697,7 @@ def test_monitor_dispatch_handles_agent_default_task_id_collision(tmp_path: Path
         ),
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
 
     ok_msg, payload_msg = msg_mod.send_message(
         workboard,
@@ -635,6 +719,8 @@ def test_monitor_dispatch_handles_agent_default_task_id_collision(tmp_path: Path
             "--monitor",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--cycles",
             "1",
             "--interval-seconds",
@@ -677,6 +763,7 @@ def test_monitor_prioritizes_user_tasks_before_background_ecosystem(tmp_path: Pa
         ),
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
 
     ok_msg, payload_msg = msg_mod.send_message(
         workboard,
@@ -698,6 +785,8 @@ def test_monitor_prioritizes_user_tasks_before_background_ecosystem(tmp_path: Pa
             "--monitor",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--cycles",
             "1",
             "--interval-seconds",
@@ -740,6 +829,7 @@ def test_monitor_auto_splits_partial_overlap_task_for_idle_dispatch(tmp_path: Pa
         ),
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
     monkeypatch.setattr(mod, "_line_commit_unix", lambda *_args, **_kwargs: 1772020800)
 
     ok_msg, payload_msg = msg_mod.send_message(
@@ -762,6 +852,8 @@ def test_monitor_auto_splits_partial_overlap_task_for_idle_dispatch(tmp_path: Pa
             "--monitor",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--cycles",
             "1",
             "--interval-seconds",
@@ -809,6 +901,7 @@ def test_monitor_pings_silent_active_task_agent(tmp_path: Path, monkeypatch, cap
         active_tasks_block="- task_id=quiet-lane; agent=Codex Quiet; scope=thomas/cli/main.py; summary=[WIP] quiet lane; status=active",
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
     monkeypatch.setattr(mod, "_line_commit_unix", lambda *_args, **_kwargs: 1772020800)
 
     rc = mod.run(
@@ -818,6 +911,8 @@ def test_monitor_pings_silent_active_task_agent(tmp_path: Path, monkeypatch, cap
             "--monitor",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--cycles",
             "1",
             "--interval-seconds",
@@ -855,7 +950,7 @@ def test_monitor_starts_brainstorm_session_for_brainstorm_task(tmp_path: Path, c
     workboard = _write_workboard(
         tmp_path,
         claims_block=(
-            "- agent=Codex 1; scope=scripts/a.py; task=lane a\n" "- agent=Codex 2; scope=scripts/b.py; task=lane b"
+            "- agent=Codex 1; scope=scripts/a.py; task=lane a\n- agent=Codex 2; scope=scripts/b.py; task=lane b"
         ),
         active_tasks_block=(
             "- task_id=lane-a; agent=Codex 1; scope=scripts/a.py; summary=lane a; status=active\n"
@@ -867,6 +962,7 @@ def test_monitor_starts_brainstorm_session_for_brainstorm_task(tmp_path: Path, c
         ),
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
 
     ok_msg, payload_msg = msg_mod.send_message(
         workboard,
@@ -888,6 +984,8 @@ def test_monitor_starts_brainstorm_session_for_brainstorm_task(tmp_path: Path, c
             "--monitor",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--cycles",
             "1",
             "--interval-seconds",
@@ -927,6 +1025,7 @@ def test_monitor_sends_blocked_dispatch_notice_when_no_non_overlap_task(tmp_path
         ),
     )
     plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
     monkeypatch.setattr(mod, "_line_commit_unix", lambda *_args, **_kwargs: 1772020800)
 
     ok_msg, payload_msg = msg_mod.send_message(
@@ -949,6 +1048,8 @@ def test_monitor_sends_blocked_dispatch_notice_when_no_non_overlap_task(tmp_path
             "--monitor",
             "--plan-root",
             str(plan_root),
+            "--problem-root",
+            str(problem_root),
             "--cycles",
             "1",
             "--interval-seconds",

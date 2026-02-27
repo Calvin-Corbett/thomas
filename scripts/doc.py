@@ -23,6 +23,8 @@ GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
     ("Pre-commit skip policy gate", (PY, "scripts/check_precommit_skip_policy.py")),
     ("Workboard claims gate", (PY, "scripts/check_workboard_claims.py")),
+    ("Workboard task problems gate", (PY, "scripts/check_workboard_task_problems.py")),
+    ("Repo identity gate", (PY, "scripts/check_repo_identity.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
     ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
     ("Release hygiene gate", (PY, "scripts/check_release_hygiene.py")),

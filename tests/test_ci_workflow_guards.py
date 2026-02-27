@@ -140,6 +140,9 @@ def test_pre_commit_includes_workboard_claims_gate_hook() -> None:
     assert "id: thomas-workboard-claims-gate" in text
     assert "name: Thomas Workboard Claims Gate" in text
     assert "entry: python scripts/check_workboard_claims.py --require-identity-metadata" in text
+    assert "id: thomas-workboard-task-problems-gate" in text
+    assert "name: Thomas Workboard Task Problems Gate" in text
+    assert "entry: python scripts/check_workboard_task_problems.py" in text
     assert "id: thomas-workboard-changed-files-gate" in text
     assert "name: Thomas Workboard Changed Files Gate" in text
     assert "entry: python scripts/check_workboard_changed_files.py --staged --require-identity-metadata" in text
@@ -155,3 +158,6 @@ def test_pre_commit_includes_workboard_claims_gate_hook() -> None:
     assert "id: thomas-workboard-audit-backstop-gate" in text
     assert "name: Thomas Workboard Audit Backstop Gate" in text
     assert "entry: python scripts/workboard_audit_backstop.py" in text
+    assert "id: thomas-repo-identity-gate" in text
+    assert "name: Thomas Repo Identity Gate" in text
+    assert "entry: python scripts/check_repo_identity.py" in text
