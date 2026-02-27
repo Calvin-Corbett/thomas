@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
@@ -19,6 +20,8 @@ except Exception:  # pragma: no cover
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_IGNORE_PATTERNS = ("plans/thomas/WORKBOARD.md",)
+DEFAULT_MAX_CHANGED_FILES = 200
+DEFAULT_BULK_ALLOW_ENV = "THOMAS_ALLOW_BULK_CHANGED_FILES"
 
 
 def _normalize_path(value: str) -> str:
@@ -113,6 +116,11 @@ def _matches_ignore(path: str, patterns: Sequence[str]) -> bool:
         if candidate.lower() == pat.lower():
             return True
     return False
+
+
+def _is_truthy(value: str) -> bool:
+    normalized = str(value or "").strip().lower()
+    return normalized in {"1", "true", "yes", "y", "on"}
 
 
 def evaluate_changed_files(
@@ -224,12 +232,23 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--ignore",
         action="append",
         default=[],
-        help=("Ignore path pattern(s), repeatable or comma-separated. " "Defaults to plans/thomas/WORKBOARD.md."),
+        help=("Ignore path pattern(s), repeatable or comma-separated. Defaults to plans/thomas/WORKBOARD.md."),
     )
     parser.add_argument(
         "--require-identity-metadata",
         action="store_true",
         help="Require name/role/parent metadata fields while parsing claims.",
+    )
+    parser.add_argument(
+        "--max-changed-files",
+        type=int,
+        default=DEFAULT_MAX_CHANGED_FILES,
+        help="Maximum changed files allowed before requiring bulk override (default: 200).",
+    )
+    parser.add_argument(
+        "--bulk-allow-env",
+        default=DEFAULT_BULK_ALLOW_ENV,
+        help=f"Env var name allowing bulk changed-file checks (default: {DEFAULT_BULK_ALLOW_ENV}).",
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
     args = parser.parse_args(argv)
@@ -250,6 +269,39 @@ def run(argv: Sequence[str] | None = None) -> int:
             staged=bool(args.staged),
         )
 
+    max_changed_files = max(1, int(args.max_changed_files))
+    bulk_allow_env = str(args.bulk_allow_env or "").strip() or DEFAULT_BULK_ALLOW_ENV
+    bulk_override = _is_truthy(os.getenv(bulk_allow_env, ""))
+    if len(changed_files) > max_changed_files and not bulk_override:
+        sample = changed_files[:20]
+        payload = {
+            "gate": "workboard_changed_files",
+            "ok": False,
+            "error": (
+                f"changed file count {len(changed_files)} exceeds max {max_changed_files}; "
+                f"set {bulk_allow_env}=1 for audited bulk override"
+            ),
+            "workboard": str(workboard_path),
+            "require_identity_metadata": bool(args.require_identity_metadata),
+            "changed_file_count": len(changed_files),
+            "max_changed_files": max_changed_files,
+            "bulk_allow_env": bulk_allow_env,
+            "bulk_override": bulk_override,
+            "sample_changed_files": sample,
+            "base": str(args.base or "").strip(),
+            "head": str(args.head or "HEAD").strip() or "HEAD",
+            "staged": bool(args.staged),
+        }
+        if args.json:
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print("Workboard changed-files gate: FAIL")
+            print(f"- {payload['error']}")
+            print("- sample changed files:")
+            for path in sample:
+                print(f"  - {path}")
+        return 1
+
     ok, payload = evaluate_changed_files(
         workboard_path=workboard_path,
         changed_files=changed_files,
@@ -260,6 +312,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     payload["base"] = str(args.base or "").strip()
     payload["head"] = str(args.head or "HEAD").strip() or "HEAD"
     payload["staged"] = bool(args.staged)
+    payload["max_changed_files"] = max_changed_files
+    payload["bulk_allow_env"] = bulk_allow_env
+    payload["bulk_override"] = bulk_override
 
     if args.json:
         print(json.dumps(payload, sort_keys=True))
