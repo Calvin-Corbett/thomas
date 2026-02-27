@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from .scheduler import compute_next_run
 
 
-def _parse_dt(val: Optional[str]) -> Optional[datetime]:
+def _parse_dt(val: str | None) -> datetime | None:
     if not val:
         return None
     try:
@@ -15,14 +15,14 @@ def _parse_dt(val: Optional[str]) -> Optional[datetime]:
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt
-    except Exception:
+    except ImportError:
         return None
 
 
 @dataclass
 class ExecutorOutcome:
-    created_job_ids: List[str]
-    skipped: List[Dict[str, Any]]
+    created_job_ids: list[str]
+    skipped: list[dict[str, Any]]
 
 
 class ExecutorAgent:
@@ -41,20 +41,20 @@ class ExecutorAgent:
         *,
         store,
         policy,
-        parent_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        parent_id: str | None = None,
+        session_id: str | None = None,
     ):
         self.store = store
         self.policy = policy
         self.parent_id = parent_id
         self.session_id = session_id
 
-    def enqueue_plan(self, plan: Dict[str, Any]) -> Dict[str, Any]:
+    def enqueue_plan(self, plan: dict[str, Any]) -> dict[str, Any]:
         actions = plan.get("actions") or []
         now = datetime.now(timezone.utc)
 
-        created: List[str] = []
-        skipped: List[Dict[str, Any]] = []
+        created: list[str] = []
+        skipped: list[dict[str, Any]] = []
 
         for idx, a in enumerate(actions):
             if not isinstance(a, dict):

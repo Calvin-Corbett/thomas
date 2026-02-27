@@ -5,8 +5,8 @@ import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from urllib.parse import urlsplit
 from typing import Any
+from urllib.parse import urlsplit
 
 from thomas.companion.kernel import CompanionKernel
 from thomas.companion.update import VerifyReport
@@ -37,20 +37,16 @@ _EXECUTABLE_EXTENSIONS = {
 }
 
 
-
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
-
 
 
 def _norm(value: Any) -> str:
     return str(value or "").strip().lower()
 
 
-
 def _text(value: Any) -> str:
     return str(value or "").strip()
-
 
 
 def _bool(value: Any, *, default: bool = False) -> bool:
@@ -59,7 +55,6 @@ def _bool(value: Any, *, default: bool = False) -> bool:
     if isinstance(value, bool):
         return value
     return _norm(value) in {"1", "true", "yes", "on"}
-
 
 
 def _string_list(value: Any) -> list[str]:
@@ -75,7 +70,6 @@ def _string_list(value: Any) -> list[str]:
             if text:
                 out.append(text)
     return sorted(set(out))
-
 
 
 @dataclass(frozen=True)
@@ -94,7 +88,6 @@ class ComplianceViolation:
             "path": self.path,
             "remediation": self.remediation,
         }
-
 
 
 @dataclass(frozen=True)
@@ -119,14 +112,11 @@ class ComplianceReport:
             "warnings": list(self.warnings),
             "counts": {
                 "violations": len(self.violations),
-                "blocking_violations": len(
-                    [item for item in self.violations if item.severity == "block"]
-                ),
+                "blocking_violations": len([item for item in self.violations if item.severity == "block"]),
                 "warnings": len(self.warnings),
             },
             "inputs": dict(self.inputs),
         }
-
 
 
 class ComplianceReportStore:
@@ -153,27 +143,26 @@ class ComplianceReportStore:
             fh.write(line + "\n")
 
 
-
 def _payload_entrypoint_path(bundle_dir: Path, manifest: Any) -> Path | None:
     try:
         rel = str(manifest.module.entrypoint or "").replace("\\", "/").strip()
         if not rel:
             return None
         return (bundle_dir / "payload" / rel).resolve()
-    except Exception:
+    except json.JSONDecodeError:
         return None
-
 
 
 def _read_json(path: Path) -> Any:
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except json.JSONDecodeError:
         return None
 
 
-
-def _collect_component_nodes(node: Any, *, path: str = "$", out: list[tuple[str, dict[str, Any]]] | None = None) -> list[tuple[str, dict[str, Any]]]:
+def _collect_component_nodes(
+    node: Any, *, path: str = "$", out: list[tuple[str, dict[str, Any]]] | None = None
+) -> list[tuple[str, dict[str, Any]]]:
     rows = out if out is not None else []
     if isinstance(node, dict):
         if "type" in node:
@@ -185,7 +174,6 @@ def _collect_component_nodes(node: Any, *, path: str = "$", out: list[tuple[str,
         for idx, value in enumerate(node):
             _collect_component_nodes(value, path=f"{path}[{idx}]", out=rows)
     return rows
-
 
 
 def _collect_url_refs(node: Any, *, path: str = "$", out: list[tuple[str, str]] | None = None) -> list[tuple[str, str]]:
@@ -205,7 +193,6 @@ def _collect_url_refs(node: Any, *, path: str = "$", out: list[tuple[str, str]] 
     return rows
 
 
-
 def _make_report_id(
     *,
     checked_at: str,
@@ -213,11 +200,10 @@ def _make_report_id(
     bundle_dir: Path,
     bundle_id: str,
 ) -> str:
-    seed = f"{checked_at}|{profile_id}|{bundle_dir}|{bundle_id}".encode("utf-8")
+    seed = f"{checked_at}|{profile_id}|{bundle_dir}|{bundle_id}".encode()
     digest = hashlib.sha256(seed).hexdigest()[:12]
     stamp = checked_at.replace("-", "").replace(":", "").replace("+", "_")
     return f"cr.{stamp}.{digest}"
-
 
 
 class PolicyComplianceService:
@@ -322,9 +308,7 @@ class PolicyComplianceService:
                 add_violation(
                     code="targeting.platform_required",
                     severity="block",
-                    message=(
-                        f"platform is required for production profile {profile.profile_id}"
-                    ),
+                    message=(f"platform is required for production profile {profile.profile_id}"),
                     path="platform",
                     remediation="Set platform explicitly (ios/android) before ship.",
                 )
@@ -332,9 +316,7 @@ class PolicyComplianceService:
                 add_violation(
                     code="targeting.distribution_channel_required",
                     severity="block",
-                    message=(
-                        f"distribution_channel is required for production profile {profile.profile_id}"
-                    ),
+                    message=(f"distribution_channel is required for production profile {profile.profile_id}"),
                     path="distribution_channel",
                     remediation="Set distribution_channel explicitly (app_store/play_store).",
                 )
@@ -342,9 +324,7 @@ class PolicyComplianceService:
                 add_violation(
                     code="targeting.storefront_region_required",
                     severity="block",
-                    message=(
-                        f"storefront_region is required for production profile {profile.profile_id}"
-                    ),
+                    message=(f"storefront_region is required for production profile {profile.profile_id}"),
                     path="storefront_region",
                     remediation="Set storefront_region (for example US) before ship.",
                 )
@@ -440,9 +420,7 @@ class PolicyComplianceService:
             payload_moderation_controls = payload_moderation_controls or _string_list(
                 entry_payload.get("moderation_controls")
             )
-            payload_url_allowlist = payload_url_allowlist or _string_list(
-                entry_payload.get("url_allowlist")
-            )
+            payload_url_allowlist = payload_url_allowlist or _string_list(entry_payload.get("url_allowlist"))
             if not payload_url_allowlist:
                 payload_url_allowlist = _string_list(entry_payload.get("external_navigation_allowlist"))
 
@@ -462,8 +440,7 @@ class PolicyComplianceService:
                 code="commerce.store_billing_required",
                 severity="block",
                 message=(
-                    "digital_in_app modules require store_billing_enabled=true for profile "
-                    f"{profile.profile_id}"
+                    "digital_in_app modules require store_billing_enabled=true for profile " f"{profile.profile_id}"
                 ),
                 path="commerce_model",
                 remediation="Enable store billing or classify feature as physical_or_off_app/enterprise_internal.",

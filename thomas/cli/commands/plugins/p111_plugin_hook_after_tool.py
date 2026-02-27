@@ -1,13 +1,12 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 import click
 
 from thomas.plugins.p111_plugin_hook_after_tool import (
     AfterToolHookRequest,
-    ConfigError,
     HookErrorInfo,
     InvalidInputError,
     ToolCompletionHookError,
@@ -34,7 +33,7 @@ def _run(
     *,
     tool_name: str,
     tool_input_raw: str,
-    config_path: Optional[str],
+    config_path: str | None,
     json_out: bool,
     json_schema: bool,
 ) -> int:
@@ -82,7 +81,7 @@ def command(
     ctx: click.Context,
     tool_name: str,
     tool_input_raw: str,
-    config_path: Optional[str],
+    config_path: str | None,
     json_out: bool,
     json_schema: bool,
 ) -> None:
@@ -104,5 +103,5 @@ def register(group: Any) -> None:
     """Best-effort registration hook for CLI group loaders."""
     try:
         group.add_command(COMMAND)
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
         return

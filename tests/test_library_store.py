@@ -41,6 +41,36 @@ def test_library_auto_dedupe_research_notes(tmp_path) -> None:  # noqa: ANN001
     assert len(rows) == 1
 
 
+def test_library_add_entry_id_collision_uses_unique_suffix(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    lib = ResearchLibrary(tmp_path / "library")
+
+    monkeypatch.setattr("thomas.library.store.time.time", lambda: 1_762_000_000)
+    first = lib.add_entry(
+        title="Same title",
+        category="research",
+        content="first payload",
+        summary="first",
+        source="unit:test",
+    )
+    second = lib.add_entry(
+        title="Same title",
+        category="research",
+        content="second payload",
+        summary="second",
+        source="unit:test",
+    )
+
+    assert first["id"] != second["id"]
+    assert first["path"] != second["path"]
+
+    first_row = lib.get_entry(first["id"])
+    second_row = lib.get_entry(second["id"])
+    assert first_row is not None
+    assert second_row is not None
+    assert "first payload" in str(first_row.get("content", ""))
+    assert "second payload" in str(second_row.get("content", ""))
+
+
 def test_default_library_root_for_runtime_memory(tmp_path) -> None:  # noqa: ANN001
     cfg = AppConfig(
         models={"local": ModelConfig(name="local", model="dummy")},
@@ -49,4 +79,3 @@ def test_default_library_root_for_runtime_memory(tmp_path) -> None:  # noqa: ANN
     )
     root = default_library_root(cfg)
     assert root == (tmp_path / "library").resolve()
-

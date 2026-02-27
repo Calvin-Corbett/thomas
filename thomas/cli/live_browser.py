@@ -9,7 +9,7 @@ import subprocess  # nosec B404
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 import httpx
@@ -40,13 +40,13 @@ def _cdp_ready(cdp_url: str, timeout_s: float = 0.75) -> bool:
     probe = _devtools_probe_url(cdp_url)
     try:
         r = httpx.get(probe, timeout=max(0.1, float(timeout_s)))
-    except Exception:
+    except (ConnectionError, TimeoutError):
         return False
     if r.status_code != 200:
         return False
     try:
         data = r.json()
-    except Exception:
+    except (ConnectionError, TimeoutError):
         return False
     return isinstance(data, dict) and bool(data.get("webSocketDebuggerUrl"))
 
@@ -60,7 +60,7 @@ def _parse_cdp_port(cdp_url: str) -> int:
     return int(parsed.port or 9222)
 
 
-def _find_browser_exe(browser: str) -> Optional[str]:
+def _find_browser_exe(browser: str) -> str | None:
     b = str(browser or "").strip().lower()
     if b not in ("chrome", "edge"):
         raise LiveBrowserSmokeError(f"Unsupported browser: {browser}")
@@ -96,9 +96,7 @@ def _launch_browser_with_cdp(
 ) -> subprocess.Popen:
     exe = _find_browser_exe(browser)
     if not exe:
-        raise LiveBrowserSmokeError(
-            f"Could not find {browser} executable. Install it or pass a reachable CDP URL."
-        )
+        raise LiveBrowserSmokeError(f"Could not find {browser} executable. Install it or pass a reachable CDP URL.")
 
     port = _parse_cdp_port(cdp_url)
     profile_dir = runtime_root / ".thomas" / "live_browser_cdp_profile" / f"{browser}_{port}"
@@ -133,11 +131,11 @@ def _port_in_use(host: str, port: int) -> bool:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
             s.settimeout(0.35)
             return s.connect_ex((host, int(port))) == 0
-    except Exception:
+    except (ConnectionError, TimeoutError):
         return False
 
 
-def _find_fallback_cdp_url(cdp_url: str, max_hops: int = 30) -> Optional[str]:
+def _find_fallback_cdp_url(cdp_url: str, max_hops: int = 30) -> str | None:
     parsed = urlparse(cdp_url)
     scheme = parsed.scheme or "http"
     host = parsed.hostname or "127.0.0.1"
@@ -195,10 +193,10 @@ class _CdpClient:
     def close(self) -> None:
         try:
             self._ws.close()
-        except Exception:
+        except (ConnectionError, TimeoutError):
             pass
 
-    def call(self, method: str, params: Optional[dict[str, Any]] = None) -> dict[str, Any]:
+    def call(self, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
         msg_id = self._next_id
         self._next_id += 1
         payload: dict[str, Any] = {"id": msg_id, "method": method}
@@ -273,16 +271,12 @@ def run_live_browser_smoke(
         )
         launched = True
         if not _wait_for_cdp(active_cdp_url, timeout_s=15.0):
-            raise LiveBrowserSmokeError(
-                f"Timed out waiting for CDP endpoint: {_devtools_probe_url(active_cdp_url)}"
-            )
+            raise LiveBrowserSmokeError(f"Timed out waiting for CDP endpoint: {_devtools_probe_url(active_cdp_url)}")
 
     def _open_client_for(url: str) -> tuple[_CdpClient, dict[str, Any]]:
         targets = _list_page_targets(url)
         if not targets:
-            raise LiveBrowserSmokeError(
-                "No page targets found in browser. Open at least one tab and rerun."
-            )
+            raise LiveBrowserSmokeError("No page targets found in browser. Open at least one tab and rerun.")
         selected = None
         for t in targets:
             page_url = str(t.get("url") or "")
@@ -331,7 +325,9 @@ def run_live_browser_smoke(
         wait_deadline = time.monotonic() + max(5.0, float(wait_timeout_s))
         composer_ready = False
         while time.monotonic() < wait_deadline:
-            ready = _eval_js(client, "Boolean(document.querySelector('#composerTextarea') && document.querySelector('#sendBtn'))")
+            ready = _eval_js(
+                client, "Boolean(document.querySelector('#composerTextarea') && document.querySelector('#sendBtn'))"
+            )
             if bool(ready):
                 composer_ready = True
                 break

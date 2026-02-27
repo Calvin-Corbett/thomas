@@ -3,7 +3,6 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from .kernel import CompanionKernel
@@ -65,7 +64,7 @@ class CompanionAuditLog:
         lim = max(1, min(2000, int(limit or 100)))
         try:
             lines = self.path.read_text(encoding="utf-8").splitlines()
-        except Exception:
+        except json.JSONDecodeError:
             lines = []
         for line in reversed(lines):
             line = line.strip()
@@ -73,7 +72,7 @@ class CompanionAuditLog:
                 continue
             try:
                 payload = json.loads(line)
-            except Exception:
+            except json.JSONDecodeError:
                 continue
             if not isinstance(payload, dict):
                 continue

@@ -24,15 +24,23 @@ Design:
 - Output is JSON-serializable and safe for automation.
 """
 
-from dataclasses import MISSING, dataclass, fields, is_dataclass
 import enum
 import importlib
 import inspect
 import json
 import re
+from collections.abc import Mapping, Sequence
+from dataclasses import MISSING, dataclass, fields, is_dataclass
 from types import ModuleType
-from typing import Any, Dict, Mapping, Optional, Sequence, Union, get_args, get_origin, get_type_hints, Annotated, Literal
-
+from typing import (
+    Annotated,
+    Any,
+    Literal,
+    Union,
+    get_args,
+    get_origin,
+    get_type_hints,
+)
 
 _PROVIDER_RE = re.compile(r"^[a-zA-Z][a-zA-Z0-9_-]*$")
 
@@ -50,24 +58,24 @@ def _camel_case(s: str) -> str:
 
 class ChannelProviderConfigSchemaError(Exception):
     code: str
-    provider: Optional[str]
-    details: Dict[str, Any]
+    provider: str | None
+    details: dict[str, Any]
 
     def __init__(
         self,
         message: str,
         *,
         code: str,
-        provider: Optional[str] = None,
-        details: Optional[Dict[str, Any]] = None,
+        provider: str | None = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.provider = provider
         self.details = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
-        base: Dict[str, Any] = {"code": self.code, "message": str(self)}
+    def to_dict(self) -> dict[str, Any]:
+        base: dict[str, Any] = {"code": self.code, "message": str(self)}
         if self.provider is not None:
             base["provider"] = self.provider
         if self.details:
@@ -136,10 +144,10 @@ class ProviderSchemaInvalidError(ChannelProviderConfigSchemaError):
 @dataclass(frozen=True)
 class ChannelProviderConfigSchema:
     provider: str
-    schema: Dict[str, Any]
+    schema: dict[str, Any]
     source_module: str
 
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self) -> dict[str, Any]:
         return {"provider": self.provider, "schema": self.schema, "source_module": self.source_module}
 
 
@@ -151,8 +159,8 @@ def get_channel_provider_config_schema(provider: str) -> ChannelProviderConfigSc
     module_fragment = _provider_to_module_fragment(provider)
     attempted = [f"thomas.integrations.{module_fragment}"]
 
-    module: Optional[ModuleType] = None
-    imported_from: Optional[str] = None
+    module: ModuleType | None = None
+    imported_from: str | None = None
 
     for mod_name in attempted:
         try:
@@ -165,7 +173,7 @@ def get_channel_provider_config_schema(provider: str) -> ChannelProviderConfigSc
             if e.name == mod_name:
                 continue
             raise ChannelProviderImportError(provider, module=mod_name, exc=e) from e
-        except Exception as e:  # noqa: BLE001
+        except (ImportError, RuntimeError, AttributeError, SyntaxError) as e:  # noqa: BLE001
             raise ChannelProviderImportError(provider, module=mod_name, exc=e) from e
 
     if module is None or imported_from is None:
@@ -175,14 +183,14 @@ def get_channel_provider_config_schema(provider: str) -> ChannelProviderConfigSc
         schema = _extract_schema_from_module(module, provider=provider)
     except ChannelProviderConfigSchemaError:
         raise
-    except Exception as e:  # noqa: BLE001
+    except (AttributeError, ValueError, KeyError, TypeError) as e:  # noqa: BLE001
         raise ProviderSchemaInvalidError(provider, module=imported_from, reason=str(e)) from e
 
     _validate_json_schema(schema, provider=provider, module=imported_from)
     return ChannelProviderConfigSchema(provider=provider.lower(), schema=schema, source_module=imported_from)
 
 
-def _extract_schema_from_module(module: ModuleType, *, provider: str) -> Dict[str, Any]:
+def _extract_schema_from_module(module: ModuleType, *, provider: str) -> dict[str, Any]:
     # 1) Explicit schema constant (highest priority).
     for attr in (
         "PROVIDER_CONFIG_JSON_SCHEMA",
@@ -201,8 +209,10 @@ def _extract_schema_from_module(module: ModuleType, *, provider: str) -> Dict[st
         if callable(fn):
             try:
                 value = fn()
-            except Exception as e:  # noqa: BLE001
-                raise ProviderSchemaInvalidError(provider, module=module.__name__, reason=f"{attr}() raised: {e}") from e
+            except (RuntimeError, ValueError, TypeError, AttributeError) as e:  # noqa: BLE001
+                raise ProviderSchemaInvalidError(
+                    provider, module=module.__name__, reason=f"{attr}() raised: {e}"
+                ) from e
             if isinstance(value, dict):
                 return _normalize_schema_meta(value, title=f"{_camel_case(provider)}Config")
             raise ProviderSchemaInvalidError(provider, module=module.__name__, reason=f"{attr}() did not return a dict")
@@ -216,7 +226,7 @@ def _extract_schema_from_module(module: ModuleType, *, provider: str) -> Dict[st
     return _normalize_schema_meta(schema, title=f"{_camel_case(provider)}Config")
 
 
-def _find_config_model_type(module: ModuleType, *, provider: str) -> Optional[type]:
+def _find_config_model_type(module: ModuleType, *, provider: str) -> type | None:
     provider_cc = _camel_case(provider)
 
     preferred_names = [
@@ -270,18 +280,18 @@ def _is_typed_dict(cls: type) -> bool:
 def _is_pydantic_model(cls: type) -> bool:
     try:
         import pydantic  # type: ignore
-    except Exception:
+    except ImportError:
         return False
     BaseModel = getattr(pydantic, "BaseModel", None)
     if BaseModel is None:
         return False
     try:
         return inspect.isclass(cls) and issubclass(cls, BaseModel)
-    except Exception:
+    except (TypeError, AttributeError):
         return False
 
 
-def json_schema_from_type(config_type: type) -> Dict[str, Any]:
+def json_schema_from_type(config_type: type) -> dict[str, Any]:
     """
     Convert a config *type* into a JSON Schema object.
 
@@ -307,10 +317,12 @@ def json_schema_from_type(config_type: type) -> Dict[str, Any]:
 
     defaults = _extract_class_defaults(config_type)
     required = set(annotations.keys())
-    return _json_schema_from_annotations(annotations, required_keys=required, title=config_type.__name__, defaults=defaults)
+    return _json_schema_from_annotations(
+        annotations, required_keys=required, title=config_type.__name__, defaults=defaults
+    )
 
 
-def _try_pydantic_schema(config_type: type) -> Optional[Dict[str, Any]]:
+def _try_pydantic_schema(config_type: type) -> dict[str, Any] | None:
     if not _is_pydantic_model(config_type):
         return None
     # Pydantic v2: model_json_schema. v1: schema()
@@ -321,8 +333,8 @@ def _try_pydantic_schema(config_type: type) -> Optional[Dict[str, Any]]:
     return None
 
 
-def _extract_class_defaults(cls: type) -> Dict[str, Any]:
-    defaults: Dict[str, Any] = {}
+def _extract_class_defaults(cls: type) -> dict[str, Any]:
+    defaults: dict[str, Any] = {}
     for name, value in vars(cls).items():
         if name.startswith("_"):
             continue
@@ -335,9 +347,9 @@ def _extract_class_defaults(cls: type) -> Dict[str, Any]:
     return defaults
 
 
-def _json_schema_from_dataclass(cls: type) -> Dict[str, Any]:
+def _json_schema_from_dataclass(cls: type) -> dict[str, Any]:
     type_hints = get_type_hints(cls, include_extras=True)
-    properties: Dict[str, Any] = {}
+    properties: dict[str, Any] = {}
     required: list[str] = []
 
     for f in fields(cls):
@@ -359,7 +371,7 @@ def _json_schema_from_dataclass(cls: type) -> Dict[str, Any]:
 
         properties[name] = prop_schema
 
-    schema: Dict[str, Any] = {
+    schema: dict[str, Any] = {
         "type": "object",
         "title": cls.__name__,
         "properties": properties,
@@ -372,9 +384,9 @@ def _json_schema_from_dataclass(cls: type) -> Dict[str, Any]:
     return schema
 
 
-def _json_schema_from_typed_dict(td_cls: type) -> Dict[str, Any]:
+def _json_schema_from_typed_dict(td_cls: type) -> dict[str, Any]:
     hints = get_type_hints(td_cls, include_extras=True)
-    properties: Dict[str, Any] = {k: _type_to_schema(v) for k, v in hints.items()}
+    properties: dict[str, Any] = {k: _type_to_schema(v) for k, v in hints.items()}
 
     required_keys: set[str] = set()
     optional_keys: set[str] = set()
@@ -393,7 +405,7 @@ def _json_schema_from_typed_dict(td_cls: type) -> Dict[str, Any]:
         else:
             required_keys = set()
 
-    schema: Dict[str, Any] = {
+    schema: dict[str, Any] = {
         "type": "object",
         "title": td_cls.__name__,
         "properties": properties,
@@ -411,10 +423,10 @@ def _json_schema_from_annotations(
     *,
     required_keys: set[str],
     title: str,
-    defaults: Optional[Mapping[str, Any]] = None,
-) -> Dict[str, Any]:
+    defaults: Mapping[str, Any] | None = None,
+) -> dict[str, Any]:
     defaults = defaults or {}
-    properties: Dict[str, Any] = {}
+    properties: dict[str, Any] = {}
     required: list[str] = []
 
     for name, t in annotations.items():
@@ -426,7 +438,7 @@ def _json_schema_from_annotations(
                 required.append(name)
         properties[name] = prop_schema
 
-    schema: Dict[str, Any] = {
+    schema: dict[str, Any] = {
         "type": "object",
         "title": title,
         "properties": properties,
@@ -437,13 +449,13 @@ def _json_schema_from_annotations(
     return schema
 
 
-def _with_default(prop_schema: Dict[str, Any], default_value: Any) -> Dict[str, Any]:
+def _with_default(prop_schema: dict[str, Any], default_value: Any) -> dict[str, Any]:
     if _is_jsonable(default_value):
         return {**prop_schema, "default": default_value}
     return {**prop_schema, "default": repr(default_value)}
 
 
-def _type_to_schema(t: Any) -> Dict[str, Any]:
+def _type_to_schema(t: Any) -> dict[str, Any]:
     origin = get_origin(t)
     args = get_args(t)
 
@@ -480,14 +492,14 @@ def _type_to_schema(t: Any) -> Dict[str, Any]:
     if t is type(None):  # noqa: E721
         return {"type": "null"}
 
-    if origin in (list, set, tuple, Sequence := getattr(__import__("collections.abc"), "Sequence")):
+    if origin in (list, set, tuple, Sequence := __import__("collections.abc").Sequence):
         item_t = args[0] if args else Any
-        schema: Dict[str, Any] = {"type": "array", "items": _type_to_schema(item_t)}
+        schema: dict[str, Any] = {"type": "array", "items": _type_to_schema(item_t)}
         if origin is set:
             schema["uniqueItems"] = True
         return schema
 
-    if origin in (dict, Mapping := getattr(__import__("collections.abc"), "Mapping")):
+    if origin in (dict, Mapping := __import__("collections.abc").Mapping):
         # JSON object keys are strings; ignore key type and map values.
         val_t = args[1] if len(args) == 2 else Any
         return {"type": "object", "additionalProperties": _type_to_schema(val_t)}
@@ -517,7 +529,7 @@ def _is_jsonable(value: Any) -> bool:
         return False
 
 
-def _normalize_schema_meta(schema: Dict[str, Any], *, title: str) -> Dict[str, Any]:
+def _normalize_schema_meta(schema: dict[str, Any], *, title: str) -> dict[str, Any]:
     # Don't clobber provider-defined metadata; only fill gaps.
     out = dict(schema)
     out.setdefault("$schema", "https://json-schema.org/draft/2020-12/schema")

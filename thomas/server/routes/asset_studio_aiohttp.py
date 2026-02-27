@@ -5,18 +5,21 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import json
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
-from thomas.asset_studio.runtime import AssetStudioJobStore, AssetStudioRuntime, TERMINAL_STATES
+from thomas.asset_studio.comfy_service import ComfyStudioService
+from thomas.asset_studio.runtime import TERMINAL_STATES, AssetStudioJobStore, AssetStudioRuntime
 from thomas.preferences.store import get_db_path
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
 
 APP_ASSET_STUDIO_RUNTIME = web.AppKey("asset_studio_runtime", AssetStudioRuntime)
+APP_ASSET_STUDIO_COMFY_SERVICE = web.AppKey("asset_studio_comfy_service", ComfyStudioService)
 APP_ASSET_STUDIO_CLEANUP = web.AppKey("asset_studio_cleanup", bool)
 
 
@@ -35,12 +38,29 @@ def _runtime_for_app(app: web.Application) -> AssetStudioRuntime:
     return runtime
 
 
+def _comfy_service_for_app(app: web.Application) -> ComfyStudioService:
+    existing = app.get(APP_ASSET_STUDIO_COMFY_SERVICE)
+    if existing is not None:
+        return existing
+    service = ComfyStudioService()
+    app[APP_ASSET_STUDIO_COMFY_SERVICE] = service
+    return service
+
+
 def _parse_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
     try:
         parsed = int(value)
     except Exception:
         parsed = default
     return max(minimum, min(maximum, parsed))
+
+
+def _parse_float(value: Any, *, default: float, minimum: float, maximum: float) -> float:
+    try:
+        parsed = float(value)
+    except Exception:
+        parsed = float(default)
+    return max(float(minimum), min(float(maximum), float(parsed)))
 
 
 def _parse_bool(value: Any, *, default: bool) -> bool:
@@ -79,16 +99,19 @@ def register_asset_studio_routes(
     read_json: ReadJsonFn,
 ) -> None:
     runtime = _runtime_for_app(app)
+    comfy_service = _comfy_service_for_app(app)
 
     if not bool(app.get(APP_ASSET_STUDIO_CLEANUP)):
+
         async def _asset_studio_cleanup(app_: web.Application) -> None:
             runner = app_.get(APP_ASSET_STUDIO_RUNTIME)
-            if runner is None:
-                return
-            try:
-                await runner.shutdown()
-            except Exception:
-                return
+            if runner is not None:
+                with contextlib.suppress(Exception):
+                    await runner.shutdown()
+            comfy = app_.get(APP_ASSET_STUDIO_COMFY_SERVICE)
+            if comfy is not None:
+                with contextlib.suppress(Exception):
+                    await comfy.close()
 
         app.on_cleanup.append(_asset_studio_cleanup)
         app[APP_ASSET_STUDIO_CLEANUP] = True
@@ -134,6 +157,94 @@ def register_asset_studio_routes(
         jobs_limit = _parse_int(request.query.get("limit"), default=200, minimum=1, maximum=1000)
         snapshot = await runtime.health_snapshot(include_detection=include_detection, jobs_limit=jobs_limit)
         return web.json_response({"ok": True, "health": snapshot})
+
+    async def api_asset_studio_comfy_status(request: web.Request) -> web.Response:
+        require_api_access(request)
+        server_url = str(request.query.get("server_url") or "").strip()
+        timeout_s = _parse_float(request.query.get("timeout_s"), default=2.0, minimum=0.5, maximum=20.0)
+        status = await comfy_service.status(server_url=server_url, timeout_s=timeout_s)
+        return web.json_response({"ok": True, "status": status})
+
+    async def api_asset_studio_comfy_boot(request: web.Request) -> web.Response:
+        require_api_access(request)
+        payload = await read_json(request)
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        server_url = str(payload.get("server_url") or "").strip()
+        command = str(payload.get("command") or "").strip()
+        cwd = str(payload.get("cwd") or "").strip()
+        wait_timeout_s = _parse_float(payload.get("wait_timeout_s"), default=20.0, minimum=1.0, maximum=180.0)
+        boot = await comfy_service.boot(
+            server_url=server_url,
+            command=command,
+            cwd=cwd,
+            wait_timeout_s=wait_timeout_s,
+        )
+        return web.json_response({"ok": bool(boot.get("ready")), "boot": boot})
+
+    async def api_asset_studio_comfy_shutdown(request: web.Request) -> web.Response:
+        require_api_access(request)
+        payload = await read_json(request)
+        if payload is None:
+            payload = {}
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        server_url = str(payload.get("server_url") or "").strip()
+        wait_timeout_s = _parse_float(payload.get("wait_timeout_s"), default=8.0, minimum=1.0, maximum=60.0)
+        result = await comfy_service.shutdown(server_url=server_url, wait_timeout_s=wait_timeout_s)
+        return web.json_response({"ok": True, "shutdown": result})
+
+    async def api_asset_studio_comfy_queue(request: web.Request) -> web.Response:
+        require_api_access(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        try:
+            result = await comfy_service.queue_prompt(
+                server_url=str(payload.get("server_url") or "").strip(),
+                workflow_json=str(payload.get("workflow_json") or ""),
+                workflow_file=str(payload.get("workflow_file") or ""),
+                client_id=str(payload.get("client_id") or "").strip(),
+                timeout_s=_parse_float(payload.get("timeout_s"), default=30.0, minimum=1.0, maximum=180.0),
+                output=str(payload.get("output") or "").strip(),
+            )
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc))
+        except Exception as exc:
+            raise web.HTTPBadGateway(text=str(exc))
+        return web.json_response({"ok": True, "result": result})
+
+    async def api_asset_studio_comfy_history(request: web.Request) -> web.Response:
+        require_api_access(request)
+        prompt_id = str(request.match_info.get("prompt_id") or "").strip()
+        if not prompt_id:
+            raise web.HTTPBadRequest(text="missing prompt_id")
+        server_url = str(request.query.get("server_url") or "").strip()
+        timeout_s = _parse_float(request.query.get("timeout_s"), default=20.0, minimum=1.0, maximum=120.0)
+        try:
+            result = await comfy_service.get_history(server_url=server_url, prompt_id=prompt_id, timeout_s=timeout_s)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc))
+        except Exception as exc:
+            raise web.HTTPBadGateway(text=str(exc))
+        return web.json_response({"ok": True, "result": result})
+
+    async def api_asset_studio_comfy_outputs(request: web.Request) -> web.Response:
+        require_api_access(request)
+        prompt_id = str(request.match_info.get("prompt_id") or "").strip()
+        if not prompt_id:
+            raise web.HTTPBadRequest(text="missing prompt_id")
+        server_url = str(request.query.get("server_url") or "").strip()
+        timeout_s = _parse_float(request.query.get("timeout_s"), default=20.0, minimum=1.0, maximum=120.0)
+        try:
+            result = await comfy_service.get_outputs(server_url=server_url, prompt_id=prompt_id, timeout_s=timeout_s)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc))
+        except Exception as exc:
+            raise web.HTTPBadGateway(text=str(exc))
+        return web.json_response({"ok": True, "outputs": result})
 
     async def api_asset_studio_completion_webhook_get(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -373,7 +484,9 @@ def register_asset_studio_routes(
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc))
         pin_index_present = "pin_index" in payload
-        pin_index = _parse_int(payload.get("pin_index"), default=0, minimum=0, maximum=9999) if pin_index_present else None
+        pin_index = (
+            _parse_int(payload.get("pin_index"), default=0, minimum=0, maximum=9999) if pin_index_present else None
+        )
         pinned = _parse_bool(payload.get("pinned"), default=bool(pin_index_present))
         favorite = _parse_bool(payload.get("favorite"), default=False)
         try:
@@ -891,7 +1004,7 @@ def register_asset_studio_routes(
             for event in events:
                 cursor = max(cursor, int(event.get("seq") or 0))
                 blob = json.dumps(event, ensure_ascii=True)
-                await response.write(f"data: {blob}\n\n".encode("utf-8"))
+                await response.write(f"data: {blob}\n\n".encode())
                 sent_any = True
             if current is None:
                 break
@@ -928,6 +1041,12 @@ def register_asset_studio_routes(
 
     app.router.add_get("/api/asset-studio/v1/connectors", api_asset_studio_connectors)
     app.router.add_get("/api/asset-studio/v1/health", api_asset_studio_health)
+    app.router.add_get("/api/asset-studio/v1/comfy/status", api_asset_studio_comfy_status)
+    app.router.add_post("/api/asset-studio/v1/comfy/boot", api_asset_studio_comfy_boot)
+    app.router.add_post("/api/asset-studio/v1/comfy/shutdown", api_asset_studio_comfy_shutdown)
+    app.router.add_post("/api/asset-studio/v1/comfy/queue", api_asset_studio_comfy_queue)
+    app.router.add_get("/api/asset-studio/v1/comfy/history/{prompt_id}", api_asset_studio_comfy_history)
+    app.router.add_get("/api/asset-studio/v1/comfy/outputs/{prompt_id}", api_asset_studio_comfy_outputs)
     app.router.add_get("/api/asset-studio/v1/webhooks/completion", api_asset_studio_completion_webhook_get)
     app.router.add_post("/api/asset-studio/v1/webhooks/completion", api_asset_studio_completion_webhook_set)
     app.router.add_delete("/api/asset-studio/v1/webhooks/completion", api_asset_studio_completion_webhook_delete)
@@ -948,9 +1067,13 @@ def register_asset_studio_routes(
     app.router.add_get("/api/asset-studio/v1/templates/{template_id}/export", api_asset_studio_template_export)
     app.router.add_get("/api/asset-studio/v1/templates/{template_id}/webhook", api_asset_studio_template_webhook_get)
     app.router.add_post("/api/asset-studio/v1/templates/{template_id}/webhook", api_asset_studio_template_webhook_set)
-    app.router.add_delete("/api/asset-studio/v1/templates/{template_id}/webhook", api_asset_studio_template_webhook_delete)
+    app.router.add_delete(
+        "/api/asset-studio/v1/templates/{template_id}/webhook", api_asset_studio_template_webhook_delete
+    )
     app.router.add_post("/api/asset-studio/v1/templates/{template_id}/run", api_asset_studio_template_run)
-    app.router.add_post("/api/asset-studio/v1/templates/by-name/{template_name}/run", api_asset_studio_template_run_by_name)
+    app.router.add_post(
+        "/api/asset-studio/v1/templates/by-name/{template_name}/run", api_asset_studio_template_run_by_name
+    )
     app.router.add_post("/api/asset-studio/v1/templates/run-favorite", api_asset_studio_template_run_favorite)
     app.router.add_post("/api/asset-studio/v1/jobs", api_asset_studio_jobs_create)
     app.router.add_get("/api/asset-studio/v1/jobs", api_asset_studio_jobs_list)

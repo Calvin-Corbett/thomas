@@ -1,4 +1,4 @@
-﻿"""CLI entry point for Thomas.
+"""CLI entry point for Thomas.
 
 Commands:
   thomas chat "prompt"          Single-shot query
@@ -15,49 +15,61 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime, timezone
 from dataclasses import asdict
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 try:
     import click
 except ImportError:
     from thomas._vendor import click_shim as click  # type: ignore[assignment]
 
-from thomas.core.config import load_config, AppConfig
-from thomas.core.autonomy import clamp_autonomy_level
-from thomas.core.events import EventType
-from thomas.core.llm import LLMClient
-from thomas.tools.registry import ToolRegistry
-from thomas.tools.filesystem import register_filesystem_tools
-from thomas.tools.shell import register_shell_tools
-from thomas.tools.git import register_git_tools
-from thomas.tools.code_search import register_code_search_tools
-from thomas.tools.diff import register_diff_tools
 from thomas.agent.loop import AgentLoop
+from thomas.cli.main_chatops import register_chatops_commands
+from thomas.cli.main_library_commands import register_library_commands
 from thomas.cli.main_runtime_ops import (
     doctor_cmd as _doctor_cmd,
+)
+from thomas.cli.main_runtime_ops import (
     live_browser_smoke_cmd as _live_browser_smoke_cmd,
+)
+from thomas.cli.main_runtime_ops import (
     repo_clean_cmd as _repo_clean_cmd,
+)
+from thomas.cli.main_runtime_ops import (
     resolved_config_path as _resolved_config_path,
+)
+from thomas.cli.main_runtime_ops import (
     run_provider_checks as _run_provider_checks_impl,
+)
+from thomas.cli.main_runtime_ops import (
     status_cmd as _status_cmd,
+)
+from thomas.cli.main_runtime_ops import (
     telegram_run_cmd as _telegram_run_cmd,
 )
-from thomas.cli.main_library_commands import register_library_commands
-from thomas.cli.main_chatops import register_chatops_commands
+from thomas.core.autonomy import clamp_autonomy_level
+from thomas.core.config import AppConfig, load_config
+from thomas.core.events import EventType
+from thomas.core.llm import LLMClient
+from thomas.server.tool_extensions import register_all_optional_tools
+from thomas.tools.code_search import register_code_search_tools
+from thomas.tools.diff import register_diff_tools
+from thomas.tools.filesystem import register_filesystem_tools
+from thomas.tools.git import register_git_tools
+from thomas.tools.registry import ToolRegistry
+from thomas.tools.shell import register_shell_tools
+from thomas.tools.ssh import register_ssh_tools
 
 log = logging.getLogger(__name__)
 
 # Compatibility marker for prompt-pack integration tests that expect the
 # browser wiring hook to be present on argparse.
-setattr(argparse.ArgumentParser.add_subparsers, "_p026_browser_wrapped", True)
+argparse.ArgumentParser.add_subparsers._p026_browser_wrapped = True
 
 
-def _parse_model_switch_prompt(
-    prompt: str, config: AppConfig
-) -> tuple[Optional[str], Optional[str], Optional[str]]:
+def _parse_model_switch_prompt(prompt: str, config: AppConfig) -> tuple[str | None, str | None, str | None]:
     """
     Parse natural-language model switch requests.
     Returns (model_name, new_prompt, message).
@@ -76,7 +88,8 @@ def _parse_model_switch_prompt(
         return None, None, f"Available models: {available} (current: {config.default_model})"
 
     import re
-    m = re.match(r"^(switch|use|set|change)\\s+(to\\s+)?(model\\s+)?(?P<name>[\\w\\-\\.:]+)(?P<rest>.*)$", lower)
+
+    m = re.match(r"^(switch|use|set|change)\s+(to\s+)?(model\s+)?(?P<name>[\w\-\.:]+)(?P<rest>.*)$", lower)
     if not m:
         return None, None, None
 
@@ -122,13 +135,18 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     register_git_tools(registry, sandbox)
     register_code_search_tools(registry, sandbox)
     register_diff_tools(registry, sandbox)
+    register_ssh_tools(registry)
 
     # Investigation tools — registered only if investigation DB has cases
     try:
         from thomas.tools.investigation import register_investigation_tools
+
         register_investigation_tools(registry)
-    except Exception:
+    except ImportError:
         pass
+
+    # Register all optional domain module tools
+    register_all_optional_tools(registry)
 
     return registry
 
@@ -169,7 +187,7 @@ def _build_library(config: AppConfig):
 async def _run_chat(
     config: AppConfig,
     prompt: str,
-    model_name: Optional[str],
+    model_name: str | None,
     *,
     autonomy_level: int = 3,
 ) -> None:
@@ -202,7 +220,9 @@ async def _run_chat(
                 route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
                 mode = route.get("mode") or event.data.get("mode") or "auto"
                 policy = event.data.get("tools_policy", "auto")
-                autonomy_lv = int(event.data.get("autonomy_level", clamp_autonomy_level(autonomy_level, default=3)) or 3)
+                autonomy_lv = int(
+                    event.data.get("autonomy_level", clamp_autonomy_level(autonomy_level, default=3)) or 3
+                )
                 autonomy_name = str(event.data.get("autonomy_name") or "")
                 autonomy_text = f", autonomy=L{autonomy_lv}"
                 if autonomy_name:
@@ -285,10 +305,8 @@ async def _run_chat(
                         f"-> {active_profile_name}/{active_model}]\033[0m\n"
                     )
                 else:
-                    sys.stdout.write(
-                        f"\033[90m[runtime model: {active_profile_name}/{active_model}]\033[0m\n"
-                    )
-            except Exception:
+                    sys.stdout.write(f"\033[90m[runtime model: {active_profile_name}/{active_model}]\033[0m\n")
+            except (OSError, FileNotFoundError):
                 pass
     finally:
         await llm.close()
@@ -300,7 +318,7 @@ async def _run_chat(
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
 @click.option("-c", "--config", "config_path", type=click.Path(exists=False), help="Config file path")
 @click.pass_context
-def cli(ctx: click.Context, verbose: bool, config_path: Optional[str]) -> None:
+def cli(ctx: click.Context, verbose: bool, config_path: str | None) -> None:
     """Thomas - autonomous AI execution platform for local and remote deployments."""
     _setup_logging(verbose)
     path = Path(config_path) if config_path else None
@@ -314,13 +332,15 @@ def cli(ctx: click.Context, verbose: bool, config_path: Optional[str]) -> None:
             cli._first_run_checked = True  # type: ignore[attr-defined]
             try:
                 from thomas.cli.commands.setup_wizard import _detect_existing_config
+
                 if _detect_existing_config() is None:
-                    click.echo(click.style(
-                        "  Thomas isn't configured yet. "
-                        "Run `thomas setup` to get started.\n",
-                        fg="yellow",
-                    ))
-            except Exception:
+                    click.echo(
+                        click.style(
+                            "  Thomas isn't configured yet. " "Run `thomas setup` to get started.\n",
+                            fg="yellow",
+                        )
+                    )
+            except ImportError:
                 pass
 
     # Auto-update check (silent, background, once per day)
@@ -329,10 +349,11 @@ def cli(ctx: click.Context, verbose: bool, config_path: Optional[str]) -> None:
             cli._update_checked = True  # type: ignore[attr-defined]
             try:
                 from thomas.cli.commands.updater import check_and_auto_update
+
                 update_msg = check_and_auto_update(silent=True)
                 if update_msg:
                     click.echo(click.style(f"  {update_msg}", fg="green"))
-            except Exception:
+            except ImportError:
                 pass
 
     if ctx.invoked_subcommand is None:
@@ -353,7 +374,7 @@ def cli(ctx: click.Context, verbose: bool, config_path: Optional[str]) -> None:
 def chat(
     ctx: click.Context,
     prompt: str,
-    model_name: Optional[str],
+    model_name: str | None,
     autonomy_level: int,
 ) -> None:
     """Send a single prompt and get a response."""
@@ -429,7 +450,7 @@ def _load_config_overrides(config: AppConfig) -> dict[str, Any]:
         return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except json.JSONDecodeError:
         return {}
     return payload if isinstance(payload, dict) else {}
 
@@ -508,7 +529,7 @@ def config_set(ctx: click.Context, key: str, value: str, as_json: bool) -> None:
     parsed: Any
     try:
         parsed = json.loads(str(value))
-    except Exception:
+    except json.JSONDecodeError:
         parsed = str(value)
     overrides[str(key)] = parsed
     _save_config_overrides(config, overrides)
@@ -760,12 +781,12 @@ def models_list(ctx: click.Context) -> None:
 @click.option("-m", "--model", "model_name", help="Model profile to query (default: current default)")
 @click.option("--timeout", "timeout_s", type=float, default=2.0, show_default=True)
 @click.pass_context
-def models_discover(ctx: click.Context, model_name: Optional[str], timeout_s: float) -> None:
+def models_discover(ctx: click.Context, model_name: str | None, timeout_s: float) -> None:
     """Discover model ids available at an endpoint (best effort)."""
     _run_models_discover(ctx, model_name=model_name, timeout_s=timeout_s)
 
 
-def _run_models_discover(ctx: click.Context, model_name: Optional[str], timeout_s: float) -> None:
+def _run_models_discover(ctx: click.Context, model_name: str | None, timeout_s: float) -> None:
     """Run discovery for both ``models discover`` and its compatibility aliases."""
     if float(timeout_s) <= 0:
         raise click.UsageError("Invalid value for --timeout: must be greater than 0")
@@ -802,7 +823,14 @@ def _run_models_discover(ctx: click.Context, model_name: Optional[str], timeout_
 @models.command("validate")
 @click.option("-m", "--model", "model_name", help="Validate one model profile (default: all profiles).")
 @click.option("--timeout", "timeout_s", type=float, default=3.0, show_default=True, help="Handshake timeout seconds.")
-@click.option("--tool-timeout", "tool_timeout_s", type=float, default=20.0, show_default=True, help="Tool-call smoke timeout seconds.")
+@click.option(
+    "--tool-timeout",
+    "tool_timeout_s",
+    type=float,
+    default=20.0,
+    show_default=True,
+    help="Tool-call smoke timeout seconds.",
+)
 @click.option("--no-tool-smoke", is_flag=True, help="Skip the synthetic tool-calling smoke test.")
 @click.option(
     "--strict/--no-strict",
@@ -813,7 +841,7 @@ def _run_models_discover(ctx: click.Context, model_name: Optional[str], timeout_
 @click.pass_context
 def models_validate(
     ctx: click.Context,
-    model_name: Optional[str],
+    model_name: str | None,
     timeout_s: float,
     tool_timeout_s: float,
     no_tool_smoke: bool,
@@ -895,9 +923,7 @@ def models_validate(
     help="After pull, set the profile's model id for this run (does not edit thomas.toml).",
 )
 @click.pass_context
-def models_pull(
-    ctx: click.Context, model_id: str, profile_name: Optional[str], set_after: bool
-) -> None:
+def models_pull(ctx: click.Context, model_id: str, profile_name: str | None, set_after: bool) -> None:
     """Pull a local model via Ollama (requires the `ollama` CLI)."""
     import shutil
     import subprocess  # nosec
@@ -960,7 +986,7 @@ def _load_models_state(config: AppConfig) -> dict[str, Any]:
         return default
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except json.JSONDecodeError:
         return default
     if not isinstance(raw, dict):
         return default
@@ -987,9 +1013,7 @@ def _save_models_state(config: AppConfig, state: dict[str, Any]) -> Path:
     }
     image = dict(image_raw) if isinstance(image_raw, dict) else {}
     fallback_profiles = [
-        str(x).strip()
-        for x in (image_fallback_raw if isinstance(image_fallback_raw, list) else [])
-        if str(x).strip()
+        str(x).strip() for x in (image_fallback_raw if isinstance(image_fallback_raw, list) else []) if str(x).strip()
     ]
     payload = {
         "aliases": aliases,
@@ -1064,10 +1088,12 @@ def models_scan(ctx: click.Context, timeout_s: float) -> None:
 
 @models.command("set")
 @click.argument("model_id")
-@click.option("--profile", "profile_name", default=None, help="Profile to update (default: current default model profile).")
+@click.option(
+    "--profile", "profile_name", default=None, help="Profile to update (default: current default model profile)."
+)
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
 @click.pass_context
-def models_set(ctx: click.Context, model_id: str, profile_name: Optional[str], as_json: bool) -> None:
+def models_set(ctx: click.Context, model_id: str, profile_name: str | None, as_json: bool) -> None:
     """Set the active model id for a profile (runtime only)."""
     config: AppConfig = ctx.obj["config"]
     profile = str(profile_name or config.default_model)
@@ -1371,9 +1397,9 @@ def models_fallbacks(
     ctx: click.Context,
     primary_profile: str,
     set_profiles: tuple[str, ...],
-    enabled: Optional[bool],
-    chat_auto_failover: Optional[bool],
-    cooldown_seconds: Optional[int],
+    enabled: bool | None,
+    chat_auto_failover: bool | None,
+    cooldown_seconds: int | None,
     as_json: bool,
 ) -> None:
     """Inspect or update runtime failover profile chain."""
@@ -1438,7 +1464,9 @@ def models_fallbacks(
 
 
 @models.command("image-fallbacks")
-@click.option("--for-profile", "primary_profile", default="", help="Primary profile to derive default image fallback chain.")
+@click.option(
+    "--for-profile", "primary_profile", default="", help="Primary profile to derive default image fallback chain."
+)
 @click.option("--set-profile", "set_profiles", multiple=True, help="Set ordered image fallback profiles (repeatable).")
 @click.option("--clear", is_flag=True, help="Clear configured image fallback profiles.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
@@ -1527,18 +1555,19 @@ def serve(ctx: click.Context, host: str, port: int) -> None:
 
     try:
         from thomas.server.app import serve as serve_app
+
         serve_app(config, host=host, port=port)
     except ModuleNotFoundError as e:
         # Most commonly: aiohttp missing.
         click.echo(f"Server dependencies missing: {e}", err=True)
-        click.echo("Install with: pip install -e \".[server]\"", err=True)
+        click.echo('Install with: pip install -e ".[server]"', err=True)
         sys.exit(1)
 
 
 @cli.command()
 @click.option("-m", "--model", "model_name", help="Model profile to use")
 @click.pass_context
-def repl(ctx: click.Context, model_name: Optional[str]) -> None:
+def repl(ctx: click.Context, model_name: str | None) -> None:
     """Start the interactive REPL with rich terminal UI."""
     try:
         from thomas.cli.repl import ThomasREPL
@@ -1666,45 +1695,52 @@ except Exception as e:
 # --- Architecture tools ---
 try:
     from thomas.cli.doctor import doctor_command
+
     cli.add_command(doctor_command)
-except Exception:
-    pass
+except Exception as e:
+    log.debug("Failed to register doctor command: %s", e)
 
 try:
     from thomas.cli.why import why_command
+
     cli.add_command(why_command)
-except Exception:
-    pass
+except Exception as e:
+    log.debug("Failed to register why command: %s", e)
 
 try:
     from thomas.cli.scaffold import scaffold_group
+
     cli.add_command(scaffold_group)
-except Exception:
-    pass
+except Exception as e:
+    log.debug("Failed to register scaffold command: %s", e)
 
 try:
     from thomas.cli.generate_agent_docs import generate_agent_docs_command
+
     cli.add_command(generate_agent_docs_command)
-except Exception:
-    pass
+except Exception as e:
+    log.debug("Failed to register generate_agent_docs command: %s", e)
 
 try:
     from thomas.cli.sweep import sweep_command
+
     cli.add_command(sweep_command)
-except Exception:
-    pass
+except Exception as e:
+    log.debug("Failed to register sweep command: %s", e)
 
 try:
     from thomas.cli.heartbeat_cmd import heartbeat_command
+
     cli.add_command(heartbeat_command)
-except Exception:
-    pass
+except Exception as e:
+    log.debug("Failed to register heartbeat command: %s", e)
 
 try:
     from thomas.cli.commands.investigate import register_investigate_commands
+
     register_investigate_commands(cli)
-except Exception:
-    pass
+except Exception as e:
+    log.debug("Failed to register investigate commands: %s", e)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from thomas.channels.p082_channel_logs_command import (
     ChannelLogsError,
@@ -22,7 +23,7 @@ from thomas.channels.p082_channel_logs_command import (
 # Optional: some Thomas builds may use Typer for the CLI.
 try:  # pragma: no cover
     import typer  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
 
@@ -65,6 +66,8 @@ build_parser = add_parser
 register_command = add_parser
 register_subcommand = add_parser
 add_subcommand = add_parser
+
+
 def register(subparsers: Any) -> Any:
     """Best-effort registration hook."""
 
@@ -76,7 +79,7 @@ def register(subparsers: Any) -> Any:
             if isinstance(subparsers, typer.Typer):
                 subparsers.command(COMMAND_NAME)(typer_command)
                 return subparsers
-        except Exception:
+        except AttributeError:
             pass
 
     return None

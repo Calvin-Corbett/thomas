@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
-import sys
 import urllib.parse
 import urllib.request
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from thomas.integrations.github_automation import (
     fetch_issue,
@@ -340,15 +340,15 @@ def otio_validate_timeline(args: argparse.Namespace) -> dict[str, Any]:
         if tracks is not None:
             try:
                 iterable = list(tracks)
-            except Exception:
+            except ImportError:
                 iterable = []
             track_count = len(iterable)
             for track in iterable:
                 try:
                     clip_count += len(list(track))
-                except Exception:
+                except ImportError:
                     continue
-    except Exception:
+    except ImportError:
         payload = json.loads(input_path.read_text(encoding="utf-8"))
         if not isinstance(payload, Mapping):
             raise RuntimeError("Timeline JSON must be an object")

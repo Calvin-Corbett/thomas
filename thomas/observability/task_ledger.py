@@ -11,10 +11,11 @@ import os
 import re
 import sqlite3
 import threading
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 ENV_TASK_LEDGER_DB_PATH = "THOMAS_TASK_LEDGER_DB_PATH"
 _VALID_STATUSES = {"in_progress", "blocked", "complete"}
@@ -87,7 +88,7 @@ ON task_ledger(updated_at DESC);
 
 
 def _now_iso_utc() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _compact_ws(text: Any) -> str:
@@ -116,7 +117,7 @@ def _normalize_progress(value: Any) -> str:
     return progress[:_MAX_PROGRESS_LEN]
 
 
-def _normalize_missing_inputs(values: Optional[Iterable[Any]]) -> list[str]:
+def _normalize_missing_inputs(values: Iterable[Any] | None) -> list[str]:
     out: list[str] = []
     seen: set[str] = set()
     for value in values or []:
@@ -137,7 +138,7 @@ def _normalize_missing_inputs(values: Optional[Iterable[Any]]) -> list[str]:
     return out
 
 
-def resolve_task_ledger_db_path(default_root: Optional[Path] = None) -> Path:
+def resolve_task_ledger_db_path(default_root: Path | None = None) -> Path:
     env = str(os.getenv(ENV_TASK_LEDGER_DB_PATH, "")).strip()
     if env:
         return Path(env)
@@ -237,7 +238,7 @@ def extract_missing_inputs(text: Any, *, limit: int = 6) -> list[str]:
 def classify_completion_state(
     *,
     assistant_text: Any,
-    token_report: Optional[dict[str, Any]] = None,
+    token_report: dict[str, Any] | None = None,
 ) -> tuple[str, list[str], str]:
     progress = _normalize_progress(assistant_text)
     missing_inputs = extract_missing_inputs(assistant_text)
@@ -259,7 +260,7 @@ def _snapshot_from_row(row: sqlite3.Row) -> TaskLedgerSnapshot:
     raw_missing = str(row["missing_inputs_json"] or "[]")
     try:
         parsed = json.loads(raw_missing)
-    except Exception:
+    except json.JSONDecodeError:
         parsed = []
     missing_inputs = _normalize_missing_inputs(parsed if isinstance(parsed, list) else [])
     return TaskLedgerSnapshot(
@@ -294,7 +295,7 @@ class TaskLedgerStore:
             finally:
                 con.close()
 
-    def get_current(self, session_id: str) -> Optional[TaskLedgerSnapshot]:
+    def get_current(self, session_id: str) -> TaskLedgerSnapshot | None:
         sid = str(session_id or "").strip()
         if not sid:
             return None
@@ -314,7 +315,7 @@ class TaskLedgerStore:
             return None
         return _snapshot_from_row(row)
 
-    def get_latest(self) -> Optional[TaskLedgerSnapshot]:
+    def get_latest(self) -> TaskLedgerSnapshot | None:
         con = self._connect()
         try:
             row = con.execute(
@@ -355,7 +356,7 @@ class TaskLedgerStore:
         for row in rows:
             try:
                 parsed_missing = json.loads(str(row["missing_inputs_json"] or "[]"))
-            except Exception:
+            except json.JSONDecodeError:
                 parsed_missing = []
             events.append(
                 {
@@ -377,7 +378,7 @@ class TaskLedgerStore:
         *,
         active_goal: Any = None,
         status: Any = None,
-        missing_inputs: Optional[Iterable[Any]] = None,
+        missing_inputs: Iterable[Any] | None = None,
         last_progress: Any = None,
         source: str = "",
         force_event: bool = False,

@@ -1,0 +1,19 @@
+{
+  "name": "Thomas Infinite Companion",
+  "short_name": "Infinite",
+  "description": "Phone companion chat for controlling Thomas.",
+  "start_url": "/companion",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12161f",
+  "theme_color": "#12161f",
+  "icons": [
+    {
+      "src": "/static/companion-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -13,19 +13,20 @@ Expected runtime context:
 
 from __future__ import annotations
 
-from dataclasses import asdict
 import json
-from typing import Any, Dict, Optional
+from dataclasses import asdict
+from typing import Any
 
 import typer
 
 from thomas.browser.p023_browser_trace_start_stop_export import (
+    DEFAULT_TRACE_REGISTRY,
     BrowserTraceError,
     BrowserTraceErrorCode,
     BrowserTraceExportInput,
     BrowserTraceStartInput,
-    DEFAULT_TRACE_REGISTRY,
 )
+from thomas.cli.commands.browser._runtime_entrypoint import run_typer_app
 
 COMMAND_NAME = "trace"
 
@@ -44,7 +45,7 @@ def _extract_target(ctx: typer.Context) -> Any:
 
 def _emit_success(action: str, payload: Any, json_mode: bool) -> None:
     if json_mode:
-        out: Dict[str, Any] = {"ok": True, "action": action, "result": asdict(payload)}
+        out: dict[str, Any] = {"ok": True, "action": action, "result": asdict(payload)}
         typer.echo(json.dumps(out, ensure_ascii=False, sort_keys=True))
         return
 
@@ -65,7 +66,7 @@ def _emit_error(action: str, err: Exception, json_mode: bool) -> None:
         exit_code = 1
 
     if json_mode:
-        out: Dict[str, Any] = {"ok": False, "action": action, "error": error_payload}
+        out: dict[str, Any] = {"ok": False, "action": action, "error": error_payload}
         typer.echo(json.dumps(out, ensure_ascii=False, sort_keys=True))
         raise typer.Exit(code=exit_code)
 
@@ -79,7 +80,7 @@ def trace_start(
     screenshots: bool = typer.Option(True, help="Include screenshots in the trace."),
     snapshots: bool = typer.Option(True, help="Include DOM snapshots in the trace."),
     sources: bool = typer.Option(True, help="Include source files in the trace."),
-    title: Optional[str] = typer.Option(None, help="Optional trace title shown in Trace Viewer."),
+    title: str | None = typer.Option(None, help="Optional trace title shown in Trace Viewer."),
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
 ) -> None:
     """Start tracing on the active browser context."""
@@ -151,3 +152,14 @@ cli_app = app  # alias
 def as_click_command():
     """Return this Typer application as a Click command (for Click-only registries)."""
     return typer.main.get_command(app)
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    return run_typer_app(
+        app,
+        argv,
+        command="browser trace-start-stop-export",
+        require_args=True,
+        missing_args_message="Specify a trace action: start, stop, or export.",
+    )

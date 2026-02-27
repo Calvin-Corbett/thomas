@@ -14,7 +14,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from thomas.core.config import AppConfig
 
@@ -41,37 +41,40 @@ class AutonomyMemoryEngine:
         self._enable_v2 = bool(enable_v2)
         self._started = False
 
-        self._legacy: Optional[Any] = None
-        self._fabric_v2: Optional[Any] = None
-        self._curator: Optional[Any] = None
-        self._curator_last_result: Dict[str, Any] = {}
+        self._legacy: Any | None = None
+        self._fabric_v2: Any | None = None
+        self._curator: Any | None = None
+        self._curator_last_result: dict[str, Any] = {}
 
-        self._curator_enabled = str(
-            os.environ.get("THOMAS_MEMORY_CURATOR_ENABLED", "1")
-        ).strip().lower() in ("1", "true", "yes", "on")
+        self._curator_enabled = str(os.environ.get("THOMAS_MEMORY_CURATOR_ENABLED", "1")).strip().lower() in (
+            "1",
+            "true",
+            "yes",
+            "on",
+        )
         try:
             self._curator_min_interval_s = max(
                 0, int(os.environ.get("THOMAS_MEMORY_CURATOR_MIN_INTERVAL_SECONDS", "180") or 180)
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._curator_min_interval_s = 180
         try:
             self._curator_max_episode_scan = max(
                 10, int(os.environ.get("THOMAS_MEMORY_CURATOR_MAX_EPISODE_SCAN", "120") or 120)
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._curator_max_episode_scan = 120
         try:
             self._curator_max_library_scan = max(
                 10, int(os.environ.get("THOMAS_MEMORY_CURATOR_MAX_LIBRARY_SCAN", "40") or 40)
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._curator_max_library_scan = 40
         try:
             self._curator_max_promotions = max(
                 10, int(os.environ.get("THOMAS_MEMORY_CURATOR_MAX_PROMOTIONS_PER_RUN", "120") or 120)
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._curator_max_promotions = 120
         self._curator_approval_enabled = str(
             os.environ.get("THOMAS_MEMORY_CURATOR_APPROVAL_ENABLED", "1")
@@ -80,7 +83,7 @@ class AutonomyMemoryEngine:
             self._curator_approval_auto_apply_conf = float(
                 os.environ.get("THOMAS_MEMORY_CURATOR_APPROVAL_AUTO_APPLY_CONFIDENCE", "0.70") or 0.70
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._curator_approval_auto_apply_conf = 0.70
         self._curator_approval_auto_apply_conf = max(
             0.0,
@@ -97,13 +100,13 @@ class AutonomyMemoryEngine:
             self._token_report_prompt_threshold = max(
                 500, int(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_PROMPT_TOKENS", "12000") or 12000)
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._token_report_prompt_threshold = 12000
         try:
             self._token_report_total_threshold = max(
                 1000, int(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_TOTAL_TOKENS", "18000") or 18000)
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._token_report_total_threshold = 18000
         try:
             self._token_report_memory_share_threshold = max(
@@ -113,28 +116,25 @@ class AutonomyMemoryEngine:
                     float(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_MEMORY_SHARE", "0.42") or 0.42),
                 ),
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._token_report_memory_share_threshold = 0.42
         try:
             self._token_report_budget_pressure_threshold = max(
                 0.10,
                 min(
                     1.5,
-                    float(
-                        os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_BUDGET_PRESSURE", "0.90")
-                        or 0.90
-                    ),
+                    float(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_BUDGET_PRESSURE", "0.90") or 0.90),
                 ),
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._token_report_budget_pressure_threshold = 0.90
         try:
             self._token_report_min_interval_s = max(
                 0, int(os.environ.get("THOMAS_MEMORY_AUTO_COMPACT_MIN_INTERVAL_SECONDS", "300") or 300)
             )
-        except Exception:
+        except (ValueError, TypeError):
             self._token_report_min_interval_s = 300
-        self._token_report_last_compact_ms: Dict[str, int] = {}
+        self._token_report_last_compact_ms: dict[str, int] = {}
 
         # Keep memory packs dense but bounded; the agent prompt has its own
         # larger budget and should not be monopolized by memory text.
@@ -167,7 +167,7 @@ class AutonomyMemoryEngine:
                 self._legacy = legacy
                 legacy_ok = bool(getattr(legacy, "started", False))
                 log.info("Legacy memory backend started.")
-            except Exception as e:
+            except (ImportError, RuntimeError, OSError) as e:
                 log.warning("Legacy memory backend unavailable: %s", e)
 
         if self._enable_v2:
@@ -178,7 +178,7 @@ class AutonomyMemoryEngine:
                 self._fabric_v2 = MemoryFabricV2(root_path=root_path)
                 v2_ok = True
                 log.info("Memory Fabric v2 backend started at %s", root_path)
-            except Exception as e:
+            except (ImportError, RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 backend unavailable: %s", e)
 
         if self._fabric_v2 is not None and self._curator_enabled:
@@ -208,7 +208,7 @@ class AutonomyMemoryEngine:
                     self._curator_max_episode_scan,
                     self._curator_max_library_scan,
                 )
-            except Exception as e:
+            except (ImportError, RuntimeError, OSError) as e:
                 log.warning("Memory curator unavailable: %s", e)
 
         self._started = bool(legacy_ok or v2_ok)
@@ -229,7 +229,7 @@ class AutonomyMemoryEngine:
             return "tool"
         return "system"
 
-    def _budget_for_mode(self, budget: Optional[int], mode: str) -> int:
+    def _budget_for_mode(self, budget: int | None, mode: str) -> int:
         b = int(budget or self._pack_budget_default)
         m = str(mode or "auto").strip().lower()
         if m == "fast":
@@ -249,8 +249,8 @@ class AutonomyMemoryEngine:
         thread: str,
         etype: str,
         text: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        blob_id: Optional[str] = None,
+        metadata: dict[str, Any] | None = None,
+        blob_id: str | None = None,
     ) -> int:
         self._require_started()
 
@@ -264,7 +264,7 @@ class AutonomyMemoryEngine:
         if self._legacy is not None:
             try:
                 out_id = int(self._legacy.add_event(thread_id, etype, payload, metadata, blob_id))
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory add_event failed: %s", e)
 
         if self._fabric_v2 is not None and payload:
@@ -279,7 +279,7 @@ class AutonomyMemoryEngine:
                 )
                 if out_id <= 0:
                     out_id = int(v2_id)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 add_event failed: %s", e)
 
         return int(out_id)
@@ -287,8 +287,8 @@ class AutonomyMemoryEngine:
     def retrieve(
         self,
         query: str,
-        thread: Optional[str] = None,
-        budget: Optional[int] = None,
+        thread: str | None = None,
+        budget: int | None = None,
         mode: str = "auto",
     ) -> _MemoryText:
         self._require_started()
@@ -307,27 +307,27 @@ class AutonomyMemoryEngine:
                 text = str(getattr(pack, "pack_text", "") or "").strip()
                 if text:
                     return _MemoryText(text=text)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 retrieval failed: %s", e)
 
         if self._legacy is not None:
             try:
                 return self._legacy.retrieve(query=query_text, thread=thread, budget=budget, mode=mode)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory retrieval failed: %s", e)
 
         return _MemoryText(text="")
 
-    def ingest_pending(self) -> Dict[str, Any]:
+    def ingest_pending(self) -> dict[str, Any]:
         self._require_started()
         if self._legacy is not None:
             try:
                 return dict(self._legacy.ingest_pending())
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory ingestion failed: %s", e)
         return {"indexed": 0}
 
-    def run_curator(self, *, force: bool = False) -> Dict[str, Any]:
+    def run_curator(self, *, force: bool = False) -> dict[str, Any]:
         """Run one curator pass (best effort)."""
         self._require_started()
         if self._curator is None:
@@ -336,11 +336,11 @@ class AutonomyMemoryEngine:
             out = dict(self._curator.run(force=bool(force)))
             self._curator_last_result = out
             return out
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory curator run failed: %s", e)
             return {"ran": False, "reason": f"error:{type(e).__name__}"}
 
-    def curator_stats(self) -> Dict[str, Any]:
+    def curator_stats(self) -> dict[str, Any]:
         """Curator status and checkpoint data."""
         self._require_started()
         if self._curator is None:
@@ -350,11 +350,11 @@ class AutonomyMemoryEngine:
             if self._curator_last_result:
                 out["last_result"] = dict(self._curator_last_result)
             return out
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory curator stats failed: %s", e)
             return {"enabled": False, "error": str(e)}
 
-    def list_curator_approvals(self, *, status: str = "pending", limit: int = 100) -> List[Dict[str, Any]]:
+    def list_curator_approvals(self, *, status: str = "pending", limit: int = 100) -> list[dict[str, Any]]:
         self._require_started()
         if self._curator is None:
             return []
@@ -363,7 +363,7 @@ class AutonomyMemoryEngine:
             return []
         try:
             return list(list_fn(status=str(status or "").strip(), limit=int(limit)))
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory curator approval queue listing failed: %s", e)
             return []
 
@@ -374,7 +374,7 @@ class AutonomyMemoryEngine:
         approve: bool,
         actor: str = "api",
         reason: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         self._require_started()
         if self._curator is None:
             return {"ok": False, "error": "curator_unavailable"}
@@ -392,16 +392,16 @@ class AutonomyMemoryEngine:
             )
         except KeyError:
             return {"ok": False, "error": "not_found"}
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory curator approval decision failed: %s", e)
             return {"ok": False, "error": f"{type(e).__name__}: {e}"}
 
     def auto_compact_from_token_report(
         self,
         *,
-        thread_id: Optional[str],
-        token_report: Optional[Dict[str, Any]],
-    ) -> Dict[str, Any]:
+        thread_id: str | None,
+        token_report: dict[str, Any] | None,
+    ) -> dict[str, Any]:
         self._require_started()
         tid = str(thread_id or "").strip()
         if not tid:
@@ -413,7 +413,7 @@ class AutonomyMemoryEngine:
         if not isinstance(token_report, dict):
             return {"checked": False, "triggered": False, "reason": "token_report_missing"}
 
-        reasons: List[str] = []
+        reasons: list[str] = []
         prompt_tokens = int(token_report.get("prompt_tokens", 0) or 0)
         total_tokens = int(token_report.get("total_tokens", 0) or 0)
         memory_share = float(token_report.get("memory_share_of_context", 0.0) or 0.0)
@@ -430,16 +430,13 @@ class AutonomyMemoryEngine:
             try:
                 warn_cap = int(budget.get("iteration_prompt_warn_cap", 0) or 0)
                 max_spend = int(budget.get("max_iteration_prompt_spend", 0) or 0)
-            except Exception:
+            except (ValueError, TypeError):
                 warn_cap = 0
                 max_spend = 0
             if warn_cap > 0:
                 pressure = float(max_spend) / float(max(1, warn_cap))
                 if pressure >= float(self._token_report_budget_pressure_threshold):
-                    reasons.append(
-                        "iteration_budget_pressure"
-                        f">={self._token_report_budget_pressure_threshold:.2f}"
-                    )
+                    reasons.append("iteration_budget_pressure" f">={self._token_report_budget_pressure_threshold:.2f}")
 
         if not reasons:
             return {"checked": True, "triggered": False, "reasons": []}
@@ -466,7 +463,7 @@ class AutonomyMemoryEngine:
                 "compact": compact_result if isinstance(compact_result, dict) else {},
                 "triggered_at_ms": now_ms,
             }
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Token-report-driven compaction failed for thread %s: %s", tid, e)
             return {
                 "checked": True,
@@ -483,20 +480,20 @@ class AutonomyMemoryEngine:
         self,
         thread_id: str,
         *,
-        enabled: Optional[bool] = None,
-        include_global: Optional[bool] = None,
-        include_profile: Optional[bool] = None,
-        pins_only: Optional[bool] = None,
-        max_pack_tokens: Optional[int] = None,
-        max_results: Optional[int] = None,
-        decay_half_life_hours: Optional[float] = None,
-        auto_compact_enabled: Optional[bool] = None,
-        auto_compact_episode_threshold: Optional[int] = None,
-        auto_compact_min_interval_hours: Optional[float] = None,
-        auto_optimize_enabled: Optional[bool] = None,
-        auto_optimize_waste_threshold: Optional[float] = None,
-        auto_optimize_min_interval_hours: Optional[float] = None,
-    ) -> Dict[str, Any]:
+        enabled: bool | None = None,
+        include_global: bool | None = None,
+        include_profile: bool | None = None,
+        pins_only: bool | None = None,
+        max_pack_tokens: int | None = None,
+        max_results: int | None = None,
+        decay_half_life_hours: float | None = None,
+        auto_compact_enabled: bool | None = None,
+        auto_compact_episode_threshold: int | None = None,
+        auto_compact_min_interval_hours: float | None = None,
+        auto_optimize_enabled: bool | None = None,
+        auto_optimize_waste_threshold: float | None = None,
+        auto_optimize_min_interval_hours: float | None = None,
+    ) -> dict[str, Any]:
         self._require_started()
         if self._fabric_v2 is None:
             return {}
@@ -505,7 +502,7 @@ class AutonomyMemoryEngine:
         if not tid:
             raise ValueError("thread_id is required")
 
-        patch: Dict[str, Any] = {}
+        patch: dict[str, Any] = {}
         if enabled is not None:
             patch["enabled"] = bool(enabled)
         if include_global is not None:
@@ -534,13 +531,11 @@ class AutonomyMemoryEngine:
             patch["auto_optimize_min_interval_hours"] = float(auto_optimize_min_interval_hours)
 
         settings = (
-            self._fabric_v2.update_thread_settings(tid, patch)
-            if patch
-            else self._fabric_v2.get_thread_settings(tid)
+            self._fabric_v2.update_thread_settings(tid, patch) if patch else self._fabric_v2.get_thread_settings(tid)
         )
         return dict(getattr(settings, "__dict__", {}))
 
-    def thread_memory_policy(self, thread_id: str) -> Dict[str, Any]:
+    def thread_memory_policy(self, thread_id: str) -> dict[str, Any]:
         self._require_started()
         if self._fabric_v2 is None:
             return {}
@@ -550,29 +545,29 @@ class AutonomyMemoryEngine:
         settings = self._fabric_v2.get_thread_settings(tid)
         return dict(getattr(settings, "__dict__", {}))
 
-    def list_contradictions(self, *, only_open: bool = True, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_contradictions(self, *, only_open: bool = True, limit: int = 50) -> list[dict[str, Any]]:
         """List memory contradictions from Fabric v2 (if available)."""
         self._require_started()
         if self._fabric_v2 is None:
             return []
         try:
             lim = max(1, min(500, int(limit)))
-        except Exception:
+        except (ValueError, TypeError):
             lim = 50
         try:
             return list(self._fabric_v2.list_contradictions(only_open=bool(only_open), limit=lim))
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory Fabric v2 list_contradictions failed: %s", e)
             return []
 
     def list_contradictions_review(
         self,
         *,
-        status: Optional[str] = None,
-        severity: Optional[str] = None,
-        route: Optional[str] = None,
+        status: str | None = None,
+        severity: str | None = None,
+        route: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         self._require_started()
         if self._fabric_v2 is None:
             return []
@@ -581,7 +576,7 @@ class AutonomyMemoryEngine:
             return self.list_contradictions(only_open=True, limit=limit)
         try:
             lim = max(1, min(500, int(limit)))
-        except Exception:
+        except (ValueError, TypeError):
             lim = 50
         try:
             return list(
@@ -592,7 +587,7 @@ class AutonomyMemoryEngine:
                     limit=lim,
                 )
             )
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory Fabric v2 contradiction review listing failed: %s", e)
             return []
 
@@ -612,7 +607,7 @@ class AutonomyMemoryEngine:
             return False
         try:
             cid_i = int(cid)
-        except Exception:
+        except (ValueError, TypeError):
             return False
         if cid_i <= 0:
             return False
@@ -625,7 +620,7 @@ class AutonomyMemoryEngine:
                     reason=str(reason or ""),
                 )
             )
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory Fabric v2 contradiction review decision failed: %s", e)
             return False
 
@@ -636,7 +631,7 @@ class AutonomyMemoryEngine:
             return False
         try:
             cid_i = int(cid)
-        except Exception:
+        except (ValueError, TypeError):
             return False
         if cid_i <= 0:
             return False
@@ -654,7 +649,7 @@ class AutonomyMemoryEngine:
                 )
             self._fabric_v2.resolve_contradiction(cid_i, resolved=bool(resolved))
             return True
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory Fabric v2 resolve_contradiction failed: %s", e)
             return False
 
@@ -672,7 +667,7 @@ class AutonomyMemoryEngine:
         if self._legacy is not None:
             try:
                 self._legacy.pin(k, v)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory pin failed: %s", e)
 
         if self._fabric_v2 is not None:
@@ -683,7 +678,7 @@ class AutonomyMemoryEngine:
                     source_episode_id=None,
                 )
                 self._fabric_v2.pin_profile_hint(k, pinned=True)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 pin failed: %s", e)
 
     def unpin(self, key: str) -> None:
@@ -695,22 +690,22 @@ class AutonomyMemoryEngine:
         if self._legacy is not None:
             try:
                 self._legacy.unpin(k)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory unpin failed: %s", e)
 
         if self._fabric_v2 is not None:
             try:
                 self._fabric_v2.pin_profile_hint(k, pinned=False)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 unpin failed: %s", e)
 
-    def list_pins(self) -> List[Tuple[str, str, int]]:
+    def list_pins(self) -> list[tuple[str, str, int]]:
         self._require_started()
 
         if self._legacy is not None:
             try:
                 return list(self._legacy.list_pins())
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory list_pins failed: %s", e)
 
         if self._fabric_v2 is None:
@@ -729,18 +724,18 @@ class AutonomyMemoryEngine:
                 )
                 for r in rows
             ]
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("Memory Fabric v2 list_pins fallback failed: %s", e)
             return []
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         self._require_started()
 
-        out: Dict[str, Any]
+        out: dict[str, Any]
         if self._legacy is not None:
             try:
                 out = dict(self._legacy.stats())
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory stats failed: %s", e)
                 out = {
                     "event_count": 0,
@@ -765,15 +760,11 @@ class AutonomyMemoryEngine:
                         "v2_episodes": int(health.get("episodes", 0) or 0),
                         "v2_facts": int(health.get("facts", 0) or 0),
                         "v2_profile_hints": int(health.get("profile_hints", 0) or 0),
-                        "v2_contradictions_open": int(
-                            health.get("contradictions_open", 0) or 0
-                        ),
-                        "v2_pack_waste_avg_30": float(
-                            health.get("pack_waste_avg_30", 0.0) or 0.0
-                        ),
+                        "v2_contradictions_open": int(health.get("contradictions_open", 0) or 0),
+                        "v2_pack_waste_avg_30": float(health.get("pack_waste_avg_30", 0.0) or 0.0),
                     }
                 )
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 stats failed: %s", e)
                 out["v2_enabled"] = False
         else:
@@ -785,18 +776,16 @@ class AutonomyMemoryEngine:
                 out["curator"] = self._curator.stats()
                 if self._curator_last_result:
                     out["curator_last_run"] = dict(self._curator_last_result)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.debug("Curator stats unavailable: %s", e)
         else:
             out["curator_enabled"] = False
 
         return out
 
-    def recent_traces(
-        self, thread: Optional[str] = None, limit: int = 10
-    ) -> List[Dict[str, Any]]:
+    def recent_traces(self, thread: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
         self._require_started()
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         lim = max(1, int(limit))
 
         if self._legacy is not None:
@@ -804,7 +793,7 @@ class AutonomyMemoryEngine:
                 legacy_traces = self._legacy.recent_traces(thread=thread, limit=lim)
                 if isinstance(legacy_traces, list):
                     out.extend(legacy_traces)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Legacy memory recent_traces failed: %s", e)
 
         if self._fabric_v2 is not None and thread:
@@ -822,23 +811,18 @@ class AutonomyMemoryEngine:
                             },
                         }
                     )
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 recent_traces failed: %s", e)
 
         return out[:lim]
 
-    def diagnostics(
-        self, thread: Optional[str] = None, trace_limit: int = 8
-    ) -> Dict[str, Any]:
+    def diagnostics(self, thread: str | None = None, trace_limit: int = 8) -> dict[str, Any]:
         self._require_started()
 
         pins = self.list_pins()
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "stats": self.stats(),
-            "pins": [
-                {"key": k, "text": t, "created_ts_utc": int(ts)}
-                for k, t, ts in pins
-            ],
+            "pins": [{"key": k, "text": t, "created_ts_utc": int(ts)} for k, t, ts in pins],
             "traces": self.recent_traces(thread=thread, limit=trace_limit),
         }
 
@@ -847,13 +831,13 @@ class AutonomyMemoryEngine:
                 payload["v2_health"] = self._fabric_v2.health()
                 if thread:
                     payload["v2_thread_settings"] = self.thread_memory_policy(thread)
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 diagnostics failed: %s", e)
 
         if self._curator is not None:
             try:
                 payload["curator"] = self.curator_stats()
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Curator diagnostics failed: %s", e)
 
         return payload
@@ -865,7 +849,7 @@ class AutonomyMemoryEngine:
         if self._legacy is not None:
             try:
                 self._legacy.close()
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.debug("Legacy memory close failed: %s", e)
 
         if self._fabric_v2 is not None:
@@ -874,7 +858,7 @@ class AutonomyMemoryEngine:
                 close_fn = getattr(db, "close", None)
                 if callable(close_fn):
                     close_fn()
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.debug("Memory Fabric v2 close failed: %s", e)
 
         self._curator = None

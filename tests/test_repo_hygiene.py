@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.check_repo_hygiene import evaluate_hygiene, evaluate_worktree_clean
+from scripts.check_repo_hygiene import evaluate_generated_artifacts, evaluate_hygiene, evaluate_worktree_clean
 
 
 def test_repo_hygiene_detects_unexpected_root_and_forbidden_prefix() -> None:
@@ -72,3 +72,37 @@ def test_repo_hygiene_worktree_dirty_classifies_paths() -> None:
     assert "thomas/cli/main.py" in result["staged_paths"]
     assert "thomas/cli/main.py" in result["unstaged_paths"]
     assert "scratch/local.txt" in result["untracked_paths"]
+
+
+def test_repo_hygiene_generated_artifacts_detects_untracked_noise() -> None:
+    baseline = {
+        "forbidden_untracked_prefixes": ["output/", "tmp/", "artifacts/"],
+        "blocked_untracked_suffixes": [".har", ".tar.gz"],
+    }
+    untracked_paths = [
+        "docs/notes.md",
+        "output/run-1/scorecard.json",
+        "tmp/cache.db",
+        "browser_capture.har",
+        "artifacts/snapshots/report.txt",
+    ]
+    result = evaluate_generated_artifacts(untracked_paths, baseline)
+    assert result["ok"] is False
+    assert result["offenders"] == [
+        "artifacts/snapshots/report.txt",
+        "browser_capture.har",
+        "output/run-1/scorecard.json",
+        "tmp/cache.db",
+    ]
+    assert result["prefix_matches"] == [
+        "artifacts/snapshots/report.txt",
+        "output/run-1/scorecard.json",
+        "tmp/cache.db",
+    ]
+    assert result["suffix_matches"] == ["browser_capture.har"]
+
+
+def test_repo_hygiene_generated_artifacts_no_patterns_noop() -> None:
+    result = evaluate_generated_artifacts(["docs/notes.md", "README.md"], {})
+    assert result["ok"] is True
+    assert result["offenders"] == []

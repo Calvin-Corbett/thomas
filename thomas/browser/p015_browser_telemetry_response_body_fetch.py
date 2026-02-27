@@ -16,8 +16,9 @@ from __future__ import annotations
 import asyncio
 import base64
 import inspect
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping, Protocol
+from typing import Any, Protocol
 
 __all__ = [
     "BrowserTelemetryResponseBodyFetchError",
@@ -170,8 +171,7 @@ class BrowserTelemetryBackend(Protocol):
     - Any of the above wrapped in an awaitable
     """
 
-    def get_response_body(self, request_id: str, *, timeout_s: float | None = None) -> Any:
-        ...
+    def get_response_body(self, request_id: str, *, timeout_s: float | None = None) -> Any: ...
 
 
 # ---------------------------------------------------------------------------
@@ -425,7 +425,7 @@ def _maybe_await_sync(value: Any) -> Any:
     if callable(close):
         try:
             close()
-        except Exception:
+        except (RuntimeError, AttributeError):
             pass
 
     raise BrowserTelemetryResponseBodyFetchError(
@@ -478,7 +478,7 @@ def _normalize_backend_result(raw: Any) -> tuple[bytes, dict[str, Any]]:
         status = raw.get("status")
         try:
             meta["status"] = int(status) if status is not None else None
-        except Exception:
+        except (ValueError, TypeError):
             meta["status"] = None
 
         if isinstance(body, (bytes, bytearray)):

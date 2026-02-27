@@ -20,17 +20,17 @@ The primary entrypoints are:
 
 from __future__ import annotations
 
-import inspect
 import importlib
+import inspect
 import json
 import os
 import tempfile
 import zipfile
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Protocol, Sequence, TypedDict, Union, cast
-
+from typing import Any, Literal, Protocol, TypedDict, cast
 
 # -------------------------
 # Public data contracts
@@ -62,9 +62,9 @@ class CookiesExportRequest:
     """Input contract for exporting cookies."""
 
     output_file: Path
-    profile_dir: Optional[Path] = None
-    url: Optional[str] = None
-    output_format: Optional[CookiesFormat] = None  # None => infer from output_file suffix
+    profile_dir: Path | None = None
+    url: str | None = None
+    output_format: CookiesFormat | None = None  # None => infer from output_file suffix
 
 
 @dataclass(frozen=True)
@@ -75,9 +75,9 @@ class CookiesExportResult:
     cookie_count: int
     schema: str
     exported_at: str
-    url: Optional[str]
+    url: str | None
     output_format: CookiesFormat
-    archive_member: Optional[str]
+    archive_member: str | None
 
 
 @dataclass(frozen=True)
@@ -85,8 +85,8 @@ class CookiesImportRequest:
     """Input contract for importing cookies."""
 
     input_file: Path
-    profile_dir: Optional[Path] = None
-    input_format: Optional[CookiesFormat] = None  # None => infer from file signature/ext
+    profile_dir: Path | None = None
+    input_format: CookiesFormat | None = None  # None => infer from file signature/ext
 
 
 @dataclass(frozen=True)
@@ -97,13 +97,13 @@ class CookiesImportResult:
     cookie_count: int
     schema: str
     input_format: CookiesFormat
-    archive_member: Optional[str]
+    archive_member: str | None
 
 
 class CookiesBackend(Protocol):
     """Backend protocol for reading/writing cookies from a browser profile."""
 
-    def list_cookies(self, url: Optional[str] = None) -> list[Cookie]:
+    def list_cookies(self, url: str | None = None) -> list[Cookie]:
         raise NotImplementedError
 
     def add_cookies(self, cookies: Sequence[Cookie]) -> None:
@@ -128,7 +128,7 @@ class CookiesTransferError(RuntimeError):
     code: ErrorCode
     details: dict[str, Any]
 
-    def __init__(self, code: ErrorCode, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, code: ErrorCode, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = details or {}
@@ -142,17 +142,17 @@ class CookiesTransferError(RuntimeError):
 
 
 class InvalidInputError(CookiesTransferError):
-    def __init__(self, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__("INVALID_INPUT", message, details=details)
 
 
 class MissingConfigError(CookiesTransferError):
-    def __init__(self, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__("MISSING_CONFIG", message, details=details)
 
 
 class ExternalFailureError(CookiesTransferError):
-    def __init__(self, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__("EXTERNAL_FAILURE", message, details=details)
 
 
@@ -189,8 +189,8 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
     """Write bytes atomically (best-effort) to avoid partial files."""
     _ensure_parent_dir(path)
 
-    fd: Optional[int] = None
-    tmp_path: Optional[str] = None
+    fd: int | None = None
+    tmp_path: str | None = None
     try:
         fd, tmp_path = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
         with os.fdopen(fd, "wb") as f:
@@ -211,12 +211,12 @@ def _atomic_write_bytes(path: Path, data: bytes) -> None:
         if fd is not None:
             try:
                 os.close(fd)
-            except Exception:
+            except OSError:
                 pass
         if tmp_path is not None:
             try:
                 os.unlink(tmp_path)
-            except Exception:
+            except OSError:
                 pass
 
 
@@ -253,8 +253,8 @@ def _zip_write_payload(path: Path, payload: Any, *, member_name: str = COOKIES_A
     _ensure_parent_dir(path)
     json_text = json.dumps(payload, indent=2, sort_keys=True) + "\n"
 
-    fd: Optional[int] = None
-    tmp_path: Optional[str] = None
+    fd: int | None = None
+    tmp_path: str | None = None
     try:
         fd, tmp_path = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=str(path.parent))
         os.close(fd)
@@ -276,12 +276,12 @@ def _zip_write_payload(path: Path, payload: Any, *, member_name: str = COOKIES_A
         if fd is not None:
             try:
                 os.close(fd)
-            except Exception:
+            except OSError:
                 pass
         if tmp_path is not None:
             try:
                 os.unlink(tmp_path)
-            except Exception:
+            except OSError:
                 pass
 
 
@@ -354,7 +354,7 @@ def _peek_file_signature(path: Path, n: int = 4) -> bytes:
         ) from e
 
 
-def _infer_export_format(path: Path, requested: Optional[CookiesFormat]) -> CookiesFormat:
+def _infer_export_format(path: Path, requested: CookiesFormat | None) -> CookiesFormat:
     if requested is not None:
         if requested not in ("json", "zip"):
             raise InvalidInputError("Invalid output format", details={"format": requested})
@@ -364,7 +364,7 @@ def _infer_export_format(path: Path, requested: Optional[CookiesFormat]) -> Cook
     return "json"
 
 
-def _infer_import_format(path: Path, requested: Optional[CookiesFormat]) -> CookiesFormat:
+def _infer_import_format(path: Path, requested: CookiesFormat | None) -> CookiesFormat:
     if requested is not None:
         if requested not in ("json", "zip"):
             raise InvalidInputError("Invalid input format", details={"format": requested})
@@ -379,7 +379,7 @@ def _infer_import_format(path: Path, requested: Optional[CookiesFormat]) -> Cook
     return "json"
 
 
-def _synthesize_url_from_domain_path(cookie: Mapping[str, Any]) -> Optional[str]:
+def _synthesize_url_from_domain_path(cookie: Mapping[str, Any]) -> str | None:
     domain = cookie.get("domain")
     path = cookie.get("path")
     if not isinstance(domain, str) or not domain:
@@ -412,7 +412,7 @@ _ALLOWED_COOKIE_KEYS = {
 }
 
 
-def _normalize_same_site(value: Any) -> Optional[str]:
+def _normalize_same_site(value: Any) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -536,7 +536,7 @@ class PlaywrightCookiesBackend:
         self._pw = None
         self._context = None
 
-    def __enter__(self) -> "PlaywrightCookiesBackend":
+    def __enter__(self) -> PlaywrightCookiesBackend:
         try:
             from playwright.sync_api import sync_playwright  # type: ignore
         except Exception as e:
@@ -563,7 +563,7 @@ class PlaywrightCookiesBackend:
             try:
                 if self._pw is not None:
                     self._pw.stop()
-            except Exception:
+            except (RuntimeError, AttributeError):
                 pass
 
             raise ExternalFailureError(
@@ -581,10 +581,24 @@ class PlaywrightCookiesBackend:
             if self._pw is not None:
                 try:
                     self._pw.stop()
-                except Exception:
+                except (RuntimeError, AttributeError):
                     pass
 
-    def list_cookies(self, url: Optional[str] = None) -> list[Cookie]:
+    def list_cookies(self, url: str | None = None) -> list[Cookie]:
+        """List cookies from the browser context.
+
+        Uses Playwright's context.cookies() API to retrieve cookies.
+        Optionally filter by URL.
+
+        Args:
+            url: Optional URL to filter cookies for
+
+        Returns:
+            List of cookie dicts with normalized Playwright-compatible format
+
+        Raises:
+            ExternalFailureError: If cookie retrieval fails
+        """
         assert self._context is not None
         try:
             if url:
@@ -592,7 +606,9 @@ class PlaywrightCookiesBackend:
             else:
                 cookies = self._context.cookies()
         except Exception as e:
-            raise ExternalFailureError("Failed to read cookies from browser", details={"error": type(e).__name__}) from e
+            raise ExternalFailureError(
+                "Failed to read cookies from browser", details={"error": type(e).__name__}
+            ) from e
 
         normalized: list[Cookie] = []
         for c in cookies:
@@ -607,14 +623,49 @@ class PlaywrightCookiesBackend:
         return normalized
 
     def add_cookies(self, cookies: Sequence[Cookie]) -> None:
+        """Add cookies to the browser context.
+
+        Uses Playwright's context.add_cookies() API. Validates that
+        each cookie has required fields (name, value, url OR domain+path).
+
+        Args:
+            cookies: List of cookie dicts (Playwright-compatible format)
+
+        Raises:
+            InvalidInputError: If cookie validation fails
+            ExternalFailureError: If cookie addition fails
+        """
         assert self._context is not None
+
+        # Validate required fields
+        for cookie in cookies:
+            if not isinstance(cookie, Mapping):
+                raise InvalidInputError("Each cookie entry must be a dict")
+
+            name = cookie.get("name")
+            value = cookie.get("value")
+            if not isinstance(name, str) or not name:
+                raise InvalidInputError("Each cookie must have a valid 'name'")
+            if not isinstance(value, str):
+                raise InvalidInputError("Each cookie must have a valid 'value'")
+
+            url = cookie.get("url")
+            domain = cookie.get("domain")
+            path = cookie.get("path")
+
+            has_url = isinstance(url, str) and url
+            has_domain_path = isinstance(domain, str) and domain and isinstance(path, str) and path
+
+            if not (has_url or has_domain_path):
+                raise InvalidInputError(f"Cookie '{name}' must have either 'url' or both 'domain' and 'path'")
+
         try:
             self._context.add_cookies(list(cookies))
         except Exception as e:
             raise ExternalFailureError("Failed to write cookies to browser", details={"error": type(e).__name__}) from e
 
 
-def _resolve_profile_dir(profile_dir: Optional[Path]) -> Path:
+def _resolve_profile_dir(profile_dir: Path | None) -> Path:
     """Resolve the profile directory.
 
     Resolution order:
@@ -632,12 +683,12 @@ def _resolve_profile_dir(profile_dir: Optional[Path]) -> Path:
         return Path(env)
 
     # Best-effort integration with the existing Thomas codebase.
-    def _try_call_zero_arg(obj: Any) -> Optional[Path]:
+    def _try_call_zero_arg(obj: Any) -> Path | None:
         if not callable(obj):
             return None
         try:
             sig = inspect.signature(obj)
-        except Exception:
+        except (ValueError, TypeError):
             sig = None
         if sig is not None and any(
             p.default is p.empty and p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
@@ -646,7 +697,7 @@ def _resolve_profile_dir(profile_dir: Optional[Path]) -> Path:
             return None
         try:
             value = obj()
-        except Exception:
+        except (RuntimeError, TypeError):
             return None
         if isinstance(value, Path):
             return value
@@ -654,10 +705,10 @@ def _resolve_profile_dir(profile_dir: Optional[Path]) -> Path:
             return Path(value)
         return None
 
-    def _try_attr(mod_name: str, attr_names: Sequence[str]) -> Optional[Path]:
+    def _try_attr(mod_name: str, attr_names: Sequence[str]) -> Path | None:
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             return None
         for attr in attr_names:
             val = getattr(mod, attr, None)
@@ -714,7 +765,7 @@ def _resolve_profile_dir(profile_dir: Optional[Path]) -> Path:
     )
 
 
-def export_cookies(request: CookiesExportRequest, *, backend: Optional[CookiesBackend] = None) -> CookiesExportResult:
+def export_cookies(request: CookiesExportRequest, *, backend: CookiesBackend | None = None) -> CookiesExportResult:
     """Export cookies from the given backend/profile to a JSON file or zip archive."""
     output_format = _infer_export_format(request.output_file, request.output_format)
 
@@ -736,7 +787,7 @@ def export_cookies(request: CookiesExportRequest, *, backend: Optional[CookiesBa
         "cookies": cast(list[Cookie], cookies),
     }
 
-    archive_member: Optional[str] = None
+    archive_member: str | None = None
     if output_format == "json":
         _dump_json_file(request.output_file, payload)
     else:
@@ -754,7 +805,7 @@ def export_cookies(request: CookiesExportRequest, *, backend: Optional[CookiesBa
     )
 
 
-def import_cookies(request: CookiesImportRequest, *, backend: Optional[CookiesBackend] = None) -> CookiesImportResult:
+def import_cookies(request: CookiesImportRequest, *, backend: CookiesBackend | None = None) -> CookiesImportResult:
     """Import cookies from a JSON file or zip archive into the given backend/profile."""
     input_format = _infer_import_format(request.input_file, request.input_format)
 
@@ -763,7 +814,7 @@ def import_cookies(request: CookiesImportRequest, *, backend: Optional[CookiesBa
         with PlaywrightCookiesBackend(profile_dir) as pw_backend:
             return import_cookies(request, backend=pw_backend)
 
-    archive_member: Optional[str] = None
+    archive_member: str | None = None
     if input_format == "zip":
         payload, archive_member = _zip_read_payload(request.input_file)
     else:
@@ -787,7 +838,7 @@ def import_cookies(request: CookiesImportRequest, *, backend: Optional[CookiesBa
     )
 
 
-def result_to_dict(result: Union[CookiesExportResult, CookiesImportResult]) -> dict[str, Any]:
+def result_to_dict(result: CookiesExportResult | CookiesImportResult) -> dict[str, Any]:
     """Convert result dataclasses to JSON-serializable dict."""
     d = asdict(result)
     for k, v in list(d.items()):

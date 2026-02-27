@@ -4,7 +4,7 @@ import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from .network import TailscalePolicy
 
@@ -30,9 +30,9 @@ def _default_root_from_config(config: Any | None) -> Path:
         return Path(env).expanduser().resolve()
     if config is not None:
         try:
-            root = Path(getattr(config.memory, "root_path")).resolve()
+            root = Path(config.memory.root_path).resolve()
             return (root / ".thomas" / "companion").resolve()
-        except Exception:
+        except (OSError, FileNotFoundError):
             pass
     return (Path.home() / ".thomas" / "companion").resolve()
 
@@ -58,7 +58,7 @@ class CompanionKernel:
         self.paths = build_kernel_paths(root.resolve())
 
     @classmethod
-    def from_config(cls, config: Any | None, *, root_override: str = "") -> "CompanionKernel":
+    def from_config(cls, config: Any | None, *, root_override: str = "") -> CompanionKernel:
         if root_override:
             root = Path(root_override).expanduser().resolve()
         else:
@@ -125,7 +125,7 @@ class CompanionKernel:
         self.init_layout()
         try:
             data = json.loads(self.paths.policy_file.read_text(encoding="utf-8"))
-        except Exception:
+        except json.JSONDecodeError:
             data = self.default_policy()
         if not isinstance(data, dict):
             return self.default_policy()
@@ -142,21 +142,21 @@ class CompanionKernel:
             mods = payload.get("modules")
             if isinstance(mods, dict):
                 modules_count = len(mods)
-        except Exception:
+        except json.JSONDecodeError:
             modules_count = 0
         try:
             payload = json.loads(self.paths.devices_file.read_text(encoding="utf-8"))
             rows = payload.get("devices")
             if isinstance(rows, dict):
                 devices_count = len(rows)
-        except Exception:
+        except json.JSONDecodeError:
             devices_count = 0
         try:
             payload = json.loads(self.paths.releases_file.read_text(encoding="utf-8"))
             rows = payload.get("releases")
             if isinstance(rows, dict):
                 releases_count = len(rows)
-        except Exception:
+        except json.JSONDecodeError:
             releases_count = 0
         return {
             "kernel_version": KERNEL_VERSION,

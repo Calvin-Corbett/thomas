@@ -49,8 +49,9 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Literal, Mapping, Optional, TypedDict
+from typing import Any, Literal, TypedDict
 
 import requests
 
@@ -68,8 +69,8 @@ class MessagePinInput:
 
     channel_id: str
     message_id: str
-    reason: Optional[str] = None
-    requested_by: Optional[str] = None
+    reason: str | None = None
+    requested_by: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -89,8 +90,8 @@ class MessagePinConfig:
     """Configuration contract for message pinning."""
 
     backend: BackendType = "http"
-    api_base_url: Optional[str] = None
-    api_token: Optional[str] = None
+    api_base_url: str | None = None
+    api_token: str | None = None
     timeout_seconds: float = 10.0
 
 
@@ -134,7 +135,7 @@ class MessagePinCommandError(Exception):
     kind: str = "error"
     code: str = "error"
 
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.details: dict[str, Any] = dict(details or {})
 
@@ -177,7 +178,7 @@ def reset_memory_pins() -> None:
 
 
 def _deterministic_pin_id(channel_id: str, message_id: str) -> str:
-    digest = hashlib.sha256(f"{channel_id}:{message_id}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha256(f"{channel_id}:{message_id}".encode()).hexdigest()
     return f"mempin_{digest[:12]}"
 
 
@@ -186,7 +187,7 @@ def _deterministic_pin_id(channel_id: str, message_id: str) -> str:
 # ----------------------------
 
 
-def _env_get(env: Mapping[str, str], *keys: str) -> Optional[str]:
+def _env_get(env: Mapping[str, str], *keys: str) -> str | None:
     for k in keys:
         v = env.get(k)
         if v is None:
@@ -197,7 +198,7 @@ def _env_get(env: Mapping[str, str], *keys: str) -> Optional[str]:
     return None
 
 
-def load_message_pin_config(env: Optional[Mapping[str, str]] = None) -> MessagePinConfig:
+def load_message_pin_config(env: Mapping[str, str] | None = None) -> MessagePinConfig:
     """Load MessagePinConfig from environment.
 
     Raises:
@@ -206,9 +207,7 @@ def load_message_pin_config(env: Optional[Mapping[str, str]] = None) -> MessageP
 
     env = env or os.environ
 
-    backend_raw = (
-        _env_get(env, "THOMAS_MESSAGES_BACKEND", "THOMAS_MESSAGE_BACKEND") or "http"
-    ).lower()
+    backend_raw = (_env_get(env, "THOMAS_MESSAGES_BACKEND", "THOMAS_MESSAGE_BACKEND") or "http").lower()
 
     if backend_raw in {"memory", "mem", "inmemory", "in-memory"}:
         backend: BackendType = "memory"
@@ -223,9 +222,7 @@ def load_message_pin_config(env: Optional[Mapping[str, str]] = None) -> MessageP
     api_base_url = _env_get(env, "THOMAS_MESSAGES_API_URL", "THOMAS_MESSAGE_API_URL")
     api_token = _env_get(env, "THOMAS_MESSAGES_API_TOKEN", "THOMAS_MESSAGE_API_TOKEN")
 
-    timeout_raw = _env_get(
-        env, "THOMAS_MESSAGES_TIMEOUT_SECONDS", "THOMAS_MESSAGE_TIMEOUT_SECONDS"
-    ) or "10"
+    timeout_raw = _env_get(env, "THOMAS_MESSAGES_TIMEOUT_SECONDS", "THOMAS_MESSAGE_TIMEOUT_SECONDS") or "10"
     try:
         timeout_seconds = float(timeout_raw)
     except ValueError as e:
@@ -266,7 +263,7 @@ def _normalize_required_str(value: Any, field: str) -> str:
     return v
 
 
-def _normalize_optional_str(value: Any, field: str) -> Optional[str]:
+def _normalize_optional_str(value: Any, field: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -302,7 +299,7 @@ def parse_message_pin_request(payload: Mapping[str, Any]) -> MessagePinInput:
 def pin_message(
     pin_input: MessagePinInput,
     *,
-    config: Optional[MessagePinConfig] = None,
+    config: MessagePinConfig | None = None,
     http_post=requests.post,
 ) -> MessagePinResult:
     """Pin a message.
@@ -380,7 +377,7 @@ def pin_message(
             "Message backend request failed.",
             details={"exception": e.__class__.__name__},
         ) from e
-    except Exception as e:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
         raise MessagePinExternalError(
             "Unexpected error while calling message backend.",
             details={"exception": e.__class__.__name__},
@@ -402,7 +399,7 @@ def pin_message(
             data = resp.json()
             if isinstance(data, dict) and data.get("pin_id"):
                 pin_id = str(data.get("pin_id"))
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             pass
         return MessagePinResult(
             pinned=True,
@@ -424,7 +421,7 @@ def pin_message(
         raw = resp.json()
         if isinstance(raw, dict):
             data = raw
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         data = None
 
     pinned = True
@@ -456,7 +453,7 @@ def result_to_dict(result: MessagePinResult) -> dict[str, Any]:
 def pin_message_json(
     payload: Mapping[str, Any],
     *,
-    config: Optional[MessagePinConfig] = None,
+    config: MessagePinConfig | None = None,
     http_post=requests.post,
 ) -> MessagePinJsonResponse:
     """Convenience wrapper that accepts a mapping and returns a machine-readable dict.

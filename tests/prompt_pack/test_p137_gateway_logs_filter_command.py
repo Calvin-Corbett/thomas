@@ -31,7 +31,7 @@ async def test_gateway_logs_filter_success_contains(tmp_path: Path):
     )
 
     app = web.Application()
-    app["config"] = {"gateway_log_path": str(log_file)}
+    app[route_mod.CONFIG_APP_KEY] = {"gateway_log_path": str(log_file)}
     app.add_routes(route_mod.routes)
 
     client = await _make_client(app)
@@ -65,7 +65,7 @@ async def test_gateway_logs_filter_newest_first_ring_buffer(tmp_path: Path):
     )
 
     app = web.Application()
-    app["config"] = {"gateway_log_path": str(log_file)}
+    app[route_mod.CONFIG_APP_KEY] = {"gateway_log_path": str(log_file)}
     app.add_routes(route_mod.routes)
 
     client = await _make_client(app)
@@ -89,7 +89,7 @@ async def test_gateway_logs_filter_invalid_regex_returns_deterministic_error(tmp
     log_file.write_text("2026-02-20T12:00:00Z INFO hello\n", encoding="utf-8")
 
     app = web.Application()
-    app["config"] = {"gateway_log_path": str(log_file)}
+    app[route_mod.CONFIG_APP_KEY] = {"gateway_log_path": str(log_file)}
     app.add_routes(route_mod.routes)
 
     client = await _make_client(app)

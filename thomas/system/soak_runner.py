@@ -1,4 +1,4 @@
-﻿"""Long-running soak runner utilities for Thomas operations."""
+"""Long-running soak runner utilities for Thomas operations."""
 
 from __future__ import annotations
 
@@ -6,13 +6,13 @@ import argparse
 import json
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
-
+from typing import Any
 
 Runner = Callable[[str, float], subprocess.CompletedProcess[str]]
-ProbeHook = Callable[[Dict[str, Any]], Any]
+ProbeHook = Callable[[dict[str, Any]], Any]
 
 
 @dataclass(frozen=True)
@@ -24,10 +24,9 @@ class SoakOptions:
     failure_command: str
     inject_failure_every: int
     timeout_seconds: float
-    log_file: Optional[Path]
+    log_file: Path | None
     probe_command: str = ""
     probe_every: int = 1
-
 
 
 def _default_runner(command: str, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
@@ -40,8 +39,7 @@ def _default_runner(command: str, timeout_seconds: float) -> subprocess.Complete
     )
 
 
-
-def _append_jsonl(path: Optional[Path], row: Dict[str, Any]) -> None:
+def _append_jsonl(path: Path | None, row: dict[str, Any]) -> None:
     if path is None:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -49,8 +47,7 @@ def _append_jsonl(path: Optional[Path], row: Dict[str, Any]) -> None:
         handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
-
-def _normalize_probe_hook_payload(payload: Any) -> Dict[str, Any]:
+def _normalize_probe_hook_payload(payload: Any) -> dict[str, Any]:
     if payload is None:
         return {"ok": True}
     if isinstance(payload, bool):
@@ -65,13 +62,12 @@ def _normalize_probe_hook_payload(payload: Any) -> Dict[str, Any]:
     }
 
 
-
 def run_soak(
     options: SoakOptions,
     *,
     runner: Runner = _default_runner,
-    probe_hook: Optional[ProbeHook] = None,
-) -> Dict[str, Any]:
+    probe_hook: ProbeHook | None = None,
+) -> dict[str, Any]:
     started_at = time.time()
     deadline = started_at + max(0.0, float(options.duration_seconds)) if options.duration_seconds > 0 else None
 
@@ -85,7 +81,7 @@ def run_soak(
     probe_failure_count = 0
     consecutive_probe_failures = 0
     max_consecutive_probe_failures = 0
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     probe_every = max(1, int(options.probe_every))
 
     while True:
@@ -96,7 +92,11 @@ def run_soak(
             break
 
         injected = False
-        if options.failure_command and options.inject_failure_every > 0 and iteration % options.inject_failure_every == 0:
+        if (
+            options.failure_command
+            and options.inject_failure_every > 0
+            and iteration % options.inject_failure_every == 0
+        ):
             injected = True
             injected_count += 1
             inject_started = time.time()
@@ -137,7 +137,7 @@ def run_soak(
             "injected": bool(injected),
         }
 
-        probe_events: List[Dict[str, Any]] = []
+        probe_events: list[dict[str, Any]] = []
         if options.probe_command and iteration % probe_every == 0:
             probe_runs += 1
             probe_started = time.time()
@@ -207,9 +207,7 @@ def run_soak(
     total_runs = success_count + failure_count
     failure_rate = (float(failure_count) / float(total_runs)) if total_runs else 0.0
     probe_failure_rate = (float(probe_failure_count) / float(probe_runs)) if probe_runs else 0.0
-    avg_duration_ms = (
-        int(sum(int(row["duration_ms"]) for row in rows) / max(1, len(rows))) if rows else 0
-    )
+    avg_duration_ms = int(sum(int(row["duration_ms"]) for row in rows) / max(1, len(rows))) if rows else 0
 
     return {
         "ok": True,
@@ -232,8 +230,7 @@ def run_soak(
     }
 
 
-
-def _format_text_report(report: Dict[str, Any]) -> str:
+def _format_text_report(report: dict[str, Any]) -> str:
     summary = dict(report.get("summary") or {})
     lines = [
         "Soak run complete",
@@ -253,20 +250,25 @@ def _format_text_report(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Run a command repeatedly for soak testing with optional failure injection.")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Run a command repeatedly for soak testing with optional failure injection."
+    )
     parser.add_argument("--command", required=True, help="Command to execute each iteration.")
     parser.add_argument("--duration-seconds", type=float, default=0.0, help="Optional run duration in seconds.")
     parser.add_argument("--iterations", type=int, default=100, help="Maximum number of iterations (default: 100).")
     parser.add_argument("--interval-seconds", type=float, default=0.0, help="Sleep between iterations.")
     parser.add_argument("--failure-command", default="", help="Optional failure-injection command.")
-    parser.add_argument("--inject-failure-every", type=int, default=0, help="Inject failure command every N iterations.")
+    parser.add_argument(
+        "--inject-failure-every", type=int, default=0, help="Inject failure command every N iterations."
+    )
     parser.add_argument("--timeout-seconds", type=float, default=60.0, help="Per-command timeout in seconds.")
     parser.add_argument("--log-file", default="", help="Optional JSONL output path.")
     parser.add_argument("--probe-command", default="", help="Optional probe command to execute during soak.")
     parser.add_argument("--probe-every", type=int, default=1, help="Run --probe-command every N iterations.")
-    parser.add_argument("--max-failure-rate", type=float, default=1.0, help="Fail run if failure rate exceeds this threshold.")
+    parser.add_argument(
+        "--max-failure-rate", type=float, default=1.0, help="Fail run if failure rate exceeds this threshold."
+    )
     parser.add_argument(
         "--max-probe-failure-rate",
         type=float,
@@ -314,20 +316,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     max_consecutive_probe_failures = int(summary.get("max_consecutive_probe_failures") or 0)
     failure_within_limit = failure_rate <= float(args.max_failure_rate)
     probe_within_limit = probe_failure_rate <= float(args.max_probe_failure_rate)
-    consecutive_within_limit = (
-        int(args.max_consecutive_failures) < 0
-        or max_consecutive_failures <= int(args.max_consecutive_failures)
+    consecutive_within_limit = int(args.max_consecutive_failures) < 0 or max_consecutive_failures <= int(
+        args.max_consecutive_failures
     )
-    probe_consecutive_within_limit = (
-        int(args.max_consecutive_probe_failures) < 0
-        or max_consecutive_probe_failures <= int(args.max_consecutive_probe_failures)
+    probe_consecutive_within_limit = int(
+        args.max_consecutive_probe_failures
+    ) < 0 or max_consecutive_probe_failures <= int(args.max_consecutive_probe_failures)
+    return (
+        0
+        if (failure_within_limit and probe_within_limit and consecutive_within_limit and probe_consecutive_within_limit)
+        else 3
     )
-    return 0 if (
-        failure_within_limit
-        and probe_within_limit
-        and consecutive_within_limit
-        and probe_consecutive_within_limit
-    ) else 3
 
 
 if __name__ == "__main__":

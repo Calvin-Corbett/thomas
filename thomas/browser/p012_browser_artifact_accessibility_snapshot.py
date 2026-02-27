@@ -21,19 +21,20 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Mapping, Optional, Protocol
+from typing import Any, Protocol
 
 
 class BrowserArtifactError(Exception):
     """Deterministic error for artifact capture failures."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
 
     def to_dict(self) -> dict:
         payload: dict = {"code": self.code, "message": self.message}
@@ -43,13 +44,11 @@ class BrowserArtifactError(Exception):
 
 
 class _SupportsAccessibilitySnapshot(Protocol):
-    def accessibility_snapshot(self, *, root: Any | None = None, interesting_only: bool = True) -> Any:
-        ...
+    def accessibility_snapshot(self, *, root: Any | None = None, interesting_only: bool = True) -> Any: ...
 
 
 class _SupportsPlaywrightAccessibility(Protocol):
-    def snapshot(self, *, root: Any | None = None, interesting_only: bool = True) -> Any:
-        ...
+    def snapshot(self, *, root: Any | None = None, interesting_only: bool = True) -> Any: ...
 
 
 @dataclass(frozen=True)
@@ -208,14 +207,14 @@ def _write_json_atomic(path: Path, payload: Any) -> None:
         try:
             if tmp_path.exists():
                 tmp_path.unlink()
-        except Exception:
+        except OSError:
             pass
         raise e
 
 
 def _extract_snapshot(source: Any, *, root: Any | None, interesting_only: bool) -> Mapping[str, Any]:
     # 1) Thomas-style wrapper: has `accessibility_snapshot(...)`.
-    if hasattr(source, "accessibility_snapshot") and callable(getattr(source, "accessibility_snapshot")):
+    if hasattr(source, "accessibility_snapshot") and callable(source.accessibility_snapshot):
         return _call_snapshot(source, root=root, interesting_only=interesting_only)
 
     # 2) Wrapper exposes a `.page` attribute.
@@ -225,7 +224,7 @@ def _extract_snapshot(source: Any, *, root: Any | None, interesting_only: bool) 
 
     # 3) Playwright page: `page.accessibility.snapshot(...)`.
     accessibility = getattr(source, "accessibility", None)
-    if accessibility is not None and hasattr(accessibility, "snapshot") and callable(getattr(accessibility, "snapshot")):
+    if accessibility is not None and hasattr(accessibility, "snapshot") and callable(accessibility.snapshot):
         try:
             snap = accessibility.snapshot(root=root, interesting_only=interesting_only)
         except Exception as e:  # noqa: BLE001
@@ -243,7 +242,9 @@ def _extract_snapshot(source: Any, *, root: Any | None, interesting_only: bool) 
     )
 
 
-def _call_snapshot(source: _SupportsAccessibilitySnapshot, *, root: Any | None, interesting_only: bool) -> Mapping[str, Any]:
+def _call_snapshot(
+    source: _SupportsAccessibilitySnapshot, *, root: Any | None, interesting_only: bool
+) -> Mapping[str, Any]:
     try:
         snap = source.accessibility_snapshot(root=root, interesting_only=interesting_only)
     except Exception as e:  # noqa: BLE001

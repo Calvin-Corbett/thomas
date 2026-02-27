@@ -1,15 +1,14 @@
-﻿import asyncio
-import os
-from typing import Tuple
 import argparse
+import asyncio
+import os
 
 from aiohttp import ClientSession, web
 
-from thomas.server.routes.gateway import p138_gateway_metrics_snapshot_command as route_mod
 from thomas.cli.commands.gateway import p138_gateway_metrics_snapshot_command as cli_mod
+from thomas.server.routes.gateway import p138_gateway_metrics_snapshot_command as route_mod
 
 
-async def _start_app(app: web.Application) -> Tuple[web.AppRunner, str]:
+async def _start_app(app: web.Application) -> tuple[web.AppRunner, str]:
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "127.0.0.1", 0)
@@ -28,7 +27,7 @@ def _register_routes(app: web.Application) -> None:
     if hasattr(route_mod, "register"):
         route_mod.register(app)
         return
-    routes = getattr(route_mod, "ROUTES", getattr(route_mod, "routes"))
+    routes = getattr(route_mod, "ROUTES", route_mod.routes)
     app.add_routes(routes)
 
 
@@ -129,7 +128,7 @@ def test_snapshot_success_via_external_gateway_endpoint():
 
                 app = web.Application()
                 # Put config in the most common spot.
-                app["config"] = {"gateway_metrics_url": upstream_base + "/metrics/snapshot"}
+                app[route_mod.CONFIG_APP_KEY] = {"gateway_metrics_url": upstream_base + "/metrics/snapshot"}
                 _register_routes(app)
 
                 app_runner, base = await _start_app(app)
@@ -152,7 +151,7 @@ def test_snapshot_success_via_external_gateway_endpoint():
 def test_snapshot_external_unreachable_is_deterministic_error():
     async def _test():
         app = web.Application()
-        app["config"] = {
+        app[route_mod.CONFIG_APP_KEY] = {
             "gateway_metrics_url": "http://127.0.0.1:1/metrics/snapshot",
             "gateway_metrics_timeout_seconds": 1,
         }
@@ -214,4 +213,3 @@ def test_cli_json_output_and_exit_codes(capsys):
                 await runner.cleanup()
 
     _run(_test())
-

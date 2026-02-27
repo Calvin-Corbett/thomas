@@ -1,8 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set
+from typing import Any
 
 
 class WorkflowExecutionError(ValueError):
@@ -15,8 +16,8 @@ def _text(value: Any, *, default: str = "") -> str:
     return default
 
 
-def _text_list(value: Any) -> List[str]:
-    out: List[str] = []
+def _text_list(value: Any) -> list[str]:
+    out: list[str] = []
     if isinstance(value, list):
         for item in value:
             s = _text(item)
@@ -42,7 +43,7 @@ def _as_bool(value: Any, *, default: bool = False) -> bool:
 def _as_int(value: Any, *, default: int, minimum: int = 1, maximum: int = 12) -> int:
     try:
         iv = int(value)
-    except Exception:
+    except (ValueError, TypeError):
         iv = int(default)
     return max(minimum, min(maximum, iv))
 
@@ -67,12 +68,12 @@ class _RouteSpec:
 
 @dataclass(frozen=True)
 class _AskJsonResult:
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     profile: str
     capability: str
     requested_profile: str
     requested_capability: str
-    attempts: List[Dict[str, Any]]
+    attempts: list[dict[str, Any]]
 
     @property
     def fallback_used(self) -> bool:
@@ -83,7 +84,7 @@ class _AskJsonResult:
         )
 
 
-_CAPABILITY_FALLBACKS: Dict[str, tuple[str, ...]] = {
+_CAPABILITY_FALLBACKS: dict[str, tuple[str, ...]] = {
     "video_gen": ("image_gen", "chat"),
     "image_gen": ("chat",),
     "audio": ("chat",),
@@ -102,14 +103,14 @@ class WorkflowRunner:
         chat_adapter,
         session_id: str | None = None,
         default_profile: str | None = None,
-        capabilities_by_profile: Optional[Mapping[str, Mapping[str, bool]]] = None,
+        capabilities_by_profile: Mapping[str, Mapping[str, bool]] | None = None,
         approval_broker: Any = None,
     ):
         self._chat = chat_adapter
         self._session_id = session_id
         self._default_profile = _text(default_profile)
         self._approval_broker = approval_broker  # optional ApprovalBroker for step gates
-        self._caps: Dict[str, Dict[str, bool]] = {}
+        self._caps: dict[str, dict[str, bool]] = {}
         for profile, caps in (capabilities_by_profile or {}).items():
             p = _text(profile)
             if not p:
@@ -135,12 +136,12 @@ class WorkflowRunner:
         capability: str = "",
         preferred_profile: str = "",
         strict_capability: bool,
-    ) -> List[str]:
+    ) -> list[str]:
         c = _text(capability)
         preferred = _text(preferred_profile)
         default = _text(self._default_profile)
-        candidates: List[str] = []
-        seen: Set[str] = set()
+        candidates: list[str] = []
+        seen: set[str] = set()
 
         def _push(profile: str, *, requires_capability: bool) -> None:
             p = _text(profile)
@@ -174,11 +175,11 @@ class WorkflowRunner:
         self,
         capability: str,
         *,
-        fallback_capabilities: Optional[Sequence[str]] = None,
-    ) -> List[str]:
+        fallback_capabilities: Sequence[str] | None = None,
+    ) -> list[str]:
         requested = _text(capability, default="chat")
-        chain: List[str] = []
-        seen: Set[str] = set()
+        chain: list[str] = []
+        seen: set[str] = set()
 
         def _add(value: str) -> None:
             v = _text(value)
@@ -188,7 +189,7 @@ class WorkflowRunner:
             chain.append(v)
 
         _add(requested)
-        for c in (fallback_capabilities or []):
+        for c in fallback_capabilities or []:
             _add(str(c))
         for c in _CAPABILITY_FALLBACKS.get(requested, ()):
             _add(c)
@@ -211,10 +212,10 @@ class WorkflowRunner:
         *,
         system_prompt: str,
         user_prompt: str,
-        schema_hint: Dict[str, Any],
+        schema_hint: dict[str, Any],
         profile: str = "",
         capability: str = "chat",
-        fallback_capabilities: Optional[Sequence[str]] = None,
+        fallback_capabilities: Sequence[str] | None = None,
     ) -> _AskJsonResult:
         requested_profile = _text(profile)
         requested_capability = _text(capability, default="chat")
@@ -222,9 +223,9 @@ class WorkflowRunner:
             requested_capability,
             fallback_capabilities=fallback_capabilities,
         )
-        attempts: List[Dict[str, Any]] = []
-        tried: Set[tuple[str, str]] = set()
-        last_exc: Optional[Exception] = None
+        attempts: list[dict[str, Any]] = []
+        tried: set[tuple[str, str]] = set()
+        last_exc: Exception | None = None
 
         for cap in chain:
             candidates = self._candidate_profiles(
@@ -290,8 +291,8 @@ class WorkflowRunner:
             raise last_exc
         raise WorkflowExecutionError("workflow step had no viable fallback candidates")
 
-    def _parse_steps(self, payload: Dict[str, Any], *, default_capability: str = "chat") -> List[_StepSpec]:
-        steps_out: List[_StepSpec] = []
+    def _parse_steps(self, payload: dict[str, Any], *, default_capability: str = "chat") -> list[_StepSpec]:
+        steps_out: list[_StepSpec] = []
         raw_steps = payload.get("steps")
         if isinstance(raw_steps, list):
             for idx, item in enumerate(raw_steps, start=1):
@@ -332,8 +333,8 @@ class WorkflowRunner:
             )
         return steps_out
 
-    def _parse_workers(self, payload: Dict[str, Any], *, default_capability: str = "chat") -> List[_StepSpec]:
-        workers: List[_StepSpec] = []
+    def _parse_workers(self, payload: dict[str, Any], *, default_capability: str = "chat") -> list[_StepSpec]:
+        workers: list[_StepSpec] = []
         raw_workers = payload.get("workers")
         if isinstance(raw_workers, list):
             for idx, item in enumerate(raw_workers, start=1):
@@ -354,7 +355,7 @@ class WorkflowRunner:
             return workers
         return self._parse_steps(payload, default_capability=default_capability)
 
-    async def run(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def run(self, payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(payload, dict):
             raise WorkflowExecutionError("workflow payload must be an object")
         workflow = _text(payload.get("workflow") or payload.get("pattern") or "chain").lower()
@@ -364,13 +365,15 @@ class WorkflowRunner:
             return await self.run_parallel(payload)
         if workflow in ("orchestrator_worker", "orchestrator-workers", "orchestrate"):
             return await self.run_orchestrator_worker(payload)
+        if workflow in ("coding_pipeline", "coding-pipeline", "phased_coding"):
+            return await self.run_coding_pipeline(payload)
         if workflow in ("routing", "router"):
             return await self.run_routing(payload)
         if workflow in ("evaluator_optimizer", "eval_opt", "optimize"):
             return await self.run_evaluator_optimizer(payload)
         raise WorkflowExecutionError(f"unsupported workflow pattern: {workflow}")
 
-    async def run_chain(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def run_chain(self, payload: dict[str, Any]) -> dict[str, Any]:
         goal = _text(payload.get("goal") or payload.get("task") or payload.get("prompt"))
         if not goal:
             raise WorkflowExecutionError("chain workflow requires payload.goal")
@@ -380,7 +383,7 @@ class WorkflowRunner:
             raise WorkflowExecutionError("chain workflow requires at least one step")
 
         previous_summary = ""
-        outputs: List[Dict[str, Any]] = []
+        outputs: list[dict[str, Any]] = []
         for idx, step in enumerate(steps, start=1):
             # Approval gate: halt for human approval before executing this step.
             if step.approval_required and self._approval_broker is not None:
@@ -443,7 +446,7 @@ class WorkflowRunner:
             "final_output": final_output,
         }
 
-    async def run_parallel(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def run_parallel(self, payload: dict[str, Any]) -> dict[str, Any]:
         goal = _text(payload.get("goal") or payload.get("task") or payload.get("prompt"))
         if not goal:
             raise WorkflowExecutionError("parallel workflow requires payload.goal")
@@ -452,7 +455,7 @@ class WorkflowRunner:
         if not workers:
             workers = [_StepSpec(name="worker-1", prompt=goal, capability="chat", profile="")]
 
-        async def _run_worker(worker: _StepSpec) -> Dict[str, Any]:
+        async def _run_worker(worker: _StepSpec) -> dict[str, Any]:
             worker_profile = self._select_profile(
                 capability=worker.capability,
                 preferred_profile=worker.profile,
@@ -513,10 +516,7 @@ class WorkflowRunner:
                     "You are an orchestrator that merges worker outputs into a single answer. "
                     "Return strict JSON with final_output and rationale."
                 ),
-                user_prompt=(
-                    f"Global goal:\n{goal}\n\n"
-                    f"Worker outputs:\n{results}\n"
-                ),
+                user_prompt=(f"Global goal:\n{goal}\n\n" f"Worker outputs:\n{results}\n"),
                 schema_hint={"final_output": "string", "rationale": "string"},
                 profile=synthesis_profile,
                 capability=synthesis_cap,
@@ -532,7 +532,7 @@ class WorkflowRunner:
             "final_output": synthesis or "\n\n".join(_text(x.get("output")) for x in results if _text(x.get("output"))),
         }
 
-    async def run_orchestrator_worker(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def run_orchestrator_worker(self, payload: dict[str, Any]) -> dict[str, Any]:
         goal = _text(payload.get("goal") or payload.get("task") or payload.get("prompt"))
         if not goal:
             raise WorkflowExecutionError("orchestrator_worker requires payload.goal")
@@ -553,7 +553,9 @@ class WorkflowRunner:
                 f"Goal:\n{goal}\n\n"
                 f"Create up to {worker_count} workers. Prefer independent tasks that can run in parallel."
             ),
-            schema_hint={"workers": [{"name": "string", "prompt": "string", "capability": "string", "profile": "string"}]},
+            schema_hint={
+                "workers": [{"name": "string", "prompt": "string", "capability": "string", "profile": "string"}]
+            },
             profile=orchestration_profile,
             capability=orchestration_cap,
         )
@@ -594,8 +596,8 @@ class WorkflowRunner:
             "final_output": parallel_out.get("final_output", ""),
         }
 
-    def _parse_routes(self, payload: Dict[str, Any]) -> List[_RouteSpec]:
-        routes: List[_RouteSpec] = []
+    def _parse_routes(self, payload: dict[str, Any]) -> list[_RouteSpec]:
+        routes: list[_RouteSpec] = []
         raw_routes = payload.get("routes")
         if not isinstance(raw_routes, list):
             return routes
@@ -617,7 +619,7 @@ class WorkflowRunner:
             )
         return routes
 
-    async def run_routing(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def run_routing(self, payload: dict[str, Any]) -> dict[str, Any]:
         goal = _text(payload.get("goal") or payload.get("task") or payload.get("prompt"))
         if not goal:
             raise WorkflowExecutionError("routing workflow requires payload.goal")
@@ -654,11 +656,11 @@ class WorkflowRunner:
 
         chosen_name = _text(route_choice.get("route_name"))
         selected = next((r for r in routes if r.name == chosen_name), routes[0])
-        route_order: List[_RouteSpec] = [selected] + [r for r in routes if r.name != selected.name]
-        route_attempts: List[Dict[str, Any]] = []
-        worker_exec: Optional[_AskJsonResult] = None
-        executed_route: Optional[_RouteSpec] = None
-        last_exc: Optional[Exception] = None
+        route_order: list[_RouteSpec] = [selected] + [r for r in routes if r.name != selected.name]
+        route_attempts: list[dict[str, Any]] = []
+        worker_exec: _AskJsonResult | None = None
+        executed_route: _RouteSpec | None = None
+        last_exc: Exception | None = None
         for route in route_order:
             selected_profile = self._select_profile(
                 capability=route.capability,
@@ -735,7 +737,145 @@ class WorkflowRunner:
             "worker_response": worker_resp,
         }
 
-    async def run_evaluator_optimizer(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def run_coding_pipeline(self, payload: dict[str, Any]) -> dict[str, Any]:
+        goal = _text(payload.get("goal") or payload.get("task") or payload.get("prompt"))
+        if not goal:
+            raise WorkflowExecutionError("coding_pipeline workflow requires payload.goal")
+
+        max_rounds = _as_int(payload.get("max_rounds"), default=2, minimum=1, maximum=4)
+
+        coder_capability = _text(payload.get("coder_capability"), default="chat")
+        reviewer_capability = _text(payload.get("reviewer_capability"), default="chat")
+        fixer_capability = _text(payload.get("fixer_capability"), default="chat")
+        coder_profile = self._select_profile(
+            capability=coder_capability,
+            preferred_profile=_text(payload.get("coder_profile")),
+        )
+        reviewer_profile = self._select_profile(
+            capability=reviewer_capability,
+            preferred_profile=_text(payload.get("reviewer_profile")),
+        )
+        fixer_profile = self._select_profile(
+            capability=fixer_capability,
+            preferred_profile=_text(payload.get("fixer_profile")),
+        )
+
+        coder_exec = await self._ask_json(
+            system_prompt=(
+                "You are the coding worker. Produce the best implementation for the task. "
+                "Return strict JSON with code and rationale."
+            ),
+            user_prompt=f"Coding task:\n{goal}\n",
+            schema_hint={"code": "string", "rationale": "string"},
+            profile=coder_profile,
+            capability=coder_capability,
+        )
+        coder_resp = coder_exec.payload
+        current_code = _text(coder_resp.get("code") or coder_resp.get("output") or coder_resp.get("draft"))
+        if not current_code:
+            raise WorkflowExecutionError("coding worker returned empty code")
+
+        steps: list[dict[str, Any]] = [
+            {
+                "name": "coder",
+                "capability": coder_capability,
+                "resolved_capability": coder_exec.capability,
+                "profile": coder_exec.profile,
+                "fallback_used": bool(coder_exec.fallback_used),
+                "attempt_count": len(coder_exec.attempts),
+                "output": current_code,
+                "summary": _text(coder_resp.get("rationale")) or "initial draft",
+                "ok": True,
+            }
+        ]
+
+        review_rounds: list[dict[str, Any]] = []
+        passed = False
+        rounds_used = 0
+        for round_idx in range(1, max_rounds + 1):
+            review_exec = await self._ask_json(
+                system_prompt=(
+                    "You are a strict code reviewer. Evaluate correctness and edge cases. "
+                    "Return strict JSON with pass (boolean), issues (array of strings), and summary."
+                ),
+                user_prompt=f"Task:\n{goal}\n\nCandidate code:\n{current_code}\n",
+                schema_hint={"pass": "boolean", "issues": ["string"], "summary": "string"},
+                profile=reviewer_profile,
+                capability=reviewer_capability,
+            )
+            review_resp = review_exec.payload
+            issues = _text_list(review_resp.get("issues"))
+            passed = _as_bool(review_resp.get("pass"), default=(len(issues) == 0))
+            summary = _text(review_resp.get("summary"))
+            rounds_used = round_idx
+            review_row = {
+                "round": round_idx,
+                "pass": bool(passed),
+                "issues": issues,
+                "summary": summary,
+            }
+            review_rounds.append(review_row)
+            steps.append(
+                {
+                    "name": f"reviewer-{round_idx}",
+                    "capability": reviewer_capability,
+                    "resolved_capability": review_exec.capability,
+                    "profile": review_exec.profile,
+                    "fallback_used": bool(review_exec.fallback_used),
+                    "attempt_count": len(review_exec.attempts),
+                    "output": summary,
+                    "summary": summary or ("pass" if passed else "needs_fix"),
+                    "ok": bool(passed),
+                    "issues": issues,
+                }
+            )
+            if passed:
+                break
+
+            fix_exec = await self._ask_json(
+                system_prompt=(
+                    "You are a coding fixer. Revise the code to address reviewer issues. "
+                    "Return strict JSON with revised_code and change_summary."
+                ),
+                user_prompt=(f"Task:\n{goal}\n\nCurrent code:\n{current_code}\n\n" f"Reviewer issues:\n{issues}\n"),
+                schema_hint={"revised_code": "string", "change_summary": "string"},
+                profile=fixer_profile,
+                capability=fixer_capability,
+            )
+            fix_resp = fix_exec.payload
+            revised = _text(fix_resp.get("revised_code") or fix_resp.get("code") or fix_resp.get("output"))
+            if revised:
+                current_code = revised
+            steps.append(
+                {
+                    "name": f"fixer-{round_idx}",
+                    "capability": fixer_capability,
+                    "resolved_capability": fix_exec.capability,
+                    "profile": fix_exec.profile,
+                    "fallback_used": bool(fix_exec.fallback_used),
+                    "attempt_count": len(fix_exec.attempts),
+                    "output": current_code,
+                    "summary": _text(fix_resp.get("change_summary")) or "applied fixes",
+                    "ok": True,
+                }
+            )
+
+        return {
+            "pattern": "coding_pipeline",
+            "goal": goal,
+            "profiles": {
+                "coder": coder_profile,
+                "reviewer": reviewer_profile,
+                "fixer": fixer_profile,
+            },
+            "steps": steps,
+            "review_rounds": review_rounds,
+            "passed": bool(passed),
+            "rounds_used": int(rounds_used),
+            "final_output": current_code,
+        }
+
+    async def run_evaluator_optimizer(self, payload: dict[str, Any]) -> dict[str, Any]:
         goal = _text(payload.get("goal") or payload.get("task") or payload.get("prompt"))
         if not goal:
             raise WorkflowExecutionError("evaluator_optimizer workflow requires payload.goal")
@@ -761,8 +901,7 @@ class WorkflowRunner:
         draft_prompt = _text(payload.get("draft_prompt")) or goal
         draft_exec = await self._ask_json(
             system_prompt=(
-                "You are a generator. Produce a high-quality first draft. "
-                "Return strict JSON with draft."
+                "You are a generator. Produce a high-quality first draft. " "Return strict JSON with draft."
             ),
             user_prompt=f"Goal:\n{goal}\n\nDraft instructions:\n{draft_prompt}\n",
             schema_hint={"draft": "string"},
@@ -774,16 +913,14 @@ class WorkflowRunner:
         if not draft:
             raise WorkflowExecutionError("generator returned empty draft")
 
-        evaluations: List[Dict[str, Any]] = []
+        evaluations: list[dict[str, Any]] = []
         for round_idx in range(1, max_rounds + 1):
             eval_exec = await self._ask_json(
                 system_prompt=(
                     "You are an evaluator. Score the draft against rubric and decide pass/fail. "
                     "Return strict JSON with pass (boolean), feedback, and score_0_to_10."
                 ),
-                user_prompt=(
-                    f"Goal:\n{goal}\n\nRubric:\n{rubric}\n\nDraft:\n{draft}\n"
-                ),
+                user_prompt=(f"Goal:\n{goal}\n\nRubric:\n{rubric}\n\nDraft:\n{draft}\n"),
                 schema_hint={"pass": "boolean", "feedback": "string", "score_0_to_10": "number"},
                 profile=evaluator_profile,
                 capability=_text(payload.get("evaluator_capability"), default="chat"),
@@ -820,9 +957,7 @@ class WorkflowRunner:
                     "You are an optimizer. Improve the draft using evaluator feedback. "
                     "Return strict JSON with revised_draft and changes."
                 ),
-                user_prompt=(
-                    f"Goal:\n{goal}\n\nCurrent draft:\n{draft}\n\nFeedback:\n{feedback}\n"
-                ),
+                user_prompt=(f"Goal:\n{goal}\n\nCurrent draft:\n{draft}\n\nFeedback:\n{feedback}\n"),
                 schema_hint={"revised_draft": "string", "changes": "string"},
                 profile=optimizer_profile,
                 capability=_text(payload.get("optimizer_capability"), default="chat"),
@@ -847,7 +982,7 @@ class WorkflowRunner:
         }
 
 
-def summarize_workflow_telemetry(result: Dict[str, Any]) -> Dict[str, Any]:
+def summarize_workflow_telemetry(result: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(result, dict):
         return {}
     pattern = _text(result.get("pattern"), default="workflow")
@@ -874,7 +1009,7 @@ def summarize_workflow_telemetry(result: Dict[str, Any]) -> Dict[str, Any]:
         attempt_count += len(route_attempts)
         fallback_count += 1 if bool(result.get("route_fallback_used")) else 0
 
-    telemetry: Dict[str, Any] = {
+    telemetry: dict[str, Any] = {
         "pattern": pattern or "workflow",
         "step_count": len(steps) if isinstance(steps, list) else 0,
         "worker_count": len(workers) if isinstance(workers, list) else 0,
@@ -886,5 +1021,3 @@ def summarize_workflow_telemetry(result: Dict[str, Any]) -> Dict[str, Any]:
         "passed": bool(result.get("passed")) if "passed" in result else None,
     }
     return telemetry
-
-

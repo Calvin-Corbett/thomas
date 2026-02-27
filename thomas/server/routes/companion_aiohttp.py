@@ -2,26 +2,22 @@
 
 from __future__ import annotations
 
-import io
-import json
 import os
-import zipfile
+from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
 from thomas.companion.audit import CompanionAuditLog
 from thomas.companion.contracts import allowed_permissions
 from thomas.companion.devices import DeviceRegistry
-from thomas.companion.kernel import CompanionKernel, KERNEL_VERSION
+from thomas.companion.kernel import KERNEL_VERSION, CompanionKernel
 from thomas.companion.network import TailscalePolicy, assert_peer_allowed
 from thomas.companion.policy import (
-    PolicyComplianceService,
     get_policy_profile,
     list_policy_profiles,
-    resolve_policy_profile,
 )
 from thomas.companion.registry import ModuleRegistry
 from thomas.companion.releases import ReleaseRegistry
@@ -31,6 +27,21 @@ from thomas.companion.update import BundleVerifier, UpdateApplier
 from thomas.server.routes.companion_device_release_aiohttp import (
     CompanionDeviceReleaseDeps,
     register_companion_device_release_routes,
+)
+from thomas.server.routes.companion_runtime import (
+    _app_store_catalog,
+    _csv_list,
+    _device_capabilities,
+    _int_or_none,
+    _module_payload_from_bundle,
+    _release_bundle_dir,
+    _release_manifest,
+    _run_compliance_check,
+    _string_list,
+    _studio_capability_catalog,
+    _zip_bundle,
+    run_companion_device_app_push,
+    run_companion_ship,
 )
 
 RequireAccessFn = Callable[[web.Request], None]
@@ -44,6 +55,7 @@ _ENDPOINTS = [
     "GET /api/companion/v1/policy/profile/{profile_id}",
     "POST /api/companion/v1/compliance/check",
     "GET /api/companion/v1/bootstrap",
+    "GET /api/companion/v1/app-store",
     "GET /api/companion/v1/modules",
     "GET /api/companion/v1/slots",
     "GET /api/companion/v1/slots/{slot}",
@@ -57,6 +69,7 @@ _ENDPOINTS = [
     "GET /api/companion/v1/devices",
     "POST /api/companion/v1/devices/register",
     "POST /api/companion/v1/devices/{device_id}/heartbeat",
+    "POST /api/companion/v1/devices/{device_id}/apps/{module_id}/push",
     "POST /api/companion/v1/devices/{device_id}/pin-release",
     "POST /api/companion/v1/devices/{device_id}/unpin-release",
     "POST /api/companion/v1/devices/{device_id}/updates/check",
@@ -185,255 +198,46 @@ def _installed_modules_from_payload(payload: Any) -> dict[str, str]:
     return {}
 
 
-def _string_list(value: Any) -> list[str]:
-    out: list[str] = []
-    if isinstance(value, list):
-        for item in value:
-            text = str(item or "").strip()
-            if not text:
-                continue
-            out.append(text)
-    return sorted(set(out))
-
-
-def _int_or_none(value: Any) -> int | None:
-    try:
-        return int(value)
-    except Exception:
-        return None
-
-
-def _coerce_policy_context(payload: Any, *, kernel: CompanionKernel) -> dict[str, Any]:
-    body = payload if isinstance(payload, dict) else {}
-    target_device_id = str(
-        body.get("target_device_id")
-        or body.get("device_id")
-        or ""
-    ).strip()
-    target_device = DeviceRegistry(kernel).get(target_device_id) if target_device_id else None
-
-    runtime_caps = _string_list(body.get("runtime_capability_set"))
-    if not runtime_caps and target_device is not None:
-        runtime_caps = [str(x) for x in list(target_device.runtime_capability_set) if str(x).strip()]
-    if not runtime_caps and target_device is not None:
-        runtime_caps = [str(x) for x in list(target_device.capabilities) if str(x).strip()]
-
-    platform = str(body.get("platform") or "").strip() or (target_device.platform if target_device else "")
-    distribution_channel = str(body.get("distribution_channel") or "").strip() or (
-        target_device.distribution_channel if target_device else ""
-    )
-    storefront_region = str(body.get("storefront_region") or "").strip() or (
-        target_device.storefront_region if target_device else ""
-    )
-    requested_policy_profile_id = str(
-        body.get("policy_profile_id")
-        or body.get("target_policy_profile")
-        or ""
-    ).strip()
-    resolved_policy_profile_id = resolve_policy_profile(
-        platform=platform,
-        distribution_channel=distribution_channel,
-        storefront_region=storefront_region,
-        requested_profile_id=requested_policy_profile_id,
+def _companion_primary_function() -> str:
+    return (
+        "Thomas Companion is a mobile chat runtime and app-runtime control surface. "
+        "Its primary function is creating, shipping, and pushing companion apps "
+        "including websocket-backed/headless web experiences."
     )
 
+
+def _companion_setup_blueprint(*, access_mode: str) -> dict[str, Any]:
+    token_required = str(access_mode or "").strip().lower() == "remote"
     return {
-        "target_device_id": target_device_id,
-        "platform": platform,
-        "distribution_channel": distribution_channel,
-        "storefront_region": storefront_region,
-        "requested_policy_profile_id": requested_policy_profile_id,
-        "policy_profile_id": resolved_policy_profile_id,
-        "runtime_capability_set": runtime_caps,
-        "required_capabilities": _string_list(body.get("required_capabilities")),
-        "commerce_model": str(body.get("commerce_model") or "").strip(),
-        "store_billing_enabled": _boolish(body.get("store_billing_enabled"), default=False),
-        "ugc_enabled": _boolish(body.get("ugc_enabled"), default=False),
-        "moderation_controls": _string_list(body.get("moderation_controls")),
-        "age_gate_enabled": _boolish(body.get("age_gate_enabled"), default=False),
-        "collects_personal_data": _boolish(body.get("collects_personal_data"), default=False),
-        "privacy_policy_url": str(body.get("privacy_policy_url") or "").strip(),
-        "url_allowlist": _string_list(body.get("url_allowlist") or body.get("external_navigation_allowlist")),
-    }
-
-
-def _studio_capability_catalog() -> dict[str, Any]:
-    profiles = [item.to_dict() for item in list_policy_profiles()]
-    return {
-        "module_contract_fields": [
-            "id",
-            "version",
-            "entrypoint",
-            "slots",
-            "permissions",
-            "ui_schema_version",
-            "display_name",
-            "description",
-        ],
-        "permission_allowlist": allowed_permissions(),
-        "default_slots": [
-            "home.main",
-            "home.secondary",
-            "search.main",
-            "settings.main",
-            "profile.main",
-        ],
-        "ui_component_primitives": [
-            "container",
-            "text",
-            "image",
-            "icon",
-            "button",
-            "input",
-            "toggle",
-            "list",
-            "tabs",
-            "chart",
-            "form",
-            "webview",
-            "map",
-            "video",
-        ],
-        "action_primitives": [
-            "navigate",
-            "open_url",
-            "api_call",
-            "persist_state",
-            "emit_event",
-            "show_toast",
-            "request_permission",
-        ],
-        "data_primitives": [
-            "local_state",
-            "secure_storage",
-            "remote_http_json",
-            "websocket_stream",
-            "device_sensor",
-            "push_channel",
-        ],
-        "release_controls": {
-            "supports_rollout_pct": True,
-            "supports_target_devices": True,
-            "supports_exclude_devices": True,
-            "supports_min_app_version": True,
-            "supports_required_capabilities": True,
-            "supports_status": True,
-            "supports_device_pinning": True,
-            "supports_release_promote": True,
-            "supports_release_rollback": True,
-            "supports_policy_profile_selection": True,
-            "supports_compliance_check": True,
-            "supports_store_targeting": True,
-        },
-        "policy_profiles": profiles,
-        "templates": {
-            "module": {
-                "id": "companion.custom",
-                "version": "0.1.0",
-                "entrypoint": "modules/companion.custom/ui/screen.json",
-                "slots": ["home.main"],
-                "permissions": ["ui.render", "storage.read"],
-                "ui_schema_version": "0.1.0",
-                "display_name": "Custom Module",
-                "description": "Generated from Thomas Studio",
+        "token_required": token_required,
+        "steps": [
+            {
+                "id": "install_open_companion",
+                "title": "Install and open the companion app",
+                "details": ("Open /companion on mobile (or install as PWA) and confirm chat is online."),
+                "endpoint": "/companion",
             },
-            "screen_payload": {
-                "screen_id": "home",
-                "title": "Custom Screen",
-                "components": [
-                    {"type": "text", "value": "hello from Thomas companion studio"},
-                ],
+            {
+                "id": "pair_device",
+                "title": "Register the phone as a trusted device",
+                "details": (
+                    "Call devices/register with platform/channel/storefront so policy routing resolves correctly."
+                ),
+                "endpoint": "/api/companion/v1/devices/register",
             },
-        },
-    }
-
-
-def _module_payload_from_bundle(bundle_dir: Path, *, module_id: str, entrypoint: str) -> Any:
-    rel = str(entrypoint or "").replace("\\", "/").strip()
-    module_prefix = f"modules/{module_id}/"
-    if not rel.startswith(module_prefix):
-        raise web.HTTPBadRequest(text="bundle module.entrypoint is outside module namespace")
-    payload_path = (bundle_dir / "payload" / rel).resolve()
-    if not payload_path.exists() or not payload_path.is_file():
-        raise web.HTTPBadRequest(text=f"bundle entrypoint payload missing: payload/{rel}")
-    try:
-        return json.loads(payload_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise web.HTTPBadRequest(text=f"invalid bundle entrypoint payload json: {exc}")
-
-
-def _release_bundle_dir(release_row: dict[str, Any]) -> Path:
-    raw = str(release_row.get("bundle_dir") or "").strip()
-    if not raw:
-        raise web.HTTPNotFound(text="release bundle_dir missing")
-    bundle_dir = Path(raw).expanduser().resolve()
-    if not bundle_dir.exists() or not bundle_dir.is_dir():
-        raise web.HTTPNotFound(text="release bundle_dir not found")
-    return bundle_dir
-
-
-def _release_manifest(release_row: dict[str, Any]) -> dict[str, Any]:
-    manifest_path_raw = str(release_row.get("manifest_path") or "").strip()
-    if manifest_path_raw:
-        manifest_path = Path(manifest_path_raw).expanduser().resolve()
-    else:
-        manifest_path = _release_bundle_dir(release_row) / "manifest.json"
-    if not manifest_path.exists() or not manifest_path.is_file():
-        raise web.HTTPNotFound(text="release manifest not found")
-    try:
-        payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        raise web.HTTPInternalServerError(text=f"invalid release manifest json: {exc}")
-    if not isinstance(payload, dict):
-        raise web.HTTPInternalServerError(text="invalid release manifest payload")
-    return payload
-
-
-def _zip_bundle(bundle_dir: Path) -> bytes:
-    out = io.BytesIO()
-    with zipfile.ZipFile(out, mode="w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
-        for file_path in sorted(bundle_dir.rglob("*")):
-            if not file_path.is_file():
-                continue
-            rel = file_path.relative_to(bundle_dir).as_posix()
-            zf.write(file_path, arcname=rel)
-    return out.getvalue()
-
-
-def _run_compliance_check(
-    *,
-    kernel: CompanionKernel,
-    payload: Any,
-    bundle_dir: Path,
-    verify_report: Any,
-    actor: str,
-    peer_identity: str,
-) -> dict[str, Any]:
-    ctx = _coerce_policy_context(payload, kernel=kernel)
-    report = PolicyComplianceService(kernel).check_bundle(
-        bundle_dir=bundle_dir,
-        verify_report=verify_report,
-        platform=str(ctx.get("platform") or ""),
-        distribution_channel=str(ctx.get("distribution_channel") or ""),
-        storefront_region=str(ctx.get("storefront_region") or ""),
-        policy_profile_id=str(ctx.get("policy_profile_id") or ""),
-        runtime_capability_set=list(ctx.get("runtime_capability_set") or []),
-        required_capabilities=list(ctx.get("required_capabilities") or []),
-        commerce_model=str(ctx.get("commerce_model") or ""),
-        store_billing_enabled=bool(ctx.get("store_billing_enabled")),
-        ugc_enabled=bool(ctx.get("ugc_enabled")),
-        moderation_controls=list(ctx.get("moderation_controls") or []),
-        age_gate_enabled=bool(ctx.get("age_gate_enabled")),
-        collects_personal_data=bool(ctx.get("collects_personal_data")),
-        privacy_policy_url=str(ctx.get("privacy_policy_url") or ""),
-        url_allowlist=list(ctx.get("url_allowlist") or []),
-        actor=actor,
-        peer_identity=peer_identity,
-    )
-    return {
-        "ok": bool(report.ok),
-        "report": report.to_dict(),
-        "context": ctx,
+            {
+                "id": "browse_apps",
+                "title": "Open app catalog and pick module",
+                "details": ("Use app-store catalog to see latest published modules and release constraints."),
+                "endpoint": "/api/companion/v1/app-store",
+            },
+            {
+                "id": "push_and_apply",
+                "title": "Push release to phone and apply",
+                "details": ("Push selected module release to the device, then check updates/apply from companion."),
+                "endpoint": "/api/companion/v1/devices/{device_id}/apps/{module_id}/push",
+            },
+        ],
     }
 
 
@@ -450,6 +254,7 @@ def register_companion_routes(
         kernel_status = kernel.status()
         policy = kernel.load_policy()
         profiles = [item.to_dict() for item in list_policy_profiles()]
+        access_mode = str(getattr(getattr(config, "server", None), "access_mode", "local") or "local")
         return web.json_response(
             {
                 "ok": True,
@@ -462,6 +267,18 @@ def register_companion_routes(
                     "default_profile_id": "strict_global",
                     "profiles_count": len(profiles),
                 },
+                "mission": {
+                    "primary_function": _companion_primary_function(),
+                    "core_capabilities": [
+                        "mobile_chat_runtime",
+                        "device_pairing",
+                        "app_store_catalog",
+                        "device_targeted_app_push",
+                        "release_shipping",
+                        "websocket_headless_web_modules",
+                    ],
+                    "setup": _companion_setup_blueprint(access_mode=access_mode),
+                },
                 "policy_profiles": profiles,
                 "endpoints": list(_ENDPOINTS),
             }
@@ -471,6 +288,7 @@ def register_companion_routes(
         require_api_access(request)
         kernel = _kernel_from_config(config)
         policy = kernel.load_policy()
+        access_mode = str(getattr(getattr(config, "server", None), "access_mode", "local") or "local")
         return web.json_response(
             {
                 "ok": True,
@@ -484,6 +302,9 @@ def register_companion_routes(
                     "store_policy_profile_enforcement",
                     "permission_allowlist",
                     "auditability",
+                    "companion_app_setup_handshake",
+                    "app_store_discovery",
+                    "device_targeted_app_push",
                 ],
                 "module_contract_fields": [
                     "id",
@@ -498,6 +319,8 @@ def register_companion_routes(
                 "permission_allowlist": allowed_permissions(),
                 "signed_updates_required": bool(policy.get("require_signed_updates", True)),
                 "tailscale_only": bool(policy.get("tailscale_only", True)),
+                "primary_function": _companion_primary_function(),
+                "setup_blueprint": _companion_setup_blueprint(access_mode=access_mode),
                 "api_endpoints": list(_ENDPOINTS),
             }
         )
@@ -560,10 +383,8 @@ def register_companion_routes(
             details={
                 "bundle_dir": str(bundle_dir),
                 "ok": bool(compliance.get("ok")),
-                "policy_profile_id": str(
-                    ((compliance.get("report") or {}).get("policy_profile_id") or "")
-                ),
-                "report_id": str(((compliance.get("report") or {}).get("report_id") or "")),
+                "policy_profile_id": str((compliance.get("report") or {}).get("policy_profile_id") or ""),
+                "report_id": str((compliance.get("report") or {}).get("report_id") or ""),
             },
         )
         return web.json_response(
@@ -591,6 +412,11 @@ def register_companion_routes(
         if device_id:
             row = DeviceRegistry(kernel).get(device_id)
             device = row.to_dict() if row else None
+        access_mode = str(getattr(getattr(config, "server", None), "access_mode", "local") or "local")
+        app_store_channel = str(request.query.get("channel") or "").strip()
+        if not app_store_channel:
+            app_store_channel = str((device or {}).get("channel") or "stable").strip() or "stable"
+        app_store_count = len(ReleaseRegistry(kernel).latest_by_module(channel=app_store_channel))
         return web.json_response(
             {
                 "ok": True,
@@ -603,7 +429,60 @@ def register_companion_routes(
                     "require_signed_updates": bool(policy.get("require_signed_updates", True)),
                 },
                 "device": device,
+                "mission": {
+                    "primary_function": _companion_primary_function(),
+                    "setup": _companion_setup_blueprint(access_mode=access_mode),
+                },
+                "app_store": {
+                    "channel": app_store_channel,
+                    "apps_published": int(app_store_count),
+                    "catalog_endpoint": "/api/companion/v1/app-store",
+                    "push_endpoint_template": "/api/companion/v1/devices/{device_id}/apps/{module_id}/push",
+                },
                 **data,
+            }
+        )
+
+    async def api_companion_app_store(request: web.Request) -> web.Response:
+        require_api_access(request)
+        kernel = _kernel_from_config(config)
+        channel = str(request.query.get("channel") or "stable").strip() or "stable"
+        device_id = str(request.query.get("device_id") or "").strip()
+        include_ineligible = _boolish(request.query.get("include_ineligible"), default=True)
+
+        device_row = DeviceRegistry(kernel).get(device_id) if device_id else None
+        if device_id and device_row is None:
+            return web.json_response(
+                {"ok": False, "error": f"device not found: {device_id}"},
+                status=404,
+            )
+
+        app_version = str(request.query.get("app_version") or "").strip()
+        if (not app_version) and device_row is not None:
+            app_version = str(device_row.app_version or "").strip()
+
+        capabilities = _csv_list(request.query.get("capabilities"))
+        if (not capabilities) and device_row is not None:
+            capabilities = _device_capabilities(device_row)
+
+        catalog = _app_store_catalog(
+            kernel=kernel,
+            channel=channel,
+            device_id=device_id,
+            app_version=app_version,
+            capabilities=capabilities,
+            include_ineligible=include_ineligible,
+        )
+        return web.json_response(
+            {
+                "ok": True,
+                "api_version": "v1",
+                "generated_at": _now_iso(),
+                "channel": channel,
+                "device": device_row.to_dict() if device_row is not None else None,
+                "app_version": app_version,
+                "capabilities": list(capabilities),
+                **catalog,
             }
         )
 
@@ -673,6 +552,29 @@ def register_companion_routes(
             details={"module_id": module_id, "status": "disabled"},
         )
         return web.json_response({"ok": True, "module": row.to_dict()})
+
+    async def api_companion_device_app_push(request: web.Request) -> web.Response:
+        require_api_access(request)
+        kernel = _kernel_from_config(config)
+        peer_identity = _require_control_plane_identity(request, kernel)
+        payload = await read_json(request)
+        device_id = str(request.match_info.get("device_id") or "").strip()
+        module_id = str(request.match_info.get("module_id") or "").strip()
+        if not device_id:
+            raise web.HTTPBadRequest(text="missing device_id")
+        if not module_id:
+            raise web.HTTPBadRequest(text="missing module_id")
+        actor = _actor_from_payload(payload)
+        response_payload, status = run_companion_device_app_push(
+            kernel=kernel,
+            device_id=device_id,
+            module_id=module_id,
+            payload=payload,
+            peer_identity=peer_identity,
+            actor=actor,
+            now_iso=_now_iso(),
+        )
+        return web.json_response(response_payload, status=status)
 
     async def api_companion_studio_build_bundle(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -830,208 +732,18 @@ def register_companion_routes(
         channel = str(payload.get("channel") or "stable").strip() or "stable"
         actor = _actor_from_payload(payload)
         execute = _boolish(payload.get("execute"), default=True)
-
-        verifier = _new_verifier(kernel)
-        verify_report = verifier.verify_bundle(bundle_dir)
-        verify_payload = verify_report.to_dict()
-        verify_payload["bundle_dir"] = str(bundle_dir)
-
-        compliance_payload: dict[str, Any] | None = None
-        if not verify_report.ok:
-            _audit(kernel).append(
-                "ship",
-                actor=actor,
-                peer_identity=peer_identity,
-                details={
-                    "bundle_dir": str(bundle_dir),
-                    "channel": channel,
-                    "ok": False,
-                    "stage": "verify",
-                    "errors": list(verify_report.errors),
-                },
-            )
-            return web.json_response(
-                {
-                    "ok": False,
-                    "channel": channel,
-                    "verify": verify_payload,
-                    "apply": None,
-                    "release": None,
-                    "compliance": None,
-                },
-                status=400,
-            )
-
-        compliance_payload = _run_compliance_check(
+        result_payload, status = run_companion_ship(
             kernel=kernel,
             payload=payload,
             bundle_dir=bundle_dir,
-            verify_report=verify_report,
+            channel=channel,
             actor=actor,
+            execute=execute,
             peer_identity=peer_identity,
+            verifier=_new_verifier(kernel),
+            now_iso=_now_iso(),
         )
-        if execute and not bool(compliance_payload.get("ok")):
-            report = compliance_payload.get("report") or {}
-            _audit(kernel).append(
-                "ship",
-                actor=actor,
-                peer_identity=peer_identity,
-                details={
-                    "bundle_dir": str(bundle_dir),
-                    "channel": channel,
-                    "ok": False,
-                    "stage": "compliance",
-                    "policy_profile_id": str(report.get("policy_profile_id") or ""),
-                    "compliance_report_id": str(report.get("report_id") or ""),
-                    "blocking_violations": int(
-                        ((report.get("counts") or {}).get("blocking_violations") or 0)
-                    ),
-                },
-            )
-            return web.json_response(
-                {
-                    "ok": False,
-                    "channel": channel,
-                    "verify": verify_payload,
-                    "apply": None,
-                    "release": None,
-                    "compliance": compliance_payload,
-                },
-                status=400,
-            )
-
-        applier = UpdateApplier(kernel, verifier=verifier)
-        apply_result = applier.apply_bundle(bundle_dir, dry_run=not execute)
-        if not bool(apply_result.get("ok")):
-            _audit(kernel).append(
-                "ship",
-                actor=actor,
-                peer_identity=peer_identity,
-                details={
-                    "bundle_dir": str(bundle_dir),
-                    "channel": channel,
-                    "ok": False,
-                    "stage": "apply",
-                    "errors": list(apply_result.get("errors") or []),
-                },
-            )
-            return web.json_response(
-                {
-                    "ok": False,
-                    "channel": channel,
-                    "verify": verify_payload,
-                    "apply": apply_result,
-                    "release": None,
-                    "compliance": compliance_payload,
-                },
-                status=400,
-            )
-
-        release_payload: dict[str, Any] | None = None
-        publish_result: dict[str, Any] | None = None
-        if execute:
-            publish_result = ReleaseRegistry(kernel).publish_from_bundle(
-                bundle_dir,
-                channel=channel,
-                published_by=actor,
-                verifier=verifier,
-                rollout_pct=(_int_or_none(payload.get("rollout_pct")) or 100),
-                target_devices=_string_list(payload.get("target_devices")),
-                exclude_devices=_string_list(payload.get("exclude_devices")),
-                min_app_version=str(payload.get("min_app_version") or "").strip(),
-                required_capabilities=_string_list(payload.get("required_capabilities")),
-                status=str(payload.get("status") or "active").strip() or "active",
-                policy_profile_id=str(
-                    ((compliance_payload or {}).get("report") or {}).get("policy_profile_id")
-                    or "strict_global"
-                ),
-                compliance_report_id=str(
-                    ((compliance_payload or {}).get("report") or {}).get("report_id") or ""
-                ),
-                compliance_status=(
-                    "pass"
-                    if bool((compliance_payload or {}).get("ok"))
-                    else "block"
-                ),
-                compliance_violations=(
-                    _int_or_none(
-                        (((compliance_payload or {}).get("report") or {}).get("counts") or {}).get(
-                            "blocking_violations"
-                        )
-                    )
-                    or 0
-                ),
-                compliance_warnings=(
-                    _int_or_none(
-                        (((compliance_payload or {}).get("report") or {}).get("counts") or {}).get(
-                            "warnings"
-                        )
-                    )
-                    or 0
-                ),
-                compliance_checked_at=str(
-                    ((compliance_payload or {}).get("report") or {}).get("checked_at") or ""
-                ),
-                timestamp=_now_iso(),
-            )
-            if not bool(publish_result.get("ok")):
-                _audit(kernel).append(
-                    "ship",
-                    actor=actor,
-                    peer_identity=peer_identity,
-                    details={
-                        "bundle_dir": str(bundle_dir),
-                        "channel": channel,
-                        "ok": False,
-                        "stage": "publish",
-                        "errors": list(publish_result.get("errors") or []),
-                    },
-                )
-                return web.json_response(
-                    {
-                        "ok": False,
-                        "channel": channel,
-                        "verify": verify_payload,
-                        "apply": apply_result,
-                        "release": publish_result,
-                        "compliance": compliance_payload,
-                    },
-                    status=400,
-                )
-            release_payload = publish_result
-
-        result_payload = {
-            "ok": True,
-            "channel": channel,
-            "verify": verify_payload,
-            "apply": apply_result,
-            "release": release_payload,
-            "compliance": compliance_payload,
-        }
-        _audit(kernel).append(
-            "ship",
-            actor=actor,
-            peer_identity=peer_identity,
-            details={
-                "bundle_dir": str(bundle_dir),
-                "channel": channel,
-                "ok": True,
-                "dry_run": not execute,
-                "module_id": str(apply_result.get("module_id") or ""),
-                "release_id": (
-                    str(((publish_result or {}).get("release") or {}).get("release_id") or "")
-                    if publish_result is not None
-                    else ""
-                ),
-                "policy_profile_id": str(
-                    (((compliance_payload or {}).get("report") or {}).get("policy_profile_id") or "")
-                ),
-                "compliance_report_id": str(
-                    (((compliance_payload or {}).get("report") or {}).get("report_id") or "")
-                ),
-            },
-        )
-        return web.json_response(result_payload)
+        return web.json_response(result_payload, status=status)
 
     app.router.add_get("/api/companion/v1/status", api_companion_status)
     app.router.add_get("/api/companion/v1/contract", api_companion_contract)
@@ -1043,11 +755,16 @@ def register_companion_routes(
     )
     app.router.add_post("/api/companion/v1/compliance/check", api_companion_compliance_check)
     app.router.add_get("/api/companion/v1/bootstrap", api_companion_bootstrap)
+    app.router.add_get("/api/companion/v1/app-store", api_companion_app_store)
     app.router.add_get("/api/companion/v1/modules", api_companion_modules)
     app.router.add_get("/api/companion/v1/slots", api_companion_slots)
     app.router.add_get("/api/companion/v1/slots/{slot}", api_companion_slot_get)
     app.router.add_post("/api/companion/v1/modules/{module_id}/enable", api_companion_module_enable)
     app.router.add_post("/api/companion/v1/modules/{module_id}/disable", api_companion_module_disable)
+    app.router.add_post(
+        "/api/companion/v1/devices/{device_id}/apps/{module_id}/push",
+        api_companion_device_app_push,
+    )
     app.router.add_post("/api/companion/v1/studio/build-bundle", api_companion_studio_build_bundle)
     app.router.add_post("/api/companion/v1/bundles/preview", api_companion_preview_bundle)
     app.router.add_post("/api/companion/v1/bundles/verify", api_companion_verify_bundle)

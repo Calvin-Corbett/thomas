@@ -5,10 +5,10 @@ import importlib
 import inspect
 import json
 import time
+from collections.abc import Callable, Mapping, MutableSequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Mapping, MutableSequence, Optional
-
+from typing import Any
 
 # -------------------------
 # Deterministic error model
@@ -65,7 +65,7 @@ class ToolCallOutcome:
 
     ok: bool
     output: Any = None
-    error: Optional[str] = None
+    error: str | None = None
 
 
 @dataclass(frozen=True)
@@ -81,13 +81,13 @@ class ToolCompletionEvent:
 class ToolCompletionHookConfig:
     """Configuration for a tool completion audit plugin."""
 
-    log_path: Optional[str] = None
+    log_path: str | None = None
     include_input: bool = True
     include_output: bool = True
     clock: Callable[[], float] = time.time  # injected for testability; not serialized
 
     @classmethod
-    def from_mapping(cls, mapping: Optional[Mapping[str, Any]]) -> "ToolCompletionHookConfig":
+    def from_mapping(cls, mapping: Mapping[str, Any] | None) -> ToolCompletionHookConfig:
         if not mapping:
             return cls()
 
@@ -114,11 +114,11 @@ class AfterToolHookRequest:
 
     tool_name: str
     tool_input: Any = dataclasses.field(default_factory=dict)
-    config: Optional[Mapping[str, Any]] = None
-    config_path: Optional[str] = None
+    config: Mapping[str, Any] | None = None
+    config_path: str | None = None
 
     # For unit tests and embedding: bypass tool resolution and call this directly.
-    tool_callable: Optional[Callable[[Any], Any]] = None
+    tool_callable: Callable[[Any], Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -129,7 +129,7 @@ class AfterToolHookResponse:
     success: bool
     tool_output: Any = None
     events: tuple[ToolCompletionEvent, ...] = ()
-    error: Optional[HookErrorInfo] = None
+    error: HookErrorInfo | None = None
 
     def to_dict(self) -> dict[str, Any]:
         # Manual conversion to avoid serializing config.clock etc.
@@ -180,7 +180,9 @@ def _load_json_file(path: Path) -> Mapping[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        raise ConfigError(HookErrorInfo(code="config_invalid_json", message=f"Config file is not valid JSON: {path}")) from None
+        raise ConfigError(
+            HookErrorInfo(code="config_invalid_json", message=f"Config file is not valid JSON: {path}")
+        ) from None
 
     if not isinstance(data, dict):
         raise ConfigError(
@@ -204,7 +206,7 @@ def _plugin_base_type() -> type:
     """Best-effort lookup of Thomas' plugin base class without tight coupling."""
     try:
         mod = importlib.import_module("thomas.autonomy.plugin")
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError):
         return object
 
     for attr in ("Plugin", "BasePlugin", "AutonomyPlugin"):
@@ -230,7 +232,7 @@ class ToolCompletionAuditPlugin(_PluginBase):
     id = plugin_id
     name = plugin_id
 
-    def __init__(self, config: Optional[ToolCompletionHookConfig] = None, **_kwargs: Any):
+    def __init__(self, config: ToolCompletionHookConfig | None = None, **_kwargs: Any):
         # Be gentle with super().__init__(): only call it if it looks invokable.
         try:
             super_init = getattr(super(), "__init__", None)
@@ -238,7 +240,7 @@ class ToolCompletionAuditPlugin(_PluginBase):
                 params = list(inspect.signature(super_init).parameters.values())
                 if len(params) <= 1:
                     super_init()  # type: ignore[misc]
-        except Exception:
+        except (TypeError, ValueError, AttributeError):
             pass
 
         self.config = config or ToolCompletionHookConfig()
@@ -269,10 +271,12 @@ class ToolCompletionAuditPlugin(_PluginBase):
         tool_name: str,
         tool_input: Any,
         tool_output: Any = None,
-        tool_error: Optional[str] = None,
+        tool_error: str | None = None,
     ) -> ToolCompletionEvent:
         if not isinstance(tool_name, str) or not tool_name.strip():
-            raise InvalidInputError(HookErrorInfo(code="invalid_tool_name", message="Tool name must be a non-empty string."))
+            raise InvalidInputError(
+                HookErrorInfo(code="invalid_tool_name", message="Tool name must be a non-empty string.")
+            )
 
         event = ToolCompletionEvent(
             tool=ToolCallSpec(name=tool_name, input=tool_input if self.config.include_input else None),
@@ -299,7 +303,7 @@ class ToolCompletionAuditPlugin(_PluginBase):
             with path.open("a", encoding="utf-8") as f:
                 f.write(payload)
                 f.write("\n")
-        except Exception:
+        except (OSError, UnicodeDecodeError, TypeError):
             raise ExternalFailureError(
                 HookErrorInfo(code="external_failure", message=f"Failed to write tool audit log to: {path}")
             ) from None
@@ -307,7 +311,7 @@ class ToolCompletionAuditPlugin(_PluginBase):
 
 def _extract_tool_completion_payload(
     args: tuple[Any, ...], kwargs: Mapping[str, Any]
-) -> tuple[str, Any, Any, Optional[str]]:
+) -> tuple[str, Any, Any, str | None]:
     """
     Extract (tool_name, tool_input, output, error) from a hook payload.
 
@@ -390,7 +394,11 @@ def response_json_schema() -> dict[str, Any]:
                         "outcome": {
                             "type": "object",
                             "required": ["ok", "output", "error"],
-                            "properties": {"ok": {"type": "boolean"}, "output": {}, "error": {"type": ["string", "null"]}},
+                            "properties": {
+                                "ok": {"type": "boolean"},
+                                "output": {},
+                                "error": {"type": ["string", "null"]},
+                            },
                         },
                         "timestamp": {"type": "number"},
                     },
@@ -417,7 +425,9 @@ def run_after_tool_hook(request: AfterToolHookRequest) -> AfterToolHookResponse:
     plugins; for the CLI and tests we make the behavior explicit and deterministic.
     """
     if not isinstance(request.tool_name, str) or not request.tool_name.strip():
-        raise InvalidInputError(HookErrorInfo(code="invalid_tool_name", message="Tool name must be a non-empty string."))
+        raise InvalidInputError(
+            HookErrorInfo(code="invalid_tool_name", message="Tool name must be a non-empty string.")
+        )
 
     # Load config (file first, then overlay explicit mapping).
     config_mapping: Mapping[str, Any] = {}
@@ -435,10 +445,10 @@ def run_after_tool_hook(request: AfterToolHookRequest) -> AfterToolHookResponse:
         )
 
     output: Any = None
-    err: Optional[str] = None
+    err: str | None = None
     try:
         output = tool_callable(request.tool_input)
-    except Exception as e:  # pragma: no cover - execution paths vary
+    except (RuntimeError, OSError, AttributeError) as e:  # pragma: no cover - execution paths vary
         err = _normalize_error(e)
 
     # If Thomas didn't dispatch a completion hook (or we're running standalone), record it ourselves.
@@ -466,7 +476,7 @@ def run_after_tool_hook(request: AfterToolHookRequest) -> AfterToolHookResponse:
 # -------------------------
 
 
-def _resolve_tool_callable(tool_name: str) -> Optional[Callable[[Any], Any]]:
+def _resolve_tool_callable(tool_name: str) -> Callable[[Any], Any] | None:
     """
     Resolve a tool callable.
 
@@ -480,7 +490,7 @@ def _resolve_tool_callable(tool_name: str) -> Optional[Callable[[Any], Any]]:
 
     try:
         reg_mod = importlib.import_module("thomas.tools.registry")
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
     registry = None
@@ -503,13 +513,13 @@ def _resolve_tool_callable(tool_name: str) -> Optional[Callable[[Any], Any]]:
         if isinstance(cls, type):
             try:
                 registry = cls()
-            except Exception:
+            except (TypeError, ValueError, RuntimeError):
                 registry = None
 
     if registry is None:
         return None
 
-    method: Optional[Callable[..., Any]] = None
+    method: Callable[..., Any] | None = None
     for name in ("invoke", "call", "run", "execute"):
         m = getattr(registry, name, None)
         if callable(m):
@@ -544,7 +554,7 @@ def _call_registry_method(method: Callable[..., Any], tool_name: str, tool_input
         param_names = {p.name for p in sig.parameters.values()}
         if "tool" in param_names and "input" in param_names:
             candidates.insert(0, ((), {"tool": tool_name, "input": tool_input}))
-    except Exception:
+    except (ValueError, TypeError):
         pass
 
     for args, kwargs in candidates:

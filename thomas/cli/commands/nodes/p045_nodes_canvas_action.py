@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -13,7 +13,6 @@ from thomas.nodes.p045_nodes_canvas_action import (
     NodesCanvasActionRequest,
     run_nodes_canvas_action,
 )
-
 
 # Typer application for this command module.
 #
@@ -47,13 +46,12 @@ def _resolve_json_flag(explicit: bool) -> bool:
         return True
     try:
         ctx = typer.get_current_context(silent=True)
-    except Exception:  # pragma: no cover
+    except AttributeError:  # pragma: no cover
         return explicit
     if not ctx:
         return explicit
     obj = getattr(ctx, "obj", None)
     return bool(isinstance(obj, dict) and obj.get("json") is True)
-
 
 
 def _emit(result: dict[str, Any], *, json_output: bool) -> None:
@@ -92,7 +90,7 @@ def canvas_action(
     operation: str = typer.Argument(..., help="Operation: pan, zoom, select, focus, clear-selection."),
     canvas_id: str = typer.Option("default", "--canvas-id", "-c", help="Canvas identifier."),
     payload: str = typer.Option("{}", "--payload", help="JSON object payload for the operation."),
-    state_path: Optional[Path] = typer.Option(
+    state_path: Path | None = typer.Option(
         None,
         "--state-path",
         help="Path to the persistent canvas state store JSON file.",
@@ -133,5 +131,5 @@ try:  # pragma: no cover
     import typer.main
 
     CLICK_COMMAND = typer.main.get_command(app)
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     CLICK_COMMAND = None

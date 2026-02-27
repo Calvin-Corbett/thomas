@@ -3,14 +3,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from thomas.plugins.p100_plugin_discovery_scanner import (
-    PluginDiscoveryScanRequest,
     PluginDiscoveryScannerError,
+    PluginDiscoveryScanRequest,
     scan_plugins,
 )
-
 
 COMMAND_NAME = "p100-plugin-discovery-scanner"
 COMMAND_HELP = "Scan for Thomas plugin candidates (filesystem + Python entry points)."
@@ -38,7 +38,7 @@ def register(target: Any) -> Any:
     if hasattr(target, "command"):
         try:
             import typer
-        except Exception:  # pragma: no cover
+        except ImportError:  # pragma: no cover
             return target
 
         @target.command(COMMAND_NAME, help=COMMAND_HELP)  # type: ignore[misc]

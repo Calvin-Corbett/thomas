@@ -21,8 +21,9 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, Literal, Optional
+from typing import Any, Literal
 
 BrowserErrorCategory = Literal["input", "config", "external", "internal"]
 
@@ -32,10 +33,10 @@ class BrowserErrorNormalizationRequest:
     """Input contract for browser error normalization."""
 
     raw: Any
-    operation: Optional[str] = None
-    profile: Optional[str] = None
-    target_url: Optional[str] = None
-    http_status: Optional[int] = None
+    operation: str | None = None
+    profile: str | None = None
+    target_url: str | None = None
+    http_status: int | None = None
 
 
 @dataclass(frozen=True)
@@ -51,18 +52,18 @@ class BrowserErrorNormalizationResult:
     raw: str
 
     # Optional context (echoed back).
-    operation: Optional[str] = None
-    profile: Optional[str] = None
-    target_url: Optional[str] = None
-    http_status: Optional[int] = None
+    operation: str | None = None
+    profile: str | None = None
+    target_url: str | None = None
+    http_status: int | None = None
 
     # Extra structured info (stable keys; JSON-serializable values).
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Return a JSON-serializable dictionary."""
 
-        out: Dict[str, Any] = {
+        out: dict[str, Any] = {
             "code": self.code,
             "category": self.category,
             "message": self.message,
@@ -84,7 +85,7 @@ class BrowserErrorNormalizationResult:
 
 # A small JSON-schema-ish description for automation.
 # (Kept intentionally minimal and stable; callers can hardcode keys if desired.)
-BROWSER_ERROR_NORMALIZATION_SCHEMA: Dict[str, Any] = {
+BROWSER_ERROR_NORMALIZATION_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["code", "category", "message", "retryable", "raw"],
     "properties": {
@@ -102,7 +103,7 @@ BROWSER_ERROR_NORMALIZATION_SCHEMA: Dict[str, Any] = {
 }
 
 
-def browser_error_normalization_schema() -> Dict[str, Any]:
+def browser_error_normalization_schema() -> dict[str, Any]:
     """Return the normalization output schema."""
 
     # Defensive copy so callers can't mutate the module constant.
@@ -115,10 +116,10 @@ _MAX_RAW_CHARS = 4000
 def normalize_browser_error(
     request: BrowserErrorNormalizationRequest | Any,
     *,
-    operation: Optional[str] = None,
-    profile: Optional[str] = None,
-    target_url: Optional[str] = None,
-    http_status: Optional[int] = None,
+    operation: str | None = None,
+    profile: str | None = None,
+    target_url: str | None = None,
+    http_status: int | None = None,
 ) -> BrowserErrorNormalizationResult:
     """Normalize a browser error.
 
@@ -148,7 +149,7 @@ def normalize_browser_error(
     resolved_http_status = _extract_http_status(req.raw, req.http_status)
     error_type = _extract_error_type(req.raw)
 
-    details: Dict[str, Any] = {}
+    details: dict[str, Any] = {}
     if error_type:
         details["error_type"] = error_type
 
@@ -541,8 +542,8 @@ def _result(
     retryable: bool,
     raw: str,
     req: BrowserErrorNormalizationRequest,
-    http_status: Optional[int],
-    details: Dict[str, Any],
+    http_status: int | None,
+    details: dict[str, Any],
 ) -> BrowserErrorNormalizationResult:
     return BrowserErrorNormalizationResult(
         code=code,
@@ -572,7 +573,7 @@ _HTTP_STATUS_IN_TEXT_RE = re.compile(
 )
 
 
-def _extract_http_status(raw: Any, explicit: Optional[int]) -> Optional[int]:
+def _extract_http_status(raw: Any, explicit: int | None) -> int | None:
     if isinstance(explicit, int):
         return explicit
 
@@ -612,7 +613,7 @@ def _extract_http_status(raw: Any, explicit: Optional[int]) -> Optional[int]:
     return None
 
 
-def _extract_error_type(raw: Any) -> Optional[str]:
+def _extract_error_type(raw: Any) -> str | None:
     if raw is None:
         return None
     if isinstance(raw, BaseException):
@@ -639,7 +640,7 @@ def _extract_error_text(raw: Any, *, _depth: int = 0) -> str:
     if isinstance(raw, bytes):
         try:
             return raw.decode("utf-8", errors="replace")
-        except Exception:
+        except (AttributeError, UnicodeDecodeError):
             return "<bytes>"
 
     if isinstance(raw, BaseException):
@@ -656,11 +657,9 @@ def _extract_error_text(raw: Any, *, _depth: int = 0) -> str:
 
         # If it's a small dict of primitives, serialize it (stable order).
         try:
-            if len(raw) <= 12 and all(
-                isinstance(v, (str, int, float, bool, type(None))) for v in raw.values()
-            ):
+            if len(raw) <= 12 and all(isinstance(v, (str, int, float, bool, type(None))) for v in raw.values()):
                 return json.dumps(raw, ensure_ascii=False, sort_keys=True)
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
         return "{...}" if raw else "{}"
@@ -673,7 +672,7 @@ def _extract_error_text(raw: Any, *, _depth: int = 0) -> str:
     # Avoid default object reprs that include memory addresses.
     try:
         text = str(raw)
-    except Exception:
+    except (TypeError, ValueError):
         return raw.__class__.__name__
 
     if re.fullmatch(r"<\w+(?:\.\w+)* object at 0x[0-9a-fA-F]+>", text.strip()):
@@ -694,9 +693,7 @@ _AUTHZ_RE = re.compile(
 _BEARER_RE = re.compile(r"\b(bearer\s+)[A-Za-z0-9._\-]+", flags=re.IGNORECASE)
 _HEADER_API_KEY_RE = re.compile(r"((?:x-)?api[-_]?key\s*:\s*)[^\s,;]+", flags=re.IGNORECASE)
 _COOKIE_RE = re.compile(r"(cookie\s*:\s*)[^\n\r]+", flags=re.IGNORECASE)
-_JWT_RE = re.compile(
-    r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b"
-)
+_JWT_RE = re.compile(r"\beyJ[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\.[A-Za-z0-9_\-]{10,}\b")
 
 
 def _sanitize_error_text(text: str) -> str:
@@ -724,7 +721,7 @@ def _sanitize_error_text(text: str) -> str:
     return text
 
 
-def _map_http_status(status: Optional[int]) -> Optional[tuple[str, BrowserErrorCategory, str, bool]]:
+def _map_http_status(status: int | None) -> tuple[str, BrowserErrorCategory, str, bool] | None:
     if not isinstance(status, int):
         return None
 
@@ -829,11 +826,11 @@ normalize_browser_exception = normalize_browser_error
 def normalize_browser_error_dict(
     request: BrowserErrorNormalizationRequest | Any,
     *,
-    operation: Optional[str] = None,
-    profile: Optional[str] = None,
-    target_url: Optional[str] = None,
-    http_status: Optional[int] = None,
-) -> Dict[str, Any]:
+    operation: str | None = None,
+    profile: str | None = None,
+    target_url: str | None = None,
+    http_status: int | None = None,
+) -> dict[str, Any]:
     """Convenience wrapper that returns a dict instead of a dataclass."""
 
     return normalize_browser_error(

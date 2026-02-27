@@ -126,7 +126,7 @@ def test_runtime_skills_context_format_includes_selected_instructions(tmp_path: 
         max_selected=2,
     )
     ctx = format_runtime_skills_context(selection)
-    assert "--- Runtime Skills ---" in ctx
+    assert "<runtime_skills" in ctx
     assert "robot-ui" in ctx
     assert "Verify before finishing" in ctx
 
@@ -170,7 +170,7 @@ def test_agent_loop_injects_runtime_skill_context_into_system_prompt(tmp_path: P
     system_msg = llm.last_messages[0]
     assert str(system_msg.get("role")) == "system"
     text = str(system_msg.get("content") or "")
-    assert "--- Runtime Skills ---" in text
+    assert "<runtime_skills" in text
     assert "robot-theme" in text
 
 
@@ -289,9 +289,9 @@ def test_runtime_skills_provider_conformance_same_selection_and_prompt(tmp_path:
 
         assert llm.last_messages
         system_text = str((llm.last_messages[0] or {}).get("content") or "")
-        assert "--- Runtime Skills ---" in system_text
+        assert "<runtime_skills" in system_text
         assert "robot-theme" in system_text
-        prompt_snippets.append(system_text.split("--- Runtime Skills ---", 1)[1][:220])
+        prompt_snippets.append(system_text.split("<runtime_skills", 1)[1][:220])
 
     assert len(set(selected_sets)) == 1
     assert len(set(prompt_snippets)) == 1

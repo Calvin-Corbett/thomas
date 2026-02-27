@@ -5,14 +5,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Optional
+from collections.abc import Sequence
 
 from thomas.browser.p026_browser_integration_into_top_level_cli import (
     BrowserOpenRequest,
     open_url,
     result_json_schema,
 )
-
 
 _EXIT_CODE_BY_ERROR_KIND = {
     "invalid_input": 2,
@@ -78,7 +77,7 @@ def register_browser_command(subparsers: argparse._SubParsersAction) -> None:
     parser.set_defaults(func=_handle_browser_command, _handler=_handle_browser_command)
 
 
-def _pick_url(args: argparse.Namespace) -> Optional[str]:
+def _pick_url(args: argparse.Namespace) -> str | None:
     explicit = getattr(args, "url", None)
     if isinstance(explicit, str) and explicit.strip() != "":
         return explicit.strip()
@@ -129,3 +128,27 @@ def _handle_browser_command(args: argparse.Namespace) -> int:
 
     kind = result.error.kind if result.error is not None else "internal_error"
     return int(_EXIT_CODE_BY_ERROR_KIND.get(kind, 1))
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser integration-into-top-level-cli",
+        description="Open a URL using the available browser backend.",
+    )
+    parser.add_argument(
+        "route_args",
+        nargs="*",
+        help="URL to open, or `open <url>`.",
+    )
+    parser.add_argument("--url", dest="url", default=None)
+    parser.add_argument("--config", dest="config_path", default=None)
+    parser.add_argument("--timeout", dest="timeout_s", type=float, default=None)
+    parser.add_argument("--dry-run", action="store_true")
+    parser.add_argument("--json", action="store_true")
+    parser.add_argument("--json-schema", action="store_true")
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+    return _handle_browser_command(args)

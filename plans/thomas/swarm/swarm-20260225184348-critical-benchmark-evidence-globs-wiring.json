@@ -1,0 +1,88 @@
+{
+  "entries": [
+    {
+      "agent": "Codex 1",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 1\"; $env:CODEX_AGENT_NAME=\"Codex 1\"; python scripts/workboard_message.py --send --from-agent \"Codex 1\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-1.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "true",
+      "lane_scope": "demo/baselines/agent_comparison_suite.current.json",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-1.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 2",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 2\"; $env:CODEX_AGENT_NAME=\"Codex 2\"; python scripts/workboard_claim.py --claim --agent \"Codex 2\" --name \"Codex 2\" --role solo --parent none --scope \"thomas/demo/agent_comparison_suite.py\" --task \"[WIP][SWARM:swarm-20260225184348-critical-benchmark-evidence-globs-wiring] critical-benchmark-evidence-globs-wiring lane\"; python scripts/workboard_message.py --send --from-agent \"Codex 2\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-2.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "false",
+      "lane_scope": "thomas/demo/agent_comparison_suite.py",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-2.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 3",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 3\"; $env:CODEX_AGENT_NAME=\"Codex 3\"; python scripts/workboard_message.py --send --from-agent \"Codex 3\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-3.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "true",
+      "lane_scope": "tests/test_agent_comparison_suite.py",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-3.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 4",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 4\"; $env:CODEX_AGENT_NAME=\"Codex 4\"; python scripts/workboard_claim.py --claim --agent \"Codex 4\" --name \"Codex 4\" --role solo --parent none --scope \"plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-4.md\" --task \"[WIP][SWARM:swarm-20260225184348-critical-benchmark-evidence-globs-wiring] critical-benchmark-evidence-globs-wiring lane\"; python scripts/workboard_message.py --send --from-agent \"Codex 4\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-4.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "false",
+      "lane_scope": "plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-4.md",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-4.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 5",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 5\"; $env:CODEX_AGENT_NAME=\"Codex 5\"; python scripts/workboard_message.py --send --from-agent \"Codex 5\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-5.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "true",
+      "lane_scope": "plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-5.md",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-5.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 6",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 6\"; $env:CODEX_AGENT_NAME=\"Codex 6\"; python scripts/workboard_claim.py --claim --agent \"Codex 6\" --name \"Codex 6\" --role solo --parent none --scope \"plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-6.md\" --task \"[WIP][SWARM:swarm-20260225184348-critical-benchmark-evidence-globs-wiring] critical-benchmark-evidence-globs-wiring lane\"; python scripts/workboard_message.py --send --from-agent \"Codex 6\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-6.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "false",
+      "lane_scope": "plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-6.md",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-6.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 7",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 7\"; $env:CODEX_AGENT_NAME=\"Codex 7\"; python scripts/workboard_claim.py --claim --agent \"Codex 7\" --name \"Codex 7\" --role solo --parent none --scope \"plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-7.md\" --task \"[WIP][SWARM:swarm-20260225184348-critical-benchmark-evidence-globs-wiring] critical-benchmark-evidence-globs-wiring lane\"; python scripts/workboard_message.py --send --from-agent \"Codex 7\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-7.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "false",
+      "lane_scope": "plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-7.md",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-7.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 8",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 8\"; $env:CODEX_AGENT_NAME=\"Codex 8\"; python scripts/workboard_message.py --send --from-agent \"Codex 8\" --to-agent \"task-manager-agent\" --task-id \"critical-benchmark-evidence-globs-wiring\" --kind status --priority p0 --summary \"swarm swarm-20260225184348-critical-benchmark-evidence-globs-wiring terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-8.txt' -Raw; codex $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "true",
+      "lane_scope": "plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring/lanes/codex-8.md",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225184348-critical-benchmark-evidence-globs-wiring\\prompts\\codex-8.txt",
+      "task_id": "critical-benchmark-evidence-globs-wiring",
+      "workboard": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\WORKBOARD.md"
+    }
+  ],
+  "entry_count": 8,
+  "generated_at": "2026-02-25T18:43:48+00:00",
+  "swarm_id": "swarm-20260225184348-critical-benchmark-evidence-globs-wiring",
+  "task_id": "critical-benchmark-evidence-globs-wiring"
+}

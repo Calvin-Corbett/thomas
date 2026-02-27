@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import time
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -19,7 +19,7 @@ from thomas.core.config import AppConfig
     help="Only include sessions updated in the past N minutes.",
 )
 @click.pass_context
-def sessions_cmd(ctx: click.Context, as_json: bool, active_minutes: Optional[int]) -> None:
+def sessions_cmd(ctx: click.Context, as_json: bool, active_minutes: int | None) -> None:
     """List persisted local chat sessions."""
     config: AppConfig = ctx.obj["config"]
     chats_dir = config.memory.root_path / ".thomas" / "chats"
@@ -30,7 +30,7 @@ def sessions_cmd(ctx: click.Context, as_json: bool, active_minutes: Optional[int
         for path in chats_dir.glob("*.json"):
             try:
                 payload = json.loads(path.read_text(encoding="utf-8"))
-            except Exception:
+            except json.JSONDecodeError:
                 continue
             if not isinstance(payload, dict):
                 continue
@@ -44,12 +44,12 @@ def sessions_cmd(ctx: click.Context, as_json: bool, active_minutes: Optional[int
 
             try:
                 updated_at = int(payload.get("updatedAt") or 0)
-            except Exception:
+            except json.JSONDecodeError:
                 updated_at = 0
             if updated_at <= 0:
                 try:
                     updated_at = int(path.stat().st_mtime * 1000)
-                except Exception:
+                except json.JSONDecodeError:
                     updated_at = now_ms
 
             age_minutes = max(0.0, float(now_ms - updated_at) / 60000.0)
@@ -77,12 +77,9 @@ def sessions_cmd(ctx: click.Context, as_json: bool, active_minutes: Optional[int
         click.echo("(no persisted sessions found)")
         return
     for row in sessions:
-        click.echo(
-            f"- {row['id']} | {row['title']} | messages={row['message_count']} | age={row['age_minutes']}m"
-        )
+        click.echo(f"- {row['id']} | {row['title']} | messages={row['message_count']} | age={row['age_minutes']}m")
 
 
 def register_sessions_commands(cli: click.Group) -> None:
     if "sessions" not in cli.commands:
         cli.add_command(sessions_cmd)
-

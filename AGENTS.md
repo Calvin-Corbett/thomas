@@ -3,6 +3,14 @@
 Thomas is an AI coding agent with intentionally broad scope.
 The breadth is a feature — don't reduce scope without explicit user request.
 
+## Guardrails — Read Before Doing Anything
+
+Before writing ANY code, read:
+1. **[GUARDRAILS.md](GUARDRAILS.md)** — Immutable project-wide rules
+2. The `GUARDRAILS.md` in the specific module directory you're modifying
+
+**These rules cannot be bypassed.** If a test fails because of your code, fix your code — not the test. If a file is too large, split it — don't increase the limit. If you're unsure, ask the user.
+
 ## Start Here
 1. **`PROJECT_INDEX.md`** — How the project boots, where things live, process model,
    config flow, logging, data files, verification checklist, gotchas. **Read this first**
@@ -63,10 +71,19 @@ This applies to every agent identity that touches the repo (Codex, Claude, Grok,
 1. Claim scope at start:
    - Set explicit id first (PowerShell): `$env:AGENT_ID="<name>"` (or `$env:THOMAS_AGENT_ID="<name>"`)
    - Optional one-shot bootstrap: `python scripts/agent_bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>"`
-   - `python scripts/workboard_claim.py --claim --agent "<name>" --scope "<path[,path...]>" --task "[WIP][HSK-<id>] <short task>"`
+   - `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <solo|parent|worker> --parent <none|parent-id> --scope "<path[,path...]>" --task "[WIP][HSK-<id>] <short task>"`
 2. Mark ready when code/tests are complete:
-   - `python scripts/workboard_claim.py --claim --agent "<name>" --scope "<path[,path...]>" --task "[READY][HSK-<id>] <summary>"`
-3. Report execution issues:
+   - `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <solo|parent|worker> --parent <none|parent-id> --scope "<path[,path...]>" --task "[READY][HSK-<id>] <summary>"`
+3. Parent agents should fan out when possible:
+   - `python scripts/workboard_claim.py --suggest-delegation --agent "<parent-name>"`
+   - One-command dispatch (release READY workers + claim fresh lanes):  
+     `python scripts/workboard_claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "task-manager-agent"`
+   - If no lanes are available, dispatch auto-claims a temporary task-creator lease and notifies task manager.
+   - Temporary task-creator lease is single-owner: only one agent can hold it at a time.
+   - Task manager clears temp lease when backlog is healthy:  
+     `python scripts/workboard_claim.py --release-temp-task-creator --agent "task-manager-agent" --task-manager-agent "task-manager-agent"`
+   - Claim at least one suggested worker task when non-overlapping candidates exist.
+4. Report execution issues:
    - Add blocked tasks to `## Active Tasks` with `status=blocked`.
    - Add/maintain a matching entry in `## Issues / Blockers` until resolved.
    - If you cannot continue, move task details into `## Up For Grabs`.
@@ -75,10 +92,10 @@ This applies to every agent identity that touches the repo (Codex, Claude, Grok,
      - `python scripts/workboard_issue.py --triage --issue-id "<issue_id>" --owner "<agent|team>"`
      - `python scripts/workboard_issue.py --resolve --issue-id "<issue_id>"`
      - `python scripts/workboard_issue.py --up-for-grabs --task-id "<task_id>" --reported-by "<agent>"`
-4. Acknowledge handoff in the log:
+5. Acknowledge handoff in the log:
    - `python scripts/append_handoff.py --title "ACK HSK-<id>" --note "<agent> marked READY" --note "<integrator> will bundle"`
-5. Integrator bundles only after READY+ACK.
-6. Release claims after commit/push:
+6. Integrator bundles only after READY+ACK.
+7. Release claims after commit/push:
    - `python scripts/workboard_claim.py --release --agent "<name>"`
 
 Optional hard lock for active edits:
@@ -87,8 +104,34 @@ Optional hard lock for active edits:
 
 Guard rails:
 - Check active claims: `python scripts/workboard_claim.py --list`
-- Validate claims gate: `python scripts/check_workboard_claims.py`
+- Validate claims gate: `python scripts/check_workboard_claims.py --require-identity-metadata`
+- Validate changed-file ownership gate: `python scripts/check_workboard_changed_files.py --staged --require-identity-metadata`
+- Validate per-agent gate: `python scripts/check_workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2`
 - Never commit another agent's scope unless they are marked `[READY]` and ACK is logged.
+- Never use `git commit --no-verify` except explicit emergency approval from maintainers.
+- If using `SKIP=<hook-id[,hook-id...]>`, set both `AGENT_ID` and `THOMAS_SKIP_REASON` (>=12 chars).
+- All SKIP usage is audited to `.git/thomas_skip_audit.jsonl` by `python scripts/check_precommit_skip_policy.py`.
+- Configure GitHub hard merge guardrails with `python scripts/configure_github_branch_protection.py --apply` or `powershell -ExecutionPolicy Bypass -File scripts/apply_branch_protection.ps1` (see `docs/GITHUB_BRANCH_PROTECTION_SETUP.md`).
+- For proof bundles, run `python scripts/evidence_pack.py --name "<run>" --command "<cmd>" [--command "<cmd2>"]` (see `docs/EVIDENCE_PACK_RUNBOOK.md`).
+
+## Task Ecosystem Control Plane (Required)
+Every agent must follow `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`.
+
+Core rules:
+1. Thomas routes tasks through `task-manager-agent`; agents execute.
+2. User-requested tasks outrank background tasks.
+3. Keep the board ordered by priority and urgency (`[P0][NOW]`, `[P1][NEXT]`, `[P2][LATER]`).
+4. All agent-to-agent and agent-to-manager coordination requests go through workboard message traffic.
+5. Keep alias identity stable (`Codex 1`, `Codex 2`, etc.) and track unique session ids per run.
+
+Required commands:
+- Sync plans: `python scripts/workboard_task_manager.py --sync-plans --apply`
+- Sync sessions: `python scripts/workboard_task_manager.py --sync-sessions --apply`
+- Sweep inactive: `python scripts/workboard_task_manager.py --sweep-inactive --max-idle-minutes 1 --apply --task-manager-agent "task-manager-agent"`
+- Message send: `python scripts/workboard_message.py --send --from-agent "<agent>" --to-agent "<agent|task-manager-agent>" --summary "<text>" --task-id "<task_id>"`
+- Message ack: `python scripts/workboard_message.py --ack --msg-id "<msg_id>" --by "<agent>"`
+- Message resolve: `python scripts/workboard_message.py --resolve --msg-id "<msg_id>" --by "<agent>"`
+- Preference capture: `python scripts/workboard_task_manager.py --capture-preference --preference-summary "<summary>" --preference-verbatim "<verbatim>"`
 
 ## Website Dev Shortcut (Dev-Only)
 If a task mentions website/site/homepage/domain/Spline or the user asks for web changes:

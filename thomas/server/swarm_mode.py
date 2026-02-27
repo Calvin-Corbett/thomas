@@ -30,25 +30,27 @@ async def chat_handler(request):
 
 app.router.add_post("/api/runs/{run_id}/cancel", handle_cancel)
 """
+
 from __future__ import annotations
 
 import asyncio
 import hmac
 import json
-from typing import Any, Awaitable, Callable, Dict, Optional
+import re
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
 from thomas.agent.swarm import SwarmConfig, SwarmOrchestrator, SwarmRunRegistry
-from thomas.core.token_economy import build_token_economy_meta, normalize_token_economy_level
 from thomas.core.rules_of_road import evaluate_rules
+from thomas.core.token_economy import build_token_economy_meta, normalize_token_economy_level
+
+ToolCall = Callable[[str, dict[str, Any]], Awaitable[dict[str, Any]]]
+OnEvent = Callable[[dict[str, Any]], Awaitable[Any]]
 
 
-ToolCall = Callable[[str, Dict[str, Any]], Awaitable[Dict[str, Any]]]
-OnEvent = Callable[[Dict[str, Any]], Awaitable[Any]]
-
-
-def _normalize_usage_payload(payload: Any) -> Dict[str, int]:
+def _normalize_usage_payload(payload: Any) -> dict[str, int]:
     """Normalize usage object/dict to {prompt_tokens, completion_tokens, total_tokens}."""
     if isinstance(payload, dict):
         prompt_raw = payload.get("prompt_tokens", 0)
@@ -77,6 +79,85 @@ def _normalize_usage_payload(payload: Any) -> Dict[str, int]:
         "completion_tokens": completion,
         "total_tokens": total,
     }
+
+
+def _is_probable_task_graph_json(text: str) -> bool:
+    src = str(text or "").strip()
+    if not src or src[0] not in "{[":
+        return False
+    try:
+        obj = json.loads(src)
+    except Exception:
+        return False
+    if not isinstance(obj, dict):
+        return False
+    tasks = obj.get("tasks")
+    return bool("version" in obj and "goal" in obj and isinstance(tasks, list))
+
+
+def _summarize_swarm_error(error_text: str) -> str:
+    text = str(error_text or "").strip()
+    if not text:
+        return ""
+    text = re.sub(r"^[A-Za-z_][\w.]*:\s*", "", text).strip()
+    if "planner output is empty" in text.lower():
+        return "planner returned no output"
+    return text[:220]
+
+
+def _safe_swarm_final_text(
+    user_request: str,
+    final_text: str,
+    summary: Any,
+    *,
+    ok: bool,
+    error_text: str,
+) -> str:
+    text = str(final_text or "").strip()
+    if text and not _is_probable_task_graph_json(text):
+        return text
+
+    if not ok:
+        err = _summarize_swarm_error(error_text)
+        if err:
+            return f"I couldn't complete the swarm run ({err}). Please retry."
+        return "I couldn't complete the swarm run before a final response was produced. Please retry."
+
+    # Casual greetings no longer get hardcoded replies — let the LLM
+    # produce a natural, context-aware response.  The old "Yo. What's up?"
+    # fallback sounded robotic and repetitive.
+
+    done_count = 0
+    failed_count = 0
+    blocked_count = 0
+    if isinstance(summary, dict):
+        status_map = summary.get("status")
+        if isinstance(status_map, dict):
+            for raw in status_map.values():
+                status = str(raw or "").strip().lower()
+                if status == "done":
+                    done_count += 1
+                elif status == "failed":
+                    failed_count += 1
+                elif status == "blocked":
+                    blocked_count += 1
+
+    if done_count or failed_count or blocked_count:
+        return (
+            f"Swarm finished. Done: {done_count}, failed: {failed_count}, blocked: {blocked_count}. "
+            "I can give a detailed breakdown or apply fixes next."
+        )
+    return "Swarm finished. I can summarize results or continue with the next step."
+
+
+def _should_forward_agent_text(evt: dict[str, Any]) -> bool:
+    task_id = str(evt.get("task_id") or "").strip().lower()
+    agent_id = str(evt.get("agent_id") or evt.get("agent") or "").strip().lower()
+    # Planner output is internal (task-graph JSON and routing chatter).
+    if task_id == "__plan__" or agent_id == "planner":
+        return False
+    return True
+
 
 def _extract_request_token(request: web.Request) -> str:
     auth = str(request.headers.get("Authorization") or "")
@@ -152,14 +233,14 @@ async def handle_cancel(request: web.Request) -> web.Response:
 async def handle_swarm_chat(
     request: web.Request,
     *,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     user_request: str,
     run_id: str,
     session_id: str,
-    subagents: Dict[str, Any],
+    subagents: dict[str, Any],
     tool_call: ToolCall,
-    tool_mutates_fs: Optional[Callable[[str, Dict[str, Any]], bool]] = None,
-    on_event: Optional[OnEvent] = None,
+    tool_mutates_fs: Callable[[str, dict[str, Any]], bool] | None = None,
+    on_event: OnEvent | None = None,
 ) -> web.StreamResponse:
     """
     NDJSON stream response for Swarm Mode. The caller supplies:
@@ -193,8 +274,9 @@ async def handle_swarm_chat(
         },
     )
     await resp.prepare(request)
-    quality_tool_events: list[Dict[str, Any]] = []
-    pending_tool_args: Dict[str, Dict[str, Any]] = {}
+    quality_tool_events: list[dict[str, Any]] = []
+    pending_tool_args: dict[str, dict[str, Any]] = {}
+    suppress_reviewer_stream = False
 
     try:
         async for evt in orch.astream(user_request=user_request, subagents=subagents):
@@ -213,23 +295,15 @@ async def handle_swarm_chat(
                         "name": str(out.get("tool") or ""),
                         "ok": bool(out.get("ok", False)),
                         "command": str(
-                            args_meta.get("command")
-                            or args_meta.get("cmd")
-                            or args_meta.get("shell")
-                            or ""
+                            args_meta.get("command") or args_meta.get("cmd") or args_meta.get("shell") or ""
                         )[:500],
-                        "path": str(
-                            args_meta.get("path")
-                            or args_meta.get("file")
-                            or args_meta.get("filename")
-                            or ""
-                        )[:500],
+                        "path": str(args_meta.get("path") or args_meta.get("file") or args_meta.get("filename") or "")[
+                            :500
+                        ],
                     }
                 )
             if str(out.get("type") or "") == "swarm_done":
-                usage_obj = _normalize_usage_payload(
-                    out.get("run_usage") if "run_usage" in out else out.get("usage")
-                )
+                usage_obj = _normalize_usage_payload(out.get("run_usage") if "run_usage" in out else out.get("usage"))
                 out["usage"] = usage_obj  # legacy alias for run_usage
                 out.setdefault("run_usage", usage_obj)
                 out.setdefault("session_usage", usage_obj)
@@ -256,12 +330,8 @@ async def handle_swarm_chat(
                         cfg_errors = [f"config_audit_failed: {type(cfg_e).__name__}: {cfg_e}"]
 
                 quality_cfg = getattr(cfg, "quality", None) if cfg is not None else None
-                require_verify = bool(
-                    getattr(quality_cfg, "require_verification_for_coding", True)
-                )
-                require_tests = bool(
-                    getattr(quality_cfg, "require_tests_for_code_edits", False)
-                )
+                require_verify = bool(getattr(quality_cfg, "require_verification_for_coding", True))
+                require_tests = bool(getattr(quality_cfg, "require_tests_for_code_edits", False))
                 if applied_level == "cheap":
                     require_verify = True
                     require_tests = False
@@ -314,8 +384,68 @@ async def handle_swarm_chat(
                     if isinstance(maybe_out, dict):
                         out = dict(maybe_out)
 
+            evt_type = str(out.get("type") or "")
+            if evt_type == "agent_text":
+                if not _should_forward_agent_text(out):
+                    continue
+                agent_id = str(out.get("agent_id") or out.get("agent") or "").strip().lower()
+                text_chunk = str(out.get("text") or "")
+                if agent_id == "reviewer":
+                    probe = text_chunk.lstrip()
+                    if not suppress_reviewer_stream and (
+                        probe.startswith("{") or '"tasks"' in text_chunk or '"version"' in text_chunk
+                    ):
+                        suppress_reviewer_stream = True
+                    if suppress_reviewer_stream:
+                        continue
+
+            compat_events: list[dict[str, Any]] = []
+            if evt_type == "swarm_done":
+                ok_raw = out.get("ok")
+                ok_value = True if ok_raw is None else bool(ok_raw)
+                out["final"] = _safe_swarm_final_text(
+                    user_request=user_request,
+                    final_text=str(out.get("final") or ""),
+                    summary=out.get("summary"),
+                    ok=ok_value,
+                    error_text=str(out.get("error") or ""),
+                )
+                usage_obj = _normalize_usage_payload(out.get("run_usage") if "run_usage" in out else out.get("usage"))
+                summary = out.get("summary")
+                status_map = summary.get("status") if isinstance(summary, dict) else None
+                iterations = len(status_map) if isinstance(status_map, dict) and status_map else 1
+                try:
+                    compat_seq = int(out.get("seq") or 0) + 1
+                except Exception:
+                    compat_seq = 0
+                token_report = out.get("token_report") if isinstance(out.get("token_report"), dict) else {}
+                token_economy = out.get("token_economy") if isinstance(out.get("token_economy"), dict) else {}
+                rules_of_road = out.get("rules_of_road") if isinstance(out.get("rules_of_road"), dict) else {}
+                compat_done = {
+                    "type": "done",
+                    "run_id": out.get("run_id", run_id),
+                    "seq": compat_seq,
+                    "iterations": int(iterations),
+                    "tool_calls": 0,
+                    "usage": usage_obj,
+                    "run_usage": usage_obj,
+                    "session_usage": usage_obj,
+                    "token_report": token_report,
+                    "token_economy": token_economy,
+                    "rules_of_road": rules_of_road,
+                    "elapsed_ms": float(out.get("duration_ms") or 0.0),
+                }
+                final_text = str(out.get("final") or "")
+                if final_text:
+                    compat_done["text"] = final_text
+                    compat_done["final"] = final_text
+                compat_events.append(compat_done)
+
             line = json.dumps(out, ensure_ascii=False) + "\n"
             await resp.write(line.encode("utf-8"))
+            for compat in compat_events:
+                compat_line = json.dumps(compat, ensure_ascii=False) + "\n"
+                await resp.write(compat_line.encode("utf-8"))
     except (ConnectionResetError, asyncio.CancelledError, BrokenPipeError):
         orch.cancel()
     finally:

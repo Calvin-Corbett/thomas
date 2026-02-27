@@ -15,10 +15,12 @@ browser/controller object to be provided via Typer context (ctx.obj).
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
 import types
-from typing import Any, Literal, Optional, Union
+from collections.abc import Sequence
+from typing import Any, Literal
 
 import typer
 
@@ -80,7 +82,7 @@ def _emit(payload: dict[str, Any], *, json_out: bool) -> None:
         typer.echo(f"error[{err.get('code')}] {err.get('message')}")
 
 
-def _browser_from_ctx(ctx: Optional[typer.Context]) -> Any:
+def _browser_from_ctx(ctx: typer.Context | None) -> Any:
     if ctx is None:
         return None
 
@@ -95,7 +97,7 @@ def _browser_from_ctx(ctx: Optional[typer.Context]) -> Any:
     return None
 
 
-def _coerce_node_id(node_id: Optional[str]) -> Optional[Union[int, str]]:
+def _coerce_node_id(node_id: str | None) -> int | str | None:
     if node_id is None:
         return None
 
@@ -108,11 +110,11 @@ def _coerce_node_id(node_id: Optional[str]) -> Optional[Union[int, str]]:
 def run_hover_or_focus(
     *,
     action: Literal["hover", "focus"],
-    selector: Optional[str],
-    node_id: Optional[str],
-    timeout_ms: Optional[int],
+    selector: str | None,
+    node_id: str | None,
+    timeout_ms: int | None,
     json_out: bool,
-    ctx: Optional[typer.Context] = None,
+    ctx: typer.Context | None = None,
     browser: Any = None,
 ) -> tuple[int, dict[str, Any]]:
     """Pure helper for tests and CLI wrappers.
@@ -141,19 +143,19 @@ def run_hover_or_focus(
 @_browser_app.command("hover")
 def hover(
     ctx: typer.Context,
-    selector: Optional[str] = typer.Option(
+    selector: str | None = typer.Option(
         None,
         "--selector",
         "-s",
         help="Target element selector (CSS/XPath/text depending on backend).",
     ),
-    node_id: Optional[str] = typer.Option(
+    node_id: str | None = typer.Option(
         None,
         "--node-id",
         "-n",
         help="Target node id (from a prior nodes listing).",
     ),
-    timeout_ms: Optional[int] = typer.Option(
+    timeout_ms: int | None = typer.Option(
         None,
         "--timeout-ms",
         help="Optional timeout in milliseconds.",
@@ -182,19 +184,19 @@ def hover(
 @_browser_app.command("focus")
 def focus(
     ctx: typer.Context,
-    selector: Optional[str] = typer.Option(
+    selector: str | None = typer.Option(
         None,
         "--selector",
         "-s",
         help="Target element selector (CSS/XPath/text depending on backend).",
     ),
-    node_id: Optional[str] = typer.Option(
+    node_id: str | None = typer.Option(
         None,
         "--node-id",
         "-n",
         help="Target node id (from a prior nodes listing).",
     ),
-    timeout_ms: Optional[int] = typer.Option(
+    timeout_ms: int | None = typer.Option(
         None,
         "--timeout-ms",
         help="Optional timeout in milliseconds.",
@@ -222,3 +224,32 @@ def focus(
 
 # Re-export for discovery/tests.
 app = _browser_app
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser action-hover-and-focus",
+        description="Hover or focus an element in the active browser session.",
+    )
+    parser.add_argument("action_arg", nargs="?", choices=["hover", "focus"], default="hover")
+    parser.add_argument("--action", dest="action_opt", choices=["hover", "focus"], default="")
+    parser.add_argument("--selector", default=None)
+    parser.add_argument("--node-id", default=None)
+    parser.add_argument("--timeout-ms", type=int, default=None)
+    parser.add_argument("--json", dest="json_out", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    action = str(args.action_opt or "").strip().lower() or str(args.action_arg).strip().lower() or "hover"
+    exit_code, payload = run_hover_or_focus(
+        action=action,  # type: ignore[arg-type]
+        selector=args.selector,
+        node_id=args.node_id,
+        timeout_ms=args.timeout_ms,
+        json_out=bool(args.json_out),
+    )
+    _emit(payload, json_out=bool(args.json_out))
+    return int(exit_code)

@@ -1,206 +1,31 @@
 # thomas/core/search_history.py
 from __future__ import annotations
 
-import hashlib
 import json
 import os
-import re
 import sqlite3
 import threading
-from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from thomas.core.persistence import get_persistence
+from thomas.core.search_history_shared import (
+    Bookmark,
+    SavedSearch,
+    SearchResult,
+    TurnContext,
+    _norm_ts,
+    _parse_ts,
+    _safe_text,
+    _scoped_query,
+    _turn_fingerprint,
+    _turn_id,
+)
 
 # Highlight markers produced by FTS snippet() and rendered safely by UI (no innerHTML)
 HL_START = "\u0001"
 HL_END = "\u0002"
-
-
-@dataclass(frozen=True)
-class SearchResult:
-    """
-    Consumer-grade search hit.
-
-    - turn_id: stable id (hash of ts/channel/user/assistant/tools)
-    - turn_pos: best-effort index in persistence.turn_history at time of indexing
-    - snippets include HL markers matching SQLite tokenization
-    - score combines bm25 relevance + soft recency boost
-    """
-    turn_id: str
-    turn_pos: int
-    ts: str
-    channel: str
-    user_msg: str
-    user_snippet: str
-    assistant_snippet: str
-    assistant_snippet_plain: str
-    rank: float
-    score: float
-
-
-@dataclass(frozen=True)
-class TurnContext:
-    turn_id: str
-    turn_pos: int
-    ts: str
-    channel: str
-    user_msg: str
-    assistant_msg: str
-    tool_calls: str
-
-
-@dataclass(frozen=True)
-class Bookmark:
-    turn_id: str
-    label: str
-    created_ts: str
-
-
-@dataclass(frozen=True)
-class SavedSearch:
-    id: int
-    name: str
-    query: str
-    filters_json: str
-    created_ts: str
-    last_used_ts: str
-    use_count: int
-
-
-def _safe_text(x: Any) -> str:
-    if x is None:
-        return ""
-    if isinstance(x, str):
-        return x
-    try:
-        return json.dumps(x, ensure_ascii=False, default=str)
-    except Exception:
-        return str(x)
-
-
-def _norm_ts(ts: Any) -> str:
-    if ts is None:
-        return ""
-    if isinstance(ts, datetime):
-        return ts.isoformat()
-    s = str(ts).strip()
-    if not s:
-        return ""
-    if s.endswith("Z"):
-        s = s[:-1] + "+00:00"
-    if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
-        return s + "T00:00:00"
-    try:
-        dt = datetime.fromisoformat(s)
-        return dt.isoformat()
-    except Exception:
-        return s
-
-
-def _parse_ts(ts: str) -> Optional[datetime]:
-    s = (ts or "").strip()
-    if not s:
-        return None
-    try:
-        if s.endswith("Z"):
-            s = s[:-1] + "+00:00"
-        dt = datetime.fromisoformat(s)
-        if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=timezone.utc)
-        return dt.astimezone(timezone.utc)
-    except Exception:
-        # last resort: date only
-        try:
-            if re.match(r"^\d{4}-\d{2}-\d{2}$", s):
-                return datetime.fromisoformat(s + "T00:00:00+00:00")
-        except Exception:
-            return None
-    return None
-
-
-def _turn_fingerprint(ts: str, channel: str, user_msg: str, assistant_msg: str, tool_calls: str) -> str:
-    payload = (ts + "\n" + channel + "\n" + user_msg + "\n" + assistant_msg + "\n" + tool_calls).encode("utf-8", "ignore")
-    return hashlib.sha1(payload).hexdigest()
-
-
-def _turn_id(fp: str) -> str:
-    return fp[:20]
-
-
-def _looks_like_fts_syntax(q: str) -> bool:
-    uq = q.upper()
-    return (
-        '"' in q
-        or ":" in q
-        or "*" in q
-        or "(" in q
-        or ")" in q
-        or " OR " in uq
-        or " AND " in uq
-        or " NOT " in uq
-        or " NEAR" in uq
-    )
-
-
-def _to_prefix_query(q: str) -> str:
-    q = (q or "").strip()
-    if not q:
-        return ""
-    if _looks_like_fts_syntax(q):
-        return q
-    parts = [p.strip() for p in q.split() if p.strip()]
-    cooked = []
-    for p in parts:
-        p = p.replace('"', "").replace("'", "")
-        cooked.append(f"{p}*")
-    return " AND ".join(cooked)
-
-
-def _scoped_query(q: str, scopes: set[str]) -> str:
-    """
-    Build a scoped FTS query that works well for consumers:
-    - if scopes = {"all"} return q
-    - else, for each term, OR it across selected columns, AND across terms
-
-    Example: query="truck invoice"
-      scopes={"user","assistant"} ->
-        (user_msg:truck* OR assistant_msg:truck*) AND (user_msg:invoice* OR assistant_msg:invoice*)
-    """
-    cooked = _to_prefix_query(q)
-    if not cooked:
-        return ""
-
-    if "all" in scopes or not scopes:
-        return cooked
-
-    # If user provided explicit FTS syntax, do not rewrite.
-    if _looks_like_fts_syntax(q):
-        # If they also used explicit column syntax, assume they know what they're doing.
-        return q
-
-    terms = [t.strip() for t in q.split() if t.strip()]
-    # Very small terms can produce huge match sets with prefix; keep but allow.
-    cols = []
-    if "user" in scopes:
-        cols.append("user_msg")
-    if "assistant" in scopes:
-        cols.append("assistant_msg")
-    if "tools" in scopes:
-        cols.append("tool_calls")
-
-    if not cols:
-        return cooked
-
-    def term_clause(term: str) -> str:
-        t = term.replace('"', "").replace("'", "") + "*"
-        ors = [f"{c}:{t}" for c in cols]
-        return "(" + " OR ".join(ors) + ")"
-
-    clauses = [term_clause(t) for t in terms]
-    return " AND ".join(clauses)
 
 
 class ConversationSearch:
@@ -215,9 +40,11 @@ class ConversationSearch:
 
     SCHEMA_VERSION = "4"
 
-    def __init__(self, db_path: Optional[str | Path] = None) -> None:
+    def __init__(self, db_path: str | Path | None = None) -> None:
         self._lock = threading.RLock()
-        self._db_path = Path(db_path if db_path is not None else os.getenv("THOMAS_SEARCH_DB", "./thomas_search.db")).resolve()
+        self._db_path = Path(
+            db_path if db_path is not None else os.getenv("THOMAS_SEARCH_DB", "./thomas_search.db")
+        ).resolve()
         self._conn = sqlite3.connect(str(self._db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
 
@@ -386,7 +213,7 @@ class ConversationSearch:
         q = (q or "").strip()
         if not q:
             return
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         with self._lock:
             self._conn.execute(
                 """
@@ -410,7 +237,7 @@ class ConversationSearch:
                 except sqlite3.OperationalError:
                     pass
 
-    def index_turn(self, turn: Any, pos: Optional[int] = None) -> str:
+    def index_turn(self, turn: Any, pos: int | None = None) -> str:
         ts = _norm_ts(getattr(turn, "timestamp", ""))
         channel = _safe_text(getattr(turn, "channel", ""))
         user_msg = _safe_text(getattr(turn, "user_msg", ""))
@@ -596,7 +423,7 @@ class ConversationSearch:
         tid = (turn_id or "").strip()
         if not tid:
             return
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         with self._lock:
             self._conn.execute(
                 """
@@ -657,7 +484,7 @@ class ConversationSearch:
         q = (query or "").strip()
         if not q:
             raise ValueError("query required")
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         fj = json.dumps(filters or {}, ensure_ascii=False)
         with self._lock:
             cur = self._conn.execute(
@@ -676,7 +503,7 @@ class ConversationSearch:
             self._conn.commit()
 
     def touch_saved_search(self, sid: int) -> None:
-        now = datetime.utcnow().isoformat() + "Z"
+        now = datetime.now(timezone.utc).replace(tzinfo=None).isoformat() + "Z"
         with self._lock:
             self._conn.execute(
                 "UPDATE saved_searches SET last_used_ts=?, use_count=use_count+1 WHERE id=?",
@@ -697,7 +524,7 @@ class ConversationSearch:
         before: str | None = None,
         has_tool_calls: bool | None = None,
         sort: str = "relevance",
-        scopes: Optional[set[str]] = None,
+        scopes: set[str] | None = None,
     ) -> list[SearchResult]:
         q = (query or "").strip()
         if not q:

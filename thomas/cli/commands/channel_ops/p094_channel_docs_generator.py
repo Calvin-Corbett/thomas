@@ -9,7 +9,8 @@ from __future__ import annotations
 
 import argparse
 import sys
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from thomas.channels.p094_channel_docs_generator import (
     ChannelDocsGeneratorError,
@@ -26,10 +27,11 @@ from thomas.channels.p094_channel_docs_generator import (
 COMMAND_NAME = "docs"
 HELP = "Generate documentation for Thomas messaging channels."
 
+
 def _run(
     *,
-    channel: Optional[str],
-    output_path: Optional[str],
+    channel: str | None,
+    output_path: str | None,
     json_mode: bool,
     validate_config: bool,
     stream: Any,
@@ -128,7 +130,7 @@ def register(target: Any) -> None:
         if isinstance(target, typer.Typer):
             _register_typer(target)
             return
-    except Exception:
+    except ImportError:
         pass
 
     try:
@@ -137,16 +139,14 @@ def register(target: Any) -> None:
         if isinstance(target, click.Group):
             _register_click(target)
             return
-    except Exception:
+    except ImportError:
         pass
 
     if hasattr(target, "command"):
         _register_command_decorator(target)
         return
 
-    raise TypeError(
-        "Unsupported channels command registrar. Expected argparse subparsers, Typer, or Click group."
-    )
+    raise TypeError("Unsupported channels command registrar. Expected argparse subparsers, Typer, or Click group.")
 
 
 def _register_argparse(subparsers: Any) -> None:
@@ -180,12 +180,12 @@ def _register_typer(app: Any) -> None:
 
     @app.command(COMMAND_NAME, help=HELP)
     def docs(
-        channel: Optional[str] = typer.Option(
+        channel: str | None = typer.Option(
             None,
             "--channel",
             help="Comma-separated channel names to include (default: all discovered).",
         ),
-        out: Optional[str] = typer.Option(
+        out: str | None = typer.Option(
             None,
             "--out",
             help="Write output to a file instead of stdout.",
@@ -240,7 +240,7 @@ def _register_click(group: Any) -> None:
         default=False,
         help="Fail if required env configuration is missing.",
     )
-    def docs(channel: Optional[str], out: Optional[str], json_mode: bool, validate_config: bool) -> None:
+    def docs(channel: str | None, out: str | None, json_mode: bool, validate_config: bool) -> None:
         exit_code = _run(
             channel=channel,
             output_path=out,
@@ -260,7 +260,7 @@ def _register_command_decorator(group: Any) -> None:
         return
 
     @decorator
-    def docs(channel: Optional[str] = None, out: Optional[str] = None, json: bool = False) -> None:
+    def docs(channel: str | None = None, out: str | None = None, json: bool = False) -> None:
         exit_code = _run(
             channel=channel,
             output_path=out,

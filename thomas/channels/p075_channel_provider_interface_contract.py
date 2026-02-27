@@ -21,9 +21,10 @@ import importlib
 import inspect
 import json
 import re
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from types import ModuleType
-from typing import Any, Callable, Mapping, Protocol
+from typing import Any, Protocol
 
 
 class ChannelContractError(Exception):
@@ -120,14 +121,11 @@ class SendMessageResult:
 class ChannelProvider(Protocol):
     provider_id: str
 
-    def describe(self) -> ProviderDescription:
-        ...
+    def describe(self) -> ProviderDescription: ...
 
-    def health_check(self) -> HealthCheckResult:
-        ...
+    def health_check(self) -> HealthCheckResult: ...
 
-    def send_message(self, request: SendMessageRequest) -> SendMessageResult:
-        ...
+    def send_message(self, request: SendMessageRequest) -> SendMessageResult: ...
 
 
 _PROVIDER_ID_RE = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_-]{0,63}$")
@@ -136,9 +134,13 @@ _ALLOWED_ACTIONS: set[str] = {"describe", "health_check", "send"}
 
 def _validate_provider_id(provider_id: str) -> None:
     if not isinstance(provider_id, str) or not provider_id.strip():
-        raise ChannelContractError(ERROR_INVALID_INPUT, "provider must be a non-empty string", details={"field": "provider"})
+        raise ChannelContractError(
+            ERROR_INVALID_INPUT, "provider must be a non-empty string", details={"field": "provider"}
+        )
     if not _PROVIDER_ID_RE.match(provider_id):
-        raise ChannelContractError(ERROR_INVALID_INPUT, "provider contains invalid characters", details={"provider": provider_id})
+        raise ChannelContractError(
+            ERROR_INVALID_INPUT, "provider contains invalid characters", details={"provider": provider_id}
+        )
 
 
 def _normalize_provider_id(provider_id: str) -> str:
@@ -188,7 +190,7 @@ def load_provider(provider_id: str, config: Mapping[str, Any] | None = None) -> 
     for module_name in _candidate_modules(provider_id):
         try:
             module = _safe_import(module_name)
-        except Exception as e:  # pragma: no cover
+        except (ImportError, AttributeError, RuntimeError) as e:  # pragma: no cover
             raise ChannelContractError(
                 ERROR_PROVIDER_LOAD_FAILED,
                 f"provider module '{module_name}' failed to import",
@@ -217,7 +219,7 @@ def _adapt(provider_id: str, module: ModuleType, cfg: Mapping[str, Any]) -> Chan
     if isinstance(provider_cls, type):
         try:
             obj = _call_best_effort(provider_cls, {"config": cfg, "settings": cfg, "cfg": cfg})
-        except Exception as e:  # pragma: no cover
+        except (RuntimeError, AttributeError, TypeError, ValueError) as e:  # pragma: no cover
             raise ChannelContractError(
                 ERROR_PROVIDER_LOAD_FAILED,
                 "provider class could not be constructed",
@@ -233,8 +235,8 @@ def _coerce(provider_id: str, obj: Any, module: ModuleType, cfg: Mapping[str, An
     if all(hasattr(obj, name) for name in required):
         if not hasattr(obj, "provider_id"):
             try:
-                setattr(obj, "provider_id", provider_id)
-            except Exception:
+                obj.provider_id = provider_id
+            except (AttributeError, TypeError):
                 pass
         return obj  # type: ignore[return-value]
 
@@ -339,23 +341,33 @@ def run_provider_contract(request: ProviderContractRequest) -> ProviderContractR
 
         if request.action == "describe":
             desc = provider.describe()
-            return ProviderContractResponse(ok=True, provider=request.provider, action=request.action, result=asdict(desc))
+            return ProviderContractResponse(
+                ok=True, provider=request.provider, action=request.action, result=asdict(desc)
+            )
 
         if request.action == "health_check":
             hc = provider.health_check()
-            return ProviderContractResponse(ok=True, provider=request.provider, action=request.action, result={"ok": hc.ok, "details": hc.details})
+            return ProviderContractResponse(
+                ok=True, provider=request.provider, action=request.action, result={"ok": hc.ok, "details": hc.details}
+            )
 
         assert request.config is not None
 
         # Enforce required config keys when available.
         try:
             desc = provider.describe()
-            missing = [k for k in desc.required_config_keys if k not in request.config or request.config.get(k) in (None, "")]
+            missing = [
+                k for k in desc.required_config_keys if k not in request.config or request.config.get(k) in (None, "")
+            ]
             if missing:
-                raise ChannelContractError(ERROR_MISSING_CONFIG, "config missing required keys", details={"provider": request.provider, "missing_keys": missing})
+                raise ChannelContractError(
+                    ERROR_MISSING_CONFIG,
+                    "config missing required keys",
+                    details={"provider": request.provider, "missing_keys": missing},
+                )
         except ChannelContractError:
             raise
-        except Exception:
+        except (RuntimeError, AttributeError, KeyError, ValueError):
             pass  # pragma: no cover
 
         send_req = SendMessageRequest(
@@ -371,7 +383,11 @@ def run_provider_contract(request: ProviderContractRequest) -> ProviderContractR
             ok=True,
             provider=request.provider,
             action=request.action,
-            result={"delivered": send_res.delivered, "message_id": send_res.message_id, "provider_response": send_res.provider_response},
+            result={
+                "delivered": send_res.delivered,
+                "message_id": send_res.message_id,
+                "provider_response": send_res.provider_response,
+            },
         )
 
     except ChannelContractError as e:
@@ -381,7 +397,15 @@ def run_provider_contract(request: ProviderContractRequest) -> ProviderContractR
             action=getattr(request, "action", ""),
             error=ContractErrorInfo(code=e.code, message=str(e), details=dict(e.details)),
         )
-    except Exception as e:  # pragma: no cover
+    except (
+        RuntimeError,
+        AttributeError,
+        ConnectionError,
+        TimeoutError,
+        json.JSONDecodeError,
+        ValueError,
+        KeyError,
+    ) as e:  # pragma: no cover
         return ProviderContractResponse(
             ok=False,
             provider=getattr(request, "provider", ""),
@@ -401,17 +425,27 @@ def _validate_request(request: ProviderContractRequest) -> None:
     _validate_provider_id(request.provider)
 
     if request.action not in _ALLOWED_ACTIONS:
-        raise ChannelContractError(ERROR_INVALID_INPUT, "action must be one of: describe, health_check, send", details={"action": request.action})
+        raise ChannelContractError(
+            ERROR_INVALID_INPUT,
+            "action must be one of: describe, health_check, send",
+            details={"action": request.action},
+        )
 
     if request.action == "send":
         if request.config is None:
-            raise ChannelContractError(ERROR_MISSING_CONFIG, "config is required for send", details={"provider": request.provider})
+            raise ChannelContractError(
+                ERROR_MISSING_CONFIG, "config is required for send", details={"provider": request.provider}
+            )
         if not isinstance(request.config, Mapping):
             raise ChannelContractError(ERROR_INVALID_INPUT, "config must be a mapping", details={"field": "config"})
         if request.recipient is None or not str(request.recipient).strip():
-            raise ChannelContractError(ERROR_INVALID_INPUT, "recipient is required for send", details={"field": "recipient"})
+            raise ChannelContractError(
+                ERROR_INVALID_INPUT, "recipient is required for send", details={"field": "recipient"}
+            )
         if request.message is None or not str(request.message).strip():
-            raise ChannelContractError(ERROR_INVALID_INPUT, "message is required for send", details={"field": "message"})
+            raise ChannelContractError(
+                ERROR_INVALID_INPUT, "message is required for send", details={"field": "message"}
+            )
 
     if request.metadata is not None and not isinstance(request.metadata, Mapping):
         raise ChannelContractError(ERROR_INVALID_INPUT, "metadata must be a mapping", details={"field": "metadata"})
@@ -420,9 +454,13 @@ def _validate_request(request: ProviderContractRequest) -> None:
         try:
             t = float(request.timeout_seconds)
         except (TypeError, ValueError):
-            raise ChannelContractError(ERROR_INVALID_INPUT, "timeout_seconds must be a number", details={"field": "timeout_seconds"})
+            raise ChannelContractError(
+                ERROR_INVALID_INPUT, "timeout_seconds must be a number", details={"field": "timeout_seconds"}
+            )
         if t <= 0:
-            raise ChannelContractError(ERROR_INVALID_INPUT, "timeout_seconds must be > 0", details={"field": "timeout_seconds"})
+            raise ChannelContractError(
+                ERROR_INVALID_INPUT, "timeout_seconds must be > 0", details={"field": "timeout_seconds"}
+            )
 
 
 def dumps_response_json(response: ProviderContractResponse) -> str:

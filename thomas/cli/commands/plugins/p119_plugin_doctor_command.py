@@ -13,16 +13,16 @@ The module exports:
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 try:
     import click
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     click = None  # type: ignore[assignment]
 
 try:
     import typer
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore[assignment]
 
 from thomas.plugins.p119_plugin_doctor_command import (
@@ -58,8 +58,8 @@ def _emit_error(err: PluginDoctorError, *, json_mode: bool) -> str:
 
 def run_cli(
     *,
-    plugin: Optional[str] = None,
-    config_path: Optional[str] = None,
+    plugin: str | None = None,
+    config_path: str | None = None,
     include_hidden: bool = False,
     strict: bool = False,
     json_mode: bool = False,
@@ -98,8 +98,8 @@ if click is not None:
     @click.option("--strict", is_flag=True, default=False, help="Treat warnings as failures.")
     @click.option("--json", "json_mode", is_flag=True, default=False, help="Emit JSON.")
     def doctor_command(
-        plugin: Optional[str],
-        config_path: Optional[str],
+        plugin: str | None,
+        config_path: str | None,
         include_hidden: bool,
         strict: bool,
         json_mode: bool,
@@ -120,7 +120,6 @@ if click is not None:
 
         raise SystemExit(exit_code)
 
-
     COMMAND = doctor_command
 else:  # pragma: no cover
     COMMAND = None
@@ -133,10 +132,8 @@ else:  # pragma: no cover
 if typer is not None:
 
     def _typer_doctor(
-        plugin: Optional[str] = typer.Option(None, "--plugin", help="Inspect only one plugin module."),
-        config_path: Optional[str] = typer.Option(
-            None, "--config", help="Config file path to validate exists."
-        ),
+        plugin: str | None = typer.Option(None, "--plugin", help="Inspect only one plugin module."),
+        config_path: str | None = typer.Option(None, "--config", help="Config file path to validate exists."),
         include_hidden: bool = typer.Option(
             False, "--include-hidden", help="Include plugins starting with '_' in discovery."
         ),
@@ -161,6 +158,7 @@ else:  # pragma: no cover
 # Registration helper
 # ----------------------------
 
+
 def register(target: Any) -> None:
     """Register the command on a supported CLI target (best-effort)."""
     if target is None:
@@ -171,7 +169,7 @@ def register(target: Any) -> None:
         try:
             target.add_command(COMMAND)  # type: ignore[attr-defined]
             return
-        except Exception:
+        except AttributeError:
             pass
 
     # Typer App
@@ -179,7 +177,7 @@ def register(target: Any) -> None:
         try:
             target.command("doctor")(_typer_doctor)  # type: ignore[attr-defined]
             return
-        except Exception:
+        except AttributeError:
             pass
 
     # argparse subparsers

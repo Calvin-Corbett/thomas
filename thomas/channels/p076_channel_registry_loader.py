@@ -9,18 +9,19 @@ remaining easy to validate and serialize.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Any, Mapping, MutableMapping, Sequence
-
 import json
 import os
 import re
+from collections.abc import Mapping, MutableMapping, Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
+
 import tomllib
 
 try:  # Optional dependency
     import yaml  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     yaml = None  # type: ignore[assignment]
 
 
@@ -30,7 +31,7 @@ except Exception:  # pragma: no cover
 
 try:  # Prefer a project-level base error if available
     from thomas.exceptions import ThomasError as _ThomasBaseError  # type: ignore
-except Exception:  # pragma: no cover
+except (ImportError, AttributeError):  # pragma: no cover
     _ThomasBaseError = Exception  # type: ignore[misc,assignment]
 
 
@@ -79,6 +80,7 @@ class ChannelRegistryUnsupportedFormatError(ChannelRegistryError):
 # ---------------------------------------------------------------------------
 # Contracts
 # ---------------------------------------------------------------------------
+
 
 @dataclass(frozen=True, slots=True)
 class ChannelRegistryLoadRequest:
@@ -130,6 +132,7 @@ class ChannelRegistryLoadResult:
 # ---------------------------------------------------------------------------
 # Schema helpers (for automation)
 # ---------------------------------------------------------------------------
+
 
 def channel_registry_load_result_schema() -> dict[str, Any]:
     """Return a small JSON schema for the CLI ``--json`` output."""
@@ -299,15 +302,15 @@ def _parse_registry(text: str, path: Path) -> Any:
         if yaml is not None:
             try:
                 return yaml.safe_load(text)
-            except Exception:
+            except (ValueError, KeyError, AttributeError, RuntimeError):
                 pass
         try:
             return json.loads(text)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             pass
         try:
             return tomllib.loads(text)
-        except Exception:
+        except ValueError:
             pass
 
         raise ChannelRegistryUnsupportedFormatError(
@@ -316,7 +319,7 @@ def _parse_registry(text: str, path: Path) -> Any:
         )
     except ChannelRegistryError:
         raise
-    except Exception as e:
+    except (ValueError, json.JSONDecodeError, RuntimeError, KeyError) as e:
         raise ChannelRegistryParseError(
             f"Failed to parse channel registry file: {path}",
             details={"path": str(path), "suffix": suffix, "error_type": type(e).__name__},
@@ -458,6 +461,7 @@ def _resolve_env(value: Any, *, env: Mapping[str, str]) -> Any:
 
     def walk(v: Any) -> Any:
         if isinstance(v, str):
+
             def repl(match: re.Match[str]) -> str:
                 var = match.group(1)
                 default = match.group(2)

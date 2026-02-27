@@ -17,13 +17,12 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Optional
 
 import click
 
 try:  # Typer is optional; Click is the hard dependency here.
     import typer  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
 from thomas.nodes.p035_node_command_stop import (
@@ -44,8 +43,8 @@ def _run_stop(
     *,
     node_id: str,
     force: bool,
-    timeout_s: Optional[float],
-    config_path: Optional[str],
+    timeout_s: float | None,
+    config_path: str | None,
     json_output: bool,
 ) -> None:
     inp = NodeCommandStopInput(
@@ -84,8 +83,8 @@ def _run_stop(
 def click_command(
     node_id: str,
     force: bool,
-    timeout_s: Optional[float],
-    config_path: Optional[str],
+    timeout_s: float | None,
+    config_path: str | None,
     json_output: bool,
 ) -> None:
     """Stop a node."""
@@ -114,13 +113,13 @@ if typer is not None:
     def stop(
         node_id: str = typer.Argument(..., help="Node identifier to stop"),  # type: ignore[attr-defined]
         force: bool = typer.Option(False, "--force", help="Force stop"),  # type: ignore[attr-defined]
-        timeout_s: Optional[float] = typer.Option(  # type: ignore[attr-defined]
+        timeout_s: float | None = typer.Option(  # type: ignore[attr-defined]
             None,
             "--timeout",
             help="Timeout (seconds) to wait for the stop operation",
             min=0,
         ),
-        config_path: Optional[Path] = typer.Option(  # type: ignore[attr-defined]
+        config_path: Path | None = typer.Option(  # type: ignore[attr-defined]
             None,
             "--config",
             exists=False,

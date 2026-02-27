@@ -6,6 +6,7 @@ from pathlib import Path
 import scripts.check_workboard_claims as gate
 import scripts.workboard_message as msg_mod
 import scripts.workboard_task_manager as mod
+
 from thomas.preferences.store import PreferencesStore
 
 
@@ -27,7 +28,8 @@ def _write_workboard(
             f"{claims_block}\n\n"
             "## Active Tasks\n\n"
             "Task format:\n"
-            "`- \\`task_id=<id>; agent=<id>; scope=<path[,path...]>; summary=<short text>; status=<active|blocked>\\``\n\n"
+            "`- \\`task_id=<id>; agent=<id>; scope=<path[,path...]>; summary=<short text>; "
+            "status=<queued|claimed|in_progress|blocked|review|done>\\``\n\n"
             f"{active_tasks_block}\n\n"
             "## Issues / Blockers\n\n"
             "Issue format:\n"
@@ -77,15 +79,34 @@ def test_sync_plans_apply_scaffolds_missing_plan_files(tmp_path: Path, capsys) -
     assert gate.evaluate(workboard) == []
 
 
-def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
         claims_block="- agent=Codex Offline; scope=thomas/cli/main.py; task=[WIP] models lane",
         active_tasks_block="- task_id=models-lane; agent=Codex Offline; scope=thomas/cli/main.py; summary=[WIP] models lane; status=active",
     )
     monkeypatch.setattr(mod, "_line_commit_unix", lambda *_args, **_kwargs: 1771846200)
+    original_release = mod.workboard_claim.release
+    release_call: dict[str, str | bool] = {}
+
+    def _release_proxy(
+        workboard_path: Path,
+        *,
+        agent: str,
+        allow_dirty: bool = False,
+        dirty_reason: str = "",
+    ) -> tuple[bool, str]:
+        release_call["agent"] = agent
+        release_call["allow_dirty"] = bool(allow_dirty)
+        release_call["dirty_reason"] = dirty_reason
+        return original_release(
+            workboard_path,
+            agent=agent,
+            allow_dirty=allow_dirty,
+            dirty_reason=dirty_reason,
+        )
+
+    monkeypatch.setattr(mod.workboard_claim, "release", _release_proxy)
 
     rc = mod.run(
         [
@@ -110,6 +131,11 @@ def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(
     assert payload["stale_claim_count"] == 1
     assert payload["moved_task_ids"] == ["models-lane"]
     assert payload["sent_message_count"] == 1
+    assert release_call == {
+        "agent": "Codex Offline",
+        "allow_dirty": True,
+        "dirty_reason": "inactivity reclaim by TaskManager for Codex Offline: claim_line_age_timeout",
+    }
     assert "agent=Codex Offline; scope=thomas/cli/main.py; task=[WIP] models lane" not in text
     assert "task_id=models-lane; agent=Codex Offline;" not in text
     assert "task_id=models-lane; scope=thomas/cli/main.py; summary=[WIP] models lane; reported_by=TaskManager" in text
@@ -118,6 +144,52 @@ def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(
     assert "## Agent Message Traffic" in text
     assert "kind=ping;" in text
     assert "agent=Codex Offline; state=inactive;" in text
+    assert gate.evaluate(workboard) == []
+
+
+def test_sweep_inactive_uses_agent_activity_when_claim_line_is_fresh(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block="- agent=Codex Offline; scope=thomas/cli/main.py; task=[WIP] models lane",
+        active_tasks_block="- task_id=models-lane; agent=Codex Offline; scope=thomas/cli/main.py; summary=[WIP] models lane; status=active",
+    )
+    text = workboard.read_text(encoding="utf-8")
+    workboard.write_text(
+        text
+        + "\n## Agent Sessions\n\n"
+        + "- agent=Codex Offline; model_alias=Codex Offline; session_id=sess-old; parent=none; state=active; active_task=models-lane; last_seen=2026-02-25T11:30:00+00:00\n",
+        encoding="utf-8",
+    )
+    # Simulate a fresh claim line timestamp so stale detection must use agent activity.
+    monkeypatch.setattr(mod, "_line_commit_unix", lambda *_args, **_kwargs: 1772020795)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--sweep-inactive",
+            "--max-idle-minutes",
+            "1",
+            "--task-manager-agent",
+            "TaskManager",
+            "--now",
+            "2026-02-25T12:00:00+00:00",
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    out = workboard.read_text(encoding="utf-8")
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["stale_claim_count"] == 1
+    assert payload["moved_task_ids"] == ["models-lane"]
+    stale = list(payload["stale_claims"] or [])
+    assert stale
+    assert stale[0]["issue"] == "agent_activity_timeout"
+    assert "agent=Codex Offline; scope=thomas/cli/main.py; task=[WIP] models lane" not in out
+    assert "task_id=models-lane; agent=Codex Offline;" not in out
     assert gate.evaluate(workboard) == []
 
 
@@ -155,7 +227,9 @@ def test_reactivate_moves_task_back_to_active_lane(tmp_path: Path, capsys) -> No
     assert rc == 0
     assert payload["ok"] is True
     assert "task_id=models-lane; agent=Codex Offline;" in out
-    assert "task_id=models-lane; scope=thomas/cli/main.py; summary=[WIP] models lane; reported_by=TaskManager" not in out
+    assert (
+        "task_id=models-lane; scope=thomas/cli/main.py; summary=[WIP] models lane; reported_by=TaskManager" not in out
+    )
     assert "agent=Codex Offline;" in out
     assert gate.evaluate(workboard) == []
 
@@ -184,10 +258,12 @@ def test_sync_sessions_apply_writes_active_registry(tmp_path: Path, capsys) -> N
     assert rc == 0
     assert payload["ok"] is True
     assert payload["session_entry_count"] == 1
+    assert payload["session_lease_minutes"] == 5.0
     assert "## Agent Sessions" in text
     assert "agent=Codex 3;" in text
     assert "state=active;" in text
     assert "active_task=coord-lane;" in text
+    assert "lease_expires=" in text
     assert gate.evaluate(workboard) == []
 
 
@@ -474,7 +550,7 @@ def test_monitor_dispatches_online_idle_agent_to_up_for_grabs(tmp_path: Path, ca
         tmp_path,
         up_for_grabs_block=(
             "- task_id=cleanup-lane; scope=docs/ops,plans/thomas; "
-            "summary=[P0][NOW] cleanup legacy board residue; reported_by=task-manager-agent"
+            "summary=[P0][NOW] cleanup legacy board residue; reported_by=task-manager-agent; depends_on=none"
         ),
     )
     plan_root = tmp_path / "task-plans"
@@ -485,7 +561,7 @@ def test_monitor_dispatches_online_idle_agent_to_up_for_grabs(tmp_path: Path, ca
         recipient="task-manager-agent",
         summary="swarm test terminal online",
         task_id="none",
-        kind="status",
+        kind="ping",
         priority="p0",
         requested_action="none",
         decision="pending",
@@ -529,16 +605,138 @@ def test_monitor_dispatches_online_idle_agent_to_up_for_grabs(tmp_path: Path, ca
     assert gate.evaluate(workboard) == []
 
 
-def test_monitor_auto_splits_partial_overlap_task_for_idle_dispatch(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_monitor_dispatch_handles_agent_default_task_id_collision(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        up_for_grabs_block=(
+            "- task_id=codex-1-task; scope=thomas/cli/main.py; "
+            "summary=[P0][NOW] codex lane dispatch collision regression; reported_by=task-manager-agent; depends_on=none"
+        ),
+    )
+    plan_root = tmp_path / "task-plans"
+
+    ok_msg, payload_msg = msg_mod.send_message(
+        workboard,
+        sender="Codex 1",
+        recipient="task-manager-agent",
+        summary="terminal online",
+        task_id="none",
+        kind="ping",
+        priority="p0",
+        requested_action="none",
+        decision="pending",
+    )
+    assert ok_msg is True, payload_msg
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--monitor",
+            "--plan-root",
+            str(plan_root),
+            "--cycles",
+            "1",
+            "--interval-seconds",
+            "0",
+            "--max-idle-minutes",
+            "999",
+            "--max-agent-silence-minutes",
+            "30",
+            "--max-dispatch-per-cycle",
+            "1",
+            "--no-swarm-recovery",
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text = workboard.read_text(encoding="utf-8")
+
+    assert rc == 0
+    assert payload["ok"] is True
+    checks = dict((payload.get("cycles") or [{}])[0].get("checks") or {})
+    dispatch = dict(checks.get("idle_dispatch") or {})
+    assert dispatch.get("assigned_count") == 1
+    assert "task_id=codex-1-task; agent=Codex 1;" in text
+    assert (
+        "task_id=codex-1-task; scope=thomas/cli/main.py; "
+        "summary=[P0][NOW] codex lane dispatch collision regression; reported_by=task-manager-agent" not in text
+    )
+    assert gate.evaluate(workboard) == []
+
+
+def test_monitor_prioritizes_user_tasks_before_background_ecosystem(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        up_for_grabs_block=(
+            "- task_id=ecosystem-lane; scope=plans/thomas/WORKBOARD.md,docs/ops/TASK_ECOSYSTEM_PROTOCOL.md; "
+            "summary=[P0][NOW] maintain ecosystem queue; reported_by=task-manager-agent; depends_on=none\n"
+            "- task_id=user-feature-lane; scope=thomas/server/app.py; "
+            "summary=[P1][NEXT][USER] implement runtime user feature lane; reported_by=task-manager-agent"
+        ),
+    )
+    plan_root = tmp_path / "task-plans"
+
+    ok_msg, payload_msg = msg_mod.send_message(
+        workboard,
+        sender="Codex Idle",
+        recipient="task-manager-agent",
+        summary="terminal online",
+        task_id="none",
+        kind="ping",
+        priority="p1",
+        requested_action="none",
+        decision="pending",
+    )
+    assert ok_msg is True, payload_msg
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--monitor",
+            "--plan-root",
+            str(plan_root),
+            "--cycles",
+            "1",
+            "--interval-seconds",
+            "0",
+            "--max-idle-minutes",
+            "999",
+            "--max-agent-silence-minutes",
+            "30",
+            "--max-dispatch-per-cycle",
+            "1",
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text = workboard.read_text(encoding="utf-8")
+
+    assert rc == 0
+    assert payload["ok"] is True
+    checks = dict((payload.get("cycles") or [{}])[0].get("checks") or {})
+    dispatch = dict(checks.get("idle_dispatch") or {})
+    assignments = list(dispatch.get("assignments") or [])
+    assert len(assignments) == 1
+    assigned = dict(assignments[0])
+    assert assigned.get("task_id") == "user-feature-lane"
+    assert assigned.get("priority_source") == "user"
+    assert "task_id=user-feature-lane; agent=Codex Idle;" in text
+    assert "task_id=ecosystem-lane; scope=plans/thomas/WORKBOARD.md,docs/ops/TASK_ECOSYSTEM_PROTOCOL.md;" in text
+    assert gate.evaluate(workboard) == []
+
+
+def test_monitor_auto_splits_partial_overlap_task_for_idle_dispatch(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
         claims_block="- agent=Codex Busy; scope=docs/ops; task=[WIP] docs lane",
         active_tasks_block="- task_id=docs-lane; agent=Codex Busy; scope=docs/ops; summary=[WIP] docs lane; status=active",
         up_for_grabs_block=(
             "- task_id=mixed-lane; scope=docs/ops,thomas/cli/main.py; "
-            "summary=[P0][NOW] mixed scope cleanup lane; reported_by=task-manager-agent"
+            "summary=[P0][NOW] mixed scope cleanup lane; reported_by=task-manager-agent; depends_on=none"
         ),
     )
     plan_root = tmp_path / "task-plans"
@@ -550,7 +748,7 @@ def test_monitor_auto_splits_partial_overlap_task_for_idle_dispatch(
         recipient="task-manager-agent",
         summary="terminal online",
         task_id="none",
-        kind="status",
+        kind="ping",
         priority="p0",
         requested_action="none",
         decision="pending",
@@ -597,7 +795,10 @@ def test_monitor_auto_splits_partial_overlap_task_for_idle_dispatch(
     assert assigned.get("mode") == "applied_split"
     assert assigned.get("task_id") == "mixed-lane-split-1"
     assert "task_id=mixed-lane-split-1; agent=Codex Idle; scope=thomas/cli/main.py;" in text
-    assert "task_id=mixed-lane; scope=docs/ops; summary=[P0][NOW] mixed scope cleanup lane; reported_by=task-manager-agent" in text
+    assert (
+        "task_id=mixed-lane; scope=docs/ops; summary=[P0][NOW] mixed scope cleanup lane; reported_by=task-manager-agent"
+        in text
+    )
     assert gate.evaluate(workboard) == []
 
 
@@ -650,9 +851,72 @@ def test_monitor_pings_silent_active_task_agent(tmp_path: Path, monkeypatch, cap
     assert gate.evaluate(workboard) == []
 
 
-def test_monitor_sends_blocked_dispatch_notice_when_no_non_overlap_task(
-    tmp_path: Path, monkeypatch, capsys
-) -> None:
+def test_monitor_starts_brainstorm_session_for_brainstorm_task(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block=(
+            "- agent=Codex 1; scope=scripts/a.py; task=lane a\n" "- agent=Codex 2; scope=scripts/b.py; task=lane b"
+        ),
+        active_tasks_block=(
+            "- task_id=lane-a; agent=Codex 1; scope=scripts/a.py; summary=lane a; status=active\n"
+            "- task_id=lane-b; agent=Codex 2; scope=scripts/b.py; summary=lane b; status=active"
+        ),
+        up_for_grabs_block=(
+            "- task_id=brainstorm-target; scope=plans/thomas/brainstorm.md; "
+            "summary=[P0][NOW] run an all-hands brainstorm workshop to reach consensus; reported_by=task-manager-agent; depends_on=none"
+        ),
+    )
+    plan_root = tmp_path / "task-plans"
+
+    ok_msg, payload_msg = msg_mod.send_message(
+        workboard,
+        sender="Codex Idle",
+        recipient="task-manager-agent",
+        summary="terminal online",
+        task_id="none",
+        kind="ping",
+        priority="p1",
+        requested_action="none",
+        decision="pending",
+    )
+    assert ok_msg is True, payload_msg
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--monitor",
+            "--plan-root",
+            str(plan_root),
+            "--cycles",
+            "1",
+            "--interval-seconds",
+            "0",
+            "--max-idle-minutes",
+            "999",
+            "--max-agent-silence-minutes",
+            "30",
+            "--max-dispatch-per-cycle",
+            "1",
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text = workboard.read_text(encoding="utf-8")
+
+    assert rc == 0
+    assert payload["ok"] is True
+    checks = dict((payload.get("cycles") or [{}])[0].get("checks") or {})
+    dispatch = dict(checks.get("idle_dispatch") or {})
+    assert dispatch.get("brainstorm_task_count") == 1
+    assert "## Brainstorm Sessions" in text
+    assert "task_id=brainstorm-target;" in text
+    assert "kind=brainstorm_call;" in text
+    assert gate.evaluate(workboard) == []
+
+
+def test_monitor_sends_blocked_dispatch_notice_when_no_non_overlap_task(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
         claims_block="- agent=Codex Busy; scope=docs/ops; task=[WIP] docs lane",
@@ -671,7 +935,7 @@ def test_monitor_sends_blocked_dispatch_notice_when_no_non_overlap_task(
         recipient="task-manager-agent",
         summary="terminal online",
         task_id="none",
-        kind="status",
+        kind="ping",
         priority="p0",
         requested_action="none",
         decision="pending",

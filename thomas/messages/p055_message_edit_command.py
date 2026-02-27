@@ -18,9 +18,9 @@ from __future__ import annotations
 import dataclasses
 import inspect
 import json
+from collections.abc import Mapping, MutableMapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping, MutableMapping, Optional
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Contracts
@@ -33,8 +33,8 @@ class MessageEditCommandInput:
 
     message_id: str
     new_text: str
-    channel_id: Optional[str] = None
-    metadata: Optional[Mapping[str, Any]] = None
+    channel_id: str | None = None
+    metadata: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -43,9 +43,9 @@ class MessageEditCommandOutput:
 
     message_id: str
     new_text: str
-    channel_id: Optional[str] = None
+    channel_id: str | None = None
     edited: bool = True
-    provider_result: Optional[Mapping[str, Any]] = None
+    provider_result: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data = asdict(self)
@@ -116,7 +116,7 @@ class MessageEditCommandError(Exception):
         code: str,
         message: str,
         *,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -173,7 +173,7 @@ def execute_message_edit(
         provider_result = _coerce_provider_result(provider_result_raw)
     except MessageEditCommandError:
         raise
-    except Exception as exc:  # pragma: no cover (defensive)
+    except (ConnectionError, TimeoutError, RuntimeError) as exc:  # pragma: no cover (defensive)
         # Deterministic wrapper: do not leak network/library messages.
         raise MessageEditCommandError(
             ERR_EXTERNAL_FAILURE,
@@ -255,7 +255,7 @@ def _call_editor(editor: Any, request: MessageEditCommandInput) -> Any:
     text_keys = ["text", "new_text", "content", "body"]
     channel_keys = ["channel_id", "channel", "room_id", "conversation_id"]
 
-    last_type_error: Optional[TypeError] = None
+    last_type_error: TypeError | None = None
 
     for fn, _label in candidates:
         # Try keyword conventions.
@@ -325,7 +325,7 @@ def _call_with_filtered_kwargs(fn: Any, kwargs: MutableMapping[str, Any]) -> Any
     return fn(**filtered)
 
 
-def _coerce_provider_result(result: Any) -> Optional[Mapping[str, Any]]:
+def _coerce_provider_result(result: Any) -> Mapping[str, Any] | None:
     """Coerce provider result to a JSON-friendly mapping (or None).
 
     Determinism matters: when we can't serialize something, we do **not** include
@@ -349,7 +349,7 @@ def _coerce_provider_result(result: Any) -> Optional[Mapping[str, Any]]:
             v = to_dict()
             if isinstance(v, Mapping):
                 return dict(v)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             return {"type": type(result).__name__}
 
     dict_method = getattr(result, "dict", None)
@@ -358,7 +358,7 @@ def _coerce_provider_result(result: Any) -> Optional[Mapping[str, Any]]:
             v = dict_method()
             if isinstance(v, Mapping):
                 return dict(v)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             return {"type": type(result).__name__}
 
     # Fallback: record only the type.

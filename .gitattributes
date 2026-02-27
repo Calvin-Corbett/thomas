@@ -1,0 +1,47 @@
+# Binary files
+*.db binary
+*.db-shm binary
+*.db-wal binary
+*.sqlite3 binary
+*.zip binary
+*.tar binary
+*.tar.gz binary
+*.whl binary
+*.exe binary
+*.dll binary
+*.so binary
+*.dylib binary
+*.jar binary
+*.war binary
+
+# Image formats
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.webp binary
+*.svg binary
+*.bmp binary
+
+# Font files
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.eot binary
+
+# Audio/Video
+*.mp3 binary
+*.mp4 binary
+*.wav binary
+*.flac binary
+*.mov binary
+*.avi binary
+*.mkv binary
+
+# Documents
+*.pdf binary
+*.docx binary
+*.xlsx binary
+*.pptx binary

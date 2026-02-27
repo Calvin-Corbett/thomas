@@ -1,0 +1,1657 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tool Management - Thomas AI Agent</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #12161f;
+            color: #e0e0e0;
+            line-height: 1.6;
+        }
+
+        /* Header */
+        header {
+            background: #1a1f2e;
+            border-bottom: 1px solid #2d3748;
+            padding: 1.5rem 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+
+        .header-content {
+            max-width: 1600px;
+            margin: 0 auto;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        h1 {
+            font-size: 1.75rem;
+            color: #fff;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+        .header-icon {
+            width: 32px;
+            height: 32px;
+            background: #6c5ce7;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+        }
+
+        .search-bar {
+            flex: 1;
+            max-width: 400px;
+            margin: 0 2rem;
+        }
+
+        .search-bar input {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border: 1px solid #2d3748;
+            background: #0f1419;
+            color: #e0e0e0;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            transition: border-color 0.2s;
+        }
+
+        .search-bar input:focus {
+            outline: none;
+            border-color: #6c5ce7;
+            background: #141821;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 1rem;
+        }
+
+        .btn {
+            padding: 0.75rem 1.25rem;
+            border: none;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: #6c5ce7;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #7c6ff7;
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(108, 92, 231, 0.3);
+        }
+
+        .btn-secondary {
+            background: #2d3748;
+            color: #e0e0e0;
+        }
+
+        .btn-secondary:hover {
+            background: #3a4556;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #f15241;
+        }
+
+        .btn-success {
+            background: #27ae60;
+            color: white;
+        }
+
+        .btn-success:hover {
+            background: #2ecc71;
+        }
+
+        /* Main Container */
+        .container {
+            max-width: 1600px;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 250px 1fr;
+            gap: 2rem;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            height: fit-content;
+            position: sticky;
+            top: 100px;
+        }
+
+        .sidebar-section {
+            margin-bottom: 2rem;
+        }
+
+        .sidebar-title {
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            color: #999;
+            margin-bottom: 1rem;
+            letter-spacing: 0.5px;
+        }
+
+        .category-filter {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .category-btn {
+            padding: 0.75rem 1rem;
+            background: transparent;
+            border: 1px solid transparent;
+            color: #a0aec0;
+            border-radius: 6px;
+            cursor: pointer;
+            text-align: left;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+        }
+
+        .category-btn:hover {
+            background: #2d3748;
+            color: #e0e0e0;
+        }
+
+        .category-btn.active {
+            background: #6c5ce7;
+            color: white;
+            border-color: #6c5ce7;
+        }
+
+        .stats-box {
+            background: #1a1f2e;
+            padding: 1rem;
+            border-radius: 8px;
+            border: 1px solid #2d3748;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 0.5rem 0;
+        }
+
+        .stat-label {
+            color: #a0aec0;
+            font-size: 0.9rem;
+        }
+
+        .stat-value {
+            font-weight: bold;
+            color: #6c5ce7;
+            font-size: 1.1rem;
+        }
+
+        /* Main Content */
+        .main-content {
+            display: flex;
+            flex-direction: column;
+            gap: 2rem;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            border-bottom: 1px solid #2d3748;
+            margin-bottom: 1.5rem;
+        }
+
+        .tab-btn {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #a0aec0;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .tab-btn:hover {
+            color: #e0e0e0;
+        }
+
+        .tab-btn.active {
+            color: #6c5ce7;
+            border-bottom-color: #6c5ce7;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        /* Tool Grid */
+        .tool-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .tool-card {
+            background: #1a1f2e;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            padding: 1.5rem;
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+        }
+
+        .tool-card:hover {
+            border-color: #6c5ce7;
+            box-shadow: 0 8px 24px rgba(108, 92, 231, 0.15);
+            transform: translateY(-4px);
+        }
+
+        .tool-card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 1rem;
+        }
+
+        .tool-icon {
+            width: 48px;
+            height: 48px;
+            background: #2d3748;
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+        }
+
+        .tool-status {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            background: #0f1419;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-active { color: #27ae60; }
+        .status-disabled { color: #e67e22; }
+        .status-error { color: #e74c3c; }
+
+        .status-dot {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+        .status-dot.active { background: #27ae60; }
+        .status-dot.disabled { background: #e67e22; }
+        .status-dot.error { background: #e74c3c; }
+
+        .tool-name {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .tool-category {
+            display: inline-block;
+            background: #2d3748;
+            color: #a0aec0;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-size: 0.8rem;
+            margin-bottom: 1rem;
+        }
+
+        .tool-description {
+            color: #a0aec0;
+            font-size: 0.9rem;
+            line-height: 1.5;
+            margin-bottom: 1rem;
+            min-height: 3em;
+        }
+
+        .tool-footer {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding-top: 1rem;
+            border-top: 1px solid #2d3748;
+        }
+
+        .tool-meta {
+            display: flex;
+            gap: 1rem;
+            font-size: 0.85rem;
+            color: #a0aec0;
+        }
+
+        .tool-actions {
+            display: flex;
+            gap: 0.5rem;
+        }
+
+        .icon-btn {
+            width: 32px;
+            height: 32px;
+            background: #2d3748;
+            border: none;
+            border-radius: 4px;
+            color: #a0aec0;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            background: #6c5ce7;
+            color: white;
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            animation: fadeIn 0.2s ease;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: #1a1f2e;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 90vh;
+            overflow-y: auto;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 2rem;
+            border-bottom: 1px solid #2d3748;
+            sticky: top;
+            background: #1a1f2e;
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            color: #fff;
+        }
+
+        .modal-close {
+            background: none;
+            border: none;
+            font-size: 1.5rem;
+            color: #a0aec0;
+            cursor: pointer;
+            transition: color 0.2s;
+        }
+
+        .modal-close:hover {
+            color: #e0e0e0;
+        }
+
+        .modal-body {
+            padding: 2rem;
+        }
+
+        .modal-tabs {
+            display: flex;
+            gap: 1rem;
+            border-bottom: 1px solid #2d3748;
+            margin-bottom: 1.5rem;
+            margin: -2rem -2rem 1.5rem -2rem;
+            padding: 1rem 2rem 0 2rem;
+        }
+
+        .modal-tab-btn {
+            padding: 0.75rem 1.5rem;
+            background: none;
+            border: none;
+            border-bottom: 2px solid transparent;
+            color: #a0aec0;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .modal-tab-btn:hover {
+            color: #e0e0e0;
+        }
+
+        .modal-tab-btn.active {
+            color: #6c5ce7;
+            border-bottom-color: #6c5ce7;
+        }
+
+        .modal-tab-content {
+            display: none;
+        }
+
+        .modal-tab-content.active {
+            display: block;
+        }
+
+        /* Form Styles */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #e0e0e0;
+            font-size: 0.95rem;
+        }
+
+        input[type="text"],
+        input[type="number"],
+        input[type="password"],
+        input[type="email"],
+        textarea,
+        select {
+            width: 100%;
+            padding: 0.75rem;
+            background: #0f1419;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 0.95rem;
+            font-family: inherit;
+            transition: border-color 0.2s;
+        }
+
+        input[type="text"]:focus,
+        input[type="number"]:focus,
+        input[type="password"]:focus,
+        input[type="email"]:focus,
+        textarea:focus,
+        select:focus {
+            outline: none;
+            border-color: #6c5ce7;
+            background: #141821;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 120px;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+            font-size: 0.85rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .help-text {
+            font-size: 0.85rem;
+            color: #a0aec0;
+            margin-top: 0.25rem;
+        }
+
+        /* Logs Table */
+        .logs-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.9rem;
+        }
+
+        .logs-table thead {
+            background: #0f1419;
+            border: 1px solid #2d3748;
+        }
+
+        .logs-table th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #a0aec0;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+        }
+
+        .logs-table tbody tr {
+            border-bottom: 1px solid #2d3748;
+            transition: background 0.2s;
+        }
+
+        .logs-table tbody tr:hover {
+            background: #0f1419;
+        }
+
+        .logs-table td {
+            padding: 1rem;
+        }
+
+        .log-status {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            padding: 0.25rem 0.75rem;
+            border-radius: 4px;
+            font-weight: 500;
+            font-size: 0.8rem;
+        }
+
+        .log-status.success {
+            background: rgba(39, 174, 96, 0.1);
+            color: #27ae60;
+        }
+
+        .log-status.error {
+            background: rgba(231, 76, 60, 0.1);
+            color: #e74c3c;
+        }
+
+        .log-status.pending {
+            background: rgba(230, 126, 34, 0.1);
+            color: #e67e22;
+        }
+
+        /* Health Dashboard */
+        .health-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+        }
+
+        .health-card {
+            background: #0f1419;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            padding: 1.5rem;
+        }
+
+        .health-label {
+            color: #a0aec0;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            margin-bottom: 0.75rem;
+            font-weight: 600;
+        }
+
+        .health-value {
+            font-size: 1.75rem;
+            font-weight: bold;
+            color: #fff;
+            margin-bottom: 0.5rem;
+        }
+
+        .health-bar {
+            height: 6px;
+            background: #2d3748;
+            border-radius: 3px;
+            overflow: hidden;
+            margin-bottom: 0.5rem;
+        }
+
+        .health-bar-fill {
+            height: 100%;
+            background: #6c5ce7;
+            transition: width 0.3s ease;
+        }
+
+        .health-meta {
+            font-size: 0.8rem;
+            color: #a0aec0;
+        }
+
+        /* Code Editor */
+        .code-editor {
+            background: #0f1419;
+            border: 1px solid #2d3748;
+            border-radius: 6px;
+            overflow: hidden;
+        }
+
+        .code-editor textarea {
+            border: none;
+            background: #0f1419;
+            padding: 1rem;
+        }
+
+        .code-editor textarea:focus {
+            background: #141821;
+            border: none;
+        }
+
+        /* Utility */
+        .empty-state {
+            text-align: center;
+            padding: 3rem 2rem;
+            color: #a0aec0;
+        }
+
+        .empty-state-icon {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+        }
+
+        .empty-state-title {
+            font-size: 1.2rem;
+            color: #e0e0e0;
+            margin-bottom: 0.5rem;
+        }
+
+        /* Bulk Actions */
+        .bulk-actions {
+            background: #0f1419;
+            border: 1px solid #2d3748;
+            border-radius: 8px;
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            display: none;
+            gap: 1rem;
+            align-items: center;
+        }
+
+        .bulk-actions.active {
+            display: flex;
+        }
+
+        .bulk-select-all {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .bulk-select-all input[type="checkbox"] {
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+
+        .bulk-count {
+            color: #a0aec0;
+            font-size: 0.9rem;
+        }
+
+        .bulk-action-btns {
+            display: flex;
+            gap: 0.75rem;
+            margin-left: auto;
+        }
+
+        /* Text overflow fixes */
+        .header-icon,
+        .icon-btn {
+            flex-shrink: 0;
+        }
+
+        .logs-table td,
+        .tool-card {
+            overflow: hidden;
+            word-wrap: break-word;
+        }
+
+        .tool-description {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            display: -webkit-box;
+            -webkit-line-clamp: 2;
+            -webkit-box-orient: vertical;
+        }
+
+        code {
+            word-break: break-all;
+            overflow-wrap: break-word;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .container {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                position: static;
+            }
+
+            .tool-grid {
+                grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        @media (max-width: 768px) {
+            header {
+                padding: 1rem;
+            }
+
+            .header-content {
+                flex-direction: column;
+                gap: 1rem;
+            }
+
+            .search-bar {
+                max-width: 100%;
+                margin: 0;
+            }
+
+            .header-actions {
+                width: 100%;
+            }
+
+            .container {
+                padding: 1rem;
+                grid-template-columns: 1fr;
+                gap: 1rem;
+            }
+
+            .tool-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .sidebar {
+                display: none;
+            }
+
+            .tabs {
+                flex-wrap: wrap;
+            }
+
+            .modal-content {
+                width: 95%;
+                max-height: 95vh;
+            }
+
+            .health-grid {
+                grid-template-columns: 1fr;
+            }
+
+            .bulk-actions {
+                flex-direction: column;
+                align-items: flex-start;
+            }
+
+            .bulk-action-btns {
+                margin-left: 0;
+                width: 100%;
+            }
+
+            .bulk-action-btns .btn {
+                flex: 1;
+                justify-content: center;
+            }
+        }
+
+        /* Scrollbar Styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #0f1419;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #2d3748;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3a4556;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <h1>
+                <div class="header-icon">⚙</div>
+                Tool Management
+            </h1>
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Search tools...">
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" id="refreshBtn">↻ Refresh</button>
+                <button class="btn btn-primary" id="newToolBtn">+ New Tool</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">Categories</div>
+                <div class="category-filter">
+                    <button class="category-btn active" data-category="all">All Tools</button>
+                    <button class="category-btn" data-category="browser">Browser</button>
+                    <button class="category-btn" data-category="database">Database</button>
+                    <button class="category-btn" data-category="email">Email</button>
+                    <button class="category-btn" data-category="filesystem">File System</button>
+                    <button class="category-btn" data-category="cloud">Cloud</button>
+                    <button class="category-btn" data-category="code">Code</button>
+                    <button class="category-btn" data-category="search">Search</button>
+                    <button class="category-btn" data-category="voice">Voice</button>
+                    <button class="category-btn" data-category="custom">Custom</button>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Statistics</div>
+                <div class="stats-box">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Tools</span>
+                        <span class="stat-value" id="statTotal">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Active</span>
+                        <span class="stat-value" id="statActive">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Errors</span>
+                        <span class="stat-value" id="statErrors">0</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="tools">Tools</button>
+                <button class="tab-btn" data-tab="logs">Execution Logs</button>
+                <button class="tab-btn" data-tab="health">Health</button>
+            </div>
+
+            <!-- Bulk Actions -->
+            <div class="bulk-actions" id="bulkActions">
+                <label class="bulk-select-all">
+                    <input type="checkbox" id="selectAllCheckbox">
+                    <span>Select All</span>
+                </label>
+                <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+                <div class="bulk-action-btns">
+                    <button class="btn btn-success" id="enableSelectedBtn">Enable</button>
+                    <button class="btn btn-secondary" id="disableSelectedBtn">Disable</button>
+                    <button class="btn btn-danger" id="deleteSelectedBtn">Delete</button>
+                </div>
+            </div>
+
+            <!-- Tools Tab -->
+            <div class="tab-content active" id="tools-tab">
+                <div class="tool-grid" id="toolGrid">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚙</div>
+                        <div class="empty-state-title">Loading tools...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div class="tab-content" id="logs-tab">
+                <div style="overflow-x: auto;">
+                    <table class="logs-table" id="logsTable">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Tool</th>
+                                <th>Input</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                                <th>Output</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsBody">
+                            <tr><td colspan="6" style="text-align: center; padding: 2rem;">Loading logs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Health Tab -->
+            <div class="tab-content" id="health-tab">
+                <div class="health-grid" id="healthGrid">
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-state-icon">❤</div>
+                        <div class="empty-state-title">Loading health data...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Tool Detail Modal -->
+    <div class="modal" id="toolModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalToolName"></h2>
+                <button class="modal-close" id="modalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-tabs">
+                <button class="modal-tab-btn active" data-modal-tab="overview">Overview</button>
+                <button class="modal-tab-btn" data-modal-tab="config">Configuration</button>
+                <button class="modal-tab-btn" data-modal-tab="logs">Execution Log</button>
+                <button class="modal-tab-btn" data-modal-tab="health">Health</button>
+            </div>
+            <div class="modal-body">
+                <!-- Overview Tab -->
+                <div class="modal-tab-content active" id="modal-overview">
+                    <div class="form-group">
+                        <label>Description</label>
+                        <p id="modalDescription" style="color: #a0aec0;"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <p id="modalCategory" style="color: #a0aec0;"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Parameters Schema</label>
+                        <pre id="modalParams" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                    </div>
+                    <div class="form-group">
+                        <label>Usage Examples</label>
+                        <pre id="modalExamples" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                    </div>
+                </div>
+
+                <!-- Config Tab -->
+                <div class="modal-tab-content" id="modal-config">
+                    <div id="configForm"></div>
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" id="saveConfigBtn">Save Configuration</button>
+                        <button class="btn btn-secondary" id="testToolBtn">Test Tool</button>
+                    </div>
+                    <div id="testResult" style="margin-top: 1.5rem; display: none;">
+                        <label>Test Result</label>
+                        <pre id="testResultText" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div class="modal-tab-content" id="modal-logs">
+                    <div style="overflow-x: auto;">
+                        <table class="logs-table" id="toolLogsTable">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Status</th>
+                                    <th>Input</th>
+                                    <th>Output</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="toolLogsBody">
+                                <tr><td colspan="5" style="text-align: center; padding: 2rem;">No execution logs</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Health Tab -->
+                <div class="modal-tab-content" id="modal-health">
+                    <div class="health-grid">
+                        <div class="health-card">
+                            <div class="health-label">Success Rate</div>
+                            <div class="health-value" id="healthSuccessRate">-</div>
+                            <div class="health-bar">
+                                <div class="health-bar-fill" id="healthSuccessBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-label">Avg Latency</div>
+                            <div class="health-value" id="healthLatency">-</div>
+                            <div class="health-meta">milliseconds</div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-label">Error Rate</div>
+                            <div class="health-value" id="healthErrorRate">-</div>
+                            <div class="health-bar">
+                                <div class="health-bar-fill" id="healthErrorBar" style="width: 0%; background: #e74c3c;"></div>
+                            </div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-label">Total Calls</div>
+                            <div class="health-value" id="healthTotalCalls">-</div>
+                            <div class="health-meta" id="healthLastCalled">Never</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Tool Modal -->
+    <div class="modal" id="newToolModal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Create New Tool</h2>
+                <button class="modal-close" id="newToolCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Tool Name</label>
+                    <input type="text" id="newToolName" placeholder="e.g., PDF Reader">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="newToolCategory">
+                            <option value="custom">Custom</option>
+                            <option value="browser">Browser</option>
+                            <option value="database">Database</option>
+                            <option value="email">Email</option>
+                            <option value="filesystem">File System</option>
+                            <option value="cloud">Cloud</option>
+                            <option value="code">Code</option>
+                            <option value="search">Search</option>
+                            <option value="voice">Voice</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Icon/Type</label>
+                        <input type="text" id="newToolIcon" placeholder="e.g., 📄">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="newToolDescription" placeholder="Describe what this tool does..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Parameters Schema (JSON)</label>
+                    <div class="code-editor">
+                        <textarea id="newToolParams" placeholder='{"properties": {"param1": {"type": "string"}}}'>{"properties": {}}</textarea>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Implementation (Python)</label>
+                    <div class="code-editor">
+                        <textarea id="newToolCode" placeholder="def execute(params):&#10;    return {'result': 'success'}">def execute(params):
+    return {'result': 'success'}</textarea>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-primary" id="createToolBtn">Create Tool</button>
+                    <button class="btn btn-secondary" id="testNewToolBtn">Test Implementation</button>
+                </div>
+                <div id="newToolTestResult" style="margin-top: 1.5rem; display: none;">
+                    <pre id="newToolTestText" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State Management
+        const state = {
+            tools: [],
+            selectedCategory: 'all',
+            searchQuery: '',
+            selectedTools: new Set(),
+            currentTool: null
+        };
+
+        // API Functions
+        async function fetchTools() {
+            try {
+                const response = await fetch('/api/tools');
+                state.tools = await response.json();
+                updateStats();
+                renderTools();
+                return true;
+            } catch (error) {
+                console.error('Failed to fetch tools:', error);
+                renderEmpty('Failed to load tools');
+                return false;
+            }
+        }
+
+        async function fetchToolLogs() {
+            try {
+                const response = await fetch('/api/tools/logs');
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch logs:', error);
+                return [];
+            }
+        }
+
+        async function fetchToolHealth() {
+            try {
+                const response = await fetch('/api/tools/health');
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to fetch health:', error);
+                return [];
+            }
+        }
+
+        async function saveToolConfig(toolId, config) {
+            try {
+                const response = await fetch(`/api/tools/${toolId}/config`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(config)
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to save config:', error);
+                throw error;
+            }
+        }
+
+        async function testTool(toolId) {
+            try {
+                const response = await fetch(`/api/tools/${toolId}/test`, {
+                    method: 'POST'
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('Failed to test tool:', error);
+                throw error;
+            }
+        }
+
+        // UI Functions
+        function updateStats() {
+            const total = state.tools.length;
+            const active = state.tools.filter(t => t.status === 'active').length;
+            const errors = state.tools.filter(t => t.status === 'error').length;
+
+            document.getElementById('statTotal').textContent = total;
+            document.getElementById('statActive').textContent = active;
+            document.getElementById('statErrors').textContent = errors;
+        }
+
+        function filterTools() {
+            return state.tools.filter(tool => {
+                const matchCategory = state.selectedCategory === 'all' || tool.category === state.selectedCategory;
+                const matchSearch = tool.name.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
+                                  tool.description.toLowerCase().includes(state.searchQuery.toLowerCase());
+                return matchCategory && matchSearch;
+            });
+        }
+
+        function renderTools() {
+            const filtered = filterTools();
+            const grid = document.getElementById('toolGrid');
+
+            if (filtered.length === 0) {
+                renderEmpty('No tools found');
+                return;
+            }
+
+            grid.innerHTML = filtered.map(tool => `
+                <div class="tool-card" data-tool-id="${tool.id}">
+                    <div class="tool-card-header">
+                        <div class="tool-icon">${tool.icon || '⚙'}</div>
+                        <div class="tool-status status-${tool.status}">
+                            <span class="status-dot ${tool.status}"></span>
+                            ${tool.status}
+                        </div>
+                    </div>
+                    <input type="checkbox" class="tool-checkbox" style="position: absolute; top: 1rem; left: 1.5rem; width: 18px; height: 18px; cursor: pointer;">
+                    <div class="tool-name">${tool.name}</div>
+                    <div class="tool-category">${tool.category}</div>
+                    <div class="tool-description">${tool.description}</div>
+                    <div class="tool-footer">
+                        <div class="tool-meta">
+                            <span>⏱ ${tool.avgLatency || 0}ms</span>
+                            <span>✓ ${tool.successRate || 0}%</span>
+                        </div>
+                        <div class="tool-actions">
+                            <button class="icon-btn" title="View Details">👁</button>
+                            <button class="icon-btn" title="Configure">⚙</button>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+
+            // Add event listeners
+            grid.querySelectorAll('.tool-card').forEach(card => {
+                const toolId = card.dataset.toolId;
+                const checkbox = card.querySelector('.tool-checkbox');
+
+                checkbox.addEventListener('change', (e) => {
+                    e.stopPropagation();
+                    if (checkbox.checked) {
+                        state.selectedTools.add(toolId);
+                    } else {
+                        state.selectedTools.delete(toolId);
+                    }
+                    updateBulkActions();
+                });
+
+                card.querySelector('.tool-actions').addEventListener('click', (e) => {
+                    e.stopPropagation();
+                    const btn = e.target.closest('.icon-btn');
+                    if (btn) {
+                        if (btn.title === 'View Details') {
+                            showToolModal(toolId);
+                        } else if (btn.title === 'Configure') {
+                            showToolModal(toolId, 'config');
+                        }
+                    }
+                });
+
+                card.addEventListener('click', () => showToolModal(toolId));
+            });
+        }
+
+        function renderEmpty(message) {
+            document.getElementById('toolGrid').innerHTML = `
+                <div class="empty-state" style="grid-column: 1/-1;">
+                    <div class="empty-state-icon">⚙</div>
+                    <div class="empty-state-title">${message}</div>
+                </div>
+            `;
+        }
+
+        async function showToolModal(toolId, tab = 'overview') {
+            const tool = state.tools.find(t => t.id === toolId);
+            if (!tool) return;
+
+            state.currentTool = tool;
+
+            // Overview
+            document.getElementById('modalToolName').textContent = tool.name;
+            document.getElementById('modalDescription').textContent = tool.description;
+            document.getElementById('modalCategory').textContent = tool.category;
+            document.getElementById('modalParams').textContent = JSON.stringify(tool.params || {}, null, 2);
+            document.getElementById('modalExamples').textContent = tool.examples || 'No examples available';
+
+            // Config Form
+            renderConfigForm(tool);
+
+            // Logs
+            await renderToolLogs(toolId);
+
+            // Health
+            await renderToolHealth(toolId);
+
+            // Show Tab
+            setModalTab(tab);
+            document.getElementById('toolModal').classList.add('active');
+        }
+
+        function renderConfigForm(tool) {
+            const form = document.getElementById('configForm');
+            const params = tool.params?.properties || {};
+
+            form.innerHTML = Object.entries(params).map(([key, param]) => `
+                <div class="form-group">
+                    <label>${param.title || key}</label>
+                    <input type="text" data-param="${key}" placeholder="${param.description || ''}">
+                    ${param.description ? `<div class="help-text">${param.description}</div>` : ''}
+                </div>
+            `).join('');
+        }
+
+        async function renderToolLogs(toolId) {
+            try {
+                const logs = await fetchToolLogs();
+                const toolLogs = logs.filter(log => log.toolId === toolId);
+                const tbody = document.getElementById('toolLogsBody');
+
+                if (toolLogs.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; padding: 2rem;">No execution logs</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = toolLogs.slice(0, 10).map(log => `
+                    <tr>
+                        <td>${new Date(log.timestamp).toLocaleString()}</td>
+                        <td><span class="log-status ${log.status}">${log.status}</span></td>
+                        <td><code style="color: #a0aec0;">${JSON.stringify(log.input || {})}</code></td>
+                        <td><code style="color: #a0aec0; max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${JSON.stringify(log.output || {})}</code></td>
+                        <td>${log.duration || 0}ms</td>
+                    </tr>
+                `).join('');
+            } catch (error) {
+                console.error('Failed to render logs:', error);
+            }
+        }
+
+        async function renderToolHealth(toolId) {
+            try {
+                const health = await fetchToolHealth();
+                const toolHealth = health.find(h => h.toolId === toolId) || {};
+
+                document.getElementById('healthSuccessRate').textContent = `${toolHealth.successRate || 0}%`;
+                document.getElementById('healthSuccessBar').style.width = `${toolHealth.successRate || 0}%`;
+                document.getElementById('healthLatency').textContent = `${toolHealth.avgLatency || 0}`;
+                document.getElementById('healthErrorRate').textContent = `${toolHealth.errorRate || 0}%`;
+                document.getElementById('healthErrorBar').style.width = `${toolHealth.errorRate || 0}%`;
+                document.getElementById('healthTotalCalls').textContent = toolHealth.totalCalls || 0;
+                document.getElementById('healthLastCalled').textContent =
+                    toolHealth.lastCalled ? new Date(toolHealth.lastCalled).toLocaleString() : 'Never';
+            } catch (error) {
+                console.error('Failed to render health:', error);
+            }
+        }
+
+        async function renderLogs() {
+            const logs = await fetchToolLogs();
+            const tbody = document.getElementById('logsBody');
+
+            if (logs.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;">No execution logs</td></tr>';
+                return;
+            }
+
+            tbody.innerHTML = logs.slice(0, 50).map(log => `
+                <tr>
+                    <td>${new Date(log.timestamp).toLocaleString()}</td>
+                    <td>${log.toolName || 'Unknown'}</td>
+                    <td><code style="color: #a0aec0; font-size: 0.8rem;">${JSON.stringify(log.input || {}).substring(0, 50)}...</code></td>
+                    <td><span class="log-status ${log.status}">${log.status}</span></td>
+                    <td>${log.duration || 0}ms</td>
+                    <td><code style="color: #a0aec0; font-size: 0.8rem;">${JSON.stringify(log.output || {}).substring(0, 50)}...</code></td>
+                </tr>
+            `).join('');
+        }
+
+        async function renderHealth() {
+            const health = await fetchToolHealth();
+            const grid = document.getElementById('healthGrid');
+
+            if (health.length === 0) {
+                grid.innerHTML = `
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-state-icon">❤</div>
+                        <div class="empty-state-title">No health data available</div>
+                    </div>
+                `;
+                return;
+            }
+
+            grid.innerHTML = health.map(h => `
+                <div class="health-card">
+                    <div class="health-label">${h.toolName || 'Unknown'}</div>
+                    <div style="margin-bottom: 1rem;">
+                        <div style="font-size: 0.9rem; color: #a0aec0; margin-bottom: 0.5rem;">Success Rate</div>
+                        <div class="health-bar">
+                            <div class="health-bar-fill" style="width: ${h.successRate || 0}%"></div>
+                        </div>
+                        <div style="color: #6c5ce7; font-weight: bold;">${h.successRate || 0}%</div>
+                    </div>
+                    <div style="font-size: 0.85rem; color: #a0aec0;">
+                        <div>Latency: ${h.avgLatency || 0}ms</div>
+                        <div>Errors: ${h.errorRate || 0}%</div>
+                        <div>Calls: ${h.totalCalls || 0}</div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function updateBulkActions() {
+            const count = state.selectedTools.size;
+            const bulkActions = document.getElementById('bulkActions');
+            const bulkCount = document.getElementById('bulkCount');
+
+            bulkCount.textContent = count;
+
+            if (count > 0) {
+                bulkActions.classList.add('active');
+            } else {
+                bulkActions.classList.remove('active');
+            }
+        }
+
+        function setModalTab(tabName) {
+            document.querySelectorAll('.modal-tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.modalTab === tabName);
+            });
+            document.querySelectorAll('.modal-tab-content').forEach(content => {
+                content.classList.toggle('active', content.id === `modal-${tabName}`);
+            });
+        }
+
+        function setMainTab(tabName) {
+            document.querySelectorAll('.tab-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.tab === tabName);
+            });
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.toggle('active', content.id === `${tabName}-tab`);
+            });
+
+            if (tabName === 'logs') renderLogs();
+            if (tabName === 'health') renderHealth();
+        }
+
+        // Event Listeners
+        document.getElementById('searchInput').addEventListener('input', (e) => {
+            state.searchQuery = e.target.value;
+            renderTools();
+        });
+
+        document.querySelectorAll('.category-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.category-btn').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                state.selectedCategory = btn.dataset.category;
+                renderTools();
+            });
+        });
+
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => setMainTab(btn.dataset.tab));
+        });
+
+        document.querySelectorAll('.modal-tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => setModalTab(btn.dataset.modalTab));
+        });
+
+        document.getElementById('refreshBtn').addEventListener('click', fetchTools);
+
+        document.getElementById('newToolBtn').addEventListener('click', () => {
+            document.getElementById('newToolModal').classList.add('active');
+        });
+
+        document.getElementById('modalCloseBtn').addEventListener('click', () => {
+            document.getElementById('toolModal').classList.remove('active');
+        });
+
+        document.getElementById('newToolCloseBtn').addEventListener('click', () => {
+            document.getElementById('newToolModal').classList.remove('active');
+        });
+
+        document.getElementById('saveConfigBtn').addEventListener('click', async () => {
+            const config = {};
+            document.querySelectorAll('[data-param]').forEach(input => {
+                config[input.dataset.param] = input.value;
+            });
+            try {
+                await saveToolConfig(state.currentTool.id, config);
+                alert('Configuration saved successfully');
+            } catch (error) {
+                alert('Failed to save configuration');
+            }
+        });
+
+        document.getElementById('testToolBtn').addEventListener('click', async () => {
+            try {
+                const result = await testTool(state.currentTool.id);
+                const resultDiv = document.getElementById('testResult');
+                resultDiv.style.display = 'block';
+                document.getElementById('testResultText').textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                alert('Test failed: ' + error.message);
+            }
+        });
+
+        document.getElementById('selectAllCheckbox').addEventListener('change', (e) => {
+            if (e.target.checked) {
+                filterTools().forEach(tool => state.selectedTools.add(tool.id));
+            } else {
+                state.selectedTools.clear();
+            }
+            updateBulkActions();
+            document.querySelectorAll('.tool-checkbox').forEach(checkbox => {
+                checkbox.checked = e.target.checked;
+            });
+        });
+
+        document.getElementById('enableSelectedBtn').addEventListener('click', async () => {
+            for (const toolId of state.selectedTools) {
+                await saveToolConfig(toolId, { enabled: true });
+            }
+            state.selectedTools.clear();
+            updateBulkActions();
+            fetchTools();
+        });
+
+        document.getElementById('disableSelectedBtn').addEventListener('click', async () => {
+            for (const toolId of state.selectedTools) {
+                await saveToolConfig(toolId, { enabled: false });
+            }
+            state.selectedTools.clear();
+            updateBulkActions();
+            fetchTools();
+        });
+
+        document.getElementById('deleteSelectedBtn').addEventListener('click', async () => {
+            if (confirm(`Delete ${state.selectedTools.size} tool(s)?`)) {
+                for (const toolId of state.selectedTools) {
+                    try {
+                        await fetch(`/api/tools/${toolId}`, { method: 'DELETE' });
+                    } catch (error) {
+                        console.error('Failed to delete tool:', error);
+                    }
+                }
+                state.selectedTools.clear();
+                updateBulkActions();
+                fetchTools();
+            }
+        });
+
+        document.getElementById('createToolBtn').addEventListener('click', async () => {
+            const newTool = {
+                name: document.getElementById('newToolName').value,
+                category: document.getElementById('newToolCategory').value,
+                icon: document.getElementById('newToolIcon').value,
+                description: document.getElementById('newToolDescription').value,
+                params: JSON.parse(document.getElementById('newToolParams').value),
+                code: document.getElementById('newToolCode').value
+            };
+
+            try {
+                const response = await fetch('/api/tools', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(newTool)
+                });
+                if (response.ok) {
+                    document.getElementById('newToolModal').classList.remove('active');
+                    fetchTools();
+                }
+            } catch (error) {
+                alert('Failed to create tool');
+            }
+        });
+
+        document.getElementById('testNewToolBtn').addEventListener('click', async () => {
+            try {
+                const code = document.getElementById('newToolCode').value;
+                const response = await fetch('/api/tools/test', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ code })
+                });
+                const result = await response.json();
+                const resultDiv = document.getElementById('newToolTestResult');
+                resultDiv.style.display = 'block';
+                document.getElementById('newToolTestText').textContent = JSON.stringify(result, null, 2);
+            } catch (error) {
+                alert('Test failed');
+            }
+        });
+
+        // Close modals on outside click
+        document.getElementById('toolModal').addEventListener('click', (e) => {
+            if (e.target.id === 'toolModal') {
+                document.getElementById('toolModal').classList.remove('active');
+            }
+        });
+
+        document.getElementById('newToolModal').addEventListener('click', (e) => {
+            if (e.target.id === 'newToolModal') {
+                document.getElementById('newToolModal').classList.remove('active');
+            }
+        });
+
+        // Initialize
+        fetchTools();
+    </script>
+</body>
+</html>

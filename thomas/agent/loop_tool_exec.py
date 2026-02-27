@@ -9,14 +9,22 @@ import logging
 import os
 import re
 import time
-from typing import Any, AsyncIterator, Dict, List
+from collections.abc import AsyncIterator
+from typing import Any
 
 from thomas.core.events import AgentEvent, EventType
+
+try:
+    from thomas.agent.verification import format_verification_feedback, verify_after_tool
+
+    _HAS_VERIFICATION = True
+except ImportError:
+    _HAS_VERIFICATION = False
 
 log = logging.getLogger(__name__)
 
 
-def parse_tool_args(raw_args: Any) -> tuple[Dict[str, Any] | None, str | None]:
+def parse_tool_args(raw_args: Any) -> tuple[dict[str, Any] | None, str | None]:
     """Parse tool arguments with repair heuristics for weak model outputs."""
     if raw_args is None:
         return {}, None
@@ -39,12 +47,7 @@ def parse_tool_args(raw_args: Any) -> tuple[Dict[str, Any] | None, str | None]:
     except json.JSONDecodeError:
         pass
 
-    repaired = (
-        text.replace("\u201c", '"')
-        .replace("\u201d", '"')
-        .replace("\u2018", "'")
-        .replace("\u2019", "'")
-    )
+    repaired = text.replace("\u201c", '"').replace("\u201d", '"').replace("\u2018", "'").replace("\u2019", "'")
     repaired = re.sub(r",\s*([}\]])", r"\1", repaired)
     brace_delta = repaired.count("{") - repaired.count("}")
     if brace_delta > 0:
@@ -69,14 +72,14 @@ def parse_tool_args(raw_args: Any) -> tuple[Dict[str, Any] | None, str | None]:
 
 async def execute_tools(
     loop: Any,
-    tool_calls: List[Dict[str, Any]],
+    tool_calls: list[dict[str, Any]],
     iteration: int,
     *,
     file_audit_module: Any,
 ) -> AsyncIterator[AgentEvent]:
     """Execute tool calls and stream result events as each call completes."""
 
-    async def _run_one(tc: Dict[str, Any]) -> AgentEvent:
+    async def _run_one(tc: dict[str, Any]) -> AgentEvent:
         name = tc["name"]
         tc_id = tc["id"]
         raw_args = tc["arguments"]
@@ -119,8 +122,8 @@ async def execute_tools(
         )
         if loop._guarded_tool_runner is not None:
 
-            async def _execute_guarded_tool() -> Dict[str, Any]:
-                async def _guarded_executor(call: Dict[str, Any]) -> Dict[str, Any]:
+            async def _execute_guarded_tool() -> dict[str, Any]:
+                async def _guarded_executor(call: dict[str, Any]) -> dict[str, Any]:
                     tr = await loop.tools.execute(str(call.get("name") or ""), call.get("args") or {})
                     return {
                         "ok": bool(tr.ok),
@@ -129,7 +132,7 @@ async def execute_tools(
                         "result_text": tr.to_content(),
                     }
 
-                async def _emit_guardrails_event(evt_type: str, payload: Dict[str, Any]) -> None:
+                async def _emit_guardrails_event(evt_type: str, payload: dict[str, Any]) -> None:
                     cb = loop._guardrails_event_cb
                     if cb is None:
                         return
@@ -138,7 +141,7 @@ async def execute_tools(
                     except Exception as e:
                         log.debug("Guardrails callback failed: %s", e)
 
-                summary_lines: List[str] = []
+                summary_lines: list[str] = []
                 for m in loop._conversation[-8:]:
                     if not isinstance(m, dict):
                         continue
@@ -280,15 +283,18 @@ async def execute_tools(
                     else ""
                 )
                 action = "delete" if "delet" in name.lower() or "remov" in name.lower() else "write"
-                args_snippet = (
-                    json.dumps(
-                        {k: v for k, v in (args or {}).items() if k != "content"},
-                        ensure_ascii=False,
-                        default=str,
-                    )[:300]
-                    if isinstance(args, dict)
-                    else ""
-                )
+                try:
+                    args_snippet = (
+                        json.dumps(
+                            {k: v for k, v in (args or {}).items() if k != "content"},
+                            ensure_ascii=False,
+                            default=str,
+                        )[:300]
+                        if isinstance(args, dict)
+                        else ""
+                    )
+                except (TypeError, ValueError):
+                    args_snippet = str(args)[:200]
                 model_name = getattr(getattr(loop, "llm", None), "model_name", None) or getattr(
                     getattr(loop.llm, "config", None), "model", "unknown"
                 )
@@ -315,16 +321,39 @@ async def execute_tools(
             },
         )
 
+        # --- Post-action verification hooks ---
+        verification_feedback = None
+        if _HAS_VERIFICATION and ok and isinstance(args, dict):
+            try:
+                sandbox = str(loop.config.tools.sandbox_path) if hasattr(loop.config, "tools") else None
+                issues = await verify_after_tool(
+                    tool_name=name,
+                    args=args,
+                    result_ok=ok,
+                    sandbox_root=sandbox,
+                )
+                verification_feedback = format_verification_feedback(issues)
+                if verification_feedback:
+                    log.info("Verification for %s: %s", name, verification_feedback[:200])
+            except Exception as _ve:
+                log.debug("Verification hook failed for %s: %s", name, _ve)
+
+        event_data = {
+            "tool_id": tc_id,
+            "tool_name": name,
+            "result": result_text[:4000],
+            "result_text": result_text,
+            "ok": ok,
+            "duration_ms": duration,
+        }
+        if verification_feedback:
+            event_data["verification"] = verification_feedback
+            # Append verification feedback to result so the LLM sees it
+            event_data["result_text"] = result_text + "\n\n" + verification_feedback
+
         return AgentEvent(
             type=EventType.TOOL_RESULT,
-            data={
-                "tool_id": tc_id,
-                "tool_name": name,
-                "result": result_text[:4000],
-                "result_text": result_text,
-                "ok": ok,
-                "duration_ms": duration,
-            },
+            data=event_data,
             iteration=iteration,
         )
 
@@ -336,7 +365,7 @@ async def execute_tools(
         max_parallel = max(1, len(tool_calls))
     sem = asyncio.Semaphore(max(1, int(max_parallel)))
 
-    async def _run_one_limited(tc: Dict[str, Any]) -> AgentEvent:
+    async def _run_one_limited(tc: dict[str, Any]) -> AgentEvent:
         async with sem:
             return await _run_one(tc)
 

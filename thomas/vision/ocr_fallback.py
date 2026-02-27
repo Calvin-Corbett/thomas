@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 from PIL import Image, ImageEnhance, ImageOps
 
@@ -14,7 +14,7 @@ def _get_tesseract_cmd() -> str | None:
 def _tesseract_available() -> bool:
     try:
         import pytesseract  # type: ignore
-    except Exception:
+    except ImportError:
         return False
 
     cmd = _get_tesseract_cmd()
@@ -24,7 +24,7 @@ def _tesseract_available() -> bool:
     try:
         _ = pytesseract.get_tesseract_version()  # type: ignore[attr-defined]
         return True
-    except Exception:
+    except ImportError:
         return False
 
 
@@ -49,7 +49,7 @@ def _preprocess_for_ocr(img: Image.Image) -> Image.Image:
     return gray
 
 
-def extract_text_from_images(image_paths: Sequence[Path]) -> List[str]:
+def extract_text_from_images(image_paths: Sequence[Path]) -> list[str]:
     """Best-effort OCR. Returns one string per image.
 
     If pytesseract / the tesseract binary isn't available, returns a short inline hint.
@@ -58,15 +58,12 @@ def extract_text_from_images(image_paths: Sequence[Path]) -> List[str]:
         return []
 
     if not _tesseract_available():
-        return [
-            "(OCR unavailable: install pytesseract + tesseract, or set TESSERACT_CMD.)"
-            for _ in image_paths
-        ]
+        return ["(OCR unavailable: install pytesseract + tesseract, or set TESSERACT_CMD.)" for _ in image_paths]
 
     import pytesseract  # type: ignore
 
     lang = os.getenv("TESSERACT_LANG", "eng")
-    texts: List[str] = []
+    texts: list[str] = []
 
     for p in image_paths:
         try:

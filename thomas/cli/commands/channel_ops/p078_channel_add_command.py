@@ -9,10 +9,10 @@ command-discovery patterns in the Thomas codebase.
 
 from __future__ import annotations
 
-from pathlib import Path
-from typing import Any, Optional
 import json
 import os
+from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -21,7 +21,6 @@ from thomas.channels.p078_channel_add_command import (
     ChannelAddRequest,
     add_channel,
 )
-
 
 _CONFIG_FILENAMES = (
     "config.json",
@@ -32,7 +31,7 @@ _CONFIG_FILENAMES = (
 )
 
 
-def _resolve_config_path(ctx: Optional[typer.Context], explicit: Optional[str]) -> Path:
+def _resolve_config_path(ctx: typer.Context | None, explicit: str | None) -> Path:
     """Resolve config path deterministically.
 
     Priority:
@@ -91,7 +90,7 @@ def _resolve_config_path(ctx: Optional[typer.Context], explicit: Optional[str]) 
             val = getattr(main_mod, attr, None)
             if isinstance(val, (str, os.PathLike)) and str(val).strip():
                 return Path(val)
-    except Exception:
+    except ImportError:
         pass
 
     cfg_dir = Path.home() / ".config" / "thomas"
@@ -109,9 +108,7 @@ def _emit(payload: dict, *, json_out: bool) -> None:
 
     if payload.get("ok"):
         r = payload.get("result", {})
-        typer.echo(
-            f"Added channel '{r.get('channel')}' (account '{r.get('account')}') to {r.get('config_path')}"
-        )
+        typer.echo(f"Added channel '{r.get('channel')}' (account '{r.get('account')}') to {r.get('config_path')}")
         if r.get("verified") and r.get("verification_subject"):
             typer.echo(f"Verified: {r.get('verification_subject')}")
         return
@@ -122,25 +119,15 @@ def _emit(payload: dict, *, json_out: bool) -> None:
 
 def channel_add_cli(
     ctx: typer.Context,
-    channel: Optional[str] = typer.Option(
-        None, "--channel", "-c", help="Channel type to add (e.g. 'telegram')."
-    ),
-    token: Optional[str] = typer.Option(
-        None, "--token", help="Authentication token (Telegram bot token, etc)."
-    ),
-    account: str = typer.Option(
-        "default", "--account", help="Account id (for multiple accounts per channel)."
-    ),
-    name: Optional[str] = typer.Option(None, "--name", help="Optional display name for this account."),
+    channel: str | None = typer.Option(None, "--channel", "-c", help="Channel type to add (e.g. 'telegram')."),
+    token: str | None = typer.Option(None, "--token", help="Authentication token (Telegram bot token, etc)."),
+    account: str = typer.Option("default", "--account", help="Account id (for multiple accounts per channel)."),
+    name: str | None = typer.Option(None, "--name", help="Optional display name for this account."),
     overwrite: bool = typer.Option(
         False, "--overwrite", "--force", help="Overwrite an existing account entry, if present."
     ),
-    verify: bool = typer.Option(
-        False, "--verify", help="Best-effort verify credentials against the external service."
-    ),
-    config: Optional[str] = typer.Option(
-        None, "--config", help="Override config path for this command."
-    ),
+    verify: bool = typer.Option(False, "--verify", help="Best-effort verify credentials against the external service."),
+    config: str | None = typer.Option(None, "--config", help="Override config path for this command."),
     json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
     """Add a channel account to Thomas configuration."""
@@ -203,7 +190,7 @@ def register(app: Any) -> None:
 
     try:
         app.command("add")(channel_add_cli)
-    except Exception:
+    except (ValueError, TypeError):
         pass
 
 
@@ -224,5 +211,5 @@ try:  # pragma: no cover
     from typer.main import get_command as _typer_get_command
 
     COMMAND = _typer_get_command(_COMMAND_APP)
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     COMMAND = None  # type: ignore[assignment]

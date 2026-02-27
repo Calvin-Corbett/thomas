@@ -4,16 +4,17 @@ P067 - Message role assign and remove (Thomas-native).
 Provides deterministic functions to assign/remove a Discord role for a guild member.
 No OpenClaw naming is reused.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import os
 import re
 import urllib.error
 import urllib.request
-from typing import Any, Callable, Literal, Optional
-
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, Literal
 
 _DISCORD_API_BASE = "https://discord.com/api/v10"
 RoleChangeAction = Literal["assign", "remove"]
@@ -25,7 +26,7 @@ class MessageRoleError(RuntimeError):
     code: str
     details: dict[str, Any]
 
-    def __init__(self, code: str, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = details or {}
@@ -35,17 +36,17 @@ class MessageRoleError(RuntimeError):
 
 
 class InvalidMessageRoleInput(MessageRoleError):
-    def __init__(self, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__("invalid_input", message, details=details)
 
 
 class MissingMessageRoleConfig(MessageRoleError):
-    def __init__(self, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__("missing_config", message, details=details)
 
 
 class ExternalMessageRoleFailure(MessageRoleError):
-    def __init__(self, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None):
         super().__init__("external_failure", message, details=details)
 
 
@@ -55,7 +56,7 @@ class MessageRoleChangeRequest:
     user_id: str
     role_id: str
     action: RoleChangeAction
-    discord_bot_token: Optional[str] = None
+    discord_bot_token: str | None = None
     timeout_s: float = 15.0
 
 
@@ -67,7 +68,7 @@ class MessageRoleChangeResult:
     user_id: str
     role_id: str
     provider: str = "discord"
-    status_code: Optional[int] = None
+    status_code: int | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -98,7 +99,7 @@ def _discord_role_endpoint(guild_id: str, user_id: str, role_id: str) -> str:
     return f"{_DISCORD_API_BASE}/guilds/{guild_id}/members/{user_id}/roles/{role_id}"
 
 
-def _dig_for_token(cfg: Any) -> Optional[str]:
+def _dig_for_token(cfg: Any) -> str | None:
     candidate_keys = {"discord_bot_token", "bot_token", "token", "discord_token"}
 
     if isinstance(cfg, dict):
@@ -131,7 +132,7 @@ def _dig_for_token(cfg: Any) -> Optional[str]:
     return None
 
 
-def _resolve_discord_bot_token(explicit: Optional[str]) -> str:
+def _resolve_discord_bot_token(explicit: str | None) -> str:
     if explicit:
         return explicit
 
@@ -148,7 +149,7 @@ def _resolve_discord_bot_token(explicit: Optional[str]) -> str:
     # Best-effort Thomas config lookup if available (no hard dependency).
     try:
         from thomas.config import load_config  # type: ignore
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         load_config = None  # type: ignore
 
     if load_config is not None:
@@ -157,7 +158,7 @@ def _resolve_discord_bot_token(explicit: Optional[str]) -> str:
             tok = _dig_for_token(cfg)
             if tok:
                 return tok
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             pass
 
     raise MissingMessageRoleConfig(
@@ -204,20 +205,20 @@ def _default_http_request(method: str, url: str, headers: dict[str, str], timeou
         ) from e
 
 
-def _parse_body(result: HttpResult) -> tuple[Optional[Any], str]:
+def _parse_body(result: HttpResult) -> tuple[Any | None, str]:
     body_text = ""
-    body_json: Optional[Any] = None
+    body_json: Any | None = None
     if result.body:
         try:
             body_text = result.body.decode("utf-8", errors="replace")
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             body_text = ""
         # Try JSON decode if it looks like JSON or content-type says json.
         ctype = (result.headers.get("content-type") or "").lower()
         if "application/json" in ctype or (body_text and body_text.lstrip().startswith(("{", "["))):
             try:
                 body_json = json.loads(body_text)
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 body_json = None
     return body_json, body_text
 
@@ -225,7 +226,7 @@ def _parse_body(result: HttpResult) -> tuple[Optional[Any], str]:
 def change_member_role(
     request: MessageRoleChangeRequest,
     *,
-    http_request: Optional[HttpRequestFn] = None,
+    http_request: HttpRequestFn | None = None,
 ) -> MessageRoleChangeResult:
     """
     Assign or remove a role for a member in a Discord guild.
@@ -299,9 +300,9 @@ def assign_role_to_member(
     guild_id: str,
     user_id: str,
     role_id: str,
-    discord_bot_token: Optional[str] = None,
+    discord_bot_token: str | None = None,
     timeout_s: float = 15.0,
-    http_request: Optional[HttpRequestFn] = None,
+    http_request: HttpRequestFn | None = None,
 ) -> MessageRoleChangeResult:
     return change_member_role(
         MessageRoleChangeRequest(
@@ -321,9 +322,9 @@ def remove_role_from_member(
     guild_id: str,
     user_id: str,
     role_id: str,
-    discord_bot_token: Optional[str] = None,
+    discord_bot_token: str | None = None,
     timeout_s: float = 15.0,
-    http_request: Optional[HttpRequestFn] = None,
+    http_request: HttpRequestFn | None = None,
 ) -> MessageRoleChangeResult:
     return change_member_role(
         MessageRoleChangeRequest(

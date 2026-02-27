@@ -19,8 +19,9 @@ Implementation lives in:
 from __future__ import annotations
 
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional, cast
+from typing import Any, cast
 
 import typer
 
@@ -34,6 +35,7 @@ from thomas.browser.p016_browser_data_cookies_export_and_import import (
     import_cookies,
     result_to_dict,
 )
+from thomas.cli.commands.browser._runtime_entrypoint import run_typer_app
 
 _REGISTERED = False
 _FORMAT_HELP = "Format: auto|json|zip. 'auto' infers from file extension/signature."
@@ -79,7 +81,7 @@ def _handle_error(err: Exception, *, json_mode: bool) -> None:
     raise typer.Exit(code=1)
 
 
-def _parse_format_option(format_opt: str, *, zip_flag: bool = False) -> Optional[str]:
+def _parse_format_option(format_opt: str, *, zip_flag: bool = False) -> str | None:
     fmt = (format_opt or "auto").strip().lower()
 
     if zip_flag:
@@ -93,10 +95,12 @@ def _parse_format_option(format_opt: str, *, zip_flag: bool = False) -> Optional
     if fmt in ("json", "zip"):
         return fmt
 
-    raise InvalidInputError("Invalid format option", details={"format": format_opt, "expected": ["auto", "json", "zip"]})
+    raise InvalidInputError(
+        "Invalid format option", details={"format": format_opt, "expected": ["auto", "json", "zip"]}
+    )
 
 
-def _find_group(parent: typer.Typer, name: str) -> Optional[typer.Typer]:
+def _find_group(parent: typer.Typer, name: str) -> typer.Typer | None:
     for info in getattr(parent, "registered_groups", []) or []:
         if getattr(info, "name", None) == name:
             for attr in ("typer_instance", "typer", "app"):
@@ -121,10 +125,10 @@ app = typer.Typer(help="Export/import browser cookies")
 @app.command("export")
 def cookies_export(
     output_file: Path = typer.Argument(..., exists=False, dir_okay=False, writable=True, readable=False),
-    profile_dir: Optional[Path] = typer.Option(
+    profile_dir: Path | None = typer.Option(
         None, "--profile-dir", help="Browser profile directory (or set THOMAS_BROWSER_PROFILE_DIR)."
     ),
-    url: Optional[str] = typer.Option(None, "--url", help="Optional URL scope filter."),
+    url: str | None = typer.Option(None, "--url", help="Optional URL scope filter."),
     format: str = typer.Option("auto", "--format", help=_FORMAT_HELP),
     zip_mode: bool = typer.Option(False, "--zip", help="Shorthand for --format zip."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
@@ -137,7 +141,7 @@ def cookies_export(
                 output_file=output_file,
                 profile_dir=profile_dir,
                 url=url,
-                output_format=cast(Optional[CookiesFormat], output_format),
+                output_format=cast(CookiesFormat | None, output_format),
             )
         )
         payload = {"ok": True, "result": result_to_dict(res)}
@@ -149,7 +153,7 @@ def cookies_export(
 @app.command("import")
 def cookies_import(
     input_file: Path = typer.Argument(..., exists=True, dir_okay=False, readable=True),
-    profile_dir: Optional[Path] = typer.Option(
+    profile_dir: Path | None = typer.Option(
         None, "--profile-dir", help="Browser profile directory (or set THOMAS_BROWSER_PROFILE_DIR)."
     ),
     format: str = typer.Option("auto", "--format", help=_FORMAT_HELP),
@@ -162,7 +166,7 @@ def cookies_import(
             CookiesImportRequest(
                 input_file=input_file,
                 profile_dir=profile_dir,
-                input_format=cast(Optional[CookiesFormat], input_format),
+                input_format=cast(CookiesFormat | None, input_format),
             )
         )
         payload = {"ok": True, "result": result_to_dict(res)}
@@ -183,3 +187,14 @@ def register(browser_app: typer.Typer) -> None:
         data_app.add_typer(app, name="cookies")
 
     _REGISTERED = True
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    return run_typer_app(
+        app,
+        argv,
+        command="browser data-cookies-export-and-import",
+        require_args=True,
+        missing_args_message="Specify an operation: export or import.",
+    )

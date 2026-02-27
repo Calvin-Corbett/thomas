@@ -5,10 +5,11 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_REGISTRY_PATH = ROOT / "docs" / "release" / "contract_registry.json"
@@ -24,7 +25,7 @@ class ContractFinding:
     remediation: str
     contract_id: str = ""
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         payload = {
             "level": self.level,
             "code": self.code,
@@ -36,25 +37,25 @@ class ContractFinding:
         return payload
 
 
-def _parse_iso_date(raw: Any) -> Optional[date]:
+def _parse_iso_date(raw: Any) -> date | None:
     text = str(raw or "").strip()
     if not text:
         return None
     try:
         return datetime.strptime(text, "%Y-%m-%d").date()
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
 def _safe_int(raw: Any, default: int) -> int:
     try:
         value = int(raw)
-    except Exception:
+    except (ValueError, TypeError):
         return int(default)
     return int(value)
 
 
-def _read_registry(path: Path) -> Dict[str, Any]:
+def _read_registry(path: Path) -> dict[str, Any]:
     text = path.read_text(encoding="utf-8")
     payload = json.loads(text)
     if not isinstance(payload, dict):
@@ -63,12 +64,12 @@ def _read_registry(path: Path) -> Dict[str, Any]:
 
 
 def evaluate_release_contract_registry(
-    registry: Dict[str, Any],
+    registry: dict[str, Any],
     *,
-    today: Optional[date] = None,
-) -> Dict[str, Any]:
-    now = today or datetime.now(UTC).date()
-    findings: List[ContractFinding] = []
+    today: date | None = None,
+) -> dict[str, Any]:
+    now = today or datetime.now(timezone.utc).date()
+    findings: list[ContractFinding] = []
 
     policy = registry.get("policy")
     policy_dict = policy if isinstance(policy, dict) else {}
@@ -87,7 +88,7 @@ def evaluate_release_contract_registry(
         contracts_raw = []
 
     seen_ids: set[str] = set()
-    normalized_contracts: List[Dict[str, Any]] = []
+    normalized_contracts: list[dict[str, Any]] = []
 
     for item in contracts_raw:
         if not isinstance(item, dict):
@@ -272,7 +273,7 @@ def evaluate_release_contract_registry(
         )
 
     migration_raw = registry.get("migration_guarantees")
-    migration_rows: List[Dict[str, str]] = []
+    migration_rows: list[dict[str, str]] = []
     if not isinstance(migration_raw, list) or not migration_raw:
         findings.append(
             ContractFinding(
@@ -349,16 +350,16 @@ def evaluate_release_contract_registry(
 
 
 def build_release_contract_report(
-    registry_path: Optional[Path] = None,
+    registry_path: Path | None = None,
     *,
-    today: Optional[date] = None,
-) -> Dict[str, Any]:
+    today: date | None = None,
+) -> dict[str, Any]:
     path = (registry_path or DEFAULT_REGISTRY_PATH).resolve()
     if not path.exists():
         return {
             "ok": False,
             "registry_path": str(path),
-            "as_of": (today or datetime.now(UTC).date()).isoformat(),
+            "as_of": (today or datetime.now(timezone.utc).date()).isoformat(),
             "contracts": [],
             "migration_guarantees": [],
             "errors": [
@@ -385,7 +386,7 @@ def build_release_contract_report(
         return {
             "ok": False,
             "registry_path": str(path),
-            "as_of": (today or datetime.now(UTC).date()).isoformat(),
+            "as_of": (today or datetime.now(timezone.utc).date()).isoformat(),
             "contracts": [],
             "migration_guarantees": [],
             "errors": [
@@ -411,7 +412,7 @@ def build_release_contract_report(
     return report
 
 
-def _render_findings(lines: List[str], title: str, rows: Iterable[Dict[str, Any]]) -> None:
+def _render_findings(lines: list[str], title: str, rows: Iterable[dict[str, Any]]) -> None:
     entries = list(rows)
     if not entries:
         return
@@ -426,7 +427,7 @@ def _render_findings(lines: List[str], title: str, rows: Iterable[Dict[str, Any]
         lines.append(f"  Fix: {row.get('remediation', '')}")
 
 
-def format_text_report(report: Dict[str, Any]) -> str:
+def format_text_report(report: dict[str, Any]) -> str:
     summary = report.get("summary") if isinstance(report.get("summary"), dict) else {}
     lines = [
         f"Contract registry: {report.get('registry_path', '')}",
@@ -447,7 +448,7 @@ def format_text_report(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate release contract registry and deprecation discipline.")
     parser.add_argument(
         "--path",

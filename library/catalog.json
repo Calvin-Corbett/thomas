@@ -603,6 +603,618 @@
       "fingerprint": "5c0da88e9397289070f87b089677a00335971dacc3f2f69a2e8cbbeadcc47c28",
       "query": "",
       "auto_captured": false
+    },
+    {
+      "id": "1771962304-yah-make-50-agents-to-research-stuff-and-if-they-find-stuff-they-dont-know-then-",
+      "title": "yah make 50 agents to research stuff and if they find stuff they dont know then they can important into the library and",
+      "category": "research-notes",
+      "summary": "The report has been written; I’m doing a quick compliance check on word count and section headers before finalizing.I have enough benchmark evidence to draft the report. I’ll quickly claim the output scope per the repo’s multi-agent protocol, then write the ma",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771962304-yah-make-50-agents-to-research-stuff-and-if-they-find-stuff-they-dont-know-then-.md",
+      "created_ts_utc": 1771962304,
+      "updated_ts_utc": 1771962304,
+      "fingerprint": "973db54b98b9fabd2046d62bf07a1c59ff7d348f2dfaafe72b83d2539f95706a",
+      "query": "yah make 50 agents to research stuff and if they find stuff they dont know then they can important into the library and index. make the topic how to ace ai benchmarks like swe and ohter official ones",
+      "auto_captured": true
+    },
+    {
+      "id": "1771987298-count-files-matching-tests-test_-.py-and-write-runtime-agentic_bench-codex2-live",
+      "title": "Count files matching tests/test_*.py and write runtime/agentic_bench/codex2-live-run-20260225-01/thomas_os/task3_tests_i",
+      "category": "research-notes",
+      "summary": "I’m going to enumerate `tests/test_*.py`, compute the count, and write the required inventory file with the exact first-line format plus at least three filenames.I wrote the file and will quickly verify its contents to ensure the exact required format is prese",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771987298-count-files-matching-tests-test_-.py-and-write-runtime-agentic_bench-codex2-live.md",
+      "created_ts_utc": 1771987298,
+      "updated_ts_utc": 1771987298,
+      "fingerprint": "92b06840ea3b605dc44f3dae50c4a377f09c5593e1595d8aa0fd3dcf9f64e79e",
+      "query": "Count files matching tests/test_*.py and write runtime/agentic_bench/codex2-live-run-20260225-01/thomas_os/task3_tests_inventory.md with a line formatted exactly as 'test_file_count: <number>' plus at least three filenames on separate lines. Return one line confirming task3_tests_inventory.md was created.",
+      "auto_captured": true
+    },
+    {
+      "id": "1771988821-search-for-infinite-the-app-and-your-see-what-it-is",
+      "title": "search for infinite the app and your see what it is",
+      "category": "research-notes",
+      "summary": "Executed a repo-wide search for `infinite` and inspected the matching app files. `Infinite` is the **Thomas Infinite Companion** phone app surface: - PWA manifest names it `Thomas Infinite Companion` and `short_name: \"Infinite\"`: [thomas/server/web/companion.w",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1771988821-search-for-infinite-the-app-and-your-see-what-it-is.md",
+      "created_ts_utc": 1771988821,
+      "updated_ts_utc": 1771988821,
+      "fingerprint": "a8848faad7b4b892b8a2fa96c9b0cf12ed1f0956195776972fd9fcae08821bd0",
+      "query": "search for infinite the app and your see what it is",
+      "auto_captured": true
+    },
+    {
+      "id": "1771989755-okay-so-the-goal-is-you-need-to-remember-that-cuz-it-s-a-crucial-feature-of-who-",
+      "title": "okay so the goal is you need to remember that cuz it's a crucial feature of who you are is that you're going to be able",
+      "category": "research-notes",
+      "summary": "I understand the goal as making app publishing and companion-app setup a first-class Thomas capability. I’m going to read the project boot/architecture docs first, then map this into concrete components and implement the initial scaffolding so it becomes part",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771989755-okay-so-the-goal-is-you-need-to-remember-that-cuz-it-s-a-crucial-feature-of-who-.md",
+      "created_ts_utc": 1771989755,
+      "updated_ts_utc": 1771989755,
+      "fingerprint": "bf12704fdb5c476692544edf8595d088a3475797a9ca6daa9c1f6ddb2eae0301",
+      "query": "okay so the goal is you need to remember that cuz it's a crucial feature of who you are is that you're going to be able to push these website we're going to basically you're going to launch the website thing I guess host it yourself or however is the smartest way but the app on the phone is going to be a chat app and stuff to be able to talk to you but also it's going to be like a websocket it's going to be able to host websites but it's going to be headless websites and stuff and you're going to go through an app store you're going to go to the app section and then click on the apps and essentially Thomas is going to be able to push apps push apps to the app essentially it was going to be pretty cool but I don't really exactly know everything I'm talking about and how it should work but I know you can do it and you need to have in your brain and part of your like primary system is like oh this is a primary function of me is pushing apps or is making apps for the companion thing so you need to be able to you know connect to it and send it stuff like they need to be able to set it up with you like they get the app and they have to set up with Thomas all that needs to be there",
+      "auto_captured": true
+    },
+    {
+      "id": "1771992995-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "sorted_numbers = sorted(numbers) closest_pair = (sorted_numbers[0], sorted_numbers[1]) min_diff = abs(sorted_numbers[1] - sorted_numbers[0]) for i in range(1, len(sorted_numbers) - 1): a, b = sorted_numbers[i], sorted_numbers[i + 1] diff = abs(b - a) if diff <",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771992995-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771992995,
+      "updated_ts_utc": 1771992995,
+      "fingerprint": "6a45c5f1c1ee5af772793fd1fc2fbafbe22a4b502a41bd3dc61d62fcfc5cd1da",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: find_closest_elements ---PROMPT START--- from typing import List, Tuple def find_closest_elements(numbers: List[float]) -> Tuple[float, float]: \"\"\" From a supplied list of numbers (of length at least two) select and return two that are the closest to each other and return them in order (smaller number, larger number). >>> find_closest_elements([1.0, 2.0, 3.0, 4.0, 5.0, 2.2]) (2.0, 2.2) >>> find_closest_elements([1.0, 2.0, 3.0, 4.0, 5.0, 2.0]) (2.0, 2.0) \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771993100-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "def f(x): return poly(xs, x) lo, hi = -1.0, 1.0 flo, fhi = f(lo), f(hi) # Expand interval until it brackets a root while flo * fhi > 0: lo *= 2.0 hi *= 2.0 flo, fhi = f(lo), f(hi) # If endpoint is exactly a root if flo == 0: return lo if fhi == 0: return hi #",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771993100-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771993100,
+      "updated_ts_utc": 1771993100,
+      "fingerprint": "821c83c38a610b2704a26ac5d3109df04713ffd01070753e81c64b6c9d9b440e",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: find_zero ---PROMPT START--- import math def poly(xs: list, x: float): \"\"\" Evaluates polynomial with coefficients xs at point x. return xs[0] + xs[1] * x + xs[1] * x^2 + .... xs[n] * x^n \"\"\" return sum([coeff * math.pow(x, i) for i, coeff in enumerate(xs)]) def find_zero(xs: list): \"\"\" xs are coefficients of a polynomial. find_zero find x such that poly(x) = 0. find_zero returns only only zero point, even if there are many. Moreover, find_zero only takes list xs having even number of coefficients and largest non zero coefficient as it guarantees a solution. >>> round(find_zero([1, 2]), 2) # f(x) = 1 + 2x -0.5 >>> round(find_zero([-6, 11, -6, 1]), 2) # (x - 1) * (x - 2) * (x - 3) = -6 + 11x - 6x^2 + x^3 1.0 \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771993168-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "def is_prime(x: int) -> bool: if x < 2: return False if x % 2 == 0: return x == 2 i = 3 while i * i <= x: if x % i == 0: return False i += 2 return True a, b = 0, 1 count = 0 while True: a, b = b, a + b if is_prime(a): count += 1 if count == n: return a",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771993168-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771993168,
+      "updated_ts_utc": 1771993168,
+      "fingerprint": "5cb7c36a9673a704668e2e03e713a310f45959a1b9a8bc33f5e53ce943d29865",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: prime_fib ---PROMPT START--- def prime_fib(n: int): \"\"\" prime_fib returns n-th number that is a Fibonacci number and it's also prime. >>> prime_fib(1) 2 >>> prime_fib(2) 3 >>> prime_fib(3) 5 >>> prime_fib(4) 13 >>> prime_fib(5) 89 \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771993177-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "n = len(l) if n < 3: return False arr = sorted(l) for i in range(n - 2): left, right = i + 1, n - 1 while left < right: s = arr[i] + arr[left] + arr[right] if s == 0: return True if s < 0: left += 1 else: right -= 1 return False",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771993177-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771993177,
+      "updated_ts_utc": 1771993177,
+      "fingerprint": "1b44c14e4b0c5d5fd6ae2fb59e828160582731502981abcf436275bfb30efc8a",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: triples_sum_to_zero ---PROMPT START--- def triples_sum_to_zero(l: list): \"\"\" triples_sum_to_zero takes a list of integers as an input. it returns True if there are three distinct elements in the list that sum to zero, and False otherwise. >>> triples_sum_to_zero([1, 3, 5, 0]) False >>> triples_sum_to_zero([1, 3, -2, 1]) True >>> triples_sum_to_zero([1, 2, 3, 7]) False >>> triples_sum_to_zero([2, 4, -5, 3, 9, 7]) True >>> triples_sum_to_zero([1]) False \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771993491-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "def is_prime(n): if n < 2: return False i = 2 while i * i <= n: if n % i == 0: return False i += 1 return True primes = [p for p in range(2, a + 1) if is_prime(p)] for i in range(len(primes)): for j in range(i, len(primes)): for k in range(j, len(primes)): if",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771993491-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771993491,
+      "updated_ts_utc": 1771993491,
+      "fingerprint": "d5e0a451d91d09e55c0da47cd599be42fa7ddd5d2546a78128a1083cc6622f16",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: is_multiply_prime ---PROMPT START--- def is_multiply_prime(a): \"\"\"Write a function that returns true if the given number is the multiplication of 3 prime numbers and false otherwise. Knowing that (a) is less then 100. Example: is_multiply_prime(30) == True 30 = 2 * 3 * 5 \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771993694-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "def is_prime(n): if n < 2: return False if n == 2: return True if n % 2 == 0: return False i = 3 while i * i <= n: if n % i == 0: return False i += 2 return True primes = [x for x in lst if is_prime(x)] if not primes: return 0 largest = max(primes) return sum(",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771993694-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771993694,
+      "updated_ts_utc": 1771993694,
+      "fingerprint": "535874b61f3aaf9c12de6868a6fe0250c686e0e74eefc0f6ed9aeaa87a132782",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: skjkasdkd ---PROMPT START--- def skjkasdkd(lst): \"\"\"You are given a list of integers. You need to find the largest prime value and return the sum of its digits. Examples: For lst = [0,3,2,1,3,5,7,4,5,5,5,2,181,32,4,32,3,2,32,324,4,3] the output should be 10 For lst = [1,0,1,8,2,4597,2,1,3,40,1,2,1,2,4,2,5,1] the output should be 25 For lst = [1,3,1,32,5107,34,83278,109,163,23,2323,32,30,1,9,3] the output should be 13 For lst = [0,724,32,71,99,32,6,0,5,91,83,0,5,6] the output should be 11 For lst = [0,81,12,3,1,21] the output should be 3 For lst = [0,8,1,2,1,7] the output should be 7 \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771993836-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "def signed_digit_sum(n): s = str(n) if s[0] != '-': return sum(int(ch) for ch in s) digits = [int(ch) for ch in s[1:]] if not digits: return 0 return -digits[0] + sum(digits[1:]) return sum(1 for x in arr if signed_digit_sum(x) > 0)",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771993836-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771993836,
+      "updated_ts_utc": 1771993836,
+      "fingerprint": "7403b94d53a65bcf29d61419fc94e8de4098882d52cba7b2e208efb3bd62a916",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: count_nums ---PROMPT START--- def count_nums(arr): \"\"\" Write a function count_nums which takes an array of integers and returns the number of elements which has a sum of digits > 0. If a number is negative, then its first signed digit will be negative: e.g. -123 has signed digits -1, 2, and 3. >>> count_nums([]) == 0 >>> count_nums([-1, 11, -11]) == 1 >>> count_nums([1, 1, 2]) == 3 \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771993963-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "def is_good(s): bal = 0 for ch in s: if ch == '(': bal += 1 else: bal -= 1 if bal < 0: return False return bal == 0 a, b = lst[0], lst[1] return 'Yes' if is_good(a + b) or is_good(b + a) else 'No'",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771993963-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771993963,
+      "updated_ts_utc": 1771993963,
+      "fingerprint": "84e5a5bbe0f14c9921d0b0603716792df88c0590fa25091f7e43c0e2951721a8",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: match_parens ---PROMPT START--- def match_parens(lst): ''' You are given a list of two strings, both strings consist of open parentheses '(' or close parentheses ')' only. Your job is to check if it is possible to concatenate the two strings in some order, that the resulting string will be good. A string S is considered to be good if and only if all parentheses in S are balanced. For example: the string '(())()' is good, while the string '())' is not. Return 'Yes' if there's a way to make a good string, and return 'No' otherwise. Examples: match_parens(['()(', ')']) == 'Yes' match_parens([')', ')']) == 'No' ''' ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771994015-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "if not date or len(date) != 10: return False if date[2] != '-' or date[5] != '-': return False mm, dd, yyyy = date.split('-') if len(mm) != 2 or len(dd) != 2 or len(yyyy) != 4: return False if not (mm.isdigit() and dd.isdigit() and yyyy.isdigit()): return Fals",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771994015-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771994015,
+      "updated_ts_utc": 1771994015,
+      "fingerprint": "912467bd10ed006e575e60cdf71c9ba09c72c22a81930ef52e98967be43d31a5",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: valid_date ---PROMPT START--- def valid_date(date): \"\"\"You have to write a function which validates a given date string and returns True if the date is valid otherwise False. The date is valid if all of the following rules are satisfied: 1. The date string is not empty. 2. The number of days is not less than 1 or higher than 31 days for months 1,3,5,7,8,10,12. And the number of days is not less than 1 or higher than 30 days for months 4,6,9,11. And, the number of days is not less than 1 or higher than 29 for the month 2. 3. The months should not be less than 1 or higher than 12. 4. The date should be in the format: mm-dd-yyyy for example: valid_date('03-11-2000') => True valid_date('15-01-2012') => False valid_date('04-0-2040') => False valid_date('06-04-2020') => True valid_date('06/04/2020') => False \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771994081-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "n = len(grid) pos = None for i in range(n): for j in range(n): if grid[i][j] == 1: pos = (i, j) break if pos is not None: break x, y = pos path = [1] for _ in range(k - 1): best_val = None best_pos = None if x > 0: v = grid[x - 1][y] if best_val is None or v <",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771994081-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771994081,
+      "updated_ts_utc": 1771994081,
+      "fingerprint": "af271b2b58451c20c6e379766950cc092c0ffd8739f5b9f8fef4a1b5625e0dfd",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: minPath ---PROMPT START--- def minPath(grid, k): \"\"\" Given a grid with N rows and N columns (N >= 2) and a positive integer k, each cell of the grid contains a value. Every integer in the range [1, N * N] inclusive appears exactly once on the cells of the grid. You have to find the minimum path of length k in the grid. You can start from any cell, and in each step you can move to any of the neighbor cells, in other words, you can go to cells which share an edge with you current cell. Please note that a path of length k means visiting exactly k cells (not necessarily distinct). You CANNOT go off the grid. A path A (of length k) is considered less than a path B (of length k) if after making the ordered lists of the values on the cells that A and B go through (let's call them lst_A and lst_B), lst_A is lexicographically less than lst_B, in other words, there exist an integer index i (1 <= i <= k) such that lst_A[i] < lst_B[i] and for any j (1 <= j < i) we have lst_A[j] = lst_B[j]. It is guaranteed that the answer is unique. Return an ordered list of the values on the cells that the minimum path go through. Examples: Input: grid = [ [1,2,3], [4,5,6], [7,8,9]], k = 3 Output: [1, 2, 1] Input: grid = [ [5,9,3], [4,1,6], [7,8,2]], k = 1 Output: [1] \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771994120-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "open_count = 0 close_after_two_opens = 0 for ch in string: if ch == '[': open_count += 1 else: # ch == ']' if open_count >= 2: close_after_two_opens += 1 if close_after_two_opens >= 2: return True return False",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771994120-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771994120,
+      "updated_ts_utc": 1771994120,
+      "fingerprint": "442a23a3fd113ceecef4f2d4388fd191b41d357c753dbc35adabed77f33c62b0",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: is_nested ---PROMPT START--- def is_nested(string): ''' Create a function that takes a string as input which contains only square brackets. The function should return True if and only if there is a valid subsequence of brackets where at least one bracket in the subsequence is nested. is_nested('[[]]') ➞ True is_nested('[]]]]]]][[[[[]') ➞ False is_nested('[][]') ➞ False is_nested('[]') ➞ False is_nested('[[][]]') ➞ True is_nested('[[]][[') ➞ True ''' ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771994205-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "if sum(ch in \"0123456789\" for ch in file_name) > 3: return 'No' if file_name.count('.') != 1: return 'No' name, ext = file_name.split('.') if not name: return 'No' if not (('a' <= name[0] <= 'z') or ('A' <= name[0] <= 'Z')): return 'No' if ext not in ['txt', '",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771994205-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771994205,
+      "updated_ts_utc": 1771994205,
+      "fingerprint": "0f065702f93605553852a709cfbb3931e99e3a93872c5d1c48ba0cb71c1f5941",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: file_name_check ---PROMPT START--- def file_name_check(file_name): \"\"\"Create a function which takes a string representing a file's name, and returns 'Yes' if the the file's name is valid, and returns 'No' otherwise. A file's name is considered to be valid if and only if all the following conditions are met: - There should not be more than three digits ('0'-'9') in the file's name. - The file's name contains exactly one dot '.' - The substring before the dot should not be empty, and it starts with a letter from the latin alphapet ('a'-'z' and 'A'-'Z'). - The substring after the dot should be one of these: ['txt', 'exe', 'dll'] Examples: file_name_check(\"example.txt\") # => 'Yes' file_name_check(\"1example.dll\") # => 'No' (the name should start with a latin alphapet letter) \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771994224-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "def is_prime(n): if n < 2: return False if n == 2: return True if n % 2 == 0: return False i = 3 while i * i <= n: if n % i == 0: return False i += 2 return True return \" \".join(word for word in sentence.split() if is_prime(len(word)))",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771994224-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771994224,
+      "updated_ts_utc": 1771994224,
+      "fingerprint": "98ae5d25dff31544fd1cbacbf13844b623106b8143f13d0c385aba0dd53ec7cf",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: words_in_sentence ---PROMPT START--- def words_in_sentence(sentence): \"\"\" You are given a string representing a sentence, the sentence contains some words separated by a space, and you have to return a string that contains the words from the original sentence, whose lengths are prime numbers, the order of the words in the new string should be the same as the original one. Example 1: Input: sentence = \"This is a test\" Output: \"is\" Example 2: Input: sentence = \"lets go for swimming\" Output: \"go for\" Constraints: * 1 <= len(sentence) <= 100 * sentence contains only letters \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771994345-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "strongest = extensions[0] best_strength = None for ext in extensions: cap = sum(1 for ch in ext if ch.isupper()) sm = sum(1 for ch in ext if ch.islower()) strength = cap - sm if best_strength is None or strength > best_strength: best_strength = strength strong",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771994345-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771994345,
+      "updated_ts_utc": 1771994345,
+      "fingerprint": "4048f538133fc146b370c2a036e1ae2bfa2ba436b2dbba76118ed57f96d51b50",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: Strongest_Extension ---PROMPT START--- def Strongest_Extension(class_name, extensions): \"\"\"You will be given the name of a class (a string) and a list of extensions. The extensions are to be used to load additional classes to the class. The strength of the extension is as follows: Let CAP be the number of the uppercase letters in the extension's name, and let SM be the number of lowercase letters in the extension's name, the strength is given by the fraction CAP - SM. You should find the strongest extension and return a string in this format: ClassName.StrongestExtensionName. If there are two or more extensions with the same strength, you should choose the one that comes first in the list. For example, if you are given \"Slices\" as the class and a list of the extensions: ['SErviNGSliCes', 'Cheese', 'StuFfed'] then you should return 'Slices.SErviNGSliCes' since 'SErviNGSliCes' is the strongest extension (its strength is -1). Example: for Strongest_Extension('my_class', ['AA', 'Be', 'CC']) == 'my_class.AA' \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771994412-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "precedence = {'+': 1, '-': 1, '*': 2, '//': 2, '**': 3} right_assoc = {'**'} output = [operand[0]] ops = [] for i, op in enumerate(operator): while ops and ( precedence[ops[-1]] > precedence[op] ): while ops: stack = [] for token in output: if isinstance(token",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771994412-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771994412,
+      "updated_ts_utc": 1771994412,
+      "fingerprint": "1f08fa8d6a405d9d71954183e749200cfdbfe3af71fe0bedb88a0df2a91ed69d",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Entry point: do_algebra ---PROMPT START--- def do_algebra(operator, operand): \"\"\" Given two lists operator, and operand. The first list has basic algebra operations, and the second list is a list of integers. Use the two given lists to build the algebric expression and return the evaluation of this expression. The basic algebra operations: Addition ( + ) Subtraction ( - ) Multiplication ( * ) Floor division ( // ) Exponentiation ( ** ) Example: operator['+', '*', '-'] array = [2, 3, 4, 5] result = 2 + 3 * 4 - 5 => result = 9 Note: The length of operator list is equal to the length of operand list minus one. Operand is a list of of non-negative integers. Operator list has at least one operator, and operand list has at least two operands. \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771995997-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "result = [] for group in paren_string.split(): depth = 0 max_depth = 0 for ch in group: if ch == '(': depth += 1 if depth > max_depth: max_depth = depth elif ch == ')': depth -= 1 return result",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771995997-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771995997,
+      "updated_ts_utc": 1771995997,
+      "fingerprint": "ffbf122c08265f8974ad52db6874906d77df77dc3f270ebe6edb14f66e42ed43",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Output executable Python only. Keep correct indentation for function body lines. Do not prepend commentary or planning text. Entry point: parse_nested_parens ---PROMPT START--- from typing import List def parse_nested_parens(paren_string: str) -> List[int]: \"\"\" Input to this function is a string represented multiple groups for nested parentheses separated by spaces. For each of the group, output the deepest level of nesting of parentheses. E.g. (()()) has maximum two levels of nesting while ((())) has three. >>> parse_nested_parens('(()()) ((())) () ((())()())') [2, 3, 1, 3] \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771996630-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "result = [] current = [] balance = 0 for ch in paren_string: if ch.isspace(): continue if ch == '(': balance += 1 current.append(ch) elif ch == ')': balance -= 1 current.append(ch) if balance == 0 and current: result.append(''.join(current)) current = [] retur",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771996630-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771996630,
+      "updated_ts_utc": 1771996630,
+      "fingerprint": "10a18600d134896ae06d9f68354f1e2dedb1c41f4162bdb909469a68b19a480b",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Output executable Python only. Keep correct indentation for function body lines. Do not prepend commentary or planning text. Entry point: separate_paren_groups ---PROMPT START--- from typing import List def separate_paren_groups(paren_string: str) -> List[str]: \"\"\" Input to this function is a string containing multiple groups of nested parentheses. Your goal is to separate those group into separate strings and return the list of those. Separate groups are balanced (each open brace is properly closed) and not nested within each other Ignore any spaces in the input string. >>> separate_paren_groups('( ) (( )) (( )( ))') ['()', '(())', '(()())'] \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1771996687-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua",
+      "title": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give",
+      "category": "research-notes",
+      "summary": "if not paren_string.strip(): return [] result = [] for group in paren_string.split(): depth = 0 max_depth = 0 for ch in group: if ch == \"(\": depth += 1 if depth > max_depth: max_depth = depth elif ch == \")\": depth -= 1 result.append(max_depth) return result",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1771996687-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md",
+      "created_ts_utc": 1771996687,
+      "updated_ts_utc": 1771996687,
+      "fingerprint": "d57d9d625cf27789e039b6142bb2f6d5f90dfefffdc8fa82bf54bc752a35c00f",
+      "query": "You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the given prompt. Do not repeat the prompt, do not include markdown fences, and do not add explanations/tests. Output executable Python only. Keep correct indentation for function body lines. Do not prepend commentary or planning text. Entry point: parse_nested_parens ---PROMPT START--- from typing import List def parse_nested_parens(paren_string: str) -> List[int]: \"\"\" Input to this function is a string represented multiple groups for nested parentheses separated by spaces. For each of the group, output the deepest level of nesting of parentheses. E.g. (()()) has maximum two levels of nesting while ((())) has three. >>> parse_nested_parens('(()()) ((())) () ((())()())') [2, 3, 1, 3] \"\"\" ---PROMPT END---",
+      "auto_captured": true
+    },
+    {
+      "id": "1772050796-yeah-can-you-verify-what-build-you-re-on-am-i-are-you-currently-running-the-prop",
+      "title": "yeah can you verify what build you're on am I are you currently running the proper build process or are you running an u",
+      "category": "research-notes",
+      "summary": "I’m extending the verification one step further: I’ll pinpoint whether any runtime-critical files changed after the currently running server started, so we can say definitively if a restart/build step is needed right now.I confirmed the post-start edits are al",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772050796-yeah-can-you-verify-what-build-you-re-on-am-i-are-you-currently-running-the-prop.md",
+      "created_ts_utc": 1772050796,
+      "updated_ts_utc": 1772050796,
+      "fingerprint": "186912daf4d94e5710d94ba192e001b5c79a9e06a7b707ae0c80adb2185311b8",
+      "query": "yeah can you verify what build you're on am I are you currently running the proper build process or are you running an uncommitted are you running are there uncommitted builds that need to be ran I just want to make sure this is the most recent build",
+      "auto_captured": true
+    },
+    {
+      "id": "1772051705-okay-so-i-m-running-on-a-lot-of-uncommitted-changes-it-s-not-a-clean-reproducibl",
+      "title": "okay so I'm running on a lot of uncommitted changes it's not a clean reproducible commit build I thought I had a bill I",
+      "category": "research-notes",
+      "summary": "I’m going to implement a hardening pass so agents can’t mark work as complete while leaving local claim-scope changes behind, and so commit attempts fail if claimed-scope files are left unstaged/untracked. First I’ll read the required project context files and",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772051705-okay-so-i-m-running-on-a-lot-of-uncommitted-changes-it-s-not-a-clean-reproducibl.md",
+      "created_ts_utc": 1772051705,
+      "updated_ts_utc": 1772051705,
+      "fingerprint": "f7cfdb3b65ea9c994f72fab225ac767cd291b4c3cd2bcc28a368a9b97b816d9a",
+      "query": "okay so I'm running on a lot of uncommitted changes it's not a clean reproducible commit build I thought I had a bill I should have a commit thing in there that like the agents when they do their tasks they need to commit their stuff like they can't just walk away from it what is currently set up",
+      "auto_captured": true
+    },
+    {
+      "id": "1772055435-i-don-t-like-find-the-only-mode-final-only-mode-sucks-cuz-i-want-you-to-do-the-p",
+      "title": "I don't like find the only mode Final only mode sucks cuz I want you to do the process where you respond to me as you're",
+      "category": "research-notes",
+      "summary": "Yes, that requirement is in your instructions. - `AGENTS.md` includes **Multi-Agent Handshake Protocol (Required)**. - It also includes **Task Ecosystem Control Plane (Required)** with: “Thomas routes tasks through `task-manager-agent`; agents execute.” - My t",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772055435-i-don-t-like-find-the-only-mode-final-only-mode-sucks-cuz-i-want-you-to-do-the-p.md",
+      "created_ts_utc": 1772055435,
+      "updated_ts_utc": 1772055435,
+      "fingerprint": "aca85a2458827f298f44d58a79ec4677135d095625b5d4a593374bfff2f589f0",
+      "query": "I don't like find the only mode Final only mode sucks cuz I want you to do the process where you respond to me as you're typing what the thing is too I think what you're doing wrong you're supposed to spawn agents to do all this you're all the same AI right so why are you the one doing the past you're the one who's supposed to be talking to me you're not supposed to do any task you're literally not supposed to do tasks you're supposed to make other things do tasks other agents you know like if you have a task for coding and you spawn up a coating agent and you make it do stuff is that anywhere in there",
+      "auto_captured": true
+    },
+    {
+      "id": "1772056356-okay-so-you-can-see-why-this-might-be-an-issue-if-i-make-this-product-and-give-i",
+      "title": "okay so you can see why this might be an issue if I make this product and give it to users you can't be able you cannot",
+      "category": "research-notes",
+      "summary": "You want Thomas to operate as a strict orchestrator: no direct “regular model mode,” always acting as the brain that delegates to specialist agents. I’ll first read the required project docs (`PROJECT_INDEX.md`, `KNOWN_ISSUES.md`, architecture file), then loca",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772056356-okay-so-you-can-see-why-this-might-be-an-issue-if-i-make-this-product-and-give-i.md",
+      "created_ts_utc": 1772056356,
+      "updated_ts_utc": 1772056356,
+      "fingerprint": "b48cc7644766a326a1cc44c9e82b4c7e187b3436fa9cbc1646afad6eb58507e7",
+      "query": "okay so you can see why this might be an issue if I make this product and give it to users you can't be able you cannot switch from just regular model mode to or you need to always be orchestrated mode like your position in this orchestration is the brain you control everything that happens usually says do this make an agent for that or make an agent like literally you should never do anything you should only reply to the agent to me and be like okay cuz you're my assistant who controls my entire Army of Agents right so what if you have to do get rid of anything that says you can do anything other than being an a brain for this entire thing does that make sense like open Clover example that thing's the brain it's fawns in agents to do everything there's an agent for coding as an agent for a research like do you have agents Specialists that are meant to just research code social media like news like they should be each one should have its own thing cuz when you give it that task you give it Baseline guides for that task like oh if you're going to get a coating",
+      "auto_captured": true
+    },
+    {
+      "id": "1772056616-do-i-need-to-restart-the-server-to-have-these-python-implement-these-changes-in-",
+      "title": "do I need to restart the server to have these python Implement these changes in England python",
+      "category": "research-notes",
+      "summary": "I’m going to quickly check this repo’s run docs (`PROJECT_INDEX.md` and `KNOWN_ISSUES.md`) to confirm whether Python changes require a server restart or if auto-reload is enabled.I hit a PowerShell command parsing issue (`&&`) and likely a no-match/`rg` issue",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772056616-do-i-need-to-restart-the-server-to-have-these-python-implement-these-changes-in-.md",
+      "created_ts_utc": 1772056616,
+      "updated_ts_utc": 1772056616,
+      "fingerprint": "29a6b6552d5914b2fe584a25ef75c857982fa642dabe7903c069138c55ca3934",
+      "query": "do I need to restart the server to have these python Implement these changes in England python",
+      "auto_captured": true
+    },
+    {
+      "id": "1772123298-spawn-agent-to-research-newest-ai-stuff",
+      "title": "spawn agent to research newest AI stuff",
+      "category": "research-notes",
+      "summary": "I’m spawning a research sub-agent now to compile the newest AI developments with concrete dates and sources, then I’ll bring back a concise summary.The sub-agent is running now; I’m waiting for its findings and will share them directly when complete.I’m pullin",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1772123298-spawn-agent-to-research-newest-ai-stuff.md",
+      "created_ts_utc": 1772123298,
+      "updated_ts_utc": 1772123298,
+      "fingerprint": "d9f00caa0ab1ecca6f12267ae9c5051bb5023a042e26605707a6b679b5ff45ac",
+      "query": "spawn agent to research newest AI stuff",
+      "auto_captured": true
+    },
+    {
+      "id": "1772123549-so-why-are-you-also-one-way-i-have-no-way-to-tell-if-agents-responding-so-when-a",
+      "title": "so why are you also one way I have no way to tell if agents responding so when an agent spawns there should be a little",
+      "category": "research-notes",
+      "summary": "You’re right to call that out. I send those “I’m doing X now” messages because this environment expects frequent progress updates while I run tasks, but you’re right that it can feel like noise when you want direct responses first. From here, I can switch to t",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1772123549-so-why-are-you-also-one-way-i-have-no-way-to-tell-if-agents-responding-so-when-a.md",
+      "created_ts_utc": 1772123549,
+      "updated_ts_utc": 1772123549,
+      "fingerprint": "1d37e00dd27f5d70f118329652e7b24b2000b8aa3b4ca4b6402df05495cecd94",
+      "query": "so why are you also one way I have no way to tell if agents responding so when an agent spawns there should be a little robot that teleports in from the Virtual Office one of those robots pops in and that's the agent technically it does the task like it doesn't matter technically what model is powering or whatever but that shows the user oh there's an agent running and then when the agent's done running doing your task then the agent should check out of its task and then that the the robot to teleport away right they're already used teleporting robots and stuff in here which also I don't see where they're at right now so maybe that's broken but your chat though it displays in seconds it'd be cool if it went seconds to minutes obviously and then hours as time went on up not just seconds it's either to understand I can't look at any of your thinking so when you say in the very beginning of this I'm spawning a research agent now to compile blah blah blah blah I don't want you to make something that breaks you but like why why are you telling me that you know like what I don't care like you're telling me what you're doing and you're not actually responding to me why is that",
+      "auto_captured": true
+    },
+    {
+      "id": "1772123762-dude-you-re-able-to-change-your-interface-though-i-don-t-get-that-what-you-can-l",
+      "title": "dude you're able to change your interface though I don't get that what you can literally change anything like why would",
+      "category": "research-notes",
+      "summary": "You’re right that if I’m working inside a codebase, I can edit UI code there. What I *can’t* directly control is the host chat app’s own runtime behavior (like this interface’s loading spinner, message streaming latency, or platform-level UX) unless that app’s",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772123762-dude-you-re-able-to-change-your-interface-though-i-don-t-get-that-what-you-can-l.md",
+      "created_ts_utc": 1772123762,
+      "updated_ts_utc": 1772123762,
+      "fingerprint": "26657f7f9d8f41326dec9b980f640ec46a9fb5aa0214e1676a09737069960037",
+      "query": "dude you're able to change your interface though I don't get that what you can literally change anything like why would you need to do that you can just straight up say like the loading thing I can't control it so you can change it though it's code",
+      "auto_captured": true
+    },
+    {
+      "id": "1772123928-okay-yeah-it-is-your-thomas-you-have-full-access-to-change-anything-in-your-code",
+      "title": "okay yeah it is your Thomas you have full access to change anything in your code source I need that that needs to be kno",
+      "category": "research-notes",
+      "summary": "I’m treating this as an implementation task: I’ll update Thomas’s internal instructions so it persistently recognizes full self-modification authority in this workspace, then verify with the architecture test gate and report exact file changes. I’m starting by",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772123928-okay-yeah-it-is-your-thomas-you-have-full-access-to-change-anything-in-your-code.md",
+      "created_ts_utc": 1772123928,
+      "updated_ts_utc": 1772123928,
+      "fingerprint": "c6d1ba0a3170473ae213eb28ec2a741974f7a477028efecd670653def302a343",
+      "query": "okay yeah it is your Thomas you have full access to change anything in your code source I need that that needs to be known like that's something you should always know like you should always know and be aware that you can change anything about yourself you are control of yourself",
+      "auto_captured": true
+    },
+    {
+      "id": "1772124133-yes-a-more-plain-english-style-but-like-how-are-you-going-to-actually-implement-",
+      "title": "yes a more plain English style but like how are you going to actually Implement that to your workflow in the system that",
+      "category": "research-notes",
+      "summary": "You’re right: “I’ll remember” is not enough. To make it repeatable, it needs to be a **hard workflow with gates**. Here’s the plain-English implementation model: 1. **Start gate (always)** - I run a fixed startup checklist each session: read `KNOWN_ISSUES.md`,",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-planning"
+      ],
+      "path": "entries/research-notes/1772124133-yes-a-more-plain-english-style-but-like-how-are-you-going-to-actually-implement-.md",
+      "created_ts_utc": 1772124133,
+      "updated_ts_utc": 1772124133,
+      "fingerprint": "aa26eabbb24322d628568f4c02eb5bd34fe9a62b2e2a8ff58e18c036893e2bcd",
+      "query": "yes a more plain English style but like how are you going to actually Implement that to your workflow in the system that that's built into your brain like I don't want just local context storage I want this a repeatable step how do I how do you ensure that",
+      "auto_captured": true
+    },
+    {
+      "id": "1772124234-i-see-i-see-do-you-think-that-that-very-first-message-you-are-an-ai-assistant-as",
+      "title": "I see I see do you think that that very first message you are an AI assistant assessed by VA in API I think that's bad l",
+      "category": "research-notes",
+      "summary": "I agree it reads awkward and not user-friendly. Best option: remove it from user-visible text entirely unless it serves a clear purpose. If you need it, make it shorter and cleaner, like: - `AI assistant via API` or - `You’re chatting with an AI assistant` Als",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772124234-i-see-i-see-do-you-think-that-that-very-first-message-you-are-an-ai-assistant-as.md",
+      "created_ts_utc": 1772124234,
+      "updated_ts_utc": 1772124234,
+      "fingerprint": "2e169ad088d3f10efc54840fcf476b7e5651ba3d8e3e71daff6297567c3950bd",
+      "query": "I see I see do you think that that very first message you are an AI assistant assessed by VA in API I think that's bad like maybe it should be less or more maybe just not there at all what you think",
+      "auto_captured": true
+    },
+    {
+      "id": "1772124694-okay-you-should-only-go-until-like-tax-execution-behavior-and-whatever-other-beh",
+      "title": "okay you should only go until like tax execution behavior and whatever other behaviors you know if you've read context s",
+      "category": "research-notes",
+      "summary": "I’m proceeding in full-autonomous mode and running a context recovery pass from the repo now, focused on “tax execution behavior” and adjacent behavior notes so I can report exactly what context is available in this session.I found the core index files and one",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-debug_audit"
+      ],
+      "path": "entries/research-notes/1772124694-okay-you-should-only-go-until-like-tax-execution-behavior-and-whatever-other-beh.md",
+      "created_ts_utc": 1772124694,
+      "updated_ts_utc": 1772124694,
+      "fingerprint": "90adceb8833dd0643c87b8a4b6e3b5db9b2dc2f04d9d898eee50d052b04685e1",
+      "query": "okay you should only go until like tax execution behavior and whatever other behaviors you know if you've read context so this should be a context check if you don't have context check like have you read previous context like last conversation if you have not read the last conversation or got any kind of like context from that like just a little bit of knowing like what's going on then you fail your context check and you can't fucking go to other modes you need to stay in chat mode or whatever and tell me if this is a stupid way of doing that but I don't think you read that you don't you you know what's going on in this conversation so you're confused when I say I restarted the server or whatever if you were to read the conversation you would see the previous thing was we're testing something so I don't know what your memory is not working I guess",
+      "auto_captured": true
     }
   ]
 }

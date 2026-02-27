@@ -125,6 +125,88 @@ class TestSetupRoutesLocal(AioHTTPTestCase):
         content_type = resp.headers.get("Content-Type", "")
         self.assertIn("ndjson", content_type)
 
+    async def test_local_background_status_returns_health_payload(self):
+        resp = await self.client.get("/api/local/background")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertIn("ok", body)
+        self.assertTrue(bool(body["ok"]))
+        self.assertIn("status", body)
+        self.assertIn("health", body)
+        self.assertIn("recent_reports", body)
+        self.assertIn("task_catalog", body)
+
+    async def test_local_background_control_updates_runtime_settings(self):
+        resp = await self.client.post(
+            "/api/local/background",
+            json={"enabled": True, "min_gpu_headroom_pct": 44},
+        )
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertIn("updated_settings", body)
+        updated = body["updated_settings"]
+        self.assertEqual(bool(updated.get("local_background_agents_enabled")), True)
+        self.assertEqual(int(updated.get("local_background_min_gpu_headroom_pct")), 44)
+
+        prefs_resp = await self.client.get("/api/preferences")
+        self.assertEqual(prefs_resp.status, 200)
+        prefs = await prefs_resp.json()
+        runtime = (prefs.get("advanced") or {}).get("runtime") or {}
+        self.assertEqual(bool(runtime.get("local_background_agents_enabled")), True)
+        self.assertEqual(int(runtime.get("local_background_min_gpu_headroom_pct")), 44)
+
+    async def test_local_sync_returns_extended_probe_contract(self):
+        resp = await self.client.post(
+            "/api/local/sync",
+            json={
+                "model_ids": ["llama3"],
+                "verify_only": True,
+                "verify_inference": True,
+                "verify_tooling": True,
+            },
+        )
+        self.assertIn(resp.status, (200, 207))
+        body = await resp.json()
+        self.assertIn("verify_inference", body)
+        self.assertIn("verify_tooling", body)
+        self.assertIn("readiness", body)
+        self.assertIn("results", body)
+        self.assertGreaterEqual(len(body["results"]), 1)
+        first = body["results"][0]
+        self.assertIn("probe_ok", first)
+        self.assertIn("probe", first)
+        self.assertIn("repair_attempted", first)
+        self.assertIn("repair_events_tail", first)
+
+    async def test_local_sync_can_apply_recommended_runtime_settings(self):
+        resp = await self.client.post(
+            "/api/local/sync",
+            json={
+                "model_ids": ["llama3"],
+                "verify_only": True,
+                "apply_recommended_settings": True,
+            },
+        )
+        self.assertIn(resp.status, (200, 207))
+        body = await resp.json()
+        self.assertIn("settings_applied", body)
+        settings_applied = body["settings_applied"]
+        self.assertIn("local_background_agents_enabled", settings_applied)
+        self.assertIn("local_background_min_gpu_headroom_pct", settings_applied)
+
+        prefs_resp = await self.client.get("/api/preferences")
+        self.assertEqual(prefs_resp.status, 200)
+        prefs = await prefs_resp.json()
+        runtime = (prefs.get("advanced") or {}).get("runtime") or {}
+        self.assertEqual(
+            bool(runtime.get("local_background_agents_enabled")),
+            bool(settings_applied.get("local_background_agents_enabled")),
+        )
+        self.assertEqual(
+            int(runtime.get("local_background_min_gpu_headroom_pct")),
+            int(settings_applied.get("local_background_min_gpu_headroom_pct")),
+        )
+
 
 class TestSetupRoutesRemoteAuth(AioHTTPTestCase):
     """Verify setup routes require auth in remote mode."""

@@ -99,7 +99,7 @@ def register(group: Any) -> None:
     """Hook for click/typer group-based CLIs."""
     try:
         group.add_command(gateway_health_detailed_payload)
-    except Exception:
+    except Exception:  # REVIEWED: error boundary
         return
 
 

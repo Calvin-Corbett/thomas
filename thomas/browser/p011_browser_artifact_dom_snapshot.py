@@ -25,18 +25,17 @@ Notes
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
 import asyncio
 import hashlib
 import importlib
 import inspect
 import json
 import os
-from pathlib import Path
 import re
-from typing import Any, Literal, Optional, TypedDict, cast
-
+from dataclasses import asdict, dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Literal, TypedDict, cast
 
 ErrorCategory = Literal["invalid_input", "missing_config", "external_failure"]
 CaptureMethod = Literal["browser_method", "cdp", "html"]
@@ -48,7 +47,7 @@ class BrowserDomSnapshotError(Exception):
     code: str
     category: ErrorCategory
     message: str
-    detail: Optional[str]
+    detail: str | None
 
     def __init__(
         self,
@@ -56,7 +55,7 @@ class BrowserDomSnapshotError(Exception):
         code: str,
         category: ErrorCategory,
         message: str,
-        detail: Optional[str] = None,
+        detail: str | None = None,
     ) -> None:
         # Keep the exception message deterministic: no repr(OS errors), no traces.
         super().__init__(f"{code}: {message}")
@@ -70,9 +69,9 @@ class BrowserDomSnapshotError(Exception):
 class BrowserArtifactDomSnapshotInput:
     """Input contract for capturing a DOM snapshot."""
 
-    artifacts_dir: Optional[str] = None
-    output_path: Optional[str] = None
-    base_name: Optional[str] = None
+    artifacts_dir: str | None = None
+    output_path: str | None = None
+    base_name: str | None = None
     prefer_cdp: bool = True
     timeout_ms: int = 5_000
 
@@ -221,7 +220,7 @@ def _validate_request(request: BrowserArtifactDomSnapshotInput) -> None:
         )
 
 
-def _resolve_output_location(request: BrowserArtifactDomSnapshotInput) -> tuple[Path, Optional[Path]]:
+def _resolve_output_location(request: BrowserArtifactDomSnapshotInput) -> tuple[Path, Path | None]:
     """Return (artifacts_dir, output_path)."""
 
     if request.output_path is not None:
@@ -233,7 +232,7 @@ def _resolve_output_location(request: BrowserArtifactDomSnapshotInput) -> tuple[
     return artifacts_dir, None
 
 
-def _resolve_artifacts_dir(explicit: Optional[str]) -> Path:
+def _resolve_artifacts_dir(explicit: str | None) -> Path:
     if explicit is not None:
         return _ensure_artifacts_dir(Path(explicit))
 
@@ -255,7 +254,7 @@ def _resolve_artifacts_dir(explicit: Optional[str]) -> Path:
 def _ensure_artifacts_dir(path: Path) -> Path:
     try:
         path = path.expanduser()
-    except Exception:
+    except (ValueError, OSError, RuntimeError):
         raise BrowserDomSnapshotError(
             code="THOMAS_BROWSER_DOM_SNAPSHOT_INVALID_INPUT",
             category="invalid_input",
@@ -271,7 +270,7 @@ def _ensure_artifacts_dir(path: Path) -> Path:
 
     try:
         path.mkdir(parents=True, exist_ok=True)
-    except Exception:
+    except OSError:
         raise BrowserDomSnapshotError(
             code="THOMAS_BROWSER_DOM_SNAPSHOT_EXTERNAL_FAILURE",
             category="external_failure",
@@ -284,7 +283,7 @@ def _ensure_artifacts_dir(path: Path) -> Path:
 def _ensure_output_path(path: Path) -> Path:
     try:
         path = path.expanduser()
-    except Exception:
+    except (ValueError, OSError, RuntimeError):
         raise BrowserDomSnapshotError(
             code="THOMAS_BROWSER_DOM_SNAPSHOT_INVALID_INPUT",
             category="invalid_input",
@@ -301,7 +300,7 @@ def _ensure_output_path(path: Path) -> Path:
     return path
 
 
-def _try_resolve_artifacts_dir_from_thomas_config() -> Optional[str]:
+def _try_resolve_artifacts_dir_from_thomas_config() -> str | None:
     """Best-effort integration hook into Thomas config."""
 
     candidate_modules = (
@@ -325,7 +324,7 @@ def _try_resolve_artifacts_dir_from_thomas_config() -> Optional[str]:
     for mod_name in candidate_modules:
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             continue
 
         for attr in candidate_attrs:
@@ -338,7 +337,7 @@ def _try_resolve_artifacts_dir_from_thomas_config() -> Optional[str]:
             if callable(fn):
                 try:
                     value = fn()
-                except Exception:
+                except (RuntimeError, TypeError, AttributeError):
                     continue
                 if isinstance(value, str) and value.strip():
                     return value
@@ -351,7 +350,7 @@ def _looks_async(browser: Any) -> bool:
         page = getattr(browser, "page", None) or browser
         content = getattr(page, "content", None)
         return callable(content) and inspect.iscoroutinefunction(content)
-    except Exception:
+    except (AttributeError, TypeError):
         return False
 
 
@@ -382,7 +381,7 @@ def _capture_payload_sync(
                 return payload, "application/json", "cdp"
         except BrowserDomSnapshotError:
             raise
-        except Exception:
+        except (RuntimeError, AttributeError, TimeoutError):
             # Deterministic fallthrough.
             pass
 
@@ -425,7 +424,7 @@ async def _capture_payload_async(
                 return payload, "application/json", "cdp"
         except BrowserDomSnapshotError:
             raise
-        except Exception:
+        except (RuntimeError, AttributeError, TimeoutError, asyncio.TimeoutError):
             pass
 
     # 3) HTML fallback.
@@ -440,7 +439,7 @@ async def _capture_payload_async(
     )
 
 
-def _try_browser_method_sync(browser: Any, *, timeout_ms: int) -> Optional[tuple[bytes, str, CaptureMethod]]:
+def _try_browser_method_sync(browser: Any, *, timeout_ms: int) -> tuple[bytes, str, CaptureMethod] | None:
     for method_name in ("dom_snapshot", "get_dom_snapshot", "capture_dom_snapshot"):
         method = getattr(browser, method_name, None)
         if not callable(method):
@@ -450,7 +449,7 @@ def _try_browser_method_sync(browser: Any, *, timeout_ms: int) -> Optional[tuple
             result = method(timeout_ms=timeout_ms)  # type: ignore[misc]
         except TypeError:
             result = method()
-        except Exception:
+        except (RuntimeError, AttributeError):
             result = None
 
         if result is None:
@@ -462,9 +461,7 @@ def _try_browser_method_sync(browser: Any, *, timeout_ms: int) -> Optional[tuple
     return None
 
 
-async def _try_browser_method_async(
-    browser: Any, *, timeout_ms: int
-) -> Optional[tuple[bytes, str, CaptureMethod]]:
+async def _try_browser_method_async(browser: Any, *, timeout_ms: int) -> tuple[bytes, str, CaptureMethod] | None:
     for method_name in ("dom_snapshot", "get_dom_snapshot", "capture_dom_snapshot"):
         method = getattr(browser, method_name, None)
         if not callable(method):
@@ -474,13 +471,13 @@ async def _try_browser_method_async(
             result = method(timeout_ms=timeout_ms)  # type: ignore[misc]
         except TypeError:
             result = method()
-        except Exception:
+        except (RuntimeError, AttributeError):
             result = None
 
         if inspect.isawaitable(result):
             try:
                 result = await cast(Any, result)
-            except Exception:
+            except (RuntimeError, TimeoutError, asyncio.TimeoutError):
                 result = None
 
         if result is None:
@@ -507,7 +504,7 @@ def _normalize_result_to_payload(result: Any) -> tuple[bytes, str]:
         # If it parses as JSON, store it pretty.
         try:
             parsed = json.loads(result)
-        except Exception:
+        except (ValueError, json.JSONDecodeError):
             parsed = result
         return _encode_json_payload(parsed), "application/json"
 
@@ -536,7 +533,7 @@ def _looks_like_html(s: str) -> bool:
 def _looks_like_html_bytes(b: bytes) -> bool:
     try:
         s = b[:256].decode("utf-8", errors="ignore").lower()
-    except Exception:
+    except UnicodeDecodeError:
         return False
     return _looks_like_html(s)
 
@@ -545,7 +542,7 @@ def _encode_json_payload(obj: Any) -> bytes:
     return json.dumps(obj, sort_keys=True, ensure_ascii=False, indent=2).encode("utf-8")
 
 
-def _try_capture_via_cdp_sync(browser: Any) -> Optional[_CdpDomSnapshot]:
+def _try_capture_via_cdp_sync(browser: Any) -> _CdpDomSnapshot | None:
     page = getattr(browser, "page", None) or browser
     context = getattr(page, "context", None)
     if context is None:
@@ -571,7 +568,7 @@ def _try_capture_via_cdp_sync(browser: Any) -> Optional[_CdpDomSnapshot]:
     return cast(_CdpDomSnapshot, result)
 
 
-async def _try_capture_via_cdp_async(browser: Any) -> Optional[_CdpDomSnapshot]:
+async def _try_capture_via_cdp_async(browser: Any) -> _CdpDomSnapshot | None:
     page = getattr(browser, "page", None) or browser
     context = getattr(page, "context", None)
     if context is None:
@@ -603,14 +600,14 @@ async def _try_capture_via_cdp_async(browser: Any) -> Optional[_CdpDomSnapshot]:
     return cast(_CdpDomSnapshot, result)
 
 
-def _try_capture_html_sync(browser: Any) -> Optional[str]:
+def _try_capture_html_sync(browser: Any) -> str | None:
     page = getattr(browser, "page", None) or browser
 
     content = getattr(page, "content", None)
     if callable(content):
         try:
             html = content()
-        except Exception:
+        except (RuntimeError, TimeoutError):
             html = None
         if isinstance(html, str):
             return html
@@ -619,7 +616,7 @@ def _try_capture_html_sync(browser: Any) -> Optional[str]:
     if callable(evaluate):
         try:
             html = evaluate("document.documentElement.outerHTML")
-        except Exception:
+        except (RuntimeError, TimeoutError):
             html = None
         if isinstance(html, str):
             return html
@@ -627,7 +624,7 @@ def _try_capture_html_sync(browser: Any) -> Optional[str]:
     return None
 
 
-async def _try_capture_html_async(browser: Any) -> Optional[str]:
+async def _try_capture_html_async(browser: Any) -> str | None:
     page = getattr(browser, "page", None) or browser
 
     content = getattr(page, "content", None)
@@ -636,7 +633,7 @@ async def _try_capture_html_async(browser: Any) -> Optional[str]:
             html = content()
             if inspect.isawaitable(html):
                 html = await cast(Any, html)
-        except Exception:
+        except (RuntimeError, TimeoutError, asyncio.TimeoutError):
             html = None
         if isinstance(html, str):
             return html
@@ -647,7 +644,7 @@ async def _try_capture_html_async(browser: Any) -> Optional[str]:
             html = evaluate("document.documentElement.outerHTML")
             if inspect.isawaitable(html):
                 html = await cast(Any, html)
-        except Exception:
+        except (RuntimeError, TimeoutError, asyncio.TimeoutError):
             html = None
         if isinstance(html, str):
             return html
@@ -666,8 +663,8 @@ def _sanitize_base_name(value: str) -> str:
 def _write_artifact(
     *,
     artifacts_dir: Path,
-    output_path: Optional[Path],
-    base_name: Optional[str],
+    output_path: Path | None,
+    base_name: str | None,
     payload: bytes,
     content_type: str,
     capture_method: CaptureMethod,
@@ -690,7 +687,7 @@ def _safe_write(path: Path, payload: bytes) -> tuple[Path, int, str]:
     sha256 = hashlib.sha256(payload).hexdigest()
     try:
         path.write_bytes(payload)
-    except Exception:
+    except OSError:
         raise BrowserDomSnapshotError(
             code="THOMAS_BROWSER_DOM_SNAPSHOT_EXTERNAL_FAILURE",
             category="external_failure",

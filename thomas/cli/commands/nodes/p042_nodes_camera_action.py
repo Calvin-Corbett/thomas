@@ -9,7 +9,7 @@ Default output is human-readable. Use `--json` for machine-readable automation.
 """
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -29,18 +29,18 @@ def _coerce_scalar(value: str) -> Any:
         if value.strip() == value and value not in {"", "+", "-"}:
             if value.lstrip("+-").isdigit():
                 return int(value)
-    except Exception:
+    except ImportError:
         pass
     # float
     try:
         if any(ch in value for ch in (".", "e", "E")):
             return float(value)
-    except Exception:
+    except (ValueError, TypeError):
         pass
     return value
 
 
-def _parse_kv_pairs(pairs: Optional[list[str]]) -> dict[str, Any]:
+def _parse_kv_pairs(pairs: list[str] | None) -> dict[str, Any]:
     if not pairs:
         return {}
     out: dict[str, Any] = {}
@@ -85,9 +85,9 @@ def _run_impl(
     node_id: str,
     action: str,
     *,
-    camera: Optional[int],
-    nodes_url: Optional[str],
-    token: Optional[str],
+    camera: int | None,
+    nodes_url: str | None,
+    token: str | None,
     timeout_s: float,
     options: dict[str, Any],
     as_json: bool,
@@ -121,14 +121,14 @@ def camera_action(
         ...,
         help="Camera action (capture/start_recording/stop_recording/start_stream/stop_stream).",
     ),
-    camera: Optional[int] = typer.Option(None, "--camera", min=0, help="Optional camera index."),
-    param: Optional[list[str]] = typer.Option(
+    camera: int | None = typer.Option(None, "--camera", min=0, help="Optional camera index."),
+    param: list[str] | None = typer.Option(
         None,
         "--param",
         help="Action option(s) as key=value. Can be repeated.",
     ),
-    nodes_url: Optional[str] = typer.Option(None, "--nodes-url", help="Nodes service base URL (overrides config/env)."),
-    token: Optional[str] = typer.Option(None, "--token", help="Bearer token for nodes service (overrides env)."),
+    nodes_url: str | None = typer.Option(None, "--nodes-url", help="Nodes service base URL (overrides config/env)."),
+    token: str | None = typer.Option(None, "--token", help="Bearer token for nodes service (overrides env)."),
     timeout_s: float = typer.Option(10.0, "--timeout", min=0.1, help="Request timeout in seconds."),
     json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
@@ -154,14 +154,14 @@ def camera_action_flat(
         ...,
         help="Camera action (capture/start_recording/stop_recording/start_stream/stop_stream).",
     ),
-    camera: Optional[int] = typer.Option(None, "--camera", min=0, help="Optional camera index."),
-    param: Optional[list[str]] = typer.Option(
+    camera: int | None = typer.Option(None, "--camera", min=0, help="Optional camera index."),
+    param: list[str] | None = typer.Option(
         None,
         "--param",
         help="Action option(s) as key=value. Can be repeated.",
     ),
-    nodes_url: Optional[str] = typer.Option(None, "--nodes-url", help="Nodes service base URL (overrides config/env)."),
-    token: Optional[str] = typer.Option(None, "--token", help="Bearer token for nodes service (overrides env)."),
+    nodes_url: str | None = typer.Option(None, "--nodes-url", help="Nodes service base URL (overrides config/env)."),
+    token: str | None = typer.Option(None, "--token", help="Bearer token for nodes service (overrides env)."),
     timeout_s: float = typer.Option(10.0, "--timeout", min=0.1, help="Request timeout in seconds."),
     json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
 ) -> None:
@@ -194,11 +194,11 @@ def register(parent: Any) -> None:
     if hasattr(parent, "add_typer") and hasattr(parent, "command"):
         try:
             parent.add_typer(camera_app, name="camera")
-        except Exception:
+        except AttributeError:
             pass
         try:
             parent.command("camera-action")(camera_action_flat)  # type: ignore[attr-defined]
-        except Exception:
+        except AttributeError:
             pass
 
 
@@ -211,7 +211,7 @@ def get_click_command():
     return typer.main.get_command(app)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """
     Module entrypoint (useful for parity harnesses that call a module `main`).
     """

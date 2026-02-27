@@ -1,32 +1,69 @@
 from __future__ import annotations
+
+import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
-from agent_memory.storage.sqlite_log import ImmortalLog
-from agent_memory.storage.meta_db import MetaDB
-from agent_memory.indexing.derived_db import DerivedDB
-from agent_memory.vector.index import VectorIndex
 from agent_memory.graph.store import GraphStore
+from agent_memory.indexing.derived_db import DerivedDB
 from agent_memory.rerank.features import CandidateFeatures, recency_feature
 from agent_memory.rerank.tier1 import Tier1Reranker
 from agent_memory.rerank.tier2 import Tier2Reranker
-from agent_memory.retrieval.packing import pack_context, PackConfig
+from agent_memory.retrieval.packing import PackConfig, pack_context
+from agent_memory.storage.meta_db import MetaDB
+from agent_memory.storage.sqlite_log import ImmortalLog
+from agent_memory.vector.index import VectorIndex
 
-import re
 
 def _fts_query(text: str) -> str:
     toks = re.findall(r"[A-Za-z0-9_]{3,}", text.lower())
-    stop = {"what","was","the","and","for","you","your","are","did","just","say","earlier","mentioned","about","with","this","that","from","have","has","how","show","me","my","to","of","in","on","it","is","a","an"}
+    stop = {
+        "what",
+        "was",
+        "the",
+        "and",
+        "for",
+        "you",
+        "your",
+        "are",
+        "did",
+        "just",
+        "say",
+        "earlier",
+        "mentioned",
+        "about",
+        "with",
+        "this",
+        "that",
+        "from",
+        "have",
+        "has",
+        "how",
+        "show",
+        "me",
+        "my",
+        "to",
+        "of",
+        "in",
+        "on",
+        "it",
+        "is",
+        "a",
+        "an",
+    }
     toks = [t for t in toks if t not in stop]
     toks = toks[:16]
     if not toks:
         return text
+
     def pref(t: str) -> str:
         # crude stemming via prefix to avoid plural/tense misses
         return t[: max(4, min(6, len(t)))]
+
     parts = [f"{pref(t)}*" for t in toks]
     return "(" + " OR ".join(parts) + ")"
+
 
 @dataclass
 class RetrievalConfig:
@@ -37,6 +74,7 @@ class RetrievalConfig:
     candidate_cap: int = 220
     pack: PackConfig = field(default_factory=PackConfig)
 
+
 def _etype_bonus(etype: str) -> float:
     et = etype.lower()
     if et in ("user", "instruction", "goal"):
@@ -45,11 +83,13 @@ def _etype_bonus(etype: str) -> float:
         return 0.12
     return 0.0
 
-def _merge_scores(a: Dict[int, float], b: Dict[int, float]) -> Dict[int, float]:
+
+def _merge_scores(a: dict[int, float], b: dict[int, float]) -> dict[int, float]:
     out = dict(a)
     for k, v in b.items():
         out[k] = max(out.get(k, 0.0), v)
     return out
+
 
 class RetrievalPipeline:
     def __init__(
@@ -74,10 +114,10 @@ class RetrievalPipeline:
         self.graph_base = GraphStore(base_db)
         self.graph_delta = GraphStore(delta_db)
 
-    def _pins(self) -> List[Tuple[str, str]]:
+    def _pins(self) -> list[tuple[str, str]]:
         return [(k, txt) for k, txt, _ in self.meta.pin_list()]
 
-    def _l2_summary(self, thread: str) -> Optional[str]:
+    def _l2_summary(self, thread: str) -> str | None:
         # Prefer base rollup then delta rollup
         k = f"thread:{thread}:weekly"
         s = self.delta_db.rollup_get(k)
@@ -85,7 +125,7 @@ class RetrievalPipeline:
             return s
         return self.base_db.rollup_get(k)
 
-    def query(self, thread: str, mode: str, text: str) -> Dict[str, Any]:
+    def query(self, thread: str, mode: str, text: str) -> dict[str, Any]:
         now = int(time.time())
         query_text = self.meta.lex_translate(text)
 
@@ -139,12 +179,14 @@ class RetrievalPipeline:
             vec_scores = _merge_scores(vb, vd)
 
         # Build features
-        feats: List[CandidateFeatures] = []
+        feats: list[CandidateFeatures] = []
         pins = self._pins()
         pinned_ids = set()  # pins are text, not IDs; set later via search (v4)
         for eid in candidate_ids:
             ev = self.log.get_event(eid)
             if not ev:
+                continue
+            if ev.thread != thread:
                 continue
             f = CandidateFeatures(
                 eid=eid,
@@ -181,13 +223,15 @@ class RetrievalPipeline:
             ev = self.log.get_event(eid)
             if not ev:
                 continue
-            receipts.append({
-                "event_id": ev.id,
-                "thread": ev.thread,
-                "ts_utc": ev.ts_utc,
-                "etype": ev.etype,
-                "text": ev.text,
-            })
+            receipts.append(
+                {
+                    "event_id": ev.id,
+                    "thread": ev.thread,
+                    "ts_utc": ev.ts_utc,
+                    "etype": ev.etype,
+                    "text": ev.text,
+                }
+            )
 
         # Pack context
         packed = pack_context(
@@ -203,10 +247,12 @@ class RetrievalPipeline:
         trace_cands = []
         # store only top N candidate feature rows
         for f in feats[: min(len(feats), 80)]:
-            trace_cands.append({
-                "eid": f.eid,
-                **f.to_dict(),
-            })
+            trace_cands.append(
+                {
+                    "eid": f.eid,
+                    **f.to_dict(),
+                }
+            )
         trace = {
             "thread": thread,
             "mode": mode,

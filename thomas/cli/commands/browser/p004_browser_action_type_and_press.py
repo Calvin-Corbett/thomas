@@ -16,11 +16,12 @@ The command supports:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import importlib
 import json
 import os
-from typing import Any, Callable, Optional
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 import typer
 
@@ -33,7 +34,7 @@ from thomas.browser.p004_browser_action_type_and_press import (
     parse_params,
     type_and_press,
 )
-
+from thomas.cli.commands.browser._runtime_entrypoint import run_typer_app
 
 COMMAND_NAME = "type-and-press"
 
@@ -52,7 +53,7 @@ def _is_page(obj: Any) -> bool:
     if obj is None:
         return False
     if hasattr(obj, "page"):
-        obj = getattr(obj, "page")
+        obj = obj.page
     return hasattr(obj, "locator")
 
 
@@ -60,7 +61,7 @@ def _noop() -> None:
     return None
 
 
-def _resolve_from_thomas_modules(url: Optional[str]) -> _ResolvedPage | None:
+def _resolve_from_thomas_modules(url: str | None) -> _ResolvedPage | None:
     """Best-effort resolution of a live Page from Thomas' own modules."""
 
     candidate_modules = ("thomas.cli.live_browser", "thomas.tools.browser")
@@ -77,7 +78,7 @@ def _resolve_from_thomas_modules(url: Optional[str]) -> _ResolvedPage | None:
     for mod_name in candidate_modules:
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except ImportError:
             continue
 
         for attr in candidate_attrs:
@@ -87,13 +88,13 @@ def _resolve_from_thomas_modules(url: Optional[str]) -> _ResolvedPage | None:
             if callable(candidate):
                 try:
                     page_obj = candidate()
-                except Exception:
+                except ImportError:
                     continue
             else:
                 page_obj = candidate
 
             if page_obj is None and hasattr(candidate, "page"):
-                page_obj = getattr(candidate, "page")
+                page_obj = candidate.page
 
             if not _is_page(page_obj):
                 continue
@@ -115,7 +116,7 @@ def _resolve_from_thomas_modules(url: Optional[str]) -> _ResolvedPage | None:
     return None
 
 
-def _resolve_page_with_cleanup(url: Optional[str]) -> _ResolvedPage:
+def _resolve_page_with_cleanup(url: str | None) -> _ResolvedPage:
     """Resolve a Page and a cleanup function.
 
     Resolution order:
@@ -149,19 +150,19 @@ def _resolve_page_with_cleanup(url: Optional[str]) -> _ResolvedPage:
                     # Best-effort cleanup; swallow errors to keep deterministic CLI behavior.
                     try:
                         browser.close()
-                    except Exception:
+                    except ImportError:
                         pass
                     try:
                         pw.stop()
-                    except Exception:
+                    except Exception:  # REVIEWED: broad catch
                         pass
 
                 return _ResolvedPage(page=page, cleanup=_cleanup, source="endpoint")
-            except Exception:
+            except Exception:  # REVIEWED: broad catch
                 # Ensure Playwright is stopped if connect fails mid-way.
                 try:
                     pw.stop()
-                except Exception:
+                except Exception:  # REVIEWED: broad catch
                     pass
                 raise
         except TypeAndPressError:
@@ -191,11 +192,11 @@ def _resolve_page_with_cleanup(url: Optional[str]) -> _ResolvedPage:
         def _cleanup() -> None:
             try:
                 browser.close()
-            except Exception:
+            except ImportError:
                 pass
             try:
                 pw.stop()
-            except Exception:
+            except ImportError:
                 pass
 
         return _ResolvedPage(page=page, cleanup=_cleanup, source="local")
@@ -209,12 +210,12 @@ def _resolve_page_with_cleanup(url: Optional[str]) -> _ResolvedPage:
 
 @app.callback(invoke_without_command=True, no_args_is_help=True)
 def type_and_press_command(
-    selector: Optional[str] = typer.Option(None, "--selector", help="CSS/XPath selector for the target element."),
-    text: Optional[str] = typer.Option(None, "--text", help="Text to type into the element."),
+    selector: str | None = typer.Option(None, "--selector", help="CSS/XPath selector for the target element."),
+    text: str | None = typer.Option(None, "--text", help="Text to type into the element."),
     key: str = typer.Option("Enter", "--key", help="Key to press after typing (default: Enter)."),
-    url: Optional[str] = typer.Option(None, "--url", help="Optional URL to navigate before performing the action."),
-    timeout_ms: Optional[int] = typer.Option(None, "--timeout-ms", help="Optional timeout in milliseconds."),
-    delay_ms: Optional[int] = typer.Option(None, "--delay-ms", help="Optional typing delay per keystroke (ms)."),
+    url: str | None = typer.Option(None, "--url", help="Optional URL to navigate before performing the action."),
+    timeout_ms: int | None = typer.Option(None, "--timeout-ms", help="Optional timeout in milliseconds."),
+    delay_ms: int | None = typer.Option(None, "--delay-ms", help="Optional typing delay per keystroke (ms)."),
     click_first: bool = typer.Option(True, "--click-first/--no-click-first", help="Click the element before typing."),
     json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
     schema: bool = typer.Option(False, "--schema", help="Print input/output JSON schemas and exit."),
@@ -268,7 +269,7 @@ def type_and_press_command(
         if resolved is not None:
             try:
                 resolved.cleanup()
-            except Exception:
+            except (ValueError, TypeError):
                 # Cleanup failures should never mask action errors.
                 pass
 
@@ -288,5 +289,16 @@ def add_to(parent_app: typer.Typer) -> None:
 # Compatibility shim: expose a Click command object for loaders that expect Click.
 try:  # pragma: no cover
     command = typer.main.get_command(app)
-except Exception:  # pragma: no cover
+except Exception:  # REVIEWED: error boundary:  # pragma: no cover
     command = None
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    return run_typer_app(
+        app,
+        argv,
+        command=f"browser {COMMAND_NAME}",
+        require_args=True,
+        missing_args_message="Pass --selector and --text, or use --schema for the command contract.",
+    )

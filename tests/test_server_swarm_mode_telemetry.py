@@ -77,6 +77,46 @@ class _FakeSwarmOrchestratorWithUsage:
         }
 
 
+class _FakeSwarmOrchestratorPlannerLeak:
+    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        _ = args
+        _ = kwargs
+
+    async def astream(self, *, user_request, subagents):  # noqa: ANN001
+        _ = user_request
+        _ = subagents
+        yield {
+            "type": "agent_text",
+            "agent_id": "planner",
+            "task_id": "__plan__",
+            "text": '{"version":1,"goal":"leak","tasks":[]}',
+        }
+        yield {
+            "type": "swarm_done",
+            "ok": True,
+            "final": '{"version":1,"goal":"leak","tasks":[]}',
+            "summary": {"status": {"a": "done"}},
+            "duration_ms": 5,
+        }
+
+
+class _FakeSwarmOrchestratorPlannerFailureNoFinal:
+    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
+        _ = args
+        _ = kwargs
+
+    async def astream(self, *, user_request, subagents):  # noqa: ANN001
+        _ = user_request
+        _ = subagents
+        yield {
+            "type": "swarm_done",
+            "ok": False,
+            "error": "ValueError: planner output is empty",
+            "summary": {"status": {}},
+            "duration_ms": 5,
+        }
+
+
 class TestServerSwarmModeTelemetry(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -202,6 +242,66 @@ class TestServerSwarmModeTelemetry(AioHTTPTestCase):
         budget = token_report.get("budget") or {}
         self.assertEqual((budget.get("session") or {}).get("used_tokens"), 3)
         self.assertEqual((budget.get("session") or {}).get("budget_tokens"), 1000)
+
+    async def test_swarm_suppresses_planner_text_and_sanitizes_task_graph_final(self):
+        sess_resp = await self.client.post("/api/session/new")
+        self.assertEqual(sess_resp.status, 200)
+        sid = str((await sess_resp.json()).get("session_id") or "")
+        self.assertTrue(sid)
+
+        with patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestratorPlannerLeak):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "mode": "swarm",
+                    "text": "build something",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        planner_chunks = [
+            e
+            for e in events
+            if e.get("type") == "agent_text"
+            and str(e.get("agent_id") or e.get("agent") or "").strip().lower() == "planner"
+        ]
+        self.assertEqual(planner_chunks, [])
+        swarm_done = [e for e in events if e.get("type") == "swarm_done"]
+        self.assertEqual(len(swarm_done), 1)
+        self.assertNotIn('"tasks"', str(swarm_done[0].get("final") or ""))
+
+    async def test_swarm_failure_without_final_includes_user_fallback_text(self):
+        sess_resp = await self.client.post("/api/session/new")
+        self.assertEqual(sess_resp.status, 200)
+        sid = str((await sess_resp.json()).get("session_id") or "")
+        self.assertTrue(sid)
+
+        with patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestratorPlannerFailureNoFinal):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "mode": "swarm",
+                    "text": "ping",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        swarm_done = [e for e in events if e.get("type") == "swarm_done"]
+        self.assertEqual(len(swarm_done), 1)
+        final_text = str(swarm_done[0].get("final") or "").lower()
+        self.assertIn("couldn't complete the swarm run", final_text)
+        self.assertIn("planner returned no output", final_text)
+
+        done_events = [e for e in events if e.get("type") == "done"]
+        self.assertEqual(len(done_events), 1)
+        done_text = str(done_events[0].get("text") or done_events[0].get("final") or "").lower()
+        self.assertIn("planner returned no output", done_text)
 
 
 if __name__ == "__main__":

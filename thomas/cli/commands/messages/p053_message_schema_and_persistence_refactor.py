@@ -16,11 +16,11 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Mapping, Optional
+from collections.abc import Mapping
+from typing import Any
 
 from thomas.messages.p053_message_schema_and_persistence_refactor import (
     MESSAGE_INGEST_JSON_SCHEMA,
-    ThomasMessageError,
     ingest_and_persist_safe,
     list_messages_safe,
 )
@@ -52,14 +52,14 @@ def _read_json_arg(value: str) -> Any:
 
 def run(
     *,
-    text: Optional[str] = None,
-    channel: Optional[str] = None,
-    sender: Optional[str] = None,
-    metadata_json: Optional[str] = None,
-    payload_json: Optional[str] = None,
-    store_path: Optional[str] = None,
-    list_limit: Optional[int] = None,
-    list_channel: Optional[str] = None,
+    text: str | None = None,
+    channel: str | None = None,
+    sender: str | None = None,
+    metadata_json: str | None = None,
+    payload_json: str | None = None,
+    store_path: str | None = None,
+    list_limit: int | None = None,
+    list_channel: str | None = None,
 ) -> dict[str, Any]:
     """Run the message ingest using either a full JSON payload or individual fields.
 
@@ -106,9 +106,13 @@ def build_arg_parser(subparsers: argparse._SubParsersAction) -> argparse.Argumen
     parser.add_argument("--store", dest="store_path", default=None, help="Path to SQLite store")
     parser.add_argument("--json", dest="json_output", action="store_true", help="Machine-readable output")
 
-    parser.add_argument("--list", dest="list_limit", type=int, default=None, help="List last N messages instead of ingest")
+    parser.add_argument(
+        "--list", dest="list_limit", type=int, default=None, help="List last N messages instead of ingest"
+    )
     parser.add_argument("--list-channel", dest="list_channel", default=None, help="Filter list mode by channel")
-    parser.add_argument("--print-schema", dest="print_schema", action="store_true", help="Print JSON request schema and exit")
+    parser.add_argument(
+        "--print-schema", dest="print_schema", action="store_true", help="Print JSON request schema and exit"
+    )
 
     parser.set_defaults(_thomas_handler=_handle_args)
     return parser
@@ -164,7 +168,7 @@ def _handle_args(args: argparse.Namespace) -> int:
 # Optional click integration (used only if the surrounding CLI is click-based)
 try:  # pragma: no cover
     import click  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     click = None  # type: ignore
 
 if click:  # pragma: no cover
@@ -181,15 +185,15 @@ if click:  # pragma: no cover
     @click.option("--list-channel", "list_channel", default=None)
     @click.option("--print-schema", "print_schema", is_flag=True, default=False)
     def cli(
-        text: Optional[str],
-        channel: Optional[str],
-        sender: Optional[str],
-        metadata_json: Optional[str],
-        payload_json: Optional[str],
-        store_path: Optional[str],
+        text: str | None,
+        channel: str | None,
+        sender: str | None,
+        metadata_json: str | None,
+        payload_json: str | None,
+        store_path: str | None,
         json_output: bool,
-        list_limit: Optional[int],
-        list_channel: Optional[str],
+        list_limit: int | None,
+        list_channel: str | None,
         print_schema: bool,
     ) -> None:
         if print_schema:
@@ -227,7 +231,7 @@ if click:  # pragma: no cover
 COMMAND = cli if click else None  # type: ignore
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Minimal module entrypoint for ad-hoc usage.
 
     Example:

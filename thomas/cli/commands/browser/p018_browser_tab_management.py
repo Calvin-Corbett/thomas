@@ -3,7 +3,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Dict, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from thomas.browser.p018_browser_tab_management import (
     BrowserTabManagementError,
@@ -65,7 +66,7 @@ def _run_from_argparse(args: argparse.Namespace, *, backend: Any = None) -> int:
 
 def _execute_request(request: TabManagementRequest, *, backend: Any, json_output: bool) -> int:
     try:
-        tab_backend: Optional[TabBackend]
+        tab_backend: TabBackend | None
         if backend is None:
             tab_backend = None
         else:
@@ -104,7 +105,7 @@ def _emit_response(response: TabManagementResponse, *, json_output: bool) -> Non
 
 
 def _emit_error(error: BrowserTabManagementError, *, json_output: bool) -> None:
-    payload: Dict[str, Any] = error.to_dict()
+    payload: dict[str, Any] = error.to_dict()
     if json_output:
         sys.stdout.write(json.dumps(payload, sort_keys=True))
         sys.stdout.write("\n")
@@ -116,7 +117,7 @@ def _emit_error(error: BrowserTabManagementError, *, json_output: bool) -> None:
         sys.stderr.write("\n")
 
 
-def main(argv: Optional[Sequence[str]] = None, *, backend: Any = None) -> int:
+def main(argv: Sequence[str] | None = None, *, backend: Any = None) -> int:
     """Standalone entrypoint for local execution/tests.
 
     In the full Thomas CLI, this module is imported and registered under the parent
@@ -139,11 +140,11 @@ def main(argv: Optional[Sequence[str]] = None, *, backend: Any = None) -> int:
 
 try:
     import typer
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore[assignment]
 
 
-def _ctx_backend(ctx: "typer.Context") -> Any:  # type: ignore[name-defined]
+def _ctx_backend(ctx: typer.Context) -> Any:  # type: ignore[name-defined]
     """Retrieve a backend injected by the parent Thomas CLI (if any)."""
     try:
         obj = ctx.obj
@@ -152,7 +153,7 @@ def _ctx_backend(ctx: "typer.Context") -> Any:  # type: ignore[name-defined]
             for key in ("tab_backend", "browser_backend", "live_browser", "browser", "backend"):
                 if key in obj:
                     return obj.get(key)
-    except Exception:
+    except ImportError:
         pass
     return None
 
@@ -171,7 +172,7 @@ if typer is not None:
     def _json(ctx: typer.Context) -> bool:
         try:
             return bool(ctx.obj.get("json", False))
-        except Exception:
+        except (ValueError, TypeError):
             return False
 
     @app.command("list")
@@ -182,7 +183,7 @@ if typer is not None:
     @app.command("open")
     def _open(
         ctx: typer.Context,
-        url: Optional[str] = typer.Option(None, "--url", help="URL to open."),
+        url: str | None = typer.Option(None, "--url", help="URL to open."),
         activate: bool = typer.Option(True, "--activate/--no-activate", help="Whether to activate the new tab."),
     ) -> None:
         request = TabManagementRequest(action="open", url=url, activate=activate)
@@ -191,8 +192,8 @@ if typer is not None:
     @app.command("activate")
     def _activate(
         ctx: typer.Context,
-        tab_id: Optional[str] = typer.Option(None, "--id", help="Tab id."),
-        tab_index: Optional[int] = typer.Option(None, "--index", help="Tab index (0-based)."),
+        tab_id: str | None = typer.Option(None, "--id", help="Tab id."),
+        tab_index: int | None = typer.Option(None, "--index", help="Tab index (0-based)."),
     ) -> None:
         request = TabManagementRequest(action="activate", tab_id=tab_id, tab_index=tab_index)
         raise typer.Exit(_execute_request(request, backend=_ctx_backend(ctx), json_output=_json(ctx)))
@@ -200,8 +201,8 @@ if typer is not None:
     @app.command("close")
     def _close(
         ctx: typer.Context,
-        tab_id: Optional[str] = typer.Option(None, "--id", help="Tab id."),
-        tab_index: Optional[int] = typer.Option(None, "--index", help="Tab index (0-based)."),
+        tab_id: str | None = typer.Option(None, "--id", help="Tab id."),
+        tab_index: int | None = typer.Option(None, "--index", help="Tab index (0-based)."),
     ) -> None:
         request = TabManagementRequest(action="close", tab_id=tab_id, tab_index=tab_index)
         raise typer.Exit(_execute_request(request, backend=_ctx_backend(ctx), json_output=_json(ctx)))
@@ -214,8 +215,8 @@ if typer is not None:
     @app.command("close-others")
     def _close_others(
         ctx: typer.Context,
-        tab_id: Optional[str] = typer.Option(None, "--id", help="Tab id to keep."),
-        tab_index: Optional[int] = typer.Option(None, "--index", help="Tab index (0-based) to keep."),
+        tab_id: str | None = typer.Option(None, "--id", help="Tab id to keep."),
+        tab_index: int | None = typer.Option(None, "--index", help="Tab index (0-based) to keep."),
     ) -> None:
         request = TabManagementRequest(action="close_others", tab_id=tab_id, tab_index=tab_index)
         raise typer.Exit(_execute_request(request, backend=_ctx_backend(ctx), json_output=_json(ctx)))
@@ -231,6 +232,6 @@ def register(parent_app: Any) -> None:
         return
     try:
         parent_app.add_typer(app, name=COMMAND)  # type: ignore[attr-defined]
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         # If mounting fails, we keep quiet; the parent CLI may use a different pattern.
         return

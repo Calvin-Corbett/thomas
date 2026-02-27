@@ -1,27 +1,25 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import hashlib
 import hmac
 import json
-import re
 import urllib.parse
 import urllib.request
 import uuid
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 from .contracts import ConnectorCatalog, default_connector_catalog
 from .job_store import AssetStudioJobStore
-from .runtime_template_ops import AssetStudioRuntimeTemplateMixin
 from .runtime_common import (
     COMPLETION_WEBHOOK_KEY,
     TERMINAL_STATES,
-    _normalize_tags,
     _now_iso,
     _safe_int,
     _safe_string,
 )
+from .runtime_template_ops import AssetStudioRuntimeTemplateMixin
 
 
 class AssetStudioRuntime(AssetStudioRuntimeTemplateMixin):
@@ -276,7 +274,7 @@ class AssetStudioRuntime(AssetStudioRuntimeTemplateMixin):
         while not stream.at_eof():
             try:
                 line = await stream.readline()
-            except Exception:
+            except (OSError, FileNotFoundError):
                 break
             if not line:
                 break
@@ -304,7 +302,7 @@ class AssetStudioRuntime(AssetStudioRuntimeTemplateMixin):
         timeout = max(1, min(600, _safe_int(timeout_s, 30)))
         try:
             poll = float(poll_interval_s)
-        except Exception:
+        except (ValueError, TypeError):
             poll = 0.1
         poll = max(0.05, min(2.0, poll))
         loop = asyncio.get_running_loop()

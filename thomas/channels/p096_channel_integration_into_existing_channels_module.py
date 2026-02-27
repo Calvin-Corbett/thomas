@@ -12,10 +12,10 @@ It is intentionally conservative:
 """
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Protocol
-
+from typing import Any, Protocol
 
 # -----------------------------
 # Deterministic errors
@@ -106,8 +106,7 @@ class ChannelIntegrationResult:
 class TelegramSender(Protocol):
     """Small interface for sending Telegram messages (DI-friendly)."""
 
-    def send_message(self, *, token: str, chat_id: str, text: str) -> Mapping[str, Any]:
-        ...
+    def send_message(self, *, token: str, chat_id: str, text: str) -> Mapping[str, Any]: ...
 
 
 # -----------------------------
@@ -242,7 +241,7 @@ class _TelegramIntegrationSender:
     def __init__(self) -> None:
         try:
             from thomas.integrations import telegram as telegram_mod  # type: ignore
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             raise ExternalFailureError(
                 "Telegram integration module is not available.",
                 details={"import": "thomas.integrations.telegram", "error": repr(e)},
@@ -380,7 +379,7 @@ def integrate_channel(
                 )
             except ChannelIntegrationError:
                 raise
-            except Exception as e:  # pragma: no cover
+            except (ConnectionError, TimeoutError, RuntimeError) as e:  # pragma: no cover
                 raise ExternalFailureError(
                     "Provider call failed.",
                     details={"provider": provider, "error": repr(e)},

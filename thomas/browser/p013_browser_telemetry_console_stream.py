@@ -4,9 +4,10 @@ import contextlib
 import json
 import os
 import time
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 # -----------------------------
 # Public contracts
@@ -245,7 +246,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
                 continue
             try:
                 candidate = fn()
-            except Exception:
+            except (RuntimeError, TypeError, AttributeError):
                 continue
 
             if isinstance(candidate, str) and candidate.strip():
@@ -267,7 +268,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
         try:
             text = cfg_path.read_text(encoding="utf-8")
             data = json.loads(text)
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             continue
         if isinstance(data, Mapping):
             for k in ("cdp_url", "cdpUrl", "ws_endpoint", "wsEndpoint", "endpoint", "ws_url", "url"):
@@ -277,10 +278,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
 
     raise BrowserTelemetryConfigError(
         code="browser_endpoint_missing",
-        message=(
-            "No live browser endpoint configured. "
-            "Provide --cdp-url or set THOMAS_BROWSER_CDP_URL."
-        ),
+        message=("No live browser endpoint configured. " "Provide --cdp-url or set THOMAS_BROWSER_CDP_URL."),
         details={"env_candidates": list(_ENV_CANDIDATES)},
     )
 
@@ -288,7 +286,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
 def _safe_import(module_name: str):
     try:
         return __import__(module_name, fromlist=["*"])
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
 
@@ -332,7 +330,7 @@ def _connect_over_cdp(cdp_url: str):
                     res = call()
                 except TypeError:
                     continue
-                except Exception:
+                except (RuntimeError, AttributeError, ConnectionError):
                     # Don't fail hard on an unknown helper; keep searching.
                     continue
 
@@ -460,7 +458,7 @@ def stream_console(
             if on_event is not None:
                 try:
                     on_event(ev)
-                except Exception:
+                except (RuntimeError, TypeError):
                     # Streaming callbacks should never crash capture.
                     pass
 
@@ -495,7 +493,7 @@ def _pump_playwright(anchor_page: Any, poll_ms: int) -> bool:
     try:
         anchor_page.wait_for_timeout(poll_ms)
         return True
-    except Exception:
+    except (RuntimeError, AttributeError, TimeoutError):
         return False
 
 
@@ -584,7 +582,7 @@ def _best_effort_handle_to_json(handle: Any) -> Any:
         try:
             json.dumps(handle)
             return handle
-        except Exception:
+        except (TypeError, ValueError):
             pass
 
     # Playwright JSHandle supports json_value() in sync API.
@@ -593,13 +591,13 @@ def _best_effort_handle_to_json(handle: Any) -> Any:
         if callable(fn):
             try:
                 return fn()
-            except Exception:
+            except (RuntimeError, TypeError):
                 break
 
     # Fallback: use str() representation; it's stable enough for logs.
     try:
         return str(handle)
-    except Exception:
+    except (TypeError, ValueError):
         return "<unserializable>"
 
 
@@ -608,7 +606,7 @@ def _call_or_attr(obj: Any, name: str) -> Any:
     if callable(val):
         try:
             return val()
-        except Exception:
+        except (RuntimeError, TypeError):
             return None
     return val
 
@@ -618,7 +616,7 @@ def _safe_int(value: Any) -> int | None:
         if value is None:
             return None
         return int(value)
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 
@@ -628,7 +626,7 @@ def _safe_str(value: Any) -> str | None:
             return None
         s = str(value)
         return s if s.strip() else None
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 

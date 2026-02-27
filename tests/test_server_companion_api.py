@@ -79,12 +79,17 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         self.assertTrue(status_data.get("ok"))
         self.assertEqual(status_data.get("api_version"), "v1")
         self.assertEqual((status_data.get("kernel") or {}).get("kernel_version"), "0.1.0")
+        self.assertIn(
+            "pushing companion apps",
+            str((status_data.get("mission") or {}).get("primary_function") or ""),
+        )
 
         contract_resp = await self.client.get("/api/companion/v1/contract")
         self.assertEqual(contract_resp.status, 200)
         contract_data = await contract_resp.json()
         self.assertTrue(contract_data.get("ok"))
         self.assertIn("immutable_kernel_boundary", contract_data.get("minimum_requirements") or [])
+        self.assertIn("app_store_discovery", contract_data.get("minimum_requirements") or [])
         self.assertIn("ui.render", contract_data.get("permission_allowlist") or [])
 
         capabilities_resp = await self.client.get("/api/companion/v1/studio/capabilities")
@@ -93,8 +98,10 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         self.assertTrue(capabilities_data.get("ok"))
         self.assertIn("ui.render", capabilities_data.get("permission_allowlist") or [])
         self.assertIn("home.main", capabilities_data.get("default_slots") or [])
-        self.assertTrue(((capabilities_data.get("release_controls") or {}).get("supports_device_pinning")))
-        self.assertTrue(((capabilities_data.get("release_controls") or {}).get("supports_compliance_check")))
+        self.assertIn("headless_web_runtime", capabilities_data.get("data_primitives") or [])
+        self.assertIn("push_release_to_device", capabilities_data.get("action_primitives") or [])
+        self.assertTrue((capabilities_data.get("release_controls") or {}).get("supports_device_pinning"))
+        self.assertTrue((capabilities_data.get("release_controls") or {}).get("supports_compliance_check"))
 
         profiles_resp = await self.client.get("/api/companion/v1/policy/profiles")
         self.assertEqual(profiles_resp.status, 200)
@@ -139,7 +146,7 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         self.assertEqual(preview_resp.status, 200)
         preview_data = await preview_resp.json()
         self.assertTrue(preview_data.get("ok"))
-        preview_slots = ((preview_data.get("preview") or {}).get("slots") or {})
+        preview_slots = (preview_data.get("preview") or {}).get("slots") or {}
         self.assertIn("home.main", preview_slots)
 
         verify_resp = await self.client.post(
@@ -191,6 +198,17 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         payloads = bootstrap_data.get("slot_payloads") or {}
         self.assertIn("home.main", payloads)
         self.assertEqual(int((payloads["home.main"] or {}).get("count", 0)), 1)
+        self.assertIn(
+            "push_and_apply",
+            {
+                str(s.get("id") or "")
+                for s in list(((bootstrap_data.get("mission") or {}).get("setup") or {}).get("steps") or [])
+            },
+        )
+        self.assertEqual(
+            str((bootstrap_data.get("app_store") or {}).get("catalog_endpoint") or ""),
+            "/api/companion/v1/app-store",
+        )
 
         register_resp = await self.client.post(
             "/api/companion/v1/devices/register",
@@ -226,7 +244,7 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         self.assertEqual(compliance_resp.status, 200)
         compliance_data = await compliance_resp.json()
         self.assertTrue(compliance_data.get("ok"))
-        self.assertTrue(((compliance_data.get("compliance") or {}).get("ok")))
+        self.assertTrue((compliance_data.get("compliance") or {}).get("ok"))
 
         publish_resp = await self.client.post(
             "/api/companion/v1/releases/publish",
@@ -246,9 +264,41 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         self.assertTrue(publish_data.get("ok"))
         self.assertEqual(((publish_data.get("release") or {}).get("module_id")), "companion.home")
         self.assertEqual(((publish_data.get("release") or {}).get("policy_profile_id")), "ios_app_store")
-        self.assertTrue(bool(((publish_data.get("release") or {}).get("compliance_report_id") or "")))
+        self.assertTrue(bool((publish_data.get("release") or {}).get("compliance_report_id") or ""))
         release_id = str((publish_data.get("release") or {}).get("release_id") or "")
         self.assertTrue(bool(release_id))
+
+        app_store_resp = await self.client.get(
+            "/api/companion/v1/app-store?channel=stable&device_id=ios-1&include_ineligible=0",
+        )
+        self.assertEqual(app_store_resp.status, 200)
+        app_store_data = await app_store_resp.json()
+        self.assertTrue(app_store_data.get("ok"))
+        app_rows = list(app_store_data.get("apps") or [])
+        self.assertGreaterEqual(len(app_rows), 1)
+        self.assertIn("companion.home", {str(item.get("module_id") or "") for item in app_rows})
+        home_row = next(
+            (item for item in app_rows if str(item.get("module_id") or "") == "companion.home"),
+            {},
+        )
+        self.assertTrue(bool((home_row.get("compatibility") or {}).get("eligible")))
+        self.assertIn(
+            "/devices/ios-1/apps/companion.home/push", str((home_row.get("install") or {}).get("push_endpoint") or "")
+        )
+
+        push_preview_resp = await self.client.post(
+            "/api/companion/v1/devices/ios-1/apps/companion.home/push",
+            headers={"X-Companion-Peer": "iphone.owner.ts.net"},
+            json={"actor": "owner", "channel": "stable", "execute": False},
+        )
+        self.assertEqual(push_preview_resp.status, 200)
+        push_preview_data = await push_preview_resp.json()
+        self.assertTrue(push_preview_data.get("ok"))
+        self.assertTrue(bool(push_preview_data.get("planned")))
+        self.assertEqual(
+            str((push_preview_data.get("release") or {}).get("release_id") or ""),
+            release_id,
+        )
 
         publish_blocked_resp = await self.client.post(
             "/api/companion/v1/releases/publish",
@@ -285,11 +335,8 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         )
         self.assertEqual(publish_missing_region_resp.status, 400)
         publish_missing_region_data = await publish_missing_region_resp.json()
-        profile_report = ((publish_missing_region_data.get("compliance") or {}).get("report") or {})
-        missing_codes = {
-            str(item.get("code") or "")
-            for item in list(profile_report.get("violations") or [])
-        }
+        profile_report = (publish_missing_region_data.get("compliance") or {}).get("report") or {}
+        missing_codes = {str(item.get("code") or "") for item in list(profile_report.get("violations") or [])}
         self.assertIn("targeting.storefront_region_required", missing_codes)
 
         release_get_resp = await self.client.get(
@@ -365,7 +412,7 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         check_data_3 = await check_resp_3.json()
         self.assertEqual(int(check_data_3.get("count", -1)), 1)
 
-        release_id_latest = str((((ship_data.get("release") or {}).get("release") or {}).get("release_id") or ""))
+        release_id_latest = str(((ship_data.get("release") or {}).get("release") or {}).get("release_id") or "")
         self.assertTrue(bool(release_id_latest))
 
         rollout_resp = await self.client.post(
@@ -546,6 +593,26 @@ class TestServerCompanionApiRemoteAuth(AioHTTPTestCase):
             json={"device_id": "ios-remote"},
         )
         self.assertEqual(forbidden_register.status, 403)
+
+        forbidden_push = await self.client.post(
+            "/api/companion/v1/devices/ios-remote/apps/companion.home/push",
+            headers={
+                "Authorization": "Bearer test-token",
+                "X-Companion-Peer": "internet.example",
+            },
+            json={"channel": "stable"},
+        )
+        self.assertEqual(forbidden_push.status, 403)
+
+        allowed_push = await self.client.post(
+            "/api/companion/v1/devices/ios-remote/apps/companion.home/push",
+            headers={
+                "Authorization": "Bearer test-token",
+                "X-Companion-Peer": "ios.user.ts.net",
+            },
+            json={"channel": "stable"},
+        )
+        self.assertNotEqual(allowed_push.status, 403)
 
         allowed_register = await self.client.post(
             "/api/companion/v1/devices/register",

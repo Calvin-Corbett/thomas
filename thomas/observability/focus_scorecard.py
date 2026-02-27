@@ -1,35 +1,31 @@
-﻿"""Telemetry-driven weekly focus scorecard for outcome-based prioritization."""
+"""Telemetry-driven weekly focus scorecard for outcome-based prioritization."""
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
 from thomas.system.config_validator import validate_config
 
 
-
 def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
-
+    return datetime.now(timezone.utc).isoformat()
 
 
 def _int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except Exception:
+    except ImportError:
         return default
-
 
 
 def _float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
-    except Exception:
+    except ImportError:
         return default
-
 
 
 def _clamp_score(value: float) -> int:
@@ -37,9 +33,8 @@ def _clamp_score(value: float) -> int:
     return int(round(num))
 
 
-
-def _build_priorities(config_report: Dict[str, Any], onboarding_report: Dict[str, Any]) -> List[Dict[str, Any]]:
-    priorities: List[Dict[str, Any]] = []
+def _build_priorities(config_report: dict[str, Any], onboarding_report: dict[str, Any]) -> list[dict[str, Any]]:
+    priorities: list[dict[str, Any]] = []
 
     cfg_summary = dict(config_report.get("summary") or {})
     err_count = _int(cfg_summary.get("error_count"), 0)
@@ -72,9 +67,7 @@ def _build_priorities(config_report: Dict[str, Any], onboarding_report: Dict[str
                 "id": "onboarding_conversion_drop",
                 "severity": "high",
                 "lane": "D1_setup_to_success",
-                "reason": (
-                    f"Onboarding completion below target: {completion_rate:.2%} over {opened} wizard opens."
-                ),
+                "reason": (f"Onboarding completion below target: {completion_rate:.2%} over {opened} wizard opens."),
                 "actions": [
                     "Review onboarding stage drop-offs and top failure events.",
                     "Prioritize UX/recovery fixes for the dominant failing step.",
@@ -145,8 +138,7 @@ def _build_priorities(config_report: Dict[str, Any], onboarding_report: Dict[str
     return priorities
 
 
-
-def _compute_health_score(config_report: Dict[str, Any], onboarding_report: Dict[str, Any]) -> int:
+def _compute_health_score(config_report: dict[str, Any], onboarding_report: dict[str, Any]) -> int:
     cfg_summary = dict(config_report.get("summary") or {})
     err_count = _int(cfg_summary.get("error_count"), 0)
     warn_count = _int(cfg_summary.get("warning_count"), 0)
@@ -170,22 +162,25 @@ def _compute_health_score(config_report: Dict[str, Any], onboarding_report: Dict
     return _clamp_score(score)
 
 
-
 def build_focus_scorecard(
     *,
     runs_db_path: Path,
-    config_path: Optional[Path] = None,
+    config_path: Path | None = None,
     window_days: int = 7,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     days = max(1, min(90, int(window_days)))
     onboarding_report = build_onboarding_outcome_report(runs_db_path, since_days=days)
-    config_report = validate_config(config_path) if config_path is not None else {
-        "ok": True,
-        "summary": {"error_count": 0, "warning_count": 0},
-        "errors": [],
-        "warnings": [],
-        "config_path": "",
-    }
+    config_report = (
+        validate_config(config_path)
+        if config_path is not None
+        else {
+            "ok": True,
+            "summary": {"error_count": 0, "warning_count": 0},
+            "errors": [],
+            "warnings": [],
+            "config_path": "",
+        }
+    )
 
     health_score = _compute_health_score(config_report, onboarding_report)
     priorities = _build_priorities(config_report, onboarding_report)

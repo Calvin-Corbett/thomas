@@ -6,8 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 try:
     from scripts import check_workboard_claims as claims_gate
@@ -44,7 +44,7 @@ def _normalize_scope_token(scope: str) -> str:
 
 def _normalize_scope_value(scope_value: str) -> str:
     raw = _sanitize_field("scope", scope_value)
-    scopes: List[str] = []
+    scopes: list[str] = []
     for token in raw.split(","):
         normalized = _normalize_scope_token(token)
         if normalized:
@@ -54,7 +54,7 @@ def _normalize_scope_value(scope_value: str) -> str:
     return ",".join(scopes)
 
 
-def _default_issue_id(task_id: str, existing_issue_ids: List[str]) -> str:
+def _default_issue_id(task_id: str, existing_issue_ids: list[str]) -> str:
     base = re.sub(r"[^a-z0-9]+", "-", str(task_id or "").strip().lower()).strip("-")
     if not base:
         base = "task"
@@ -122,19 +122,21 @@ def _format_up_for_grabs(
     scope: str,
     summary: str,
     reported_by: str,
+    depends_on: str = "",
 ) -> str:
     task_id_clean = _sanitize_field("task_id", task_id)
     scope_clean = _normalize_scope_value(scope)
     summary_clean = _sanitize_field("summary", summary)
     reporter_clean = _sanitize_field("reported_by", reported_by)
-    return (
-        f"- task_id={task_id_clean}; scope={scope_clean}; "
-        f"summary={summary_clean}; reported_by={reporter_clean}"
-    )
+    line = f"- task_id={task_id_clean}; scope={scope_clean}; " f"summary={summary_clean}; reported_by={reporter_clean}"
+    depends_clean = str(depends_on or "").strip()
+    if depends_clean:
+        line += f"; depends_on={_sanitize_field('depends_on', depends_clean)}"
+    return line
 
 
-def _find_section(lines: Sequence[str], *, heading_prefix: str, heading_label: str) -> Tuple[int, int]:
-    start: Optional[int] = None
+def _find_section(lines: Sequence[str], *, heading_prefix: str, heading_label: str) -> tuple[int, int]:
+    start: int | None = None
     end = len(lines)
     wanted = str(heading_prefix or "").strip().lower()
     for idx, line in enumerate(lines):
@@ -152,24 +154,24 @@ def _find_section(lines: Sequence[str], *, heading_prefix: str, heading_label: s
     return start, end
 
 
-def _find_claim_section(lines: Sequence[str]) -> Tuple[int, int]:
+def _find_claim_section(lines: Sequence[str]) -> tuple[int, int]:
     return _find_section(lines, heading_prefix="agent claims", heading_label="Agent Claims")
 
 
-def _find_active_tasks_section(lines: Sequence[str]) -> Tuple[int, int]:
+def _find_active_tasks_section(lines: Sequence[str]) -> tuple[int, int]:
     return _find_section(lines, heading_prefix="active tasks", heading_label="Active Tasks")
 
 
-def _find_issues_section(lines: Sequence[str]) -> Tuple[int, int]:
+def _find_issues_section(lines: Sequence[str]) -> tuple[int, int]:
     return _find_section(lines, heading_prefix="issues / blockers", heading_label="Issues / Blockers")
 
 
-def _find_up_for_grabs_section(lines: Sequence[str]) -> Tuple[int, int]:
+def _find_up_for_grabs_section(lines: Sequence[str]) -> tuple[int, int]:
     return _find_section(lines, heading_prefix="up for grabs", heading_label="Up For Grabs")
 
 
-def _bullet_indices(lines: Sequence[str], start: int, end: int) -> List[int]:
-    out: List[int] = []
+def _bullet_indices(lines: Sequence[str], start: int, end: int) -> list[int]:
+    out: list[int] = []
     for idx in range(start, end):
         if lines[idx].strip().startswith("- "):
             out.append(idx)
@@ -180,7 +182,7 @@ def _is_none_entry(entry: str) -> bool:
     return str(entry or "").strip().lower() in claims_gate.NONE_TOKENS
 
 
-def _parse_claim_line(line_no: int, line: str) -> Tuple[Optional[str], Optional[Dict[str, str]], Optional[str]]:
+def _parse_claim_line(line_no: int, line: str) -> tuple[str | None, dict[str, str] | None, str | None]:
     stripped = line.strip()
     if not stripped.startswith("- "):
         return None, None, f"line {line_no}: expected claim bullet entry"
@@ -203,9 +205,7 @@ def _parse_claim_line(line_no: int, line: str) -> Tuple[Optional[str], Optional[
     )
 
 
-def _parse_active_task_line(
-    line_no: int, line: str
-) -> Tuple[Optional[str], Optional[Dict[str, str]], Optional[str]]:
+def _parse_active_task_line(line_no: int, line: str) -> tuple[str | None, dict[str, str] | None, str | None]:
     stripped = line.strip()
     if not stripped.startswith("- "):
         return None, None, f"line {line_no}: expected active task bullet entry"
@@ -230,7 +230,7 @@ def _parse_active_task_line(
     )
 
 
-def _parse_issue_line(line_no: int, line: str) -> Tuple[Optional[str], Optional[Dict[str, str]], Optional[str]]:
+def _parse_issue_line(line_no: int, line: str) -> tuple[str | None, dict[str, str] | None, str | None]:
     stripped = line.strip()
     if not stripped.startswith("- "):
         return None, None, f"line {line_no}: expected issue bullet entry"
@@ -256,9 +256,7 @@ def _parse_issue_line(line_no: int, line: str) -> Tuple[Optional[str], Optional[
     )
 
 
-def _parse_up_for_grabs_line(
-    line_no: int, line: str
-) -> Tuple[Optional[str], Optional[Dict[str, str]], Optional[str]]:
+def _parse_up_for_grabs_line(line_no: int, line: str) -> tuple[str | None, dict[str, str] | None, str | None]:
     stripped = line.strip()
     if not stripped.startswith("- "):
         return None, None, f"line {line_no}: expected up-for-grabs bullet entry"
@@ -277,12 +275,13 @@ def _parse_up_for_grabs_line(
             "scope": ",".join(task.scopes),
             "summary": task.summary,
             "reported_by": task.reported_by,
+            "depends_on": ",".join(task.depends_on) if task.has_explicit_depends_on else "",
         },
         None,
     )
 
 
-def _ensure_none_if_empty(lines: List[str], *, section_start: int, section_end: int) -> None:
+def _ensure_none_if_empty(lines: list[str], *, section_start: int, section_end: int) -> None:
     bullet_idxs = _bullet_indices(lines, section_start, section_end)
     has_non_none = False
     for idx in bullet_idxs:
@@ -302,7 +301,7 @@ def _ensure_none_if_empty(lines: List[str], *, section_start: int, section_end: 
     lines.insert(section_end - len(bullet_idxs), NONE_ENTRY)
 
 
-def _validate_and_write(workboard_path: Path, original_text: str, new_text: str) -> Tuple[bool, List[str]]:
+def _validate_and_write(workboard_path: Path, original_text: str, new_text: str) -> tuple[bool, list[str]]:
     workboard_path.write_text(new_text, encoding="utf-8")
     violations = claims_gate.evaluate(workboard_path)
     if violations:
@@ -311,11 +310,11 @@ def _validate_and_write(workboard_path: Path, original_text: str, new_text: str)
     return True, []
 
 
-def _set_task_status(lines: List[str], *, task_id: str, status: str) -> Tuple[bool, str, Dict[str, str] | None]:
+def _set_task_status(lines: list[str], *, task_id: str, status: str) -> tuple[bool, str, dict[str, str] | None]:
     section_start, section_end = _find_active_tasks_section(lines)
     bullet_idxs = _bullet_indices(lines, section_start, section_end)
-    task_idx: Optional[int] = None
-    task_fields: Optional[Dict[str, str]] = None
+    task_idx: int | None = None
+    task_fields: dict[str, str] | None = None
     task_key = _normalize_key(task_id)
     for idx in bullet_idxs:
         entry, fields, err = _parse_active_task_line(idx + 1, lines[idx])
@@ -346,7 +345,7 @@ def _set_task_status(lines: List[str], *, task_id: str, status: str) -> Tuple[bo
 
 
 def _upsert_issue(
-    lines: List[str],
+    lines: list[str],
     *,
     task_id: str,
     reporter: str,
@@ -354,13 +353,13 @@ def _upsert_issue(
     summary: str,
     issue_id: str | None,
     state: str,
-) -> Tuple[bool, str, str]:
+) -> tuple[bool, str, str]:
     section_start, section_end = _find_issues_section(lines)
     bullet_idxs = _bullet_indices(lines, section_start, section_end)
-    none_idxs: List[int] = []
-    existing_ids: List[str] = []
-    target_idx: Optional[int] = None
-    target_fields: Optional[Dict[str, str]] = None
+    none_idxs: list[int] = []
+    existing_ids: list[str] = []
+    target_idx: int | None = None
+    target_fields: dict[str, str] | None = None
     task_key = _normalize_key(task_id)
     issue_key = _normalize_key(issue_id or "")
 
@@ -426,7 +425,7 @@ def block_task(
     summary: str,
     owner: str,
     issue_id: str | None,
-) -> Tuple[bool, str, str]:
+) -> tuple[bool, str, str]:
     original_text = workboard_path.read_text(encoding="utf-8")
     lines = original_text.splitlines()
 
@@ -458,14 +457,14 @@ def triage_issue(
     issue_id: str,
     owner: str | None,
     summary: str | None,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     original_text = workboard_path.read_text(encoding="utf-8")
     lines = original_text.splitlines()
 
     section_start, section_end = _find_issues_section(lines)
     bullet_idxs = _bullet_indices(lines, section_start, section_end)
-    issue_idx: Optional[int] = None
-    issue_fields: Optional[Dict[str, str]] = None
+    issue_idx: int | None = None
+    issue_fields: dict[str, str] | None = None
     issue_key = _normalize_key(issue_id)
     for idx in bullet_idxs:
         entry, fields, err = _parse_issue_line(idx + 1, lines[idx])
@@ -505,17 +504,17 @@ def triage_issue(
 
 
 def _find_issue_by_selector(
-    lines: List[str],
+    lines: list[str],
     *,
     issue_id: str | None,
     task_id: str | None,
-) -> Tuple[Optional[int], Optional[Dict[str, str]], str | None]:
+) -> tuple[int | None, dict[str, str] | None, str | None]:
     section_start, section_end = _find_issues_section(lines)
     bullet_idxs = _bullet_indices(lines, section_start, section_end)
     issue_key = _normalize_key(issue_id or "")
     task_key = _normalize_key(task_id or "")
 
-    candidates: List[Tuple[int, Dict[str, str]]] = []
+    candidates: list[tuple[int, dict[str, str]]] = []
     for idx in bullet_idxs:
         entry, fields, err = _parse_issue_line(idx + 1, lines[idx])
         if err:
@@ -548,7 +547,7 @@ def resolve_issue(
     *,
     issue_id: str | None,
     task_id: str | None,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     original_text = workboard_path.read_text(encoding="utf-8")
     lines = original_text.splitlines()
 
@@ -568,7 +567,7 @@ def resolve_issue(
         summary=issue_fields["summary"],
     )
 
-    _set_task_status(lines, task_id=issue_fields["task_id"], status="active")
+    _set_task_status(lines, task_id=issue_fields["task_id"], status="in_progress")
 
     new_text = "\n".join(lines) + ("\n" if original_text.endswith("\n") else "")
     write_ok, violations = _validate_and_write(workboard_path, original_text, new_text)
@@ -583,14 +582,14 @@ def move_task_to_up_for_grabs(
     task_id: str,
     reported_by: str,
     summary: str | None,
-) -> Tuple[bool, str]:
+) -> tuple[bool, str]:
     original_text = workboard_path.read_text(encoding="utf-8")
     lines = original_text.splitlines()
 
     task_section_start, task_section_end = _find_active_tasks_section(lines)
     bullet_idxs = _bullet_indices(lines, task_section_start, task_section_end)
-    task_idx: Optional[int] = None
-    task_fields: Optional[Dict[str, str]] = None
+    task_idx: int | None = None
+    task_fields: dict[str, str] | None = None
     task_key = _normalize_key(task_id)
     for idx in bullet_idxs:
         entry, fields, err = _parse_active_task_line(idx + 1, lines[idx])
@@ -630,7 +629,7 @@ def move_task_to_up_for_grabs(
 
     if remaining_tasks_for_agent == 0:
         claim_section_start, claim_section_end = _find_claim_section(lines)
-        claim_remove: List[int] = []
+        claim_remove: list[int] = []
         for idx in _bullet_indices(lines, claim_section_start, claim_section_end):
             entry, fields, err = _parse_claim_line(idx + 1, lines[idx])
             if err:
@@ -645,8 +644,8 @@ def move_task_to_up_for_grabs(
         _ensure_none_if_empty(lines, section_start=claim_section_start, section_end=claim_section_end)
 
     grabs_section_start, grabs_section_end = _find_up_for_grabs_section(lines)
-    grab_idx: Optional[int] = None
-    none_idxs: List[int] = []
+    grab_idx: int | None = None
+    none_idxs: list[int] = []
     for idx in _bullet_indices(lines, grabs_section_start, grabs_section_end):
         entry, fields, err = _parse_up_for_grabs_line(idx + 1, lines[idx])
         if err:
@@ -663,6 +662,7 @@ def move_task_to_up_for_grabs(
         scope=moved_scope,
         summary=moved_summary,
         reported_by=reported_by,
+        depends_on="none",
     )
     if grab_idx is not None:
         lines[grab_idx] = grab_line

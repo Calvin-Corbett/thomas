@@ -15,10 +15,10 @@ error code suitable for automation.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from typing import Any, Mapping, NotRequired, TypedDict, Literal, cast
-
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
 ACTION_NAME = "type_and_press"
 
@@ -166,7 +166,9 @@ def parse_params(data: Mapping[str, Any]) -> TypeAndPressParams:
     if timeout_ms is not None and (not isinstance(timeout_ms, int) or timeout_ms <= 0):
         raise TypeAndPressError(code="INVALID_INPUT", message="timeout_ms must be a positive integer", step="validate")
     if delay_ms is not None and (not isinstance(delay_ms, int) or not delay_ms >= 0):
-        raise TypeAndPressError(code="INVALID_INPUT", message="delay_ms must be a non-negative integer", step="validate")
+        raise TypeAndPressError(
+            code="INVALID_INPUT", message="delay_ms must be a non-negative integer", step="validate"
+        )
     if not isinstance(click_first, bool):
         raise TypeAndPressError(code="INVALID_INPUT", message="click_first must be a boolean", step="validate")
 
@@ -195,7 +197,7 @@ def _timeout_error_type() -> type[BaseException] | None:
 
     try:
         from playwright.sync_api import TimeoutError as PlaywrightTimeoutError  # type: ignore
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
     return PlaywrightTimeoutError
 

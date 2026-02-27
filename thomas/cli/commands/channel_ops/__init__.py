@@ -14,13 +14,14 @@ from __future__ import annotations
 
 import importlib
 import pkgutil
+from collections.abc import Callable
 from types import ModuleType
-from typing import Callable, Optional
+from typing import Optional
 
 import typer
 
 
-def _find_register_fn(mod: ModuleType) -> Optional[Callable[[typer.Typer], None]]:
+def _find_register_fn(mod: ModuleType) -> Callable[[typer.Typer], None] | None:
     for name in ("register", "register_command", "add_commands"):
         fn = getattr(mod, name, None)
         if callable(fn):
@@ -59,11 +60,7 @@ def register(app: typer.Typer) -> None:
                 typer.main.get_command(app)
             except TypeError as e:
                 msg = str(e)
-                if (
-                    "Unsupported CLI" in msg
-                    or "add_parser" in msg
-                    or "argparse subparsers" in msg.lower()
-                ):
+                if "Unsupported CLI" in msg or "add_parser" in msg or "argparse subparsers" in msg.lower():
                     _restore_typer_state(app, snap)
                     continue
                 raise
@@ -73,7 +70,7 @@ def register(app: typer.Typer) -> None:
                     _restore_typer_state(app, snap)
                     continue
                 raise
-            except Exception:
+            except (ValueError, TypeError):
                 _restore_typer_state(app, snap)
                 continue
 

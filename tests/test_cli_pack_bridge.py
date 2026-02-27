@@ -10,6 +10,26 @@ from click.testing import CliRunner
 
 from thomas.cli.pack_bridge import invoke_pack_module, register_pack_proxy_commands
 
+_BROWSER_PACK_MODULES_WITH_RUNTIME_ENTRYPOINTS = (
+    "thomas.cli.commands.browser.p001_browser_command_registry_scaffold",
+    "thomas.cli.commands.browser.p002_browser_action_navigate_and_open",
+    "thomas.cli.commands.browser.p004_browser_action_type_and_press",
+    "thomas.cli.commands.browser.p005_browser_action_hover_and_focus",
+    "thomas.cli.commands.browser.p006_browser_action_scroll_and_scroll_into_view",
+    "thomas.cli.commands.browser.p007_browser_action_wait_conditions",
+    "thomas.cli.commands.browser.p009_browser_artifact_screenshot",
+    "thomas.cli.commands.browser.p012_browser_artifact_accessibility_snapshot",
+    "thomas.cli.commands.browser.p015_browser_telemetry_response_body_fetch",
+    "thomas.cli.commands.browser.p016_browser_data_cookies_export_and_import",
+    "thomas.cli.commands.browser.p017_browser_data_storage_snapshot",
+    "thomas.cli.commands.browser.p019_browser_profile_create_delete_list",
+    "thomas.cli.commands.browser.p020_browser_lifecycle_start_stop_restart",
+    "thomas.cli.commands.browser.p023_browser_trace_start_stop_export",
+    "thomas.cli.commands.browser.p024_browser_error_normalization",
+    "thomas.cli.commands.browser.p025_browser_json_output_contract",
+    "thomas.cli.commands.browser.p026_browser_integration_into_top_level_cli",
+)
+
 
 def _write_module(tmp_path: Path, source: str) -> str:
     name = f"pb_{uuid.uuid4().hex}"
@@ -166,9 +186,7 @@ COMMAND = cmd
     assert "noop" not in result.output
 
 
-def test_non_browser_proxy_run_missing_main_keeps_legacy_noop_success(
-    tmp_path: Path, monkeypatch
-) -> None:
+def test_non_browser_proxy_run_missing_main_keeps_legacy_noop_success(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.syspath_prepend(str(tmp_path))
     package_name = _write_pack_package(
         tmp_path,
@@ -212,3 +230,15 @@ def main(argv=None):
     assert "failed via main" in result.output
     assert "main exited with code 2" in result.output
     assert "unknown error" not in result.output
+
+
+def test_browser_pack_modules_run_via_main_not_noop() -> None:
+    for module_name in _BROWSER_PACK_MODULES_WITH_RUNTIME_ENTRYPOINTS:
+        payload = invoke_pack_module(
+            module_name,
+            ["--help"],
+            prog_name=f"test::{module_name}",
+            strict_missing_main=True,
+        )
+        assert payload["mode"] == "main", module_name
+        assert "no callable main" not in str(payload.get("message", "")).lower()

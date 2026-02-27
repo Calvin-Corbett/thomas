@@ -1,10 +1,10 @@
 from __future__ import annotations
 
+import inspect
 import json
 import sys
-import inspect
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -55,15 +55,15 @@ def _success_payload(result_json: str) -> str:
     # result_json is already a JSON string; wrap it deterministically.
     try:
         result_obj = json.loads(result_json)
-    except Exception:
+    except json.JSONDecodeError:
         result_obj = {"raw": result_json}
     return json.dumps({"ok": True, **result_obj}, sort_keys=True)
 
 
 @app.command("list")
 def list_nodes(
-    base_url: Optional[str] = typer.Option(None, "--base-url", help="Thomas server base URL."),
-    nodes_path: Optional[str] = typer.Option(None, "--nodes-path", help="Override nodes endpoint path."),
+    base_url: str | None = typer.Option(None, "--base-url", help="Thomas server base URL."),
+    nodes_path: str | None = typer.Option(None, "--nodes-path", help="Override nodes endpoint path."),
     timeout_s: float = typer.Option(10.0, "--timeout", min=0.1, help="Request timeout (seconds)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
 ) -> None:
@@ -85,8 +85,8 @@ def list_nodes(
 
 @app.command("parity")
 def parity_tests(
-    base_url: Optional[str] = typer.Option(None, "--base-url", help="Thomas server base URL."),
-    nodes_path: Optional[str] = typer.Option(None, "--nodes-path", help="Override nodes endpoint path."),
+    base_url: str | None = typer.Option(None, "--base-url", help="Thomas server base URL."),
+    nodes_path: str | None = typer.Option(None, "--nodes-path", help="Override nodes endpoint path."),
     timeout_s: float = typer.Option(10.0, "--timeout", min=0.1, help="Request timeout (seconds)."),
     json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output."),
 ) -> None:
@@ -109,6 +109,7 @@ def parity_tests(
 @dataclass(frozen=True)
 class CliHttpParitySpec:
     """Lightweight parity spec for registries/tests."""
+
     name: str
     cli: list[str]
     method: str
@@ -123,7 +124,9 @@ def get_parity_specs() -> list[dict[str, Any]]:
     """
     specs = [
         CliHttpParitySpec(name="nodes_list", cli=["nodes", "list"], method="GET", path_hint="nodes/devices endpoint"),
-        CliHttpParitySpec(name="nodes_parity", cli=["nodes", "parity"], method="GET", path_hint="nodes/devices endpoint"),
+        CliHttpParitySpec(
+            name="nodes_parity", cli=["nodes", "parity"], method="GET", path_hint="nodes/devices endpoint"
+        ),
     ]
     return [spec.__dict__ for spec in specs]
 
@@ -132,7 +135,7 @@ def _register_typer(root_app: typer.Typer) -> None:
     for name in CLI_NAMES:
         try:
             root_app.add_typer(app, name=name)
-        except Exception:
+        except ImportError:
             # Avoid failing CLI import if another module already registered it.
             continue
 
@@ -141,7 +144,7 @@ def _register_click(root_group: Any) -> None:
     try:
         import click
         from typer.main import get_command
-    except Exception:
+    except ImportError:
         return
 
     if not isinstance(root_group, click.Group):
@@ -153,7 +156,7 @@ def _register_click(root_group: Any) -> None:
             continue
         try:
             root_group.add_command(cmd, name=name)
-        except Exception:
+        except ImportError:
             continue
 
 
@@ -222,13 +225,13 @@ def wire_into_cli() -> None:
 
             if caller_mod == "thomas.cli.main" and not getattr(self, "_p052_nodes_registered", False):
                 _register_typer(self)
-                setattr(self, "_p052_nodes_registered", True)
+                self._p052_nodes_registered = True
 
         typer.Typer.__init__ = _patched_typer_init  # type: ignore[assignment]
 
     try:
         import click
-    except Exception:
+    except ImportError:
         return
 
     if _ORIG_CLICK_GROUP_INIT is None:
@@ -246,7 +249,7 @@ def wire_into_cli() -> None:
 
             if caller_mod == "thomas.cli.main" and not getattr(self, "_p052_nodes_registered", False):
                 _register_click(self)
-                setattr(self, "_p052_nodes_registered", True)
+                self._p052_nodes_registered = True
 
         click.Group.__init__ = _patched_click_group_init  # type: ignore[assignment]
 

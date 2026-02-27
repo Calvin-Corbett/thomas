@@ -16,13 +16,13 @@ Design goals:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
 import math
 import random
 import time
-from typing import Any, Callable, Mapping, MutableSequence, Sequence, Tuple, TypeVar
-
+from collections.abc import Callable, Mapping, MutableSequence
+from dataclasses import dataclass
+from typing import Any, TypeVar
 
 T = TypeVar("T")
 
@@ -215,11 +215,7 @@ def policy_from_mapping(data: Mapping[str, Any] | None) -> RetryPolicy:
         max_delay_s=float(_get("max_delay_s", "max_delay", default=30.0)),
         backoff_factor=float(_get("backoff_factor", "factor", default=2.0)),
         jitter=float(_get("jitter", default=0.0)),
-        jitter_seed=(
-            None
-            if _get("jitter_seed", "seed", default=None) is None
-            else int(_get("jitter_seed", "seed"))
-        ),
+        jitter_seed=(None if _get("jitter_seed", "seed", default=None) is None else int(_get("jitter_seed", "seed"))),
         retry_on_status_codes=tuple(
             int(x)
             for x in _get(
@@ -307,9 +303,7 @@ def compute_exponential_backoff_s(policy: RetryPolicy, retry_index: int) -> floa
     """Compute the backoff delay for a given retry index (1 for first retry)."""
 
     if retry_index < 1:
-        raise ChannelRetryConfigError(
-            "invalid_retry_index", "retry_index must be >= 1"
-        )
+        raise ChannelRetryConfigError("invalid_retry_index", "retry_index must be >= 1")
 
     delay = policy.base_delay_s * (policy.backoff_factor ** (retry_index - 1))
     delay = min(delay, policy.max_delay_s)
@@ -374,7 +368,7 @@ def classify_failure(exc: BaseException, policy: RetryPolicy) -> tuple[str, floa
 
         if isinstance(exc, requests.exceptions.RequestException):
             return "network", None
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         pass
 
     try:
@@ -382,7 +376,7 @@ def classify_failure(exc: BaseException, policy: RetryPolicy) -> tuple[str, floa
 
         if isinstance(exc, httpx.TransportError):
             return "network", None
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         pass
 
     try:
@@ -390,7 +384,7 @@ def classify_failure(exc: BaseException, policy: RetryPolicy) -> tuple[str, floa
 
         if isinstance(exc, aiohttp.ClientError):
             return "network", None
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         pass
 
     return "unknown", None
@@ -441,7 +435,7 @@ def call_with_retry(
         try:
             value = operation()
             return RetryOutcome(ok=True, attempts=attempt, value=value, errors=tuple(errors))
-        except Exception as exc:
+        except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
             kind, _ = classify_failure(exc, policy)
             retryable = is_retryable_exception(exc, policy)
 
@@ -517,36 +511,24 @@ def call_with_retry_or_raise(
 
 def _validate_policy(policy: RetryPolicy) -> None:
     if not isinstance(policy.max_attempts, int) or policy.max_attempts < 1:
-        raise ChannelRetryConfigError(
-            "invalid_max_attempts", "max_attempts must be an integer >= 1"
-        )
+        raise ChannelRetryConfigError("invalid_max_attempts", "max_attempts must be an integer >= 1")
 
     for name in ("base_delay_s", "max_delay_s", "backoff_factor", "jitter"):
         value = getattr(policy, name)
         if not isinstance(value, (int, float)) or not math.isfinite(float(value)):
-            raise ChannelRetryConfigError(
-                f"invalid_{name}", f"{name} must be a finite number"
-            )
+            raise ChannelRetryConfigError(f"invalid_{name}", f"{name} must be a finite number")
 
     if policy.base_delay_s < 0:
-        raise ChannelRetryConfigError(
-            "invalid_base_delay", "base_delay_s must be >= 0"
-        )
+        raise ChannelRetryConfigError("invalid_base_delay", "base_delay_s must be >= 0")
 
     if policy.max_delay_s <= 0:
-        raise ChannelRetryConfigError(
-            "invalid_max_delay", "max_delay_s must be > 0"
-        )
+        raise ChannelRetryConfigError("invalid_max_delay", "max_delay_s must be > 0")
 
     if policy.backoff_factor < 1:
-        raise ChannelRetryConfigError(
-            "invalid_backoff_factor", "backoff_factor must be >= 1"
-        )
+        raise ChannelRetryConfigError("invalid_backoff_factor", "backoff_factor must be >= 1")
 
     if not (0.0 <= policy.jitter <= 1.0):
-        raise ChannelRetryConfigError(
-            "invalid_jitter", "jitter must be between 0 and 1"
-        )
+        raise ChannelRetryConfigError("invalid_jitter", "jitter must be between 0 and 1")
 
     if policy.jitter > 0 and policy.jitter_seed is None:
         raise ChannelRetryConfigError(

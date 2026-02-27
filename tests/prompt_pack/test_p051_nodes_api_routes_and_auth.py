@@ -8,15 +8,15 @@ import pytest
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from thomas.nodes import p051_nodes_api_routes_and_auth as nodes_api
 from thomas.cli.commands.nodes import p051_nodes_api_routes_and_auth as cli_mod
+from thomas.nodes import p051_nodes_api_routes_and_auth as nodes_api
 
 
 def test_nodes_api_list_success_and_schema() -> None:
     async def run() -> None:
         app = web.Application()
-        app["nodes_api_token"] = "secret-token"
-        app["node_store"] = nodes_api.InMemoryNodeStore(
+        app[nodes_api.NODES_API_TOKEN_KEY] = "secret-token"
+        app[nodes_api.NODE_STORE_KEY] = nodes_api.InMemoryNodeStore(
             [nodes_api.NodeRecord(id="n1", label="Node 1", status="ready")]
         )
 
@@ -59,8 +59,8 @@ def test_nodes_api_list_success_and_schema() -> None:
 def test_nodes_api_auth_missing_token_header() -> None:
     async def run() -> None:
         app = web.Application()
-        app["nodes_api_token"] = "secret-token"
-        app["node_store"] = nodes_api.InMemoryNodeStore([])
+        app[nodes_api.NODES_API_TOKEN_KEY] = "secret-token"
+        app[nodes_api.NODE_STORE_KEY] = nodes_api.InMemoryNodeStore([])
         nodes_api.register(app, prefix="/api")
 
         server = TestServer(app)
@@ -82,8 +82,8 @@ def test_nodes_api_auth_missing_token_header() -> None:
 def test_nodes_api_auth_invalid_token() -> None:
     async def run() -> None:
         app = web.Application()
-        app["nodes_api_token"] = "secret-token"
-        app["node_store"] = nodes_api.InMemoryNodeStore([])
+        app[nodes_api.NODES_API_TOKEN_KEY] = "secret-token"
+        app[nodes_api.NODE_STORE_KEY] = nodes_api.InMemoryNodeStore([])
         nodes_api.register(app, prefix="/api")
 
         server = TestServer(app)
@@ -106,7 +106,7 @@ def test_nodes_api_auth_missing_config_is_deterministic() -> None:
     async def run() -> None:
         app = web.Application()
         # No token configured
-        app["node_store"] = nodes_api.InMemoryNodeStore([])
+        app[nodes_api.NODE_STORE_KEY] = nodes_api.InMemoryNodeStore([])
         nodes_api.register(app, prefix="/api")
 
         server = TestServer(app)
@@ -129,8 +129,8 @@ def test_nodes_api_auth_missing_config_is_deterministic() -> None:
 def test_nodes_api_invalid_node_id() -> None:
     async def run() -> None:
         app = web.Application()
-        app["nodes_api_token"] = "secret-token"
-        app["node_store"] = nodes_api.InMemoryNodeStore([])
+        app[nodes_api.NODES_API_TOKEN_KEY] = "secret-token"
+        app[nodes_api.NODE_STORE_KEY] = nodes_api.InMemoryNodeStore([])
         nodes_api.register(app, prefix="/api")
 
         server = TestServer(app)
@@ -155,8 +155,8 @@ def test_nodes_api_invalid_node_id() -> None:
 def test_nodes_api_not_found() -> None:
     async def run() -> None:
         app = web.Application()
-        app["nodes_api_token"] = "secret-token"
-        app["node_store"] = nodes_api.InMemoryNodeStore([])
+        app[nodes_api.NODES_API_TOKEN_KEY] = "secret-token"
+        app[nodes_api.NODE_STORE_KEY] = nodes_api.InMemoryNodeStore([])
         nodes_api.register(app, prefix="/api")
 
         server = TestServer(app)
@@ -181,7 +181,7 @@ def test_nodes_api_not_found() -> None:
 def test_nodes_api_external_failure_missing_store() -> None:
     async def run() -> None:
         app = web.Application()
-        app["nodes_api_token"] = "secret-token"
+        app[nodes_api.NODES_API_TOKEN_KEY] = "secret-token"
         # No store configured
         nodes_api.register(app, prefix="/api")
 
@@ -215,8 +215,8 @@ def test_nodes_api_external_failure_store_raises() -> None:
 
     async def run() -> None:
         app = web.Application()
-        app["nodes_api_token"] = "secret-token"
-        app["node_store"] = BoomStore()
+        app[nodes_api.NODES_API_TOKEN_KEY] = "secret-token"
+        app[nodes_api.NODE_STORE_KEY] = BoomStore()
         nodes_api.register(app, prefix="/api")
 
         server = TestServer(app)

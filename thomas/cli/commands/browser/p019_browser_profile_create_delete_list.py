@@ -1,4 +1,4 @@
-﻿"""CLI commands for browser profile management (create/delete/list).
+"""CLI commands for browser profile management (create/delete/list).
 
 This module exposes a Typer app named "profile" intended to be registered under
 the existing "browser" command group.
@@ -8,7 +8,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import NoReturn, Optional
+from typing import NoReturn
 
 import typer
 
@@ -21,7 +21,7 @@ from thomas.browser.p019_browser_profile_create_delete_list import (
     delete_browser_profile,
     list_browser_profiles,
 )
-
+from thomas.cli.commands.browser._runtime_entrypoint import run_typer_app
 
 profile_app = typer.Typer(
     name="profile",
@@ -56,7 +56,7 @@ def _emit_error(exc: BrowserProfileError, *, json_output: bool) -> NoReturn:
 @profile_app.command("create")
 def create(
     name: str = typer.Argument(..., help="Profile name (letters/numbers/._-)."),
-    root: Optional[Path] = typer.Option(
+    root: Path | None = typer.Option(
         None,
         "--root",
         help="Override the profiles root directory (advanced).",
@@ -83,7 +83,7 @@ def create(
 @profile_app.command("delete")
 def delete(
     name: str = typer.Argument(..., help="Profile name to delete."),
-    root: Optional[Path] = typer.Option(
+    root: Path | None = typer.Option(
         None,
         "--root",
         help="Override the profiles root directory (advanced).",
@@ -110,7 +110,7 @@ def delete(
 
 @profile_app.command("list")
 def list_cmd(
-    root: Optional[Path] = typer.Option(
+    root: Path | None = typer.Option(
         None,
         "--root",
         help="Override the profiles root directory (advanced).",
@@ -150,8 +150,8 @@ def register(parent_app: object) -> None:
     if getattr(parent_app, "_p019_browser_profile_registered", False):
         return
     try:
-        setattr(parent_app, "_p019_browser_profile_registered", True)
-    except Exception:
+        parent_app._p019_browser_profile_registered = True
+    except ImportError:
         pass
 
     if hasattr(parent_app, "add_typer"):
@@ -168,3 +168,13 @@ def register(parent_app: object) -> None:
 
     raise TypeError(f"Unsupported parent app type for registration: {type(parent_app)!r}")
 
+
+def main(argv: list[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    return run_typer_app(
+        profile_app,
+        argv,
+        command="browser profile-create-delete-list",
+        require_args=True,
+        missing_args_message="Specify a profile action: create, delete, or list.",
+    )

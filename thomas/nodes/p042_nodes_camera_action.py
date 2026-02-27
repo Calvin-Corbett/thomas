@@ -14,14 +14,15 @@ Key properties:
 The actual camera work is delegated to a configured Nodes service endpoint.
 """
 
-from dataclasses import dataclass, field
-from enum import Enum
-from typing import Any, Callable, Mapping, Optional
 import json
 import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable, Mapping
+from dataclasses import dataclass, field
+from enum import Enum
+from typing import Any
 
 
 class NodesCameraActionErrorCode(str, Enum):
@@ -87,7 +88,7 @@ class NodesCameraActionRequest:
 
     node_id: str
     action: str
-    camera: Optional[int] = None
+    camera: int | None = None
     options: dict[str, Any] = field(default_factory=dict)
     timeout_s: float = 10.0
 
@@ -99,8 +100,8 @@ class NodesCameraActionResponse:
     ok: bool
     node_id: str
     action: str
-    camera: Optional[int] = None
-    artifact: Optional[str] = None
+    camera: int | None = None
+    artifact: str | None = None
     payload: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -119,7 +120,7 @@ class HttpResponse:
     status: int
     headers: Mapping[str, str]
     text: str
-    json_data: Optional[Mapping[str, Any]] = None
+    json_data: Mapping[str, Any] | None = None
 
 
 def _truncate(text: str, limit: int = 700) -> str:
@@ -148,7 +149,7 @@ def _require_non_empty_str(value: Any, *, field: str) -> str:
     return value.strip()
 
 
-def _validate_camera(camera: Any) -> Optional[int]:
+def _validate_camera(camera: Any) -> int | None:
     if camera is None:
         return None
     if isinstance(camera, bool):
@@ -175,7 +176,7 @@ def _validate_camera(camera: Any) -> Optional[int]:
 def _validate_timeout(timeout_s: Any) -> float:
     try:
         timeout_val = float(timeout_s)
-    except Exception:
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError):
         raise NodesCameraActionError(
             code=NodesCameraActionErrorCode.INVALID_INPUT,
             message="timeout_s must be a number if provided.",
@@ -239,7 +240,7 @@ def parse_nodes_camera_action_request(data: Mapping[str, Any]) -> NodesCameraAct
     )
 
 
-def _maybe_resolve_from_thomas_config() -> Optional[str]:
+def _maybe_resolve_from_thomas_config() -> str | None:
     """
     Best-effort lookup of a nodes base URL from a Thomas config module.
 
@@ -251,7 +252,7 @@ def _maybe_resolve_from_thomas_config() -> Optional[str]:
         import importlib
 
         cfg = importlib.import_module("thomas.config")
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return None
 
     candidates: list[Any] = []
@@ -259,7 +260,7 @@ def _maybe_resolve_from_thomas_config() -> Optional[str]:
         if hasattr(cfg, attr):
             candidates.append(getattr(cfg, attr))
 
-    def dig(obj: Any, path: list[str]) -> Optional[Any]:
+    def dig(obj: Any, path: list[str]) -> Any | None:
         cur = obj
         for key in path:
             if cur is None:
@@ -298,7 +299,7 @@ def _validate_base_url(url: str, *, source: str) -> str:
     return url.rstrip("/")
 
 
-def resolve_nodes_base_url(explicit_base_url: Optional[str] = None) -> str:
+def resolve_nodes_base_url(explicit_base_url: str | None = None) -> str:
     """
     Determine the Nodes service base URL.
 
@@ -338,7 +339,7 @@ def resolve_nodes_base_url(explicit_base_url: Optional[str] = None) -> str:
     )
 
 
-def _resolve_auth_token(explicit_token: Optional[str] = None) -> Optional[str]:
+def _resolve_auth_token(explicit_token: str | None = None) -> str | None:
     if explicit_token and explicit_token.strip():
         return explicit_token.strip()
     for key in ("THOMAS_NODES_TOKEN", "THOMAS_NODE_SERVICE_TOKEN", "NODES_TOKEN"):
@@ -395,7 +396,7 @@ def _http_post_json(
         status = int(getattr(e, "code", 0) or 0)
         try:
             text = e.read().decode("utf-8", errors="replace")
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             text = ""
         resp_headers = {k: v for k, v in (e.headers.items() if e.headers else [])}
     except urllib.error.URLError as e:
@@ -404,20 +405,20 @@ def _http_post_json(
             message="Failed to reach Nodes service.",
             details={"url": url, "reason": str(getattr(e, "reason", e))},
         )
-    except Exception as e:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
         raise NodesCameraActionError(
             code=NodesCameraActionErrorCode.EXTERNAL_FAILURE,
             message="Unexpected failure while contacting Nodes service.",
             details={"url": url, "error": type(e).__name__},
         )
 
-    json_data: Optional[Mapping[str, Any]] = None
+    json_data: Mapping[str, Any] | None = None
     if text:
         try:
             parsed = json.loads(text)
             if isinstance(parsed, Mapping):
                 json_data = parsed
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             json_data = None
 
     return HttpResponse(status=int(status), headers=resp_headers, text=text, json_data=json_data)
@@ -426,9 +427,9 @@ def _http_post_json(
 def execute_nodes_camera_action(
     request: NodesCameraActionRequest,
     *,
-    base_url: Optional[str] = None,
-    auth_token: Optional[str] = None,
-    http_post: Optional[Callable[..., HttpResponse]] = None,
+    base_url: str | None = None,
+    auth_token: str | None = None,
+    http_post: Callable[..., HttpResponse] | None = None,
 ) -> NodesCameraActionResponse:
     """
     Execute the camera action against the configured Nodes service.
@@ -500,9 +501,7 @@ def execute_nodes_camera_action(
             details={
                 "url": url,
                 "status": resp.status,
-                "remote_error": payload_dict.get("error")
-                if isinstance(payload_dict.get("error"), Mapping)
-                else None,
+                "remote_error": payload_dict.get("error") if isinstance(payload_dict.get("error"), Mapping) else None,
                 "body": _truncate(resp.text),
             },
         )
@@ -528,7 +527,7 @@ def execute_nodes_camera_action(
     )
 
 
-def run_nodes_camera_action(payload: Mapping[str, Any], *, base_url: Optional[str] = None) -> dict[str, Any]:
+def run_nodes_camera_action(payload: Mapping[str, Any], *, base_url: str | None = None) -> dict[str, Any]:
     """
     Convenience wrapper suitable for route handlers: takes a JSON-like mapping
     and returns a JSON-serializable dict.
@@ -538,7 +537,7 @@ def run_nodes_camera_action(payload: Mapping[str, Any], *, base_url: Optional[st
     return {"ok": True, "data": resp.to_dict()}
 
 
-def run_nodes_camera_action_safe(payload: Mapping[str, Any], *, base_url: Optional[str] = None) -> dict[str, Any]:
+def run_nodes_camera_action_safe(payload: Mapping[str, Any], *, base_url: str | None = None) -> dict[str, Any]:
     """
     Safe wrapper that never raises: returns either {"ok": True, "data": ...}
     or {"ok": False, "error": ...}.

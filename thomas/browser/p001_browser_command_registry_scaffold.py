@@ -17,9 +17,10 @@ from __future__ import annotations
 import inspect
 import json
 import types
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Callable, Mapping, MutableMapping, Sequence, get_args, get_origin
+from typing import Any, get_args, get_origin
 
 JsonValue = Any
 JsonDict = dict[str, JsonValue]
@@ -82,7 +83,9 @@ class CommandNotFoundError(BrowserRegistryError):
 
 
 class MissingConfigError(BrowserRegistryError):
-    def __init__(self, message: str = "Missing required browser configuration", *, details: JsonDict | None = None) -> None:
+    def __init__(
+        self, message: str = "Missing required browser configuration", *, details: JsonDict | None = None
+    ) -> None:
         super().__init__(BrowserRegistryErrorCode.MISSING_CONFIG, message, details=details)
 
 
@@ -226,7 +229,11 @@ def _validate_schema(schema: Mapping[str, Any], data: Mapping[str, Any]) -> None
                 f"Field '{key}' must be a boolean",
                 details={"field": key, "expected": expected, "actual": type(value).__name__},
             )
-        if expected == "number" and not isinstance(value, (int, float)) or (expected == "number" and isinstance(value, bool)):
+        if (
+            expected == "number"
+            and not isinstance(value, (int, float))
+            or (expected == "number" and isinstance(value, bool))
+        ):
             raise InvalidInputError(
                 f"Field '{key}' must be a number",
                 details={"field": key, "expected": expected, "actual": type(value).__name__},
@@ -562,6 +569,8 @@ def _schema_from_callable(fn: Callable[..., Any]) -> JsonDict:
             required.append(param.name)
 
     return {"type": "object", "properties": properties, "required": required}
+
+
 def _callable_description(fn: Callable[..., Any]) -> str:
     doc = (inspect.getdoc(fn) or "").strip()
     return doc
@@ -657,13 +666,13 @@ def _coerce_command_definition_from_object(
     description = ""
     if hasattr(obj, "description"):
         try:
-            description = str(getattr(obj, "description") or "")
-        except Exception:
+            description = str(obj.description or "")
+        except (AttributeError, TypeError):
             description = ""
     if not description and hasattr(obj, "help"):
         try:
-            description = str(getattr(obj, "help") or "")
-        except Exception:
+            description = str(obj.help or "")
+        except (AttributeError, TypeError):
             description = ""
     if not description and callable(fallback_callable):
         description = _callable_description(fallback_callable)
@@ -702,12 +711,22 @@ def _coerce_command_spec(name_hint: str | None, obj: Any) -> BrowserCommandSpec 
         return obj
 
     # (definition, handler) pair
-    if isinstance(obj, (tuple, list)) and len(obj) == 2 and isinstance(obj[0], BrowserCommandDefinition) and callable(obj[1]):
+    if (
+        isinstance(obj, (tuple, list))
+        and len(obj) == 2
+        and isinstance(obj[0], BrowserCommandDefinition)
+        and callable(obj[1])
+    ):
         return BrowserCommandSpec(definition=obj[0], handler=obj[1])
 
     # dict-shaped spec
     if isinstance(obj, Mapping):
-        if "definition" in obj and "handler" in obj and isinstance(obj["definition"], BrowserCommandDefinition) and callable(obj["handler"]):
+        if (
+            "definition" in obj
+            and "handler" in obj
+            and isinstance(obj["definition"], BrowserCommandDefinition)
+            and callable(obj["handler"])
+        ):
             return BrowserCommandSpec(definition=obj["definition"], handler=obj["handler"])  # type: ignore[index]
         name = obj.get("name") if isinstance(obj.get("name"), str) else name_hint
         handler = obj.get("handler") or obj.get("func") or obj.get("callable")
@@ -718,19 +737,19 @@ def _coerce_command_spec(name_hint: str | None, obj: Any) -> BrowserCommandSpec 
     # object with attributes
     if hasattr(obj, "definition") and hasattr(obj, "handler"):
         try:
-            definition = getattr(obj, "definition")
-            handler = getattr(obj, "handler")
+            definition = obj.definition
+            handler = obj.handler
             if isinstance(definition, BrowserCommandDefinition) and callable(handler):
                 return BrowserCommandSpec(definition=definition, handler=handler)
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
     # route-like object: name + handler/func
     name = None
     if hasattr(obj, "name"):
         try:
-            name = getattr(obj, "name")
-        except Exception:
+            name = obj.name
+        except (AttributeError, TypeError):
             name = None
     if not isinstance(name, str) or not name:
         name = name_hint
@@ -740,7 +759,7 @@ def _coerce_command_spec(name_hint: str | None, obj: Any) -> BrowserCommandSpec 
         if hasattr(obj, key):
             try:
                 handler = getattr(obj, key)
-            except Exception:
+            except (AttributeError, TypeError):
                 handler = None
             if callable(handler):
                 break
@@ -796,7 +815,7 @@ def discover_browser_command_specs() -> list[BrowserCommandSpec]:
     """
     try:
         from thomas.tools import browser as browser_tool_mod  # type: ignore
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return []
 
     candidate_attr_names = [
@@ -815,7 +834,7 @@ def discover_browser_command_specs() -> list[BrowserCommandSpec]:
             continue
         try:
             extracted = _extract_specs(getattr(browser_tool_mod, attr_name))
-        except Exception:
+        except (AttributeError, TypeError, ValueError):
             continue
         found.extend(extracted)
 

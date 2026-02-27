@@ -6,10 +6,11 @@ import hashlib
 import importlib
 import json
 import os
-from pathlib import Path
 import tempfile
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple
 import zipfile
+from collections.abc import Mapping, Sequence
+from pathlib import Path
+from typing import Any, Literal
 
 ErrorCode = Literal["invalid_input", "missing_config", "external_failure"]
 
@@ -22,14 +23,14 @@ class BrowserDataStorageSnapshotError(Exception):
         code: ErrorCode,
         message: str,
         *,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code: ErrorCode = code
         self.message: str = message
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "code": self.code,
             "message": self.message,
@@ -41,9 +42,9 @@ class BrowserDataStorageSnapshotError(Exception):
 class BrowserDataStorageSnapshotRequest:
     """Input contract for taking a snapshot of browser data storage."""
 
-    data_dir: Optional[Path] = None
-    profile: Optional[str] = None
-    output_path: Optional[Path] = None
+    data_dir: Path | None = None
+    profile: str | None = None
+    output_path: Path | None = None
     overwrite: bool = False
     strict: bool = True
     include_hash: bool = True
@@ -51,7 +52,7 @@ class BrowserDataStorageSnapshotRequest:
     compress_level: int = 6  # zlib default; good tradeoff for real-world browser profiles
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "BrowserDataStorageSnapshotRequest":
+    def from_dict(cls, data: Mapping[str, Any]) -> BrowserDataStorageSnapshotRequest:
         if not isinstance(data, Mapping):
             raise BrowserDataStorageSnapshotError(
                 "invalid_input",
@@ -59,7 +60,7 @@ class BrowserDataStorageSnapshotRequest:
                 details={"got_type": type(data).__name__},
             )
 
-        def _p(key: str) -> Optional[Path]:
+        def _p(key: str) -> Path | None:
             v = data.get(key)
             if v is None:
                 return None
@@ -125,12 +126,12 @@ class BrowserDataStorageSnapshotResult:
     format: Literal["zip"]
     bytes_written: int
     file_count: int
-    skipped_files: Tuple[str, ...]
-    sha256: Optional[str]
+    skipped_files: tuple[str, ...]
+    sha256: str | None
     created_at: str
-    manifest_path_in_archive: Optional[str] = None
+    manifest_path_in_archive: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "data_dir": str(self.data_dir),
@@ -145,12 +146,15 @@ class BrowserDataStorageSnapshotResult:
         }
 
 
-TOOL_INPUT_SCHEMA: Dict[str, Any] = {
+TOOL_INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
         "data_dir": {"type": ["string", "null"], "description": "Browser data directory to snapshot."},
-        "profile": {"type": ["string", "null"], "description": "Browser profile name to snapshot (resolved via config/env)."},
+        "profile": {
+            "type": ["string", "null"],
+            "description": "Browser profile name to snapshot (resolved via config/env).",
+        },
         "output_path": {"type": ["string", "null"], "description": "Where to write the snapshot archive (.zip)."},
         "overwrite": {"type": "boolean", "default": False},
         "strict": {"type": "boolean", "default": True},
@@ -161,7 +165,7 @@ TOOL_INPUT_SCHEMA: Dict[str, Any] = {
     "required": [],
 }
 
-TOOL_OUTPUT_SCHEMA: Dict[str, Any] = {
+TOOL_OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
@@ -176,7 +180,16 @@ TOOL_OUTPUT_SCHEMA: Dict[str, Any] = {
         "created_at": {"type": "string"},
         "manifest_path_in_archive": {"type": ["string", "null"]},
     },
-    "required": ["ok", "data_dir", "snapshot_path", "format", "bytes_written", "file_count", "skipped_files", "created_at"],
+    "required": [
+        "ok",
+        "data_dir",
+        "snapshot_path",
+        "format",
+        "bytes_written",
+        "file_count",
+        "skipped_files",
+        "created_at",
+    ],
 }
 
 
@@ -220,10 +233,10 @@ def browser_data_storage_snapshot(request: BrowserDataStorageSnapshotRequest) ->
     created_at = _dt.datetime.now(tz=_dt.timezone.utc).isoformat()
 
     file_count = 0
-    skipped: List[str] = []
-    files_listing: List[Dict[str, Any]] = []
+    skipped: list[str] = []
+    files_listing: list[dict[str, Any]] = []
 
-    manifest_path_in_archive: Optional[str] = None
+    manifest_path_in_archive: str | None = None
 
     try:
         snapshot_path.parent.mkdir(parents=True, exist_ok=True)
@@ -279,9 +292,7 @@ def browser_data_storage_snapshot(request: BrowserDataStorageSnapshotRequest) ->
                                 {
                                     "path": arcname,
                                     "size": int(st.st_size),
-                                    "mtime": _dt.datetime.fromtimestamp(
-                                        st.st_mtime, tz=_dt.timezone.utc
-                                    ).isoformat(),
+                                    "mtime": _dt.datetime.fromtimestamp(st.st_mtime, tz=_dt.timezone.utc).isoformat(),
                                 }
                             )
                     except OSError as e:
@@ -336,7 +347,7 @@ def browser_data_storage_snapshot(request: BrowserDataStorageSnapshotRequest) ->
             details={"snapshot_path": str(tmp_zip_path), "os_error": str(e)},
         ) from e
 
-    sha256: Optional[str] = None
+    sha256: str | None = None
     if request.include_hash:
         sha256 = _sha256_file(tmp_zip_path)
 
@@ -364,7 +375,7 @@ def browser_data_storage_snapshot(request: BrowserDataStorageSnapshotRequest) ->
     )
 
 
-def run_tool(payload: Mapping[str, Any]) -> Dict[str, Any]:
+def run_tool(payload: Mapping[str, Any]) -> dict[str, Any]:
     """Tool-friendly wrapper: accepts a JSON payload and returns a JSON-serializable dict."""
     req = BrowserDataStorageSnapshotRequest.from_dict(payload)
     res = browser_data_storage_snapshot(req)
@@ -375,7 +386,7 @@ def _resolve_data_dir(request: BrowserDataStorageSnapshotRequest) -> Path:
     if request.data_dir is not None:
         return Path(request.data_dir).expanduser().resolve()
 
-    candidates: List[Path] = []
+    candidates: list[Path] = []
 
     profile = request.profile
     profile_env_key = None
@@ -408,11 +419,11 @@ def _resolve_data_dir(request: BrowserDataStorageSnapshotRequest) -> Path:
         ]
     )
 
-    attempted: List[str] = []
+    attempted: list[str] = []
     for c in candidates:
         try:
             c2 = c.expanduser()
-        except Exception:
+        except (ValueError, OSError, RuntimeError):
             c2 = c
         attempted.append(str(c2))
         if c2.exists() and c2.is_dir():
@@ -425,11 +436,11 @@ def _resolve_data_dir(request: BrowserDataStorageSnapshotRequest) -> Path:
     )
 
 
-def _candidates_from_thomas_config(profile: Optional[str]) -> List[Path]:
+def _candidates_from_thomas_config(profile: str | None) -> list[Path]:
     # Best-effort, lazy config discovery. This should never raise.
-    candidates: List[Path] = []
+    candidates: list[Path] = []
 
-    def _as_path(v: Any) -> Optional[Path]:
+    def _as_path(v: Any) -> Path | None:
         if isinstance(v, (str, os.PathLike)):
             return Path(v).expanduser()
         return None
@@ -452,21 +463,21 @@ def _candidates_from_thomas_config(profile: Optional[str]) -> List[Path]:
     for mod_name in ("thomas.config", "thomas.settings", "thomas.cli.config"):
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             continue
 
         config_obj = None
         for attr in ("get_config", "load_config", "get_settings", "load_settings", "settings", "CONFIG"):
             try:
                 candidate = getattr(mod, attr, None)
-            except Exception:
+            except (AttributeError, TypeError):
                 continue
             if candidate is None:
                 continue
             if callable(candidate):
                 try:
                     config_obj = candidate()
-                except Exception:
+                except (RuntimeError, TypeError):
                     continue
             else:
                 config_obj = candidate
@@ -523,7 +534,7 @@ def _validate_data_dir(data_dir: Path) -> None:
         )
 
 
-def _resolve_output_path(*, data_dir: Path, output_path: Optional[Path], overwrite: bool) -> Path:
+def _resolve_output_path(*, data_dir: Path, output_path: Path | None, overwrite: bool) -> Path:
     if output_path is None:
         stamp = _dt.datetime.now(tz=_dt.timezone.utc).strftime("%Y%m%dT%H%M%SZ")
         output_path = Path.cwd() / f"browser_data_storage_snapshot_{stamp}.zip"
@@ -605,6 +616,6 @@ def _safe_unlink(path: Path) -> None:
     try:
         if path.exists():
             path.unlink()
-    except Exception:
+    except OSError:
         # Best-effort cleanup only.
         pass

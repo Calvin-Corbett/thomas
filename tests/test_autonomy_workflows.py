@@ -33,7 +33,7 @@ class _ChainParallelAdapter:
         if "parallel workflow worker" in system_prompt:
             marker = "Assigned subtask:\n"
             ix = user_prompt.find(marker)
-            subtask = user_prompt[ix + len(marker):].strip() if ix >= 0 else "task"
+            subtask = user_prompt[ix + len(marker) :].strip() if ix >= 0 else "task"
             return {"output": f"parallel:{subtask}:{profile or 'default'}", "summary": "ok"}
         if "orchestrator that merges worker outputs" in system_prompt:
             return {"final_output": "synthesized"}
@@ -106,6 +106,33 @@ class _RouteFallbackAdapter:
                 raise RuntimeError("math route backend unavailable")
             return {"output": "fallback-route-ok", "summary": "ok"}
         return {"output": "ok", "summary": "ok"}
+
+
+class _CodingPipelineAdapter:
+    def __init__(self):
+        self.review_calls = 0
+
+    async def generate_json(  # noqa: D401
+        self,
+        *,
+        system_prompt,
+        user_prompt,
+        session_id=None,
+        schema_hint=None,
+        profile=None,
+        model_id=None,
+    ):
+        _ = user_prompt, session_id, schema_hint, profile, model_id
+        if "You are the coding worker." in system_prompt:
+            return {"code": "def solve():\n    return 1", "rationale": "initial draft"}
+        if "You are a strict code reviewer." in system_prompt:
+            self.review_calls += 1
+            if self.review_calls == 1:
+                return {"pass": False, "issues": ["wrong constant"], "summary": "needs fix"}
+            return {"pass": True, "issues": [], "summary": "looks good"}
+        if "You are a coding fixer." in system_prompt:
+            return {"revised_code": "def solve():\n    return 2", "change_summary": "fixed constant"}
+        return {"output": "ok"}
 
 
 class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
@@ -265,3 +292,19 @@ class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(bool(out.get("route_fallback_used")))
         attempts = out.get("route_attempts") or []
         self.assertGreaterEqual(len(attempts), 2)
+
+    async def test_coding_pipeline_runs_phases_and_repairs_once(self):
+        runner = WorkflowRunner(chat_adapter=_CodingPipelineAdapter(), session_id="s1")
+        out = await runner.run(
+            {
+                "workflow": "coding_pipeline",
+                "goal": "implement solve() that returns two",
+                "max_rounds": 2,
+            }
+        )
+        self.assertEqual(out.get("pattern"), "coding_pipeline")
+        self.assertTrue(bool(out.get("passed")))
+        self.assertEqual(int(out.get("rounds_used") or 0), 2)
+        self.assertIn("return 2", str(out.get("final_output") or ""))
+        steps = out.get("steps") or []
+        self.assertGreaterEqual(len(steps), 4)

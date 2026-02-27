@@ -20,14 +20,14 @@ Public contracts:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import ssl
-from typing import Any, Mapping, Optional, TypedDict, Literal
-from urllib.parse import urlparse
-from urllib import request as urlrequest
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any, Literal, TypedDict
 from urllib import error as urlerror
-
+from urllib import request as urlrequest
+from urllib.parse import urlparse
 
 HttpMethod = Literal["POST", "PUT", "PATCH", "GET", "DELETE"]
 
@@ -60,11 +60,11 @@ class WebhookBridgeSendRequest:
 @dataclass(frozen=True, slots=True)
 class WebhookBridgeSendResult:
     ok: bool
-    status_code: Optional[int]
-    response_text: Optional[str]
+    status_code: int | None
+    response_text: str | None
     request_url: str
     method: str
-    error: Optional[WebhookBridgeErrorInfo] = None
+    error: WebhookBridgeErrorInfo | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -78,7 +78,7 @@ class WebhookBridgeSendResult:
 
 
 class WebhookBridgeAdapterError(Exception):
-    def __init__(self, *, code: str, message: str, details: Optional[dict[str, Any]] = None) -> None:
+    def __init__(self, *, code: str, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
@@ -93,7 +93,9 @@ def _validate_url(url: str) -> None:
         raise WebhookBridgeAdapterError(code="missing_config", message="Webhook URL is required.", details={})
     parsed = urlparse(url.strip())
     if parsed.scheme not in ("http", "https") or not parsed.netloc:
-        raise WebhookBridgeAdapterError(code="invalid_url", message="Webhook URL must be an http(s) URL.", details={"url": url})
+        raise WebhookBridgeAdapterError(
+            code="invalid_url", message="Webhook URL must be an http(s) URL.", details={"url": url}
+        )
 
 
 def _normalize_method(method: str) -> str:
@@ -122,7 +124,9 @@ def _coerce_payload(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     try:
         json.dumps(payload, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
     except TypeError as e:
-        raise WebhookBridgeAdapterError(code="invalid_payload", message="Webhook payload must be JSON-serializable.", details={"error": str(e)}) from e
+        raise WebhookBridgeAdapterError(
+            code="invalid_payload", message="Webhook payload must be JSON-serializable.", details={"error": str(e)}
+        ) from e
     return payload
 
 
@@ -134,17 +138,29 @@ def _merge_headers(headers: Mapping[str, str]) -> dict[str, str]:
     if not headers:
         return base
     if not isinstance(headers, Mapping):
-        raise WebhookBridgeAdapterError(code="invalid_headers", message="Headers must be a mapping.", details={"headers_type": type(headers).__name__})
+        raise WebhookBridgeAdapterError(
+            code="invalid_headers",
+            message="Headers must be a mapping.",
+            details={"headers_type": type(headers).__name__},
+        )
     for k, v in headers.items():
         if not isinstance(k, str) or not k.strip():
-            raise WebhookBridgeAdapterError(code="invalid_headers", message="Header names must be non-empty strings.", details={"header_name": repr(k)})
+            raise WebhookBridgeAdapterError(
+                code="invalid_headers",
+                message="Header names must be non-empty strings.",
+                details={"header_name": repr(k)},
+            )
         if not isinstance(v, str):
-            raise WebhookBridgeAdapterError(code="invalid_headers", message="Header values must be strings.", details={"header_name": k, "header_value_type": type(v).__name__})
+            raise WebhookBridgeAdapterError(
+                code="invalid_headers",
+                message="Header values must be strings.",
+                details={"header_name": k, "header_value_type": type(v).__name__},
+            )
         base[k] = v
     return base
 
 
-def _cap_text(text: Optional[str], cap: int = 500) -> Optional[str]:
+def _cap_text(text: str | None, cap: int = 500) -> str | None:
     if not isinstance(text, str):
         return text
     if len(text) <= cap:
@@ -158,7 +174,9 @@ def send_via_webhook_bridge(req: WebhookBridgeSendRequest) -> WebhookBridgeSendR
     payload = _coerce_payload(req.payload)
 
     if not isinstance(req.timeout_s, (int, float)) or float(req.timeout_s) <= 0:
-        raise WebhookBridgeAdapterError(code="invalid_timeout", message="timeout_s must be a positive number.", details={"timeout_s": req.timeout_s})
+        raise WebhookBridgeAdapterError(
+            code="invalid_timeout", message="timeout_s must be a positive number.", details={"timeout_s": req.timeout_s}
+        )
 
     headers = _merge_headers(req.headers)
     body = json.dumps(dict(payload), ensure_ascii=False).encode("utf-8")
@@ -179,18 +197,23 @@ def send_via_webhook_bridge(req: WebhookBridgeSendRequest) -> WebhookBridgeSendR
             raw = resp.read(2048)
             try:
                 text = raw.decode("utf-8", errors="replace")
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 text = None
     except urlerror.HTTPError as e:
         try:
             raw = e.read(2048)
             text = raw.decode("utf-8", errors="replace")
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             text = None
         raise WebhookBridgeAdapterError(
             code="non_success_status",
             message="Webhook returned a non-success HTTP status.",
-            details={"status_code": int(getattr(e, "code", 0) or 0), "response_text": _cap_text(text), "url": req.url, "method": method},
+            details={
+                "status_code": int(getattr(e, "code", 0) or 0),
+                "response_text": _cap_text(text),
+                "url": req.url,
+                "method": method,
+            },
         ) from e
     except urlerror.URLError as e:
         raise WebhookBridgeAdapterError(
@@ -198,7 +221,7 @@ def send_via_webhook_bridge(req: WebhookBridgeSendRequest) -> WebhookBridgeSendR
             message="Webhook request failed.",
             details={"error": str(getattr(e, "reason", e)), "url": req.url, "method": method},
         ) from e
-    except Exception as e:
+    except (ImportError, AttributeError, RuntimeError) as e:
         raise WebhookBridgeAdapterError(
             code="request_failed",
             message="Webhook request failed.",
@@ -230,7 +253,11 @@ def webhook_bridge_payload_schema() -> dict[str, Any]:
         "type": "object",
         "properties": {
             "text": {"type": "string", "description": "Message text to deliver."},
-            "metadata": {"type": "object", "description": "Optional structured metadata.", "additionalProperties": True},
+            "metadata": {
+                "type": "object",
+                "description": "Optional structured metadata.",
+                "additionalProperties": True,
+            },
         },
         "required": ["text"],
         "additionalProperties": True,
@@ -248,7 +275,7 @@ class WebhookBridgeChannelAdapter:
     def config(self) -> WebhookBridgeAdapterConfig:
         return self._config
 
-    def send_text(self, text: str, *, metadata: Optional[Mapping[str, Any]] = None) -> WebhookBridgeSendResult:
+    def send_text(self, text: str, *, metadata: Mapping[str, Any] | None = None) -> WebhookBridgeSendResult:
         payload: dict[str, Any] = {"text": text}
         if metadata is not None:
             payload["metadata"] = dict(metadata)

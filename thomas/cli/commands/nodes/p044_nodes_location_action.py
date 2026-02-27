@@ -14,7 +14,7 @@ from __future__ import annotations
 import asyncio
 import inspect
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 import typer
 
@@ -40,14 +40,14 @@ def _run(coro: Any) -> Any:
     raise RuntimeError("CLI command cannot run inside an active event loop")
 
 
-def _call_with_accepted_kwargs(fn: Any, kwargs: Dict[str, Any]) -> Any:
+def _call_with_accepted_kwargs(fn: Any, kwargs: dict[str, Any]) -> Any:
     """Call `fn` with only kwargs it accepts (best-effort)."""
     try:
         sig = inspect.signature(fn)
     except (TypeError, ValueError):
         return fn(**kwargs)
 
-    accepted: Dict[str, Any] = {}
+    accepted: dict[str, Any] = {}
     for name in sig.parameters.keys():
         if name in kwargs and kwargs[name] is not None:
             accepted[name] = kwargs[name]
@@ -76,7 +76,7 @@ def _resolve_invoker(ctx: typer.Context) -> Any:
     # Best-effort: try to build a client from parity_compat if present in the codebase.
     try:
         from thomas.cli import parity_compat  # type: ignore
-    except Exception:
+    except ImportError:
         return None
 
     for fn_name in (
@@ -105,7 +105,7 @@ def _resolve_invoker(ctx: typer.Context) -> Any:
                     "timeout": timeout_ms,
                 },
             )
-        except Exception:
+        except AttributeError:
             continue
 
     return None
@@ -156,13 +156,13 @@ def get_command(
         help="How long the device may try to obtain a fix (ms).",
         show_default=True,
     ),
-    invoke_timeout_ms: Optional[int] = typer.Option(
+    invoke_timeout_ms: int | None = typer.Option(
         None,
         "--invoke-timeout",
         help="Gateway/node invoke timeout (ms). If omitted, use CLI default.",
         show_default=False,
     ),
-    idempotency_key: Optional[str] = typer.Option(
+    idempotency_key: str | None = typer.Option(
         None,
         "--idempotency-key",
         help="Optional idempotency key for the gateway invoke.",

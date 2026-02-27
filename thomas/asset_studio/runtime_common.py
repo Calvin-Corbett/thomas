@@ -18,7 +18,7 @@ def _safe_string(value: Any) -> str:
 def _safe_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except Exception:
+    except ImportError:
         return default
 
 

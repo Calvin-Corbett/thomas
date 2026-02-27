@@ -35,3 +35,14 @@ Required per entry:
   - Tightened remote vs local tool policy behavior in `AgentLoop`.
   - Re-aligned remote API token enforcement for run/audit endpoints.
   - Added Doc runner script for repeatable gate/test sweeps.
+
+## 2026-02-25 - Model surface change tracking refresh
+
+- Profiles changed: model-routing and recommendation surfaces touched in current workspace (`thomas/core/config.py`, `thomas/core/llm.py`, `thomas/models/batching.py`, `thomas/models/discovery.py`, `thomas/models/local_recommendations.py`)
+- Research notes:
+  - `library/entries/research-notes/1771987298-count-files-matching-tests-test_-.py-and-write-runtime-agentic_bench-codex2-live.md`
+- Validation:
+  - Command: `python scripts/check_model_onboarding_gate.py`
+  - Result: pass (after onboarding log update)
+- Notes:
+  - Gate requirement satisfied by explicitly recording model-surface updates and research-note linkage.

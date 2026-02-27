@@ -1,13 +1,14 @@
-﻿"""Thomas runtime configuration validator."""
+"""Thomas runtime configuration validator."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import os
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from thomas.core.config import AppConfig, load_config
@@ -26,7 +27,7 @@ class ConfigFinding:
     message: str
     remediation: str
 
-    def to_dict(self) -> Dict[str, str]:
+    def to_dict(self) -> dict[str, str]:
         return {
             "level": self.level,
             "code": self.code,
@@ -41,7 +42,7 @@ def _is_local_url(raw_url: str) -> bool:
         return True
     try:
         parsed = urlparse(text)
-    except Exception:
+    except (ValueError, TypeError):
         return False
     host = str(parsed.hostname or "").strip().lower()
     if not host:
@@ -58,7 +59,7 @@ def _provider_needs_key(provider: str, base_url: str) -> bool:
     return True
 
 
-def _parse_env_flag(name: str) -> tuple[Optional[bool], Optional[str]]:
+def _parse_env_flag(name: str) -> tuple[bool | None, str | None]:
     raw = os.getenv(name)
     if raw is None:
         return None, None
@@ -79,8 +80,8 @@ def _has_any_env_value(keys: Iterable[str]) -> bool:
     return False
 
 
-def _findings_from_config_validation(errors: Iterable[str]) -> List[ConfigFinding]:
-    out: List[ConfigFinding] = []
+def _findings_from_config_validation(errors: Iterable[str]) -> list[ConfigFinding]:
+    out: list[ConfigFinding] = []
     for err in errors:
         text = str(err or "").strip()
         if not text:
@@ -99,9 +100,9 @@ def _findings_from_config_validation(errors: Iterable[str]) -> List[ConfigFindin
 def evaluate_config(
     config: AppConfig,
     *,
-    secret_lookup: Optional[Callable[[str], Optional[str]]] = None,
-) -> List[ConfigFinding]:
-    findings: List[ConfigFinding] = []
+    secret_lookup: Callable[[str], str | None] | None = None,
+) -> list[ConfigFinding]:
+    findings: list[ConfigFinding] = []
     findings.extend(_findings_from_config_validation(config.validate()))
 
     mode = str(config.server.access_mode or "").strip().lower()
@@ -122,8 +123,7 @@ def evaluate_config(
                 level="warning",
                 code="webhooks.require_signatures.invalid_env",
                 message=(
-                    "Environment value `THOMAS_WEBHOOK_REQUIRE_SIGNATURES="
-                    f"{webhook_signatures_invalid}` is invalid."
+                    "Environment value `THOMAS_WEBHOOK_REQUIRE_SIGNATURES=" f"{webhook_signatures_invalid}` is invalid."
                 ),
                 remediation=(
                     "Use `THOMAS_WEBHOOK_REQUIRE_SIGNATURES=1` to require signatures or "
@@ -144,9 +144,7 @@ def evaluate_config(
                     "Remote mode is configured with `THOMAS_WEBHOOK_REQUIRE_SIGNATURES=0`, "
                     "which disables signature enforcement on public webhook receive routes."
                 ),
-                remediation=(
-                    "Unset `THOMAS_WEBHOOK_REQUIRE_SIGNATURES` or set it to `1` before exposing remote mode."
-                ),
+                remediation=("Unset `THOMAS_WEBHOOK_REQUIRE_SIGNATURES` or set it to `1` before exposing remote mode."),
             )
         )
 
@@ -220,9 +218,7 @@ def evaluate_config(
                     message=(
                         f"Profile '{name}' uses provider '{provider}' at non-local URL but has no API key configured."
                     ),
-                    remediation=(
-                        "Set a key via secrets/settings and re-run profile validation."
-                    ),
+                    remediation=("Set a key via secrets/settings and re-run profile validation."),
                 )
             )
 
@@ -242,9 +238,9 @@ def evaluate_config(
 def build_report_for_config(
     cfg: AppConfig,
     *,
-    config_path: Optional[Path] = None,
-    secret_lookup: Optional[Callable[[str], Optional[str]]] = None,
-) -> Dict[str, Any]:
+    config_path: Path | None = None,
+    secret_lookup: Callable[[str], str | None] | None = None,
+) -> dict[str, Any]:
     findings = evaluate_config(cfg, secret_lookup=secret_lookup)
     errors = [item.to_dict() for item in findings if item.level == "error"]
     warnings = [item.to_dict() for item in findings if item.level == "warning"]
@@ -262,13 +258,13 @@ def build_report_for_config(
     }
 
 
-def validate_config(config_path: Optional[Path] = None) -> Dict[str, Any]:
+def validate_config(config_path: Path | None = None) -> dict[str, Any]:
     cfg = load_config(config_path)
     return build_report_for_config(cfg, config_path=config_path)
 
 
-def format_text_report(report: Dict[str, Any]) -> str:
-    lines: List[str] = []
+def format_text_report(report: dict[str, Any]) -> str:
+    lines: list[str] = []
     lines.append(f"Config: {report.get('config_path', '')}")
     lines.append(f"Default profile: {report.get('default_model', '')}")
     lines.append(f"Result: {'OK' if report.get('ok') else 'FAILED'}")
@@ -297,8 +293,10 @@ def format_text_report(report: Dict[str, Any]) -> str:
     return "\n".join(lines)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
-    parser = argparse.ArgumentParser(description="Validate Thomas runtime configuration and emit support-grade diagnostics.")
+def main(argv: list[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Validate Thomas runtime configuration and emit support-grade diagnostics."
+    )
     parser.add_argument("--config", dest="config", default=None, help="Path to thomas.toml (optional).")
     parser.add_argument("--json", dest="as_json", action="store_true", help="Emit machine-readable JSON output.")
     args = parser.parse_args(argv)

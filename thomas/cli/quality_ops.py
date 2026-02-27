@@ -3,8 +3,9 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Iterable, Optional
+from typing import Any
 
 import click
 
@@ -143,7 +144,7 @@ def _family_metrics_payload(group: click.Group, config: AppConfig, family: str) 
         if exists and path.is_file():
             try:
                 size_bytes = int(path.stat().st_size)
-            except Exception:
+            except (OSError, FileNotFoundError):
                 size_bytes = 0
         details.append(
             {
@@ -207,10 +208,7 @@ def _family_doctor_payload(group: click.Group, config: AppConfig, family: str) -
 
 def _family_verify_payload(group: click.Group, config: AppConfig, family: str) -> dict[str, Any]:
     env_keys = ENV_REQUIREMENTS.get(family, tuple())
-    env_state = {
-        key: bool(str(os.environ.get(key) or "").strip())
-        for key in env_keys
-    }
+    env_state = {key: bool(str(os.environ.get(key) or "").strip()) for key in env_keys}
     cfg_payload = {
         "default_model": str(config.default_model or ""),
         "model_count": len(config.models),
@@ -269,7 +267,7 @@ def _emit_payload(payload: dict[str, Any], *, as_json: bool) -> None:
             click.echo(f"{key}: {payload[key]}")
 
 
-def _write_export(payload: dict[str, Any], output: str) -> Optional[str]:
+def _write_export(payload: dict[str, Any], output: str) -> str | None:
     target = str(output or "").strip()
     if not target:
         return None

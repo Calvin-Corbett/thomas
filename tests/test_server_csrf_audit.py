@@ -123,7 +123,7 @@ class TestServerCsrfAuditLocal(_BaseServerMutatingAudit):
             enforced_by = list(row.get("enforced_by") or [])
             if sample.startswith("/api/") or sample.startswith("/gateway/"):
                 self.assertEqual(authz, "require_api_access")
-                self.assertEqual(csrf, "same_origin_browser_local_mode")
+                self.assertEqual(csrf, "same_origin_or_optional_custom_header")
                 self.assertIn("authz_guard_mutating_api", enforced_by)
                 self.assertIn("csrf_guard_mutating_api", enforced_by)
             elif sample.startswith("/webhooks/receive/"):

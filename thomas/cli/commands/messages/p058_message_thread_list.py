@@ -11,7 +11,8 @@ from __future__ import annotations
 
 import inspect
 import json
-from typing import Any, Mapping, MutableMapping
+from collections.abc import Mapping, MutableMapping
+from typing import Any
 
 import click
 
@@ -111,9 +112,7 @@ def message_thread_list_cmd(
         title = t.title or ""
         channel = t.channel_id or ""
         participants = ",".join(t.participants)
-        click.echo(
-            f"{t.thread_id}	{channel}	{t.message_count}	{last}	{title}	{participants}".rstrip()
-        )
+        click.echo(f"{t.thread_id}	{channel}	{t.message_count}	{last}	{title}	{participants}".rstrip())
 
 
 # Common integration hooks expected by various CLI loader patterns.
@@ -148,7 +147,7 @@ def register_with_parity() -> None:
 
     try:
         from thomas.cli import parity_compat  # type: ignore
-    except Exception:
+    except ImportError:
         return
 
     if _is_already_registered(parity_compat):
@@ -194,7 +193,7 @@ def _is_already_registered(parity_compat: Any) -> bool:
 def _try_register_call(fn: Any, spec: Mapping[str, Any]) -> bool:
     try:
         sig = inspect.signature(fn)
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
         sig = None
 
     attempts: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
@@ -218,7 +217,7 @@ def _try_register_call(fn: Any, spec: Mapping[str, Any]) -> bool:
             return True
         except TypeError:
             continue
-        except Exception:
+        except (ValueError, TypeError):
             return False
 
     return False

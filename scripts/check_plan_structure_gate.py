@@ -1,14 +1,13 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Enforce canonical planning structure and redirects."""
 
 from __future__ import annotations
 
 import argparse
+import json
 import re
-import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Iterable, List, Sequence, Set
-
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -30,7 +29,10 @@ LEGACY_POINTER_FILES: Sequence[str] = (
 PLAN_NAME_RE = re.compile(r"(plan|roadmap|workboard|launch)", re.IGNORECASE)
 POINTER_RE = re.compile(r"Canonical location:\s*\n- `([^`]+)`", re.IGNORECASE)
 PATH_REF_RE = re.compile(r"`(plans/thomas/[^`]+\.md)`")
-
+GENERATED_PLAN_PREFIXES: Sequence[str] = (
+    "plans/thomas/tasks/",
+    "plans/thomas/swarm/",
+)
 
 
 def _normalize(path: str) -> str:
@@ -40,9 +42,8 @@ def _normalize(path: str) -> str:
     return p
 
 
-
-def _collect_md_candidates() -> List[str]:
-    out: Set[str] = set()
+def _collect_md_candidates() -> list[str]:
+    out: set[str] = set()
     for candidate in ROOT.glob("*.md"):
         out.add(_normalize(candidate.relative_to(ROOT).as_posix()))
     docs_dir = ROOT / "docs"
@@ -52,12 +53,11 @@ def _collect_md_candidates() -> List[str]:
     return sorted(out)
 
 
-
-def _plan_docs_in_workspace() -> List[str]:
+def _plan_docs_in_workspace() -> list[str]:
     base = ROOT / "plans" / "thomas"
     if not base.exists():
         return []
-    out: List[str] = []
+    out: list[str] = []
     for candidate in base.rglob("*.md"):
         rel = _normalize(candidate.relative_to(ROOT).as_posix())
         if rel in {"plans/thomas/README.md", "plans/thomas/WORKBOARD.md"}:
@@ -66,20 +66,17 @@ def _plan_docs_in_workspace() -> List[str]:
     return sorted(set(out))
 
 
-
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-
-def _check_required_files(violations: List[str]) -> None:
+def _check_required_files(violations: list[str]) -> None:
     for rel in REQUIRED_FILES:
         if not (ROOT / rel).exists():
             violations.append(f"missing required structure file: {rel}")
 
 
-
-def _check_noncanonical_plan_files(violations: List[str]) -> None:
+def _check_noncanonical_plan_files(violations: list[str]) -> None:
     allow = set(LEGACY_POINTER_FILES)
     for rel in _collect_md_candidates():
         name = Path(rel).name
@@ -87,13 +84,10 @@ def _check_noncanonical_plan_files(violations: List[str]) -> None:
             continue
         if rel in allow:
             continue
-        violations.append(
-            f"non-canonical plan-like file outside plans/: {rel} (move to plans/ and leave pointer)"
-        )
+        violations.append(f"non-canonical plan-like file outside plans/: {rel} (move to plans/ and leave pointer)")
 
 
-
-def _check_pointer_files(violations: List[str]) -> None:
+def _check_pointer_files(violations: list[str]) -> None:
     for rel in LEGACY_POINTER_FILES:
         path = ROOT / rel
         if not path.exists():
@@ -112,16 +106,24 @@ def _check_pointer_files(violations: List[str]) -> None:
             violations.append(f"legacy pointer target does not exist: {rel} -> {target}")
 
 
-
-def _extract_plan_refs(text: str) -> Set[str]:
-    out: Set[str] = set()
+def _extract_plan_refs(text: str) -> set[str]:
+    out: set[str] = set()
     for m in PATH_REF_RE.finditer(text or ""):
         out.add(_normalize(m.group(1)))
     return out
 
 
+def _is_generated_plan_doc(rel: str) -> bool:
+    normalized = _normalize(rel)
+    return any(normalized.startswith(prefix) for prefix in GENERATED_PLAN_PREFIXES)
 
-def _check_workboard_coverage(violations: List[str]) -> None:
+
+def _is_template_path(rel: str) -> bool:
+    normalized = _normalize(rel)
+    return "<" in normalized and ">" in normalized
+
+
+def _check_workboard_coverage(violations: list[str]) -> None:
     workboard = ROOT / "plans" / "thomas" / "WORKBOARD.md"
     hub = ROOT / "plans" / "thomas" / "README.md"
     if not workboard.exists() or not hub.exists():
@@ -131,19 +133,22 @@ def _check_workboard_coverage(violations: List[str]) -> None:
     plan_docs = _plan_docs_in_workspace()
 
     for rel in plan_docs:
+        if _is_generated_plan_doc(rel):
+            continue
         if rel not in workboard_refs:
             violations.append(f"plan missing from workboard references: {rel}")
         if rel not in hub_refs:
             violations.append(f"plan missing from plans/thomas/README.md references: {rel}")
 
     for rel in sorted(workboard_refs | hub_refs):
+        if _is_template_path(rel):
+            continue
         if rel.startswith("plans/thomas/") and not (ROOT / rel).exists():
             violations.append(f"stale plan reference to missing file: {rel}")
 
 
-
-def evaluate() -> List[str]:
-    violations: List[str] = []
+def evaluate() -> list[str]:
+    violations: list[str] = []
     _check_required_files(violations)
     _check_noncanonical_plan_files(violations)
     _check_pointer_files(violations)
@@ -151,12 +156,23 @@ def evaluate() -> List[str]:
     return violations
 
 
-
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Enforce canonical plan structure and pointers.")
-    parser.parse_args(argv)
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+    args = parser.parse_args(argv)
 
     violations = evaluate()
+    payload = {
+        "ok": not violations,
+        "gate": "plan_structure",
+        "violation_count": len(violations),
+        "violations": list(violations),
+    }
+
+    if args.json:
+        print(json.dumps(payload, indent=2))
+        return 0 if payload["ok"] else 1
+
     if violations:
         print("Plan structure gate: FAIL")
         for item in violations:

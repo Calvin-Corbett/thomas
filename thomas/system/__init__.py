@@ -1,1 +1,1 @@
-﻿"""Scaffold package for accelerated catch-up work."""
+"""Scaffold package for accelerated catch-up work."""

@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Optional
+from typing import Any
 
 from thomas.channels.p076_channel_registry_loader import (
     ChannelRegistryError,
@@ -42,24 +42,22 @@ def register(app_or_subparsers: Any) -> None:
 
 
 def _looks_like_typer(obj: Any) -> bool:
-    return hasattr(obj, "command") and callable(getattr(obj, "command"))
+    return hasattr(obj, "command") and callable(obj.command)
 
 
 def _looks_like_argparse(obj: Any) -> bool:
-    return hasattr(obj, "add_parser") and callable(getattr(obj, "add_parser"))
+    return hasattr(obj, "add_parser") and callable(obj.add_parser)
 
 
 def _register_typer(app: Any) -> None:
     try:
         import typer  # type: ignore
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         return
 
     @app.command(COMMAND_NAME, help=COMMAND_HELP)
     def registry_load(
-        path: Optional[str] = typer.Option(
-            None, "--path", "-p", help="Path to a channel registry file (YAML/JSON/TOML)."
-        ),
+        path: str | None = typer.Option(None, "--path", "-p", help="Path to a channel registry file (YAML/JSON/TOML)."),
         json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON to stdout."),
         json_schema: bool = typer.Option(
             False, "--json-schema", help="Print the JSON schema for --json output and exit."
@@ -92,9 +90,7 @@ def _register_typer(app: Any) -> None:
 def _register_argparse(subparsers: Any) -> None:
     import argparse
 
-    parser: argparse.ArgumentParser = subparsers.add_parser(
-        COMMAND_NAME, help=COMMAND_HELP, description=COMMAND_HELP
-    )
+    parser: argparse.ArgumentParser = subparsers.add_parser(COMMAND_NAME, help=COMMAND_HELP, description=COMMAND_HELP)
     parser.add_argument(
         "--path",
         "-p",

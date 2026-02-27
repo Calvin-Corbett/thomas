@@ -28,9 +28,7 @@ def test_load_suite_config_infers_tracked_cli_commands_from_fixed_depth(tmp_path
 def test_load_suite_config_preserves_competitor_catalog(tmp_path: Path) -> None:
     cfg = {
         "id": "x",
-        "competitor_catalog": [
-            {"id": "openclaw", "repo_url": "https://example.com/openclaw.git", "enabled": True}
-        ],
+        "competitor_catalog": [{"id": "openclaw", "repo_url": "https://example.com/openclaw.git", "enabled": True}],
         "agents": [{"id": "thomas", "root": "."}],
     }
     path = tmp_path / "suite.json"
@@ -81,6 +79,17 @@ def test_load_suite_config_reads_head_to_head_tie_policy(tmp_path: Path) -> None
     path.write_text(json.dumps(cfg), encoding="utf-8")
     loaded = suite.load_suite_config(path)
     assert loaded["head_to_head_tie_policy"] == "exclude"
+
+
+def test_default_suite_config_wires_benchmark_evidence_globs_for_thomas_and_openclaw() -> None:
+    loaded = suite.load_suite_config(suite.DEFAULT_SUITE_CONFIG)
+    agents = {
+        str(agent.get("id") or "").strip(): dict(agent)
+        for agent in list(loaded.get("agents") or [])
+        if str(agent.get("id") or "").strip()
+    }
+    assert agents["thomas"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
+    assert agents["openclaw"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
 
 
 def test_assertion_resolution_and_ops() -> None:
@@ -176,6 +185,52 @@ def test_collect_benchmark_summary_reads_raw_rows_for_cost_signals(tmp_path: Pat
     assert summary["raw_total_tokens_mean"] == 125.0
     assert summary["raw_tool_calls_mean"] == 1.5
     assert summary["raw_tokens_per_success"] == 250.0
+
+
+def test_collect_benchmark_evidence_reads_raw_rows_by_alias(tmp_path: Path) -> None:
+    runs = tmp_path / "runs" / "run-1"
+    runs.mkdir(parents=True, exist_ok=True)
+    raw_rows = [
+        {
+            "task_id": "prog.001",
+            "track": "thomas",
+            "success": True,
+            "quality_score": 96.0,
+            "evidence": "transcripts/thomas/prog.001.md",
+        },
+        {
+            "task_id": "prog.001",
+            "track": "openclaw",
+            "success": False,
+            "quality_score": 20.0,
+            "evidence": "transcripts/openclaw/prog.001.md",
+        },
+        {
+            "task_id": "prog.002",
+            "track": "thomas_os",
+            "checks": {"success": True},
+        },
+    ]
+    evidence_file = runs / "benchmark_results.raw.json"
+    evidence_file.write_text(json.dumps(raw_rows), encoding="utf-8")
+    pattern = str((tmp_path / "runs" / "*" / "benchmark_results.raw.json").as_posix())
+
+    thomas_evidence = suite._collect_benchmark_evidence(
+        {"id": "thomas", "benchmark_aliases": ["thomas_os"], "benchmark_evidence_globs": [pattern]},
+        suite_root=tmp_path,
+    )
+    assert thomas_evidence["checks"]["prog.001"]["pass"] is True
+    assert thomas_evidence["checks"]["prog.001"]["score"] == 96.0
+    assert thomas_evidence["checks"]["prog.001"]["source"] == "transcripts/thomas/prog.001.md"
+    assert thomas_evidence["checks"]["prog.002"]["pass"] is True
+
+    openclaw_evidence = suite._collect_benchmark_evidence(
+        {"id": "openclaw", "benchmark_aliases": ["openclaw"], "benchmark_evidence_globs": [pattern]},
+        suite_root=tmp_path,
+    )
+    assert openclaw_evidence["checks"]["prog.001"]["pass"] is False
+    assert openclaw_evidence["checks"]["prog.001"]["score"] == 20.0
+    assert "prog.002" not in openclaw_evidence["checks"]
 
 
 def test_compute_token_efficiency_returns_blended_score() -> None:
@@ -461,6 +516,7 @@ def test_collect_agent_metrics_uses_fallback_probes_when_unconfigured(tmp_path: 
     }
     raw_rows = [
         {
+            "task_id": "prog.001",
             "track": "agent_a",
             "run": {
                 "usage": {"prompt_tokens": 120, "completion_tokens": 60, "total_tokens": 180},
@@ -468,6 +524,8 @@ def test_collect_agent_metrics_uses_fallback_probes_when_unconfigured(tmp_path: 
                 "elapsed_seconds": 5.0,
             },
             "success": True,
+            "quality_score": 95.0,
+            "evidence": "transcripts/agent_a/prog.001.md",
         }
     ]
     (runs / "scorecard.json").write_text(json.dumps(scorecard), encoding="utf-8")
@@ -487,6 +545,7 @@ def test_collect_agent_metrics_uses_fallback_probes_when_unconfigured(tmp_path: 
         "strict_checks": [],
         "benchmark_scorecard_globs": [str((tmp_path / "runs" / "*" / "scorecard.json").as_posix())],
         "benchmark_raw_globs": [str((tmp_path / "runs" / "*" / "benchmark_results.raw.json").as_posix())],
+        "benchmark_evidence_globs": [str((tmp_path / "runs" / "*" / "benchmark_results.raw.json").as_posix())],
         "benchmark_aliases": ["agent_a"],
     }
 
@@ -511,6 +570,8 @@ def test_collect_agent_metrics_uses_fallback_probes_when_unconfigured(tmp_path: 
     assert payload["metrics"]["cost.token_efficiency_telemetry_coverage"] >= 0.0
     assert isinstance(payload["version_info"], dict)
     assert isinstance(payload["model_snapshot"], dict)
+    assert payload["benchmark_evidence"]["checks"]["prog.001"]["pass"] is True
+    assert payload["benchmark_evidence"]["checks"]["prog.001"]["score"] == 95.0
 
 
 def test_collect_agent_metrics_counts_test_dataset_roots(tmp_path: Path) -> None:
@@ -519,8 +580,8 @@ def test_collect_agent_metrics_counts_test_dataset_roots(tmp_path: Path) -> None
     (src / "main.py").write_text("print('ok')\n", encoding="utf-8")
     dataset = tmp_path / "dataset"
     dataset.mkdir(parents=True, exist_ok=True)
-    (dataset / "case_0001.json").write_text("{\n  \"id\": 1,\n  \"name\": \"case\"\n}\n", encoding="utf-8")
-    (dataset / "case_0002.json").write_text("{\n  \"id\": 2,\n  \"name\": \"case\"\n}\n", encoding="utf-8")
+    (dataset / "case_0001.json").write_text('{\n  "id": 1,\n  "name": "case"\n}\n', encoding="utf-8")
+    (dataset / "case_0002.json").write_text('{\n  "id": 2,\n  "name": "case"\n}\n', encoding="utf-8")
 
     agent = {
         "id": "agent_ds",

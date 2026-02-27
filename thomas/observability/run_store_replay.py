@@ -8,6 +8,7 @@ from typing import Any
 
 from thomas.observability.run_db import connect, ensure_schema, resolve_runs_db_path
 
+
 @dataclass(frozen=True)
 class RunEvent:
     index: int
@@ -15,6 +16,7 @@ class RunEvent:
     t_ms: int | None
     event_type: str
     payload: Any
+
 
 def count_events(run_id: str, db_path: Path | None = None) -> int:
     db_path = db_path or resolve_runs_db_path()
@@ -26,6 +28,7 @@ def count_events(run_id: str, db_path: Path | None = None) -> int:
         return int(row["n"] if row else 0)
     finally:
         con.close()
+
 
 def list_events(
     run_id: str,
@@ -61,7 +64,7 @@ def list_events(
             payload_json = row["payload_json"]
             try:
                 payload = json.loads(payload_json) if payload_json else None
-            except Exception:
+            except json.JSONDecodeError:
                 payload = {"_parse_error": True, "raw": payload_json}
             out.append(
                 RunEvent(
@@ -77,11 +80,13 @@ def list_events(
     finally:
         con.close()
 
+
 def get_event_at_index(run_id: str, index: int, db_path: Path | None = None) -> RunEvent | None:
     if index < 0:
         return None
     events = list_events(run_id, start=index, limit=1, db_path=db_path)
     return events[0] if events else None
+
 
 def get_run_metadata(run_id: str, db_path: Path | None = None) -> dict[str, Any] | None:
     db_path = db_path or resolve_runs_db_path()
@@ -96,7 +101,7 @@ def get_run_metadata(run_id: str, db_path: Path | None = None) -> dict[str, Any]
         if "meta_json" in d and isinstance(d["meta_json"], str):
             try:
                 d["meta_json"] = json.loads(d["meta_json"])
-            except Exception:
+            except json.JSONDecodeError:
                 pass
         return d
     finally:

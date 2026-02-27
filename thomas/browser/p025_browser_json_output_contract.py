@@ -16,10 +16,10 @@ This implementation avoids reusing any external project naming.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
 import json
-from typing import Any, Literal, Mapping, MutableMapping, Optional, TypedDict, Union, cast
-
+from collections.abc import Mapping, MutableMapping
+from dataclasses import asdict, dataclass, is_dataclass
+from typing import Any, Literal, TypedDict, Union, cast
 
 CONTRACT_NAME = "thomas.browser.json_output"
 CONTRACT_VERSION = "1.0"
@@ -41,7 +41,7 @@ class BrowserJsonContractError(Exception):
         code: ErrorCode,
         message: str,
         *,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code: ErrorCode = code
@@ -52,15 +52,15 @@ class BrowserJsonContractError(Exception):
 class BrowserJsonError:
     code: ErrorCode
     message: str
-    details: Optional[Mapping[str, Any]] = None
+    details: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
 class BrowserJsonMeta:
     contract: str = CONTRACT_NAME
     contract_version: str = CONTRACT_VERSION
-    request_id: Optional[str] = None
-    command: Optional[str] = None
+    request_id: str | None = None
+    command: str | None = None
 
 
 class BrowserJsonData(TypedDict, total=False):
@@ -148,7 +148,7 @@ def _coerce_json_default(value: Any) -> Any:  # noqa: ANN401
         if callable(fn):
             try:
                 return fn()
-            except Exception:
+            except (RuntimeError, TypeError):
                 break
 
     return repr(value)
@@ -163,8 +163,8 @@ def render_json(envelope: BrowserJsonEnvelope) -> str:
 def success(
     data: Any,
     *,
-    command: Optional[str] = None,
-    request_id: Optional[str] = None,
+    command: str | None = None,
+    request_id: str | None = None,
 ) -> BrowserJsonSuccess:
     """Create a success envelope."""
 
@@ -183,9 +183,9 @@ def failure(
     code: ErrorCode,
     message: str,
     *,
-    details: Optional[Mapping[str, Any]] = None,
-    command: Optional[str] = None,
-    request_id: Optional[str] = None,
+    details: Mapping[str, Any] | None = None,
+    command: str | None = None,
+    request_id: str | None = None,
 ) -> BrowserJsonFailure:
     """Create a failure envelope."""
 
@@ -197,8 +197,8 @@ def failure(
 def failure_from_exception(
     exc: BaseException,
     *,
-    command: Optional[str] = None,
-    request_id: Optional[str] = None,
+    command: str | None = None,
+    request_id: str | None = None,
 ) -> BrowserJsonFailure:
     """Map an exception to a deterministic failure envelope."""
 
@@ -237,7 +237,7 @@ def failure_from_exception(
     return failure(code, message, details=details, command=command, request_id=request_id)
 
 
-def attach_meta(envelope: BrowserJsonEnvelope, *, command: Optional[str] = None) -> BrowserJsonEnvelope:
+def attach_meta(envelope: BrowserJsonEnvelope, *, command: str | None = None) -> BrowserJsonEnvelope:
     """Attach/override meta.command on an existing envelope."""
 
     updated: MutableMapping[str, Any] = dict(envelope)

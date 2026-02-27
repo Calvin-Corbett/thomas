@@ -2,7 +2,26 @@
 
 > **For AI agents.** Read this FIRST before exploring code. Update this file when
 > you change boot paths, add entry points, move key files, or alter the process model.
-> Last updated: 2026-02-24.
+> Last updated: 2026-02-25.
+
+---
+
+## Active Doc Index (Canonical)
+
+This file is the single authoritative index for active operational docs. Use this list before opening root summary/report files.
+
+- `README.md` - first-run setup and operator-facing startup commands
+- `AGENTS.md` - contributor protocol, guardrails, and changelog/versioning workflow
+- `CHANGELOG.md` - ongoing behavior changes and migration notes
+- `SECURITY.md` - security policy and disclosure process
+- `ONBOARDING.md` - onboarding flow, repair path, and model setup details
+- `KNOWN_ISSUES.md` - recurring break/fix patterns and mitigation notes
+- `docs/REPO_STRUCTURE_PROTOCOL.md` - repository structure contract
+- `docs/ops/repo_hygiene.md` - repo hygiene gate and policy operations
+- `plans/thomas/WORKBOARD.md` - active execution board
+- `docs/ops/ROOT_DOC_ARCHIVE_INDEX.md` - archive map for root doc sprawl candidates
+
+If a root-level doc is not in the active list above, treat it as legacy/archival context unless explicitly promoted.
 
 ---
 
@@ -175,6 +194,7 @@ POST /api/chat
         -> token economy policy
         -> task ledger update (request + route + completion/blocker)
         -> early exits: UI control, hello shortcut, batch mode, swarm mode
+           (when `orchestrator_only=true`, chat is forced to swarm and direct AgentLoop fallback is blocked)
         -> main path: resp.prepare() -> AgentLoop.run() -> NDJSON stream
         -> finally: llm.close(), run store finalize, write_eof
 ```
@@ -231,6 +251,13 @@ python -m thomas serve --port 0
 10. **Frontend autonomy state must hydrate before first chat send.** `app.js` always includes `autonomy_level` in `/api/chat` payloads. If `activeAutonomyLevel` is not synced from `preferences.autonomy.default_level` during startup, stale default `3` will override saved L4 behavior.
 
 11. **Port bind retries must use a fresh `TCPSite` object each attempt.** Reusing the same site after a bind failure can raise `RuntimeError: Site ... is already registered in runner ...`. In `serve_async()`, create a new site per attempt and call `site.stop()` after failed binds.
+
+12. **Workboard claim completion now enforces cleaner handoff discipline.**
+   - `scripts/check_workboard_agent_claim.py` supports claimed-scope cleanliness checks (`--enforce-clean-claimed-scope`, optional `--enforce-untracked-claimed-scope`) so commit-time gate runs can block partial dirty claim-scope work.
+   - `scripts/workboard_claim.py --release` now blocks release when claimed scopes have dirty files unless `--allow-dirty-release` is provided with `--dirty-release-reason` (audited to `runtime/coordination/workboard_release_override_audit.jsonl`).
+   - If release unexpectedly fails, run `git status --porcelain`, then either commit/stash claim-scope files or provide an auditable override reason.
+
+13. **`orchestrator_only` chat calls must complete through swarm.** In `thomas/server/routes/chat_aiohttp.py`, requests with `orchestrator_only=true` clamp mode to `swarm`, skip quick casual shortcut replies, and raise `HTTP 500` if swarm routing unexpectedly returns no response (instead of silently falling back to direct `AgentLoop` execution).
 
 ---
 

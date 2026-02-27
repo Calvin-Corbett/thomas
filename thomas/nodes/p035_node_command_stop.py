@@ -16,9 +16,10 @@ import importlib
 import inspect
 import json
 import os
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, MutableMapping, Optional, Protocol, TypedDict
+from typing import Any, Protocol, TypedDict
 
 __all__ = [
     "NodeCommandStopInput",
@@ -42,8 +43,8 @@ __all__ = [
 class NodeCommandStopRequestJson(TypedDict, total=False):
     node_id: str
     force: bool
-    timeout_s: Optional[float]
-    config_path: Optional[str]
+    timeout_s: float | None
+    config_path: str | None
 
 
 class NodeCommandStopResultJson(TypedDict):
@@ -59,8 +60,8 @@ class NodeCommandStopInput:
 
     node_id: str
     force: bool = False
-    timeout_s: Optional[float] = None
-    config_path: Optional[str] = None
+    timeout_s: float | None = None
+    config_path: str | None = None
 
     def to_json(self) -> NodeCommandStopRequestJson:
         return {
@@ -71,7 +72,7 @@ class NodeCommandStopInput:
         }
 
     @classmethod
-    def from_json(cls, data: Mapping[str, Any]) -> "NodeCommandStopInput":
+    def from_json(cls, data: Mapping[str, Any]) -> NodeCommandStopInput:
         """Parse a JSON-like mapping into :class:`NodeCommandStopInput`.
 
         This is useful for HTTP routes or automation callers.
@@ -193,7 +194,7 @@ class NodeCommandStopError(Exception):
         self,
         message: str,
         *,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self._details: Mapping[str, Any] = dict(details or {})
@@ -275,7 +276,7 @@ def _load_config(path: str) -> Mapping[str, Any]:
     if suffix == ".json":
         try:
             parsed = json.loads(raw)
-        except Exception as e:
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
             raise NodeCommandStopConfigError(
                 "unable to parse config_path",
                 details={"config_path": str(p), "reason": "InvalidJson"},
@@ -285,7 +286,7 @@ def _load_config(path: str) -> Mapping[str, Any]:
     if suffix in {".yml", ".yaml"}:
         try:
             import yaml  # type: ignore
-        except Exception as e:  # ImportError or other import-time issues
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # ImportError or other import-time issues
             raise NodeCommandStopConfigError(
                 "unable to parse config_path",
                 details={
@@ -296,7 +297,7 @@ def _load_config(path: str) -> Mapping[str, Any]:
             ) from e
         try:
             parsed = yaml.safe_load(raw)
-        except Exception as e:
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
             raise NodeCommandStopConfigError(
                 "unable to parse config_path",
                 details={"config_path": str(p), "reason": "InvalidYaml"},
@@ -307,14 +308,14 @@ def _load_config(path: str) -> Mapping[str, Any]:
     try:
         parsed = json.loads(raw)
         return parsed if isinstance(parsed, Mapping) else {}
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodeCommandStopConfigError(
             "unable to parse config_path",
             details={"config_path": str(p), "reason": "UnknownFormat"},
         ) from e
 
 
-def _parse_backend_spec(spec: str) -> Optional[StopBackend]:
+def _parse_backend_spec(spec: str) -> StopBackend | None:
     """Parse THOMAS_NODE_STOP_BACKEND="module:function"."""
     if not spec or ":" not in spec:
         return None
@@ -324,16 +325,16 @@ def _parse_backend_spec(spec: str) -> Optional[StopBackend]:
         return None
     try:
         mod = importlib.import_module(mod_name)
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return None
     fn = getattr(mod, attr, None)
     return fn if callable(fn) else None
 
 
-def _find_backend_in_module(mod_name: str) -> Optional[StopBackend]:
+def _find_backend_in_module(mod_name: str) -> StopBackend | None:
     try:
         mod = importlib.import_module(mod_name)
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return None
 
     # Common function names.
@@ -352,7 +353,7 @@ def _find_backend_in_module(mod_name: str) -> Optional[StopBackend]:
     return None
 
 
-def _resolve_default_backend() -> Optional[StopBackend]:
+def _resolve_default_backend() -> StopBackend | None:
     env_spec = os.environ.get("THOMAS_NODE_STOP_BACKEND", "").strip()
     backend = _parse_backend_spec(env_spec)
     if backend is not None:
@@ -375,8 +376,9 @@ def _resolve_default_backend() -> Optional[StopBackend]:
     # evolving internal APIs, but we limit imports to likely candidates.
     try:
         import pkgutil
+
         import thomas.nodes as nodes_pkg  # type: ignore
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return None
 
     pkg_path = getattr(nodes_pkg, "__path__", None)
@@ -401,8 +403,8 @@ def _invoke_backend(
     *,
     node_id: str,
     force: bool,
-    timeout_s: Optional[float],
-    config: Optional[Mapping[str, Any]],
+    timeout_s: float | None,
+    config: Mapping[str, Any] | None,
 ) -> Any:
     """Invoke backend with best-effort signature adaptation."""
 
@@ -502,14 +504,14 @@ def _backend_result_is_success(result: Any) -> bool:
 async def node_command_stop_async(
     inp: NodeCommandStopInput,
     *,
-    backend: Optional[StopBackend] = None,
+    backend: StopBackend | None = None,
 ) -> NodeCommandStopOutput:
     """Stop a node."""
 
     _validate_input(inp)
     node_id = inp.node_id.strip()
 
-    config: Optional[Mapping[str, Any]] = None
+    config: Mapping[str, Any] | None = None
     if inp.config_path is not None:
         config = _load_config(inp.config_path)
 
@@ -532,7 +534,7 @@ async def node_command_stop_async(
             result = await result
     except NodeCommandStopError:
         raise
-    except Exception as e:
+    except (RuntimeError, asyncio.QueueFull, ValueError) as e:
         raise NodeCommandStopExternalError(
             "failed to stop node",
             details={"node_id": node_id, "reason": type(e).__name__},
@@ -551,7 +553,7 @@ async def node_command_stop_async(
 def node_command_stop(
     inp: NodeCommandStopInput,
     *,
-    backend: Optional[StopBackend] = None,
+    backend: StopBackend | None = None,
 ) -> NodeCommandStopOutput:
     """Synchronous wrapper for :func:`node_command_stop_async`."""
 
@@ -565,13 +567,13 @@ def node_command_stop(
     import queue
     import threading
 
-    q: "queue.Queue[tuple[bool, object]]" = queue.Queue(maxsize=1)
+    q: queue.Queue[tuple[bool, object]] = queue.Queue(maxsize=1)
 
     def _runner() -> None:
         try:
             res = asyncio.run(node_command_stop_async(inp, backend=backend))
             q.put((True, res))
-        except Exception as e:  # pragma: no cover
+        except (ImportError, AttributeError, RuntimeError) as e:  # pragma: no cover
             q.put((False, e))
 
     t = threading.Thread(target=_runner, name="thomas-node-stop", daemon=True)

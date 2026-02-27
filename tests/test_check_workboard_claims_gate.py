@@ -23,7 +23,8 @@ def _write_workboard(
         f"{claims_block}\n\n"
         "## Active Tasks\n\n"
         "Task format:\n"
-        "`- \\`task_id=<id>; agent=<id>; scope=<path[,path...]>; summary=<short text>; status=<active|blocked>\\``\n\n"
+        "`- \\`task_id=<id>; agent=<id>; scope=<path[,path...]>; summary=<short text>; "
+        "status=<queued|claimed|in_progress|blocked|review|done>\\``\n\n"
         f"{active_tasks_block}\n\n"
         "## Issues / Blockers\n\n"
         "Issue format:\n"
@@ -128,9 +129,7 @@ def test_workboard_claims_gate_json_fail_payload(tmp_path: Path, capsys) -> None
     assert "missing required field(s): scope" in payload["violations"][0]
 
 
-def test_workboard_claims_gate_strict_identity_metadata_fails_legacy_claim(
-    tmp_path: Path, capsys
-) -> None:
+def test_workboard_claims_gate_strict_identity_metadata_fails_legacy_claim(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
         "- agent=Codex 3; scope=thomas/cli/main.py; task=main lane",
@@ -142,9 +141,7 @@ def test_workboard_claims_gate_strict_identity_metadata_fails_legacy_claim(
     assert "missing required field(s): name, role, parent" in out
 
 
-def test_workboard_claims_gate_strict_identity_metadata_passes(
-    tmp_path: Path, capsys
-) -> None:
+def test_workboard_claims_gate_strict_identity_metadata_passes(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
         "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=thomas/cli/main.py; task=main lane",
@@ -191,6 +188,24 @@ def test_blocked_task_requires_open_issue(tmp_path: Path, capsys) -> None:
     out = capsys.readouterr().out
     assert rc == 1
     assert "blocked task `blocked-lane` must have an open/triaged entry" in out
+
+
+def test_review_task_cannot_have_open_issue(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 9; scope=thomas/cli/main.py; task=review lane",
+        active_tasks_block=(
+            "- task_id=review-lane; agent=Codex 9; scope=thomas/cli/main.py; " "summary=review lane; status=review"
+        ),
+        issues_block=(
+            "- issue_id=review-lane-1; task_id=review-lane; reporter=Codex 9; "
+            "owner=Codex 9; state=open; summary=still blocked"
+        ),
+    )
+    rc = mod.run(["--workboard", str(workboard)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "review task `review-lane` cannot have open/triaged blockers" in out
 
 
 def test_workboard_claims_gate_fails_for_worker_without_parent(tmp_path: Path, capsys) -> None:

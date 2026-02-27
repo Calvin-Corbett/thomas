@@ -14,9 +14,9 @@ registries, this module exports common hooks:
 
 from __future__ import annotations
 
-from typing import Any, Mapping
-
 import json
+from collections.abc import Mapping
+from typing import Any
 
 import click
 
@@ -166,7 +166,9 @@ def nodes_list(config_path: str | None, server_url: str | None, timeout_s: float
 )
 def nodes_show(node_id: str, config_path: str | None, server_url: str | None, timeout_s: float, as_json: bool) -> None:
     try:
-        resp = get_node(NodeGetRequest(node_id=node_id, config_path=config_path, server_url=server_url, timeout_s=timeout_s))
+        resp = get_node(
+            NodeGetRequest(node_id=node_id, config_path=config_path, server_url=server_url, timeout_s=timeout_s)
+        )
         payload = ok_get_to_dict(resp)
         _emit_result(payload, as_json=as_json)
     except NodeCliScaffoldError as e:
@@ -220,6 +222,6 @@ def register(root: click.Group) -> None:
             root.add_command(nodes_group, name="devices")
         if "device" not in existing:
             root.add_command(nodes_group, name="device")
-    except Exception:
+    except ImportError:
         # Never explode at import/register time; deterministic failures are handled at invocation.
         return

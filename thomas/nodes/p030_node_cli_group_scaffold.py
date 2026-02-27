@@ -13,17 +13,17 @@ Design goals
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field, asdict
-from typing import Any, Mapping, Optional, Literal
 import json
 import os
 import re
-import socket
-import tomllib
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
+from dataclasses import asdict, dataclass, field
+from typing import Any, Literal
 
+import tomllib
 
 NodeSource = Literal["config", "server"]
 
@@ -33,8 +33,8 @@ class NodeRecord:
     """A minimal description of a Thomas node."""
 
     node_id: str
-    label: Optional[str] = None
-    address: Optional[str] = None
+    label: str | None = None
+    address: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -42,9 +42,9 @@ class NodeListRequest:
     """Input contract for listing nodes."""
 
     # Explicit config file holding node definitions.
-    config_path: Optional[str] = None
+    config_path: str | None = None
     # Explicit server URL to query for nodes.
-    server_url: Optional[str] = None
+    server_url: str | None = None
     # Request timeout (seconds) for external calls.
     timeout_s: float = 5.0
 
@@ -56,7 +56,7 @@ class NodeListResponse:
     source: NodeSource
     nodes: tuple[NodeRecord, ...] = field(default_factory=tuple)
     # When source == "server", which endpoint actually succeeded.
-    endpoint: Optional[str] = None
+    endpoint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -64,8 +64,8 @@ class NodeGetRequest:
     """Input contract for fetching a single node by id."""
 
     node_id: str
-    config_path: Optional[str] = None
-    server_url: Optional[str] = None
+    config_path: str | None = None
+    server_url: str | None = None
     timeout_s: float = 5.0
 
 
@@ -75,7 +75,7 @@ class NodeGetResponse:
 
     source: NodeSource
     node: NodeRecord
-    endpoint: Optional[str] = None
+    endpoint: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,18 +136,16 @@ def list_nodes(request: NodeListRequest, *, env: Mapping[str, str] | None = None
         raise NodeCliInputError("invalid_timeout", "timeout_s must be > 0")
 
     # Explicit server URL wins.
-    server_url = (
-        (request.server_url or "").strip()
-        or (env.get("THOMAS_SERVER_URL") or env.get("THOMAS_API_URL") or "").strip()
-    )
+    server_url = (request.server_url or "").strip() or (
+        env.get("THOMAS_SERVER_URL") or env.get("THOMAS_API_URL") or ""
+    ).strip()
     if server_url:
         return _list_nodes_from_server(server_url, timeout_s=request.timeout_s)
 
     # Explicit config path next.
-    config_path = (
-        (request.config_path or "").strip()
-        or (env.get("THOMAS_NODES_CONFIG") or env.get("THOMAS_CONFIG") or "").strip()
-    )
+    config_path = (request.config_path or "").strip() or (
+        env.get("THOMAS_NODES_CONFIG") or env.get("THOMAS_CONFIG") or ""
+    ).strip()
     if config_path:
         return _list_nodes_from_config_file(config_path)
 
@@ -272,7 +270,7 @@ def _read_config_file(path: str) -> Mapping[str, Any]:
             data = parser(raw_bytes)
             if isinstance(data, Mapping):
                 return data
-        except Exception as e:  # noqa: BLE001 - deterministic conversion below
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001 - deterministic conversion below
             last_err = e
             continue
 
@@ -344,7 +342,7 @@ def _simple_yaml_load(text: str) -> Any:
         if low == "false":
             return False
         # Strip simple quotes.
-        if (v.startswith("\"") and v.endswith("\"")) or (v.startswith("'") and v.endswith("'")):
+        if (v.startswith('"') and v.endswith('"')) or (v.startswith("'") and v.endswith("'")):
             return v[1:-1]
         return v
 
@@ -461,7 +459,7 @@ def _list_nodes_from_server(server_url: str, *, timeout_s: float) -> NodeListRes
                 last_err = e
                 continue
             raise
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
             last_err = e
             continue
 
@@ -483,7 +481,7 @@ def _fetch_nodes_json(url: str, *, timeout_s: float) -> tuple[NodeRecord, ...]:
         if status == 405:
             raise NodeCliExternalError("http_method_not_allowed", f"Method not allowed at: {url}") from e
         raise NodeCliExternalError("http_error", f"HTTP error {status} from {url}") from e
-    except (urllib.error.URLError, socket.timeout) as e:
+    except (TimeoutError, urllib.error.URLError) as e:
         raise NodeCliExternalError("connection_failed", f"Failed to connect to {url}") from e
 
     if status < 200 or status >= 300:
@@ -491,7 +489,7 @@ def _fetch_nodes_json(url: str, *, timeout_s: float) -> tuple[NodeRecord, ...]:
 
     try:
         data: Any = json.loads(raw.decode("utf-8"))
-    except Exception as e:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
         raise NodeCliExternalError("invalid_json", f"Server returned invalid JSON from {url}") from e
 
     # Common wrappers:

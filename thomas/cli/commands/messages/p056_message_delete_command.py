@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import inspect
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
-from typing import Any, Callable, Iterable, Optional
+from typing import Any
 
 from thomas.messages.p056_message_delete_command import MessageDeleteRequest, delete_message
 
@@ -18,7 +19,7 @@ def _safe_add_argument(parser: Any, *args: Any, **kwargs: Any) -> None:
         return
     try:
         parser.add_argument(*args, **kwargs)
-    except Exception:
+    except ImportError:
         # Duplicate option strings or incompatible parser type.
         return
 
@@ -134,7 +135,7 @@ def _build_command_spec() -> Any:
 
     try:
         from thomas.cli import parity_commands as pc  # type: ignore
-    except Exception:
+    except ImportError:
         return fallback
 
     candidates = [
@@ -148,7 +149,7 @@ def _build_command_spec() -> Any:
         "build_command",
     ]
 
-    factory: Optional[Callable[..., Any]] = None
+    factory: Callable[..., Any] | None = None
     for name in candidates:
         obj = getattr(pc, name, None)
         if callable(obj):
@@ -161,7 +162,7 @@ def _build_command_spec() -> Any:
     # Try kwargs construction by signature.
     try:
         sig = inspect.signature(factory)
-    except Exception:
+    except AttributeError:
         sig = None
 
     if sig is not None:
@@ -189,7 +190,7 @@ def _build_command_spec() -> Any:
 
         try:
             return factory(**kwargs)
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             pass
 
     # Positional fallbacks (seen across a few registry styles).
@@ -204,7 +205,7 @@ def _build_command_spec() -> Any:
     for args in positional_attempts:
         try:
             return factory(*args)
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             continue
 
     return fallback

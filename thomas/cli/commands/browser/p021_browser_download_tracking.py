@@ -9,8 +9,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 import typer
 
@@ -59,7 +59,7 @@ def _emit_json(payload: dict[str, object]) -> None:
 
 def _run(
     *,
-    download_dir: Optional[Path],
+    download_dir: Path | None,
     timeout_s: float,
     poll_interval_s: float,
     stable_checks: int,
@@ -96,7 +96,7 @@ def register(browser_app: typer.Typer) -> None:
 
     @browser_app.command(name="download-tracking")
     def download_tracking(
-        download_dir: Optional[Path] = typer.Option(
+        download_dir: Path | None = typer.Option(
             None,
             "--download-dir",
             help=(
@@ -132,7 +132,7 @@ def register(browser_app: typer.Typer) -> None:
 def _autoregister() -> None:  # pragma: no cover
     try:
         import thomas.cli.commands.browser as browser_pkg  # type: ignore
-    except Exception:
+    except ImportError:
         return
 
     for attr in ("app", "browser_app"):
@@ -140,7 +140,7 @@ def _autoregister() -> None:  # pragma: no cover
         if isinstance(maybe, typer.Typer):
             try:
                 register(maybe)
-            except Exception:
+            except ImportError:
                 # Avoid hard failures during import; explicit registration (if used)
                 # will surface issues deterministically.
                 return
@@ -168,7 +168,7 @@ def _build_standalone_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_standalone_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
 

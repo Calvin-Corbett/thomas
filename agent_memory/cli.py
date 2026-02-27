@@ -1,17 +1,26 @@
 from __future__ import annotations
+
 import argparse
-from pathlib import Path
 import json
+from pathlib import Path
 
 from agent_memory.app import AgentMemoryApp
-from agent_memory.runtime import init_runtime
-from agent_memory.rerank.tier2 import Tier2Reranker, Tier2Config
-from agent_memory.rerank.train import train_linear_from_traces, TrainConfig
 from agent_memory.eval.suite import run_all
+from agent_memory.rerank.tier2 import Tier2Config, Tier2Reranker
+from agent_memory.runtime import init_runtime
+
+
+def _require_non_empty(value, flag_name: str) -> str:
+    text = str(value or "").strip()
+    if not text:
+        raise ValueError(f"Missing required argument: {flag_name}")
+    return text
+
 
 def cmd_init(args):
     _ = init_runtime(Path(args.root))
     print("ok")
+
 
 def cmd_log(args):
     app = AgentMemoryApp(Path(args.root))
@@ -20,6 +29,7 @@ def cmd_log(args):
         print(eid)
     finally:
         app.close()
+
 
 def cmd_query(args):
     app = AgentMemoryApp(Path(args.root))
@@ -32,7 +42,14 @@ def cmd_query(args):
     finally:
         app.close()
 
+
 def cmd_pin(args):
+    if args.action == "add":
+        _require_non_empty(args.key, "--key")
+        _require_non_empty(args.text, "--text")
+    elif args.action == "rm":
+        _require_non_empty(args.key, "--key")
+
     app = AgentMemoryApp(Path(args.root))
     try:
         if args.action == "add":
@@ -46,7 +63,12 @@ def cmd_pin(args):
     finally:
         app.close()
 
+
 def cmd_lex(args):
+    if args.action == "add":
+        _require_non_empty(args.phrase, "--phrase")
+        _require_non_empty(args.meaning, "--meaning")
+
     app = AgentMemoryApp(Path(args.root))
     try:
         if args.action == "add":
@@ -58,6 +80,7 @@ def cmd_lex(args):
     finally:
         app.close()
 
+
 def cmd_nightly(args):
     app = AgentMemoryApp(Path(args.root))
     try:
@@ -65,6 +88,7 @@ def cmd_nightly(args):
         print(build)
     finally:
         app.close()
+
 
 def cmd_compact(args):
     app = AgentMemoryApp(Path(args.root))
@@ -74,7 +98,13 @@ def cmd_compact(args):
     finally:
         app.close()
 
+
 def cmd_train(args):
+    try:
+        from agent_memory.rerank.train import TrainConfig, train_linear_from_traces
+    except Exception as exc:  # pragma: no cover - exercised by CLI error paths
+        raise RuntimeError("Training requires optional dependencies. Install with: pip install .[train]") from exc
+
     app = AgentMemoryApp(Path(args.root))
     try:
         t2 = Tier2Reranker(Tier2Config(enabled=True), root_dir=app.rt.paths.root)
@@ -82,6 +112,7 @@ def cmd_train(args):
         print(json.dumps({"trained": bool(w), "weights": w}, indent=2))
     finally:
         app.close()
+
 
 def cmd_eval(args):
     app = AgentMemoryApp(Path(args.root))
@@ -94,6 +125,7 @@ def cmd_eval(args):
         print("ALL_PASS" if passed else "SOME_FAIL")
     finally:
         app.close()
+
 
 def build_parser():
     p = argparse.ArgumentParser(prog="agent_memory")
@@ -151,10 +183,12 @@ def build_parser():
 
     return p
 
+
 def main():
     p = build_parser()
     args = p.parse_args()
     args.func(args)
+
 
 if __name__ == "__main__":
     main()

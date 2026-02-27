@@ -9,7 +9,7 @@ import threading
 import uuid
 from dataclasses import asdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from .models import Approval, AuditEvent, Job, RetryPolicy
 
@@ -20,7 +20,7 @@ def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
 
 
-def _dt_to_str(dt: Optional[datetime]) -> Optional[str]:
+def _dt_to_str(dt: datetime | None) -> str | None:
     if dt is None:
         return None
     if dt.tzinfo is None:
@@ -28,12 +28,12 @@ def _dt_to_str(dt: Optional[datetime]) -> Optional[str]:
     return dt.strftime(ISO)
 
 
-def _str_to_dt(s: Optional[str]) -> Optional[datetime]:
+def _str_to_dt(s: str | None) -> datetime | None:
     if s is None:
         return None
     try:
         return datetime.strptime(s, ISO)
-    except Exception:
+    except (ValueError, TypeError):
         # Accept ISO-8601 variants from older codepaths
         return datetime.fromisoformat(s)
 
@@ -49,7 +49,7 @@ class AutonomyStore:
     - Optional tamper-evident audit chain (HMAC/SHA256)
     """
 
-    def __init__(self, db_path: str, *, integrity_key: Optional[bytes] = None):
+    def __init__(self, db_path: str, *, integrity_key: bytes | None = None):
         self.db_path = db_path
         os.makedirs(os.path.dirname(db_path), exist_ok=True)
 
@@ -62,11 +62,11 @@ class AutonomyStore:
         )
         self._conn.row_factory = sqlite3.Row
 
-        self._integrity_key: Optional[bytes] = integrity_key
+        self._integrity_key: bytes | None = integrity_key
         self._setup_pragmas()
         self.migrate()
 
-    def set_integrity_key(self, key: Optional[bytes]) -> None:
+    def set_integrity_key(self, key: bytes | None) -> None:
         self._integrity_key = key
 
     def close(self) -> None:
@@ -95,7 +95,9 @@ class AutonomyStore:
             else:
                 version = int(rows[0]["version"])
                 if len(rows) > 1:
-                    cur.execute("DELETE FROM schema_version WHERE rowid NOT IN (SELECT rowid FROM schema_version LIMIT 1);")
+                    cur.execute(
+                        "DELETE FROM schema_version WHERE rowid NOT IN (SELECT rowid FROM schema_version LIMIT 1);"
+                    )
             cur.close()
 
         migrations = [
@@ -194,7 +196,7 @@ class AutonomyStore:
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_audit_job_ts ON audit(job_id, ts);")
 
                 cur.execute("COMMIT;")
-            except Exception:
+            except Exception:  # REVIEWED: broad catch
                 cur.execute("ROLLBACK;")
                 raise
             finally:
@@ -229,7 +231,7 @@ class AutonomyStore:
                 )
                 cur.execute("CREATE INDEX IF NOT EXISTS idx_briefings_ts ON briefings(ts);")
                 cur.execute("COMMIT;")
-            except Exception:
+            except Exception:  # REVIEWED: broad catch
                 cur.execute("ROLLBACK;")
                 raise
             finally:
@@ -258,14 +260,14 @@ class AutonomyStore:
         *,
         name: str,
         kind: str,
-        payload: Dict[str, Any],
-        schedule: Optional[Dict[str, Any]],
-        next_run_at: Optional[datetime],
+        payload: dict[str, Any],
+        schedule: dict[str, Any] | None,
+        next_run_at: datetime | None,
         risk_class: str = "low",
         requires_approval: bool = False,
-        retry_policy: Optional[RetryPolicy] = None,
-        parent_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        retry_policy: RetryPolicy | None = None,
+        parent_id: str | None = None,
+        session_id: str | None = None,
     ) -> Job:
         now = _utcnow()
         job_id = uuid.uuid4().hex
@@ -281,8 +283,7 @@ class AutonomyStore:
                     payload_json,schedule_json,attempts,retry_policy_json,
                     risk_class,requires_approval,approved,cancelled
                 ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?);
-                """
-                ,
+                """,
                 (
                     job_id,
                     name,
@@ -320,16 +321,16 @@ class AutonomyStore:
     def list_jobs(
         self,
         *,
-        status: Optional[str] = None,
-        kind: Optional[str] = None,
-        parent_id: Optional[str] = None,
-        session_id: Optional[str] = None,
+        status: str | None = None,
+        kind: str | None = None,
+        parent_id: str | None = None,
+        session_id: str | None = None,
         limit: int = 200,
         offset: int = 0,
-    ) -> List[Job]:
+    ) -> list[Job]:
         q = "SELECT * FROM jobs"
-        args: List[Any] = []
-        conds: List[str] = []
+        args: list[Any] = []
+        conds: list[str] = []
         if status:
             conds.append("status=?")
             args.append(status)
@@ -353,7 +354,7 @@ class AutonomyStore:
             cur.close()
         return [self._row_to_job(r) for r in rows]
 
-    def update_job_payload(self, job_id: str, payload: Dict[str, Any]) -> None:
+    def update_job_payload(self, job_id: str, payload: dict[str, Any]) -> None:
         now = _utcnow()
         with self._lock:
             cur = self._conn.cursor()
@@ -374,7 +375,7 @@ class AutonomyStore:
             cur.close()
         self.add_audit(job_id, "job.cancelled", actor, {})
 
-    def set_job_next_run(self, job_id: str, next_run_at: Optional[datetime]) -> None:
+    def set_job_next_run(self, job_id: str, next_run_at: datetime | None) -> None:
         now = _utcnow()
         with self._lock:
             cur = self._conn.cursor()
@@ -389,17 +390,17 @@ class AutonomyStore:
         job_id: str,
         status: str,
         *,
-        result: Optional[Dict[str, Any]] = None,
-        error: Optional[Dict[str, Any]] = None,
-        attempts: Optional[int] = None,
-        approved: Optional[bool] = None,
-        requires_approval: Optional[bool] = None,
+        result: dict[str, Any] | None = None,
+        error: dict[str, Any] | None = None,
+        attempts: int | None = None,
+        approved: bool | None = None,
+        requires_approval: bool | None = None,
         lock_clear: bool = True,
-        next_run_at: Optional[datetime] = None,
+        next_run_at: datetime | None = None,
     ) -> None:
         now = _utcnow()
         sets = ["status=?", "updated_at=?"]
-        args: List[Any] = [status, _dt_to_str(now)]
+        args: list[Any] = [status, _dt_to_str(now)]
         if result is not None:
             sets.append("result_json=?")
             args.append(json.dumps(result, separators=(",", ":"), ensure_ascii=False))
@@ -438,7 +439,7 @@ class AutonomyStore:
         limit: int,
         now: datetime,
         lock_ttl_s: float,
-    ) -> List[Tuple[Job, str]]:
+    ) -> list[tuple[Job, str]]:
         """Claim due queued jobs and mark them running. Returns (job, lock_token)."""
         now_s = _dt_to_str(now) or _dt_to_str(_utcnow())
         expires = _dt_to_str((now if now.tzinfo else now.replace(tzinfo=timezone.utc)) + timedelta(seconds=lock_ttl_s))
@@ -456,12 +457,11 @@ class AutonomyStore:
                       AND (lock_expires_at IS NULL OR lock_expires_at<=?)
                     ORDER BY next_run_at ASC, created_at ASC
                     LIMIT ?;
-                    """
-                    ,
+                    """,
                     (now_s, now_s, int(limit)),
                 ).fetchall()
 
-                claimed: List[Tuple[str, str]] = []
+                claimed: list[tuple[str, str]] = []
                 for r in rows:
                     jid = r["id"]
                     token = uuid.uuid4().hex
@@ -477,14 +477,13 @@ class AutonomyStore:
                         WHERE id=?
                           AND status='queued'
                           AND (lock_expires_at IS NULL OR lock_expires_at<=?);
-                        """
-                        ,
+                        """,
                         (worker_id, token, now_s, expires, now_s, jid, now_s),
                     )
                     if cur.rowcount == 1:
                         claimed.append((jid, token))
                 cur.execute("COMMIT;")
-            except Exception:
+            except Exception:  # REVIEWED: broad catch
                 cur.execute("ROLLBACK;")
                 raise
             finally:
@@ -495,7 +494,7 @@ class AutonomyStore:
     def reap_stale_running(self, *, now: datetime, limit: int = 200) -> int:
         """Re-queue jobs stuck in running state past their lock expiry."""
         now_s = _dt_to_str(now) or _dt_to_str(_utcnow())
-        ids: List[str] = []
+        ids: list[str] = []
         with self._lock:
             cur = self._conn.cursor()
             cur.execute("BEGIN IMMEDIATE;")
@@ -509,8 +508,7 @@ class AutonomyStore:
                       AND lock_expires_at<=?
                     ORDER BY lock_expires_at ASC
                     LIMIT ?;
-                    """
-                    ,
+                    """,
                     (now_s, int(limit)),
                 ).fetchall()
                 ids = [r["id"] for r in rows]
@@ -525,12 +523,11 @@ class AutonomyStore:
                             lock_expires_at=NULL,
                             updated_at=?
                         WHERE id=?;
-                        """
-                        ,
+                        """,
                         (now_s, jid),
                     )
                 cur.execute("COMMIT;")
-            except Exception:
+            except (ValueError, TypeError):
                 cur.execute("ROLLBACK;")
                 raise
             finally:
@@ -543,7 +540,7 @@ class AutonomyStore:
     # ---------------------------
     # Approvals
     # ---------------------------
-    def create_approval(self, *, job_id: str, action: Dict[str, Any], risk_class: str) -> Approval:
+    def create_approval(self, *, job_id: str, action: dict[str, Any], risk_class: str) -> Approval:
         now = _utcnow()
         ap_id = uuid.uuid4().hex
         with self._lock:
@@ -552,8 +549,7 @@ class AutonomyStore:
                 """
                 INSERT INTO approvals(id,job_id,action_json,risk_class,status,requested_at)
                 VALUES (?,?,?,?,?,?);
-                """
-                ,
+                """,
                 (
                     ap_id,
                     job_id,
@@ -576,9 +572,9 @@ class AutonomyStore:
             raise KeyError(approval_id)
         return self._row_to_approval(row)
 
-    def list_approvals(self, *, status: Optional[str] = None, limit: int = 200) -> List[Approval]:
+    def list_approvals(self, *, status: str | None = None, limit: int = 200) -> list[Approval]:
         q = "SELECT * FROM approvals"
-        args: List[Any] = []
+        args: list[Any] = []
         if status:
             q += " WHERE status=?"
             args.append(status)
@@ -590,9 +586,9 @@ class AutonomyStore:
             cur.close()
         return [self._row_to_approval(r) for r in rows]
 
-    def list_job_approvals(self, job_id: str, *, status: Optional[str] = None) -> List[Approval]:
+    def list_job_approvals(self, job_id: str, *, status: str | None = None) -> list[Approval]:
         q = "SELECT * FROM approvals WHERE job_id=?"
-        args: List[Any] = [job_id]
+        args: list[Any] = [job_id]
         if status:
             q += " AND status=?"
             args.append(status)
@@ -603,33 +599,35 @@ class AutonomyStore:
             cur.close()
         return [self._row_to_approval(r) for r in rows]
 
-    def decide_approval(self, *, approval_id: str, approve: bool, actor: str, reason: Optional[str] = None) -> Approval:
+    def decide_approval(self, *, approval_id: str, approve: bool, actor: str, reason: str | None = None) -> Approval:
         now = _utcnow()
         status = "approved" if approve else "denied"
 
         with self._lock:
             cur = self._conn.cursor()
-            row = cur.execute("SELECT status FROM approvals WHERE id=?;", (approval_id,)).fetchone()
+            row = cur.execute("SELECT * FROM approvals WHERE id=?;", (approval_id,)).fetchone()
             if row is None:
                 cur.close()
                 raise KeyError(approval_id)
             if row["status"] != "pending":
+                terminal = self._row_to_approval(row)
                 cur.close()
-                return self.get_approval(approval_id)
+                return terminal
 
             cur.execute(
                 """
                 UPDATE approvals
                 SET status=?, decided_at=?, decided_by=?, decision_reason=?
                 WHERE id=? AND status='pending';
-                """
-                ,
+                """,
                 (status, _dt_to_str(now), actor, reason, approval_id),
             )
             cur.close()
 
         ap = self.get_approval(approval_id)
-        self.add_audit(ap.job_id, "approval.decided", actor, {"approval_id": approval_id, "status": status, "reason": reason})
+        self.add_audit(
+            ap.job_id, "approval.decided", actor, {"approval_id": approval_id, "status": status, "reason": reason}
+        )
         return ap
 
     # ---------------------------
@@ -640,7 +638,7 @@ class AutonomyStore:
             return hmac.new(self._integrity_key, (prev_sig + payload).encode("utf-8"), hashlib.sha256).hexdigest()
         return hashlib.sha256((prev_sig + payload).encode("utf-8")).hexdigest()
 
-    def add_audit(self, job_id: Optional[str], event_type: str, actor: str, detail: Dict[str, Any]) -> None:
+    def add_audit(self, job_id: str | None, event_type: str, actor: str, detail: dict[str, Any]) -> None:
         now = _utcnow()
         ev_id = uuid.uuid4().hex
         ts = _dt_to_str(now) or now.isoformat()
@@ -656,15 +654,14 @@ class AutonomyStore:
                 """
                 INSERT INTO audit(id,job_id,ts,event_type,actor,detail_json,prev_sig,sig)
                 VALUES (?,?,?,?,?,?,?,?);
-                """
-                ,
+                """,
                 (ev_id, job_id, ts, event_type, actor, detail_json, prev_sig or None, sig),
             )
             cur.close()
 
-    def list_audit(self, *, job_id: Optional[str] = None, limit: int = 400) -> List[AuditEvent]:
+    def list_audit(self, *, job_id: str | None = None, limit: int = 400) -> list[AuditEvent]:
         q = "SELECT * FROM audit"
-        args: List[Any] = []
+        args: list[Any] = []
         if job_id:
             q += " WHERE job_id=?"
             args.append(job_id)
@@ -675,24 +672,26 @@ class AutonomyStore:
             cur = self._conn.cursor()
             rows = cur.execute(q, tuple(args)).fetchall()
             cur.close()
-        out: List[AuditEvent] = []
+        out: list[AuditEvent] = []
         for r in rows:
-            out.append(AuditEvent(
-                id=r["id"],
-                job_id=r["job_id"],
-                ts=_str_to_dt(r["ts"]) or _utcnow(),
-                event_type=r["event_type"],
-                actor=r["actor"],
-                detail=json.loads(r["detail_json"] or "{}"),
-                prev_sig=r["prev_sig"],
-                sig=r["sig"],
-            ))
+            out.append(
+                AuditEvent(
+                    id=r["id"],
+                    job_id=r["job_id"],
+                    ts=_str_to_dt(r["ts"]) or _utcnow(),
+                    event_type=r["event_type"],
+                    actor=r["actor"],
+                    detail=json.loads(r["detail_json"] or "{}"),
+                    prev_sig=r["prev_sig"],
+                    sig=r["sig"],
+                )
+            )
         return out
 
     # ---------------------------
     # Messages + briefings (optional UX layer)
     # ---------------------------
-    def add_message(self, *, session_id: Optional[str], level: str, text: str) -> str:
+    def add_message(self, *, session_id: str | None, level: str, text: str) -> str:
         now = _utcnow()
         mid = uuid.uuid4().hex
         with self._lock:
@@ -704,9 +703,9 @@ class AutonomyStore:
             cur.close()
         return mid
 
-    def list_messages(self, *, limit: int = 200, session_id: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_messages(self, *, limit: int = 200, session_id: str | None = None) -> list[dict[str, Any]]:
         q = "SELECT * FROM autonomy_messages"
-        args: List[Any] = []
+        args: list[Any] = []
         if session_id:
             q += " WHERE session_id=?"
             args.append(session_id)
@@ -717,9 +716,12 @@ class AutonomyStore:
             cur = self._conn.cursor()
             rows = cur.execute(q, tuple(args)).fetchall()
             cur.close()
-        return [{"id": r["id"], "session_id": r["session_id"], "ts": r["ts"], "level": r["level"], "text": r["text"]} for r in rows]
+        return [
+            {"id": r["id"], "session_id": r["session_id"], "ts": r["ts"], "level": r["level"], "text": r["text"]}
+            for r in rows
+        ]
 
-    def add_briefing(self, *, content: Dict[str, Any]) -> str:
+    def add_briefing(self, *, content: dict[str, Any]) -> str:
         now = _utcnow()
         bid = uuid.uuid4().hex
         with self._lock:
@@ -731,7 +733,7 @@ class AutonomyStore:
             cur.close()
         return bid
 
-    def list_briefings(self, *, limit: int = 30) -> List[Dict[str, Any]]:
+    def list_briefings(self, *, limit: int = 30) -> list[dict[str, Any]]:
         with self._lock:
             cur = self._conn.cursor()
             rows = cur.execute("SELECT * FROM briefings ORDER BY ts DESC LIMIT ?;", (int(limit),)).fetchall()

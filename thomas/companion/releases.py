@@ -25,7 +25,7 @@ def _safe_key(text: str) -> str:
 def _semver_gt(left: str, right: str) -> bool:
     try:
         return parse_semver_tuple(left) > parse_semver_tuple(right)
-    except Exception:
+    except ImportError:
         return False
 
 
@@ -43,7 +43,7 @@ def _normalize_text_list(value: Any) -> list[str]:
 def _clamp_rollout_pct(value: Any) -> int:
     try:
         n = int(value)
-    except Exception:
+    except (ValueError, TypeError):
         n = 100
     return max(0, min(100, n))
 
@@ -51,7 +51,7 @@ def _clamp_rollout_pct(value: Any) -> int:
 def _nonneg_int(value: Any, *, default: int = 0) -> int:
     try:
         n = int(value)
-    except Exception:
+    except (ValueError, TypeError):
         n = int(default)
     return max(0, n)
 
@@ -78,7 +78,7 @@ def _app_version_gte(actual: str, minimum: str) -> bool:
 
 
 def _rollout_bucket(release_id: str, device_id: str) -> int:
-    key = f"{release_id}:{device_id}".encode("utf-8")
+    key = f"{release_id}:{device_id}".encode()
     digest = hashlib.sha256(key).hexdigest()
     return int(digest[:8], 16) % 100
 
@@ -110,7 +110,7 @@ class ReleaseRecord:
     compliance_checked_at: str
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ReleaseRecord":
+    def from_dict(cls, data: dict[str, Any]) -> ReleaseRecord:
         return cls(
             release_id=str(data.get("release_id") or ""),
             channel=str(data.get("channel") or "stable"),
@@ -174,7 +174,7 @@ class ReleaseRegistry:
         path = self.kernel.paths.releases_file
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except json.JSONDecodeError:
             payload = {"schema_version": 1, "releases": {}}
         if not isinstance(payload, dict):
             payload = {"schema_version": 1, "releases": {}}
@@ -279,7 +279,7 @@ class ReleaseRegistry:
             "created_at": now,
             "bundle_id": manifest.bundle_id,
             "bundle_dir": str(bundle_dir.resolve()),
-            "manifest_path": str((bundle_dir.resolve() / "manifest.json")),
+            "manifest_path": str(bundle_dir.resolve() / "manifest.json"),
             "module_id": module.module_id,
             "module_version": module.version,
             "min_kernel_version": manifest.min_kernel_version,

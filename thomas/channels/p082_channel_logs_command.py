@@ -12,11 +12,10 @@ from __future__ import annotations
 
 import json
 import os
-from collections import deque
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional
-
+from typing import Any
 
 # ---------------------------
 # Contracts
@@ -81,7 +80,7 @@ class ChannelLogsError(RuntimeError):
 
     code: str = "channel_logs_error"
 
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.details: dict[str, Any] = dict(details or {})
 
@@ -292,7 +291,7 @@ def _newest_log_in_dir(d: Path) -> Path | None:
             return None
         candidates.sort(key=lambda p: p.stat().st_mtime, reverse=True)
         return candidates[0]
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return None
 
 
@@ -334,7 +333,7 @@ def _log_path_from_config_file(config_path: Path) -> str | None:
         if isinstance(data, Mapping):
             return _log_path_from_mapping(data)
         return None
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         # Best-effort; do not raise.
         return None
 
@@ -412,7 +411,7 @@ def _maybe_parse_json(line: str) -> Mapping[str, Any] | None:
     try:
         data = json.loads(line)
         return data if isinstance(data, Mapping) else None
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return None
 
 

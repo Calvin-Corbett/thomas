@@ -31,6 +31,12 @@ class _WorkflowChatAdapter:
             return {"output": "worker-done", "summary": "worker-summary"}
         if "orchestrator that merges worker outputs" in system_prompt:
             return {"final_output": "merged", "rationale": "ok"}
+        if "You are the coding worker." in system_prompt:
+            return {"code": "def solve():\n    return 1", "rationale": "draft"}
+        if "You are a strict code reviewer." in system_prompt:
+            return {"pass": True, "issues": [], "summary": "ok"}
+        if "You are a coding fixer." in system_prompt:
+            return {"revised_code": "def solve():\n    return 1", "change_summary": "none"}
         if "workflow chain worker" in system_prompt:
             return {"output": "step-done", "summary": "step-summary"}
         return {"output": "ok", "summary": "ok"}
@@ -136,3 +142,31 @@ class TestAutonomyEngineWorkflow(unittest.IsolatedAsyncioTestCase):
         self.assertIn("workflow_compile", result)
         workers = result.get("workers") or []
         self.assertGreaterEqual(len(workers), 1)
+
+    async def test_workflow_task_max_coding_routes_to_coding_pipeline(self):
+        job = self.store.create_job(
+            name="workflow max coding",
+            kind="workflow_task",
+            payload={
+                "goal": "Fix bug in app.py and add tests",
+                "mode": "thinking",
+                "token_economy": "max",
+            },
+            schedule=None,
+            next_run_at=datetime.now(timezone.utc),
+            risk_class="low",
+        )
+        self.engine.wake_up()
+        for _ in range(80):
+            current = self.store.get_job(job.id)
+            if current.status in ("succeeded", "failed", "dead", "cancelled"):
+                break
+            await asyncio.sleep(0.05)
+        done = self.store.get_job(job.id)
+        self.assertEqual(done.status, "succeeded")
+        result = done.result or {}
+        self.assertEqual(result.get("pattern"), "coding_pipeline")
+        mode_policy = result.get("workflow_mode_policy") or {}
+        self.assertTrue(bool(mode_policy.get("applied")))
+        self.assertEqual(str(mode_policy.get("effective_workflow") or ""), "coding_pipeline")
+        self.assertEqual(str(mode_policy.get("task_class") or ""), "coding")

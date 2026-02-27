@@ -15,7 +15,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
 from thomas.preferences.api import router as preferences_router
-from thomas.preferences.store import PreferencesStore
+from thomas.preferences.store import PreferencesStore, ProfilePrefs, profile_prefers_non_coder_mode
 
 
 @pytest.fixture()
@@ -42,6 +42,8 @@ def test_defaults(tmp_db):
     assert data["appearance"]["font_size"] == 16
     assert data["appearance"]["bubble_style"] == "rounded"
     assert data["memory"]["enabled_global"] is True
+    assert data["profile"]["profile_type"] == "adaptive"
+    assert data["profile"]["review_depth"] == "adaptive"
     assert data["api_keys"]["openai"] is None
 
 
@@ -62,6 +64,77 @@ def test_patch_partial_does_not_wipe(tmp_db):
     assert r.json()["appearance"]["theme"] == "dark"
     assert r.json()["appearance"]["font_size"] == 18
     assert r.json()["appearance"]["bubble_style"] == "compact"
+
+
+def test_profile_type_roundtrip_and_alias_normalization(tmp_db):
+    app = make_app()
+    c = TestClient(app)
+
+    r = c.patch("/api/preferences", json={"profile": {"profile_type": "non-coder"}})
+    assert r.status_code == 200
+    assert r.json()["profile"]["profile_type"] == "non_coder"
+
+    r = c.patch("/api/preferences", json={"profile": {"profile_type": "coder"}})
+    assert r.status_code == 200
+    assert r.json()["profile"]["profile_type"] == "coder"
+
+    r = c.patch("/api/preferences", json={"profile": {"profile_type": "unknown-value"}})
+    assert r.status_code == 200
+    assert r.json()["profile"]["profile_type"] == "adaptive"
+
+
+def test_profile_review_depth_roundtrip_and_alias_normalization(tmp_db):
+    app = make_app()
+    c = TestClient(app)
+
+    r = c.patch("/api/preferences", json={"profile": {"review_depth": "simplified"}})
+    assert r.status_code == 200
+    assert r.json()["profile"]["review_depth"] == "simple"
+
+    r = c.patch("/api/preferences", json={"profile": {"review_depth": "technical"}})
+    assert r.status_code == 200
+    assert r.json()["profile"]["review_depth"] == "technical"
+
+    r = c.patch("/api/preferences", json={"profile": {"review_depth": "unknown-value"}})
+    assert r.status_code == 200
+    assert r.json()["profile"]["review_depth"] == "adaptive"
+
+
+def test_non_coder_profile_forces_strict_quality_runtime_flags(tmp_db):
+    app = make_app()
+    c = TestClient(app)
+
+    r = c.patch(
+        "/api/preferences",
+        json={
+            "profile": {"profile_type": "non_coder"},
+            "advanced": {
+                "runtime": {
+                    "quality_enforce": False,
+                    "quality_require_verification_for_coding": False,
+                    "quality_require_tests_for_code_edits": False,
+                    "quality_require_monolith_guard_for_coding": False,
+                }
+            },
+        },
+    )
+    assert r.status_code == 200
+    runtime = r.json()["advanced"]["runtime"]
+    assert runtime["quality_enforce"] is True
+    assert runtime["quality_require_verification_for_coding"] is True
+    assert runtime["quality_require_tests_for_code_edits"] is True
+    assert runtime["quality_require_monolith_guard_for_coding"] is True
+
+    # Strict values remain locked while profile_type is non_coder.
+    r = c.patch("/api/preferences", json={"advanced": {"runtime": {"quality_enforce": False}}})
+    assert r.status_code == 200
+    assert r.json()["advanced"]["runtime"]["quality_enforce"] is True
+
+
+def test_profile_type_helper_uses_onboarding_fallback():
+    profile = ProfilePrefs(profile_type="adaptive")
+    assert profile_prefers_non_coder_mode(profile, onboarding_answers={"experience": "new"}) is True
+    assert profile_prefers_non_coder_mode(profile, onboarding_answers={"experience": "expert"}) is False
 
 
 def test_thread_memory_override(tmp_db):
@@ -157,7 +230,14 @@ def test_onboarding_patch_roundtrip(tmp_db):
 
     clear = c.patch(
         "/api/preferences",
-        json={"onboarding": {"dismissed_at": None, "connection_method": None, "dependency_plan": None, "current_step": None}},
+        json={
+            "onboarding": {
+                "dismissed_at": None,
+                "connection_method": None,
+                "dependency_plan": None,
+                "current_step": None,
+            }
+        },
     )
     assert clear.status_code == 200
     assert clear.json()["onboarding"]["dismissed_at"] is None

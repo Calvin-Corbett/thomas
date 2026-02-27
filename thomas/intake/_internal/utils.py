@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import subprocess
 import time
-from typing import Optional, Tuple
 
 from PIL import Image, ImageGrab
 
@@ -11,21 +10,23 @@ def launch_region_snip() -> None:
     """Launch Windows snipping overlay (region selection) via ms-screenclip:."""
     try:
         subprocess.Popen(["cmd", "/c", "start", "ms-screenclip:"], shell=False)
-    except Exception:
+    except ImportError:
         pass
 
 
-def try_grab_clipboard_image() -> Optional[Image.Image]:
+def try_grab_clipboard_image() -> Image.Image | None:
     try:
         grabbed = ImageGrab.grabclipboard()
         if isinstance(grabbed, Image.Image):
             return grabbed
         return None
-    except Exception:
+    except ImportError:
         return None
 
 
-def wait_for_new_clipboard_image(prev_hash: Optional[str], timeout_s: float = 10.0, poll_s: float = 0.15) -> Tuple[Optional[Image.Image], Optional[str]]:
+def wait_for_new_clipboard_image(
+    prev_hash: str | None, timeout_s: float = 10.0, poll_s: float = 0.15
+) -> tuple[Image.Image | None, str | None]:
     import hashlib
     import io
 

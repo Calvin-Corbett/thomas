@@ -1,16 +1,14 @@
-"""Intent routing policy for token-efficient, high-quality replies.
+"""Intent routing for token-efficient, high-quality replies.
 
-This module provides a lightweight flowchart-like router:
-- classify the user's latest message into an intent path
-- choose response/tool/memory policies per path
-- keep expensive context for coding/debug turns only
+Classifies user messages into intent paths, choosing response/tool/memory
+policies per path. Context-aware: accepts prior route hints and follow-up
+signals to avoid misclassification.
 """
 
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, asdict
-from typing import Dict, List, Tuple
+from dataclasses import asdict, dataclass
 
 PATH_CASUAL = "casual_chat"
 PATH_PERSONAL = "personal_context"
@@ -21,99 +19,68 @@ PATH_RESEARCH = "research"
 PATH_META = "assistant_meta"
 PATH_GENERAL = "general"
 
+# ── Signal Detection Patterns ────────────────────────────────
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_./:\\-]+")
-_PATHY_RE = re.compile(r"[A-Za-z]:\\|/|\\\\|\\.(py|ts|js|go|rs|toml|json|md)\\b", re.I)
+_PATHY_RE = re.compile(r"[A-Za-z]:\\|/[\w.-]+/|\\\\|\.(?:py|ts|js|go|rs|toml|json|md)\b", re.I)
 _STACK_RE = re.compile(r"\b(traceback|stack trace|exception|error:|failed|failure)\b", re.I)
 _LIVENESS_RE = re.compile(
-    r"\b(are you (there|working|alive)|you there|still there|ping|status check)\b",
+    r"\b(are you (?:there|working|alive)|you there|still there|ping|status check)\b",
     re.I,
 )
 _INTEGRATION_RE = re.compile(
-    r"\b(telegram|discord|slack|whatsapp|botfather|webhook|oauth|integration|integrate|chat bot|bot)\b",
+    r"\b(telegram|discord|slack|whatsapp|webhook|oauth|integration|integrate)\b",
     re.I,
 )
-_SETUP_RE = re.compile(
-    r"\b(set ?up|setup|configure|configuration|config|connect|wire up)\b",
+_SETUP_RE = re.compile(r"\b(set ?up|setup|configure|configuration|config|connect|wire up)\b", re.I)
+_TROUBLESHOOT_RE = re.compile(r"\b(not working|broken|crash|failing|issue|problem)\b", re.I)
+
+# Code-context words — "fix" only boosts coding when near these
+_CODE_CONTEXT_RE = re.compile(
+    r"\b(bug|code|function|class|file|module|import|syntax|error|test|repo|commit|"
+    r"api|endpoint|server|database|query|variable|method|script)\b",
     re.I,
 )
-_TROUBLESHOOT_RE = re.compile(
-    r"\b("
-    r"not working|"
-    r"broken|"
-    r"reset(?:s|ting)?|"
-    r"settings?\s+(?:reset|saving|persist|stick)|"
-    r"restart|"
-    r"crash|"
-    r"failing|"
-    r"issue|"
-    r"problem"
-    r")\b",
-    re.I,
-)
-_EXECUTION_PREFERENCE_RE = re.compile(
-    r"\b(i want|don't want|do not want|want thomas to|want you to)\b.*\b(program|code|build|fix|implement)\b",
-    re.I,
-)
+_FIX_RE = re.compile(r"\b(fix|patch|repair)\b", re.I)
+
 _BEHAVIOR_FEEDBACK_RE = re.compile(
-    r"\b("
-    r"how you talk|"
-    r"how you speak|"
-    r"person skills|"
-    r"too robotic|"
-    r"sound robotic|"
-    r"assistant style|"
-    r"conversation style|"
-    r"talk better|"
-    r"less robotic|"
-    r"be more human"
-    r")\b",
+    r"\b(how you talk|how you speak|too robotic|sound robotic|talk better|"
+    r"less robotic|be more human|conversation style|person skills|"
+    r"you('re| are) (dumb|stupid|confusing|annoying|bad at)|"
+    r"talking to you (sucks|is bad|is hard))\b",
     re.I,
 )
 _FRUSTRATION_RE = re.compile(
-    r"\b("
-    r"frustrat(?:ed|ing)?|"
-    r"annoy(?:ed|ing)?|"
-    r"upset|"
-    r"this sucks|"
-    r"not working|"
-    r"you keep|"
-    r"you always|"
-    r"why do you"
-    r")\b",
+    r"\b(frustrat\w*|annoy\w*|upset|this sucks|you keep|you always|why do you)\b",
     re.I,
 )
 _NO_EXECUTION_RE = re.compile(
-    r"\b("
-    r"no task|"
-    r"did not give (you )?a task|"
-    r"didn'?t give (you )?a task|"
-    r"have not given (you )?a task|"
-    r"haven'?t given (you )?a task|"
-    r"we never (even )?started (a )?coding task|"
-    r"not asking (you )?to code|"
-    r"continue talking|"
-    r"just talking|"
-    r"just chat(?:ting)?|"
-    r"conversation mode"
-    r")\b",
+    r"\b(no task|didn'?t give (?:you )?a task|not asking (?:you )?to code|"
+    r"just talking|just chat(?:ting)?|conversation mode|continue talking)\b",
+    re.I,
+)
+_EXECUTION_PREFERENCE_RE = re.compile(
+    r"\b(i want|want you to)\b.*\b(program|code|build|implement)\b",
     re.I,
 )
 
 
 @dataclass(frozen=True)
 class RouteDecision:
+    """Result of intent classification."""
+
     path: str
     confidence: float
-    reasons: List[str]
+    reasons: list[str]
     mode: str
     tools_policy: str
     include_purpose: bool
     memory_include_global: bool
     memory_include_profile: bool
     memory_budget_tokens: int
+    is_followup: bool = False
 
-    def to_dict(self) -> Dict[str, object]:
+    def to_dict(self) -> dict[str, object]:
         return asdict(self)
 
 
@@ -127,22 +94,25 @@ class _PathPolicy:
     memory_budget_tokens: int
 
 
-_POLICY: Dict[str, _PathPolicy] = {
+# Tools policy: "auto" = use tools based on model decision
+# Previously casual/personal/meta had "never" — now "auto" so
+# Thomas can still answer factual questions in casual mode
+_POLICY: dict[str, _PathPolicy] = {
     PATH_CASUAL: _PathPolicy(
         mode="auto",
-        tools_policy="never",
+        tools_policy="auto",
         include_purpose=False,
         memory_include_global=False,
         memory_include_profile=True,
-        memory_budget_tokens=480,
+        memory_budget_tokens=800,
     ),
     PATH_PERSONAL: _PathPolicy(
         mode="auto",
-        tools_policy="never",
+        tools_policy="auto",
         include_purpose=False,
         memory_include_global=False,
         memory_include_profile=True,
-        memory_budget_tokens=700,
+        memory_budget_tokens=800,
     ),
     PATH_PLANNING: _PathPolicy(
         mode="auto",
@@ -150,7 +120,7 @@ _POLICY: Dict[str, _PathPolicy] = {
         include_purpose=False,
         memory_include_global=False,
         memory_include_profile=True,
-        memory_budget_tokens=850,
+        memory_budget_tokens=900,
     ),
     PATH_CODING: _PathPolicy(
         mode="auto",
@@ -178,11 +148,11 @@ _POLICY: Dict[str, _PathPolicy] = {
     ),
     PATH_META: _PathPolicy(
         mode="auto",
-        tools_policy="never",
+        tools_policy="auto",
         include_purpose=False,
         memory_include_global=False,
         memory_include_profile=True,
-        memory_budget_tokens=550,
+        memory_budget_tokens=700,
     ),
     PATH_GENERAL: _PathPolicy(
         mode="auto",
@@ -190,13 +160,17 @@ _POLICY: Dict[str, _PathPolicy] = {
         include_purpose=False,
         memory_include_global=False,
         memory_include_profile=True,
-        memory_budget_tokens=760,
+        memory_budget_tokens=800,
     ),
 }
 
 
 class IntentRouter:
-    """Heuristic intent router for response policy selection."""
+    """Context-aware intent router for response policy selection.
+
+    Classifies messages into intent paths using keyword scoring,
+    with support for follow-up detection and prior route bias.
+    """
 
     def decide(
         self,
@@ -204,11 +178,25 @@ class IntentRouter:
         *,
         requested_mode: str = "auto",
         requested_tools_policy: str = "auto",
+        is_followup: bool = False,
+        prior_route: str | None = None,
     ) -> RouteDecision:
+        """Classify a message and return routing decision.
+
+        Args:
+            text: User message
+            requested_mode: Override mode
+            requested_tools_policy: Override tools policy
+            is_followup: Whether this is a follow-up turn
+            prior_route: The route from the previous turn
+
+        Returns:
+            RouteDecision with path, policies, and confidence
+        """
         src = str(text or "").strip()
         lower = src.lower()
-        scores: Dict[str, float] = {k: 0.0 for k in _POLICY.keys()}
-        reasons: Dict[str, List[str]] = {k: [] for k in _POLICY.keys()}
+        scores: dict[str, float] = {k: 0.0 for k in _POLICY}
+        reasons: dict[str, list[str]] = {k: [] for k in _POLICY}
 
         def add(path: str, weight: float, reason: str) -> None:
             scores[path] += float(weight)
@@ -221,76 +209,89 @@ class IntentRouter:
         if not src:
             add(PATH_CASUAL, 1.0, "empty_or_short")
 
-        # Structural signals
+        # ── Structural signals ───────────────────────────────
         if _PATHY_RE.search(src):
             add(PATH_CODING, 2.5, "file_or_path_signal")
         if _STACK_RE.search(src):
             add(PATH_DEBUG, 3.2, "error_signal")
         if _LIVENESS_RE.search(src):
             add(PATH_CASUAL, 3.0, "liveness_check")
-        if _INTEGRATION_RE.search(src):
-            add(PATH_CODING, 2.6, "integration_signal")
         if _INTEGRATION_RE.search(src) and _SETUP_RE.search(src):
-            add(PATH_CODING, 1.8, "integration_setup_signal")
+            add(PATH_CODING, 2.8, "integration_setup")
+        elif _INTEGRATION_RE.search(src):
+            add(PATH_CODING, 1.8, "integration_signal")
 
-        # Casual + personal
-        if tok_set.intersection({"hi", "hello", "hey", "yo", "sup"}):
+        # ── Casual + personal ────────────────────────────────
+        if tok_set & {"hi", "hello", "hey", "yo", "sup", "whats", "wassup"}:
             add(PATH_CASUAL, 2.4, "greeting")
-        if tok_set.intersection({"life", "family", "stress", "anxious", "relationship"}):
+        if tok_set & {"life", "family", "stress", "anxious", "relationship"}:
             add(PATH_PERSONAL, 2.2, "personal_topic")
-        if "my " in lower or "i feel" in lower or "i am " in lower:
+        if "my " in lower or "i feel" in lower:
             add(PATH_PERSONAL, 1.0, "self_context")
 
-        # Planning
-        if tok_set.intersection({"plan", "roadmap", "strategy", "steps", "workflow", "flowchart"}):
+        # ── Planning ─────────────────────────────────────────
+        if tok_set & {"plan", "roadmap", "strategy", "steps", "workflow"}:
             add(PATH_PLANNING, 2.8, "planning_keywords")
         if "how should" in lower or "what's the best way" in lower:
             add(PATH_PLANNING, 1.8, "decision_prompt")
 
-        # Coding
-        if tok_set.intersection(
-            {"code", "coding", "program", "programming", "refactor", "function", "class", "api", "repo", "test"}
-        ):
+        # ── Coding (context-aware "fix") ─────────────────────
+        if tok_set & {"code", "coding", "program", "refactor", "function", "class", "api", "repo", "test"}:
             add(PATH_CODING, 2.8, "coding_keywords")
-        if tok_set.intersection({"build", "implement", "implemented", "implementation", "fix", "patch", "commit"}):
+        if tok_set & {"build", "implement", "implementation", "commit"}:
             add(PATH_CODING, 1.4, "implementation_intent")
+
+        # "fix" only boosts coding if code context is present
+        if _FIX_RE.search(src):
+            if _CODE_CONTEXT_RE.search(src):
+                add(PATH_CODING, 2.0, "fix_with_code_context")
+            elif _BEHAVIOR_FEEDBACK_RE.search(src):
+                add(PATH_META, 3.0, "fix_conversation_style")
+            else:
+                add(PATH_GENERAL, 0.5, "ambiguous_fix")
+
         if _EXECUTION_PREFERENCE_RE.search(src):
             add(PATH_CODING, 2.4, "execution_preference")
         if _NO_EXECUTION_RE.search(src):
             add(PATH_CASUAL, 4.6, "no_execution_intent")
-            add(PATH_META, 2.0, "no_execution_intent_meta")
+            add(PATH_META, 2.0, "no_execution_meta")
 
-        # Debug/security/audit
-        if tok_set.intersection({"debug", "bug", "audit", "security", "vulnerability", "regression", "incident"}):
-            add(PATH_DEBUG, 3.0, "debug_or_security_keywords")
-        if tok_set.intersection({"token", "latency", "performance", "cost"}):
+        # ── Debug/security ───────────────────────────────────
+        if tok_set & {"debug", "bug", "audit", "security", "vulnerability", "regression"}:
+            add(PATH_DEBUG, 3.0, "debug_keywords")
+        if tok_set & {"latency", "performance", "cost"}:
             add(PATH_DEBUG, 1.3, "optimization_signal")
+        if _TROUBLESHOOT_RE.search(src) and _CODE_CONTEXT_RE.search(src):
+            add(PATH_DEBUG, 2.6, "troubleshoot_code")
+        elif _TROUBLESHOOT_RE.search(src):
+            add(PATH_GENERAL, 1.0, "troubleshoot_ambiguous")
+        if re.search(r"\bsettings?\b", lower) and re.search(r"\b(reset|resetting|restart|restarting)\b", lower):
+            add(PATH_DEBUG, 2.4, "state_reset_troubleshoot")
+            add(PATH_CODING, 0.8, "state_reset_code_signal")
 
-        # Research
-        if tok_set.intersection({"research", "compare", "latest", "news", "lookup", "find", "online"}):
+        # ── Research ─────────────────────────────────────────
+        if tok_set & {"research", "compare", "latest", "news", "lookup", "online"}:
             add(PATH_RESEARCH, 2.5, "research_keywords")
-        if "look online" in lower or "search" in lower:
+        if re.search(r"^\s*research\b", lower):
+            add(PATH_RESEARCH, 1.2, "research_prefix")
+        if "look online" in lower or "search for" in lower:
             add(PATH_RESEARCH, 1.9, "explicit_lookup")
 
-        # Troubleshooting signals should bias toward debug/coding rather than research.
-        if _TROUBLESHOOT_RE.search(src):
-            add(PATH_DEBUG, 2.6, "troubleshoot_signal")
-            add(PATH_CODING, 1.2, "troubleshoot_signal")
-
-        # Assistant-meta
-        if tok_set.intersection({"prompt", "instruction", "behavior", "why", "route", "memory"}):
-            add(PATH_META, 1.6, "assistant_meta_keywords")
-        if "how do you work" in lower or "what are you told" in lower:
-            add(PATH_META, 3.0, "assistant_self_model")
+        # ── Assistant meta ───────────────────────────────────
         if _BEHAVIOR_FEEDBACK_RE.search(src):
-            add(PATH_META, 3.2, "behavior_feedback")
-            add(PATH_PERSONAL, 1.0, "behavior_feedback_tone")
-            add(PATH_CASUAL, 0.8, "behavior_feedback_chat")
+            add(PATH_META, 3.5, "behavior_feedback")
+            add(PATH_PERSONAL, 1.0, "behavior_tone")
+        if "how do you work" in lower or "what are you" in lower:
+            add(PATH_META, 3.0, "self_model")
         if _FRUSTRATION_RE.search(src):
             add(PATH_PERSONAL, 1.6, "frustration_signal")
-            add(PATH_META, 0.8, "frustration_meta")
+            add(PATH_META, 1.0, "frustration_meta")
 
-        # Backstop
+        # ── Follow-up bias ───────────────────────────────────
+        if is_followup and prior_route and prior_route in scores:
+            add(prior_route, 2.0, "followup_continuity")
+
+        # ── Backstop ─────────────────────────────────────────
         add(PATH_GENERAL, 0.4, "general_backstop")
 
         chosen, confidence = self._choose(scores)
@@ -299,9 +300,7 @@ class IntentRouter:
 
         mode = rule.mode if str(requested_mode or "auto") == "auto" else str(requested_mode)
         tools_policy = (
-            rule.tools_policy
-            if str(requested_tools_policy or "auto") == "auto"
-            else str(requested_tools_policy)
+            rule.tools_policy if str(requested_tools_policy or "auto") == "auto" else str(requested_tools_policy)
         )
 
         return RouteDecision(
@@ -314,9 +313,11 @@ class IntentRouter:
             memory_include_global=rule.memory_include_global,
             memory_include_profile=rule.memory_include_profile,
             memory_budget_tokens=rule.memory_budget_tokens,
+            is_followup=is_followup,
         )
 
-    def _choose(self, scores: Dict[str, float]) -> Tuple[str, float]:
+    def _choose(self, scores: dict[str, float]) -> tuple[str, float]:
+        """Select highest-scoring path with confidence."""
         ranked = sorted(scores.items(), key=lambda kv: kv[1], reverse=True)
         if not ranked:
             return PATH_GENERAL, 0.25
@@ -325,5 +326,4 @@ class IntentRouter:
             return PATH_GENERAL, 0.25
         second_score = ranked[1][1] if len(ranked) > 1 else 0.0
         conf = top_score / max(0.01, (top_score + second_score))
-        conf = max(0.35, min(0.99, conf))
-        return top_path, conf
+        return top_path, max(0.35, min(0.99, conf))

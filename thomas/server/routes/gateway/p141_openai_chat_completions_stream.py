@@ -17,11 +17,11 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import AsyncIterator, Mapping, MutableMapping
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Mapping, MutableMapping, TypedDict
+from typing import Any, TypedDict
 
 from aiohttp import ClientConnectorError, ClientResponse, ClientSession, ClientTimeout, web
-
 
 # ----------------------------
 # Contracts
@@ -319,7 +319,15 @@ async def openai_chat_completions_stream(request: web.Request) -> web.StreamResp
 
         try:
             if not stream:
-                data = await upstream.json(content_type=None)
+                try:
+                    data = await upstream.json(content_type=None)
+                except Exception as e:
+                    raise _GatewayError(
+                        status=502,
+                        code="upstream_error",
+                        message="Failed to parse upstream OpenAI JSON response.",
+                        details={"error": str(e)},
+                    ) from e
                 if upstream.status >= 400:
                     raise _GatewayError(
                         status=502,
@@ -330,7 +338,15 @@ async def openai_chat_completions_stream(request: web.Request) -> web.StreamResp
                 return web.json_response(data, status=200)
 
             if upstream.status >= 400:
-                text = await upstream.text()
+                try:
+                    text = await upstream.text()
+                except Exception as e:
+                    raise _GatewayError(
+                        status=502,
+                        code="upstream_error",
+                        message="Failed to read upstream OpenAI error response.",
+                        details={"error": str(e)},
+                    ) from e
                 raise _GatewayError(
                     status=502,
                     code="upstream_error",
@@ -343,7 +359,7 @@ async def openai_chat_completions_stream(request: web.Request) -> web.StreamResp
         finally:
             # Ensure upstream response and session are closed.
             try:
-                upstream.close()
+                await upstream.close()
             finally:
                 await session.close()
 

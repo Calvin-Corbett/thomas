@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -25,7 +25,7 @@ def _print_json(payload: Any) -> None:
     typer.echo(json.dumps(payload, sort_keys=True, ensure_ascii=True))
 
 
-def _load_registry(config_path: Optional[Path]) -> Any:
+def _load_registry(config_path: Path | None) -> Any:
     if config_path is None:
         return get_gateway_handler_registry()
 
@@ -57,7 +57,7 @@ def _load_registry(config_path: Optional[Path]) -> Any:
 
 @app.command("list")
 def list_handlers(
-    config: Optional[Path] = typer.Option(
+    config: Path | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -99,7 +99,7 @@ def schema(
         True,
         "--json/--no-json",
         help="Emit machine-readable JSON schema.",
-    )
+    ),
 ) -> None:
     """Emit a JSON Schema for the `list --json` payload."""
     schema_obj = {
@@ -163,7 +163,7 @@ def register(parent: Any, /, *args: Any, **kwargs: Any) -> None:
         if hasattr(parent, "add_typer"):
             parent.add_typer(app, name=COMMAND_NAME)
             return
-    except Exception:
+    except AttributeError:
         pass
 
     try:
@@ -173,7 +173,7 @@ def register(parent: Any, /, *args: Any, **kwargs: Any) -> None:
 
         if isinstance(parent, click.core.Group):
             parent.add_command(get_command(app), name=COMMAND_NAME)
-    except Exception:
+    except ImportError:
         # If we can't register, don't crash import-time.
         return
 
@@ -184,6 +184,6 @@ try:
 
     COMMAND = _typer_get_command(app)
     cli = COMMAND
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     COMMAND = None
     cli = None

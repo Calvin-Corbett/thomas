@@ -3,11 +3,12 @@
 Route modules import keys from here to access ``app[KEY]`` without
 depending on the monolithic ``app.py`` module.
 """
+
 from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from aiohttp import web
 
@@ -36,18 +37,29 @@ APP_CODEX_BRIDGE = web.AppKey("_codex_bridge", object)
 APP_ENGINE_MANAGER = web.AppKey("engine_manager", object)
 APP_TASK_LEDGER = web.AppKey("task_ledger", object)
 APP_MUTATING_ROUTE_POLICY_SNAPSHOT = web.AppKey("mutating_route_policy_snapshot", dict)
+APP_CHAT_AUTOPILOT_LAST_BY_GOAL = web.AppKey("chat_autopilot_last_by_goal", dict)
+APP_DIAGNOSTICS = web.AppKey("diagnostics", dict)
+APP_BOOT_TIME = web.AppKey("boot_time", float)
+APP_BOOT_DURATION = web.AppKey("boot_duration", float)
+APP_CRASH_COUNT = web.AppKey("crash_count", int)
+APP_SHUTDOWN_EVENT = web.AppKey("shutdown_event", asyncio.Event)
+APP_RESTART_REQUESTED = web.AppKey("restart_requested", bool)
+APP_RUNTIME_GUARD_STATE = web.AppKey("runtime_guard_state", dict)
+APP_RUNTIME_GUARD_TASK = web.AppKey("runtime_guard_task", object)
 
 
 # ── Shared data classes ───────────────────────────────────────────────
 
+
 @dataclass
 class ChatSession:
     """In-memory representation of a chat session."""
+
     id: str
-    conversation: List[Dict[str, Any]]
+    conversation: list[dict[str, Any]]
     profile: str
-    model_id: Optional[str] = None
+    model_id: str | None = None
     autonomy_level: int = 3
-    system_prompt: Optional[str] = None
-    reasoning_effort: Optional[str] = None
+    system_prompt: str | None = None
+    reasoning_effort: str | None = None
     session_token_spend: int = 0

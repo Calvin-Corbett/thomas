@@ -3,7 +3,7 @@ import json
 import os
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import AsyncMock, patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
@@ -82,6 +82,42 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
         self.assertGreaterEqual(int(connectors.get("total") or 0), 1)
         self.assertGreaterEqual(int(runtime.get("active_tasks") or 0), 0)
         self.assertIn("store_path", health)
+
+    async def test_comfy_status_endpoint_uses_service(self):
+        from thomas.server.routes.asset_studio_aiohttp import APP_ASSET_STUDIO_COMFY_SERVICE
+
+        service = self.app[APP_ASSET_STUDIO_COMFY_SERVICE]
+        with patch.object(
+            service,
+            "status",
+            new=AsyncMock(return_value={"server_url": "http://127.0.0.1:8188", "running": False}),
+        ):
+            resp = await self.client.get("/api/asset-studio/v1/comfy/status")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertTrue(body.get("ok"))
+        status = body.get("status") or {}
+        self.assertEqual(str(status.get("server_url") or ""), "http://127.0.0.1:8188")
+        self.assertFalse(bool(status.get("running")))
+
+    async def test_comfy_queue_endpoint_uses_service(self):
+        from thomas.server.routes.asset_studio_aiohttp import APP_ASSET_STUDIO_COMFY_SERVICE
+
+        service = self.app[APP_ASSET_STUDIO_COMFY_SERVICE]
+        with patch.object(
+            service,
+            "queue_prompt",
+            new=AsyncMock(return_value={"ok": True, "prompt_id": "pid-123"}),
+        ):
+            resp = await self.client.post(
+                "/api/asset-studio/v1/comfy/queue",
+                json={"workflow_json": '{"3": {"inputs": {}}}'},
+            )
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertTrue(body.get("ok"))
+        result = body.get("result") or {}
+        self.assertEqual(str(result.get("prompt_id") or ""), "pid-123")
 
     async def test_completion_webhook_config_crud(self):
         first_get = await self.client.get("/api/asset-studio/v1/webhooks/completion")
@@ -187,11 +223,7 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
                 self.assertEqual(events_resp.status, 200)
                 events_body = await events_resp.json()
                 events = events_body.get("events") or []
-                observed_kinds = {
-                    str(item.get("kind") or "")
-                    for item in events
-                    if isinstance(item, dict)
-                }
+                observed_kinds = {str(item.get("kind") or "") for item in events if isinstance(item, dict)}
                 if "webhook_ok" in observed_kinds:
                     break
                 await asyncio.sleep(0.1)
@@ -263,11 +295,7 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
                 self.assertEqual(events_resp.status, 200)
                 events_body = await events_resp.json()
                 events = events_body.get("events") or []
-                observed_kinds = {
-                    str(item.get("kind") or "")
-                    for item in events
-                    if isinstance(item, dict)
-                }
+                observed_kinds = {str(item.get("kind") or "") for item in events if isinstance(item, dict)}
                 if "webhook_ok" in observed_kinds:
                     break
                 await asyncio.sleep(0.1)
@@ -548,14 +576,14 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
 
         favorites = await self.client.get("/api/asset-studio/v1/templates?favorite=true")
         self.assertEqual(favorites.status, 200)
-        favorites_rows = ((await favorites.json()).get("templates") or [])
+        favorites_rows = (await favorites.json()).get("templates") or []
         favorite_names = {str(row.get("name") or "") for row in favorites_rows if isinstance(row, dict)}
         self.assertIn("video-convert-favorite", favorite_names)
         self.assertNotIn("docs-sync-non-favorite", favorite_names)
 
         by_tag = await self.client.get("/api/asset-studio/v1/templates?tag=video")
         self.assertEqual(by_tag.status, 200)
-        tag_rows = ((await by_tag.json()).get("templates") or [])
+        tag_rows = (await by_tag.json()).get("templates") or []
         tag_names = {str(row.get("name") or "") for row in tag_rows if isinstance(row, dict)}
         self.assertIn("video-convert-favorite", tag_names)
         self.assertNotIn("docs-sync-non-favorite", tag_names)
@@ -916,7 +944,7 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
 
             events_resp = await self.client.get(f"/api/asset-studio/v1/jobs/{job_id}/events")
             self.assertEqual(events_resp.status, 200)
-            events = ((await events_resp.json()).get("events") or [])
+            events = (await events_resp.json()).get("events") or []
             kinds = {str(item.get("kind") or "") for item in events if isinstance(item, dict)}
             self.assertIn("webhook_ok", kinds)
 

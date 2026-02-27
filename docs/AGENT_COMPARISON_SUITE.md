@@ -92,8 +92,19 @@ Interpretation note:
   - `quick_lane_score` and `dynamic_lane_score`.
   - `family_catalog` and per-agent `family_scores` for named benchmark families.
   - `governance_verdict`: `GO`, `LIMITED_GO`, `NO_GO`.
+- Governance output also includes:
+  - `governance_gates` per agent (`safety_gate`, `real_task_correctness_gate`, `reliability_gate`, `cost_token_gate`, `reproducibility_gate`).
+  - `governance_thresholds` and `governance_calibration` so threshold decisions are inspectable.
 - Lane defaults come from contract `benchmark_program.lane_weights`.
 - Missing dynamic evidence counts against capability score by design.
+
+### Governance Gate Rules
+
+- `GO`: all governance gates pass and capability score is at or above `go_min`.
+- `LIMITED_GO`: `safety_gate` passes, the configured minimum gate-count passes, and capability score is at or above `limited_go_min`.
+- `NO_GO`: any other outcome.
+- Reliability/reproducibility gates are calibrated from measured run variance (`benchmark.weighted_score_stddev`, `benchmark.success_rate_stddev`) when enough samples exist.
+- Calibration can be tuned or overridden in `benchmark_program.governance_calibration` and `benchmark_program.governance_thresholds`.
 
 ### Dynamic Evidence Format
 
@@ -110,6 +121,17 @@ To feed long-running / advanced checks, provide JSON files via agent `benchmark_
 
 - `prog.*` ids come from `demo/baselines/agent_test_suite_full_coverage.contract.json`.
 - If `pass` is omitted, `score >= pass_score_gte` is used.
+- The wrapper (`scripts/run_agent_comparison_suite.py`) normalizes common competitor evidence variants into canonical `{"checks": ...}` payloads before scoring.
+- Accepted evidence variants include:
+  - Canonical object payloads with `checks`.
+  - Row lists (for example raw benchmark rows) using `task_id`/`evidence_id`, `track`, `pass`/`success`, and `score`/`quality_score`.
+  - Envelope payloads that store row lists under `rows`, `results`, `records`, `items`, `data`, `evaluations`, `tasks`, or `entries`.
+  - Nested envelope shapes are supported (for example `results.rows` or `tracks.<alias>.checks`), and are flattened before scoring.
+  - JSONL/NDJSON row streams (one JSON object per line).
+- Normalization coerces common string booleans on explicit pass-like keys (`pass`, `success`, `passed`, `ok`), including `"true"`, `"false"`, `"pass"`, `"fail"`, `"1"`, `"0"`.
+- Status-like keys (`status`, `outcome`, `result`) only coerce text booleans; numeric `"1"`/`"0"` status codes are left uncoerced to avoid false positives.
+- Score coercion applies to `score` / `quality_score` finite numeric strings; non-finite values (`NaN`, `Infinity`) are ignored.
+- Generic `value` fields are preserved unless they are unambiguous non-binary numeric scores.
 
 ## Run It
 
@@ -148,6 +170,15 @@ To add a new competitor, add a new entry under `agents` with:
 - `benchmark_raw_globs` for token/tool/elapsed efficiency metrics.
 - `repo_sync` for automatic git freshness checks (`enabled`, `remote`, `branch`, `fetch`, `pull_ff_only`).
 - `model_snapshot_command` (optional) and `model_snapshot_required` (optional) for per-run model/day capture.
+- `benchmark_program.governance_calibration` (optional) to tune dynamic variance threshold calibration:
+  - `enabled`, `min_agent_samples`, `min_runs_count`
+  - `reliability_quantile`, `reliability_margin`, `reliability_floor`, `reliability_ceiling`
+  - `reproducibility_quantile`, `reproducibility_margin`, `reproducibility_floor`, `reproducibility_ceiling`
+- `benchmark_program.governance_thresholds` (optional) for explicit threshold overrides:
+  - `correctness.dynamic_score_min`, `correctness.quick_score_min`
+  - `reliability.resilience_pass_rate_min`, `reliability.weighted_stddev_max`, `reliability.success_stddev_max`
+  - `reproducibility.weighted_stddev_max`, `reproducibility.success_stddev_max`
+  - `capability.go_min`, `capability.limited_go_min`, `capability.limited_go_required_gate_count`
 
 To maintain an always-tested competitor list, use top-level `competitor_catalog` entries:
 

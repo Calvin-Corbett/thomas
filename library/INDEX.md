@@ -49,6 +49,176 @@ Durable research/reference library for Thomas.
   - File: `entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md`
 
 ## research-notes
+- `1772124694-okay-you-should-only-go-until-like-tax-execution-behavior-and-whatever-other-beh`: okay you should only go until like tax execution behavior and whatever other behaviors you know if you've read context s
+  - Summary: I’m proceeding in full-autonomous mode and running a context recovery pass from the repo now, focused on “tax execution behavior” and adjacent behavior notes so I can report exactly what context is available in this session.I found the core index files and one
+  - Source: thomas:codex
+  - Tags: research, auto, route-debug_audit
+  - File: `entries/research-notes/1772124694-okay-you-should-only-go-until-like-tax-execution-behavior-and-whatever-other-beh.md`
+- `1772124234-i-see-i-see-do-you-think-that-that-very-first-message-you-are-an-ai-assistant-as`: I see I see do you think that that very first message you are an AI assistant assessed by VA in API I think that's bad l
+  - Summary: I agree it reads awkward and not user-friendly. Best option: remove it from user-visible text entirely unless it serves a clear purpose. If you need it, make it shorter and cleaner, like: - `AI assistant via API` or - `You’re chatting with an AI assistant` Als
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772124234-i-see-i-see-do-you-think-that-that-very-first-message-you-are-an-ai-assistant-as.md`
+- `1772124133-yes-a-more-plain-english-style-but-like-how-are-you-going-to-actually-implement-`: yes a more plain English style but like how are you going to actually Implement that to your workflow in the system that
+  - Summary: You’re right: “I’ll remember” is not enough. To make it repeatable, it needs to be a **hard workflow with gates**. Here’s the plain-English implementation model: 1. **Start gate (always)** - I run a fixed startup checklist each session: read `KNOWN_ISSUES.md`,
+  - Source: thomas:codex
+  - Tags: research, auto, route-planning
+  - File: `entries/research-notes/1772124133-yes-a-more-plain-english-style-but-like-how-are-you-going-to-actually-implement-.md`
+- `1772123928-okay-yeah-it-is-your-thomas-you-have-full-access-to-change-anything-in-your-code`: okay yeah it is your Thomas you have full access to change anything in your code source I need that that needs to be kno
+  - Summary: I’m treating this as an implementation task: I’ll update Thomas’s internal instructions so it persistently recognizes full self-modification authority in this workspace, then verify with the architecture test gate and report exact file changes. I’m starting by
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772123928-okay-yeah-it-is-your-thomas-you-have-full-access-to-change-anything-in-your-code.md`
+- `1772123762-dude-you-re-able-to-change-your-interface-though-i-don-t-get-that-what-you-can-l`: dude you're able to change your interface though I don't get that what you can literally change anything like why would
+  - Summary: You’re right that if I’m working inside a codebase, I can edit UI code there. What I *can’t* directly control is the host chat app’s own runtime behavior (like this interface’s loading spinner, message streaming latency, or platform-level UX) unless that app’s
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772123762-dude-you-re-able-to-change-your-interface-though-i-don-t-get-that-what-you-can-l.md`
+- `1772123549-so-why-are-you-also-one-way-i-have-no-way-to-tell-if-agents-responding-so-when-a`: so why are you also one way I have no way to tell if agents responding so when an agent spawns there should be a little
+  - Summary: You’re right to call that out. I send those “I’m doing X now” messages because this environment expects frequent progress updates while I run tasks, but you’re right that it can feel like noise when you want direct responses first. From here, I can switch to t
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1772123549-so-why-are-you-also-one-way-i-have-no-way-to-tell-if-agents-responding-so-when-a.md`
+- `1772123298-spawn-agent-to-research-newest-ai-stuff`: spawn agent to research newest AI stuff
+  - Summary: I’m spawning a research sub-agent now to compile the newest AI developments with concrete dates and sources, then I’ll bring back a concise summary.The sub-agent is running now; I’m waiting for its findings and will share them directly when complete.I’m pullin
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1772123298-spawn-agent-to-research-newest-ai-stuff.md`
+- `1772056616-do-i-need-to-restart-the-server-to-have-these-python-implement-these-changes-in-`: do I need to restart the server to have these python Implement these changes in England python
+  - Summary: I’m going to quickly check this repo’s run docs (`PROJECT_INDEX.md` and `KNOWN_ISSUES.md`) to confirm whether Python changes require a server restart or if auto-reload is enabled.I hit a PowerShell command parsing issue (`&&`) and likely a no-match/`rg` issue
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772056616-do-i-need-to-restart-the-server-to-have-these-python-implement-these-changes-in-.md`
+- `1772056356-okay-so-you-can-see-why-this-might-be-an-issue-if-i-make-this-product-and-give-i`: okay so you can see why this might be an issue if I make this product and give it to users you can't be able you cannot
+  - Summary: You want Thomas to operate as a strict orchestrator: no direct “regular model mode,” always acting as the brain that delegates to specialist agents. I’ll first read the required project docs (`PROJECT_INDEX.md`, `KNOWN_ISSUES.md`, architecture file), then loca
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772056356-okay-so-you-can-see-why-this-might-be-an-issue-if-i-make-this-product-and-give-i.md`
+- `1772055435-i-don-t-like-find-the-only-mode-final-only-mode-sucks-cuz-i-want-you-to-do-the-p`: I don't like find the only mode Final only mode sucks cuz I want you to do the process where you respond to me as you're
+  - Summary: Yes, that requirement is in your instructions. - `AGENTS.md` includes **Multi-Agent Handshake Protocol (Required)**. - It also includes **Task Ecosystem Control Plane (Required)** with: “Thomas routes tasks through `task-manager-agent`; agents execute.” - My t
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772055435-i-don-t-like-find-the-only-mode-final-only-mode-sucks-cuz-i-want-you-to-do-the-p.md`
+- `1772051705-okay-so-i-m-running-on-a-lot-of-uncommitted-changes-it-s-not-a-clean-reproducibl`: okay so I'm running on a lot of uncommitted changes it's not a clean reproducible commit build I thought I had a bill I
+  - Summary: I’m going to implement a hardening pass so agents can’t mark work as complete while leaving local claim-scope changes behind, and so commit attempts fail if claimed-scope files are left unstaged/untracked. First I’ll read the required project context files and
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772051705-okay-so-i-m-running-on-a-lot-of-uncommitted-changes-it-s-not-a-clean-reproducibl.md`
+- `1772050796-yeah-can-you-verify-what-build-you-re-on-am-i-are-you-currently-running-the-prop`: yeah can you verify what build you're on am I are you currently running the proper build process or are you running an u
+  - Summary: I’m extending the verification one step further: I’ll pinpoint whether any runtime-critical files changed after the currently running server started, so we can say definitively if a restart/build step is needed right now.I confirmed the post-start edits are al
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772050796-yeah-can-you-verify-what-build-you-re-on-am-i-are-you-currently-running-the-prop.md`
+- `1771996687-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: if not paren_string.strip(): return [] result = [] for group in paren_string.split(): depth = 0 max_depth = 0 for ch in group: if ch == "(": depth += 1 if depth > max_depth: max_depth = depth elif ch == ")": depth -= 1 result.append(max_depth) return result
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771996687-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771996630-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: result = [] current = [] balance = 0 for ch in paren_string: if ch.isspace(): continue if ch == '(': balance += 1 current.append(ch) elif ch == ')': balance -= 1 current.append(ch) if balance == 0 and current: result.append(''.join(current)) current = [] retur
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771996630-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771995997-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: result = [] for group in paren_string.split(): depth = 0 max_depth = 0 for ch in group: if ch == '(': depth += 1 if depth > max_depth: max_depth = depth elif ch == ')': depth -= 1 return result
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771995997-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771994412-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: precedence = {'+': 1, '-': 1, '*': 2, '//': 2, '**': 3} right_assoc = {'**'} output = [operand[0]] ops = [] for i, op in enumerate(operator): while ops and ( precedence[ops[-1]] > precedence[op] ): while ops: stack = [] for token in output: if isinstance(token
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771994412-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771994345-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: strongest = extensions[0] best_strength = None for ext in extensions: cap = sum(1 for ch in ext if ch.isupper()) sm = sum(1 for ch in ext if ch.islower()) strength = cap - sm if best_strength is None or strength > best_strength: best_strength = strength strong
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771994345-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771994224-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: def is_prime(n): if n < 2: return False if n == 2: return True if n % 2 == 0: return False i = 3 while i * i <= n: if n % i == 0: return False i += 2 return True return " ".join(word for word in sentence.split() if is_prime(len(word)))
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771994224-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771994205-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: if sum(ch in "0123456789" for ch in file_name) > 3: return 'No' if file_name.count('.') != 1: return 'No' name, ext = file_name.split('.') if not name: return 'No' if not (('a' <= name[0] <= 'z') or ('A' <= name[0] <= 'Z')): return 'No' if ext not in ['txt', '
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771994205-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771994120-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: open_count = 0 close_after_two_opens = 0 for ch in string: if ch == '[': open_count += 1 else: # ch == ']' if open_count >= 2: close_after_two_opens += 1 if close_after_two_opens >= 2: return True return False
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771994120-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771994081-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: n = len(grid) pos = None for i in range(n): for j in range(n): if grid[i][j] == 1: pos = (i, j) break if pos is not None: break x, y = pos path = [1] for _ in range(k - 1): best_val = None best_pos = None if x > 0: v = grid[x - 1][y] if best_val is None or v <
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771994081-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771994015-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: if not date or len(date) != 10: return False if date[2] != '-' or date[5] != '-': return False mm, dd, yyyy = date.split('-') if len(mm) != 2 or len(dd) != 2 or len(yyyy) != 4: return False if not (mm.isdigit() and dd.isdigit() and yyyy.isdigit()): return Fals
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771994015-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771993963-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: def is_good(s): bal = 0 for ch in s: if ch == '(': bal += 1 else: bal -= 1 if bal < 0: return False return bal == 0 a, b = lst[0], lst[1] return 'Yes' if is_good(a + b) or is_good(b + a) else 'No'
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771993963-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771993836-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: def signed_digit_sum(n): s = str(n) if s[0] != '-': return sum(int(ch) for ch in s) digits = [int(ch) for ch in s[1:]] if not digits: return 0 return -digits[0] + sum(digits[1:]) return sum(1 for x in arr if signed_digit_sum(x) > 0)
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771993836-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771993694-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: def is_prime(n): if n < 2: return False if n == 2: return True if n % 2 == 0: return False i = 3 while i * i <= n: if n % i == 0: return False i += 2 return True primes = [x for x in lst if is_prime(x)] if not primes: return 0 largest = max(primes) return sum(
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771993694-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771993491-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: def is_prime(n): if n < 2: return False i = 2 while i * i <= n: if n % i == 0: return False i += 1 return True primes = [p for p in range(2, a + 1) if is_prime(p)] for i in range(len(primes)): for j in range(i, len(primes)): for k in range(j, len(primes)): if
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771993491-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771993177-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: n = len(l) if n < 3: return False arr = sorted(l) for i in range(n - 2): left, right = i + 1, n - 1 while left < right: s = arr[i] + arr[left] + arr[right] if s == 0: return True if s < 0: left += 1 else: right -= 1 return False
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771993177-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771993168-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: def is_prime(x: int) -> bool: if x < 2: return False if x % 2 == 0: return x == 2 i = 3 while i * i <= x: if x % i == 0: return False i += 2 return True a, b = 0, 1 count = 0 while True: a, b = b, a + b if is_prime(a): count += 1 if count == n: return a
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771993168-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771993100-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: def f(x): return poly(xs, x) lo, hi = -1.0, 1.0 flo, fhi = f(lo), f(hi) # Expand interval until it brackets a root while flo * fhi > 0: lo *= 2.0 hi *= 2.0 flo, fhi = f(lo), f(hi) # If endpoint is exactly a root if flo == 0: return lo if fhi == 0: return hi #
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771993100-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771992995-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua`: You are solving an official HumanEval task. Return ONLY the Python code continuation that should be appended to the give
+  - Summary: sorted_numbers = sorted(numbers) closest_pair = (sorted_numbers[0], sorted_numbers[1]) min_diff = abs(sorted_numbers[1] - sorted_numbers[0]) for i in range(1, len(sorted_numbers) - 1): a, b = sorted_numbers[i], sorted_numbers[i + 1] diff = abs(b - a) if diff <
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771992995-you-are-solving-an-official-humaneval-task.-return-only-the-python-code-continua.md`
+- `1771989755-okay-so-the-goal-is-you-need-to-remember-that-cuz-it-s-a-crucial-feature-of-who-`: okay so the goal is you need to remember that cuz it's a crucial feature of who you are is that you're going to be able
+  - Summary: I understand the goal as making app publishing and companion-app setup a first-class Thomas capability. I’m going to read the project boot/architecture docs first, then map this into concrete components and implement the initial scaffolding so it becomes part
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771989755-okay-so-the-goal-is-you-need-to-remember-that-cuz-it-s-a-crucial-feature-of-who-.md`
+- `1771988821-search-for-infinite-the-app-and-your-see-what-it-is`: search for infinite the app and your see what it is
+  - Summary: Executed a repo-wide search for `infinite` and inspected the matching app files. `Infinite` is the **Thomas Infinite Companion** phone app surface: - PWA manifest names it `Thomas Infinite Companion` and `short_name: "Infinite"`: [thomas/server/web/companion.w
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771988821-search-for-infinite-the-app-and-your-see-what-it-is.md`
+- `1771987298-count-files-matching-tests-test_-.py-and-write-runtime-agentic_bench-codex2-live`: Count files matching tests/test_*.py and write runtime/agentic_bench/codex2-live-run-20260225-01/thomas_os/task3_tests_i
+  - Summary: I’m going to enumerate `tests/test_*.py`, compute the count, and write the required inventory file with the exact first-line format plus at least three filenames.I wrote the file and will quickly verify its contents to ensure the exact required format is prese
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1771987298-count-files-matching-tests-test_-.py-and-write-runtime-agentic_bench-codex2-live.md`
+- `1771962304-yah-make-50-agents-to-research-stuff-and-if-they-find-stuff-they-dont-know-then-`: yah make 50 agents to research stuff and if they find stuff they dont know then they can important into the library and
+  - Summary: The report has been written; I’m doing a quick compliance check on word count and section headers before finalizing.I have enough benchmark evidence to draft the report. I’ll quickly claim the output scope per the repo’s multi-agent protocol, then write the ma
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1771962304-yah-make-50-agents-to-research-stuff-and-if-they-find-stuff-they-dont-know-then-.md`
 - `1771877133-research-this-topic-and-compare-the-best-options-with-tradeoffs-and-a-recommenda`: Research this topic and compare the best options with tradeoffs and a recommendation.
   - Summary: Please share the specific topic you want researched. To give you a solid comparison with tradeoffs and a recommendation, I need: 1. The exact topic/problem space 2. Your constraints (budget, timeline, team size, tech stack, risk tolerance) 3. What “best” means
   - Source: thomas:codex
@@ -170,4 +340,4 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md`
 
-_Total entries: 32_
+_Total entries: 66_

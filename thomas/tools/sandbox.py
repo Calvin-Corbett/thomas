@@ -15,9 +15,9 @@ import traceback
 import uuid
 import venv
 from collections import deque
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Tuple
-
+from typing import Any
 
 """
 thomas.tools.sandbox
@@ -59,7 +59,7 @@ Extra keys are backwards-compatible: they can be ignored by older callers.
 # Tool Specs
 # =============================================================================
 
-SANDBOX_RUN_SPEC: Dict[str, Any] = {
+SANDBOX_RUN_SPEC: dict[str, Any] = {
     "name": "sandbox.run",
     "category": "sandbox",
     "description": "Execute Python code in a restricted sandbox with stdout/stderr capture and timeouts.",
@@ -88,7 +88,7 @@ SANDBOX_RUN_SPEC: Dict[str, Any] = {
     },
 }
 
-SANDBOX_TEST_SNIPPET_SPEC: Dict[str, Any] = {
+SANDBOX_TEST_SNIPPET_SPEC: dict[str, Any] = {
     "name": "sandbox.test_snippet",
     "category": "sandbox",
     "description": "Run a code snippet against test cases and return per-case pass/fail.",
@@ -129,7 +129,7 @@ SANDBOX_TEST_SNIPPET_SPEC: Dict[str, Any] = {
     },
 }
 
-TOOL_SPECS: List[Dict[str, Any]] = [SANDBOX_RUN_SPEC, SANDBOX_TEST_SNIPPET_SPEC]
+TOOL_SPECS: list[dict[str, Any]] = [SANDBOX_RUN_SPEC, SANDBOX_TEST_SNIPPET_SPEC]
 
 
 # Optional: a simple dispatch table if your tool registry wants it.
@@ -138,7 +138,8 @@ TOOLS = {
     "sandbox.test_snippet": "sandbox_test_snippet",
 }
 
-def get_tool_specs() -> List[Dict[str, Any]]:
+
+def get_tool_specs() -> list[dict[str, Any]]:
     return TOOL_SPECS
 
 
@@ -153,9 +154,9 @@ MAX_CODE_BYTES = int(os.environ.get("THOMAS_SANDBOX_MAX_CODE_BYTES", "250000")) 
 
 # Output capture keeps head + tail so the return sentinel survives truncation.
 STDOUT_HEAD = int(os.environ.get("THOMAS_SANDBOX_STDOUT_HEAD", "262144"))  # 256 KB
-STDOUT_TAIL = int(os.environ.get("THOMAS_SANDBOX_STDOUT_TAIL", "65536"))   # 64 KB
+STDOUT_TAIL = int(os.environ.get("THOMAS_SANDBOX_STDOUT_TAIL", "65536"))  # 64 KB
 STDERR_HEAD = int(os.environ.get("THOMAS_SANDBOX_STDERR_HEAD", "262144"))  # 256 KB
-STDERR_TAIL = int(os.environ.get("THOMAS_SANDBOX_STDERR_TAIL", "65536"))   # 64 KB
+STDERR_TAIL = int(os.environ.get("THOMAS_SANDBOX_STDERR_TAIL", "65536"))  # 64 KB
 
 # Step limiter (line events). Helps prevent tight loops from just burning CPU until wall timeout.
 MAX_TRACE_STEPS = int(os.environ.get("THOMAS_SANDBOX_MAX_TRACE_STEPS", "2000000"))
@@ -175,7 +176,9 @@ DOCKER_CPUS = os.environ.get("THOMAS_SANDBOX_DOCKER_CPUS", "1.0")
 DOCKER_PIDS_LIMIT = os.environ.get("THOMAS_SANDBOX_DOCKER_PIDS_LIMIT", "128")
 
 # Wheelhouse cache so packages don't re-download every run
-WHEELHOUSE_CACHE_DIR = Path(os.environ.get("THOMAS_SANDBOX_WHEELHOUSE_DIR", str(RUNTIME_DIR / "sandbox" / "wheelhouse_cache")))
+WHEELHOUSE_CACHE_DIR = Path(
+    os.environ.get("THOMAS_SANDBOX_WHEELHOUSE_DIR", str(RUNTIME_DIR / "sandbox" / "wheelhouse_cache"))
+)
 WHEELHOUSE_CACHE_DIR.mkdir(parents=True, exist_ok=True)
 
 # Host pip download toggle (trusted host action)
@@ -185,7 +188,9 @@ ALLOW_HOST_PIP_DOWNLOAD = os.environ.get("THOMAS_SANDBOX_HOST_PIP_DOWNLOAD", "1"
 #   allow_any (default): accept safe-token packages
 #   allowlist: only allow roots listed in THOMAS_SANDBOX_ALLOWED_PACKAGES
 PACKAGES_MODE = os.environ.get("THOMAS_SANDBOX_PACKAGES_MODE", "allow_any").strip().lower()
-ALLOWED_PACKAGES = {p.strip().lower() for p in os.environ.get("THOMAS_SANDBOX_ALLOWED_PACKAGES", "").split(",") if p.strip()}
+ALLOWED_PACKAGES = {
+    p.strip().lower() for p in os.environ.get("THOMAS_SANDBOX_ALLOWED_PACKAGES", "").split(",") if p.strip()
+}
 
 # Unix rlimits (best-effort) (subprocess wrapper uses these on POSIX)
 UNIX_AS_LIMIT = int(os.environ.get("THOMAS_SANDBOX_UNIX_AS_LIMIT", str(512 * 1024 * 1024)))
@@ -202,12 +207,13 @@ SENTINEL = "__THOMAS_RETURN__:"
 # Public handlers
 # =============================================================================
 
+
 def sandbox_run(
     code: str,
     timeout_seconds: int = DEFAULT_TIMEOUT,
     allow_network: bool = False,
-    packages: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    packages: list[str] | None = None,
+) -> dict[str, Any]:
     t0 = time.perf_counter()
     run_id = str(uuid.uuid4())
     run_dir = RUNS_DIR / run_id
@@ -216,10 +222,21 @@ def sandbox_run(
     timeout = _clamp_timeout(timeout_seconds)
 
     if not isinstance(code, str):
-        return _finalize(t0, run_id, run_dir, backend="none", stdout="", stderr="", return_value="", error="code must be a string")
+        return _finalize(
+            t0, run_id, run_dir, backend="none", stdout="", stderr="", return_value="", error="code must be a string"
+        )
 
     if len(code.encode("utf-8", errors="ignore")) > MAX_CODE_BYTES:
-        return _finalize(t0, run_id, run_dir, backend="none", stdout="", stderr="", return_value="", error=f"code too large (max {MAX_CODE_BYTES} bytes)")
+        return _finalize(
+            t0,
+            run_id,
+            run_dir,
+            backend="none",
+            stdout="",
+            stderr="",
+            return_value="",
+            error=f"code too large (max {MAX_CODE_BYTES} bytes)",
+        )
 
     pkgs = [p.strip() for p in (packages or []) if isinstance(p, str) and p.strip()]
     pkg_err = _validate_packages(pkgs)
@@ -229,14 +246,21 @@ def sandbox_run(
     backend = _choose_backend(allow_network=allow_network, packages=pkgs)
 
     # Persist request receipt
-    _write_text(run_dir / "request.json", json.dumps({
-        "run_id": run_id,
-        "timestamp_unix": time.time(),
-        "backend": backend,
-        "timeout_seconds": timeout,
-        "allow_network": allow_network,
-        "packages": pkgs,
-    }, ensure_ascii=False, indent=2))
+    _write_text(
+        run_dir / "request.json",
+        json.dumps(
+            {
+                "run_id": run_id,
+                "timestamp_unix": time.time(),
+                "backend": backend,
+                "timeout_seconds": timeout,
+                "allow_network": allow_network,
+                "packages": pkgs,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
     _write_text(run_dir / "code.py", code)
 
     try:
@@ -250,18 +274,27 @@ def sandbox_run(
         out = _wrap_fail(str(e), traceback.format_exc())
 
     # Persist response receipt
-    _write_text(run_dir / "response.json", json.dumps({
-        "stdout": out.get("stdout", ""),
-        "stderr": out.get("stderr", ""),
-        "return_value": out.get("return_value", ""),
-        "error": out.get("error", None),
-        "exit_code": out.get("exit_code", None),
-        "truncated_stdout": out.get("truncated_stdout", False),
-        "truncated_stderr": out.get("truncated_stderr", False),
-    }, ensure_ascii=False, indent=2))
+    _write_text(
+        run_dir / "response.json",
+        json.dumps(
+            {
+                "stdout": out.get("stdout", ""),
+                "stderr": out.get("stderr", ""),
+                "return_value": out.get("return_value", ""),
+                "error": out.get("error", None),
+                "exit_code": out.get("exit_code", None),
+                "truncated_stdout": out.get("truncated_stdout", False),
+                "truncated_stderr": out.get("truncated_stderr", False),
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
 
     return _finalize(
-        t0, run_id, run_dir,
+        t0,
+        run_id,
+        run_dir,
         backend=backend,
         stdout=out.get("stdout", ""),
         stderr=out.get("stderr", ""),
@@ -276,11 +309,11 @@ def sandbox_run(
 
 def sandbox_test_snippet(
     code: str,
-    test_cases: List[Mapping[str, Any]],
+    test_cases: list[Mapping[str, Any]],
     timeout_seconds: int = DEFAULT_TIMEOUT,
     allow_network: bool = False,
-    packages: Optional[List[str]] = None,
-) -> Dict[str, Any]:
+    packages: list[str] | None = None,
+) -> dict[str, Any]:
     """
     Runs all test cases in ONE execution for speed + consistent state.
     Contract:
@@ -291,9 +324,14 @@ def sandbox_test_snippet(
     pkgs = [p.strip() for p in (packages or []) if isinstance(p, str) and p.strip()]
     pkg_err = _validate_packages(pkgs)
     if pkg_err:
-        return {"summary": {"total": 0, "passed": 0, "failed": 0}, "cases": [{"index": 0, "passed": False, "error": pkg_err}]}
+        return {
+            "summary": {"total": 0, "passed": 0, "failed": 0},
+            "cases": [{"index": 0, "passed": False, "error": pkg_err}],
+        }
 
-    payload_cases = [{"index": i, "input": tc.get("input"), "expected": tc.get("expected")} for i, tc in enumerate(test_cases or [])]
+    payload_cases = [
+        {"index": i, "input": tc.get("input"), "expected": tc.get("expected")} for i, tc in enumerate(test_cases or [])
+    ]
     harness = _build_batch_test_harness(payload_cases)
     merged = f"{code.rstrip()}\n\n{harness}\n"
 
@@ -308,32 +346,38 @@ def sandbox_test_snippet(
         total = len(payload_cases)
         return {
             "summary": {"total": total, "passed": 0, "failed": total},
-            "cases": [{
-                "index": i,
-                "passed": False,
-                "actual": "",
-                "expected": _safe_repr(payload_cases[i].get("expected")),
-                "error": run_res.get("error"),
-            } for i in range(total)],
+            "cases": [
+                {
+                    "index": i,
+                    "passed": False,
+                    "actual": "",
+                    "expected": _safe_repr(payload_cases[i].get("expected")),
+                    "error": run_res.get("error"),
+                }
+                for i in range(total)
+            ],
             "run_receipt": _subset_receipt(run_res),
         }
 
     try:
         parsed = json.loads(run_res.get("return_value", "") or "")
-    except Exception:
+    except json.JSONDecodeError:
         parsed = None
 
     if not isinstance(parsed, dict) or "cases" not in parsed or "summary" not in parsed:
         total = len(payload_cases)
         return {
             "summary": {"total": total, "passed": 0, "failed": total},
-            "cases": [{
-                "index": i,
-                "passed": False,
-                "actual": "",
-                "expected": _safe_repr(payload_cases[i].get("expected")),
-                "error": "Harness did not return expected JSON payload.",
-            } for i in range(total)],
+            "cases": [
+                {
+                    "index": i,
+                    "passed": False,
+                    "actual": "",
+                    "expected": _safe_repr(payload_cases[i].get("expected")),
+                    "error": "Harness did not return expected JSON payload.",
+                }
+                for i in range(total)
+            ],
             "run_receipt": _subset_receipt(run_res),
         }
 
@@ -344,7 +388,7 @@ def sandbox_test_snippet(
     }
 
 
-def _subset_receipt(run_res: Dict[str, Any]) -> Dict[str, Any]:
+def _subset_receipt(run_res: dict[str, Any]) -> dict[str, Any]:
     return {
         "run_id": run_res.get("run_id"),
         "backend": run_res.get("backend"),
@@ -360,7 +404,8 @@ def _subset_receipt(run_res: Dict[str, Any]) -> Dict[str, Any]:
 # Backend selection
 # =============================================================================
 
-def _choose_backend(allow_network: bool, packages: List[str]) -> str:
+
+def _choose_backend(allow_network: bool, packages: list[str]) -> str:
     if SANDBOX_BACKEND in ("docker", "restrictedpython", "subprocess"):
         if SANDBOX_BACKEND == "docker":
             return "docker" if _docker_available() else "subprocess"
@@ -388,8 +433,9 @@ def _docker_available() -> bool:
 def _restrictedpython_available() -> bool:
     try:
         import RestrictedPython  # noqa: F401
+
         return True
-    except Exception:
+    except ImportError:
         return False
 
 
@@ -397,25 +443,27 @@ def _restrictedpython_available() -> bool:
 # RestrictedPython backend (strict)
 # =============================================================================
 
+
 @dataclasses.dataclass
 class _RPResult:
     stdout: str = ""
     stderr: str = ""
     return_value: str = ""
-    error: Optional[str] = None
-    exit_code: Optional[int] = 0
+    error: str | None = None
+    exit_code: int | None = 0
     truncated_stdout: bool = False
     truncated_stderr: bool = False
 
 
-def _run_with_restrictedpython(code: str, timeout_seconds: int) -> Dict[str, Any]:
+def _run_with_restrictedpython(code: str, timeout_seconds: int) -> dict[str, Any]:
     """
     Strict mode: no imports, no open, safe globals injected.
     Executes in a separate process with a hard timeout.
     """
     import multiprocessing as mp
+
     ctx = mp.get_context("spawn")
-    q: "mp.Queue[Dict[str, Any]]" = ctx.Queue()
+    q: mp.Queue[dict[str, Any]] = ctx.Queue()
     p = ctx.Process(target=_restrictedpython_worker, args=(code, q), daemon=True)
     p.start()
     p.join(timeout_seconds)
@@ -435,7 +483,7 @@ def _run_with_restrictedpython(code: str, timeout_seconds: int) -> Dict[str, Any
 
     try:
         res = q.get_nowait()
-    except Exception:
+    except (OSError, RuntimeError):
         return {
             "stdout": "",
             "stderr": "",
@@ -452,48 +500,52 @@ def _run_with_restrictedpython(code: str, timeout_seconds: int) -> Dict[str, Any
 def _restrictedpython_worker(code: str, q) -> None:  # pragma: no cover
     out = _RPResult()
     try:
-        import math as _math
-        import json as _json
-        import datetime as _datetime
         import collections as _collections
+        import datetime as _datetime
+        import json as _json
+        import math as _math
         import sys as _sys
 
         # Step limiter
         steps = {"n": 0}
+
         def _trace(frame, event, arg):
             if event == "line":
                 steps["n"] += 1
                 if steps["n"] > MAX_TRACE_STEPS:
                     raise RuntimeError(f"Step limit exceeded ({MAX_TRACE_STEPS})")
             return _trace
+
         _sys.settrace(_trace)
 
         from RestrictedPython import compile_restricted  # type: ignore
+
         try:
-            from RestrictedPython import safe_builtins, limited_builtins  # type: ignore
-        except Exception:
+            from RestrictedPython import limited_builtins, safe_builtins  # type: ignore
+        except ImportError:
             from RestrictedPython.Guards import safe_builtins  # type: ignore
+
             limited_builtins = {}  # type: ignore
 
-        from RestrictedPython.PrintCollector import PrintCollector  # type: ignore
-        from RestrictedPython.Eval import default_guarded_getiter, default_guarded_getitem  # type: ignore
+        from RestrictedPython.Eval import default_guarded_getitem, default_guarded_getiter  # type: ignore
         from RestrictedPython.Guards import (  # type: ignore
+            full_write_guard,
             guarded_iter_unpack_sequence,
             guarded_unpack_sequence,
             safer_getattr,
-            full_write_guard,
         )
+        from RestrictedPython.PrintCollector import PrintCollector  # type: ignore
 
         builtins_dict = dict(safe_builtins)
         try:
             builtins_dict.update(limited_builtins)
-        except Exception:
+        except (TypeError, AttributeError):
             pass
 
         builtins_dict.pop("__import__", None)
         builtins_dict.pop("open", None)
 
-        glb: Dict[str, Any] = {
+        glb: dict[str, Any] = {
             "__builtins__": builtins_dict,
             "__name__": "thomas_sandbox",
             "_print_": PrintCollector,
@@ -508,7 +560,7 @@ def _restrictedpython_worker(code: str, q) -> None:  # pragma: no cover
             "datetime": _datetime,
             "collections": _collections,
         }
-        loc: Dict[str, Any] = {}
+        loc: dict[str, Any] = {}
 
         compile_res = compile_restricted(code, filename="<sandbox>", mode="exec")
         byte_code = getattr(compile_res, "code", compile_res)
@@ -519,12 +571,13 @@ def _restrictedpython_worker(code: str, q) -> None:  # pragma: no cover
         exec(byte_code, glb, loc)
 
         # PrintCollector output
-        stdout_parts: List[str] = []
+        stdout_parts: list[str] = []
         _print_obj = loc.get("_print") or glb.get("_print")
         if callable(_print_obj):
             try:
                 stdout_parts.append(str(_print_obj()))
-            except Exception:
+            except (TypeError, RuntimeError):
+                # REVIEWED: broad catch — PrintCollector output may raise various errors
                 pass
 
         out.stdout = "".join(stdout_parts)
@@ -551,7 +604,8 @@ def _restrictedpython_worker(code: str, q) -> None:  # pragma: no cover
 # Docker backend (best isolation)
 # =============================================================================
 
-def _run_with_docker(code: str, timeout_seconds: int, allow_network: bool, packages: List[str]) -> Dict[str, Any]:
+
+def _run_with_docker(code: str, timeout_seconds: int, allow_network: bool, packages: list[str]) -> dict[str, Any]:
     if not _docker_available():
         return _wrap_fail("docker not available")
 
@@ -593,18 +647,23 @@ def _run_with_docker(code: str, timeout_seconds: int, allow_network: bool, packa
 
         inner = []
         if wheelhouse_dir:
-            inner.append("python -m pip install --no-input --disable-pip-version-check --no-index --find-links=/wheelhouse " + " ".join(packages))
+            inner.append(
+                "python -m pip install --no-input --disable-pip-version-check --no-index --find-links=/wheelhouse "
+                + " ".join(packages)
+            )
         inner.append("python -I -S -B /work/runner.py")
         cmd += ["sh", "-lc", " && ".join(inner)]
 
-        stdout_s, stderr_s, rc, trunc = _run_process_capped(cmd, timeout_seconds, STDOUT_HEAD, STDOUT_TAIL, STDERR_HEAD, STDERR_TAIL)
+        stdout_s, stderr_s, rc, trunc = _run_process_capped(
+            cmd, timeout_seconds, STDOUT_HEAD, STDOUT_TAIL, STDERR_HEAD, STDERR_TAIL
+        )
         out = _decode_wrapper(stdout_s, stderr_s, rc)
         out["truncated_stdout"] = trunc["stdout"]
         out["truncated_stderr"] = trunc["stderr"]
         return out
 
 
-def _ensure_wheelhouse(packages: List[str]) -> Tuple[Optional[Path], Optional[str]]:
+def _ensure_wheelhouse(packages: list[str]) -> tuple[Path | None, str | None]:
     normalized = [p.strip() for p in packages if p.strip()]
     normalized.sort()
     key = f"py{sys.version_info.major}.{sys.version_info.minor}|" + "|".join(normalized)
@@ -621,15 +680,27 @@ def _ensure_wheelhouse(packages: List[str]) -> Tuple[Optional[Path], Optional[st
     env["PIP_NO_INPUT"] = "1"
     env["PYTHONNOUSERSITE"] = "1"
 
-    cmd = [sys.executable, "-m", "pip", "download", "--dest", str(wh), "--no-input", "--disable-pip-version-check"] + normalized
+    cmd = [
+        sys.executable,
+        "-m",
+        "pip",
+        "download",
+        "--dest",
+        str(wh),
+        "--no-input",
+        "--disable-pip-version-check",
+    ] + normalized
 
     try:
         completed = subprocess.run(cmd, check=False, capture_output=True, text=True, timeout=240, env=env)
         if completed.returncode != 0:
             return None, (completed.stdout or "") + "\n" + (completed.stderr or "")
-        marker.write_text(json.dumps({"packages": normalized, "py": f"{sys.version_info.major}.{sys.version_info.minor}"}, indent=2), encoding="utf-8")
+        marker.write_text(
+            json.dumps({"packages": normalized, "py": f"{sys.version_info.major}.{sys.version_info.minor}"}, indent=2),
+            encoding="utf-8",
+        )
         return wh, None
-    except Exception:
+    except (OSError, subprocess.CalledProcessError, TimeoutError):
         return None, traceback.format_exc()
 
 
@@ -637,7 +708,8 @@ def _ensure_wheelhouse(packages: List[str]) -> Tuple[Optional[Path], Optional[st
 # Subprocess backend (compat fallback)
 # =============================================================================
 
-def _run_with_subprocess(code: str, timeout_seconds: int, allow_network: bool, packages: List[str]) -> Dict[str, Any]:
+
+def _run_with_subprocess(code: str, timeout_seconds: int, allow_network: bool, packages: list[str]) -> dict[str, Any]:
     python_exe = sys.executable
     if packages:
         python_exe = str(_ensure_venv_with_packages(packages))
@@ -647,7 +719,9 @@ def _run_with_subprocess(code: str, timeout_seconds: int, allow_network: bool, p
         pth.write_text(_build_wrapper_script(code, allow_network=allow_network), encoding="utf-8")
 
         cmd = [python_exe, "-I", "-S", "-B", str(pth)]
-        stdout_s, stderr_s, rc, trunc = _run_process_capped(cmd, timeout_seconds, STDOUT_HEAD, STDOUT_TAIL, STDERR_HEAD, STDERR_TAIL)
+        stdout_s, stderr_s, rc, trunc = _run_process_capped(
+            cmd, timeout_seconds, STDOUT_HEAD, STDOUT_TAIL, STDERR_HEAD, STDERR_TAIL
+        )
         out = _decode_wrapper(stdout_s, stderr_s, rc)
         out["truncated_stdout"] = trunc["stdout"]
         out["truncated_stderr"] = trunc["stderr"]
@@ -658,24 +732,51 @@ def _run_with_subprocess(code: str, timeout_seconds: int, allow_network: bool, p
 # Wrapper script used by docker/subprocess
 # =============================================================================
 
+
 def _build_wrapper_script(user_code: str, allow_network: bool) -> str:
     user_b64 = base64.b64encode(user_code.encode("utf-8")).decode("ascii")
     allow_network_literal = "True" if allow_network else "False"
 
     blocked_always = {
-        "os", "sys", "subprocess", "importlib", "builtins", "ctypes",
-        "pathlib", "shutil", "tempfile", "io",
-        "multiprocessing", "threading", "signal",
-        "inspect", "types", "gc",
+        "os",
+        "sys",
+        "subprocess",
+        "importlib",
+        "builtins",
+        "ctypes",
+        "pathlib",
+        "shutil",
+        "tempfile",
+        "io",
+        "multiprocessing",
+        "threading",
+        "signal",
+        "inspect",
+        "types",
+        "gc",
     }
     blocked_net = {
-        "socket", "_socket", "ssl", "_ssl",
-        "http", "urllib", "ftplib", "asyncio", "selectors",
-        "smtplib", "imaplib", "poplib", "telnetlib", "xmlrpc",
-        "websocket", "websockets", "requests", "aiohttp",
+        "socket",
+        "_socket",
+        "ssl",
+        "_ssl",
+        "http",
+        "urllib",
+        "ftplib",
+        "asyncio",
+        "selectors",
+        "smtplib",
+        "imaplib",
+        "poplib",
+        "telnetlib",
+        "xmlrpc",
+        "websocket",
+        "websockets",
+        "requests",
+        "aiohttp",
     }
 
-    return f'''# Auto-generated Thomas sandbox wrapper
+    return f"""# Auto-generated Thomas sandbox wrapper
 import base64 as _b64
 import json as _json
 import math as _math
@@ -754,10 +855,10 @@ except Exception as e:
 _sys.stderr.write("\\n{SENTINEL}" + _json.dumps({{"return_value": _return_value, "error": _error}}, ensure_ascii=False) + "\\n")
 if _error:
     raise SystemExit(1)
-'''
+"""
 
 
-def _decode_wrapper(stdout: str, stderr: str, rc: int) -> Dict[str, Any]:
+def _decode_wrapper(stdout: str, stderr: str, rc: int) -> dict[str, Any]:
     return_value = ""
     error = None
     if SENTINEL in stderr:
@@ -769,7 +870,7 @@ def _decode_wrapper(stdout: str, stderr: str, rc: int) -> Dict[str, Any]:
             return_value = rv if isinstance(rv, str) else _safe_repr(rv)
             if payload.get("error"):
                 error = str(payload.get("error"))
-        except Exception:
+        except (ValueError, KeyError, AttributeError):
             error = "Failed to parse sandbox return payload."
     if rc != 0 and error is None:
         error = f"Process exited with code {rc}"
@@ -779,6 +880,7 @@ def _decode_wrapper(stdout: str, stderr: str, rc: int) -> Dict[str, Any]:
 # =============================================================================
 # Process execution with capped capture (head + tail)
 # =============================================================================
+
 
 class _CappedBuffer:
     def __init__(self, head_limit: int, tail_limit: int):
@@ -817,13 +919,13 @@ class _CappedBuffer:
 
 
 def _run_process_capped(
-    cmd: List[str],
+    cmd: list[str],
     timeout_seconds: int,
     stdout_head: int,
     stdout_tail: int,
     stderr_head: int,
     stderr_tail: int,
-) -> Tuple[str, str, int, Dict[str, bool]]:
+) -> tuple[str, str, int, dict[str, bool]]:
     import threading
 
     out_buf = _CappedBuffer(stdout_head, stdout_tail)
@@ -836,7 +938,7 @@ def _run_process_capped(
                 if not chunk:
                     break
                 buf.push(chunk)
-        except Exception:
+        except OSError:
             pass
 
     preexec_fn = _unix_preexec_limits if os.name != "nt" else None
@@ -860,7 +962,7 @@ def _run_process_capped(
     except subprocess.TimeoutExpired:
         try:
             p.kill()
-        except Exception:
+        except (OSError, ProcessLookupError):
             pass
         return "", "", -1, {"stdout": False, "stderr": False}
 
@@ -868,22 +970,28 @@ def _run_process_capped(
     t_err.join(timeout=0.5)
 
     rc = p.returncode if p.returncode is not None else 0
-    return out_buf.render_text(), err_buf.render_text(), int(rc), {"stdout": out_buf.truncated, "stderr": err_buf.truncated}
+    return (
+        out_buf.render_text(),
+        err_buf.render_text(),
+        int(rc),
+        {"stdout": out_buf.truncated, "stderr": err_buf.truncated},
+    )
 
 
 def _unix_preexec_limits():
     try:
         import resource
+
         resource.setrlimit(resource.RLIMIT_CPU, (UNIX_CPU_SECONDS, UNIX_CPU_SECONDS))
         resource.setrlimit(resource.RLIMIT_AS, (UNIX_AS_LIMIT, UNIX_AS_LIMIT))
         resource.setrlimit(resource.RLIMIT_FSIZE, (UNIX_FSIZE_LIMIT, UNIX_FSIZE_LIMIT))
         if hasattr(resource, "RLIMIT_NPROC"):
             resource.setrlimit(resource.RLIMIT_NPROC, (0, 0))
-    except Exception:
+    except (OSError, ValueError):
         pass
 
 
-def _child_env() -> Dict[str, str]:
+def _child_env() -> dict[str, str]:
     env = os.environ.copy()
     env["PYTHONNOUSERSITE"] = "1"
     env["PYTHONDONTWRITEBYTECODE"] = "1"
@@ -894,7 +1002,8 @@ def _child_env() -> Dict[str, str]:
 # Venv package caching (subprocess fallback)
 # =============================================================================
 
-def _ensure_venv_with_packages(packages: List[str]) -> Path:
+
+def _ensure_venv_with_packages(packages: list[str]) -> Path:
     venv_root = Path(os.environ.get("THOMAS_SANDBOX_VENV_DIR", str(RUNTIME_DIR / "sandbox" / "venvs")))
     venv_root.mkdir(parents=True, exist_ok=True)
 
@@ -937,9 +1046,10 @@ def _venv_python_executable(venv_dir: Path) -> Path:
 # Test harness
 # =============================================================================
 
-def _build_batch_test_harness(cases: List[Dict[str, Any]]) -> str:
+
+def _build_batch_test_harness(cases: list[dict[str, Any]]) -> str:
     cases_json = _json_dumps_best_effort(cases)
-    return f'''
+    return f"""
 # --- Thomas sandbox.test_snippet batch harness ---
 __thomas_cases = json.loads({cases_json!r})
 
@@ -947,7 +1057,7 @@ def __thomas_safe(v):
     try:
         json.dumps(v, ensure_ascii=False)
         return v
-    except Exception:
+    except (TypeError, ValueError):
         return repr(v)
 
 out_cases = []
@@ -987,24 +1097,25 @@ for c in __thomas_cases:
 
 summary = {{"total": len(__thomas_cases), "passed": passed, "failed": len(__thomas_cases) - passed}}
 result = json.dumps({{"summary": summary, "cases": out_cases}}, ensure_ascii=False)
-'''
+"""
 
 
 # =============================================================================
 # Validation / receipts / helpers
 # =============================================================================
 
+
 def _clamp_timeout(timeout_seconds: int) -> int:
     try:
         t = int(timeout_seconds)
-    except Exception:
+    except (ValueError, TypeError):
         t = DEFAULT_TIMEOUT
     if t <= 0:
         t = DEFAULT_TIMEOUT
     return max(1, min(MAX_TIMEOUT, t))
 
 
-def _validate_packages(packages: List[str]) -> Optional[str]:
+def _validate_packages(packages: list[str]) -> str | None:
     for p in packages:
         if not p or not isinstance(p, str):
             return "invalid package entry"
@@ -1023,7 +1134,7 @@ def _validate_packages(packages: List[str]) -> Optional[str]:
     return None
 
 
-def _limits_receipt(backend: str, timeout: int, allow_network: bool) -> Dict[str, Any]:
+def _limits_receipt(backend: str, timeout: int, allow_network: bool) -> dict[str, Any]:
     if backend == "docker":
         return {
             "timeout_seconds": timeout,
@@ -1047,7 +1158,11 @@ def _limits_receipt(backend: str, timeout: int, allow_network: bool) -> Dict[str
     return {
         "timeout_seconds": timeout,
         "network": "enabled" if allow_network else "disabled (best-effort)",
-        "subprocess": {"python_isolated_flags": ["-I", "-S", "-B"], "step_limit": MAX_TRACE_STEPS, "unix_rlimits": (os.name != "nt")},
+        "subprocess": {
+            "python_isolated_flags": ["-I", "-S", "-B"],
+            "step_limit": MAX_TRACE_STEPS,
+            "unix_rlimits": (os.name != "nt"),
+        },
     }
 
 
@@ -1059,12 +1174,12 @@ def _finalize(
     stdout: str,
     stderr: str,
     return_value: str,
-    error: Optional[str],
-    exit_code: Optional[int] = None,
+    error: str | None,
+    exit_code: int | None = None,
     truncated_stdout: bool = False,
     truncated_stderr: bool = False,
-    limits: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
+    limits: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     return {
         "stdout": stdout,
         "stderr": stderr,
@@ -1085,25 +1200,35 @@ def _safe_repr(value: Any) -> str:
     try:
         return repr(value)
     except Exception:
+        # REVIEWED: broad catch — repr() can raise various exceptions
         try:
             return str(value)
         except Exception:
+            # REVIEWED: broad catch — str() can raise various exceptions
             return "<unrepr-able>"
 
 
 def _json_dumps_best_effort(value: Any) -> str:
     try:
         return json.dumps(value, ensure_ascii=False)
-    except Exception:
+    except (TypeError, ValueError):
         return json.dumps(_safe_repr(value), ensure_ascii=False)
 
 
 def _write_text(path: Path, text: str) -> None:
     try:
         path.write_text(text, encoding="utf-8")
-    except Exception:
+    except (OSError, UnicodeEncodeError):
         pass
 
 
-def _wrap_fail(msg: str, detail: str = "") -> Dict[str, Any]:
-    return {"stdout": "", "stderr": detail, "return_value": "", "error": msg, "exit_code": None, "truncated_stdout": False, "truncated_stderr": False}
+def _wrap_fail(msg: str, detail: str = "") -> dict[str, Any]:
+    return {
+        "stdout": "",
+        "stderr": detail,
+        "return_value": "",
+        "error": msg,
+        "exit_code": None,
+        "truncated_stdout": False,
+        "truncated_stderr": False,
+    }

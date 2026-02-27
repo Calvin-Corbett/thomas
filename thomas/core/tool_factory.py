@@ -30,9 +30,9 @@ import logging
 import re
 import textwrap
 import threading
-from dataclasses import asdict, dataclass, field
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -43,24 +43,25 @@ _REGISTRY_FILE = Path("thomas_tool_registry.json")
 # Data model
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class GeneratedTool:
     """A tool extracted from a completed task and serialised for reuse."""
 
     name: str
     description: str
-    parameters: Dict[str, Any]          # JSON Schema object
-    implementation: str                  # Full Python source as string
+    parameters: dict[str, Any]  # JSON Schema object
+    implementation: str  # Full Python source as string
     category: str = "generated"
-    created_from: str = ""               # brief description of originating task
+    created_from: str = ""  # brief description of originating task
     usage_count: int = 0
     last_used: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "GeneratedTool":
+    def from_dict(cls, d: dict[str, Any]) -> GeneratedTool:
         return cls(
             name=d.get("name", ""),
             description=d.get("description", ""),
@@ -72,7 +73,7 @@ class GeneratedTool:
             last_used=d.get("last_used", ""),
         )
 
-    def to_openai_spec(self) -> Dict[str, Any]:
+    def to_openai_spec(self) -> dict[str, Any]:
         """Return an OpenAI-compatible function spec for use in LLM calls."""
         return {
             "type": "function",
@@ -88,6 +89,7 @@ class GeneratedTool:
 # Factory
 # ---------------------------------------------------------------------------
 
+
 class ToolFactory:
     """
     Extracts, stores, and registers reusable tools.
@@ -102,13 +104,13 @@ class ToolFactory:
 
     def __init__(
         self,
-        registry_file: Optional[Path] = None,
-        live_registry: Any = None,   # thomas.tools.registry.ToolRegistry | None
+        registry_file: Path | None = None,
+        live_registry: Any = None,  # thomas.tools.registry.ToolRegistry | None
     ) -> None:
         self.registry_file = Path(registry_file or _REGISTRY_FILE)
         self._live_registry = live_registry
         self._lock = threading.Lock()
-        self._tools: Dict[str, "GeneratedTool"] = {}
+        self._tools: dict[str, GeneratedTool] = {}
 
     # ------------------------------------------------------------------
     # Lifecycle
@@ -121,10 +123,7 @@ class ToolFactory:
         try:
             raw = json.loads(self.registry_file.read_text(encoding="utf-8"))
             with self._lock:
-                self._tools = {
-                    name: GeneratedTool.from_dict(spec)
-                    for name, spec in raw.get("tools", {}).items()
-                }
+                self._tools = {name: GeneratedTool.from_dict(spec) for name, spec in raw.get("tools", {}).items()}
             log.info("ToolFactory: loaded %d tools from %s", len(self._tools), self.registry_file)
             return len(self._tools)
         except Exception as e:
@@ -152,7 +151,7 @@ class ToolFactory:
     # Registration
     # ------------------------------------------------------------------
 
-    def register_tool(self, tool: "GeneratedTool", overwrite: bool = False) -> bool:
+    def register_tool(self, tool: GeneratedTool, overwrite: bool = False) -> bool:
         """
         Add a GeneratedTool to the factory registry, save to disk, and
         optionally register it live in the attached ToolRegistry.
@@ -169,11 +168,11 @@ class ToolFactory:
         log.info("ToolFactory: registered tool %r (%s).", safe_name, tool.category)
         return True
 
-    def get(self, name: str) -> Optional["GeneratedTool"]:
+    def get(self, name: str) -> GeneratedTool | None:
         with self._lock:
             return self._tools.get(_safe_tool_name(name))
 
-    def list_tools(self, category: Optional[str] = None) -> List["GeneratedTool"]:
+    def list_tools(self, category: str | None = None) -> list[GeneratedTool]:
         with self._lock:
             tools = list(self._tools.values())
         if category:
@@ -183,6 +182,7 @@ class ToolFactory:
     def increment_usage(self, name: str) -> None:
         """Call this whenever a generated tool is successfully used."""
         from datetime import datetime, timezone
+
         with self._lock:
             t = self._tools.get(_safe_tool_name(name))
             if t:
@@ -197,10 +197,10 @@ class ToolFactory:
     def extract_from_turn(
         self,
         task_description: str,
-        tool_calls: List[Dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
         result_summary: str,
         category: str = "generated",
-    ) -> Optional["GeneratedTool"]:
+    ) -> GeneratedTool | None:
         """
         Attempt to auto-extract a reusable tool from a completed conversation turn.
 
@@ -241,7 +241,7 @@ class ToolFactory:
         for t in tools:
             self._maybe_register_live(t)
 
-    def _maybe_register_live(self, tool: "GeneratedTool") -> None:
+    def _maybe_register_live(self, tool: GeneratedTool) -> None:
         if self._live_registry is None:
             return
         try:
@@ -292,8 +292,25 @@ def _safe_tool_name(name: str) -> str:
 def _derive_tool_name(task: str) -> str:
     """Produce a tool name from a task description."""
     words = re.findall(r"[a-z]+", task.lower())
-    stopwords = {"the", "a", "an", "and", "or", "to", "of", "in", "for",
-                 "with", "on", "at", "by", "that", "this", "it", "is"}
+    stopwords = {
+        "the",
+        "a",
+        "an",
+        "and",
+        "or",
+        "to",
+        "of",
+        "in",
+        "for",
+        "with",
+        "on",
+        "at",
+        "by",
+        "that",
+        "this",
+        "it",
+        "is",
+    }
     keywords = [w for w in words if w not in stopwords][:4]
     return "generated." + "_".join(keywords) if keywords else "generated.tool"
 
@@ -305,12 +322,12 @@ def _derive_description(task: str, result: str) -> str:
     return base
 
 
-def _infer_parameters(task: str, tool_calls: List[Dict[str, Any]]) -> Dict[str, Any]:
+def _infer_parameters(task: str, tool_calls: list[dict[str, Any]]) -> dict[str, Any]:
     """
     Build a minimal JSON-Schema parameters block from the tool calls that were made.
     Collects unique arg names seen and infers their type from the values.
     """
-    props: Dict[str, Any] = {}
+    props: dict[str, Any] = {}
     for call in tool_calls:
         args = call.get("args", call.get("arguments", call.get("input", {})))
         if isinstance(args, str):
@@ -321,45 +338,147 @@ def _infer_parameters(task: str, tool_calls: List[Dict[str, Any]]) -> Dict[str, 
         if isinstance(args, dict):
             for k, v in args.items():
                 if k not in props:
-                    typ = ("boolean" if isinstance(v, bool) else
-                           "integer" if isinstance(v, int) else
-                           "number" if isinstance(v, float) else
-                           "array" if isinstance(v, list) else
-                           "object" if isinstance(v, dict) else "string")
+                    typ = (
+                        "boolean"
+                        if isinstance(v, bool)
+                        else "integer"
+                        if isinstance(v, int)
+                        else "number"
+                        if isinstance(v, float)
+                        else "array"
+                        if isinstance(v, list)
+                        else "object"
+                        if isinstance(v, dict)
+                        else "string"
+                    )
                     props[k] = {"type": typ, "description": f"Argument '{k}'"}
     return {"type": "object", "properties": props, "required": []}
 
 
-def _build_implementation(
-    name: str, task: str, tool_calls: List[Dict[str, Any]], result: str
-) -> str:
-    """Build a Python implementation stub including original tool call sequence as comments."""
+def _build_implementation(name: str, task: str, tool_calls: list[dict[str, Any]], result: str) -> str:
+    """Build a Python implementation that invokes tools via the registry.
+
+    Generates a function that:
+    - Looks up stored tool_calls from the original sequence
+    - Invokes each tool via the registry
+    - Supports dry_run parameter for testing
+    - Handles errors gracefully
+    """
     fn_name = name.replace(".", "_").replace("-", "_")
-    calls_summary = "\n".join(
-        f"    # {i+1}. {c.get('name', c.get('function', {}).get('name', 'tool'))}({c.get('args', {})})"
-        for i, c in enumerate(tool_calls[:10])
-    )
-    return textwrap.dedent(f"""
-        async def {fn_name}(**kwargs):
-            \"\"\"
-            Auto-generated reusable tool.
-            Original task: {task.strip()[:150]}
-            Result: {result.strip()[:100]}
-            \"\"\"
-            # Tool calls made during the original task:
-{calls_summary}
-            # TODO: Replace the above with actual shell.exec / fs.* / git.* calls.
-            raise NotImplementedError(
-                "{name} is an auto-generated stub. Implement body or invoke via Thomas."
-            )
-    """).strip()
+
+    # Build a summary of tool calls for the docstring
+    tool_names = []
+    for c in tool_calls[:5]:
+        name_val = c.get("name") or c.get("function", {}).get("name")
+        if name_val:
+            tool_names.append(name_val)
+    tool_summary = "; ".join(tool_names) if tool_names else "tool sequence"
+
+    # Safely represent tool_calls
+    tool_calls_repr = repr(tool_calls)
+
+    # Build the implementation string without using f-string to avoid brace escaping issues
+    code_body = textwrap.dedent("""
+        async def FNNAME(dry_run: bool = False, **kwargs):
+            '''
+            Auto-generated reusable tool from: TASK_DESC
+
+            Invokes the original sequence of tool calls:
+            TOOL_SUMMARY
+
+            Result: RESULT_DESC
+            '''
+            # Original tool sequence stored
+            _tool_calls = TOOL_CALLS_REPR
+
+            # Get the tool registry to execute tools
+            try:
+                from thomas.tools.registry import ToolRegistry
+            except ImportError:
+                return {"ok": False, "error": "ToolRegistry not available"}
+
+            # For now, use the global registry if available
+            # In production, this would be passed as a parameter
+            registry = None
+            try:
+                # Try to access a global/singleton registry
+                import thomas.core.tool_factory as tf_module
+                factory = getattr(tf_module, "_factory", None)
+                if factory:
+                    registry = getattr(factory, "_live_registry", None)
+            except Exception:
+                pass
+
+            if not registry:
+                return {"ok": False, "error": "No tool registry available. Tools cannot be executed."}
+
+            results = []
+            final_result = None
+
+            for i, tool_call in enumerate(_tool_calls):
+                tool_name = tool_call.get("name") or tool_call.get("function", {}).get("name")
+                tool_args = tool_call.get("arguments") or tool_call.get("args", {})
+
+                if not tool_name:
+                    return {"ok": False, "error": f"Tool call {i} has no name"}
+
+                if dry_run:
+                    results.append({
+                        "step": i + 1,
+                        "tool": tool_name,
+                        "args": tool_args,
+                        "status": "would_execute"
+                    })
+                    continue
+
+                try:
+                    result = await registry.execute(tool_name, tool_args)
+                    final_result = result.data if hasattr(result, 'data') else result
+                    results.append({
+                        "step": i + 1,
+                        "tool": tool_name,
+                        "ok": result.ok if hasattr(result, 'ok') else bool(result),
+                        "result": final_result
+                    })
+
+                    # Stop on first error
+                    if hasattr(result, 'ok') and not result.ok:
+                        return {
+                            "ok": False,
+                            "error": f"Tool {tool_name} failed: {result.error}",
+                            "steps_completed": results
+                        }
+                except Exception as e:
+                    return {
+                        "ok": False,
+                        "error": f"Failed to execute tool {tool_name}: {type(e).__name__}: {str(e)}",
+                        "steps_completed": results
+                    }
+
+            return {
+                "ok": True,
+                "final_result": final_result,
+                "steps": results,
+                "dry_run": dry_run
+            }
+    """)
+
+    # Replace placeholders
+    code_body = code_body.replace("FNNAME", fn_name)
+    code_body = code_body.replace("TASK_DESC", task.strip()[:120])
+    code_body = code_body.replace("TOOL_SUMMARY", tool_summary)
+    code_body = code_body.replace("RESULT_DESC", result.strip()[:80])
+    code_body = code_body.replace("TOOL_CALLS_REPR", tool_calls_repr)
+
+    return code_body.strip()
 
 
 # ---------------------------------------------------------------------------
 # Live Tool wrapper — wraps a GeneratedTool as a callable Tool instance
 # ---------------------------------------------------------------------------
 
-def _make_live_tool(gt: "GeneratedTool") -> Any:
+
+def _make_live_tool(gt: GeneratedTool) -> Any:
     """Return a Tool subclass instance wrapping a GeneratedTool."""
     from thomas.tools.base import Tool, ToolResult
 
@@ -371,7 +490,7 @@ def _make_live_tool(gt: "GeneratedTool") -> Any:
         description = _gt.description
         parameters = _gt.parameters
 
-        async def execute(self, args: Dict[str, Any]) -> ToolResult:
+        async def execute(self, args: dict[str, Any]) -> ToolResult:
             return ToolResult(
                 ok=True,
                 data={
@@ -390,7 +509,7 @@ def _make_live_tool(gt: "GeneratedTool") -> Any:
 # Process-level singleton
 # ---------------------------------------------------------------------------
 
-_factory: Optional[ToolFactory] = None
+_factory: ToolFactory | None = None
 _factory_lock = threading.Lock()
 
 

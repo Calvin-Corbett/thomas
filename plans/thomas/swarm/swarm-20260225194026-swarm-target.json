@@ -1,0 +1,28 @@
+{
+  "entries": [
+    {
+      "agent": "Codex 31",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 31\"; $env:CODEX_AGENT_NAME=\"Codex 31\"; python scripts/workboard_claim.py --claim --agent \"Codex 31\" --name \"Codex 31\" --role solo --parent none --scope \"scripts/a.py\" --task \"[WIP][SWARM:swarm-20260225194026-swarm-target] swarm-target lane\"; python scripts/workboard_message.py --send --from-agent \"Codex 31\" --to-agent \"task-manager-agent\" --task-id \"swarm-target\" --kind status --priority p0 --summary \"swarm swarm-20260225194026-swarm-target terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225194026-swarm-target\\prompts\\codex-31.txt' -Raw; codex --help $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "false",
+      "lane_scope": "scripts/a.py",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225194026-swarm-target\\prompts\\codex-31.txt",
+      "task_id": "swarm-target",
+      "workboard": "C:\\Users\\corbe\\AppData\\Local\\Temp\\pytest-of-corbe\\pytest-1021\\test_launch_missing_only_targe0\\WORKBOARD.md"
+    },
+    {
+      "agent": "Codex 32",
+      "bootstrap": "Set-Location \"C:/Users/corbe/Thomas\"; $env:THOMAS_AGENT_NAME=\"Codex 32\"; $env:CODEX_AGENT_NAME=\"Codex 32\"; python scripts/workboard_claim.py --claim --agent \"Codex 32\" --name \"Codex 32\" --role solo --parent none --scope \"plans/thomas/swarm/swarm-20260225194026-swarm-target/lanes/codex-32.md\" --task \"[WIP][SWARM:swarm-20260225194026-swarm-target] swarm-target lane\"; python scripts/workboard_message.py --send --from-agent \"Codex 32\" --to-agent \"task-manager-agent\" --task-id \"swarm-target\" --kind status --priority p0 --summary \"swarm swarm-20260225194026-swarm-target terminal online\" --requested-action none --decision pending; $prompt = Get-Content 'C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225194026-swarm-target\\prompts\\codex-32.txt' -Raw; codex --help $prompt",
+      "coordinator": "task-manager-agent",
+      "has_active_claim": "false",
+      "lane_scope": "plans/thomas/swarm/swarm-20260225194026-swarm-target/lanes/codex-32.md",
+      "prompt_path": "C:\\Users\\corbe\\Thomas\\plans\\thomas\\swarm\\swarm-20260225194026-swarm-target\\prompts\\codex-32.txt",
+      "task_id": "swarm-target",
+      "workboard": "C:\\Users\\corbe\\AppData\\Local\\Temp\\pytest-of-corbe\\pytest-1021\\test_launch_missing_only_targe0\\WORKBOARD.md"
+    }
+  ],
+  "entry_count": 2,
+  "generated_at": "2026-02-25T19:40:26+00:00",
+  "swarm_id": "swarm-20260225194026-swarm-target",
+  "task_id": "swarm-target"
+}

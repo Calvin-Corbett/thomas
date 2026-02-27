@@ -6,7 +6,7 @@ import urllib.error
 import urllib.request
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -32,7 +32,7 @@ def _load_channels_store(config: AppConfig) -> dict[str, Any]:
         return {"providers": {}}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except json.JSONDecodeError:
         return {"providers": {}}
     if not isinstance(payload, dict):
         return {"providers": {}}
@@ -120,7 +120,7 @@ def _channel_rows(config: AppConfig) -> list[dict[str, Any]]:
 
 
 def _provider_online_probe(name: str, token: str, webhook: str, timeout_s: float) -> dict[str, Any]:
-    def _json_get(url: str, headers: Optional[dict[str, str]] = None) -> dict[str, Any]:
+    def _json_get(url: str, headers: dict[str, str] | None = None) -> dict[str, Any]:
         req = urllib.request.Request(url=url, headers=headers or {})
         try:
             with urllib.request.urlopen(req, timeout=timeout_s) as resp:
@@ -129,19 +129,19 @@ def _provider_online_probe(name: str, token: str, webhook: str, timeout_s: float
             payload: Any
             try:
                 payload = json.loads(body) if body else {}
-            except Exception:
+            except json.JSONDecodeError:
                 payload = {"raw": body[:300]}
             return {"ok": 200 <= status < 300, "status": status, "payload": payload}
         except urllib.error.HTTPError as e:
             body = ""
             try:
                 body = e.read().decode("utf-8", errors="replace")
-            except Exception:
+            except json.JSONDecodeError:
                 body = ""
             payload: Any
             try:
                 payload = json.loads(body) if body else {}
-            except Exception:
+            except json.JSONDecodeError:
                 payload = {"raw": body[:300]}
             return {"ok": False, "status": int(getattr(e, "code", 0) or 0), "payload": payload}
         except Exception as e:
@@ -301,15 +301,21 @@ def channels_test(
     configured = bool(token or webhook)
 
     checks: list[dict[str, Any]] = []
-    checks.append({"check": "configured", "ok": configured, "detail": "token/webhook present" if configured else "not set"})
+    checks.append(
+        {"check": "configured", "ok": configured, "detail": "token/webhook present" if configured else "not set"}
+    )
     if provider == "telegram" and token:
         checks.append({"check": "telegram_token_format", "ok": ":" in token, "detail": "must contain ':'"})
     if provider == "discord" and token:
         checks.append({"check": "discord_token_length", "ok": len(token) >= 20, "detail": "expected >= 20 chars"})
     if provider == "slack" and token:
-        checks.append({"check": "slack_token_prefix", "ok": token.startswith("xox"), "detail": "expected token prefix xox*"})
+        checks.append(
+            {"check": "slack_token_prefix", "ok": token.startswith("xox"), "detail": "expected token prefix xox*"}
+        )
     if webhook:
-        checks.append({"check": "webhook_scheme", "ok": webhook.startswith("https://"), "detail": "expected https:// URL"})
+        checks.append(
+            {"check": "webhook_scheme", "ok": webhook.startswith("https://"), "detail": "expected https:// URL"}
+        )
 
     online_result: dict[str, Any] = {}
     if online:

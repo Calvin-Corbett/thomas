@@ -4,8 +4,9 @@ import asyncio
 import dataclasses
 import inspect
 import json
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Mapping, Optional, Protocol, Sequence, runtime_checkable
+from typing import Any, Protocol, runtime_checkable
 
 
 class ChannelListEnrichedOutputError(Exception):
@@ -14,7 +15,7 @@ class ChannelListEnrichedOutputError(Exception):
     The `code` field is stable and intended for automation.
     """
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(f"{code}: {message}")
         self.code = code
         self.message = message
@@ -31,7 +32,7 @@ class ChannelListEnrichedOutputError(Exception):
 class ChannelListEnrichedRequest:
     """Input contract for enriched channel listing."""
 
-    integration: Optional[str] = None
+    integration: str | None = None
     limit: int = 100
     offset: int = 0
 
@@ -43,10 +44,10 @@ class ChannelEnriched:
     id: str
     name: str
     platform: str
-    kind: Optional[str] = None
-    username: Optional[str] = None
-    member_count: Optional[int] = None
-    is_private: Optional[bool] = None
+    kind: str | None = None
+    username: str | None = None
+    member_count: int | None = None
+    is_private: bool | None = None
     meta: dict[str, Any] = field(default_factory=dict)
 
 
@@ -99,7 +100,9 @@ def channel_list_enriched_output(
     if not integration_name:
         raise ChannelListEnrichedOutputError("invalid_input", "integration name resolved to an empty string")
 
-    client = integration_client if integration_client is not None else _resolve_integration_client(ctx, integration_name)
+    client = (
+        integration_client if integration_client is not None else _resolve_integration_client(ctx, integration_name)
+    )
     if client is None:
         raise ChannelListEnrichedOutputError(
             "missing_config",
@@ -110,7 +113,7 @@ def channel_list_enriched_output(
         raw_channels = _call_list_channels(client, limit=request.limit, offset=request.offset)
     except ChannelListEnrichedOutputError:
         raise
-    except Exception as exc:
+    except (ConnectionError, TimeoutError, RuntimeError) as exc:
         raise ChannelListEnrichedOutputError(
             "external_failure",
             f"Failed to list channels for '{integration_name}'.",
@@ -153,7 +156,7 @@ def _validate_request(request: ChannelListEnrichedRequest) -> None:
         raise ChannelListEnrichedOutputError("invalid_input", "offset must be >= 0", details={"offset": request.offset})
 
 
-def _infer_integration_name(ctx: Any) -> Optional[str]:
+def _infer_integration_name(ctx: Any) -> str | None:
     if ctx is None:
         return None
     for key in ("integration", "platform", "channel_platform"):
@@ -210,7 +213,7 @@ def _call_list_channels(client: Any, *, limit: int, offset: int) -> Sequence[Any
     )
 
     # Normalize no-limit behavior; callers can pass 0 from CLI to mean "all".
-    norm_limit: Optional[int] = None if limit == 0 else limit
+    norm_limit: int | None = None if limit == 0 else limit
 
     for name in method_names:
         method = getattr(client, name, None)
@@ -373,11 +376,11 @@ def _maybe_get(obj: Any, key: str) -> Any:
         if isinstance(obj, Mapping):
             return obj.get(key)
         return getattr(obj, key, None)
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return None
 
 
-def _stringify_first(*values: Any) -> Optional[str]:
+def _stringify_first(*values: Any) -> str | None:
     for v in values:
         if v is None:
             continue
@@ -387,11 +390,11 @@ def _stringify_first(*values: Any) -> Optional[str]:
     return None
 
 
-def _stringify_optional(value: Any, *fallbacks: Any) -> Optional[str]:
+def _stringify_optional(value: Any, *fallbacks: Any) -> str | None:
     return _stringify_first(value, *fallbacks)
 
 
-def _int_optional(value: Any, *fallbacks: Any) -> Optional[int]:
+def _int_optional(value: Any, *fallbacks: Any) -> int | None:
     for v in (value, *fallbacks):
         if v is None:
             continue
@@ -402,7 +405,7 @@ def _int_optional(value: Any, *fallbacks: Any) -> Optional[int]:
     return None
 
 
-def _bool_optional(value: Any, *fallbacks: Any) -> Optional[bool]:
+def _bool_optional(value: Any, *fallbacks: Any) -> bool | None:
     for v in (value, *fallbacks):
         if v is None:
             continue

@@ -1,16 +1,14 @@
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Optional, Sequence
-
 import hashlib
 import json
 import os
 import re
 import tempfile
 import zipfile
-
+from collections.abc import Sequence
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
 
 SUPPORTED_IMAGE_EXTENSIONS: tuple[str, ...] = (".png", ".jpg", ".jpeg", ".webp")
 
@@ -21,7 +19,7 @@ class BrowserArtifactPdfExportError(Exception):
     code: str = "BROWSER_ARTIFACT_PDF_EXPORT_ERROR"
     exit_code: int = 1
 
-    def __init__(self, message: str, *, details: Optional[dict[str, object]] = None) -> None:
+    def __init__(self, message: str, *, details: dict[str, object] | None = None) -> None:
         super().__init__(message)
         self.details = details or {}
 
@@ -93,10 +91,10 @@ class BrowserArtifactPdfExportRequest:
     """
 
     artifact_ref: str
-    output_path: Optional[str] = None
+    output_path: str | None = None
     overwrite: bool = False
     page_size: str = "letter"  # "letter" | "a4" | "auto"
-    artifacts_root: Optional[str] = None
+    artifacts_root: str | None = None
     output_format: str = "auto"  # "auto" | "pdf" | "zip"
     include_images_in_zip: bool = False
 
@@ -126,11 +124,11 @@ class BrowserArtifactPdfExportResult:
     pages: int
     images: int
     image_paths: tuple[str, ...] = field(default_factory=tuple)
-    pdf_path: Optional[str] = None
-    zip_path: Optional[str] = None
-    pdf_name_in_zip: Optional[str] = None
-    manifest_name_in_zip: Optional[str] = None
-    sha256: Optional[str] = None
+    pdf_path: str | None = None
+    zip_path: str | None = None
+    pdf_name_in_zip: str | None = None
+    manifest_name_in_zip: str | None = None
+    sha256: str | None = None
 
     def to_dict(self) -> dict[str, object]:
         return asdict(self)
@@ -177,7 +175,7 @@ def _resolve_default_artifacts_root() -> Path:
     # unrelated heavy dependencies at module import time.
     try:
         from thomas.tools import browser as browser_tool  # type: ignore
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         browser_tool = None
 
     if browser_tool is not None:
@@ -214,7 +212,7 @@ def _resolve_default_artifacts_root() -> Path:
     )
 
 
-def _resolve_artifact_path(artifact_ref: str, artifacts_root: Optional[str]) -> Path:
+def _resolve_artifact_path(artifact_ref: str, artifacts_root: str | None) -> Path:
     ref = artifact_ref.strip()
     if not ref:
         raise InvalidInputError("artifact_ref is required.")
@@ -266,7 +264,7 @@ def _normalize_output_format(value: str) -> str:
     raise InvalidInputError(f"Unsupported output_format: {value}. Expected one of: auto, pdf, zip.")
 
 
-def _detect_output_format(output_path: Optional[str], output_format: str) -> str:
+def _detect_output_format(output_path: str | None, output_format: str) -> str:
     fmt = _normalize_output_format(output_format)
     if fmt != "auto":
         return fmt
@@ -378,7 +376,7 @@ def _export_as_pdf(
     page_size_mode: str,
 ) -> BrowserArtifactPdfExportResult:
     # Write atomically to avoid leaving partial PDFs on external failure.
-    tmp_path: Optional[Path] = None
+    tmp_path: Path | None = None
     try:
         with tempfile.NamedTemporaryFile(
             prefix=out_path.stem + ".",
@@ -405,7 +403,7 @@ def _export_as_pdf(
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
-            except Exception:
+            except OSError:
                 pass
         raise PdfRenderFailedError("Failed to render PDF.", details={"error": str(e)}) from e
 
@@ -433,8 +431,8 @@ def _export_as_zip(
     page_size_mode: str,
     include_images: bool,
 ) -> BrowserArtifactPdfExportResult:
-    tmp_zip_path: Optional[Path] = None
-    tmp_pdf_path: Optional[Path] = None
+    tmp_zip_path: Path | None = None
+    tmp_pdf_path: Path | None = None
 
     artifact_name = artifact_path.name if artifact_path.is_dir() else artifact_path.stem
     pdf_name_in_zip = f"{artifact_name}.pdf"
@@ -522,13 +520,13 @@ def _export_as_zip(
             try:
                 if p.exists():
                     p.unlink()
-            except Exception:
+            except OSError:
                 pass
 
 
 def _render_pdf(*, image_paths: Sequence[Path], output_path: Path, page_size_mode: str) -> None:
     try:
-        from reportlab.lib.pagesizes import A4, letter, landscape, portrait
+        from reportlab.lib.pagesizes import A4, landscape, letter, portrait
         from reportlab.lib.utils import ImageReader
         from reportlab.pdfgen import canvas
     except Exception as e:  # noqa: BLE001

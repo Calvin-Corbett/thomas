@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, Iterable, List, Literal, Optional, Protocol, Sequence, Tuple, cast
+from typing import Any, Literal, Protocol, cast
 
 TabAction = Literal["list", "open", "close", "activate", "close_all", "close_others"]
 
@@ -12,11 +13,11 @@ class TabInfo:
 
     id: str
     index: int
-    url: Optional[str] = None
-    title: Optional[str] = None
+    url: str | None = None
+    title: str | None = None
     active: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "index": self.index,
@@ -29,33 +30,33 @@ class TabInfo:
 class BrowserTabManagementError(Exception):
     """Deterministic error type for browser tab management."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message, "details": self.details}}
 
 
 class InvalidTabRequestError(BrowserTabManagementError):
-    def __init__(self, message: str, *, details: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
         super().__init__("invalid_input", message, details=details)
 
 
 class TabNotFoundError(BrowserTabManagementError):
-    def __init__(self, message: str, *, details: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
         super().__init__("tab_not_found", message, details=details)
 
 
 class TabConfigError(BrowserTabManagementError):
-    def __init__(self, message: str, *, details: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
         super().__init__("missing_config", message, details=details)
 
 
 class TabBackendError(BrowserTabManagementError):
-    def __init__(self, message: str, *, details: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: dict[str, Any] | None = None) -> None:
         super().__init__("external_failure", message, details=details)
 
 
@@ -69,9 +70,9 @@ class TabManagementRequest:
     """
 
     action: TabAction
-    tab_id: Optional[str] = None
-    tab_index: Optional[int] = None
-    url: Optional[str] = None
+    tab_id: str | None = None
+    tab_index: int | None = None
+    url: str | None = None
     activate: bool = True
 
 
@@ -81,11 +82,11 @@ class TabManagementResponse:
 
     ok: bool
     action: TabAction
-    tabs: List[TabInfo] = field(default_factory=list)
-    affected_tab: Optional[TabInfo] = None
-    closed_tab_ids: List[str] = field(default_factory=list)
+    tabs: list[TabInfo] = field(default_factory=list)
+    affected_tab: TabInfo | None = None
+    closed_tab_ids: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "action": self.action,
@@ -101,20 +102,16 @@ class TabBackend(Protocol):
     Intentionally minimal to allow adaptation to multiple implementations.
     """
 
-    def list_tabs(self) -> List[TabInfo]:
-        ...
+    def list_tabs(self) -> list[TabInfo]: ...
 
-    def open_tab(self, url: Optional[str] = None, *, activate: bool = True) -> TabInfo:
-        ...
+    def open_tab(self, url: str | None = None, *, activate: bool = True) -> TabInfo: ...
 
-    def close_tab(self, tab_id: str) -> None:
-        ...
+    def close_tab(self, tab_id: str) -> None: ...
 
-    def activate_tab(self, tab_id: str) -> TabInfo:
-        ...
+    def activate_tab(self, tab_id: str) -> TabInfo: ...
 
 
-def manage_tabs(request: TabManagementRequest, backend: Optional[TabBackend]) -> TabManagementResponse:
+def manage_tabs(request: TabManagementRequest, backend: TabBackend | None) -> TabManagementResponse:
     """Perform a tab management action against a backend.
 
     Raises:
@@ -216,9 +213,9 @@ def _validate_request(request: TabManagementRequest) -> None:
             raise InvalidTabRequestError("url must not be empty.", details={})
 
 
-def _normalize_tab_indexes(tabs: Sequence[TabInfo]) -> List[TabInfo]:
+def _normalize_tab_indexes(tabs: Sequence[TabInfo]) -> list[TabInfo]:
     """Return tabs with index values normalized to their list position."""
-    normalized: List[TabInfo] = []
+    normalized: list[TabInfo] = []
     for idx, t in enumerate(tabs):
         if t.index == idx:
             normalized.append(t)
@@ -227,7 +224,7 @@ def _normalize_tab_indexes(tabs: Sequence[TabInfo]) -> List[TabInfo]:
     return normalized
 
 
-def _find_tab_by_id(tab_id: str, tabs: Sequence[TabInfo]) -> Optional[TabInfo]:
+def _find_tab_by_id(tab_id: str, tabs: Sequence[TabInfo]) -> TabInfo | None:
     for t in tabs:
         if t.id == tab_id:
             return t
@@ -245,7 +242,7 @@ def _resolve_tab_id(request: TabManagementRequest, backend: TabBackend) -> str:
     return tabs[request.tab_index].id
 
 
-def _resolve_close_targets(request: TabManagementRequest, backend: TabBackend) -> List[str]:
+def _resolve_close_targets(request: TabManagementRequest, backend: TabBackend) -> list[str]:
     tabs = _normalize_tab_indexes(backend.list_tabs())
 
     if request.action == "close_all":
@@ -262,8 +259,8 @@ def _resolve_close_targets(request: TabManagementRequest, backend: TabBackend) -
 class InMemoryTabBackend(TabBackend):
     """A deterministic, in-memory backend for tests and offline use."""
 
-    def __init__(self, *, initial_tabs: Optional[Sequence[TabInfo]] = None) -> None:
-        self._tabs: List[TabInfo] = []
+    def __init__(self, *, initial_tabs: Sequence[TabInfo] | None = None) -> None:
+        self._tabs: list[TabInfo] = []
         self._next_id = 1
 
         if initial_tabs:
@@ -283,10 +280,10 @@ class InMemoryTabBackend(TabBackend):
                 active=True,
             )
 
-    def list_tabs(self) -> List[TabInfo]:
+    def list_tabs(self) -> list[TabInfo]:
         return list(self._tabs)
 
-    def open_tab(self, url: Optional[str] = None, *, activate: bool = True) -> TabInfo:
+    def open_tab(self, url: str | None = None, *, activate: bool = True) -> TabInfo:
         tab_id = f"tab-{self._next_id}"
         self._next_id += 1
 
@@ -329,7 +326,7 @@ class InMemoryTabBackend(TabBackend):
 # ---- Playwright-like backend (duck-typed, no direct dependency) -----------------
 
 
-def _extract_playwright_context(obj: Any) -> Optional[Any]:
+def _extract_playwright_context(obj: Any) -> Any | None:
     """Return a Playwright-like context object if `obj` looks like one.
 
     We avoid importing Playwright here; this is purely duck typing.
@@ -349,7 +346,7 @@ def _extract_playwright_context(obj: Any) -> Optional[Any]:
     return None
 
 
-def _safe_page_title(page: Any) -> Optional[str]:
+def _safe_page_title(page: Any) -> str | None:
     """Best-effort title getter that won't crash on async/coroutine APIs."""
     title_attr = getattr(page, "title", None)
     if title_attr is None:
@@ -387,15 +384,15 @@ class _PlaywrightLikeTabBackend(TabBackend):
 
     def __init__(self, context: Any) -> None:
         self._context = context
-        self._active_id: Optional[str] = None
+        self._active_id: str | None = None
 
-    def list_tabs(self) -> List[TabInfo]:
+    def list_tabs(self) -> list[TabInfo]:
         pages = list(getattr(self._context, "pages", []) or [])
-        tabs: List[TabInfo] = []
+        tabs: list[TabInfo] = []
 
         for idx, page in enumerate(pages):
             tab_id = _page_identifier(page)
-            url = cast(Optional[str], getattr(page, "url", None))
+            url = cast(str | None, getattr(page, "url", None))
             title = _safe_page_title(page)
             active = (tab_id == self._active_id) if self._active_id is not None else (idx == 0)
             tabs.append(TabInfo(id=tab_id, index=idx, url=url, title=title, active=active))
@@ -406,7 +403,7 @@ class _PlaywrightLikeTabBackend(TabBackend):
 
         return tabs
 
-    def open_tab(self, url: Optional[str] = None, *, activate: bool = True) -> TabInfo:
+    def open_tab(self, url: str | None = None, *, activate: bool = True) -> TabInfo:
         page = self._context.new_page()
         if url is not None:
             goto = getattr(page, "goto", None)
@@ -423,7 +420,13 @@ class _PlaywrightLikeTabBackend(TabBackend):
             self._active_id = tab_id
 
         # Index will be normalized by caller from list_tabs(); use 0 placeholder.
-        return TabInfo(id=tab_id, index=0, url=cast(Optional[str], getattr(page, "url", None)), title=_safe_page_title(page), active=activate)
+        return TabInfo(
+            id=tab_id,
+            index=0,
+            url=cast(str | None, getattr(page, "url", None)),
+            title=_safe_page_title(page),
+            active=activate,
+        )
 
     def close_tab(self, tab_id: str) -> None:
         pages = list(getattr(self._context, "pages", []) or [])
@@ -455,7 +458,7 @@ class _PlaywrightLikeTabBackend(TabBackend):
         return TabInfo(
             id=tab_id,
             index=0,
-            url=cast(Optional[str], getattr(page, "url", None)),
+            url=cast(str | None, getattr(page, "url", None)),
             title=_safe_page_title(page),
             active=True,
         )
@@ -494,11 +497,11 @@ class _ReflectiveBackendAdapter(TabBackend):
                 details={"missing": missing, "backend_type": type(obj).__name__},
             )
 
-    def list_tabs(self) -> List[TabInfo]:
+    def list_tabs(self) -> list[TabInfo]:
         raw = _call_attr_or_method(self._m_list, self._obj)
         return _coerce_tabs(raw)
 
-    def open_tab(self, url: Optional[str] = None, *, activate: bool = True) -> TabInfo:
+    def open_tab(self, url: str | None = None, *, activate: bool = True) -> TabInfo:
         created = _call_best_effort(self._m_open, self._obj, url=url, activate=activate)
         created_info = _coerce_single_tab(created)
         if created_info is not None:
@@ -528,14 +531,14 @@ class _ReflectiveBackendAdapter(TabBackend):
         return active
 
 
-def _pick_attr_or_method(obj: Any, names: Sequence[str]) -> Optional[str]:
+def _pick_attr_or_method(obj: Any, names: Sequence[str]) -> str | None:
     for name in names:
         if hasattr(obj, name):
             return name
     return None
 
 
-def _call_attr_or_method(member_name: Optional[str], obj: Any, *args: Any, **kwargs: Any) -> Any:
+def _call_attr_or_method(member_name: str | None, obj: Any, *args: Any, **kwargs: Any) -> Any:
     if member_name is None:
         raise TabConfigError("Missing backend member.")
     member = getattr(obj, member_name)
@@ -543,12 +546,12 @@ def _call_attr_or_method(member_name: Optional[str], obj: Any, *args: Any, **kwa
 
 
 def _call_best_effort(
-    member_name: Optional[str],
+    member_name: str | None,
     obj: Any,
     *,
-    url: Optional[str] = None,
+    url: str | None = None,
     activate: bool = True,
-    tab_id: Optional[str] = None,
+    tab_id: str | None = None,
 ) -> Any:
     if member_name is None:
         raise TabConfigError("Missing backend member.")
@@ -557,7 +560,7 @@ def _call_best_effort(
     if not callable(member):
         raise TabConfigError("Backend member is not callable.", details={"member": member_name})
 
-    patterns: List[Tuple[Tuple[Any, ...], Dict[str, Any]]] = []
+    patterns: list[tuple[tuple[Any, ...], dict[str, Any]]] = []
 
     if tab_id is not None:
         patterns.extend(
@@ -583,7 +586,7 @@ def _call_best_effort(
                 ]
             )
 
-    last_type_error: Optional[TypeError] = None
+    last_type_error: TypeError | None = None
     for args, kwargs in patterns:
         try:
             return member(*args, **kwargs)
@@ -601,7 +604,7 @@ def _call_best_effort(
     )
 
 
-def _coerce_single_tab(raw: Any) -> Optional[TabInfo]:
+def _coerce_single_tab(raw: Any) -> TabInfo | None:
     if raw is None:
         return None
     if isinstance(raw, TabInfo):
@@ -613,24 +616,24 @@ def _coerce_single_tab(raw: Any) -> Optional[TabInfo]:
             return TabInfo(
                 id=tab_id,
                 index=index,
-                url=cast(Optional[str], raw.get("url")),
-                title=cast(Optional[str], raw.get("title")),
+                url=cast(str | None, raw.get("url")),
+                title=cast(str | None, raw.get("title")),
                 active=bool(raw.get("active", raw.get("is_active", False))),
             )
-        except Exception:
+        except (ValueError, TypeError, KeyError):
             return None
 
     # Heuristic for page-like objects.
     if hasattr(raw, "url"):
         tab_id = _page_identifier(raw)
-        url = cast(Optional[str], getattr(raw, "url", None))
+        url = cast(str | None, getattr(raw, "url", None))
         title = _safe_page_title(raw)
         return TabInfo(id=str(tab_id), index=0, url=url, title=title, active=False)
 
     return None
 
 
-def _coerce_tabs(raw: Any) -> List[TabInfo]:
+def _coerce_tabs(raw: Any) -> list[TabInfo]:
     if raw is None:
         return []
     if isinstance(raw, (list, tuple)):
@@ -643,7 +646,7 @@ def _coerce_tabs(raw: Any) -> List[TabInfo]:
         else:
             return []
 
-    tabs: List[TabInfo] = []
+    tabs: list[TabInfo] = []
     for idx, item in enumerate(items):
         tab = _coerce_single_tab(item)
         if tab is None:

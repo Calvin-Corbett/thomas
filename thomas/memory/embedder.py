@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import struct
-from typing import Dict, List, Optional
 
 import numpy as np
 
@@ -20,6 +18,7 @@ log = logging.getLogger(__name__)
 # Try importing sentence-transformers at module level for availability check
 try:
     from sentence_transformers import SentenceTransformer
+
     _HAS_SBERT = True
 except ImportError:
     _HAS_SBERT = False
@@ -42,14 +41,14 @@ class HashEmbedder:
         self._ngram_min = ngram_range[0]
         self._ngram_max = ngram_range[1]
 
-    def embed_text(self, text: str) -> Dict[str, float]:
+    def embed_text(self, text: str) -> dict[str, float]:
         """Produce a sparse vector from text via feature hashing."""
         tokens = text.lower().split()
-        vec: Dict[str, float] = {}
+        vec: dict[str, float] = {}
 
         for n in range(self._ngram_min, self._ngram_max + 1):
             for i in range(len(tokens) - n + 1):
-                gram = " ".join(tokens[i:i + n])
+                gram = " ".join(tokens[i : i + n])
                 # Feature hashing is not a cryptographic use case.
                 # Keep MD5 output stable for backwards-compatible bucket mapping.
                 h = hashlib.md5(gram.encode("utf-8"), usedforsecurity=False).hexdigest()[:8]
@@ -62,7 +61,7 @@ class HashEmbedder:
             vec = {k: v / norm for k, v in vec.items()}
         return vec
 
-    def embed_batch(self, texts: List[str]) -> List[Dict[str, float]]:
+    def embed_batch(self, texts: list[str]) -> list[dict[str, float]]:
         return [self.embed_text(t) for t in texts]
 
 
@@ -81,7 +80,7 @@ class DenseEmbedder:
 
     def __init__(self, config: EmbedConfig):
         self._config = config
-        self._model: Optional[SentenceTransformer] = None  # type: ignore[name-defined]
+        self._model: SentenceTransformer | None = None  # type: ignore[name-defined]
         self._dim: int = 0
 
     @property
@@ -99,15 +98,14 @@ class DenseEmbedder:
             return
         if not _HAS_SBERT:
             raise RuntimeError(
-                "sentence-transformers not installed. "
-                "Install with: pip install sentence-transformers"
+                "sentence-transformers not installed. " "Install with: pip install sentence-transformers"
             )
 
         device = self._resolve_device()
         log.info("Loading embedding model: %s on %s", self._config.model, device)
         try:
             self._model = SentenceTransformer(self._config.model, device=device)
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             # If the user asked for CUDA but it's unavailable/misconfigured, fall back to CPU.
             if str(device).lower().startswith("cuda"):
                 log.warning(
@@ -132,10 +130,10 @@ class DenseEmbedder:
             import torch  # sentence-transformers depends on torch, but be defensive
 
             return "cuda" if torch.cuda.is_available() else "cpu"
-        except Exception:
+        except (ImportError, RuntimeError):
             return "cpu"
 
-    def embed_texts(self, texts: List[str]) -> np.ndarray:
+    def embed_texts(self, texts: list[str]) -> np.ndarray:
         """Encode texts to dense vectors. Returns (N, dim) float32 array."""
         self._ensure_loaded()
         if self._model is None:
@@ -162,6 +160,7 @@ class DenseEmbedder:
             # Try to free CUDA cache
             try:
                 import torch
+
                 if torch.cuda.is_available():
                     torch.cuda.empty_cache()
             except ImportError:
@@ -215,7 +214,7 @@ class Embedder:
     def __init__(self, config: EmbedConfig):
         self._config = config
         self._hash = HashEmbedder()
-        self._dense: Optional[DenseEmbedder] = None
+        self._dense: DenseEmbedder | None = None
         if _HAS_SBERT:
             self._dense = DenseEmbedder(config)
 
@@ -229,34 +228,34 @@ class Embedder:
             return 0
         return self._dense.dim
 
-    def sparse(self, text: str) -> Dict[str, float]:
+    def sparse(self, text: str) -> dict[str, float]:
         """Get sparse (hash) embedding for text."""
         return self._hash.embed_text(text)
 
-    def sparse_batch(self, texts: List[str]) -> List[Dict[str, float]]:
+    def sparse_batch(self, texts: list[str]) -> list[dict[str, float]]:
         """Get sparse embeddings for a batch of texts."""
         return self._hash.embed_batch(texts)
 
-    def dense(self, text: str) -> Optional[np.ndarray]:
+    def dense(self, text: str) -> np.ndarray | None:
         """Get dense embedding as numpy array, or None if unavailable."""
         if self._dense is None:
             return None
         return self._dense.embed_one(text)
 
-    def dense_batch(self, texts: List[str]) -> Optional[np.ndarray]:
+    def dense_batch(self, texts: list[str]) -> np.ndarray | None:
         """Get dense embeddings as (N, dim) array, or None if unavailable."""
         if self._dense is None:
             return None
         return self._dense.embed_texts(texts)
 
-    def dense_bytes(self, text: str) -> Optional[bytes]:
+    def dense_bytes(self, text: str) -> bytes | None:
         """Get dense embedding as bytes for SQLite BLOB, or None."""
         vec = self.dense(text)
         if vec is None:
             return None
         return dense_to_bytes(vec)
 
-    def dense_bytes_batch(self, texts: List[str]) -> List[Optional[bytes]]:
+    def dense_bytes_batch(self, texts: list[str]) -> list[bytes | None]:
         """Get dense embeddings as bytes for a batch."""
         vecs = self.dense_batch(texts)
         if vecs is None:

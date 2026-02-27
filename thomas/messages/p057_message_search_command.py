@@ -40,18 +40,17 @@ it can return errors depending on token type and permissions.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
-from pathlib import Path
-from typing import Any, Mapping, Protocol, Sequence, TypedDict, cast
-
 import json
 import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
-
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Any, Protocol, TypedDict, cast
 
 # -----------------------------
 # Contracts
@@ -163,7 +162,9 @@ class HttpResponse(Protocol):
 
 
 class HttpClient(Protocol):
-    def get(self, url: str, *, params: Sequence[tuple[str, str]] | None = None, headers: Mapping[str, str] | None = None) -> HttpResponse: ...
+    def get(
+        self, url: str, *, params: Sequence[tuple[str, str]] | None = None, headers: Mapping[str, str] | None = None
+    ) -> HttpResponse: ...
 
 
 class _UrllibResponse:
@@ -179,7 +180,9 @@ class _UrllibHttpClient:
     def __init__(self, *, timeout_s: float = 15.0):
         self._timeout_s = float(timeout_s)
 
-    def get(self, url: str, *, params: Sequence[tuple[str, str]] | None = None, headers: Mapping[str, str] | None = None) -> HttpResponse:
+    def get(
+        self, url: str, *, params: Sequence[tuple[str, str]] | None = None, headers: Mapping[str, str] | None = None
+    ) -> HttpResponse:
         if params:
             qs = urllib.parse.urlencode(list(params), doseq=True)
             joiner = "&" if ("?" in url) else "?"
@@ -565,7 +568,7 @@ def _search_discord(
 
     try:
         payload = resp.json()
-    except Exception as e:  # noqa: BLE001 - map any parse failure to deterministic error
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001 - map any parse failure to deterministic error
         raise MessageSearchExternalFailure(
             message="message search response was not valid JSON",
             details={"status_code": int(resp.status_code)},

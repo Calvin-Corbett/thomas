@@ -4,16 +4,16 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
-
+from typing import Any
 
 STATUS_DONE = "DONE"
 STATUS_INBOX = "INBOX"
 STATUS_MISSING = "MISSING"
 
-STATUS_LABELS: Dict[str, str] = {
+STATUS_LABELS: dict[str, str] = {
     STATUS_DONE: "✅ DONE",
     STATUS_INBOX: "📦 INBOX",
     STATUS_MISSING: "🚧 MISSING",
@@ -28,8 +28,8 @@ def _normalize(rel_path: str) -> str:
     return str(rel_path).replace("\\", "/").strip()
 
 
-def _dedupe_keep_order(values: Iterable[str]) -> List[str]:
-    out: List[str] = []
+def _dedupe_keep_order(values: Iterable[str]) -> list[str]:
+    out: list[str] = []
     seen = set()
     for raw in values:
         val = _normalize(raw)
@@ -40,8 +40,8 @@ def _dedupe_keep_order(values: Iterable[str]) -> List[str]:
     return out
 
 
-def _existing_code_paths(repo_root: Path, item: Dict[str, Any]) -> List[str]:
-    out: List[str] = []
+def _existing_code_paths(repo_root: Path, item: dict[str, Any]) -> list[str]:
+    out: list[str] = []
     for raw in item.get("code_paths", []) or []:
         rel = _normalize(str(raw))
         if not rel:
@@ -51,8 +51,8 @@ def _existing_code_paths(repo_root: Path, item: Dict[str, Any]) -> List[str]:
     return _dedupe_keep_order(out)
 
 
-def _existing_inbox_matches(repo_root: Path, item: Dict[str, Any]) -> List[str]:
-    out: List[str] = []
+def _existing_inbox_matches(repo_root: Path, item: dict[str, Any]) -> list[str]:
+    out: list[str] = []
     for raw in item.get("inbox_globs", []) or []:
         pattern = str(raw).strip()
         if not pattern:
@@ -67,7 +67,7 @@ def _existing_inbox_matches(repo_root: Path, item: Dict[str, Any]) -> List[str]:
     return _dedupe_keep_order(out)
 
 
-def evaluate_item(repo_root: Path, item: Dict[str, Any]) -> Tuple[str, List[str], List[str]]:
+def evaluate_item(repo_root: Path, item: dict[str, Any]) -> tuple[str, list[str], list[str]]:
     code_hits = _existing_code_paths(repo_root, item)
     if code_hits:
         return STATUS_DONE, code_hits, []
@@ -81,14 +81,14 @@ def _table_row(cols: Sequence[str]) -> str:
     return "| " + " | ".join(cols) + " |"
 
 
-def _done_note(item: Dict[str, Any], code_hits: List[str]) -> str:
+def _done_note(item: dict[str, Any], code_hits: list[str]) -> str:
     location = _normalize(str(item.get("location") or "")) or (code_hits[0] if code_hits else "")
     if location:
         return f"Implemented at `{location}`"
     return "Implemented in codebase."
 
 
-def _missing_note(item: Dict[str, Any]) -> str:
+def _missing_note(item: dict[str, Any]) -> str:
     explicit = str(item.get("missing_note") or "").strip()
     if explicit:
         return explicit
@@ -98,14 +98,14 @@ def _missing_note(item: Dict[str, Any]) -> str:
     return "Needs implementation."
 
 
-def _inbox_note(inbox_hits: List[str]) -> str:
+def _inbox_note(inbox_hits: list[str]) -> str:
     if inbox_hits:
         return f"Inbox pack found: `{Path(inbox_hits[0]).name}`"
     return "Inbox pack detected."
 
 
-def _render_foundation(repo_root: Path, items: List[Dict[str, Any]]) -> Tuple[List[str], Dict[str, int]]:
-    lines: List[str] = []
+def _render_foundation(repo_root: Path, items: list[dict[str, Any]]) -> tuple[list[str], dict[str, int]]:
+    lines: list[str] = []
     counts = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
     for item in items:
         status, _, inbox_hits = evaluate_item(repo_root, item)
@@ -130,8 +130,8 @@ def _render_foundation(repo_root: Path, items: List[Dict[str, Any]]) -> Tuple[Li
     return lines, counts
 
 
-def _render_features(repo_root: Path, items: List[Dict[str, Any]]) -> Tuple[List[str], Dict[str, int]]:
-    lines: List[str] = []
+def _render_features(repo_root: Path, items: list[dict[str, Any]]) -> tuple[list[str], dict[str, int]]:
+    lines: list[str] = []
     counts = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
     for item in sorted(items, key=lambda row: int(row.get("id", 0) or 0)):
         status, code_hits, inbox_hits = evaluate_item(repo_root, item)
@@ -148,8 +148,8 @@ def _render_features(repo_root: Path, items: List[Dict[str, Any]]) -> Tuple[List
     return lines, counts
 
 
-def _render_inbox(repo_root: Path, items: List[Dict[str, Any]]) -> Tuple[List[str], Dict[str, int]]:
-    lines: List[str] = []
+def _render_inbox(repo_root: Path, items: list[dict[str, Any]]) -> tuple[list[str], dict[str, int]]:
+    lines: list[str] = []
     counts = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
     for item in items:
         status, code_hits, inbox_hits = evaluate_item(repo_root, item)
@@ -165,7 +165,7 @@ def _render_inbox(repo_root: Path, items: List[Dict[str, Any]]) -> Tuple[List[st
     return lines, counts
 
 
-def _sum_counts(parts: Iterable[Dict[str, int]]) -> Dict[str, int]:
+def _sum_counts(parts: Iterable[dict[str, int]]) -> dict[str, int]:
     total = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
     for row in parts:
         for key in total:
@@ -173,7 +173,9 @@ def _sum_counts(parts: Iterable[Dict[str, int]]) -> Dict[str, int]:
     return total
 
 
-def build_document(repo_root: Path, manifest: Dict[str, Any], date_stamp: str | None = None) -> Tuple[str, Dict[str, int]]:
+def build_document(
+    repo_root: Path, manifest: dict[str, Any], date_stamp: str | None = None
+) -> tuple[str, dict[str, int]]:
     foundation = manifest.get("foundation")
     features = manifest.get("features")
     inbox_packs = manifest.get("inbox_packs")
@@ -186,7 +188,7 @@ def build_document(repo_root: Path, manifest: Dict[str, Any], date_stamp: str | 
     totals = _sum_counts([core_counts, feature_counts, inbox_counts])
 
     stamp = date_stamp or datetime.now(timezone.utc).date().isoformat()
-    lines: List[str] = [
+    lines: list[str] = [
         "# Thomas Project - Feature Master List",
         "",
         "**Status Legend:**",
@@ -204,7 +206,7 @@ def build_document(repo_root: Path, manifest: Dict[str, Any], date_stamp: str | 
     lines.extend(
         [
             "",
-            "## The \"20 Features\" List",
+            '## The "20 Features" List',
             "",
             "| # | Feature | Status | Source / Notes |",
             "| :--- | :--- | :--- | :--- |",
@@ -253,21 +255,34 @@ def run(argv: Sequence[str] | None = None) -> int:
     repo_root = Path(args.repo_root).resolve() if args.repo_root else ROOT
     manifest_path = _resolve_path(repo_root, args.manifest)
     master_path = _resolve_path(repo_root, args.master)
+    gate_name = "feature_master_sync"
 
     if not manifest_path.exists():
-        print(f"Feature master sync failed: missing manifest {manifest_path}")
+        message = f"Feature master sync failed: missing manifest {manifest_path}"
+        if args.json:
+            print(json.dumps({"ok": False, "gate": gate_name, "error": message}, ensure_ascii=False))
+        else:
+            print(message)
         return 1
 
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     except Exception as exc:
-        print(f"Feature master sync failed: could not parse manifest: {exc}")
+        message = f"Feature master sync failed: could not parse manifest: {exc}"
+        if args.json:
+            print(json.dumps({"ok": False, "gate": gate_name, "error": message}, ensure_ascii=False))
+        else:
+            print(message)
         return 1
 
     try:
         doc, totals = build_document(repo_root, manifest)
     except Exception as exc:
-        print(f"Feature master sync failed: could not build document: {exc}")
+        message = f"Feature master sync failed: could not build document: {exc}"
+        if args.json:
+            print(json.dumps({"ok": False, "gate": gate_name, "error": message}, ensure_ascii=False))
+        else:
+            print(message)
         return 1
 
     current = master_path.read_text(encoding="utf-8") if master_path.exists() else ""
@@ -275,13 +290,45 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if args.check:
         if changed:
-            print("Feature master sync gate FAILED: docs/FEATURE_MASTER_LIST.md is stale.")
-            print("Run: python scripts/sync_feature_master_list.py")
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "ok": False,
+                            "gate": gate_name,
+                            "stale": True,
+                            "totals": totals,
+                            "master_path": str(master_path),
+                            "manifest_path": str(manifest_path),
+                            "error": "docs/FEATURE_MASTER_LIST.md is stale",
+                            "hint": "Run: python scripts/sync_feature_master_list.py",
+                        },
+                        ensure_ascii=False,
+                    )
+                )
+            else:
+                print("Feature master sync gate FAILED: docs/FEATURE_MASTER_LIST.md is stale.")
+                print("Run: python scripts/sync_feature_master_list.py")
             return 1
-        print(
-            "Feature master sync gate: OK "
-            f"({totals[STATUS_DONE]} done, {totals[STATUS_INBOX]} inbox, {totals[STATUS_MISSING]} missing)"
-        )
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "ok": True,
+                        "gate": gate_name,
+                        "stale": False,
+                        "totals": totals,
+                        "master_path": str(master_path),
+                        "manifest_path": str(manifest_path),
+                    },
+                    ensure_ascii=False,
+                )
+            )
+        else:
+            print(
+                "Feature master sync gate: OK "
+                f"({totals[STATUS_DONE]} done, {totals[STATUS_INBOX]} inbox, {totals[STATUS_MISSING]} missing)"
+            )
         return 0
 
     if changed:
@@ -291,7 +338,19 @@ def run(argv: Sequence[str] | None = None) -> int:
         action = "already up to date"
 
     if args.json:
-        print(json.dumps({"action": action, "totals": totals, "master_path": str(master_path)}, ensure_ascii=False))
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "gate": gate_name,
+                    "action": action,
+                    "totals": totals,
+                    "master_path": str(master_path),
+                    "manifest_path": str(manifest_path),
+                },
+                ensure_ascii=False,
+            )
+        )
     else:
         print(
             f"Feature master list {action}: {master_path} "

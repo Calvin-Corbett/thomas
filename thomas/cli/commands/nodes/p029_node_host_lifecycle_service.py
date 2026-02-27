@@ -27,12 +27,13 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence
+from typing import Any
 
 try:
     import typer  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
 from thomas.nodes.p029_node_host_lifecycle_service import (
@@ -41,7 +42,6 @@ from thomas.nodes.p029_node_host_lifecycle_service import (
     NodeHostLifecycleService,
     NodeHostServiceError,
 )
-
 
 # ---------------------------------------------------------------------------
 # Parity/metadata descriptions
@@ -58,14 +58,14 @@ class ParityCommandSpec(Mapping[str, Any]):
     This tiny spec supports both (Mapping interface + attributes).
     """
 
-    path: List[str]
+    path: list[str]
     summary: str
 
     @property
     def command(self) -> str:
         return " ".join(self.path)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         # Include a few common key names to maximize compatibility with
         # different parity consumers.
         return {
@@ -87,7 +87,7 @@ class ParityCommandSpec(Mapping[str, Any]):
         return len(self.to_dict())
 
 
-PARITY_COMMAND_SPECS: List[ParityCommandSpec] = [
+PARITY_COMMAND_SPECS: list[ParityCommandSpec] = [
     ParityCommandSpec(["nodes", "host", "install"], "Install the node host as a background service"),
     ParityCommandSpec(["nodes", "host", "status"], "Show node host service status"),
     ParityCommandSpec(["nodes", "host", "stop"], "Stop the node host service"),
@@ -96,7 +96,7 @@ PARITY_COMMAND_SPECS: List[ParityCommandSpec] = [
 ]
 
 # Many parity systems expect dicts.
-PARITY_COMMANDS: List[Dict[str, Any]] = [spec.to_dict() for spec in PARITY_COMMAND_SPECS]
+PARITY_COMMANDS: list[dict[str, Any]] = [spec.to_dict() for spec in PARITY_COMMAND_SPECS]
 
 # Some codebases look for `COMMANDS`.
 COMMANDS = PARITY_COMMANDS
@@ -107,24 +107,22 @@ COMMANDS = PARITY_COMMANDS
 # ---------------------------------------------------------------------------
 
 
-def _result_payload(result: NodeHostActionResult) -> Dict[str, Any]:
+def _result_payload(result: NodeHostActionResult) -> dict[str, Any]:
     return result.to_dict()
 
 
-def _error_payload(action: str, err: NodeHostServiceError) -> Dict[str, Any]:
+def _error_payload(action: str, err: NodeHostServiceError) -> dict[str, Any]:
     return {"ok": False, "action": action, "error": err.to_dict()}
 
 
-def _print_json(payload: Dict[str, Any]) -> None:
+def _print_json(payload: dict[str, Any]) -> None:
     sys.stdout.write(json.dumps(payload, indent=2, sort_keys=True) + "\n")
 
 
 def _print_human(result: NodeHostActionResult) -> None:
     st = result.status
     sys.stdout.write(f"{result.message}\n")
-    sys.stdout.write(
-        f"installed={st.installed} running={st.running} runtime={st.runtime or 'unknown'}\n"
-    )
+    sys.stdout.write(f"installed={st.installed} running={st.running} runtime={st.runtime or 'unknown'}\n")
     if st.gateway_host and st.gateway_port:
         sys.stdout.write(f"gateway={st.gateway_host}:{st.gateway_port} tls={bool(st.tls)}\n")
     if st.display_name:
@@ -135,7 +133,7 @@ def _run_action(
     action: str,
     *,
     json_mode: bool,
-    install_req: Optional[NodeHostInstallRequest] = None,
+    install_req: NodeHostInstallRequest | None = None,
 ) -> int:
     svc = NodeHostLifecycleService()
 
@@ -205,9 +203,7 @@ def _build_host_parser(subparsers: Any) -> argparse.ArgumentParser:
         help="Expected TLS certificate fingerprint (sha256 hex)",
     )
     p_install.add_argument("--node-id", dest="node_id", default=None, help="Override node id")
-    p_install.add_argument(
-        "--display-name", dest="display_name", default=None, help="Override display name"
-    )
+    p_install.add_argument("--display-name", dest="display_name", default=None, help="Override display name")
     p_install.add_argument(
         "--runtime",
         dest="runtime",
@@ -275,7 +271,7 @@ def _dispatch(args: argparse.Namespace) -> int:
     return _run_action(action, json_mode=bool(args.json))
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Standalone entrypoint.
 
     Returns an exit code.
@@ -305,13 +301,9 @@ if typer is not None:  # pragma: no cover
         host: str = typer.Option("127.0.0.1", "--host", help="Gateway host"),
         port: int = typer.Option(18789, "--port", help="Gateway port"),
         tls: bool = typer.Option(False, "--tls", help="Use TLS for the gateway connection"),
-        tls_fingerprint: Optional[str] = typer.Option(
-            None, "--tls-fingerprint", help="TLS cert fingerprint"
-        ),
-        node_id: Optional[str] = typer.Option(None, "--node-id", help="Override node id"),
-        display_name: Optional[str] = typer.Option(
-            None, "--display-name", help="Override display name"
-        ),
+        tls_fingerprint: str | None = typer.Option(None, "--tls-fingerprint", help="TLS cert fingerprint"),
+        node_id: str | None = typer.Option(None, "--node-id", help="Override node id"),
+        display_name: str | None = typer.Option(None, "--display-name", help="Override display name"),
         runtime: str = typer.Option("python", "--runtime", help="Service runtime identifier"),
         force: bool = typer.Option(False, "--force", help="Overwrite existing installation"),
         json_out: bool = typer.Option(False, "--json", help="Output machine-readable JSON"),

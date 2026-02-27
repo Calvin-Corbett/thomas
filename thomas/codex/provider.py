@@ -8,16 +8,15 @@ subscription.
 
 from __future__ import annotations
 
-import asyncio
 import logging
 import tempfile
+from collections.abc import AsyncIterator
 from pathlib import Path
-from typing import Any, AsyncIterator, Dict, List, Optional
-
-from thomas.core.config import ModelConfig
-from thomas.core.llm import StreamEvent, TokenUsage
+from typing import Any
 
 from thomas.codex.bridge import CodexBridge, CodexBridgeError
+from thomas.core.config import ModelConfig
+from thomas.core.llm import StreamEvent, TokenUsage
 
 log = logging.getLogger(__name__)
 
@@ -30,7 +29,7 @@ class CodexProvider:
     back the same StreamEvent types the agent loop expects.
     """
 
-    def __init__(self, config: ModelConfig, bridge: Optional[CodexBridge] = None):
+    def __init__(self, config: ModelConfig, bridge: CodexBridge | None = None):
         self.config = config
         self.session_usage = TokenUsage()
         self._bridge = bridge
@@ -68,8 +67,8 @@ class CodexProvider:
 
     async def stream_chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
         """Stream a chat completion through Codex.
 
@@ -102,13 +101,25 @@ class CodexProvider:
             yield StreamEvent(type="done")
             return
 
+        # Extract system prompt to use as Codex instructions.
+        # Without this, the Codex model never sees Thomas's personality,
+        # identity, or conversation instructions — it just acts like a
+        # raw coding assistant.
+        instructions = ""
+        for msg in messages:
+            if msg.get("role") == "system":
+                content = msg.get("content", "")
+                if isinstance(content, str) and content.strip():
+                    instructions = content.strip()
+                    break
+
         model = self.config.model or ""
         effort = self.config.reasoning_effort or "medium"
         allow_tools = bool(tools)
         chat_cwd = self._no_tools_cwd() if not allow_tools else None
 
         # Map tool ids to names so tool_output can include a useful label.
-        tool_names: Dict[str, str] = {}
+        tool_names: dict[str, str] = {}
 
         try:
             try:
@@ -118,6 +129,7 @@ class CodexProvider:
                     effort=effort,
                     cwd=chat_cwd,
                     allow_tools=allow_tools,
+                    instructions=instructions,
                 )
             except TypeError:
                 # Backward-compat: older bridge/test doubles may not accept newer kwargs.
@@ -136,23 +148,29 @@ class CodexProvider:
                     tool_name = event.get("name", "")
                     if tool_id:
                         tool_names[tool_id] = tool_name
-                    yield StreamEvent(type="tool_call_start", data={
-                        "id": tool_id,
-                        "name": tool_name,
-                    })
+                    yield StreamEvent(
+                        type="tool_call_start",
+                        data={
+                            "id": tool_id,
+                            "name": tool_name,
+                        },
+                    )
 
                 elif etype == "tool_output":
                     if not allow_tools:
                         continue
                     tool_id = event.get("id", "")
                     tool_name = tool_names.get(tool_id, "")
-                    yield StreamEvent(type="tool_call_end", data={
-                        "id": tool_id,
-                        "name": tool_name,
-                        "arguments": "",
-                        "output": event.get("output", ""),
-                        "exit_code": event.get("exit_code"),
-                    })
+                    yield StreamEvent(
+                        type="tool_call_end",
+                        data={
+                            "id": tool_id,
+                            "name": tool_name,
+                            "arguments": "",
+                            "output": event.get("output", ""),
+                            "exit_code": event.get("exit_code"),
+                        },
+                    )
                     if tool_id:
                         tool_names.pop(tool_id, None)
 
@@ -169,22 +187,24 @@ class CodexProvider:
 
     async def chat(
         self,
-        messages: List[Dict[str, Any]],
-        tools: Optional[List[Dict[str, Any]]] = None,
-    ) -> Dict[str, Any]:
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Non-streaming chat completion through Codex."""
         text_parts: list[str] = []
-        tool_calls: list[Dict[str, Any]] = []
+        tool_calls: list[dict[str, Any]] = []
 
         async for event in self.stream_chat(messages, tools):
             if event.type == "token":
                 text_parts.append(event.data.get("text", ""))
             elif event.type == "tool_call_end":
-                tool_calls.append({
-                    "id": event.data.get("id", ""),
-                    "name": event.data.get("name", ""),
-                    "arguments": event.data.get("arguments", ""),
-                })
+                tool_calls.append(
+                    {
+                        "id": event.data.get("id", ""),
+                        "name": event.data.get("name", ""),
+                        "arguments": event.data.get("arguments", ""),
+                    }
+                )
 
         return {
             "text": "".join(text_parts),

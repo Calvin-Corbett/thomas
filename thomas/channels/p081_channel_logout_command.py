@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import importlib
 import importlib.util
 import inspect
@@ -9,7 +7,10 @@ import json
 import os
 import shutil
 import tempfile
-from typing import Any, List, Literal, Sequence, Tuple, TypedDict, Union
+from collections.abc import Sequence
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, Literal, TypedDict, Union
 
 
 class ChannelLogoutError(RuntimeError):
@@ -50,15 +51,16 @@ class ChannelLogoutRequest:
 @dataclass(frozen=True)
 class ChannelLogoutResult:
     """Output contract for a successful logout."""
+
     channel: str
-    removed: Tuple[str, ...]
+    removed: tuple[str, ...]
     dry_run: bool = False
 
 
 class LogoutSuccessJson(TypedDict):
     ok: Literal[True]
     channel: str
-    removed: List[str]
+    removed: list[str]
     dry_run: bool
 
 
@@ -133,7 +135,7 @@ def logout_channel(request: ChannelLogoutRequest) -> ChannelLogoutResult:
             removed.append(str(path))
         except FileNotFoundError:
             continue
-        except Exception as e:  # pragma: no cover
+        except (OSError, ConnectionError) as e:  # pragma: no cover
             raise ChannelLogoutError("external_failure", f"Failed to remove '{path}': {e}") from e
 
     if request.call_integration_hooks and not request.dry_run:
@@ -169,7 +171,7 @@ def _resolve_config_root(config_root: Path | None) -> Path:
 
     xdg = os.getenv("XDG_CONFIG_HOME")
     if xdg:
-        return (Path(xdg).expanduser() / "thomas")
+        return Path(xdg).expanduser() / "thomas"
 
     return Path.home() / ".thomas"
 
@@ -262,7 +264,7 @@ def _discover_logout_targets(
 def _json_contains_channel(path: Path, channel: str) -> bool:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return False
 
     if isinstance(data, dict):
@@ -277,7 +279,7 @@ def _json_contains_channel(path: Path, channel: str) -> bool:
 def _remove_channel_from_json(path: Path, channel: str) -> bool:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ChannelLogoutError("external_failure", f"Failed to parse JSON config '{path}': {e}") from e
 
     if not isinstance(data, dict):
@@ -306,12 +308,12 @@ def _remove_channel_from_json(path: Path, channel: str) -> bool:
             tf.write(json.dumps(data, indent=2, sort_keys=True) + "\n")
             tmp_name = tf.name
         os.replace(tmp_name, str(path))
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         # Best-effort cleanup.
         try:
             if "tmp_name" in locals() and os.path.exists(tmp_name):
                 os.unlink(tmp_name)
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             pass
         raise ChannelLogoutError("external_failure", f"Failed to write JSON config '{path}': {e}") from e
 
@@ -325,7 +327,7 @@ def _integration_hint_paths(channel: str, config_root: Path) -> list[Path]:
         mod = importlib.import_module(module_name)
     except ModuleNotFoundError:
         return []
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         # Hints are optional; don't fail logout due to heavy integration deps.
         return []
 
@@ -352,7 +354,7 @@ def _integration_hint_paths(channel: str, config_root: Path) -> list[Path]:
         if isinstance(value, (str, Path)):
             try:
                 hint_paths.append(Path(value).expanduser())
-            except Exception:
+            except (AttributeError, TypeError):
                 continue
 
     normalised: list[Path] = []
@@ -364,7 +366,7 @@ def _integration_hint_paths(channel: str, config_root: Path) -> list[Path]:
 def _safe_call_path_function(fn: Any, config_root: Path) -> list[Path]:
     try:
         sig = inspect.signature(fn)
-    except Exception:
+    except (OSError, ConnectionError):
         return []
 
     kwargs: dict[str, Any] = {}
@@ -383,7 +385,7 @@ def _safe_call_path_function(fn: Any, config_root: Path) -> list[Path]:
 
     try:
         value = fn(**kwargs) if kwargs else fn()
-    except Exception:
+    except (KeyError, ValueError, AttributeError):
         return []
 
     if value is None:
@@ -405,7 +407,7 @@ def _call_integration_logout_hook(channel: str, config_root: Path) -> None:
         mod = importlib.import_module(module_name)
     except ModuleNotFoundError:
         return
-    except Exception as e:
+    except (ImportError, AttributeError, RuntimeError) as e:
         raise ChannelLogoutError("external_failure", f"Failed to load integration '{channel}': {e}") from e
 
     for fn_name in ("logout", "clear_auth", "clear_credentials", "sign_out"):
@@ -418,7 +420,7 @@ def _call_integration_logout_hook(channel: str, config_root: Path) -> None:
 def _safe_call_logout_hook(fn: Any, config_root: Path) -> None:
     try:
         sig = inspect.signature(fn)
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return
 
     kwargs: dict[str, Any] = {}
@@ -437,5 +439,5 @@ def _safe_call_logout_hook(fn: Any, config_root: Path) -> None:
 
     try:
         fn(**kwargs) if kwargs else fn()
-    except Exception as e:
+    except (KeyError, ValueError, AttributeError) as e:
         raise ChannelLogoutError("external_failure", f"Integration logout hook failed: {e}") from e

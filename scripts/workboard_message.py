@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import re
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Optional, Sequence, Tuple
 
 try:
     from scripts import check_workboard_claims as claims_gate
@@ -38,6 +38,7 @@ MESSAGE_KINDS = {
     "brainstorm_decision",
 }
 MESSAGE_DECISIONS = {"none", "pending", "approved", "rejected"}
+TASK_ID_OPTIONAL_KINDS = {"coordination", "ping"}
 
 
 def _norm(value: str) -> str:
@@ -52,6 +53,21 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _parse_iso_utc(raw: str) -> datetime | None:
+    text = str(raw or "").strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        dt = datetime.fromisoformat(text)
+    except ValueError:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
+
+
 def _sanitize(label: str, value: str) -> str:
     cleaned = str(value or "").strip()
     if not cleaned:
@@ -61,8 +77,8 @@ def _sanitize(label: str, value: str) -> str:
     return cleaned
 
 
-def _find_section(lines: Sequence[str], *, heading_prefix: str) -> Tuple[int, int] | None:
-    start: Optional[int] = None
+def _find_section(lines: Sequence[str], *, heading_prefix: str) -> tuple[int, int] | None:
+    start: int | None = None
     end = len(lines)
     wanted = str(heading_prefix or "").strip().lower()
     for idx, line in enumerate(lines):
@@ -80,7 +96,7 @@ def _find_section(lines: Sequence[str], *, heading_prefix: str) -> Tuple[int, in
     return start, end
 
 
-def _ensure_section(lines: List[str], *, heading: str) -> Tuple[int, int]:
+def _ensure_section(lines: list[str], *, heading: str) -> tuple[int, int]:
     existing = _find_section(lines, heading_prefix=heading)
     if existing is not None:
         return existing
@@ -100,15 +116,15 @@ def _ensure_section(lines: List[str], *, heading: str) -> Tuple[int, int]:
     return ensured
 
 
-def _bullet_indices(lines: Sequence[str], start: int, end: int) -> List[int]:
-    out: List[int] = []
+def _bullet_indices(lines: Sequence[str], start: int, end: int) -> list[int]:
+    out: list[int] = []
     for idx in range(start, end):
         if lines[idx].strip().startswith("- "):
             out.append(idx)
     return out
 
 
-def _parse_kv_entry(line_no: int, line: str) -> Tuple[Optional[str], Optional[Dict[str, str]], Optional[str]]:
+def _parse_kv_entry(line_no: int, line: str) -> tuple[str | None, dict[str, str] | None, str | None]:
     stripped = line.strip()
     if not stripped.startswith("- "):
         return None, None, f"line {line_no}: expected bullet entry"
@@ -116,7 +132,7 @@ def _parse_kv_entry(line_no: int, line: str) -> Tuple[Optional[str], Optional[Di
     if token.lower() in claims_gate.NONE_TOKENS:
         return token, None, None
 
-    fields: Dict[str, str] = {}
+    fields: dict[str, str] = {}
     for part in [x.strip() for x in token.split(";") if x.strip()]:
         if "=" not in part:
             return token, None, f"line {line_no}: invalid field `{part}`"
@@ -129,7 +145,7 @@ def _parse_kv_entry(line_no: int, line: str) -> Tuple[Optional[str], Optional[Di
     return token, fields, None
 
 
-def _write_entries(lines: List[str], *, section_start: int, section_end: int, entries: List[str]) -> None:
+def _write_entries(lines: list[str], *, section_start: int, section_end: int, entries: list[str]) -> None:
     for idx in sorted(_bullet_indices(lines, section_start, section_end), reverse=True):
         del lines[idx]
         if idx < section_end:
@@ -174,7 +190,7 @@ def _validate_decision(decision: str) -> str:
     return normalized
 
 
-def _format_message(fields: Dict[str, str]) -> str:
+def _format_message(fields: dict[str, str]) -> str:
     msg_id = _sanitize("msg_id", fields.get("msg_id", ""))
     sender = _sanitize("from", fields.get("from", ""))
     recipient = _sanitize("to", fields.get("to", ""))
@@ -196,7 +212,7 @@ def _format_message(fields: Dict[str, str]) -> str:
     )
 
 
-def _normalize_message_fields(fields: Dict[str, str]) -> Dict[str, str]:
+def _normalize_message_fields(fields: dict[str, str]) -> dict[str, str]:
     now_iso = _now_iso()
     out = {
         "msg_id": str(fields.get("msg_id", "")).strip(),
@@ -219,9 +235,9 @@ def _normalize_message_fields(fields: Dict[str, str]) -> Dict[str, str]:
     return out
 
 
-def _load_messages(lines: Sequence[str], section: Tuple[int, int]) -> Tuple[List[Dict[str, str]], List[str]]:
-    rows: List[Dict[str, str]] = []
-    errors: List[str] = []
+def _load_messages(lines: Sequence[str], section: tuple[int, int]) -> tuple[list[dict[str, str]], list[str]]:
+    rows: list[dict[str, str]] = []
+    errors: list[str] = []
     for idx in _bullet_indices(lines, section[0], section[1]):
         entry, fields, err = _parse_kv_entry(idx + 1, lines[idx])
         if err:
@@ -238,7 +254,7 @@ def _load_messages(lines: Sequence[str], section: Tuple[int, int]) -> Tuple[List
     return rows, errors
 
 
-def _next_message_id(messages: Sequence[Dict[str, str]], sender: str) -> str:
+def _next_message_id(messages: Sequence[dict[str, str]], sender: str) -> str:
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
     slug = re.sub(r"[^a-z0-9]+", "-", _norm(sender)).strip("-") or "agent"
     candidate = f"msg-{stamp}-{slug}"
@@ -256,8 +272,8 @@ def _next_message_id(messages: Sequence[Dict[str, str]], sender: str) -> str:
 def _write_messages(
     workboard_path: Path,
     *,
-    messages: Sequence[Dict[str, str]],
-) -> Tuple[bool, List[str]]:
+    messages: Sequence[dict[str, str]],
+) -> tuple[bool, list[str]]:
     original_text = workboard_path.read_text(encoding="utf-8")
     lines = original_text.splitlines()
     section = _ensure_section(lines, heading=MESSAGE_HEADING)
@@ -275,7 +291,7 @@ def list_messages(
     recipient: str = "",
     state: str = "",
     task_id: str = "",
-) -> Tuple[bool, Dict[str, object]]:
+) -> tuple[bool, dict[str, object]]:
     lines = workboard_path.read_text(encoding="utf-8").splitlines()
     section = _find_section(lines, heading_prefix=MESSAGE_HEADING)
     if section is None:
@@ -288,7 +304,7 @@ def list_messages(
     recipient_key = _norm(recipient)
     state_key = _norm(state)
     task_key = _norm(task_id)
-    out: List[Dict[str, str]] = []
+    out: list[dict[str, str]] = []
     for row in rows:
         if sender_key and _norm(row.get("from", "")) != sender_key:
             continue
@@ -314,7 +330,7 @@ def send_message(
     requested_action: str = "none",
     decision: str = "pending",
     msg_id: str = "",
-) -> Tuple[bool, Dict[str, object]]:
+) -> tuple[bool, dict[str, object]]:
     sender_clean = _sanitize("from", sender)
     recipient_clean = _sanitize("to", recipient)
     summary_clean = _sanitize("summary", summary)
@@ -323,6 +339,10 @@ def send_message(
     priority_clean = _validate_priority(priority)
     requested_clean = _sanitize("requested_action", requested_action or "none")
     decision_clean = _validate_decision(decision or "pending")
+    if _norm(kind_clean) not in TASK_ID_OPTIONAL_KINDS and _norm(task_clean) in {"", "none", "_none_"}:
+        return False, {
+            "error": (f"task_id is required for kind `{kind_clean}` " "(only coordination/ping may use task_id=none)")
+        }
 
     lines = workboard_path.read_text(encoding="utf-8").splitlines()
     section = _ensure_section(lines, heading=MESSAGE_HEADING)
@@ -359,6 +379,35 @@ def send_message(
     return True, {"message": row}
 
 
+def latest_activity_by_task(
+    workboard_path: Path,
+    *,
+    kinds: Sequence[str] | None = None,
+) -> tuple[bool, dict[str, object]]:
+    ok, payload = list_messages(workboard_path)
+    if not ok:
+        return False, payload
+    allowed = {_norm(item) for item in list(kinds or []) if _norm(item)}
+    latest: dict[str, datetime] = {}
+    for row in list(payload.get("messages") or []):
+        task_key = _norm(str(row.get("task_id", "")))
+        if task_key in {"", "none", "_none_"}:
+            continue
+        kind = _norm(str(row.get("kind", "")))
+        if allowed and kind not in allowed:
+            continue
+        stamp = _parse_iso_utc(str(row.get("updated_at", "")).strip() or str(row.get("created_at", "")).strip())
+        if stamp is None:
+            continue
+        prior = latest.get(task_key)
+        if prior is None or stamp > prior:
+            latest[task_key] = stamp
+    return True, {
+        "task_count": len(latest),
+        "latest_by_task": {task_id: stamp.isoformat() for task_id, stamp in sorted(latest.items())},
+    }
+
+
 def _set_message_state(
     workboard_path: Path,
     *,
@@ -366,7 +415,7 @@ def _set_message_state(
     actor: str,
     state: str,
     decision: str = "",
-) -> Tuple[bool, Dict[str, object]]:
+) -> tuple[bool, dict[str, object]]:
     msg_key = _norm(msg_id)
     if not msg_key:
         return False, {"error": "msg_id is required"}
@@ -381,7 +430,7 @@ def _set_message_state(
     if errors:
         return False, {"error": "message section parse failed", "violations": errors}
 
-    target: Optional[Dict[str, str]] = None
+    target: dict[str, str] | None = None
     for row in rows:
         if _norm(row.get("msg_id", "")) == msg_key:
             target = row
@@ -402,9 +451,7 @@ def _set_message_state(
     recipient_key = _norm(target.get("to", ""))
     if state_clean == "acked" and actor_key != recipient_key:
         return False, {
-            "error": (
-                f"only recipient `{target.get('to', '')}` can ack message `{target.get('msg_id', msg_id)}`"
-            )
+            "error": (f"only recipient `{target.get('to', '')}` can ack message `{target.get('msg_id', msg_id)}`")
         }
     if state_clean == "resolved":
         allowed = {sender_key, recipient_key}
@@ -434,7 +481,7 @@ def ack_message(
     msg_id: str,
     actor: str,
     decision: str = "",
-) -> Tuple[bool, Dict[str, object]]:
+) -> tuple[bool, dict[str, object]]:
     return _set_message_state(
         workboard_path,
         msg_id=msg_id,
@@ -450,7 +497,7 @@ def resolve_message(
     msg_id: str,
     actor: str,
     decision: str = "",
-) -> Tuple[bool, Dict[str, object]]:
+) -> tuple[bool, dict[str, object]]:
     return _set_message_state(
         workboard_path,
         msg_id=msg_id,

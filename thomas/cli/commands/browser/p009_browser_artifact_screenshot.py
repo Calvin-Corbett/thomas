@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -33,8 +35,8 @@ def _emit(payload: dict[str, Any], *, json_output: bool) -> None:
 def _run(
     *,
     artifact: str,
-    out: Optional[Path],
-    artifact_root: Optional[Path],
+    out: Path | None,
+    artifact_root: Path | None,
     full_page: bool,
     width: int,
     height: int,
@@ -82,7 +84,7 @@ def _get_typer_subapp(parent: typer.Typer, name: str, *, help_text: str) -> type
         try:
             if getattr(group_info, "name", None) != name:
                 continue
-        except Exception:
+        except (ValueError, TypeError):
             continue
         for attr in ("typer_instance", "typer", "app"):
             candidate = getattr(group_info, attr, None)
@@ -109,7 +111,7 @@ def _normalize_browser_container(app: Any) -> Any:
 
     try:
         import click
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         return app
 
     if isinstance(app, click.Group):
@@ -140,13 +142,13 @@ def register(app: Any) -> None:
             @artifact_app.command("screenshot")
             def artifact_screenshot(
                 artifact: str = typer.Argument(..., help="Artifact path or artifact id."),
-                out: Optional[Path] = typer.Option(
+                out: Path | None = typer.Option(
                     None,
                     "--out",
                     "--output",
                     help="Where to write the screenshot (PNG). If a directory, a name will be chosen automatically.",
                 ),
-                artifact_root: Optional[Path] = typer.Option(
+                artifact_root: Path | None = typer.Option(
                     None,
                     "--artifact-root",
                     help="Optional root directory used to resolve artifact ids to files.",
@@ -207,8 +209,8 @@ def register(app: Any) -> None:
         @click.option("--json", "json_output", is_flag=True, default=False)
         def _artifact_screenshot_click(
             artifact: str,
-            out: Optional[Path],
-            artifact_root: Optional[Path],
+            out: Path | None,
+            artifact_root: Path | None,
             full_page: bool,
             width: int,
             height: int,
@@ -229,7 +231,7 @@ def register(app: Any) -> None:
             )
 
         _REGISTERED_APP_IDS.add(app_id)
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
         # Only mark it registered on success.
         _REGISTERED_APP_IDS.discard(app_id)
         raise
@@ -254,9 +256,51 @@ def _auto_register_if_possible() -> None:
         return
     try:
         register(app)
-    except Exception:
+    except ImportError:
         # Never crash on import; determinism belongs at runtime invocation.
         return
 
 
 _auto_register_if_possible()
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser artifact-screenshot",
+        description="Save a PNG screenshot for a browser artifact.",
+    )
+    parser.add_argument("artifact")
+    parser.add_argument("--out", "--output", dest="out", default=None)
+    parser.add_argument("--artifact-root", dest="artifact_root", default=None)
+    full_page = parser.add_mutually_exclusive_group()
+    full_page.add_argument("--full-page", dest="full_page", action="store_true")
+    full_page.add_argument("--viewport-only", dest="full_page", action="store_false")
+    parser.set_defaults(full_page=True)
+    parser.add_argument("--width", type=int, default=1280)
+    parser.add_argument("--height", type=int, default=720)
+    parser.add_argument("--wait-ms", type=int, default=250)
+    parser.add_argument("--timeout-ms", type=int, default=30_000)
+    parser.add_argument("--json", dest="json_output", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    try:
+        _run(
+            artifact=str(args.artifact),
+            out=Path(args.out) if args.out else None,
+            artifact_root=Path(args.artifact_root) if args.artifact_root else None,
+            full_page=bool(args.full_page),
+            width=int(args.width),
+            height=int(args.height),
+            wait_ms=int(args.wait_ms),
+            timeout_ms=int(args.timeout_ms),
+            json_output=bool(args.json_output),
+        )
+        return 0
+    except typer.Exit as exc:
+        return int(exc.exit_code or 0)
+    except SystemExit as exc:
+        return int(exc.code or 0)

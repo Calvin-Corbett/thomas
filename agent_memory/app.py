@@ -1,16 +1,19 @@
 from __future__ import annotations
+
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
-from agent_memory.runtime import init_runtime, open_active_indices
 from agent_memory.rerank.tier1 import Tier1Reranker
-from agent_memory.rerank.tier2 import Tier2Reranker, Tier2Config
-from agent_memory.retrieval.pipeline import RetrievalPipeline, RetrievalConfig
+from agent_memory.rerank.tier2 import Tier2Config, Tier2Reranker
+from agent_memory.retrieval.pipeline import RetrievalConfig, RetrievalPipeline
+from agent_memory.runtime import init_runtime, open_active_indices
+
 
 @dataclass
 class AppConfig:
     tier2_enabled: bool = True
+
 
 class AgentMemoryApp:
     def __init__(self, root: Path, cfg: AppConfig = AppConfig()):
@@ -23,7 +26,7 @@ class AgentMemoryApp:
     def close(self):
         self.rt.close()
 
-    def log_event(self, thread: str, etype: str, text: str, blob_text: Optional[str] = None) -> int:
+    def log_event(self, thread: str, etype: str, text: str, blob_text: str | None = None) -> int:
         blob_id = None
         if blob_text is not None:
             blob_id = self.rt.blobs.put_text(blob_text)
@@ -31,7 +34,18 @@ class AgentMemoryApp:
         self.rt.compiler.ingest_delta_event(eid)
         return eid
 
-    def query(self, thread: str, mode: str, text: str) -> Dict[str, Any]:
+    def query(self, thread: str, mode: str, text: str) -> dict[str, Any]:
+        if mode == "no_memory":
+            trace = {
+                "thread": thread,
+                "mode": mode,
+                "query": text,
+                "selected": [],
+                "candidates": [],
+            }
+            self.rt.meta.trace_add(thread=thread, mode=mode, query=text, trace=trace)
+            return {"packed": "## L1\nMODE: no_memory", "selected": [], "trace": trace}
+
         base_db, delta_db = open_active_indices(self.rt)
         try:
             pipe = RetrievalPipeline(

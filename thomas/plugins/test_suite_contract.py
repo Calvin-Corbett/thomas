@@ -1,9 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from collections import Counter
+from collections.abc import Iterable, Mapping, Sequence
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any
 
 DEFAULT_TEST_MODES = ("quick", "dynamic", "human")
 
@@ -24,7 +25,7 @@ DYNAMIC_CATEGORIES = {
 HUMAN_CATEGORIES = {"human_quality"}
 
 
-def load_test_suite_contract(path: Path) -> Dict[str, Any]:
+def load_test_suite_contract(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {
             "id": "missing",
@@ -84,7 +85,7 @@ def _safe_float(value: Any) -> float | None:
     return num
 
 
-def _agent_metrics(result: Mapping[str, Any], agent_id: str) -> Dict[str, Any]:
+def _agent_metrics(result: Mapping[str, Any], agent_id: str) -> dict[str, Any]:
     aid = str(agent_id or "").strip()
     for row in list(result.get("agents") or []):
         if not isinstance(row, dict):
@@ -95,7 +96,7 @@ def _agent_metrics(result: Mapping[str, Any], agent_id: str) -> Dict[str, Any]:
     return {}
 
 
-def _check_signals(result: Mapping[str, Any], agent_id: str) -> Dict[str, bool]:
+def _check_signals(result: Mapping[str, Any], agent_id: str) -> dict[str, bool]:
     metrics = _agent_metrics(result, agent_id)
     suite = dict(result.get("suite") or {})
     focus = dict(result.get("focus") or {})
@@ -195,7 +196,7 @@ def _normalize_test_mode(mode: Any, *, category: Any = "") -> str:
     return _default_test_mode_for_category(category)
 
 
-def _build_token_efficiency_row(result: Mapping[str, Any], agent_id: str) -> Dict[str, Any]:
+def _build_token_efficiency_row(result: Mapping[str, Any], agent_id: str) -> dict[str, Any]:
     metrics = _agent_metrics(result, agent_id)
     score = _safe_float(metrics.get("cost.token_efficiency_score"))
     effective_tokens = _safe_float(metrics.get("cost.token_efficiency_tokens_per_success_effective"))
@@ -257,13 +258,13 @@ def evaluate_test_suite_contract(
     result: Mapping[str, Any],
     focus_agent: str,
     head_to_head_pair: Sequence[str] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     focus = str(focus_agent or "").strip()
     suite_cfg = dict(result.get("suite") or {})
     tie_policy = str(suite_cfg.get("head_to_head_tie_policy") or "half_point").strip().lower()
     if tie_policy not in {"half_point", "exclude"}:
         tie_policy = "half_point"
-    runtime_metric_ids: List[str] = []
+    runtime_metric_ids: list[str] = []
     runtime_metrics_with_focus_data = 0
     runtime_metrics_comparable = 0
     runtime_metrics_by_mode_total: Counter[str] = Counter()
@@ -287,9 +288,9 @@ def evaluate_test_suite_contract(
 
     catalog_checks_raw = [row for row in list(contract.get("catalog_checks") or []) if isinstance(row, dict)]
 
-    def _build_catalog_rows_for_agent(agent_id: str) -> List[Dict[str, Any]]:
+    def _build_catalog_rows_for_agent(agent_id: str) -> list[dict[str, Any]]:
         category_signals = _check_signals(result, agent_id)
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         for raw in catalog_checks_raw:
             rid = str(raw.get("id") or "").strip()
             if not rid:
@@ -411,15 +412,15 @@ def evaluate_test_suite_contract(
                 h2h_by_mode_counted[mode] += 1
                 h2h_right_points += 1.0
                 h2h_by_mode_right_points[mode] += 1.0
-    h2h_left_score = (round((h2h_left_points / h2h_counted) * 100.0, 3) if h2h_counted > 0 else None)
-    h2h_right_score = (round((h2h_right_points / h2h_counted) * 100.0, 3) if h2h_counted > 0 else None)
+    h2h_left_score = round((h2h_left_points / h2h_counted) * 100.0, 3) if h2h_counted > 0 else None
+    h2h_right_score = round((h2h_right_points / h2h_counted) * 100.0, 3) if h2h_counted > 0 else None
     h2h_decisive_left_score = (
         round((h2h_decisive_left_points / h2h_decisive_counted) * 100.0, 3) if h2h_decisive_counted > 0 else None
     )
     h2h_decisive_right_score = (
         round((h2h_decisive_right_points / h2h_decisive_counted) * 100.0, 3) if h2h_decisive_counted > 0 else None
     )
-    h2h_by_mode: Dict[str, Dict[str, Any]] = {}
+    h2h_by_mode: dict[str, dict[str, Any]] = {}
     for mode in sorted(set(DEFAULT_TEST_MODES) | set(h2h_by_mode_counted.keys())):
         counted = int(h2h_by_mode_counted.get(mode) or 0)
         left_points = float(h2h_by_mode_left_points.get(mode) or 0.0)
@@ -432,7 +433,7 @@ def evaluate_test_suite_contract(
             "agent_b_score": (round((right_points / counted) * 100.0, 3) if counted > 0 else None),
         }
 
-    token_rows: List[Dict[str, Any]] = [_build_token_efficiency_row(result, aid) for aid in agent_ids]
+    token_rows: list[dict[str, Any]] = [_build_token_efficiency_row(result, aid) for aid in agent_ids]
     token_map = {str(row.get("agent") or "").strip(): row for row in token_rows if str(row.get("agent") or "").strip()}
     token_ranking = sorted(
         list(token_rows),
@@ -450,7 +451,7 @@ def evaluate_test_suite_contract(
     token_h2h_ties = 0
     token_h2h_left_points = 0.0
     token_h2h_right_points = 0.0
-    token_h2h_components: List[Dict[str, Any]] = []
+    token_h2h_components: list[dict[str, Any]] = []
     if left and right:
         left_token = dict(token_map.get(left) or {})
         right_token = dict(token_map.get(right) or {})
@@ -461,7 +462,9 @@ def evaluate_test_suite_contract(
                 ("telemetry_coverage", "higher_is_better"),
             ]
             for metric, preference in component_specs:
-                outcome = _pairwise_scalar_outcome(left_token.get(metric), right_token.get(metric), preference=preference)
+                outcome = _pairwise_scalar_outcome(
+                    left_token.get(metric), right_token.get(metric), preference=preference
+                )
                 if outcome is None:
                     continue
                 token_h2h_counted += 1
@@ -493,7 +496,7 @@ def evaluate_test_suite_contract(
         round((token_h2h_right_points / token_h2h_counted) * 100.0, 3) if token_h2h_counted > 0 else None
     )
 
-    agent_score_rows: List[Dict[str, Any]] = []
+    agent_score_rows: list[dict[str, Any]] = []
     for aid in agent_ids:
         runtime_applicable = 0
         runtime_passed = 0
@@ -527,13 +530,11 @@ def evaluate_test_suite_contract(
                 catalog_passed_by_mode[mode] += 1
         overall_applicable = runtime_applicable + catalog_applicable
         overall_passed = runtime_passed + catalog_passed_agent
-        overall_score = (round((overall_passed / overall_applicable) * 100.0, 3) if overall_applicable > 0 else 0.0)
+        overall_score = round((overall_passed / overall_applicable) * 100.0, 3) if overall_applicable > 0 else 0.0
         observed_modes = sorted(
-            set(DEFAULT_TEST_MODES)
-            | set(runtime_applicable_by_mode.keys())
-            | set(catalog_applicable_by_mode.keys())
+            set(DEFAULT_TEST_MODES) | set(runtime_applicable_by_mode.keys()) | set(catalog_applicable_by_mode.keys())
         )
-        mode_scores: Dict[str, Dict[str, Any]] = {}
+        mode_scores: dict[str, dict[str, Any]] = {}
         for mode in observed_modes:
             mode_runtime_applicable = int(runtime_applicable_by_mode.get(mode) or 0)
             mode_runtime_passed = int(runtime_passed_by_mode.get(mode) or 0)
@@ -597,7 +598,9 @@ def evaluate_test_suite_contract(
                 "catalog_checks": {
                     "applicable": int(catalog_applicable),
                     "passed": int(catalog_passed_agent),
-                    "pass_ratio": (round(catalog_passed_agent / catalog_applicable, 6) if catalog_applicable > 0 else 0.0),
+                    "pass_ratio": (
+                        round(catalog_passed_agent / catalog_applicable, 6) if catalog_applicable > 0 else 0.0
+                    ),
                 },
                 "overall_checks": {
                     "applicable": int(overall_applicable),
@@ -607,7 +610,7 @@ def evaluate_test_suite_contract(
                 "mode_scores": mode_scores,
             }
         )
-    mode_rankings: Dict[str, List[Dict[str, Any]]] = {}
+    mode_rankings: dict[str, list[dict[str, Any]]] = {}
     all_modes = sorted(set(DEFAULT_TEST_MODES) | set(by_mode.keys()))
     for mode in all_modes:
         ranked_mode_rows = sorted(
@@ -619,7 +622,7 @@ def evaluate_test_suite_contract(
             ),
             reverse=True,
         )
-        mode_rows: List[Dict[str, Any]] = []
+        mode_rows: list[dict[str, Any]] = []
         for idx, row in enumerate(ranked_mode_rows, start=1):
             mode_data = dict(dict(row.get("mode_scores") or {}).get(mode) or {})
             row[f"{mode}_suite_rank"] = int(idx)
@@ -730,12 +733,12 @@ def render_test_suite_contract_markdown(evaluation: Mapping[str, Any]) -> str:
     runtime = dict(evaluation.get("runtime_metrics") or {})
     catalog = dict(evaluation.get("catalog") or {})
     summary = dict(evaluation.get("summary") or {})
-    head_to_head = dict((dict(evaluation.get("scores") or {}).get("head_to_head") or {}))
-    mode_rankings = dict((dict(evaluation.get("scores") or {}).get("mode_rankings") or {}))
-    token_efficiency = dict((dict(evaluation.get("scores") or {}).get("token_efficiency") or {}))
+    head_to_head = dict(dict(evaluation.get("scores") or {}).get("head_to_head") or {})
+    mode_rankings = dict(dict(evaluation.get("scores") or {}).get("mode_rankings") or {})
+    token_efficiency = dict(dict(evaluation.get("scores") or {}).get("token_efficiency") or {})
     token_h2h = dict(token_efficiency.get("head_to_head") or {})
     token_ranking = list(token_efficiency.get("overall_ranking") or [])
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append("# Full Coverage Test Suite Contract")
     lines.append("")
     lines.append(f"- Focus agent: `{evaluation.get('focus_agent')}`")

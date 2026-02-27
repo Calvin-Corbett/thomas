@@ -12,13 +12,14 @@ existing Thomas CLI scaffolding:
 
 Supports machine-readable output mode: `--json`
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from pathlib import Path
-from typing import Any, Optional
 import json
 import sys
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
 
 from thomas.channels.p079_channel_remove_command import (
     ChannelRemoveError,
@@ -34,10 +35,11 @@ class ChannelRemoveCliResult:
 
     Includes both `ok` and `success` for compatibility across scripts.
     """
+
     ok: bool
     success: bool
-    result: Optional[dict[str, Any]] = None
-    error: Optional[dict[str, Any]] = None
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), indent=2, sort_keys=False) + "\n"
@@ -64,11 +66,11 @@ def _runtime_error(runtime: Any, message: str) -> None:
 def run_channel_remove(
     *,
     channel: str,
-    account: Optional[str] = None,
+    account: str | None = None,
     delete: bool = False,
     json_output: bool = False,
     runtime: Any = None,
-    config_path: Optional[str | Path] = None,
+    config_path: str | Path | None = None,
 ) -> int:
     """
     Execute the remove command.
@@ -136,7 +138,7 @@ def _safe_add_argument(parser: Any, *args: Any, **kwargs: Any) -> None:
     option_strings = [a for a in args if isinstance(a, str) and a.startswith("-")]
     try:
         existing = getattr(parser, "_option_string_actions", {})  # argparse internal
-    except Exception:  # pragma: no cover
+    except (ValueError, TypeError):  # pragma: no cover
         existing = {}
 
     if option_strings and any(opt in existing for opt in option_strings):
@@ -170,7 +172,7 @@ def register(subparsers: Any) -> Any:
     for key in ("_thomas_handler", "handler", "func", "run"):
         try:
             parser.set_defaults(**{key: run_from_parsed_args})
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             pass
 
     return parser
@@ -190,15 +192,15 @@ def get_typer_command():  # pragma: no cover
     """
     try:
         import typer  # type: ignore
-    except Exception:
+    except ImportError:
         return None
 
     def _cmd(
         channel: str = typer.Argument("", help="Channel identifier (e.g., telegram)"),
-        account: Optional[str] = typer.Option(None, "--account", help="Account id (optional)"),
+        account: str | None = typer.Option(None, "--account", help="Account id (optional)"),
         delete: bool = typer.Option(False, "--delete", help="Delete config entries instead of disabling"),
         json_output: bool = typer.Option(False, "--json", help="Output machine-readable JSON"),
-        config: Optional[Path] = typer.Option(None, "--config", help="Path to Thomas config file (optional)"),
+        config: Path | None = typer.Option(None, "--config", help="Path to Thomas config file (optional)"),
     ) -> None:
         code = run_channel_remove(
             channel=channel,
@@ -214,8 +216,9 @@ def get_typer_command():  # pragma: no cover
 
 try:  # pragma: no cover
     import typer  # type: ignore
+
     typer_command = get_typer_command()
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer_command = None
 
 

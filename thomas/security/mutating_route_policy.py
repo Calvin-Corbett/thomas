@@ -3,13 +3,12 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
-
 
 DEFAULT_MANIFEST_RELATIVE_PATH = Path("docs/security/mutating_route_policy_exceptions.json")
 DEFAULT_AUTHZ_POLICY = "require_api_access"
@@ -17,10 +16,10 @@ DEFAULT_CSRF_POLICY = "same_origin_browser_local_mode"
 
 
 def _today_utc() -> date:
-    return datetime.now(UTC).date()
+    return datetime.now(timezone.utc).date()
 
 
-def _parse_iso_date(raw: Any) -> Optional[date]:
+def _parse_iso_date(raw: Any) -> date | None:
     text = str(raw or "").strip()
     if not text:
         return None
@@ -30,11 +29,11 @@ def _parse_iso_date(raw: Any) -> Optional[date]:
         return None
 
 
-def _route_key(method: Any, path: Any) -> Tuple[str, str]:
+def _route_key(method: Any, path: Any) -> tuple[str, str]:
     return (str(method or "").strip().upper(), str(path or "").strip())
 
 
-def _load_manifest(path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+def _load_manifest(path: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     if not path.exists():
         return {}, [
             {
@@ -64,10 +63,10 @@ def _load_manifest(path: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
     return data, []
 
 
-def _load_policy_snapshot(repo_root: Path) -> Tuple[Dict[str, Any], List[Dict[str, Any]]]:
+def _load_policy_snapshot(repo_root: Path) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     runtime_root = (repo_root / ".tmp" / "mutating_route_policy_audit").resolve()
     runtime_root.mkdir(parents=True, exist_ok=True)
-    errors: List[Dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
     try:
         cfg = AppConfig(
             models={"local": ModelConfig(name="local", model="dummy")},
@@ -86,7 +85,7 @@ def _load_policy_snapshot(repo_root: Path) -> Tuple[Dict[str, Any], List[Dict[st
         )
         return {}, errors
 
-    snapshot: Dict[str, Any] = {}
+    snapshot: dict[str, Any] = {}
     memory_obj: Any = None
     for key, value in app.items():
         key_text = repr(key)
@@ -113,14 +112,14 @@ def _load_policy_snapshot(repo_root: Path) -> Tuple[Dict[str, Any], List[Dict[st
 
 
 def evaluate_mutating_route_policy_manifest(
-    snapshot: Dict[str, Any],
-    manifest: Dict[str, Any],
+    snapshot: dict[str, Any],
+    manifest: dict[str, Any],
     *,
-    today: Optional[date] = None,
-) -> Dict[str, Any]:
+    today: date | None = None,
+) -> dict[str, Any]:
     now = today or _today_utc()
-    errors: List[Dict[str, Any]] = []
-    warnings: List[Dict[str, Any]] = []
+    errors: list[dict[str, Any]] = []
+    warnings: list[dict[str, Any]] = []
 
     payload = dict(snapshot or {})
     defaults_raw = payload.get("defaults")
@@ -129,8 +128,8 @@ def evaluate_mutating_route_policy_manifest(
     default_csrf = str(defaults.get("csrf") or DEFAULT_CSRF_POLICY).strip()
 
     policies = list(payload.get("policies") or [])
-    route_map: Dict[Tuple[str, str], Dict[str, Any]] = {}
-    observed_exceptions: Dict[Tuple[str, str], Dict[str, Any]] = {}
+    route_map: dict[tuple[str, str], dict[str, Any]] = {}
+    observed_exceptions: dict[tuple[str, str], dict[str, Any]] = {}
     for row in policies:
         if not isinstance(row, dict):
             continue
@@ -186,8 +185,8 @@ def evaluate_mutating_route_policy_manifest(
         )
         exceptions_raw = []
 
-    approved_keys: set[Tuple[str, str]] = set()
-    approved_exceptions: List[Dict[str, Any]] = []
+    approved_keys: set[tuple[str, str]] = set()
+    approved_exceptions: list[dict[str, Any]] = []
 
     for idx, row in enumerate(exceptions_raw):
         if not isinstance(row, dict):
@@ -345,9 +344,9 @@ def evaluate_mutating_route_policy_manifest(
 def evaluate_mutating_route_policy_exceptions(
     repo_root: Path,
     *,
-    manifest_path: Optional[Path] = None,
-    today: Optional[date] = None,
-) -> Dict[str, Any]:
+    manifest_path: Path | None = None,
+    today: date | None = None,
+) -> dict[str, Any]:
     root = repo_root.resolve()
     target_manifest = (manifest_path or (root / DEFAULT_MANIFEST_RELATIVE_PATH)).resolve()
 

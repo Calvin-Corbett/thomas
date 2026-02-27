@@ -2,13 +2,14 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Mapping, Optional, Set
+from typing import Any
 
 CAPABILITIES_SCHEMA_VERSION = 1
 
 # Thomas-native, provider-agnostic capability keys derived from integration surfaces.
-_CAPABILITY_ALIASES: Dict[str, Set[str]] = {
+_CAPABILITY_ALIASES: dict[str, set[str]] = {
     "send_text": {"send", "send_message", "send_text", "post_message"},
     "send_markdown": {"send_markdown", "send_md"},
     "send_image": {"send_image", "send_photo", "send_picture", "send_media"},
@@ -22,14 +23,14 @@ _CAPABILITY_ALIASES: Dict[str, Set[str]] = {
 
 
 class ChannelCapabilitiesCommandError(Exception):
-    def __init__(self, code: str, message: str, *, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(f"{code}: {message}")
         self.code = code
         self.message = message
         self.details = details or None
 
-    def to_dict(self) -> Dict[str, Any]:
-        out: Dict[str, Any] = {"code": self.code, "message": self.message}
+    def to_dict(self) -> dict[str, Any]:
+        out: dict[str, Any] = {"code": self.code, "message": self.message}
         if self.details:
             out["details"] = dict(self.details)
         return out
@@ -45,12 +46,12 @@ class ChannelCapabilitiesResult:
     schema_version: int
     channel: str
     integration: str
-    capabilities: Dict[str, bool]
+    capabilities: dict[str, bool]
     native: Any = None
-    details: Optional[Dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
-    def to_dict(self, *, ok: bool = True) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
+    def to_dict(self, *, ok: bool = True) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "ok": ok,
             "schema_version": self.schema_version,
             "channel": self.channel,
@@ -91,7 +92,7 @@ def get_channel_capabilities(request: ChannelCapabilitiesRequest, *, config: Any
             f"No integration module found for '{integration}'.",
             details={"module": module_name},
         ) from e
-    except Exception as e:  # pragma: no cover
+    except (ImportError, AttributeError, RuntimeError) as e:  # pragma: no cover
         raise ChannelCapabilitiesCommandError(
             "external_failure",
             f"Failed to load integration '{integration}'.",
@@ -112,7 +113,7 @@ def get_channel_capabilities(request: ChannelCapabilitiesRequest, *, config: Any
     )
 
 
-def output_json_schema() -> Dict[str, Any]:
+def output_json_schema() -> dict[str, Any]:
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "title": "ChannelCapabilitiesResult",
@@ -160,20 +161,26 @@ def _get_channel_entry(container: Any, channel: str) -> Any:
     if isinstance(container, Mapping):
         if channel in container:
             return container[channel]
-        raise ChannelCapabilitiesCommandError("unknown_channel", f"Channel '{channel}' is not defined in configuration.")
+        raise ChannelCapabilitiesCommandError(
+            "unknown_channel", f"Channel '{channel}' is not defined in configuration."
+        )
 
-    if hasattr(container, "get_channel") and callable(getattr(container, "get_channel")):
+    if hasattr(container, "get_channel") and callable(container.get_channel):
         try:
             return container.get_channel(channel)
-        except Exception:
-            raise ChannelCapabilitiesCommandError("unknown_channel", f"Channel '{channel}' is not defined in configuration.")
+        except (ImportError, AttributeError, RuntimeError):
+            raise ChannelCapabilitiesCommandError(
+                "unknown_channel", f"Channel '{channel}' is not defined in configuration."
+            )
 
     if isinstance(container, (list, tuple)):
         for entry in container:
             name = _get(entry, "name") or _get(entry, "id") or _get(entry, "channel")
             if isinstance(name, str) and name == channel:
                 return entry
-        raise ChannelCapabilitiesCommandError("unknown_channel", f"Channel '{channel}' is not defined in configuration.")
+        raise ChannelCapabilitiesCommandError(
+            "unknown_channel", f"Channel '{channel}' is not defined in configuration."
+        )
 
     raise ChannelCapabilitiesCommandError(
         "missing_config",
@@ -216,7 +223,7 @@ def _get(obj: Any, key: str) -> Any:
 
 def _get_native_capabilities(mod: Any, channel_cfg: Any) -> Any:
     if hasattr(mod, "CAPABILITIES"):
-        return getattr(mod, "CAPABILITIES")
+        return mod.CAPABILITIES
 
     fn = getattr(mod, "get_capabilities", None) or getattr(mod, "capabilities", None)
     if not callable(fn):
@@ -229,7 +236,7 @@ def _get_native_capabilities(mod: Any, channel_cfg: Any) -> Any:
         return fn(channel_cfg)
     except TypeError:
         return fn()
-    except Exception as e:
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as e:
         raise ChannelCapabilitiesCommandError(
             "external_failure",
             f"Integration '{mod.__name__}' failed while resolving native capabilities.",
@@ -237,14 +244,14 @@ def _get_native_capabilities(mod: Any, channel_cfg: Any) -> Any:
         ) from e
 
 
-def _collect_callable_names(mod: Any) -> Set[str]:
-    out: Set[str] = set()
+def _collect_callable_names(mod: Any) -> set[str]:
+    out: set[str] = set()
     for name in dir(mod):
         if name.startswith("_"):
             continue
         try:
             attr = getattr(mod, name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
         if callable(attr):
             out.add(name)
@@ -255,11 +262,11 @@ def _collect_callable_names(mod: Any) -> Set[str]:
                 try:
                     if callable(getattr(attr, m)):
                         out.add(m)
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     continue
     return out
 
 
-def _derive_capabilities(callable_names: Iterable[str]) -> Dict[str, bool]:
+def _derive_capabilities(callable_names: Iterable[str]) -> dict[str, bool]:
     present = set(callable_names)
     return {k: any(a in present for a in aliases) for k, aliases in _CAPABILITY_ALIASES.items()}

@@ -37,6 +37,9 @@ ux_visible_test_*.txt
 vel4_test.txt
 test_autonomous_task*.txt
 tmp_switch_test.py
+tmp_companion_*.png
+thomas/tmp_script.py
+%s
 nul
 =*
 
@@ -45,12 +48,22 @@ node_modules/
 .playwright-cli/
 .feature_backups/
 output/
+artifacts/
+dist/
 tmp/
 .tmp*/
 logs/
+*.har
+*.tar
+*.tar.gz
 
 # Local archives / handoff bundles
 tasks/
+!plans/
+!plans/thomas/
+!plans/thomas/tasks/
+!plans/thomas/tasks/**/
+!plans/thomas/tasks/**/PLAN.md
 archives/
 _archive/
 
@@ -64,6 +77,17 @@ thomas.asset_studio.db
 thomas.asset_studio.db-shm
 thomas.asset_studio.db-wal
 *.sqlite3
+
+# Secrets and credentials
+secrets.json
+.env
+.env.local
+.env.*.local
+
+# IDE & local development settings
+.claude/settings.local.json
+.vscode/settings.json
+.idea/
 
 # Misc local noise
 *.log

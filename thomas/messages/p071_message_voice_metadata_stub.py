@@ -1,6 +1,7 @@
-"""P071 - Message voice metadata stub.
+"""P071 - Message voice metadata extraction.
 
-This is a *stub* implementation for attaching voice-related metadata to a message.
+This module provides best-effort voice metadata extraction for message attachments.
+It keeps compatibility field names used by earlier prompt-pack flows.
 
 Design goals
 - Stable, machine-readable schema for automation.
@@ -18,9 +19,10 @@ from __future__ import annotations
 import hashlib
 import mimetypes
 import wave
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, TypedDict, Union
+from typing import Any, TypedDict
 from urllib.parse import urlparse
 
 SCHEMA_VERSION: int = 1
@@ -28,45 +30,46 @@ SCHEMA_VERSION: int = 1
 
 class VoiceMetadataStubError(RuntimeError):
     """Base error with deterministic code + structured details."""
-    code: str
-    details: Dict[str, Any]
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    code: str
+    details: dict[str, Any]
+
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = str(code)
         self.details = dict(details or {})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "message": str(self), "details": dict(self.details)}
 
 
 class InvalidVoiceMetadataRequestError(VoiceMetadataStubError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__("invalid_request", message, details=details)
 
 
 class MissingVoiceMetadataConfigError(VoiceMetadataStubError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__("missing_config", message, details=details)
 
 
 class VoiceMetadataExternalFailureError(VoiceMetadataStubError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__("external_failure", message, details=details)
 
 
 class VoiceMetadataPayload(TypedDict, total=False):
-    duration_ms: Optional[int]
-    size_bytes: Optional[int]
-    sha256: Optional[str]
-    mime_type: Optional[str]
+    duration_ms: int | None
+    size_bytes: int | None
+    sha256: str | None
+    mime_type: str | None
 
-    sample_rate_hz: Optional[int]
-    channels: Optional[int]
-    bit_depth: Optional[int]
+    sample_rate_hz: int | None
+    channels: int | None
+    bit_depth: int | None
 
-    codec: Optional[str]
-    container: Optional[str]
+    codec: str | None
+    container: str | None
 
 
 class VoiceMetadataStubRequestPayload(TypedDict, total=False):
@@ -78,25 +81,25 @@ class VoiceMetadataStubRequestPayload(TypedDict, total=False):
 class VoiceMetadataStubResultPayload(TypedDict):
     schema_version: int
     message_id: str
-    source: Dict[str, Any]
+    source: dict[str, Any]
     metadata: VoiceMetadataPayload
     is_stub: bool
-    warnings: List[str]
+    warnings: list[str]
 
 
 @dataclass(frozen=True)
 class VoiceMetadata:
-    duration_ms: Optional[int] = None
-    size_bytes: Optional[int] = None
-    sha256: Optional[str] = None
-    mime_type: Optional[str] = None
+    duration_ms: int | None = None
+    size_bytes: int | None = None
+    sha256: str | None = None
+    mime_type: str | None = None
 
-    sample_rate_hz: Optional[int] = None
-    channels: Optional[int] = None
-    bit_depth: Optional[int] = None
+    sample_rate_hz: int | None = None
+    channels: int | None = None
+    bit_depth: int | None = None
 
-    codec: Optional[str] = None
-    container: Optional[str] = None
+    codec: str | None = None
+    container: str | None = None
 
     def to_dict(self) -> VoiceMetadataPayload:
         return {
@@ -115,11 +118,11 @@ class VoiceMetadata:
 @dataclass(frozen=True)
 class VoiceMetadataStubRequest:
     message_id: str
-    audio_path: Optional[str] = None
-    audio_url: Optional[str] = None
+    audio_path: str | None = None
+    audio_url: str | None = None
 
     @classmethod
-    def from_mapping(cls, payload: Mapping[str, Any]) -> "VoiceMetadataStubRequest":
+    def from_mapping(cls, payload: Mapping[str, Any]) -> VoiceMetadataStubRequest:
         return cls(
             message_id=str(payload.get("message_id", "")),
             audio_path=payload.get("audio_path") or None,
@@ -164,10 +167,10 @@ class VoiceMetadataStubRequest:
 class VoiceMetadataStubResult:
     schema_version: int
     message_id: str
-    source: Dict[str, Any]
+    source: dict[str, Any]
     metadata: VoiceMetadata
     is_stub: bool
-    warnings: List[str]
+    warnings: list[str]
 
     def to_dict(self) -> VoiceMetadataStubResultPayload:
         return {
@@ -181,9 +184,9 @@ class VoiceMetadataStubResult:
 
 
 def run(
-    payload: Union[Mapping[str, Any], VoiceMetadataStubRequest],
+    payload: Mapping[str, Any] | VoiceMetadataStubRequest,
     *,
-    config: Optional[Mapping[str, Any]] = None,
+    config: Mapping[str, Any] | None = None,
 ) -> VoiceMetadataStubResultPayload:
     req = payload if isinstance(payload, VoiceMetadataStubRequest) else VoiceMetadataStubRequest.from_mapping(payload)
     return create_voice_metadata_stub(req, config=config).to_dict()
@@ -192,7 +195,7 @@ def run(
 def create_voice_metadata_stub(
     request: VoiceMetadataStubRequest,
     *,
-    config: Optional[Mapping[str, Any]] = None,
+    config: Mapping[str, Any] | None = None,
 ) -> VoiceMetadataStubResult:
     if not isinstance(request, VoiceMetadataStubRequest):
         raise InvalidVoiceMetadataRequestError(
@@ -202,9 +205,10 @@ def create_voice_metadata_stub(
 
     request.validate()
 
-    warnings: List[str] = []
-    source: Dict[str, Any] = {"kind": "none"}
+    warnings: list[str] = []
+    source: dict[str, Any] = {"kind": "none", "inspection_mode": "none"}
     metadata = VoiceMetadata()
+    is_stub = True
 
     if request.audio_url:
         parsed = urlparse(request.audio_url)
@@ -222,14 +226,16 @@ def create_voice_metadata_stub(
                 details={"required": "config", "audio_url": request.audio_url},
             )
 
-        allow_urls = _config_get_bool(config, ["voice_metadata_allow_urls", "allow_urls", "allow_network"], default=False)
+        allow_urls = _config_get_bool(
+            config, ["voice_metadata_allow_urls", "allow_urls", "allow_network"], default=False
+        )
         if not allow_urls:
             raise MissingVoiceMetadataConfigError(
                 "audio_url usage is disabled by config/policy",
                 details={"audio_url": request.audio_url, "allow_urls": allow_urls},
             )
 
-        source = {"kind": "url", "url": request.audio_url}
+        source = {"kind": "url", "url": request.audio_url, "inspection_mode": "url_record_only"}
         warnings.append("url_source_not_fetched")
 
         return VoiceMetadataStubResult(
@@ -267,11 +273,11 @@ def create_voice_metadata_stub(
         guessed_mime, _ = mimetypes.guess_type(str(path))
         container = path.suffix.lower().lstrip(".") or None
 
-        duration_ms: Optional[int] = None
-        sample_rate_hz: Optional[int] = None
-        channels: Optional[int] = None
-        bit_depth: Optional[int] = None
-        codec: Optional[str] = None
+        duration_ms: int | None = None
+        sample_rate_hz: int | None = None
+        channels: int | None = None
+        bit_depth: int | None = None
+        codec: str | None = None
 
         if container == "wav":
             try:
@@ -301,7 +307,9 @@ def create_voice_metadata_stub(
             codec=codec,
             container=container,
         )
-        source = {"kind": "file", "path": str(path)}
+        source = {"kind": "file", "path": str(path), "inspection_mode": "file_best_effort"}
+        # Local file mode performs real metadata extraction (size/hash + optional WAV details).
+        is_stub = False
     else:
         warnings.append("no_audio_source")
 
@@ -310,7 +318,7 @@ def create_voice_metadata_stub(
         message_id=request.message_id,
         source=source,
         metadata=metadata,
-        is_stub=True,
+        is_stub=is_stub,
         warnings=warnings,
     )
 
@@ -323,7 +331,7 @@ def _sha256_file(path: Path, *, chunk_size: int = 1024 * 1024) -> str:
     return h.hexdigest()
 
 
-def _config_get_bool(config: Any, keys: List[str], *, default: bool) -> bool:
+def _config_get_bool(config: Any, keys: list[str], *, default: bool) -> bool:
     """Read a bool-ish flag from a Mapping or attribute-based config.
 
     Checks keys in order; first match wins.

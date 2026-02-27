@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-from typing import Optional
-
 import typer
 
 try:  # pragma: no cover
     from rich.console import Console
     from rich.table import Table
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     Console = None  # type: ignore[assignment,misc]
     Table = None  # type: ignore[assignment,misc]
 
@@ -40,7 +38,7 @@ def list_channels(
     ctx: typer.Context,
     limit: int = typer.Option(100, "--limit", min=0, help="Max channels to return (0 means no limit)."),
     offset: int = typer.Option(0, "--offset", min=0, help="Number of channels to skip before returning results."),
-    integration: Optional[str] = typer.Option(
+    integration: str | None = typer.Option(
         None,
         "--integration",
         "-i",
@@ -73,7 +71,7 @@ def list_channels(
     _print_human(response)
 
 
-def _run(*, ctx: typer.Context, integration: Optional[str], limit: int, offset: int) -> ChannelListEnrichedResponse:
+def _run(*, ctx: typer.Context, integration: str | None, limit: int, offset: int) -> ChannelListEnrichedResponse:
     request = ChannelListEnrichedRequest(integration=integration, limit=limit, offset=offset)
     return channel_list_enriched_output(request, ctx=ctx)
 

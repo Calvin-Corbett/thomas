@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 try:
     import typer
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore[assignment]
 
 from thomas.browser.p010_browser_artifact_pdf_export import (
@@ -32,10 +32,10 @@ def _emit_human_error(*, code: str, message: str) -> None:
 def _run_export(
     *,
     artifact_ref: str,
-    output: Optional[str],
+    output: str | None,
     overwrite: bool,
     page_size: str,
-    artifacts_root: Optional[str],
+    artifacts_root: str | None,
     output_format: str,
     include_images_in_zip: bool,
 ) -> dict[str, object]:
@@ -55,10 +55,10 @@ def _run_export(
 def _run_cli_common(
     *,
     artifact_ref: str,
-    output: Optional[str],
+    output: str | None,
     overwrite: bool,
     page_size: str,
-    artifacts_root: Optional[str],
+    artifacts_root: str | None,
     output_format: str,
     include_images_in_zip: bool,
     json_output: bool,
@@ -108,7 +108,7 @@ if typer is not None:
             if candidate is not None:
                 _browser_app = candidate
                 break
-    except Exception:
+    except ImportError:
         _browser_app = None
 
 if typer is not None and _browser_app is not None:
@@ -116,10 +116,10 @@ if typer is not None and _browser_app is not None:
     @_browser_app.command(_COMMAND_NAME)
     def artifact_pdf_export(  # noqa: D401
         artifact_ref: str = typer.Argument(..., help="Artifact id or filesystem path."),
-        output: Optional[Path] = typer.Option(None, "--output", "-o", help="Output .pdf or .zip path."),
+        output: Path | None = typer.Option(None, "--output", "-o", help="Output .pdf or .zip path."),
         overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite output if it exists."),
         page_size: str = typer.Option("letter", "--page-size", help="letter | a4 | auto"),
-        artifacts_root: Optional[Path] = typer.Option(
+        artifacts_root: Path | None = typer.Option(
             None,
             "--artifacts-root",
             help="Artifacts root used to resolve artifact ids.",
@@ -222,7 +222,7 @@ def _build_standalone_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = _build_standalone_parser()
     args = parser.parse_args(list(argv) if argv is not None else None)
     return _run_argparse(args)

@@ -1,10 +1,24 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from pathlib import Path
-import os
-import tomllib
 from typing import Any
+
+try:
+    import tomllib
+except ModuleNotFoundError:
+    # For Python < 3.11, use toml package
+    try:
+        import toml as tomllib  # type: ignore
+    except ModuleNotFoundError:
+        # If neither is available, provide a stub
+        class _TOMLStub:  # type: ignore
+            @staticmethod
+            def loads(s: str):
+                raise ImportError("Neither tomllib (Python 3.11+) nor toml package is available")
+
+        tomllib = _TOMLStub()
 
 
 @dataclass(frozen=True)
@@ -81,7 +95,11 @@ def load_realtime_config(repo_root: str | None = None) -> RealtimeConfig:
     budgets = raw.get("budgets", {})
     bf = _merge_dataclass(LatencyBudget, budgets.get("fast", {})) if "fast" in budgets else LatencyBudget(600, 800, 350)
     bb = _merge_dataclass(LatencyBudget, budgets.get("balanced", {})) if "balanced" in budgets else LatencyBudget()
-    bd = _merge_dataclass(LatencyBudget, budgets.get("deep", {})) if "deep" in budgets else LatencyBudget(1400, 2000, 650)
+    bd = (
+        _merge_dataclass(LatencyBudget, budgets.get("deep", {}))
+        if "deep" in budgets
+        else LatencyBudget(1400, 2000, 650)
+    )
 
     base = {k: v for k, v in raw.items() if k not in ("stt", "nudges", "budgets")}
     cfg = _merge_dataclass(RealtimeConfig, base)

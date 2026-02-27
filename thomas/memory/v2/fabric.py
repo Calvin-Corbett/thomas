@@ -6,35 +6,49 @@ import os
 import re
 import time
 import uuid
+from collections.abc import Sequence
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
-from .db import SqliteDB
-from .schema import INIT_SQL, SCHEMA_VERSION, fts_sql, FTS_TRIGGERS_SQL, facts_fts_sql, FACTS_FTS_TRIGGERS_SQL
-from .token import estimate_tokens, normalize_lines, redundancy_ratio, truncate_to_token_budget, compact_lines
-from .scoring import SalienceInputs, score as salience_score
-from .types import RetrievalItem, RetrievalResult
-from .contradictions import contradiction_score_for_fact
 from .contradiction_review import (
     list_contradictions as list_contradictions_with_reviews,
+)
+from .contradiction_review import (
     list_contradictions_for_review as list_contradictions_for_review_rows,
+)
+from .contradiction_review import (
     review_contradiction as apply_contradiction_review,
+)
+from .contradiction_review import (
     severity_route as contradiction_severity_route,
+)
+from .contradiction_review import (
     upsert_review_state as upsert_contradiction_review_state,
 )
+from .contradictions import contradiction_score_for_fact
+from .db import SqliteDB
 from .profile_hints import extract_profile_hints
+from .schema import FACTS_FTS_TRIGGERS_SQL, FTS_TRIGGERS_SQL, INIT_SQL, SCHEMA_VERSION, facts_fts_sql, fts_sql
+from .scoring import SalienceInputs
+from .scoring import score as salience_score
+from .token import compact_lines, estimate_tokens, normalize_lines, redundancy_ratio, truncate_to_token_budget
+from .types import RetrievalItem, RetrievalResult
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
 log = logging.getLogger(__name__)
 
+
 def _now_ms() -> int:
     return int(time.time() * 1000)
+
 
 def _age_hours(now_ms: int, ts_ms: int) -> float:
     return max(0.0, (now_ms - ts_ms) / 1000.0 / 3600.0)
 
-def _tokenize(s: str) -> List[str]:
+
+def _tokenize(s: str) -> list[str]:
     return [t.lower() for t in _WORD_RE.findall(s or "") if len(t) >= 2]
+
 
 def _overlap_boost(query_toks: Sequence[str], text: str) -> float:
     if not query_toks:
@@ -44,6 +58,7 @@ def _overlap_boost(query_toks: Sequence[str], text: str) -> float:
         return 0.0
     hit = sum(1 for t in set(query_toks) if t in toks)
     return min(1.0, hit / max(3, len(set(query_toks))))
+
 
 @dataclass
 class MemorySettings:
@@ -60,6 +75,7 @@ class MemorySettings:
     auto_optimize_enabled: bool = True
     auto_optimize_waste_threshold: float = 0.22
     auto_optimize_min_interval_hours: float = 12.0
+
 
 class MemoryFabricV2:
     """SQLite-backed hybrid memory (episodic + semantic + profile).
@@ -90,7 +106,7 @@ class MemoryFabricV2:
             else:
                 try:
                     current = int(str(row["value"]))
-                except Exception:
+                except (ValueError, TypeError):
                     current = 0
 
             if current < SCHEMA_VERSION:
@@ -102,14 +118,14 @@ class MemoryFabricV2:
                 conn.executescript(fts_sql("episodes_fts"))
                 conn.executescript(FTS_TRIGGERS_SQL)
                 self.episodes_fts_enabled = True
-            except Exception:
+            except (OSError, RuntimeError):
                 self.episodes_fts_enabled = False
 
             try:
                 conn.executescript(facts_fts_sql("semantic_facts_fts"))
                 conn.executescript(FACTS_FTS_TRIGGERS_SQL)
                 self.facts_fts_enabled = True
-            except Exception:
+            except (OSError, RuntimeError):
                 self.facts_fts_enabled = False
 
     def _migrate_schema(self, conn, current: int, target: int) -> None:
@@ -124,14 +140,32 @@ class MemoryFabricV2:
                 if col not in cols:
                     conn.execute(ddl)
 
-            _add("auto_compact_enabled", "ALTER TABLE thread_settings ADD COLUMN auto_compact_enabled INTEGER NOT NULL DEFAULT 1")
-            _add("auto_compact_episode_threshold", "ALTER TABLE thread_settings ADD COLUMN auto_compact_episode_threshold INTEGER NOT NULL DEFAULT 2000")
-            _add("auto_compact_min_interval_hours", "ALTER TABLE thread_settings ADD COLUMN auto_compact_min_interval_hours REAL NOT NULL DEFAULT 24")
-            _add("auto_optimize_enabled", "ALTER TABLE thread_settings ADD COLUMN auto_optimize_enabled INTEGER NOT NULL DEFAULT 1")
-            _add("auto_optimize_waste_threshold", "ALTER TABLE thread_settings ADD COLUMN auto_optimize_waste_threshold REAL NOT NULL DEFAULT 0.22")
-            _add("auto_optimize_min_interval_hours", "ALTER TABLE thread_settings ADD COLUMN auto_optimize_min_interval_hours REAL NOT NULL DEFAULT 12")
+            _add(
+                "auto_compact_enabled",
+                "ALTER TABLE thread_settings ADD COLUMN auto_compact_enabled INTEGER NOT NULL DEFAULT 1",
+            )
+            _add(
+                "auto_compact_episode_threshold",
+                "ALTER TABLE thread_settings ADD COLUMN auto_compact_episode_threshold INTEGER NOT NULL DEFAULT 2000",
+            )
+            _add(
+                "auto_compact_min_interval_hours",
+                "ALTER TABLE thread_settings ADD COLUMN auto_compact_min_interval_hours REAL NOT NULL DEFAULT 24",
+            )
+            _add(
+                "auto_optimize_enabled",
+                "ALTER TABLE thread_settings ADD COLUMN auto_optimize_enabled INTEGER NOT NULL DEFAULT 1",
+            )
+            _add(
+                "auto_optimize_waste_threshold",
+                "ALTER TABLE thread_settings ADD COLUMN auto_optimize_waste_threshold REAL NOT NULL DEFAULT 0.22",
+            )
+            _add(
+                "auto_optimize_min_interval_hours",
+                "ALTER TABLE thread_settings ADD COLUMN auto_optimize_min_interval_hours REAL NOT NULL DEFAULT 12",
+            )
 
-# -----------------------
+    # -----------------------
     # Thread settings
     # -----------------------
     def get_thread_settings(self, thread_id: str) -> MemorySettings:
@@ -157,7 +191,7 @@ class MemoryFabricV2:
             auto_optimize_min_interval_hours=float(row["auto_optimize_min_interval_hours"]),
         )
 
-    def update_thread_settings(self, thread_id: str, patch: Dict[str, Any]) -> MemorySettings:
+    def update_thread_settings(self, thread_id: str, patch: dict[str, Any]) -> MemorySettings:
         allowed = {
             "enabled",
             "include_global",
@@ -173,7 +207,7 @@ class MemoryFabricV2:
             "auto_optimize_waste_threshold",
             "auto_optimize_min_interval_hours",
         }
-        fields = {k: patch[k] for k in patch.keys() if k in allowed}
+        fields = {k: patch[k] for k in patch if k in allowed}
         if not fields:
             return self.get_thread_settings(thread_id)
 
@@ -265,16 +299,18 @@ class MemoryFabricV2:
         thread_id: str,
         role: str,
         content: str,
-        ts_ms: Optional[int] = None,
+        ts_ms: int | None = None,
         base_salience: float = 1.0,
-        decay_half_life_hours: Optional[float] = None,
+        decay_half_life_hours: float | None = None,
         source: str = "chat",
         also_extract_profile: bool = True,
     ) -> int:
         ts = ts_ms or _now_ms()
         tokens = estimate_tokens(content)
         settings = self.get_thread_settings(thread_id)
-        half_life = float(decay_half_life_hours) if decay_half_life_hours is not None else float(settings.decay_half_life_hours)
+        half_life = (
+            float(decay_half_life_hours) if decay_half_life_hours is not None else float(settings.decay_half_life_hours)
+        )
 
         with self.db.transact() as conn:
             cur = conn.execute(
@@ -303,14 +339,14 @@ class MemoryFabricV2:
     def upsert_fact(
         self,
         *,
-        thread_id: Optional[str],
+        thread_id: str | None,
         subject: str,
         predicate: str,
         obj: str,
         polarity: int = 1,
         confidence: float = 0.7,
-        provenance_episode_id: Optional[int] = None,
-        ts_ms: Optional[int] = None,
+        provenance_episode_id: int | None = None,
+        ts_ms: int | None = None,
         base_salience: float = 1.1,
     ) -> int:
         ts = ts_ms or _now_ms()
@@ -331,7 +367,19 @@ class MemoryFabricV2:
             cur2 = conn.execute(
                 """INSERT INTO semantic_facts(thread_id, ts_ms, subject, predicate, obj, polarity, confidence, provenance_episode_id, base_salience, retrieval_count, created_at_ms)
                    VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
-                (thread_id, ts, subject, predicate, obj, polarity, confidence, provenance_episode_id, float(base_salience), 0, self.db.now_ms()),
+                (
+                    thread_id,
+                    ts,
+                    subject,
+                    predicate,
+                    obj,
+                    polarity,
+                    confidence,
+                    provenance_episode_id,
+                    float(base_salience),
+                    0,
+                    self.db.now_ms(),
+                ),
             )
             fact_id = int(cur2.lastrowid)
 
@@ -356,10 +404,10 @@ class MemoryFabricV2:
     def upsert_profile_hints(
         self,
         *,
-        thread_id: Optional[str],
-        hints: List[Dict[str, Any]],
-        source_episode_id: Optional[int],
-        ts_ms: Optional[int] = None,
+        thread_id: str | None,
+        hints: list[dict[str, Any]],
+        source_episode_id: int | None,
+        ts_ms: int | None = None,
     ) -> None:
         ts = ts_ms or _now_ms()
         now = self.db.now_ms()
@@ -406,7 +454,7 @@ class MemoryFabricV2:
     # -----------------------
     # Pins
     # -----------------------
-    def add_pin(self, kind: str, ref_id: str, thread_id: Optional[str] = None, note: str = "") -> int:
+    def add_pin(self, kind: str, ref_id: str, thread_id: str | None = None, note: str = "") -> int:
         with self.db.transact() as conn:
             cur = conn.execute(
                 "INSERT INTO pins(kind, ref_id, thread_id, note, created_at_ms) VALUES(?,?,?,?,?)",
@@ -418,7 +466,7 @@ class MemoryFabricV2:
         with self.db.transact() as conn:
             conn.execute("DELETE FROM pins WHERE id=?", (int(pin_id),))
 
-    def list_pins(self, thread_id: Optional[str] = None, limit: int = 100) -> List[Dict[str, Any]]:
+    def list_pins(self, thread_id: str | None = None, limit: int = 100) -> list[dict[str, Any]]:
         if thread_id:
             cur = self.db.execute(
                 "SELECT * FROM pins WHERE thread_id=? OR thread_id IS NULL ORDER BY created_at_ms DESC LIMIT ?",
@@ -431,7 +479,7 @@ class MemoryFabricV2:
     # -----------------------
     # Contradictions
     # -----------------------
-    def _contradiction_severity_route(self, *, score: float, reason: str) -> Tuple[str, str]:
+    def _contradiction_severity_route(self, *, score: float, reason: str) -> tuple[str, str]:
         return contradiction_severity_route(score=float(score), reason=str(reason or ""))
 
     def _upsert_contradiction_review_state(
@@ -480,7 +528,7 @@ class MemoryFabricV2:
                 note="auto_routed",
             )
 
-    def list_contradictions(self, only_open: bool = True, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_contradictions(self, only_open: bool = True, limit: int = 50) -> list[dict[str, Any]]:
         return list_contradictions_with_reviews(
             self.db,
             only_open=bool(only_open),
@@ -490,11 +538,11 @@ class MemoryFabricV2:
     def list_contradictions_for_review(
         self,
         *,
-        status: Optional[str] = None,
-        severity: Optional[str] = None,
-        route: Optional[str] = None,
+        status: str | None = None,
+        severity: str | None = None,
+        route: str | None = None,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         return list_contradictions_for_review_rows(
             self.db,
             status=str(status or "").strip() or None,
@@ -526,9 +574,10 @@ class MemoryFabricV2:
                 conn.execute("UPDATE contradictions SET resolved=? WHERE id=?", (1 if resolved else 0, int(cid)))
 
         # -----------------------
+
     # Auto maintenance
     # -----------------------
-    def _get_maintenance_state(self, thread_id: str) -> Dict[str, Any]:
+    def _get_maintenance_state(self, thread_id: str) -> dict[str, Any]:
         cur = self.db.execute("SELECT * FROM maintenance_state WHERE thread_id=?", (thread_id,))
         row = cur.fetchone()
         if row:
@@ -542,7 +591,9 @@ class MemoryFabricV2:
         row2 = self.db.execute("SELECT * FROM maintenance_state WHERE thread_id=?", (thread_id,)).fetchone()
         return dict(row2) if row2 else {"thread_id": thread_id, "last_compact_ts_ms": None, "last_optimize_ts_ms": None}
 
-    def _update_maintenance_state(self, thread_id: str, *, last_compact_ts_ms: Optional[int] = None, last_optimize_ts_ms: Optional[int] = None) -> None:
+    def _update_maintenance_state(
+        self, thread_id: str, *, last_compact_ts_ms: int | None = None, last_optimize_ts_ms: int | None = None
+    ) -> None:
         now = self.db.now_ms()
         st = self._get_maintenance_state(thread_id)
         lc = last_compact_ts_ms if last_compact_ts_ms is not None else st.get("last_compact_ts_ms")
@@ -564,11 +615,15 @@ class MemoryFabricV2:
             interval_ms = int(float(settings.auto_compact_min_interval_hours) * 3600 * 1000)
             if now - last_compact >= max(0, interval_ms):
                 try:
-                    cnt = int(self.db.execute("SELECT COUNT(*) c FROM episodes WHERE thread_id=?", (thread_id,)).fetchone()["c"])
+                    cnt = int(
+                        self.db.execute("SELECT COUNT(*) c FROM episodes WHERE thread_id=?", (thread_id,)).fetchone()[
+                            "c"
+                        ]
+                    )
                     if cnt >= int(settings.auto_compact_episode_threshold):
                         self.compact(thread_id=thread_id)
                         self._update_maintenance_state(thread_id, last_compact_ts_ms=now)
-                except Exception as e:
+                except (RuntimeError, OSError) as e:
                     log.debug("Auto-compact skipped for thread %s: %s", thread_id, e)
 
         if settings.auto_optimize_enabled:
@@ -582,15 +637,17 @@ class MemoryFabricV2:
                     wastes = [float(r["waste"]) for r in rows] if rows else []
                     avg_waste = (sum(wastes) / len(wastes)) if wastes else 0.0
                     if avg_waste >= float(settings.auto_optimize_waste_threshold):
-                        self.optimize_packs(threshold=float(settings.auto_optimize_waste_threshold), scope="thread", thread_id=thread_id)
+                        self.optimize_packs(
+                            threshold=float(settings.auto_optimize_waste_threshold), scope="thread", thread_id=thread_id
+                        )
                         self._update_maintenance_state(thread_id, last_optimize_ts_ms=now)
-                except Exception as e:
+                except (RuntimeError, OSError) as e:
                     log.debug("Auto-optimize skipped for thread %s: %s", thread_id, e)
 
-# -----------------------
+    # -----------------------
     # Retrieval
     # -----------------------
-    def retrieve(self, thread_id: str, query: str, budget_tokens: Optional[int] = None) -> RetrievalResult:
+    def retrieve(self, thread_id: str, query: str, budget_tokens: int | None = None) -> RetrievalResult:
         t0 = time.perf_counter()
         now = _now_ms()
         settings = self.get_thread_settings(thread_id)
@@ -605,7 +662,7 @@ class MemoryFabricV2:
 
         # pins first
         pins = self.list_pins(thread_id=thread_id, limit=200)
-        pin_items: List[RetrievalItem] = [
+        pin_items: list[RetrievalItem] = [
             RetrievalItem(
                 kind="pin",
                 ref_id=str(p["id"]),
@@ -617,17 +674,25 @@ class MemoryFabricV2:
         ]
 
         if settings.pins_only:
-            pack = self._build_pack(thread_id, query, items=pin_items, budget_tokens=budget, include_profile=settings.include_profile)
+            pack = self._build_pack(
+                thread_id, query, items=pin_items, budget_tokens=budget, include_profile=settings.include_profile
+            )
             latency_ms = int((time.perf_counter() - t0) * 1000)
             self._write_trace(trace_id, thread_id, query, budget, [it.__dict__ for it in pin_items], None, latency_ms)
-            return RetrievalResult(pack_text=pack, trace_id=trace_id, items=pin_items, latency_ms=latency_ms, pack_tokens_est=estimate_tokens(pack))
+            return RetrievalResult(
+                pack_text=pack,
+                trace_id=trace_id,
+                items=pin_items,
+                latency_ms=latency_ms,
+                pack_tokens_est=estimate_tokens(pack),
+            )
 
         # candidates
         ep_rows = self._search_episodes(thread_id, query, settings.max_results * 4)
         fact_rows = self._search_facts(thread_id, query, settings.include_global, settings.max_results * 3)
         hint_rows = self._get_profile_hints(limit=60) if settings.include_profile else []
 
-        items: List[RetrievalItem] = []
+        items: list[RetrievalItem] = []
 
         # score episodes
         for r in ep_rows:
@@ -699,14 +764,24 @@ class MemoryFabricV2:
             )
             sc = salience_score(inputs)
             snippet = f"PROFILE: {r['key']} = {r['value']} (conf {float(r['confidence']):.2f})"
-            items.append(RetrievalItem(kind="hint", ref_id=str(r["key"]), score=sc, snippet=snippet, meta={"pinned": bool(r["pinned"]), "score_components": inputs.__dict__}))
+            items.append(
+                RetrievalItem(
+                    kind="hint",
+                    ref_id=str(r["key"]),
+                    score=sc,
+                    snippet=snippet,
+                    meta={"pinned": bool(r["pinned"]), "score_components": inputs.__dict__},
+                )
+            )
 
         items.extend(pin_items)
 
         items.sort(key=lambda it: it.score, reverse=True)
         items = items[: max(10, settings.max_results)]
 
-        pack = self._build_pack(thread_id, query, items=items, budget_tokens=budget, include_profile=settings.include_profile)
+        pack = self._build_pack(
+            thread_id, query, items=items, budget_tokens=budget, include_profile=settings.include_profile
+        )
 
         latency_ms = int((time.perf_counter() - t0) * 1000)
 
@@ -719,9 +794,11 @@ class MemoryFabricV2:
 
         self._write_trace(trace_id, thread_id, query, budget, [it.__dict__ for it in items], pack_id, latency_ms)
 
-        return RetrievalResult(pack_text=pack, trace_id=trace_id, items=items, latency_ms=latency_ms, pack_tokens_est=estimate_tokens(pack))
+        return RetrievalResult(
+            pack_text=pack, trace_id=trace_id, items=items, latency_ms=latency_ms, pack_tokens_est=estimate_tokens(pack)
+        )
 
-    def _search_episodes(self, thread_id: str, query: str, limit: int) -> List[Dict[str, Any]]:
+    def _search_episodes(self, thread_id: str, query: str, limit: int) -> list[dict[str, Any]]:
         lim = int(max(1, min(500, limit)))
         if self.episodes_fts_enabled and query.strip():
             try:
@@ -735,7 +812,7 @@ class MemoryFabricV2:
                 rows = cur.fetchall()
                 if rows:
                     return [dict(r) for r in rows]
-            except Exception:
+            except (RuntimeError, OSError):
                 log.debug("FTS episode query failed; falling back to LIKE search", exc_info=True)
 
         q = f"%{query.strip()}%" if query.strip() else "%"
@@ -747,7 +824,7 @@ class MemoryFabricV2:
         )
         return [dict(r) for r in cur.fetchall()]
 
-    def _search_facts(self, thread_id: str, query: str, include_global: bool, limit: int) -> List[Dict[str, Any]]:
+    def _search_facts(self, thread_id: str, query: str, include_global: bool, limit: int) -> list[dict[str, Any]]:
         lim = int(max(1, min(500, limit)))
 
         if self.facts_fts_enabled and query.strip():
@@ -771,7 +848,7 @@ class MemoryFabricV2:
                 rows = cur.fetchall()
                 if rows:
                     return [dict(r) for r in rows]
-            except Exception:
+            except (RuntimeError, OSError):
                 log.debug("FTS fact query failed; falling back to LIKE search", exc_info=True)
 
         q = f"%{query.strip()}%" if query.strip() else "%"
@@ -791,15 +868,14 @@ class MemoryFabricV2:
             )
         return [dict(r) for r in cur.fetchall()]
 
-
-    def _get_profile_hints(self, limit: int = 50) -> List[Dict[str, Any]]:
+    def _get_profile_hints(self, limit: int = 50) -> list[dict[str, Any]]:
         cur = self.db.execute(
             "SELECT * FROM profile_hints ORDER BY pinned DESC, confidence DESC, last_seen_ts_ms DESC LIMIT ?",
             (int(limit),),
         )
         return [dict(r) for r in cur.fetchall()]
 
-    def _mark_retrieved(self, items: List[RetrievalItem], now_ms: int) -> None:
+    def _mark_retrieved(self, items: list[RetrievalItem], now_ms: int) -> None:
         ep_ids = [int(it.ref_id) for it in items if it.kind == "episode" and it.ref_id.isdigit()]
         fact_ids = [int(it.ref_id) for it in items if it.kind == "fact" and it.ref_id.isdigit()]
         with self.db.transact() as conn:
@@ -817,9 +893,11 @@ class MemoryFabricV2:
     # -----------------------
     # Pack building + optimizer
     # -----------------------
-    def _build_pack(self, thread_id: str, query: str, items: List[RetrievalItem], budget_tokens: int, include_profile: bool) -> str:
+    def _build_pack(
+        self, thread_id: str, query: str, items: list[RetrievalItem], budget_tokens: int, include_profile: bool
+    ) -> str:
         # Stable high-density format
-        profile_lines: List[str] = []
+        profile_lines: list[str] = []
         if include_profile:
             hints = [it for it in items if it.kind == "hint"]
             for it in hints[:12]:
@@ -828,7 +906,7 @@ class MemoryFabricV2:
         facts = [it for it in items if it.kind == "fact"]
         episodes = [it for it in items if it.kind == "episode"]
 
-        lines: List[str] = []
+        lines: list[str] = []
         lines.append("[Memory Fabric v2]")
         lines.append(f"Thread: {thread_id}")
         if query:
@@ -875,7 +953,7 @@ class MemoryFabricV2:
         lines = normalize_lines(text)
 
         # clamp very long bullet lines
-        clamped: List[str] = []
+        clamped: list[str] = []
         for ln in lines:
             if ln.startswith("- ") and len(ln) > 320:
                 clamped.append(ln[:317] + "...")
@@ -888,7 +966,7 @@ class MemoryFabricV2:
         waste = redundancy_ratio(clamped)
         if waste >= 0.22:
             # de-dupe bullets more aggressively per section
-            out: List[str] = []
+            out: list[str] = []
             seen = set()
             for ln in clamped:
                 if ln.startswith("[") and ln.endswith("]"):
@@ -906,7 +984,7 @@ class MemoryFabricV2:
 
         # if still too long, prefer profile/pins/facts and early episodes
         if estimate_tokens(rewritten) > target_tokens:
-            keep: List[str] = []
+            keep: list[str] = []
             section = None
             for ln in normalize_lines(rewritten):
                 if ln.startswith("[") and ln.endswith("]"):
@@ -918,7 +996,7 @@ class MemoryFabricV2:
 
         return rewritten
 
-    def _upsert_pack(self, scope: str, thread_id: Optional[str], text: str) -> int:
+    def _upsert_pack(self, scope: str, thread_id: str | None, text: str) -> int:
         tokens = estimate_tokens(text)
         waste = redundancy_ratio(normalize_lines(text))
         now = self.db.now_ms()
@@ -942,7 +1020,9 @@ class MemoryFabricV2:
             )
             return int(cur2.lastrowid)
 
-    def optimize_packs(self, threshold: float = 0.22, scope: Optional[str] = None, thread_id: Optional[str] = None) -> Dict[str, Any]:
+    def optimize_packs(
+        self, threshold: float = 0.22, scope: str | None = None, thread_id: str | None = None
+    ) -> dict[str, Any]:
         """Rewrite existing packs if redundancy/waste exceeds threshold."""
         threshold = float(threshold)
         if scope and thread_id is not None:
@@ -968,8 +1048,7 @@ class MemoryFabricV2:
             ).fetchall()
         else:
             rows = self.db.execute(
-                "SELECT id, text, tokens_est, waste FROM packs "
-                "ORDER BY updated_at_ms DESC LIMIT 200"
+                "SELECT id, text, tokens_est, waste FROM packs " "ORDER BY updated_at_ms DESC LIMIT 200"
             ).fetchall()
 
         updated = 0
@@ -990,13 +1069,15 @@ class MemoryFabricV2:
             updated += 1
         return {"updated": updated, "threshold": threshold, "scope": scope, "thread_id": thread_id}
 
-    def compact(self, thread_id: Optional[str] = None) -> Dict[str, Any]:
+    def compact(self, thread_id: str | None = None) -> dict[str, Any]:
         """Rebuild a representative pack from salient items (thread or global)."""
         now = _now_ms()
 
         if thread_id:
             settings = self.get_thread_settings(thread_id)
-            ep = self.db.execute("SELECT * FROM episodes WHERE thread_id=? ORDER BY ts_ms DESC LIMIT 250", (thread_id,)).fetchall()
+            ep = self.db.execute(
+                "SELECT * FROM episodes WHERE thread_id=? ORDER BY ts_ms DESC LIMIT 250", (thread_id,)
+            ).fetchall()
             facts = self.db.execute(
                 "SELECT * FROM semantic_facts WHERE thread_id=? OR thread_id IS NULL ORDER BY ts_ms DESC LIMIT 200",
                 (thread_id,),
@@ -1004,7 +1085,7 @@ class MemoryFabricV2:
             hints = self._get_profile_hints(50) if settings.include_profile else []
             pins = self.list_pins(thread_id=thread_id, limit=200)
 
-            items: List[RetrievalItem] = []
+            items: list[RetrievalItem] = []
             for r in ep:
                 inputs = SalienceInputs(
                     base_salience=float(r["base_salience"]),
@@ -1018,7 +1099,15 @@ class MemoryFabricV2:
                 snippet = str(r["content"]).strip().replace("\n", " ")
                 if len(snippet) > 220:
                     snippet = snippet[:217] + "..."
-                items.append(RetrievalItem(kind="episode", ref_id=str(int(r["id"])), score=sc, snippet=snippet, meta={"ts_ms": int(r["ts_ms"]), "role": r["role"]}))
+                items.append(
+                    RetrievalItem(
+                        kind="episode",
+                        ref_id=str(int(r["id"])),
+                        score=sc,
+                        snippet=snippet,
+                        meta={"ts_ms": int(r["ts_ms"]), "role": r["role"]},
+                    )
+                )
 
             for r in facts:
                 inputs = SalienceInputs(
@@ -1030,9 +1119,15 @@ class MemoryFabricV2:
                     relevance_boost=0.0,
                 )
                 sc = salience_score(inputs)
-                items.append(RetrievalItem(kind="fact", ref_id=str(int(r["id"])), score=sc,
-                                           snippet=f"FACT: {r['subject']} • {r['predicate']} • {r['obj']} (conf {float(r['confidence']):.2f})",
-                                           meta={"thread_id": r["thread_id"], "polarity": int(r["polarity"])}))
+                items.append(
+                    RetrievalItem(
+                        kind="fact",
+                        ref_id=str(int(r["id"])),
+                        score=sc,
+                        snippet=f"FACT: {r['subject']} • {r['predicate']} • {r['obj']} (conf {float(r['confidence']):.2f})",
+                        meta={"thread_id": r["thread_id"], "polarity": int(r["polarity"])},
+                    )
+                )
 
             for r in hints:
                 inputs = SalienceInputs(
@@ -1044,23 +1139,48 @@ class MemoryFabricV2:
                     relevance_boost=0.0,
                 )
                 sc = salience_score(inputs)
-                items.append(RetrievalItem(kind="hint", ref_id=str(r["key"]), score=sc, snippet=f"PROFILE: {r['key']} = {r['value']} (conf {float(r['confidence']):.2f})", meta={"pinned": bool(r["pinned"]), "score_components": inputs.__dict__}))
+                items.append(
+                    RetrievalItem(
+                        kind="hint",
+                        ref_id=str(r["key"]),
+                        score=sc,
+                        snippet=f"PROFILE: {r['key']} = {r['value']} (conf {float(r['confidence']):.2f})",
+                        meta={"pinned": bool(r["pinned"]), "score_components": inputs.__dict__},
+                    )
+                )
 
             for p in pins:
-                items.append(RetrievalItem(kind="pin", ref_id=str(p["id"]), score=2.0, snippet=f"PIN({p['kind']}:{p['ref_id']}): {(p.get('note') or '').strip()}".strip(), meta=p))
+                items.append(
+                    RetrievalItem(
+                        kind="pin",
+                        ref_id=str(p["id"]),
+                        score=2.0,
+                        snippet=f"PIN({p['kind']}:{p['ref_id']}): {(p.get('note') or '').strip()}".strip(),
+                        meta=p,
+                    )
+                )
 
             items.sort(key=lambda it: it.score, reverse=True)
             items = items[: max(25, settings.max_results)]
-            pack = self._build_pack(thread_id, "", items, budget_tokens=settings.max_pack_tokens, include_profile=settings.include_profile)
+            pack = self._build_pack(
+                thread_id, "", items, budget_tokens=settings.max_pack_tokens, include_profile=settings.include_profile
+            )
             pack_id = self._upsert_pack(scope="thread", thread_id=thread_id, text=pack)
-            return {"pack_id": pack_id, "thread_id": thread_id, "tokens_est": estimate_tokens(pack), "waste": redundancy_ratio(normalize_lines(pack))}
+            return {
+                "pack_id": pack_id,
+                "thread_id": thread_id,
+                "tokens_est": estimate_tokens(pack),
+                "waste": redundancy_ratio(normalize_lines(pack)),
+            }
 
         # global pack
-        facts = self.db.execute("SELECT * FROM semantic_facts WHERE thread_id IS NULL ORDER BY ts_ms DESC LIMIT 250").fetchall()
+        facts = self.db.execute(
+            "SELECT * FROM semantic_facts WHERE thread_id IS NULL ORDER BY ts_ms DESC LIMIT 250"
+        ).fetchall()
         hints = self._get_profile_hints(80)
         pins = self.list_pins(thread_id=None, limit=200)
 
-        items: List[RetrievalItem] = []
+        items: list[RetrievalItem] = []
         for r in hints:
             hint_inputs = SalienceInputs(
                 base_salience=1.0,
@@ -1070,23 +1190,52 @@ class MemoryFabricV2:
                 pinned=bool(r["pinned"]),
                 relevance_boost=0.0,
             )
-            items.append(RetrievalItem(kind="hint", ref_id=str(r["key"]), score=1.3 + (0.8 if bool(r["pinned"]) else 0.0),
-                                       snippet=f"PROFILE: {r['key']} = {r['value']} (conf {float(r['confidence']):.2f})", meta={"pinned": bool(r["pinned"]), "score_components": hint_inputs.__dict__}))
+            items.append(
+                RetrievalItem(
+                    kind="hint",
+                    ref_id=str(r["key"]),
+                    score=1.3 + (0.8 if bool(r["pinned"]) else 0.0),
+                    snippet=f"PROFILE: {r['key']} = {r['value']} (conf {float(r['confidence']):.2f})",
+                    meta={"pinned": bool(r["pinned"]), "score_components": hint_inputs.__dict__},
+                )
+            )
         for r in facts:
-            items.append(RetrievalItem(kind="fact", ref_id=str(int(r["id"])), score=1.1,
-                                       snippet=f"FACT: {r['subject']} • {r['predicate']} • {r['obj']} (conf {float(r['confidence']):.2f})", meta={"thread_id": None}))
+            items.append(
+                RetrievalItem(
+                    kind="fact",
+                    ref_id=str(int(r["id"])),
+                    score=1.1,
+                    snippet=f"FACT: {r['subject']} • {r['predicate']} • {r['obj']} (conf {float(r['confidence']):.2f})",
+                    meta={"thread_id": None},
+                )
+            )
         for p in pins:
-            items.append(RetrievalItem(kind="pin", ref_id=str(p["id"]), score=2.0, snippet=f"PIN({p['kind']}:{p['ref_id']}): {(p.get('note') or '').strip()}".strip(), meta=p))
+            items.append(
+                RetrievalItem(
+                    kind="pin",
+                    ref_id=str(p["id"]),
+                    score=2.0,
+                    snippet=f"PIN({p['kind']}:{p['ref_id']}): {(p.get('note') or '').strip()}".strip(),
+                    meta=p,
+                )
+            )
 
         items.sort(key=lambda it: it.score, reverse=True)
-        pack = self._build_pack(thread_id="GLOBAL", query="", items=items[:120], budget_tokens=1500, include_profile=True)
+        pack = self._build_pack(
+            thread_id="GLOBAL", query="", items=items[:120], budget_tokens=1500, include_profile=True
+        )
         pack_id = self._upsert_pack(scope="global", thread_id=None, text=pack)
-        return {"pack_id": pack_id, "scope": "global", "tokens_est": estimate_tokens(pack), "waste": redundancy_ratio(normalize_lines(pack))}
+        return {
+            "pack_id": pack_id,
+            "scope": "global",
+            "tokens_est": estimate_tokens(pack),
+            "waste": redundancy_ratio(normalize_lines(pack)),
+        }
 
     # -----------------------
     # Health / diagnostics
     # -----------------------
-    def health(self) -> Dict[str, Any]:
+    def health(self) -> dict[str, Any]:
         now = self.db.now_ms()
         ep = int(self.db.execute("SELECT COUNT(*) c FROM episodes").fetchone()["c"])
         facts = int(self.db.execute("SELECT COUNT(*) c FROM semantic_facts").fetchone()["c"])
@@ -1124,12 +1273,12 @@ class MemoryFabricV2:
             "ts_ms": now,
         }
 
-    def get_trace(self, trace_id: str) -> Optional[Dict[str, Any]]:
+    def get_trace(self, trace_id: str) -> dict[str, Any] | None:
         cur = self.db.execute("SELECT * FROM retrieval_traces WHERE id=?", (trace_id,))
         row = cur.fetchone()
         return dict(row) if row else None
 
-    def list_traces(self, thread_id: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def list_traces(self, thread_id: str, limit: int = 50) -> list[dict[str, Any]]:
         cur = self.db.execute(
             "SELECT * FROM retrieval_traces WHERE thread_id=? ORDER BY ts_ms DESC LIMIT ?",
             (thread_id, int(limit)),
@@ -1142,15 +1291,25 @@ class MemoryFabricV2:
         thread_id: str,
         query: str,
         budget_tokens: int,
-        results: List[Dict[str, Any]],
-        pack_id: Optional[int],
+        results: list[dict[str, Any]],
+        pack_id: int | None,
         latency_ms: int,
     ) -> None:
         with self.db.transact() as conn:
             conn.execute(
                 "INSERT INTO retrieval_traces(id, thread_id, query, ts_ms, budget_tokens, results_json, pack_id, latency_ms) VALUES(?,?,?,?,?,?,?,?)",
-                (trace_id, thread_id, query, self.db.now_ms(), int(budget_tokens), json.dumps(results, ensure_ascii=False), pack_id, int(latency_ms)),
+                (
+                    trace_id,
+                    thread_id,
+                    query,
+                    self.db.now_ms(),
+                    int(budget_tokens),
+                    json.dumps(results, ensure_ascii=False),
+                    pack_id,
+                    int(latency_ms),
+                ),
             )
+
 
 class MemoryFabricCompat:
     """Compatibility shim for older Thomas memory call sites."""
@@ -1159,12 +1318,16 @@ class MemoryFabricCompat:
         self.fabric = fabric
 
     @classmethod
-    def from_root_path(cls, root_path: str) -> "MemoryFabricCompat":
+    def from_root_path(cls, root_path: str) -> MemoryFabricCompat:
         return cls(MemoryFabricV2(root_path=root_path))
 
-    def ingest_message(self, thread_id: str, role: str, content: str, ts_ms: Optional[int] = None, base_salience: float = 1.0) -> int:
-        return self.fabric.ingest_episode(thread_id=thread_id, role=role, content=content, ts_ms=ts_ms, base_salience=base_salience)
+    def ingest_message(
+        self, thread_id: str, role: str, content: str, ts_ms: int | None = None, base_salience: float = 1.0
+    ) -> int:
+        return self.fabric.ingest_episode(
+            thread_id=thread_id, role=role, content=content, ts_ms=ts_ms, base_salience=base_salience
+        )
 
-    def build_memory_pack(self, thread_id: str, query: str, budget_tokens: int = 800) -> Tuple[str, str]:
+    def build_memory_pack(self, thread_id: str, query: str, budget_tokens: int = 800) -> tuple[str, str]:
         res = self.fabric.retrieve(thread_id=thread_id, query=query, budget_tokens=budget_tokens)
         return res.pack_text, res.trace_id

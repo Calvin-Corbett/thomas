@@ -13,16 +13,16 @@ Design goals:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, Mapping, Sequence, TypedDict, cast, Literal
 import json
 import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
-
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any, Literal, TypedDict, cast
 
 __all__ = [
     "SCHEMA_VERSION",
@@ -385,14 +385,18 @@ def _parse_node_record(item: Mapping[str, Any], *, implied_id: str | None, sourc
 def _load_yaml(text: str, *, source: str) -> Any:
     try:
         import yaml  # type: ignore
-    except Exception as e:  # pragma: no cover - only hits when YAML requested but dependency missing
+    except (
+        json.JSONDecodeError,
+        ValueError,
+        KeyError,
+    ) as e:  # pragma: no cover - only hits when YAML requested but dependency missing
         raise NodesRegistryExternalError(
             "YAML registry support requires PyYAML to be installed.",
             details={"source": source, "missing": "PyYAML"},
         ) from e
     try:
         return yaml.safe_load(text)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesRegistryExternalError(
             "Failed to parse YAML registry.",
             details={"source": source},
@@ -444,7 +448,7 @@ def _load_text_from_url(url: str, *, timeout_s: float) -> str:
             "Failed to fetch nodes registry URL.",
             details={"url": url, "reason": str(getattr(e, "reason", e))},
         ) from e
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesRegistryExternalError(
             "Failed to fetch nodes registry URL.",
             details={"url": url, "reason": str(e)},
@@ -660,7 +664,9 @@ def filter_nodes(registry: NodesRegistry, *, label: str | None = None, node_id: 
     return NodesRegistry(nodes=list(nodes), source=registry.source)
 
 
-def run_nodes_registry_model(req: NodesRegistryModelRequest | Mapping[str, Any] | None = None) -> NodesRegistryModelOutput:
+def run_nodes_registry_model(
+    req: NodesRegistryModelRequest | Mapping[str, Any] | None = None,
+) -> NodesRegistryModelOutput:
     """
     Non-throwing facade suitable for automation.
 
@@ -722,7 +728,13 @@ def run_nodes_registry_model(req: NodesRegistryModelRequest | Mapping[str, Any] 
         return registry.to_response()
     except NodesRegistryError as e:
         return e.to_error_response()
-    except Exception as e:  # pragma: no cover - defensive: keeps errors deterministic
+    except (
+        RuntimeError,
+        ValueError,
+        KeyError,
+        AttributeError,
+        TypeError,
+    ) as e:  # pragma: no cover - defensive: keeps errors deterministic
         return NodesRegistryExternalError(
             "Unexpected error while building nodes registry model.",
             details={"type": type(e).__name__, "reason": str(e)},

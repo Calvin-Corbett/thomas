@@ -22,11 +22,11 @@ Owned by prompt P106.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, is_dataclass
 import inspect
 import json
-from typing import Any, Callable, Dict, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
-
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from dataclasses import asdict, dataclass, is_dataclass
+from typing import Any, Protocol
 
 # ---------------------------------------------------------------------------
 # Public contracts
@@ -41,7 +41,7 @@ class BridgeError:
 
     code: ErrorCode
     message: str
-    details: Optional[Dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ class PluginCommandCall:
     """Input contract for invoking a plugin command through the bridge."""
 
     command: str
-    args: Dict[str, Any]
+    args: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -57,9 +57,9 @@ class PluginCommandCallResult:
     """Output contract for invoking a plugin command through the bridge."""
 
     ok: bool
-    command: Optional[str]
+    command: str | None
     result: Any
-    error: Optional[BridgeError]
+    error: BridgeError | None
 
 
 class PluginCommandBridgeError(RuntimeError):
@@ -68,7 +68,7 @@ class PluginCommandBridgeError(RuntimeError):
     These errors are intended to be stable and machine-readable.
     """
 
-    def __init__(self, *, code: ErrorCode, message: str, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, *, code: ErrorCode, message: str, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
@@ -83,7 +83,7 @@ class PluginCommandBridgeError(RuntimeError):
 # ---------------------------------------------------------------------------
 
 
-def request_schema() -> Dict[str, Any]:
+def request_schema() -> dict[str, Any]:
     """JSON schema for :class:`PluginCommandCall` (shape, not semantic validation)."""
     return {
         "type": "object",
@@ -96,7 +96,7 @@ def request_schema() -> Dict[str, Any]:
     }
 
 
-def response_schema() -> Dict[str, Any]:
+def response_schema() -> dict[str, Any]:
     """JSON schema for :class:`PluginCommandCallResult` (shape)."""
     return {
         "type": "object",
@@ -141,26 +141,26 @@ def _jsonable(obj: Any) -> Any:
     if is_dataclass(obj):
         try:
             return asdict(obj)
-        except Exception:
+        except (TypeError, ValueError, AttributeError):  # REVIEWED: broad catch — any dataclass conversion
             return str(obj)
 
-    if hasattr(obj, "model_dump") and callable(getattr(obj, "model_dump")):
+    if hasattr(obj, "model_dump") and callable(obj.model_dump):
         try:
-            return getattr(obj, "model_dump")()
-        except Exception:
+            return obj.model_dump()
+        except (TypeError, ValueError, AttributeError):  # REVIEWED: broad catch — any model serialization
             return str(obj)
 
-    if hasattr(obj, "dict") and callable(getattr(obj, "dict")):
+    if hasattr(obj, "dict") and callable(obj.dict):
         # Pydantic v1
         try:
-            return getattr(obj, "dict")()
-        except Exception:
+            return obj.dict()
+        except (TypeError, ValueError, AttributeError):  # REVIEWED: broad catch — any model serialization
             return str(obj)
 
     return str(obj)
 
 
-def _result_to_dict(result: PluginCommandCallResult) -> Dict[str, Any]:
+def _result_to_dict(result: PluginCommandCallResult) -> dict[str, Any]:
     return {
         "ok": result.ok,
         "command": result.command,
@@ -223,7 +223,7 @@ class CommandRegistryAdapter:
 
     # ---- Discovery ----
 
-    def list_commands(self) -> List[str]:
+    def list_commands(self) -> list[str]:
         reg = self._registry
 
         # Methods / properties that return command names or mappings
@@ -233,7 +233,7 @@ class CommandRegistryAdapter:
                 continue
             try:
                 value = attr() if callable(attr) else attr
-            except Exception:
+            except (TypeError, ValueError, RuntimeError):  # REVIEWED: broad catch — registry-specific method
                 continue
 
             if isinstance(value, Mapping):
@@ -254,7 +254,7 @@ class CommandRegistryAdapter:
         # Iterator fallback
         try:
             return sorted([str(x) for x in reg])  # type: ignore[iteration-over-non-sequence]
-        except Exception:
+        except (TypeError, AttributeError):  # REVIEWED: broad catch — non-iterable fallback
             return []
 
     # ---- Invocation ----
@@ -311,7 +311,7 @@ class CommandRegistryAdapter:
         # __getitem__
         try:
             return reg[name]  # type: ignore[index]
-        except Exception:
+        except (KeyError, IndexError, TypeError):  # REVIEWED: broad catch — subscript access fallback
             pass
 
         raise PluginCommandBridgeError(
@@ -326,12 +326,12 @@ class CommandRegistryAdapter:
 # ---------------------------------------------------------------------------
 
 
-def _call_command_object(command_obj: Any, args: Dict[str, Any]) -> Any:
+def _call_command_object(command_obj: Any, args: dict[str, Any]) -> Any:
     """Call a command object in a few common shapes."""
 
     # Unwrap common command wrappers (e.g., click.Command)
-    if hasattr(command_obj, "callback") and callable(getattr(command_obj, "callback")):
-        command_obj = getattr(command_obj, "callback")
+    if hasattr(command_obj, "callback") and callable(command_obj.callback):
+        command_obj = command_obj.callback
 
     # Prefer run/invoke if present
     for attr in ("run", "invoke"):
@@ -350,7 +350,7 @@ def _call_command_object(command_obj: Any, args: Dict[str, Any]) -> Any:
     )
 
 
-def _call_callable(fn: Callable[..., Any], args: Dict[str, Any]) -> Any:
+def _call_callable(fn: Callable[..., Any], args: dict[str, Any]) -> Any:
     """Call a function with dict args, with signature-aware validation.
 
     Deterministic failures:
@@ -395,7 +395,7 @@ def _call_callable(fn: Callable[..., Any], args: Dict[str, Any]) -> Any:
         and p.default is inspect._empty
     }
 
-    extra = sorted([k for k in args.keys() if k not in keywordable])
+    extra = sorted([k for k in args if k not in keywordable])
     missing = sorted([k for k in required if k not in args])
 
     if extra or missing:
@@ -425,8 +425,8 @@ def dispatch_plugin_command(
     payload: Any,
     *,
     command_registry: Any = None,
-    command_registry_provider: Optional[Callable[[], Any]] = None,
-) -> Dict[str, Any]:
+    command_registry_provider: Callable[[], Any] | None = None,
+) -> dict[str, Any]:
     """Dispatch a plugin command invocation.
 
     This function:
@@ -455,11 +455,9 @@ def dispatch_plugin_command(
 
     except PluginCommandBridgeError as e:
         cmd_name = payload.get("command") if isinstance(payload, Mapping) else None
-        return _result_to_dict(
-            PluginCommandCallResult(ok=False, command=cmd_name, result=None, error=e.to_error())
-        )
+        return _result_to_dict(PluginCommandCallResult(ok=False, command=cmd_name, result=None, error=e.to_error()))
 
-    except Exception as e:  # pragma: no cover
+    except (RuntimeError, ValueError, TypeError, OSError) as e:  # REVIEWED: broad catch — external command failure
         cmd_name = payload.get("command") if isinstance(payload, Mapping) else None
         err = BridgeError(
             code="EXTERNAL_FAILURE",
@@ -478,7 +476,7 @@ def register_bridge_tool(
     tool_registry: Any,
     *,
     command_registry: Any = None,
-    command_registry_provider: Optional[Callable[[], Any]] = None,
+    command_registry_provider: Callable[[], Any] | None = None,
     tool_name: str = "plugins.invoke",
     description: str = "Invoke a plugin command by name.",
 ) -> None:
@@ -496,7 +494,7 @@ def register_bridge_tool(
 
     provider = command_registry_provider or (lambda: command_registry)
 
-    def _tool(payload: Any) -> Dict[str, Any]:
+    def _tool(payload: Any) -> dict[str, Any]:
         return dispatch_plugin_command(payload, command_registry_provider=provider)
 
     # MutableMapping-style registry
@@ -512,7 +510,7 @@ def register_bridge_tool(
         "add_tool",
         "tool",
     )
-    candidates: List[Callable[..., Any]] = []
+    candidates: list[Callable[..., Any]] = []
     for name in methods:
         m = getattr(tool_registry, name, None)
         if callable(m):
@@ -525,7 +523,7 @@ def register_bridge_tool(
             details={"type": type(tool_registry).__name__},
         )
 
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for m in candidates:
         try:
             _try_register_with_method(
@@ -537,7 +535,7 @@ def register_bridge_tool(
                 output_schema=response_schema(),
             )
             return
-        except Exception as e:
+        except (TypeError, ValueError, RuntimeError) as e:  # REVIEWED: broad catch — best-effort registration
             last_err = e
             continue
 
@@ -554,8 +552,8 @@ def _try_register_with_method(
     tool_name: str,
     description: str,
     fn: Callable[[Any], Any],
-    input_schema: Dict[str, Any],
-    output_schema: Dict[str, Any],
+    input_schema: dict[str, Any],
+    output_schema: dict[str, Any],
 ) -> None:
     """Call a registration method with signature-aware adaptation."""
     try:
@@ -565,7 +563,7 @@ def _try_register_with_method(
         return
 
     params = sig.parameters
-    kwargs: Dict[str, Any] = {}
+    kwargs: dict[str, Any] = {}
 
     # name
     if "name" in params:
@@ -631,9 +629,9 @@ def discover_command_registry() -> Any:
                     reg = fn()
                     if reg is not None:
                         return reg
-                except Exception:
+                except (RuntimeError, ValueError, OSError):  # REVIEWED: broad catch — discovery fallback
                     continue
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         pass
 
     # 2) thomas.agent.loop
@@ -644,7 +642,7 @@ def discover_command_registry() -> Any:
             reg = getattr(loop_mod, attr_name, None)
             if reg is not None:
                 return reg
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         pass
 
     return None
@@ -659,7 +657,7 @@ def _resolve_thomas_plugin_base() -> type:
             base = getattr(plugin_mod, name, None)
             if isinstance(base, type):
                 return base
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError):
         pass
     return object
 
@@ -679,7 +677,7 @@ class PluginCommandRegistryBridgePlugin(_ThomasPluginBase):
     def __init__(self, *, tool_name: str = "plugins.invoke", **kwargs: Any):
         try:
             super().__init__(**kwargs)  # type: ignore[misc]
-        except Exception:
+        except (TypeError, AttributeError):  # REVIEWED: broad catch — optional base init
             # Base plugin may require specific constructor args; keep optional.
             pass
         self.tool_name = tool_name

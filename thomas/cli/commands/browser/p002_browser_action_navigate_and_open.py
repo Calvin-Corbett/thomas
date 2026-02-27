@@ -18,10 +18,9 @@ wiring patterns:
 
 from __future__ import annotations
 
-from typing import Optional
+import argparse
 
 import typer
-
 
 _fallback_app = typer.Typer(name="browser")
 
@@ -31,7 +30,7 @@ def register(target_app: typer.Typer) -> None:
 
     if getattr(target_app, "_p002_nav_open_registered", False):
         return
-    setattr(target_app, "_p002_nav_open_registered", True)
+    target_app._p002_nav_open_registered = True
 
     def _emit_success(*, result_json: str, json_mode: bool, human_message: str) -> None:
         if json_mode:
@@ -62,7 +61,7 @@ def register(target_app: typer.Typer) -> None:
             raise typer.Exit(code=3)
         raise typer.Exit(code=1)
 
-    def _run(action: str, url: str, *, timeout_ms: Optional[int], profile: Optional[str]):
+    def _run(action: str, url: str, *, timeout_ms: int | None, profile: str | None):
         from thomas.browser.p002_browser_action_navigate_and_open import (
             NavigateAndOpenRequest,
             format_result_as_json,
@@ -76,13 +75,13 @@ def register(target_app: typer.Typer) -> None:
     @target_app.command("navigate")
     def navigate(
         url: str = typer.Argument(..., help="Absolute URL to navigate to."),
-        timeout_ms: Optional[int] = typer.Option(
+        timeout_ms: int | None = typer.Option(
             None,
             "--timeout-ms",
             min=1,
             help="Optional timeout in milliseconds.",
         ),
-        profile: Optional[str] = typer.Option(
+        profile: str | None = typer.Option(
             None,
             "--profile",
             help="Optional browser profile/routing config.",
@@ -100,9 +99,7 @@ def register(target_app: typer.Typer) -> None:
             _emit_success(
                 result_json=fmt_ok(result),
                 json_mode=json_mode,
-                human_message=(
-                    f"Navigated to {result.url}" + (f" (tab {result.tab_id})" if result.tab_id else "")
-                ),
+                human_message=(f"Navigated to {result.url}" + (f" (tab {result.tab_id})" if result.tab_id else "")),
             )
         except Exception as err:
             _emit_error(err, json_mode=json_mode)
@@ -110,13 +107,13 @@ def register(target_app: typer.Typer) -> None:
     @target_app.command("open")
     def open_url(
         url: str = typer.Argument(..., help="Absolute URL to open in a new tab."),
-        timeout_ms: Optional[int] = typer.Option(
+        timeout_ms: int | None = typer.Option(
             None,
             "--timeout-ms",
             min=1,
             help="Optional timeout in milliseconds.",
         ),
-        profile: Optional[str] = typer.Option(
+        profile: str | None = typer.Option(
             None,
             "--profile",
             help="Optional browser profile/routing config.",
@@ -134,9 +131,7 @@ def register(target_app: typer.Typer) -> None:
             _emit_success(
                 result_json=fmt_ok(result),
                 json_mode=json_mode,
-                human_message=(
-                    f"Opened {result.url}" + (f" (tab {result.tab_id})" if result.tab_id else "")
-                ),
+                human_message=(f"Opened {result.url}" + (f" (tab {result.tab_id})" if result.tab_id else "")),
             )
         except Exception as err:
             _emit_error(err, json_mode=json_mode)
@@ -145,7 +140,7 @@ def register(target_app: typer.Typer) -> None:
 # Attach to the parent browser app if it exists; otherwise keep a fallback.
 try:  # pragma: no cover
     from . import app as _browser_app  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     _browser_app = None
 
 if isinstance(_browser_app, typer.Typer):  # pragma: no cover
@@ -154,3 +149,87 @@ if isinstance(_browser_app, typer.Typer):  # pragma: no cover
 else:
     register(_fallback_app)
     app = _fallback_app
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    from thomas.browser.p002_browser_action_navigate_and_open import (
+        InvalidNavigateAndOpenInput,
+        MissingBrowserConfiguration,
+        NavigateAndOpenError,
+        NavigateAndOpenRequest,
+        format_error_as_json,
+        format_result_as_json,
+        run_p002_navigate_and_open,
+    )
+
+    parser = argparse.ArgumentParser(
+        prog="browser action-navigate-and-open",
+        description="Navigate active page or open a URL in a new tab.",
+    )
+    parser.add_argument(
+        "route_args",
+        nargs="*",
+        help="Either <url> or <action> <url>, where action is navigate|open.",
+    )
+    parser.add_argument("--action", choices=["navigate", "open"], default="")
+    parser.add_argument("--url", default="")
+    parser.add_argument("--timeout-ms", type=int, default=None)
+    parser.add_argument("--profile", default=None)
+    parser.add_argument("--json", dest="json_mode", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    route_args = [str(x) for x in (args.route_args or []) if str(x).strip()]
+    action = str(args.action or "").strip().lower()
+    if not action and route_args and route_args[0].lower() in {"navigate", "open"}:
+        action = route_args[0].lower()
+
+    if not action:
+        action = "navigate"
+
+    url = str(args.url or "").strip()
+    if not url:
+        if route_args:
+            if route_args[0].lower() in {"navigate", "open"} and len(route_args) >= 2:
+                url = route_args[1].strip()
+            else:
+                url = route_args[0].strip()
+
+    if not url:
+        err = InvalidNavigateAndOpenInput("URL is required (positional or --url).")
+        if args.json_mode:
+            typer.echo(format_error_as_json(err))
+        else:
+            typer.echo(f"Error: {err}", err=True)
+        return 2
+
+    try:
+        result = run_p002_navigate_and_open(
+            NavigateAndOpenRequest(
+                url=url,
+                action=action,
+                timeout_ms=args.timeout_ms,
+                profile=args.profile,
+            )
+        )
+        if args.json_mode:
+            typer.echo(format_result_as_json(result))
+        else:
+            typer.echo(
+                f"{'Opened' if action == 'open' else 'Navigated to'} {result.url}"
+                + (f" (tab {result.tab_id})" if result.tab_id else "")
+            )
+        return 0
+    except NavigateAndOpenError as err:
+        if args.json_mode:
+            typer.echo(format_error_as_json(err))
+        else:
+            typer.echo(f"Error: {err}", err=True)
+        if isinstance(err, InvalidNavigateAndOpenInput):
+            return 2
+        if isinstance(err, MissingBrowserConfiguration):
+            return 3
+        return 1

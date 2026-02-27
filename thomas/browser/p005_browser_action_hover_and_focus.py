@@ -19,16 +19,16 @@ Design goals:
 from __future__ import annotations
 
 import inspect
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Literal, Mapping, Optional, TypedDict, Union
-
+from typing import Any, Literal, TypedDict
 
 HoverFocusAction = Literal["hover", "focus"]
 
 
 class HoverFocusTarget(TypedDict, total=False):
     selector: str
-    node_id: Union[int, str]
+    node_id: int | str
 
 
 class HoverFocusErrorInfo(TypedDict):
@@ -59,9 +59,9 @@ class HoverFocusRequest:
     """
 
     action: HoverFocusAction
-    selector: Optional[str] = None
-    node_id: Optional[Union[int, str]] = None
-    timeout_ms: Optional[int] = None
+    selector: str | None = None
+    node_id: int | str | None = None
+    timeout_ms: int | None = None
 
     def validate(self) -> None:
         if self.action not in ("hover", "focus"):
@@ -69,9 +69,7 @@ class HoverFocusRequest:
 
         if (self.selector is None) == (self.node_id is None):
             # either both None or both set
-            raise HoverFocusError.invalid_input(
-                "exactly one of selector or node_id must be provided"
-            )
+            raise HoverFocusError.invalid_input("exactly one of selector or node_id must be provided")
 
         if self.selector is not None:
             if not isinstance(self.selector, str) or not self.selector.strip():
@@ -132,15 +130,15 @@ class HoverFocusError(RuntimeError):
         }
 
     @staticmethod
-    def invalid_input(message: str) -> "HoverFocusError":
+    def invalid_input(message: str) -> HoverFocusError:
         return HoverFocusError("invalid_input", message)
 
     @staticmethod
-    def missing_config(message: str) -> "HoverFocusError":
+    def missing_config(message: str) -> HoverFocusError:
         return HoverFocusError("missing_config", message)
 
     @staticmethod
-    def external_failure(message: str) -> "HoverFocusError":
+    def external_failure(message: str) -> HoverFocusError:
         return HoverFocusError("external_failure", message)
 
 
@@ -208,13 +206,11 @@ async def hover_or_focus(browser: Any, request: HoverFocusRequest) -> HoverFocus
     request.validate()
 
     if browser is None:
-        raise HoverFocusError.missing_config(
-            "no active browser session/controller was provided"
-        )
+        raise HoverFocusError.missing_config("no active browser session/controller was provided")
 
     if request.selector is not None:
         target_kind: Literal["selector", "node_id"] = "selector"
-        target_value: Union[int, str] = request.selector
+        target_value: int | str = request.selector
     else:
         target_kind = "node_id"
         target_value = request.node_id  # type: ignore[assignment]
@@ -268,9 +264,7 @@ def request_from_mapping(data: Mapping[str, Any]) -> HoverFocusRequest:
 
 
 # A small, opt-in registry surface for any dispatcher that scans modules.
-ACTION_HANDLERS: Mapping[
-    HoverFocusAction, Callable[[Any, HoverFocusRequest], Awaitable[HoverFocusResult]]
-] = {
+ACTION_HANDLERS: Mapping[HoverFocusAction, Callable[[Any, HoverFocusRequest], Awaitable[HoverFocusResult]]] = {
     "hover": hover_or_focus,
     "focus": hover_or_focus,
 }
@@ -279,8 +273,8 @@ ACTION_HANDLERS: Mapping[
 def _call_variants(
     *,
     target_kind: Literal["selector", "node_id"],
-    target_value: Union[str, int],
-    timeout_ms: Optional[int],
+    target_value: str | int,
+    timeout_ms: int | None,
 ) -> list[tuple[tuple[Any, ...], dict[str, Any]]]:
     """Return call variants ordered from most-specific to least."""
 
@@ -308,9 +302,7 @@ async def _maybe_await(value: Any) -> None:
         await value
 
 
-def _bindability(fn: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Literal[
-    "bindable", "unbound", "unknown"
-]:
+def _bindability(fn: Any, args: tuple[Any, ...], kwargs: dict[str, Any]) -> Literal["bindable", "unbound", "unknown"]:
     """Classify whether a call *should* be legal.
 
     - bindable: signature introspection says it should accept args/kwargs
@@ -336,8 +328,8 @@ async def _dispatch(
     browser: Any,
     action: HoverFocusAction,
     target_kind: Literal["selector", "node_id"],
-    target_value: Union[str, int],
-    timeout_ms: Optional[int],
+    target_value: str | int,
+    timeout_ms: int | None,
 ) -> str:
     """Try a series of backend call patterns.
 
@@ -349,7 +341,7 @@ async def _dispatch(
     for attr in ("page", "_page", "driver", "_driver"):
         try:
             obj = getattr(browser, attr)
-        except Exception:
+        except AttributeError:
             obj = None
         if obj is not None:
             backend_objects.append((f"browser.{attr}", obj))
@@ -360,7 +352,7 @@ async def _dispatch(
         if not callable(method):
             continue
 
-        last_typeerror: Optional[BaseException] = None
+        last_typeerror: BaseException | None = None
 
         for args, kwargs in _call_variants(
             target_kind=target_kind,
@@ -381,13 +373,9 @@ async def _dispatch(
                 if bind_state == "unknown":
                     last_typeerror = exc
                     continue
-                raise HoverFocusError.external_failure(
-                    f"browser {action} failed ({type(exc).__name__})"
-                ) from exc
+                raise HoverFocusError.external_failure(f"browser {action} failed ({type(exc).__name__})") from exc
             except Exception as exc:
-                raise HoverFocusError.external_failure(
-                    f"browser {action} failed ({type(exc).__name__})"
-                ) from exc
+                raise HoverFocusError.external_failure(f"browser {action} failed ({type(exc).__name__})") from exc
 
         # If we found the method but all variants TypeErrored with unknown
         # signature, keep looking at other backend objects.
@@ -431,14 +419,8 @@ async def _dispatch(
             except TypeError as exc:
                 if bind_state == "unknown":
                     continue
-                raise HoverFocusError.external_failure(
-                    f"browser {action} failed ({type(exc).__name__})"
-                ) from exc
+                raise HoverFocusError.external_failure(f"browser {action} failed ({type(exc).__name__})") from exc
             except Exception as exc:
-                raise HoverFocusError.external_failure(
-                    f"browser {action} failed ({type(exc).__name__})"
-                ) from exc
+                raise HoverFocusError.external_failure(f"browser {action} failed ({type(exc).__name__})") from exc
 
-    raise HoverFocusError.external_failure(
-        f"browser backend does not support action '{action}'"
-    )
+    raise HoverFocusError.external_failure(f"browser backend does not support action '{action}'")

@@ -18,9 +18,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
-
+from typing import Any
 
 DEFAULT_BASE_URL_ENV = "THOMAS_BASE_URL"
 DEFAULT_BASE_URL = "http://127.0.0.1:8080"
@@ -40,7 +40,7 @@ class ResponsesCreateNonStreamCliResult:
     payload: Mapping[str, Any]
 
     @property
-    def output_text(self) -> Optional[str]:
+    def output_text(self) -> str | None:
         try:
             out0 = self.payload.get("output", [None])[0]
             if isinstance(out0, dict):
@@ -49,7 +49,7 @@ class ResponsesCreateNonStreamCliResult:
                     text = content0.get("text")
                     if isinstance(text, str):
                         return text
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             return None
         return None
 
@@ -132,7 +132,7 @@ def run(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="thomas")
     subparsers = parser.add_subparsers(dest="command", required=True)
     build_parser(subparsers)

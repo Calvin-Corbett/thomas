@@ -11,17 +11,17 @@ import shlex
 import subprocess
 import sys
 import time
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, List, Sequence, Tuple
-
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
 
-GATE_COMMANDS: Sequence[Tuple[str, Sequence[str]]] = (
+GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Model onboarding gate", (PY, "scripts/check_model_onboarding_gate.py")),
     ("Module audit gate", (PY, "scripts/check_module_audit_gate.py")),
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
+    ("Pre-commit skip policy gate", (PY, "scripts/check_precommit_skip_policy.py")),
     ("Workboard claims gate", (PY, "scripts/check_workboard_claims.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
     ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
@@ -54,7 +54,7 @@ def _fmt_cmd(cmd: Sequence[str]) -> str:
     return shlex.join([str(part) for part in cmd])
 
 
-def _run_step(label: str, cmd: Sequence[str]) -> Tuple[int, float]:
+def _run_step(label: str, cmd: Sequence[str]) -> tuple[int, float]:
     print(f"\n[doc] {label}", flush=True)
     print(f"[doc] $ {_fmt_cmd(cmd)}", flush=True)
     started = time.monotonic()
@@ -72,8 +72,8 @@ def _iter_steps(
     include_gates: bool,
     include_tests: bool,
     full: bool,
-) -> List[Tuple[str, Sequence[str]]]:
-    steps: List[Tuple[str, Sequence[str]]] = []
+) -> list[tuple[str, Sequence[str]]]:
+    steps: list[tuple[str, Sequence[str]]] = []
     if include_gates:
         steps.extend(GATE_COMMANDS)
     if include_tests:
@@ -116,7 +116,7 @@ def run(argv: Iterable[str] | None = None) -> int:
     print(f"[doc] Root: {ROOT}", flush=True)
     print(f"[doc] Steps: {len(steps)}", flush=True)
 
-    failures: List[Tuple[str, int]] = []
+    failures: list[tuple[str, int]] = []
     total_started = time.monotonic()
     for label, cmd in steps:
         rc, _elapsed = _run_step(label, cmd)

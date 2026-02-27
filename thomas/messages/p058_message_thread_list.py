@@ -31,13 +31,14 @@ Optional fields used for richer summaries:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from datetime import datetime, timezone
 import importlib
 import json
 import os
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional, Protocol, Sequence, cast
+from typing import Any, Protocol, cast
 
 DEFAULT_LIMIT = 50
 MAX_LIMIT = 200
@@ -167,8 +168,7 @@ class MessageThreadListResponse:
 
 
 class MessageThreadBackend(Protocol):
-    def list_threads(self, request: MessageThreadListRequest) -> MessageThreadListResponse:
-        ...
+    def list_threads(self, request: MessageThreadListRequest) -> MessageThreadListResponse: ...
 
 
 def list_message_threads(
@@ -187,7 +187,7 @@ def list_message_threads(
         raw = resolved_backend.list_threads(request)
     except MessageThreadListError:
         raise
-    except Exception as exc:  # pragma: no cover
+    except (ConnectionError, TimeoutError, RuntimeError) as exc:  # pragma: no cover
         raise MessageThreadListExternalError(
             "Message thread backend failure",
             details={"cause": type(exc).__name__},
@@ -208,7 +208,7 @@ def _coerce_response(raw: Any) -> MessageThreadListResponse:
         next_cursor = raw.get("next_cursor")
         return MessageThreadListResponse(
             threads=[_coerce_thread(t) for t in threads_raw],
-            next_cursor=cast(Optional[str], next_cursor),
+            next_cursor=cast(str | None, next_cursor),
         )
 
     if isinstance(raw, Sequence) and not isinstance(raw, (str, bytes, bytearray)):
@@ -257,13 +257,13 @@ def _coerce_thread(raw: Any) -> MessageThreadSummary:
     message_count_raw = raw.get("message_count")
     try:
         message_count = int(message_count_raw) if message_count_raw is not None else 0
-    except Exception:
+    except (ConnectionError, TimeoutError, RuntimeError):
         message_count = 0
 
     return MessageThreadSummary(
         thread_id=thread_id,
-        channel_id=cast(Optional[str], raw.get("channel_id")),
-        title=cast(Optional[str], raw.get("title")),
+        channel_id=cast(str | None, raw.get("channel_id")),
+        title=cast(str | None, raw.get("title")),
         last_message_at=parsed_dt,
         message_count=max(message_count, 0),
         participants=participants_list,
@@ -384,7 +384,7 @@ def _summaries_from_jsonl_stream(
         ts = msg.get("timestamp")
         dt = _parse_iso8601(ts) if isinstance(ts, str) else None
         if dt is not None:
-            current = cast(Optional[datetime], bucket["last_message_at"])
+            current = cast(datetime | None, bucket["last_message_at"])
             if current is None or dt > current:
                 bucket["last_message_at"] = dt
 
@@ -397,9 +397,9 @@ def _summaries_from_jsonl_stream(
         summaries.append(
             MessageThreadSummary(
                 thread_id=cast(str, data["thread_id"]),
-                channel_id=cast(Optional[str], data.get("channel_id")),
-                title=cast(Optional[str], data.get("title")),
-                last_message_at=cast(Optional[datetime], data.get("last_message_at")),
+                channel_id=cast(str | None, data.get("channel_id")),
+                title=cast(str | None, data.get("title")),
+                last_message_at=cast(datetime | None, data.get("last_message_at")),
                 message_count=int(cast(int, data.get("message_count", 0))),
                 participants=participants_sorted,
             )
@@ -524,7 +524,7 @@ def _try_adapt_existing_backend(config: Mapping[str, Any] | None) -> MessageThre
     for module_name, attr_name in candidates:
         try:
             mod = importlib.import_module(module_name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
 
         attr = getattr(mod, attr_name, None)
@@ -538,9 +538,9 @@ def _try_adapt_existing_backend(config: Mapping[str, Any] | None) -> MessageThre
             except TypeError:
                 try:
                     maybe_backend = attr()
-                except Exception:
+                except (ConnectionError, TimeoutError, RuntimeError):
                     continue
-            except Exception:
+            except (ConnectionError, TimeoutError, RuntimeError):
                 continue
 
             wrapped = _wrap_backend_obj(maybe_backend)
@@ -554,9 +554,9 @@ def _try_adapt_existing_backend(config: Mapping[str, Any] | None) -> MessageThre
             except TypeError:
                 try:
                     instance = attr(config) if config is not None else attr()
-                except Exception:
+                except (AttributeError, TypeError):
                     continue
-            except Exception:
+            except (AttributeError, TypeError):
                 continue
 
             wrapped = _wrap_backend_obj(instance)
@@ -570,7 +570,7 @@ def _wrap_backend_obj(obj: Any) -> MessageThreadBackend | None:
     if obj is None:
         return None
 
-    if hasattr(obj, "list_threads") and callable(getattr(obj, "list_threads")):
+    if hasattr(obj, "list_threads") and callable(obj.list_threads):
         return cast(MessageThreadBackend, obj)
 
     # Alternate method names
@@ -622,18 +622,18 @@ def run(payload: Mapping[str, Any] | None = None) -> dict[str, Any]:
     limit_raw = data.get("limit", DEFAULT_LIMIT)
     try:
         limit = int(limit_raw)
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         limit = limit_raw  # validated later
 
     req = MessageThreadListRequest(
-        channel_id=cast(Optional[str], channel_id),
+        channel_id=cast(str | None, channel_id),
         limit=cast(int, limit),
-        cursor=cast(Optional[str], data.get("cursor")),
+        cursor=cast(str | None, data.get("cursor")),
         include_archived=bool(data.get("include_archived", False)),
     )
 
     config_raw = data.get("config")
-    config = cast(Optional[Mapping[str, Any]], config_raw) if isinstance(config_raw, Mapping) else None
+    config = cast(Mapping[str, Any] | None, config_raw) if isinstance(config_raw, Mapping) else None
 
     try:
         resp = list_message_threads(req, config=config)

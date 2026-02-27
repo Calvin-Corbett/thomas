@@ -52,8 +52,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
-from typing import Any, Mapping, MutableMapping, Optional, TypedDict
+from typing import Any, TypedDict
 from urllib.parse import urlparse, urlunparse
 
 import aiohttp
@@ -89,7 +90,7 @@ class NodesPushPayloadError(Exception):
     code: str
     details: dict[str, Any]
 
-    def __init__(self, code: str, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = details or {}
@@ -169,11 +170,10 @@ INPUT_JSON_SCHEMA = REQUEST_JSON_SCHEMA
 OUTPUT_JSON_SCHEMA = RESPONSE_JSON_SCHEMA
 
 
-
 def _is_http_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return False
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
@@ -218,7 +218,7 @@ def _resolve_target_url(
     node: str,
     *,
     endpoint_path: str,
-    node_endpoints: Optional[Mapping[str, str]],
+    node_endpoints: Mapping[str, str] | None,
 ) -> str:
     """Resolve a node identifier to a concrete URL."""
 
@@ -243,7 +243,7 @@ def _resolve_target_url(
     return _append_path(base, endpoint_path)
 
 
-def _truncate_text(value: Optional[str], *, limit: int = 4096) -> Optional[str]:
+def _truncate_text(value: str | None, *, limit: int = 4096) -> str | None:
     if value is None:
         return None
     if len(value) <= limit:
@@ -259,8 +259,8 @@ class NodesPushPayloadRequest:
     endpoint_path: str = "/payload"
     timeout_s: float = 10.0
     concurrency: int = 10
-    headers: Optional[Mapping[str, str]] = None
-    node_endpoints: Optional[Mapping[str, str]] = None
+    headers: Mapping[str, str] | None = None
+    node_endpoints: Mapping[str, str] | None = None
 
 
 @dataclass(frozen=True)
@@ -268,10 +268,10 @@ class NodePushPayloadResult:
     node: str
     url: str
     ok: bool
-    status: Optional[int] = None
+    status: int | None = None
     response_json: Any = None
-    error_code: Optional[str] = None
-    error: Optional[str] = None
+    error_code: str | None = None
+    error: str | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -333,24 +333,24 @@ def request_from_dict(data: Mapping[str, Any]) -> NodesPushPayloadRequest:
     timeout_s = data.get("timeout_s", 10.0)
     try:
         timeout_s_f = float(timeout_s)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesPushPayloadError("invalid_input", "timeout_s must be a number") from e
 
     concurrency = data.get("concurrency", 10)
     try:
         concurrency_i = int(concurrency)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesPushPayloadError("invalid_input", "concurrency must be an integer") from e
 
     headers_raw = data.get("headers")
-    headers: Optional[dict[str, str]] = None
+    headers: dict[str, str] | None = None
     if headers_raw is not None:
         if not isinstance(headers_raw, dict):
             raise NodesPushPayloadError("invalid_input", "headers must be an object")
         headers = {str(k): str(v) for k, v in headers_raw.items()}
 
     node_endpoints_raw = data.get("node_endpoints")
-    node_endpoints: Optional[dict[str, str]] = None
+    node_endpoints: dict[str, str] | None = None
     if node_endpoints_raw is not None:
         if not isinstance(node_endpoints_raw, dict):
             raise NodesPushPayloadError("invalid_input", "node_endpoints must be an object")
@@ -422,7 +422,7 @@ async def push_payload_to_nodes(req: NodesPushPayloadRequest) -> NodesPushPayloa
                     response_json: Any = None
                     try:
                         response_json = await resp.json(content_type=None)
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError, KeyError):
                         response_json = None
 
                     if 200 <= status < 300:
@@ -434,10 +434,10 @@ async def push_payload_to_nodes(req: NodesPushPayloadRequest) -> NodesPushPayloa
                             response_json=response_json,
                         )
 
-                    err_text: Optional[str]
+                    err_text: str | None
                     try:
                         err_text = await resp.text()
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError, KeyError):
                         err_text = None
 
                     return NodePushPayloadResult(
@@ -466,7 +466,7 @@ async def push_payload_to_nodes(req: NodesPushPayloadRequest) -> NodesPushPayloa
                     error_code="transport_error",
                     error=_truncate_text(f"{type(e).__name__}: {e}"),
                 )
-            except Exception as e:  # pragma: no cover
+            except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
                 return NodePushPayloadResult(
                     node=node,
                     url=url,
@@ -523,4 +523,3 @@ def execute_from_dict_sync(data: Mapping[str, Any]) -> NodesPushPayloadResponseD
     """Alias for :func:`push_payload_to_nodes_from_dict_sync` (dict-in/dict-out)."""
 
     return push_payload_to_nodes_from_dict_sync(data)
-

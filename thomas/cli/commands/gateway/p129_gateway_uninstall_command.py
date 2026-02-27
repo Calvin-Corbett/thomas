@@ -11,11 +11,11 @@ This command reuses the core uninstall implementation from the server route modu
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 try:
     import typer
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore[assignment]
 
 from thomas.server.routes.gateway.p129_gateway_uninstall_command import (
@@ -50,7 +50,7 @@ def format_error(err: GatewayUninstallError, *, json_output: bool) -> str:
 
 def run_gateway_uninstall(
     *,
-    state_dir: Optional[str],
+    state_dir: str | None,
     dry_run: bool,
     purge_state: bool,
 ) -> GatewayUninstallResult:
@@ -66,7 +66,7 @@ def register_typer(app: Any) -> None:
 
     @app.command(COMMAND_NAME)
     def _cmd(
-        state_dir: Optional[str] = typer.Option(
+        state_dir: str | None = typer.Option(
             None,
             "--state-dir",
             help="Override the Thomas state directory (advanced / testing).",

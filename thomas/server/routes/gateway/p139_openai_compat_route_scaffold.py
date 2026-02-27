@@ -48,11 +48,18 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+import sys
+from collections.abc import Mapping, MutableMapping
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping, MutableMapping, NotRequired, Optional, TypedDict, cast
+from typing import Any, TypedDict, cast
+
+# NotRequired was added in Python 3.11, use typing_extensions for earlier versions
+if sys.version_info >= (3, 11):
+    from typing import NotRequired
+else:
+    from typing_extensions import NotRequired
 
 from aiohttp import ClientError, ClientSession, ClientTimeout, web
-
 
 # -----------------------------
 # Contracts
@@ -62,7 +69,7 @@ from aiohttp import ClientError, ClientSession, ClientTimeout, web
 class OpenAICompatError(TypedDict):
     message: str
     type: str
-    param: Optional[str]
+    param: str | None
     code: str
 
 
@@ -96,7 +103,7 @@ class OpenAICompatRouteSchema(TypedDict):
 @dataclass(frozen=True)
 class OpenAICompatConfig:
     base_url: str
-    api_key: Optional[str] = None
+    api_key: str | None = None
     timeout_s: float = 30.0
     allow_no_key: bool = False
 
@@ -115,7 +122,7 @@ BASE_PATH = "/openai-compat"
 # Common external base path we advertise in schema/docs (works if mounted under /gateway).
 GATEWAY_BASE_PATH = "/gateway/openai-compat"
 
-_SESSION_KEY = "p139_openai_compat_client_session"
+_SESSION_KEY = web.AppKey("p139_openai_compat_client_session", dict)
 
 
 # -----------------------------
@@ -123,7 +130,7 @@ _SESSION_KEY = "p139_openai_compat_client_session"
 # -----------------------------
 
 
-def _first_env(*names: str) -> Optional[str]:
+def _first_env(*names: str) -> str | None:
     for n in names:
         v = os.getenv(n)
         if v:
@@ -138,7 +145,7 @@ def _truthy(val: Any) -> bool:
     return s in {"1", "true", "yes", "y", "on"}
 
 
-def _as_mapping(obj: Any) -> Optional[Mapping[str, Any]]:
+def _as_mapping(obj: Any) -> Mapping[str, Any] | None:
     if isinstance(obj, Mapping):
         return cast(Mapping[str, Any], obj)
     return None
@@ -161,7 +168,7 @@ class _RouteProblem(Exception):
         code: str,
         message: str,
         type_: str,
-        param: Optional[str] = None,
+        param: str | None = None,
     ) -> None:
         super().__init__(message)
         self.status = status
@@ -213,8 +220,10 @@ def _load_config(request: web.Request) -> OpenAICompatConfig:
         )
     allow_no_key_bool = _truthy(allow_no_key)
 
-    timeout_s_val = app_cfg.get("timeout_s") or app_cfg.get("timeout") or _first_env(
-        "THOMAS_GATEWAY_OPENAI_TIMEOUT_S", "THOMAS_OPENAI_TIMEOUT_S"
+    timeout_s_val = (
+        app_cfg.get("timeout_s")
+        or app_cfg.get("timeout")
+        or _first_env("THOMAS_GATEWAY_OPENAI_TIMEOUT_S", "THOMAS_OPENAI_TIMEOUT_S")
     )
     timeout_s = 30.0
     if timeout_s_val is not None:
@@ -295,20 +304,31 @@ async def _read_json(request: web.Request) -> Mapping[str, Any]:
 
 
 def _get_or_create_session(app: web.Application, timeout_s: float) -> ClientSession:
-    sess = app.get(_SESSION_KEY)
-    if isinstance(sess, ClientSession) and not sess.closed:
+    holder = app.get(_SESSION_KEY)
+    if isinstance(holder, dict):
+        sess = holder.get("session")
+        if isinstance(sess, ClientSession) and not sess.closed:
+            return sess
+        timeout = ClientTimeout(total=timeout_s)
+        sess = ClientSession(timeout=timeout)
+        holder["session"] = sess
         return sess
-
-    timeout = ClientTimeout(total=timeout_s)
-    sess = ClientSession(timeout=timeout)
-    app[_SESSION_KEY] = sess
-    return sess
+    if isinstance(holder, ClientSession) and not holder.closed:
+        return holder
+    # Fallback for unexpected app state: return a one-off session.
+    return ClientSession(timeout=ClientTimeout(total=timeout_s))
 
 
 async def _close_session(app: web.Application) -> None:
-    sess = app.get(_SESSION_KEY)
-    if isinstance(sess, ClientSession) and not sess.closed:
-        await sess.close()
+    holder = app.get(_SESSION_KEY)
+    if isinstance(holder, dict):
+        sess = holder.get("session")
+        if isinstance(sess, ClientSession) and not sess.closed:
+            await sess.close()
+        holder["session"] = None
+        return
+    if isinstance(holder, ClientSession) and not holder.closed:
+        await holder.close()
 
 
 def get_route_schema() -> OpenAICompatRouteSchema:
@@ -511,10 +531,7 @@ async def chat_completions_handler(request: web.Request) -> web.StreamResponse:
                 raise _RouteProblem(
                     status=502,
                     code="thomas_upstream_invalid_response",
-                    message=(
-                        "Upstream returned a non-JSON response (status "
-                        f"{status}). Body: {text[:200]}"
-                    ),
+                    message=("Upstream returned a non-JSON response (status " f"{status}). Body: {text[:200]}"),
                     type_="upstream_error",
                 )
 
@@ -550,10 +567,15 @@ async def chat_completions_handler(request: web.Request) -> web.StreamResponse:
 
 def register(app: web.Application) -> None:
     """Register routes + cleanup hook onto an aiohttp app."""
+    if app.get(_SESSION_KEY) is None:
+        app[_SESSION_KEY] = {"session": None}
+    elif isinstance(app.get(_SESSION_KEY), ClientSession):
+        app[_SESSION_KEY] = {"session": app.get(_SESSION_KEY)}
     app.add_routes(routes)
 
     # Ensure we clean up any shared session.
     async def _cleanup_ctx(app_: web.Application):
         yield
         await _close_session(app_)
+
     app.cleanup_ctx.append(_cleanup_ctx)

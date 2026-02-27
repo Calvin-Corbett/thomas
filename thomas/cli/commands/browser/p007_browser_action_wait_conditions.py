@@ -9,11 +9,12 @@ Machine-readable output is supported via --json and --schema.
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import typer
 
@@ -33,7 +34,7 @@ from thomas.browser.p007_browser_action_wait_conditions import (
 COMMAND_NAME = "p007-browser-action-wait-conditions"
 
 
-def _load_spec_text(spec: Optional[str], spec_file: Optional[Path]) -> str:
+def _load_spec_text(spec: str | None, spec_file: Path | None) -> str:
     if spec and spec_file:
         raise InvalidWaitConditionsError("Provide only one of --spec or --spec-file")
 
@@ -65,7 +66,7 @@ def _load_spec_text(spec: Optional[str], spec_file: Optional[Path]) -> str:
     raise InvalidWaitConditionsError("Either --spec or --spec-file is required")
 
 
-def _emit(result: Dict[str, Any], *, json_mode: bool) -> None:
+def _emit(result: dict[str, Any], *, json_mode: bool) -> None:
     if json_mode:
         typer.echo(json.dumps(result, ensure_ascii=False, sort_keys=True))
         return
@@ -96,7 +97,7 @@ def _get_page_from_thomas() -> Any:
     """
     try:
         mod = importlib.import_module("thomas.tools.browser")
-    except Exception:
+    except ImportError:
         raise MissingBrowserDriverError(
             "Browser execution requires a configured driver; run with --dry-run for validation-only"
         )
@@ -129,7 +130,7 @@ def _get_page_from_thomas() -> Any:
 
 
 def _run(
-    spec_text: Optional[str],
+    spec_text: str | None,
     *,
     dry_run: bool,
     json_mode: bool,
@@ -156,7 +157,7 @@ def _run(
 
         parsed = spec_from_json(spec_text)
         plan = plan_action_with_waits(parsed)
-        payload: Dict[str, Any] = {"ok": True, "plan": plan_to_dict(plan)}
+        payload: dict[str, Any] = {"ok": True, "plan": plan_to_dict(plan)}
 
         if dry_run:
             _emit(payload, json_mode=json_mode)
@@ -189,8 +190,8 @@ def register_typer(app_obj: typer.Typer) -> None:
 
     @app_obj.command(COMMAND_NAME)
     def p007_browser_action_wait_conditions(
-        spec: Optional[str] = typer.Option(None, "--spec", help="JSON spec string, @path.json, or '-' for stdin"),
-        spec_file: Optional[Path] = typer.Option(None, "--spec-file", exists=False, dir_okay=False, path_type=Path),
+        spec: str | None = typer.Option(None, "--spec", help="JSON spec string, @path.json, or '-' for stdin"),
+        spec_file: Path | None = typer.Option(None, "--spec-file", exists=False, dir_okay=False, path_type=Path),
         dry_run: bool = typer.Option(True, "--dry-run/--execute", help="Validate+plan only (default) or execute"),
         json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
         schema: bool = typer.Option(False, "--schema", help="Emit JSON schema for automation"),
@@ -217,7 +218,6 @@ def register(subparsers: Any) -> None:  # pragma: no cover
 
     The host CLI may call this by convention during module discovery.
     """
-    import argparse
 
     parser = subparsers.add_parser(
         COMMAND_NAME,
@@ -257,5 +257,59 @@ try:  # pragma: no cover
 
     if _browser_app is not app:
         register_typer(_browser_app)
-except Exception:
+except ImportError:
     pass
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser action-wait-conditions",
+        description="Validate/execute browser action specs with wait conditions.",
+    )
+    parser.add_argument("--spec", type=str, default=None, help="JSON spec string, @path.json, or '-' for stdin")
+    parser.add_argument("--spec-file", type=Path, default=None, help="Path to JSON spec file")
+    parser.add_argument(
+        "--dry-run",
+        dest="dry_run",
+        action="store_true",
+        default=True,
+        help="Validate+plan only (default).",
+    )
+    parser.add_argument(
+        "--execute",
+        dest="dry_run",
+        action="store_false",
+        help="Execute action+waits (requires configured browser driver).",
+    )
+    parser.add_argument("--json", dest="json_mode", action="store_true", default=False)
+    parser.add_argument("--schema", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    if bool(args.schema):
+        return _run(None, dry_run=True, json_mode=bool(args.json_mode), schema=True)
+
+    try:
+        spec_text = _load_spec_text(args.spec, args.spec_file)
+    except InvalidWaitConditionsError as exc:
+        payload = {
+            "ok": False,
+            "error": error_to_dict(exc),
+            "input_schema": action_with_waits_json_schema(),
+            "output_schema": action_with_waits_result_json_schema(),
+        }
+        _emit(payload, json_mode=bool(args.json_mode))
+        return 2
+    except Exception as exc:  # pragma: no cover
+        payload = {
+            "ok": False,
+            "error": {"code": "external_failure", "message": str(exc), "details": {"type": type(exc).__name__}},
+            "input_schema": action_with_waits_json_schema(),
+            "output_schema": action_with_waits_result_json_schema(),
+        }
+        _emit(payload, json_mode=bool(args.json_mode))
+        return 1
+    return _run(spec_text, dry_run=bool(args.dry_run), json_mode=bool(args.json_mode), schema=False)

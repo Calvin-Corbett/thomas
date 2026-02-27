@@ -9,15 +9,12 @@ from typing import Any
 FALLBACK_POLICY_PROFILE_ID = "strict_global"
 
 
-
 def _text(value: Any) -> str:
     return str(value or "").strip()
 
 
-
 def _norm(value: Any) -> str:
     return _text(value).lower()
-
 
 
 def _text_list(value: Any) -> list[str]:
@@ -30,7 +27,6 @@ def _text_list(value: Any) -> list[str]:
     return sorted(set(out))
 
 
-
 def _bool(value: Any, *, default: bool = False) -> bool:
     if value is None:
         return bool(default)
@@ -39,10 +35,8 @@ def _bool(value: Any, *, default: bool = False) -> bool:
     return _norm(value) in {"1", "true", "yes", "on"}
 
 
-
 def _profiles_dir() -> Path:
     return (Path(__file__).resolve().parent.parent / "policy_profiles").resolve()
-
 
 
 @dataclass(frozen=True)
@@ -71,7 +65,7 @@ class PolicyProfile:
     required_age_gate_for_ugc: bool
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "PolicyProfile":
+    def from_dict(cls, data: dict[str, Any]) -> PolicyProfile:
         if not isinstance(data, dict):
             raise ValueError("policy profile payload must be an object")
         profile_id = _norm(data.get("profile_id"))
@@ -100,9 +94,7 @@ class PolicyProfile:
                 data.get("allow_arbitrary_external_navigation"),
                 default=False,
             ),
-            allowed_external_navigation_domains=_text_list(
-                data.get("allowed_external_navigation_domains")
-            ),
+            allowed_external_navigation_domains=_text_list(data.get("allowed_external_navigation_domains")),
             require_store_billing_for_digital=_bool(
                 data.get("require_store_billing_for_digital"),
                 default=False,
@@ -138,7 +130,6 @@ class PolicyProfile:
             "required_privacy_fields": list(self.required_privacy_fields),
             "required_age_gate_for_ugc": bool(self.required_age_gate_for_ugc),
         }
-
 
 
 def _fallback_profile() -> PolicyProfile:
@@ -198,7 +189,6 @@ def _fallback_profile() -> PolicyProfile:
     )
 
 
-
 @lru_cache(maxsize=1)
 def load_policy_profiles() -> dict[str, PolicyProfile]:
     out: dict[str, PolicyProfile] = {}
@@ -207,7 +197,7 @@ def load_policy_profiles() -> dict[str, PolicyProfile]:
             payload = json.loads(path.read_text(encoding="utf-8"))
             profile = PolicyProfile.from_dict(payload)
             out[profile.profile_id] = profile
-        except Exception:
+        except json.JSONDecodeError:
             continue
     if FALLBACK_POLICY_PROFILE_ID not in out:
         fallback = _fallback_profile()
@@ -215,16 +205,13 @@ def load_policy_profiles() -> dict[str, PolicyProfile]:
     return out
 
 
-
 def clear_policy_profile_cache() -> None:
     load_policy_profiles.cache_clear()
-
 
 
 def list_policy_profiles() -> list[PolicyProfile]:
     profiles = load_policy_profiles()
     return [profiles[key] for key in sorted(profiles.keys())]
-
 
 
 def get_policy_profile(profile_id: str) -> PolicyProfile:
@@ -233,7 +220,6 @@ def get_policy_profile(profile_id: str) -> PolicyProfile:
     if key and key in profiles:
         return profiles[key]
     return profiles[FALLBACK_POLICY_PROFILE_ID]
-
 
 
 def _match_value(value: str, allowed: list[str]) -> tuple[bool, int]:
@@ -247,7 +233,6 @@ def _match_value(value: str, allowed: list[str]) -> tuple[bool, int]:
     if not value:
         return False, 0
     return value in pool, 2 if value in pool else 0
-
 
 
 def resolve_policy_profile(

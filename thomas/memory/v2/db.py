@@ -5,21 +5,26 @@ import os
 import sqlite3
 import threading
 import time
-from typing import Any, Iterable, Iterator, Optional, Sequence, Tuple
+from collections.abc import Iterable, Iterator
+from typing import Any
+
 
 class _LockedCursor:
     """Wrap a sqlite3.Cursor so fetch operations are serialized."""
+
     def __init__(self, cursor: sqlite3.Cursor, lock: threading.RLock):
         self._cursor = cursor
         self._lock = lock
 
     @property
     def lastrowid(self) -> int:
-        return self._cursor.lastrowid
+        with self._lock:
+            return self._cursor.lastrowid
 
     @property
     def rowcount(self) -> int:
-        return self._cursor.rowcount
+        with self._lock:
+            return self._cursor.rowcount
 
     def fetchone(self):
         with self._lock:
@@ -33,6 +38,7 @@ class _LockedCursor:
         # safest: materialize under lock
         with self._lock:
             return iter(self._cursor.fetchall())
+
 
 class SqliteDB:
     """SQLite helper with conservative thread-safety.
@@ -67,12 +73,12 @@ class SqliteDB:
             with self._conn:
                 yield self._conn
 
-    def execute(self, sql: str, args: Tuple[Any, ...] = ()) -> _LockedCursor:
+    def execute(self, sql: str, args: tuple[Any, ...] = ()) -> _LockedCursor:
         with self._lock:
             cur = self._conn.execute(sql, args)
             return _LockedCursor(cur, self._lock)
 
-    def executemany(self, sql: str, seq: Iterable[Tuple[Any, ...]]) -> None:
+    def executemany(self, sql: str, seq: Iterable[tuple[Any, ...]]) -> None:
         with self._lock:
             self._conn.executemany(sql, seq)
 

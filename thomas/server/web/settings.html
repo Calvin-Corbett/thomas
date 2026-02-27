@@ -3,17 +3,2038 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Settings</title>
+  <title>Thomas Agent Settings</title>
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@1.4.0/src/index.css" />
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    html, body {
+      width: 100%;
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen', 'Ubuntu', sans-serif;
+      color: #e8eaed;
+      background-color: #12161f;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+    }
+
+    main {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* Header */
+    .settings-header {
+      padding: 20px 24px;
+      border-bottom: 1px solid #262d3c;
+      background-color: #12161f;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+    }
+
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 16px;
+    }
+
+    .settings-header h1 {
+      font-size: 24px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .header-actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 320px;
+      display: flex;
+      align-items: center;
+      background-color: #1a1f2e;
+      border: 1px solid #262d3c;
+      border-radius: 8px;
+      padding: 8px 12px;
+      gap: 8px;
+    }
+
+    .search-box input {
+      flex: 1;
+      background: none;
+      border: none;
+      outline: none;
+      color: #e8eaed;
+      font-size: 14px;
+    }
+
+    .search-box input::placeholder {
+      color: #7a8294;
+    }
+
+    .search-box i {
+      color: #7a8294;
+      font-size: 18px;
+    }
+
+    /* Sidebar */
+    .settings-sidebar {
+      width: 240px;
+      background-color: #1a1f2e;
+      border-right: 1px solid #262d3c;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .sidebar-nav {
+      list-style: none;
+      padding: 12px;
+    }
+
+    .sidebar-nav li {
+      margin-bottom: 8px;
+    }
+
+    .sidebar-nav button {
+      width: 100%;
+      padding: 12px 14px;
+      background: none;
+      border: none;
+      text-align: left;
+      color: #a8aeb8;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      transition: all 0.2s ease;
+    }
+
+    .sidebar-nav button:hover {
+      background-color: #262d3c;
+      color: #e8eaed;
+    }
+
+    .sidebar-nav button.active {
+      background-color: #6c5ce7;
+      color: #fff;
+    }
+
+    .sidebar-nav i {
+      font-size: 18px;
+      width: 18px;
+    }
+
+    /* Content area */
+    .settings-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .settings-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 24px;
+    }
+
+    /* Settings panel */
+    .settings-panel {
+      display: none;
+      animation: fadeIn 0.2s ease;
+    }
+
+    .settings-panel.active {
+      display: block;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; }
+      to { opacity: 1; }
+    }
+
+    .panel-title {
+      font-size: 20px;
+      font-weight: 600;
+      color: #fff;
+      margin-bottom: 8px;
+    }
+
+    .panel-description {
+      font-size: 13px;
+      color: #a8aeb8;
+      margin-bottom: 24px;
+    }
+
+    /* Settings groups */
+    .settings-group {
+      background-color: #1a1f2e;
+      border: 1px solid #262d3c;
+      border-radius: 8px;
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    .group-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #6c5ce7;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid #262d3c;
+    }
+
+    .setting-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 0;
+      border-bottom: 1px solid #262d3c;
+    }
+
+    .setting-item:last-child {
+      border-bottom: none;
+      padding-bottom: 0;
+    }
+
+    .setting-label {
+      flex: 1;
+    }
+
+    .setting-name {
+      font-size: 14px;
+      font-weight: 500;
+      color: #e8eaed;
+      margin-bottom: 4px;
+    }
+
+    .setting-description {
+      font-size: 12px;
+      color: #7a8294;
+    }
+
+    .setting-control {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+
+    /* Toggle switches */
+    .toggle-switch {
+      position: relative;
+      width: 44px;
+      height: 24px;
+      background-color: #262d3c;
+      border-radius: 12px;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+      border: none;
+      padding: 0;
+    }
+
+    .toggle-switch.on {
+      background-color: #6c5ce7;
+    }
+
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      background-color: white;
+      border-radius: 50%;
+      top: 2px;
+      left: 2px;
+      transition: left 0.2s ease;
+    }
+
+    .toggle-switch.on::after {
+      left: 22px;
+    }
+
+    /* Dropdowns */
+    .dropdown-select {
+      padding: 8px 12px;
+      background-color: #262d3c;
+      border: 1px solid #3a3f4e;
+      border-radius: 6px;
+      color: #e8eaed;
+      font-size: 14px;
+      cursor: pointer;
+      min-width: 180px;
+      transition: border-color 0.2s ease;
+    }
+
+    .dropdown-select:hover {
+      border-color: #6c5ce7;
+    }
+
+    .dropdown-select:focus {
+      outline: none;
+      border-color: #6c5ce7;
+      box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+    }
+
+    /* Text inputs */
+    .text-input, .number-input {
+      padding: 8px 12px;
+      background-color: #262d3c;
+      border: 1px solid #3a3f4e;
+      border-radius: 6px;
+      color: #e8eaed;
+      font-size: 14px;
+      font-family: 'Menlo', 'Monaco', monospace;
+      min-width: 200px;
+      transition: border-color 0.2s ease;
+    }
+
+    .text-input:focus, .number-input:focus {
+      outline: none;
+      border-color: #6c5ce7;
+      box-shadow: 0 0 0 3px rgba(108, 92, 231, 0.1);
+    }
+
+    .number-input {
+      min-width: 100px;
+    }
+
+    /* API key input with visibility toggle */
+    .key-input-group {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .key-input {
+      flex: 1;
+      min-width: 250px;
+    }
+
+    .visibility-toggle {
+      background: none;
+      border: none;
+      color: #7a8294;
+      cursor: pointer;
+      padding: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 18px;
+      transition: color 0.2s ease;
+    }
+
+    .visibility-toggle:hover {
+      color: #6c5ce7;
+    }
+
+    /* Buttons */
+    .button-group {
+      display: flex;
+      gap: 12px;
+      margin-top: 20px;
+      padding-top: 20px;
+      border-top: 1px solid #262d3c;
+    }
+
+    button.btn {
+      padding: 10px 20px;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+    }
+
+    button.btn-primary {
+      background-color: #6c5ce7;
+      color: white;
+    }
+
+    button.btn-primary:hover {
+      background-color: #7c6ff0;
+    }
+
+    button.btn-primary:active {
+      background-color: #5c4cd7;
+    }
+
+    button.btn-secondary {
+      background-color: #262d3c;
+      color: #e8eaed;
+      border: 1px solid #3a3f4e;
+    }
+
+    button.btn-secondary:hover {
+      background-color: #323847;
+      border-color: #6c5ce7;
+    }
+
+    button.btn-danger {
+      background-color: #ff6b6b;
+      color: white;
+    }
+
+    button.btn-danger:hover {
+      background-color: #ff7f7f;
+    }
+
+    button.btn-success {
+      background-color: #51cf66;
+      color: white;
+    }
+
+    button.btn-success:hover {
+      background-color: #69db7c;
+    }
+
+    /* Status badges */
+    .status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 4px 10px;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 500;
+      margin-bottom: 12px;
+    }
+
+    .status-connected {
+      background-color: rgba(81, 207, 102, 0.15);
+      color: #51cf66;
+    }
+
+    .status-disconnected {
+      background-color: rgba(255, 107, 107, 0.15);
+      color: #ff6b6b;
+    }
+
+    .status-indicator {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: currentColor;
+    }
+
+    /* Toast notifications */
+    .toast-container {
+      position: fixed;
+      top: 20px;
+      right: 20px;
+      z-index: 1000;
+      pointer-events: none;
+    }
+
+    .toast {
+      background-color: #1a1f2e;
+      border: 1px solid #262d3c;
+      border-left: 4px solid #6c5ce7;
+      padding: 14px 16px;
+      border-radius: 6px;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 14px;
+      animation: slideIn 0.3s ease;
+      pointer-events: auto;
+      max-width: 400px;
+    }
+
+    .toast.success {
+      border-left-color: #51cf66;
+    }
+
+    .toast.error {
+      border-left-color: #ff6b6b;
+    }
+
+    .toast.info {
+      border-left-color: #4c9aff;
+    }
+
+    @keyframes slideIn {
+      from {
+        transform: translateX(400px);
+        opacity: 0;
+      }
+      to {
+        transform: translateX(0);
+        opacity: 1;
+      }
+    }
+
+    .toast-icon {
+      font-size: 18px;
+      flex-shrink: 0;
+    }
+
+    .toast-close {
+      background: none;
+      border: none;
+      color: #7a8294;
+      cursor: pointer;
+      padding: 0;
+      margin-left: auto;
+      display: flex;
+      align-items: center;
+      font-size: 16px;
+    }
+
+    .toast-close:hover {
+      color: #e8eaed;
+    }
+
+    /* Modal */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      bottom: 0;
+      background-color: rgba(0, 0, 0, 0.5);
+      z-index: 500;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .modal-overlay.active {
+      display: flex;
+    }
+
+    .modal {
+      background-color: #1a1f2e;
+      border: 1px solid #262d3c;
+      border-radius: 8px;
+      padding: 24px;
+      max-width: 500px;
+      width: 90%;
+      max-height: 80vh;
+      overflow-y: auto;
+      animation: modalSlideIn 0.3s ease;
+    }
+
+    @keyframes modalSlideIn {
+      from {
+        transform: scale(0.95);
+        opacity: 0;
+      }
+      to {
+        transform: scale(1);
+        opacity: 1;
+      }
+    }
+
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 20px;
+      padding-bottom: 16px;
+      border-bottom: 1px solid #262d3c;
+    }
+
+    .modal-title {
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #7a8294;
+      cursor: pointer;
+      padding: 0;
+      font-size: 20px;
+    }
+
+    .modal-close:hover {
+      color: #e8eaed;
+    }
+
+    .modal-body {
+      margin-bottom: 20px;
+    }
+
+    .modal-footer {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+      padding-top: 20px;
+      border-top: 1px solid #262d3c;
+    }
+
+    /* Scrollbar styling */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background-color: #3a3f4e;
+      border-radius: 4px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background-color: #4a4f5e;
+    }
+
+    /* Text overflow fixes */
+    .dropdown-select,
+    .number-input,
+    .text-input {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .toast {
+      word-wrap: break-word;
+      overflow-wrap: break-word;
+      word-break: break-word;
+    }
+
+    .spinner {
+      flex-shrink: 0;
+    }
+
+    .status-indicator {
+      flex-shrink: 0;
+    }
+
+    .toggle-switch {
+      flex-shrink: 0;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      main {
+        flex-direction: column;
+      }
+
+      .settings-sidebar {
+        width: 100%;
+        border-right: none;
+        border-bottom: 1px solid #262d3c;
+        max-height: 60px;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+
+      .sidebar-nav {
+        display: flex;
+        gap: 8px;
+        padding: 8px 12px;
+        flex-wrap: nowrap;
+      }
+
+      .sidebar-nav li {
+        margin-bottom: 0;
+        flex-shrink: 0;
+      }
+
+      .sidebar-nav button {
+        white-space: nowrap;
+      }
+
+      .settings-content {
+        padding: 16px;
+      }
+
+      .header-actions {
+        flex-direction: column;
+        width: 100%;
+      }
+
+      .search-box {
+        max-width: 100%;
+      }
+
+      .setting-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 12px;
+      }
+
+      .setting-control {
+        width: 100%;
+      }
+
+      .text-input, .number-input, .dropdown-select {
+        width: 100%;
+        min-width: unset;
+      }
+
+      .key-input-group {
+        width: 100%;
+      }
+
+      .key-input {
+        min-width: unset;
+      }
+    }
+
+    /* Loading state */
+    .loading {
+      opacity: 0.6;
+      pointer-events: none;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid #3a3f4e;
+      border-top-color: #6c5ce7;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Accessibility */
+    button:focus-visible, input:focus-visible, select:focus-visible {
+      outline: 2px solid #6c5ce7;
+      outline-offset: 2px;
+    }
+
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      white-space: nowrap;
+      border-width: 0;
+    }
+  </style>
 </head>
 <body>
+  <div class="settings-header">
+    <div class="header-top">
+      <h1>Settings</h1>
+      <div class="header-actions">
+        <div class="search-box">
+          <i class="ph ph-magnifying-glass"></i>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="Search settings..."
+            aria-label="Search settings"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+
   <main>
-    <h1>Settings</h1>
-    <h2>Settings Suite</h2>
-    <section id="settingsSectionNav">Find setting section</section>
-    <section>Basic</section>
-    <div id="debugOnboardingGateStatusPill"></div>
-    <div id="debugOnboardingGateStatus"></div>
-    <ul id="debugOnboardingGateList"></ul>
+    <nav class="settings-sidebar" role="navigation" aria-label="Settings categories">
+      <ul class="sidebar-nav">
+        <li>
+          <button class="sidebar-nav-item active" data-section="general" aria-current="page">
+            <i class="ph ph-gear"></i>
+            <span>General</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="models" aria-label="Models & Providers settings">
+            <i class="ph ph-cpu"></i>
+            <span>Models & Providers</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="integrations" aria-label="Integrations settings">
+            <i class="ph ph-plug"></i>
+            <span>Integrations</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="autonomy" aria-label="Autonomy settings">
+            <i class="ph ph-robot"></i>
+            <span>Autonomy</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="privacy" aria-label="Privacy & Security settings">
+            <i class="ph ph-shield-check"></i>
+            <span>Privacy & Security</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="appearance" aria-label="Appearance settings">
+            <i class="ph ph-palette"></i>
+            <span>Appearance</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="advanced" aria-label="Advanced settings">
+            <i class="ph ph-wrench"></i>
+            <span>Advanced</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="settings-container">
+      <div class="settings-content">
+        <!-- General Settings -->
+        <div id="general" class="settings-panel active">
+          <div class="panel-title">General Settings</div>
+          <div class="panel-description">Configure basic Thomas agent behavior and preferences.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Agent Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Agent Name</div>
+                <div class="setting-description">Display name for this agent instance</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="agentName" class="text-input" placeholder="e.g., Thomas-Main" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Default Model</div>
+                <div class="setting-description">Primary AI model for most tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="defaultModel" class="dropdown-select">
+                  <option value="gpt-4">OpenAI GPT-4</option>
+                  <option value="gpt-3.5">OpenAI GPT-3.5 Turbo</option>
+                  <option value="claude-opus">Anthropic Claude Opus 4.6</option>
+                  <option value="claude-sonnet">Anthropic Claude Sonnet</option>
+                  <option value="gemini-pro">Google Gemini Pro</option>
+                  <option value="local-llama">Local Llama (Ollama)</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Default Provider</div>
+                <div class="setting-description">API provider to use by default</div>
+              </div>
+              <div class="setting-control">
+                <select id="defaultProvider" class="dropdown-select">
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="google">Google</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">User Experience</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Theme</div>
+                <div class="setting-description">Visual appearance preference</div>
+              </div>
+              <div class="setting-control">
+                <select id="theme" class="dropdown-select">
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="system">System</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Language</div>
+                <div class="setting-description">Interface language</div>
+              </div>
+              <div class="setting-control">
+                <select id="language" class="dropdown-select">
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="ja">日本語</option>
+                  <option value="zh">中文</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Start on login</div>
+                <div class="setting-description">Automatically launch Thomas on system startup</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="startupBehavior" data-setting="startupBehavior" aria-label="Toggle start on login" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('general')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('general')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Models & Providers Settings -->
+        <div id="models" class="settings-panel">
+          <div class="panel-title">Models & Providers</div>
+          <div class="panel-description">Configure AI models and API provider credentials.</div>
+
+          <div class="settings-group">
+            <div class="group-title">OpenAI Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">API Key</div>
+                <div class="setting-description">Your OpenAI API key</div>
+              </div>
+              <div class="setting-control">
+                <div class="key-input-group">
+                  <input type="password" id="openaiKey" class="text-input key-input" placeholder="sk-..." aria-label="OpenAI API key" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                    <i class="ph ph-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model Selection</div>
+                <div class="setting-description">Primary model for OpenAI tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="openaiModel" class="dropdown-select">
+                  <option value="gpt-4">GPT-4</option>
+                  <option value="gpt-3.5">GPT-3.5 Turbo</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Anthropic Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">API Key</div>
+                <div class="setting-description">Your Anthropic API key</div>
+              </div>
+              <div class="setting-control">
+                <div class="key-input-group">
+                  <input type="password" id="anthropicKey" class="text-input key-input" placeholder="sk-ant-..." aria-label="Anthropic API key" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                    <i class="ph ph-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model Selection</div>
+                <div class="setting-description">Primary model for Anthropic tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="anthropicModel" class="dropdown-select">
+                  <option value="claude-opus">Claude Opus 4.6</option>
+                  <option value="claude-sonnet">Claude Sonnet</option>
+                  <option value="claude-haiku">Claude Haiku</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Google Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">API Key</div>
+                <div class="setting-description">Your Google API key</div>
+              </div>
+              <div class="setting-control">
+                <div class="key-input-group">
+                  <input type="password" id="googleKey" class="text-input key-input" placeholder="AIza..." aria-label="Google API key" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                    <i class="ph ph-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model Selection</div>
+                <div class="setting-description">Primary model for Google tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="googleModel" class="dropdown-select">
+                  <option value="gemini-pro">Gemini Pro</option>
+                  <option value="gemini-pro-vision">Gemini Pro Vision</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Ollama Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Base URL</div>
+                <div class="setting-description">Ollama server endpoint</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="ollamaUrl" class="text-input" placeholder="http://localhost:11434" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model</div>
+                <div class="setting-description">Local model name</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="ollamaModel" class="text-input" placeholder="llama2, mistral, neural-chat, etc." />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Model Defaults</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Temperature</div>
+                <div class="setting-description">Creativity level (0-2, lower = more focused)</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="temperature" class="number-input" min="0" max="2" step="0.1" value="0.7" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Max Tokens</div>
+                <div class="setting-description">Maximum response length</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="maxTokens" class="number-input" min="100" step="100" value="2000" />
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('models')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('models')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Integrations Settings -->
+        <div id="integrations" class="settings-panel">
+          <div class="panel-title">Integrations</div>
+          <div class="panel-description">Connect Thomas to external services and platforms.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Google Workspace</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="googleWorkspaceStatus">
+                <span class="status-indicator"></span>
+                <span>Not Connected</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Gmail & Calendar Access</div>
+                <div class="setting-description">Enable email and calendar integration</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="connectGoogleWorkspace()">
+                  <i class="ph ph-plug"></i>
+                  Connect
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Slack</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="slackStatus">
+                <span class="status-indicator"></span>
+                <span>Not Connected</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Workspace Connection</div>
+                <div class="setting-description">Connect to Slack workspace</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="connectSlack()">
+                  <i class="ph ph-plug"></i>
+                  Connect
+                </button>
+              </div>
+            </div>
+            <div class="setting-item" id="slackWebhookItem" style="display: none;">
+              <div class="setting-label">
+                <div class="setting-name">Webhook URL</div>
+                <div class="setting-description">Incoming webhook for notifications</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="slackWebhook" class="text-input" placeholder="https://hooks.slack.com/services/..." />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Notion</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="notionStatus">
+                <span class="status-indicator"></span>
+                <span>Not Connected</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Database Connection</div>
+                <div class="setting-description">Access Notion workspaces</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="connectNotion()">
+                  <i class="ph ph-plug"></i>
+                  Connect
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('integrations')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('integrations')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Autonomy Settings -->
+        <div id="autonomy" class="settings-panel">
+          <div class="panel-title">Autonomy</div>
+          <div class="panel-description">Control agent decision-making and automatic actions.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Autonomy Level</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Agent Autonomy</div>
+                <div class="setting-description">Decision-making capability level</div>
+              </div>
+              <div class="setting-control">
+                <select id="autonomyLevel" class="dropdown-select">
+                  <option value="L1">L1 - Manual Only (requires approval for all actions)</option>
+                  <option value="L2">L2 - Semi-Autonomous (approval for important actions)</option>
+                  <option value="L3">L3 - Mostly Autonomous (approval for risky actions only)</option>
+                  <option value="L4">L4 - Full Autonomy (self-governing within constraints)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Auto-Approval Thresholds</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Cost Limit</div>
+                <div class="setting-description">Max API cost per action without approval</div>
+              </div>
+              <div class="setting-control">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>$</span>
+                  <input type="number" id="costLimit" class="number-input" min="0" step="0.10" value="1.00" />
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Time Commitment</div>
+                <div class="setting-description">Max hours per task without approval</div>
+              </div>
+              <div class="setting-control">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input type="number" id="timeCommitment" class="number-input" min="0.25" step="0.25" value="4" />
+                  <span>hours</span>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Auto-approve with notification</div>
+                <div class="setting-description">Execute action and notify instead of requesting approval</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="autoApproveNotify" data-setting="autoApproveNotify" aria-label="Toggle auto-approve with notification" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Behavior</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Idle Timeout</div>
+                <div class="setting-description">Minutes before pausing autonomous actions</div>
+              </div>
+              <div class="setting-control">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input type="number" id="idleTimeout" class="number-input" min="5" step="5" value="30" />
+                  <span>min</span>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Take initiative on errors</div>
+                <div class="setting-description">Automatically retry or recover from failures</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="initiativeOnErrors" data-setting="initiativeOnErrors" aria-label="Toggle initiative on errors" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('autonomy')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('autonomy')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Privacy & Security Settings -->
+        <div id="privacy" class="settings-panel">
+          <div class="panel-title">Privacy & Security</div>
+          <div class="panel-description">Manage data privacy, security, and access controls.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Data Privacy</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Data Retention</div>
+                <div class="setting-description">How long to keep conversation history</div>
+              </div>
+              <div class="setting-control">
+                <select id="dataRetention" class="dropdown-select">
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                  <option value="90d">90 days</option>
+                  <option value="1y">1 year</option>
+                  <option value="forever">Forever</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Auto-delete sensitive data</div>
+                <div class="setting-description">Remove passwords, keys, and PII after retention period</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="autoDeleteSensitive" data-setting="autoDeleteSensitive" aria-label="Toggle auto-delete sensitive data" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Security</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Session Encryption</div>
+                <div class="setting-description">Encrypt all session data in transit and at rest</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="sessionEncryption" data-setting="sessionEncryption" aria-label="Toggle session encryption" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Rate Limiting</div>
+                <div class="setting-description">Maximum requests per minute</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="rateLimit" class="number-input" min="10" step="10" value="100" />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Domain Whitelist</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Allowed Domains</div>
+                <div class="setting-description">Domains this agent can access (one per line)</div>
+              </div>
+              <div class="setting-control">
+                <textarea id="allowedDomains" style="width: 100%; min-height: 120px; padding: 8px 12px; background-color: #262d3c; border: 1px solid #3a3f4e; border-radius: 6px; color: #e8eaed; font-size: 13px; font-family: 'Menlo', monospace; resize: vertical;" placeholder="example.com&#10;api.service.com&#10;*.company.com" aria-label="Allowed domains list"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('privacy')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('privacy')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Appearance Settings -->
+        <div id="appearance" class="settings-panel">
+          <div class="panel-title">Appearance</div>
+          <div class="panel-description">Customize the visual interface.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Interface</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Font Size</div>
+                <div class="setting-description">Base interface font size</div>
+              </div>
+              <div class="setting-control">
+                <select id="fontSize" class="dropdown-select">
+                  <option value="small">Small</option>
+                  <option value="normal" selected>Normal</option>
+                  <option value="large">Large</option>
+                  <option value="xlarge">Extra Large</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Sidebar Position</div>
+                <div class="setting-description">Where to display navigation sidebar</div>
+              </div>
+              <div class="setting-control">
+                <select id="sidebarPosition" class="dropdown-select">
+                  <option value="left" selected>Left</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Compact Mode</div>
+                <div class="setting-description">Reduce spacing and sizes for more density</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="compactMode" data-setting="compactMode" aria-label="Toggle compact mode" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Chat & Messages</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Chat Bubble Style</div>
+                <div class="setting-description">Visual style for conversation bubbles</div>
+              </div>
+              <div class="setting-control">
+                <select id="bubbleStyle" class="dropdown-select">
+                  <option value="rounded" selected>Rounded</option>
+                  <option value="square">Square</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Monospace Code</div>
+                <div class="setting-description">Use monospace font for code blocks</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="monospaceCode" data-setting="monospaceCode" aria-label="Toggle monospace code" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Notifications</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Desktop Notifications</div>
+                <div class="setting-description">Show system notifications for agent events</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="desktopNotifications" data-setting="desktopNotifications" aria-label="Toggle desktop notifications" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Sound Alerts</div>
+                <div class="setting-description">Play sound on important events</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="soundAlerts" data-setting="soundAlerts" aria-label="Toggle sound alerts" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('appearance')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('appearance')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div id="advanced" class="settings-panel">
+          <div class="panel-title">Advanced</div>
+          <div class="panel-description">Technical configuration for developers and power users.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Debugging</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Debug Mode</div>
+                <div class="setting-description">Enable detailed logging and debug information</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="debugMode" data-setting="debugMode" aria-label="Toggle debug mode" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Log Level</div>
+                <div class="setting-description">Verbosity of system logs</div>
+              </div>
+              <div class="setting-control">
+                <select id="logLevel" class="dropdown-select">
+                  <option value="error">Error Only</option>
+                  <option value="warn">Warnings & Errors</option>
+                  <option value="info" selected>Info & Above</option>
+                  <option value="debug">Debug & All</option>
+                  <option value="trace">Trace (Very Verbose)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Plugin Management</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Plugin Directory</div>
+                <div class="setting-description">Path where custom plugins are loaded from</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="pluginDirectory" class="text-input" placeholder="/home/user/.thomas/plugins" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Auto-load Plugins</div>
+                <div class="setting-description">Automatically load plugins on startup</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="autoLoadPlugins" data-setting="autoLoadPlugins" aria-label="Toggle auto-load plugins" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Custom Tools</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Tool Paths</div>
+                <div class="setting-description">Directories to search for custom tools (one per line)</div>
+              </div>
+              <div class="setting-control">
+                <textarea id="toolPaths" style="width: 100%; min-height: 100px; padding: 8px 12px; background-color: #262d3c; border: 1px solid #3a3f4e; border-radius: 6px; color: #e8eaed; font-size: 13px; font-family: 'Menlo', monospace; resize: vertical;" placeholder="/usr/local/lib/thomas-tools&#10;/home/user/custom-tools" aria-label="Custom tool paths"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Database</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Connection String</div>
+                <div class="setting-description">Database connection URL</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="dbConnection" class="text-input" placeholder="postgresql://user:pass@localhost/thomas" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Connection Pool Size</div>
+                <div class="setting-description">Maximum concurrent database connections</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="poolSize" class="number-input" min="1" step="1" value="10" />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Maintenance</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Cache</div>
+                <div class="setting-description">Clear in-memory and persistent caches</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="clearCache()">
+                  <i class="ph ph-trash"></i>
+                  Clear Cache
+                </button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Logs</div>
+                <div class="setting-description">Export or clear application logs</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="exportLogs()">
+                  <i class="ph ph-download"></i>
+                  Export Logs
+                </button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Reset All Settings</div>
+                <div class="setting-description">Restore all settings to factory defaults</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-danger" onclick="confirmReset()">
+                  <i class="ph ph-warning"></i>
+                  Reset All
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('advanced')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('advanced')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   </main>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Confirm Action</h2>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close modal">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="confirmMessage"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" id="confirmButton" onclick="executeConfirm()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // State and Helpers
+    const settings = {};
+    let currentSection = 'general';
+    let pendingConfirmAction = null;
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', async () => {
+      await loadSettings();
+      setupEventListeners();
+      setupSearch();
+    });
+
+    // Load settings from API
+    async function loadSettings() {
+      try {
+        const response = await fetch('/api/settings');
+        if (!response.ok) throw new Error('Failed to load settings');
+        const data = await response.json();
+        Object.assign(settings, data);
+        populateForm();
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        showToast('Failed to load settings', 'error');
+      }
+    }
+
+    // Populate form with loaded settings
+    function populateForm() {
+      // General
+      setInputValue('agentName', settings.agentName || 'Thomas-Main');
+      setSelectValue('defaultModel', settings.defaultModel || 'claude-opus');
+      setSelectValue('defaultProvider', settings.defaultProvider || 'anthropic');
+      setSelectValue('theme', settings.theme || 'dark');
+      setSelectValue('language', settings.language || 'en');
+      setToggle('startupBehavior', settings.startupBehavior);
+
+      // Models
+      setInputValue('openaiKey', settings.openaiKey || '');
+      setSelectValue('openaiModel', settings.openaiModel || 'gpt-4');
+      setInputValue('anthropicKey', settings.anthropicKey || '');
+      setSelectValue('anthropicModel', settings.anthropicModel || 'claude-opus');
+      setInputValue('googleKey', settings.googleKey || '');
+      setSelectValue('googleModel', settings.googleModel || 'gemini-pro');
+      setInputValue('ollamaUrl', settings.ollamaUrl || 'http://localhost:11434');
+      setInputValue('ollamaModel', settings.ollamaModel || 'llama2');
+      setInputValue('temperature', settings.temperature || 0.7);
+      setInputValue('maxTokens', settings.maxTokens || 2000);
+
+      // Integrations (status handled by separate check)
+      setInputValue('slackWebhook', settings.slackWebhook || '');
+
+      // Autonomy
+      setSelectValue('autonomyLevel', settings.autonomyLevel || 'L2');
+      setInputValue('costLimit', settings.costLimit || 1.00);
+      setInputValue('timeCommitment', settings.timeCommitment || 4);
+      setToggle('autoApproveNotify', settings.autoApproveNotify);
+      setInputValue('idleTimeout', settings.idleTimeout || 30);
+      setToggle('initiativeOnErrors', settings.initiativeOnErrors !== false);
+
+      // Privacy
+      setSelectValue('dataRetention', settings.dataRetention || '90d');
+      setToggle('autoDeleteSensitive', settings.autoDeleteSensitive !== false);
+      setToggle('sessionEncryption', settings.sessionEncryption !== false);
+      setInputValue('rateLimit', settings.rateLimit || 100);
+      setInputValue('allowedDomains', (settings.allowedDomains || []).join('\n'));
+
+      // Appearance
+      setSelectValue('fontSize', settings.fontSize || 'normal');
+      setSelectValue('sidebarPosition', settings.sidebarPosition || 'left');
+      setToggle('compactMode', settings.compactMode);
+      setSelectValue('bubbleStyle', settings.bubbleStyle || 'rounded');
+      setToggle('monospaceCode', settings.monospaceCode !== false);
+      setToggle('desktopNotifications', settings.desktopNotifications !== false);
+      setToggle('soundAlerts', settings.soundAlerts);
+
+      // Advanced
+      setToggle('debugMode', settings.debugMode);
+      setSelectValue('logLevel', settings.logLevel || 'info');
+      setInputValue('pluginDirectory', settings.pluginDirectory || '');
+      setToggle('autoLoadPlugins', settings.autoLoadPlugins !== false);
+      setInputValue('toolPaths', (settings.toolPaths || []).join('\n'));
+      setInputValue('dbConnection', settings.dbConnection || '');
+      setInputValue('poolSize', settings.poolSize || 10);
+    }
+
+    // Helper functions
+    function setInputValue(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    }
+
+    function setSelectValue(id, value) {
+      const el = document.getElementById(id);
+      if (el) el.value = value;
+    }
+
+    function setToggle(id, checked) {
+      const el = document.getElementById(id);
+      if (el) {
+        const isOn = !!checked;
+        el.classList.toggle('on', isOn);
+        el.setAttribute('aria-checked', isOn);
+      }
+    }
+
+    // Setup event listeners
+    function setupEventListeners() {
+      // Sidebar navigation
+      document.querySelectorAll('.sidebar-nav-item').forEach(btn => {
+        btn.addEventListener('click', () => switchSection(btn.dataset.section));
+      });
+
+      // Toggle switches
+      document.querySelectorAll('.toggle-switch').forEach(btn => {
+        btn.addEventListener('click', () => {
+          btn.classList.toggle('on');
+          const isOn = btn.classList.contains('on');
+          btn.setAttribute('aria-checked', isOn);
+        });
+        btn.addEventListener('keydown', (e) => {
+          if (e.code === 'Space' || e.code === 'Enter') {
+            e.preventDefault();
+            btn.click();
+          }
+        });
+      });
+
+      // Escape to close modal
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape') closeModal();
+      });
+    }
+
+    // Setup search functionality
+    function setupSearch() {
+      const searchInput = document.getElementById('searchInput');
+      searchInput.addEventListener('input', (e) => {
+        const query = e.target.value.toLowerCase();
+        if (!query) return;
+
+        // Find matching settings and switch to relevant section
+        const sections = {
+          'agent name': 'general',
+          'theme': 'general',
+          'language': 'general',
+          'startup': 'general',
+          'api key': 'models',
+          'openai': 'models',
+          'anthropic': 'models',
+          'google': 'models',
+          'ollama': 'models',
+          'temperature': 'models',
+          'tokens': 'models',
+          'integration': 'integrations',
+          'slack': 'integrations',
+          'notion': 'integrations',
+          'workspace': 'integrations',
+          'autonomy': 'autonomy',
+          'approval': 'autonomy',
+          'idle': 'autonomy',
+          'privacy': 'privacy',
+          'security': 'privacy',
+          'retention': 'privacy',
+          'encryption': 'privacy',
+          'domain': 'privacy',
+          'appearance': 'appearance',
+          'font': 'appearance',
+          'sidebar': 'appearance',
+          'bubble': 'appearance',
+          'notification': 'appearance',
+          'debug': 'advanced',
+          'plugin': 'advanced',
+          'database': 'advanced',
+          'log': 'advanced',
+        };
+
+        for (const [term, section] of Object.entries(sections)) {
+          if (query.includes(term)) {
+            switchSection(section);
+            searchInput.blur();
+            break;
+          }
+        }
+      });
+    }
+
+    // Switch sections
+    function switchSection(section) {
+      currentSection = section;
+
+      // Update active panel
+      document.querySelectorAll('.settings-panel').forEach(p => p.classList.remove('active'));
+      document.getElementById(section).classList.add('active');
+
+      // Update active nav button
+      document.querySelectorAll('.sidebar-nav-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.section === section);
+        btn.setAttribute('aria-current', btn.dataset.section === section ? 'page' : 'false');
+      });
+
+      // Scroll to top of content
+      document.querySelector('.settings-content').scrollTop = 0;
+    }
+
+    // Save section
+    async function saveSection(section) {
+      const formData = gatherFormData(section);
+      try {
+        const response = await fetch('/api/settings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(formData),
+        });
+
+        if (!response.ok) throw new Error('Failed to save settings');
+        const data = await response.json();
+        Object.assign(settings, data);
+        showToast('Settings saved successfully', 'success');
+      } catch (error) {
+        console.error('Error saving settings:', error);
+        showToast('Failed to save settings', 'error');
+      }
+    }
+
+    // Reset section
+    function resetSection(section) {
+      if (confirm('Reset all settings in this section to defaults?')) {
+        populateForm();
+        showToast('Settings reset to defaults', 'info');
+      }
+    }
+
+    // Gather form data from section
+    function gatherFormData(section) {
+      const data = {};
+
+      switch (section) {
+        case 'general':
+          data.agentName = document.getElementById('agentName').value;
+          data.defaultModel = document.getElementById('defaultModel').value;
+          data.defaultProvider = document.getElementById('defaultProvider').value;
+          data.theme = document.getElementById('theme').value;
+          data.language = document.getElementById('language').value;
+          data.startupBehavior = document.getElementById('startupBehavior').classList.contains('on');
+          break;
+
+        case 'models':
+          data.openaiKey = document.getElementById('openaiKey').value;
+          data.openaiModel = document.getElementById('openaiModel').value;
+          data.anthropicKey = document.getElementById('anthropicKey').value;
+          data.anthropicModel = document.getElementById('anthropicModel').value;
+          data.googleKey = document.getElementById('googleKey').value;
+          data.googleModel = document.getElementById('googleModel').value;
+          data.ollamaUrl = document.getElementById('ollamaUrl').value;
+          data.ollamaModel = document.getElementById('ollamaModel').value;
+          data.temperature = parseFloat(document.getElementById('temperature').value);
+          data.maxTokens = parseInt(document.getElementById('maxTokens').value);
+          break;
+
+        case 'integrations':
+          data.slackWebhook = document.getElementById('slackWebhook').value;
+          break;
+
+        case 'autonomy':
+          data.autonomyLevel = document.getElementById('autonomyLevel').value;
+          data.costLimit = parseFloat(document.getElementById('costLimit').value);
+          data.timeCommitment = parseFloat(document.getElementById('timeCommitment').value);
+          data.autoApproveNotify = document.getElementById('autoApproveNotify').classList.contains('on');
+          data.idleTimeout = parseInt(document.getElementById('idleTimeout').value);
+          data.initiativeOnErrors = document.getElementById('initiativeOnErrors').classList.contains('on');
+          break;
+
+        case 'privacy':
+          data.dataRetention = document.getElementById('dataRetention').value;
+          data.autoDeleteSensitive = document.getElementById('autoDeleteSensitive').classList.contains('on');
+          data.sessionEncryption = document.getElementById('sessionEncryption').classList.contains('on');
+          data.rateLimit = parseInt(document.getElementById('rateLimit').value);
+          data.allowedDomains = document.getElementById('allowedDomains').value.split('\n').filter(d => d.trim());
+          break;
+
+        case 'appearance':
+          data.fontSize = document.getElementById('fontSize').value;
+          data.sidebarPosition = document.getElementById('sidebarPosition').value;
+          data.compactMode = document.getElementById('compactMode').classList.contains('on');
+          data.bubbleStyle = document.getElementById('bubbleStyle').value;
+          data.monospaceCode = document.getElementById('monospaceCode').classList.contains('on');
+          data.desktopNotifications = document.getElementById('desktopNotifications').classList.contains('on');
+          data.soundAlerts = document.getElementById('soundAlerts').classList.contains('on');
+          break;
+
+        case 'advanced':
+          data.debugMode = document.getElementById('debugMode').classList.contains('on');
+          data.logLevel = document.getElementById('logLevel').value;
+          data.pluginDirectory = document.getElementById('pluginDirectory').value;
+          data.autoLoadPlugins = document.getElementById('autoLoadPlugins').classList.contains('on');
+          data.toolPaths = document.getElementById('toolPaths').value.split('\n').filter(p => p.trim());
+          data.dbConnection = document.getElementById('dbConnection').value;
+          data.poolSize = parseInt(document.getElementById('poolSize').value);
+          break;
+      }
+
+      return data;
+    }
+
+    // Toggle key visibility
+    function toggleKeyVisibility(button) {
+      const input = button.previousElementSibling;
+      const isPassword = input.type === 'password';
+      input.type = isPassword ? 'text' : 'password';
+      button.innerHTML = isPassword ? '<i class="ph ph-eye-slash"></i>' : '<i class="ph ph-eye"></i>';
+      button.setAttribute('aria-label', isPassword ? 'Hide key' : 'Show key');
+    }
+
+    // Integration connections (mock implementations)
+    function connectGoogleWorkspace() {
+      showToast('Opening Google OAuth consent screen...', 'info');
+      // In production, redirect to OAuth endpoint
+      setTimeout(() => {
+        document.getElementById('googleWorkspaceStatus').className = 'status-badge status-connected';
+        document.getElementById('googleWorkspaceStatus').innerHTML = '<span class="status-indicator"></span><span>Connected</span>';
+        showToast('Google Workspace connected', 'success');
+      }, 1500);
+    }
+
+    function connectSlack() {
+      showToast('Opening Slack OAuth consent screen...', 'info');
+      setTimeout(() => {
+        document.getElementById('slackStatus').className = 'status-badge status-connected';
+        document.getElementById('slackStatus').innerHTML = '<span class="status-indicator"></span><span>Connected</span>';
+        document.getElementById('slackWebhookItem').style.display = 'block';
+        showToast('Slack workspace connected', 'success');
+      }, 1500);
+    }
+
+    function connectNotion() {
+      showToast('Opening Notion OAuth consent screen...', 'info');
+      setTimeout(() => {
+        document.getElementById('notionStatus').className = 'status-badge status-connected';
+        document.getElementById('notionStatus').innerHTML = '<span class="status-indicator"></span><span>Connected</span>';
+        showToast('Notion workspace connected', 'success');
+      }, 1500);
+    }
+
+    // Maintenance functions
+    function clearCache() {
+      pendingConfirmAction = async () => {
+        try {
+          const response = await fetch('/api/cache/clear', { method: 'POST' });
+          if (!response.ok) throw new Error('Failed to clear cache');
+          showToast('Cache cleared successfully', 'success');
+        } catch (error) {
+          showToast('Failed to clear cache', 'error');
+        }
+      };
+      showConfirmModal('Clear Cache?', 'This will remove all cached data. This operation cannot be undone.', 'Clear');
+    }
+
+    function exportLogs() {
+      try {
+        fetch('/api/logs/export')
+          .then(r => r.blob())
+          .then(blob => {
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `thomas-logs-${new Date().toISOString()}.zip`;
+            a.click();
+            showToast('Logs exported successfully', 'success');
+          });
+      } catch (error) {
+        showToast('Failed to export logs', 'error');
+      }
+    }
+
+    function confirmReset() {
+      pendingConfirmAction = async () => {
+        try {
+          const response = await fetch('/api/settings/reset', { method: 'POST' });
+          if (!response.ok) throw new Error('Failed to reset settings');
+          await loadSettings();
+          showToast('All settings reset to factory defaults', 'success');
+        } catch (error) {
+          showToast('Failed to reset settings', 'error');
+        }
+      };
+      showConfirmModal('Reset All Settings?', 'This will restore all settings to factory defaults. This action cannot be undone.', 'Reset All');
+    }
+
+    // Modal functions
+    function showConfirmModal(title, message, confirmText) {
+      document.querySelector('.modal-title').textContent = title;
+      document.getElementById('confirmMessage').textContent = message;
+      document.getElementById('confirmButton').textContent = confirmText;
+      document.getElementById('confirmModal').classList.add('active');
+      document.getElementById('confirmButton').focus();
+    }
+
+    function closeModal() {
+      document.getElementById('confirmModal').classList.remove('active');
+      pendingConfirmAction = null;
+    }
+
+    function executeConfirm() {
+      if (pendingConfirmAction) {
+        pendingConfirmAction();
+      }
+      closeModal();
+    }
+
+    // Toast notifications
+    function showToast(message, type = 'info') {
+      const container = document.getElementById('toastContainer');
+      const toast = document.createElement('div');
+      toast.className = `toast ${type}`;
+
+      let icon = '';
+      if (type === 'success') icon = '<i class="ph ph-check-circle toast-icon"></i>';
+      else if (type === 'error') icon = '<i class="ph ph-warning-circle toast-icon"></i>';
+      else icon = '<i class="ph ph-info toast-icon"></i>';
+
+      toast.innerHTML = `
+        ${icon}
+        <span>${message}</span>
+        <button class="toast-close" onclick="this.parentElement.remove()" aria-label="Close notification">
+          <i class="ph ph-x"></i>
+        </button>
+      `;
+
+      container.appendChild(toast);
+      setTimeout(() => toast.remove(), 5000);
+    }
+  </script>
 </body>
 </html>

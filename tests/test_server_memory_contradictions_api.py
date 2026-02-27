@@ -120,6 +120,15 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
         )
         self.assertEqual(resp.status, 200)
 
+    async def test_loopback_route_accepts_android_emulator_local_origin_alias(self):
+        base = self.client.make_url("/")
+        origin = f"{base.scheme}://10.0.2.2:{base.port}"
+        resp = await self.client.get(
+            "/api/memory/contradictions?only_open=1&limit=5",
+            headers={"Origin": origin},
+        )
+        self.assertEqual(resp.status, 200)
+
     async def test_json_routes_require_application_json_content_type(self):
         resp = await self.client.post(
             "/api/memory/pins",

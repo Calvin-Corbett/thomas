@@ -7,7 +7,7 @@ import json
 import os
 import urllib.request
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -46,12 +46,12 @@ def node(ctx: click.Context, as_json: bool) -> None:
 @click.option("--force", is_flag=True, help="Overwrite existing install metadata.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
 def node_install(
-    host: Optional[str],
-    port: Optional[int],
+    host: str | None,
+    port: int | None,
     tls: bool,
-    tls_fingerprint: Optional[str],
-    node_id: Optional[str],
-    display_name: Optional[str],
+    tls_fingerprint: str | None,
+    node_id: str | None,
+    display_name: str | None,
     runtime: str,
     force: bool,
     as_json: bool,
@@ -135,7 +135,7 @@ def _resolve_node_registry() -> dict[str, str]:
                             out[str(key)] = url
                 if out:
                     return out
-        except Exception:
+        except json.JSONDecodeError:
             pass
 
     candidates: list[Path] = []
@@ -160,7 +160,7 @@ def _resolve_node_registry() -> dict[str, str]:
                             out[str(key)] = url
                 if out:
                     return out
-        except Exception:
+        except json.JSONDecodeError:
             continue
     return {}
 
@@ -195,8 +195,8 @@ def _invoke_node_action_http(
     node: str,
     command: str,
     params: dict[str, Any],
-    timeout_ms: Optional[int],
-    idempotency_key: Optional[str],
+    timeout_ms: int | None,
+    idempotency_key: str | None,
 ) -> dict[str, Any]:
     endpoint = _resolve_node_endpoint(node)
     action_path = str(os.environ.get("THOMAS_NODE_INVOKE_PATH") or "/actions/invoke").strip() or "/actions/invoke"
@@ -248,7 +248,9 @@ def _invoke_node_action_http(
     type=int,
     help="Device-side location timeout in milliseconds.",
 )
-@click.option("--invoke-timeout", "invoke_timeout_ms", default=None, type=int, help="Gateway invoke timeout in milliseconds.")
+@click.option(
+    "--invoke-timeout", "invoke_timeout_ms", default=None, type=int, help="Gateway invoke timeout in milliseconds."
+)
 @click.option("--idempotency-key", default="", help="Optional idempotency key for node invoke.")
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
 def nodes_location(
@@ -256,7 +258,7 @@ def nodes_location(
     accuracy: str,
     max_age_ms: int,
     location_timeout_ms: int,
-    invoke_timeout_ms: Optional[int],
+    invoke_timeout_ms: int | None,
     idempotency_key: str,
     as_json: bool,
 ) -> None:
@@ -272,10 +274,10 @@ def nodes_location(
             self,
             node: str,
             command: str,
-            params: Optional[dict[str, Any]] = None,
+            params: dict[str, Any] | None = None,
             *,
-            timeout_ms: Optional[int] = None,
-            idempotency_key: Optional[str] = None,
+            timeout_ms: int | None = None,
+            idempotency_key: str | None = None,
         ) -> dict[str, Any]:
             return _invoke_node_action_http(
                 node=node,
@@ -346,13 +348,13 @@ def nodes_pending_approvals(state_dir: str, as_json: bool) -> None:
         ERROR_INVALID_INPUT,
         NodesPendingApprovalsError,
         NodesPendingApprovalsInput,
+    )
+    from thomas.nodes.p046_nodes_pending_approvals import (
         nodes_pending_approvals as _nodes_pending_approvals,
     )
 
     try:
-        result = _nodes_pending_approvals(
-            NodesPendingApprovalsInput(state_dir=(str(state_dir).strip() or None))
-        )
+        result = _nodes_pending_approvals(NodesPendingApprovalsInput(state_dir=(str(state_dir).strip() or None)))
         payload = {"ok": True, **result.to_dict()}
     except NodesPendingApprovalsError as exc:
         payload = {
@@ -402,4 +404,3 @@ register_pack_proxy_commands(
     family_hint="nodes",
     include_prefix="nodes_",
 )
-

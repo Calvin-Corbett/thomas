@@ -10,15 +10,14 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional, Sequence
 
 from thomas.nodes.p027_node_host_config_model import (
     NodeHostConfigModelError,
     NodeHostConfigModelRequest,
     node_host_config_model,
 )
-
 
 COMMAND_GROUP = "nodes"
 COMMAND_NAME = "host-config-model"
@@ -88,7 +87,7 @@ def run_from_args(args: argparse.Namespace) -> int:
     return 0
 
 
-def cli(argv: Optional[Sequence[str]] = None) -> int:
+def cli(argv: Sequence[str] | None = None) -> int:
     """Entrypoint usable by tests."""
 
     parser = argparse.ArgumentParser(prog=f"{COMMAND_GROUP} {COMMAND_NAME}")
@@ -103,7 +102,7 @@ def register(app: object) -> None:  # pragma: no cover
 
     try:
         import typer  # type: ignore
-    except Exception:
+    except ImportError:
         return
 
     if not hasattr(app, "command"):
@@ -112,9 +111,7 @@ def register(app: object) -> None:  # pragma: no cover
     @app.command(COMMAND_NAME, help=HELP)  # type: ignore[misc]
     def _cmd(
         json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),  # type: ignore[name-defined]
-        config_path: Optional[Path] = typer.Option(
-            None, "--config", help="Optional path to a config file."
-        ),
+        config_path: Path | None = typer.Option(None, "--config", help="Optional path to a config file."),
         include_current: bool = typer.Option(
             False, "--include-current", help="Include current nodeHost settings from --config."
         ),
@@ -152,12 +149,12 @@ COMMAND = COMMAND_SPEC
 COMMANDS = [COMMAND_SPEC]
 
 
-def _try_build_parity_command() -> Optional[object]:
+def _try_build_parity_command() -> object | None:
     """Best-effort bridge into Thomas' parity command registry."""
 
     try:
         from thomas.cli import parity_compat  # type: ignore
-    except Exception:
+    except ImportError:
         return None
 
     import inspect
@@ -168,7 +165,7 @@ def _try_build_parity_command() -> Optional[object]:
             continue
         try:
             sig = inspect.signature(cls)
-        except Exception:
+        except ImportError:
             continue
 
         kwargs: dict[str, object] = {}
@@ -186,7 +183,7 @@ def _try_build_parity_command() -> Optional[object]:
 
         try:
             return cls(**kwargs)
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             continue
 
     return None

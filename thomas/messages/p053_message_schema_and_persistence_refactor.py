@@ -18,10 +18,11 @@ import os
 import re
 import sqlite3
 import uuid
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, TypedDict
+from typing import Any, TypedDict
 
 # ---------------------------
 # Public schema + contracts
@@ -160,7 +161,7 @@ class ThomasMessageError(RuntimeError):
 
     code: str
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = dict(details or {})
@@ -218,7 +219,7 @@ def normalize_message(
     if version_raw is not None:
         try:
             version_int = int(version_raw)
-        except Exception as e:  # pragma: no cover
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
             raise MessageValidationError("invalid_input", "schema_version must be an integer") from e
         if version_int != MESSAGE_SCHEMA_VERSION:
             raise MessageValidationError(
@@ -314,7 +315,9 @@ def _parse_timestamp(value: Any) -> datetime:
         try:
             dt = datetime.fromisoformat(s)
         except ValueError as e:
-            raise MessageValidationError("invalid_input", "created_at/timestamp must be ISO8601 or epoch seconds") from e
+            raise MessageValidationError(
+                "invalid_input", "created_at/timestamp must be ISO8601 or epoch seconds"
+            ) from e
         if dt.tzinfo is None:
             dt = dt.replace(tzinfo=timezone.utc)
         return dt.astimezone(timezone.utc)
@@ -419,7 +422,7 @@ class MessageStore:
         existing = self.get(record.message_id)
         return (existing if existing is not None else record), False
 
-    def get(self, message_id: str) -> Optional[MessageRecord]:
+    def get(self, message_id: str) -> MessageRecord | None:
         if not isinstance(message_id, str) or not message_id:
             raise MessageValidationError("invalid_input", "message_id must be a non-empty string")
         try:
@@ -439,7 +442,7 @@ class MessageStore:
             return None
         return _row_to_record(row)
 
-    def list(self, *, limit: int = 100, channel: Optional[str] = None) -> list[MessageRecord]:
+    def list(self, *, limit: int = 100, channel: str | None = None) -> list[MessageRecord]:
         limit = int(limit)
         if limit <= 0:
             raise MessageValidationError("invalid_input", "limit must be a positive integer")
@@ -510,8 +513,8 @@ def _row_to_record(row: Sequence[Any]) -> MessageRecord:
 
 def resolve_store_path(
     *,
-    explicit_path: Optional[os.PathLike[str] | str] = None,
-    env: Optional[Mapping[str, str]] = None,
+    explicit_path: os.PathLike[str] | str | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> Path:
     """Resolve message store path from config/env.
 
@@ -543,7 +546,9 @@ def resolve_store_path(
     )
 
 
-def ingest_and_persist(payload: Mapping[str, Any], *, store_path: Optional[os.PathLike[str] | str] = None) -> PersistedMessage:
+def ingest_and_persist(
+    payload: Mapping[str, Any], *, store_path: os.PathLike[str] | str | None = None
+) -> PersistedMessage:
     """Normalize and persist an inbound payload."""
     record = normalize_message(payload)
     db_path = resolve_store_path(explicit_path=store_path)
@@ -552,13 +557,15 @@ def ingest_and_persist(payload: Mapping[str, Any], *, store_path: Optional[os.Pa
     return PersistedMessage(record=stored, store_path=str(db_path), inserted=inserted)
 
 
-def ingest_and_persist_safe(payload: Mapping[str, Any], *, store_path: Optional[os.PathLike[str] | str] = None) -> dict[str, Any]:
+def ingest_and_persist_safe(
+    payload: Mapping[str, Any], *, store_path: os.PathLike[str] | str | None = None
+) -> dict[str, Any]:
     """Safe wrapper that returns a machine-readable dict instead of raising."""
     try:
         return ingest_and_persist(payload, store_path=store_path).to_dict()
     except ThomasMessageError as e:
         return e.to_dict()
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return {"ok": False, "error": {"code": "internal_error", "message": "unexpected error"}}
 
 
@@ -569,9 +576,9 @@ persist_message_safe = ingest_and_persist_safe
 
 def list_messages(
     *,
-    store_path: Optional[os.PathLike[str] | str] = None,
+    store_path: os.PathLike[str] | str | None = None,
     limit: int = 100,
-    channel: Optional[str] = None,
+    channel: str | None = None,
 ) -> list[MessageRecord]:
     db_path = resolve_store_path(explicit_path=store_path)
     store = MessageStore(MessageStoreConfig(db_path=db_path))
@@ -580,9 +587,9 @@ def list_messages(
 
 def list_messages_safe(
     *,
-    store_path: Optional[os.PathLike[str] | str] = None,
+    store_path: os.PathLike[str] | str | None = None,
     limit: int = 100,
-    channel: Optional[str] = None,
+    channel: str | None = None,
 ) -> dict[str, Any]:
     try:
         records = list_messages(store_path=store_path, limit=limit, channel=channel)
@@ -593,5 +600,5 @@ def list_messages_safe(
         }
     except ThomasMessageError as e:
         return e.to_dict()
-    except Exception:
+    except (KeyError, ValueError, AttributeError):
         return {"ok": False, "error": {"code": "internal_error", "message": "unexpected error"}}

@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 import json
-import os
 import sys
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from thomas.channels.p081_channel_logout_command import (
     ChannelLogoutError,
@@ -52,10 +51,12 @@ def _register_typer_command(app: Any, typer_mod: Any) -> None:
     def logout(
         channel: str = Argument(..., help="Channel identifier, e.g. telegram."),
         json_output: bool = Option(False, "--json", help="Emit machine-readable JSON."),
-        config_root: Optional[Path] = Option(None, "--config-root", help="Override Thomas config directory."),
+        config_root: Path | None = Option(None, "--config-root", help="Override Thomas config directory."),
         dry_run: bool = Option(False, "--dry-run", help="Report what would be removed without changing anything."),
         hooks: bool = Option(False, "--hooks", help="Run integration cleanup hooks (best-effort)."),
-        no_integration_hints: bool = Option(False, "--no-integration-hints", help="Disable integration hint discovery."),
+        no_integration_hints: bool = Option(
+            False, "--no-integration-hints", help="Disable integration hint discovery."
+        ),
     ) -> None:
         try:
             result = logout_channel(
@@ -124,10 +125,10 @@ def _emit_error(error: ChannelLogoutError, *, json_output: bool) -> None:
     sys.stderr.write(f"ERROR [{error.code}]: {error.message}\n")
 
 
-def _safe_import(name: str) -> Optional[Any]:
+def _safe_import(name: str) -> Any | None:
     try:
         return __import__(name)
-    except Exception:
+    except ImportError:
         return None
 
 

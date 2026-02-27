@@ -38,10 +38,11 @@ import os
 import re
 import secrets
 import tempfile
+from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Literal, Mapping, Optional
+from typing import Any, Literal
 
 TokenAction = Literal["rotate", "revoke"]
 
@@ -55,13 +56,13 @@ _NODE_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 class NodesTokenError(Exception):
     """Deterministic, machine-readable error for node token operations."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Dict[str, Any]] = None) -> None:
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "message": self.message, "details": self.details}
 
     @property
@@ -84,7 +85,7 @@ class NodesTokenRotateAndRevokeRequest:
 
     action: TokenAction
     node_id: str
-    store_path: Optional[Path] = None
+    store_path: Path | None = None
 
 
 @dataclass(frozen=True)
@@ -95,13 +96,13 @@ class NodesTokenRotateAndRevokeResult:
     action: TokenAction
     node_id: str
     status: Literal["rotated", "revoked", "no_active_token", "error"]
-    token: Optional[str] = None
-    token_fingerprint: Optional[str] = None
-    message: Optional[str] = None
-    error: Optional[Dict[str, Any]] = None
+    token: str | None = None
+    token_fingerprint: str | None = None
+    message: str | None = None
+    error: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
-        payload: Dict[str, Any] = {
+    def to_dict(self) -> dict[str, Any]:
+        payload: dict[str, Any] = {
             "ok": self.ok,
             "action": self.action,
             "node_id": self.node_id,
@@ -118,7 +119,7 @@ class NodesTokenRotateAndRevokeResult:
         return payload
 
 
-REQUEST_JSON_SCHEMA: Dict[str, Any] = {
+REQUEST_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["action", "node_id"],
     "properties": {
@@ -128,7 +129,7 @@ REQUEST_JSON_SCHEMA: Dict[str, Any] = {
     "additionalProperties": True,
 }
 
-RESPONSE_JSON_SCHEMA: Dict[str, Any] = {
+RESPONSE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["ok", "action", "node_id", "status"],
     "properties": {
@@ -145,7 +146,7 @@ RESPONSE_JSON_SCHEMA: Dict[str, Any] = {
 }
 
 
-def _now_iso(now: Optional[datetime] = None) -> str:
+def _now_iso(now: datetime | None = None) -> str:
     dt = now or datetime.now(timezone.utc)
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=timezone.utc)
@@ -186,7 +187,7 @@ class NodesTokenStore:
     def __init__(self, path: Path) -> None:
         self.path = path
 
-    def load(self, *, create: bool) -> Dict[str, Any]:
+    def load(self, *, create: bool) -> dict[str, Any]:
         if self.path.exists():
             if self.path.is_dir():
                 raise NodesTokenError(
@@ -258,7 +259,7 @@ class NodesTokenStore:
             )
 
         tmp_dir = self.path.parent if self.path.parent.exists() else Path(tempfile.gettempdir())
-        tmp_name: Optional[str] = None
+        tmp_name: str | None = None
         try:
             with tempfile.NamedTemporaryFile("w", encoding="utf-8", dir=str(tmp_dir), delete=False) as f:
                 json.dump(dict(data), f, indent=2, sort_keys=True)
@@ -282,8 +283,8 @@ class NodesTokenStore:
 def rotate_node_token(
     node_id: str,
     *,
-    store_path: Optional[Path] = None,
-    now: Optional[datetime] = None,
+    store_path: Path | None = None,
+    now: datetime | None = None,
 ) -> NodesTokenRotateAndRevokeResult:
     """Rotate a node token: revoke any active token and create a new one."""
 
@@ -293,8 +294,8 @@ def rotate_node_token(
     store = NodesTokenStore(path)
     state = store.load(create=True)
 
-    nodes: Dict[str, Any] = state.setdefault("nodes", {})
-    node: Dict[str, Any] = nodes.setdefault(node_id, {})
+    nodes: dict[str, Any] = state.setdefault("nodes", {})
+    node: dict[str, Any] = nodes.setdefault(node_id, {})
     tokens = node.setdefault("tokens", [])
 
     if not isinstance(tokens, list):
@@ -345,8 +346,8 @@ def rotate_node_token(
 def revoke_node_token(
     node_id: str,
     *,
-    store_path: Optional[Path] = None,
-    now: Optional[datetime] = None,
+    store_path: Path | None = None,
+    now: datetime | None = None,
 ) -> NodesTokenRotateAndRevokeResult:
     """Revoke the active token for a node.
 
@@ -439,8 +440,8 @@ def revoke_node_token(
 def execute(
     request: NodesTokenRotateAndRevokeRequest | Mapping[str, Any],
     *,
-    store_path: Optional[Path] = None,
-    now: Optional[datetime] = None,
+    store_path: Path | None = None,
+    now: datetime | None = None,
 ) -> NodesTokenRotateAndRevokeResult:
     """Dispatch helper used by servers/CLIs.
 
@@ -465,7 +466,7 @@ def execute(
     return revoke_node_token(typed.node_id, store_path=path, now=now)
 
 
-def run(payload: Mapping[str, Any], **kwargs: Any) -> Dict[str, Any]:
+def run(payload: Mapping[str, Any], **kwargs: Any) -> dict[str, Any]:
     """Legacy-friendly wrapper that returns JSON-safe types.
 
     This wrapper never raises NodesTokenError; it converts it to a structured error payload.
@@ -504,7 +505,7 @@ async def aiohttp_handler(request: Any) -> Any:
 
     try:
         payload = await request.json()
-    except Exception as e:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
         err = NodesTokenError("invalid_request", "request body must be JSON", details={"error": str(e)})
         return web.json_response({"ok": False, "error": err.to_dict()}, status=err.http_status)
 
@@ -516,7 +517,7 @@ async def aiohttp_handler(request: Any) -> Any:
             candidate = app.get("nodes_tokens_path") or app.get(ENV_STORE_PATH)
             if isinstance(candidate, (str, Path)):
                 store_path = Path(candidate)
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         store_path = None
 
     try:

@@ -32,7 +32,7 @@ def read_json(path: Path, default: Any) -> Any:
         return default
     try:
         return json.loads(path.read_text(encoding="utf-8"))
-    except Exception:
+    except ImportError:
         return default
 
 
@@ -166,7 +166,7 @@ def skill_row_key(name: str, path: str) -> str:
 def read_skill_description(skill_md: Path) -> str:
     try:
         lines = skill_md.read_text(encoding="utf-8", errors="replace").splitlines()
-    except Exception:
+    except (OSError, FileNotFoundError):
         return ""
     for line in lines:
         text = str(line or "").strip()
@@ -197,7 +197,7 @@ def discover_skill_roots(config: AppConfig, *, include_root: str = "") -> list[P
     for root in roots:
         try:
             resolved = root.resolve()
-        except Exception:
+        except (OSError, FileNotFoundError):
             resolved = root
         key = str(resolved).lower()
         if key in seen:
@@ -216,7 +216,7 @@ def discover_skills(config: AppConfig, *, include_root: str = "") -> tuple[list[
     for root in roots:
         try:
             files = list(root.rglob("SKILL.md"))
-        except Exception:
+        except (OSError, FileNotFoundError):
             files = []
         for skill_md in files:
             parent = skill_md.parent
@@ -455,19 +455,19 @@ def http_post_json(
         parsed: Any
         try:
             parsed = json.loads(raw) if raw else {}
-        except Exception:
+        except json.JSONDecodeError:
             parsed = {"raw": raw[:2000]}
         return {"ok": 200 <= status < 300, "status": status, "payload": parsed}
     except urllib.error.HTTPError as e:
         body_text = ""
         try:
             body_text = e.read().decode("utf-8", errors="replace")
-        except Exception:
+        except json.JSONDecodeError:
             body_text = ""
         parsed: Any
         try:
             parsed = json.loads(body_text) if body_text else {}
-        except Exception:
+        except json.JSONDecodeError:
             parsed = {"raw": body_text[:2000]}
         return {"ok": False, "status": int(getattr(e, "code", 0) or 0), "payload": parsed, "error": str(e)}
     except Exception as e:
@@ -594,7 +594,9 @@ def compat_emit(command: str, action: str, note: str, target: str, as_json: bool
     if command == "security" and action == "audit":
         from thomas.security.security_audit import run_security_audit
 
-        repo_root = Path(target).expanduser().resolve() if str(target or "").strip() else Path(__file__).resolve().parents[2]
+        repo_root = (
+            Path(target).expanduser().resolve() if str(target or "").strip() else Path(__file__).resolve().parents[2]
+        )
         audit = run_security_audit(repo_root, include_incident_drill=False)
         payload["ok"] = bool(audit.get("ok", False))
         payload["summary"] = audit.get("summary", {})

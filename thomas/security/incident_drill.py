@@ -1,23 +1,22 @@
-﻿"""Incident response drill runner for security program maturity."""
+"""Incident response drill runner for security program maturity."""
 
 from __future__ import annotations
 
 import subprocess
 import sys
-from datetime import UTC, datetime
+from collections.abc import Callable, Sequence
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Sequence, Tuple
+from typing import Any
 
-Runner = Callable[[Sequence[str], Path], Tuple[int, str, str]]
-
+Runner = Callable[[Sequence[str], Path], tuple[int, str, str]]
 
 
 def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
-
-def _default_runner(cmd: Sequence[str], cwd: Path) -> Tuple[int, str, str]:
+def _default_runner(cmd: Sequence[str], cwd: Path) -> tuple[int, str, str]:
     completed = subprocess.run(
         list(cmd),
         cwd=str(cwd),
@@ -28,16 +27,15 @@ def _default_runner(cmd: Sequence[str], cwd: Path) -> Tuple[int, str, str]:
     return int(completed.returncode), str(completed.stdout or ""), str(completed.stderr or "")
 
 
-
 def run_security_incident_drill(
     repo_root: Path,
     *,
     scenario: str = "web_api",
     include_command_checks: bool = True,
     runner: Runner = _default_runner,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     started = _now_iso()
-    steps: List[Dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
 
     required_artifacts = [
         ("threat_model", repo_root / "docs" / "THREAT_MODEL_WEB_API.md"),

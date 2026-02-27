@@ -4,7 +4,7 @@ import queue
 import threading
 import time
 from dataclasses import dataclass
-from typing import Any, Dict
+from typing import Any
 
 import requests
 
@@ -12,8 +12,8 @@ import requests
 @dataclass
 class SendJob:
     url: str
-    json_payload: Dict[str, Any]
-    headers: Dict[str, str]
+    json_payload: dict[str, Any]
+    headers: dict[str, str]
     timeout_s: float
 
 
@@ -24,7 +24,7 @@ class SenderQueue:
     """
 
     def __init__(self, maxsize: int = 400):
-        self.q: "queue.Queue[SendJob]" = queue.Queue(maxsize=maxsize)
+        self.q: queue.Queue[SendJob] = queue.Queue(maxsize=maxsize)
         self._stop = threading.Event()
         self._t = threading.Thread(target=self._worker, daemon=True)
         self._t.start()
@@ -58,10 +58,10 @@ class SenderQueue:
                         if summary or action:
                             print("\n[Thomas] Summary:", summary)
                             print("[Thomas] Suggestion:", action)
-                    except Exception:
+                    except (ConnectionError, TimeoutError):
                         pass
                     break
-                except Exception:
+                except (ConnectionError, TimeoutError):
                     time.sleep(backoff)
                     backoff = min(backoff * 2.0, 10.0)
 

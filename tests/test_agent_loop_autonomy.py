@@ -85,14 +85,14 @@ def test_autonomy_level_4_keeps_casual_turns_lightweight() -> None:
     start = _collect_start("hey how are you", autonomy_level=4)
     assert start is not None
     assert start.data.get("tools_policy") == "never"
-    assert str(start.data.get("autonomy_name") or "").lower() == "full auto"
+    assert str(start.data.get("autonomy_name") or "").lower() == "agent"
 
 
 def test_autonomy_level_4_forces_full_auto_on_action_turns() -> None:
     start = _collect_start("fix this bug in app.py", autonomy_level=4)
     assert start is not None
     assert start.data.get("tools_policy") == "always"
-    assert str(start.data.get("autonomy_name") or "").lower() == "full auto"
+    assert str(start.data.get("autonomy_name") or "").lower() == "agent"
 
 
 def test_autonomy_level_2_keeps_guarded_auto_policy() -> None:
@@ -136,7 +136,4 @@ def test_ack_turn_detection_ignores_explanatory_continue_sentence() -> None:
     tools.register(_DummyTool())
     agent = AgentLoop(cfg, _DummyLocalLLM(), tools, conversation=[], autonomy_level=4)
     assert agent._is_ack_turn("continue") is True
-    assert (
-        agent._is_ack_turn("continue about what I said before, I am just talking to you right now")
-        is False
-    )
+    assert agent._is_ack_turn("continue about what I said before, I am just talking to you right now") is False

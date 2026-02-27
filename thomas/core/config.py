@@ -10,7 +10,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -18,7 +18,87 @@ else:
     try:
         import tomllib  # type: ignore[import]
     except ModuleNotFoundError:
-        import tomli as tomllib  # type: ignore[import,no-redef]
+        try:
+            import tomli as tomllib  # type: ignore[import,no-redef]
+        except ModuleNotFoundError:
+            # Minimal TOML parser fallback for Python <3.11 without tomli
+            import json as _json
+            import re as _re
+
+            class _MinimalTOML:
+                """Bare-minimum TOML parser for thomas.toml configs."""
+
+                @staticmethod
+                def loads(s: str) -> dict:
+                    result: dict = {}
+                    current: dict = result
+                    for raw_line in s.split("\n"):
+                        line = raw_line.strip()
+                        if not line or line.startswith("#"):
+                            continue
+                        # Table header [section] or [section.sub]
+                        m = _re.match(r"^\[([^\]]+)\]$", line)
+                        if m:
+                            keys = m.group(1).split(".")
+                            current = result
+                            for k in keys:
+                                current = current.setdefault(k.strip(), {})
+                            continue
+                        # Key = value
+                        if "=" in line:
+                            key, _, val = line.partition("=")
+                            key = key.strip()
+                            val = val.strip()
+                            # Strip inline comments (# ...) outside quotes
+                            if not val.startswith('"') and not val.startswith("'") and not val.startswith("["):
+                                comment_idx = val.find("#")
+                                if comment_idx >= 0:
+                                    val = val[:comment_idx].strip()
+                            # Booleans
+                            if val == "true":
+                                current[key] = True
+                            elif val == "false":
+                                current[key] = False
+                            # Integers
+                            elif _re.match(r"^-?\d+$", val):
+                                current[key] = int(val)
+                            # Floats
+                            elif _re.match(r"^-?(\d+\.?\d*|\d*\.\d+)$", val) and "." in val:
+                                current[key] = float(val)
+                            # Quoted strings
+                            elif (val.startswith('"') and val.endswith('"')) or (
+                                val.startswith("'") and val.endswith("'")
+                            ):
+                                current[key] = val[1:-1]
+                            # Arrays (simple)
+                            elif val.startswith("["):
+                                try:
+                                    current[key] = _json.loads(val)
+                                except _json.JSONDecodeError:
+                                    current[key] = val
+                            else:
+                                current[key] = val
+                    return result
+
+                @staticmethod
+                def load(fp) -> dict:
+                    data = fp.read()
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8")
+                    return _MinimalTOML.loads(data)
+
+            # Create a module-like namespace
+            class _tomllib_compat:
+                loads = staticmethod(_MinimalTOML.loads)
+
+                @staticmethod
+                def load(fp):
+                    data = fp.read()
+                    if isinstance(data, bytes):
+                        data = data.decode("utf-8")
+                    return _MinimalTOML.loads(data)
+
+            tomllib = _tomllib_compat  # type: ignore[assignment]
 
 
 @dataclass
@@ -35,8 +115,8 @@ class ModelConfig:
     api_key_prefix: str = "Bearer "
     chat_path: str = "/chat/completions"
     models_path: str = "/models"
-    extra_headers: Dict[str, str] = field(default_factory=dict)
-    query: Dict[str, str] = field(default_factory=dict)
+    extra_headers: dict[str, str] = field(default_factory=dict)
+    query: dict[str, str] = field(default_factory=dict)
     model: str = "qwen2.5-coder:7b"
     max_tokens: int = 4096
     context_window: int = 8192
@@ -77,13 +157,20 @@ class EmbedConfig:
     load_on_demand: bool = True
     batch_size: int = 64
 
+    def validate(self) -> list[str]:
+        errors: list[str] = []
+        valid_devices = {"auto", "cpu", "cuda", ""}
+        if self.device not in valid_devices:
+            errors.append(f"embed.device must be one of {valid_devices}, got '{self.device}'")
+        return errors
+
 
 @dataclass
 class MemoryConfig:
     """Configuration for the memory engine."""
 
     root: str = "./runtime"
-    context_budget: int = 12000
+    context_budget: int = 12000  # Default; TOML may override (e.g., 4000 for smaller models)
     mode: str = "auto"
 
     @property
@@ -183,7 +270,7 @@ class QualityConfig:
 class AppConfig:
     """Top-level application configuration."""
 
-    models: Dict[str, ModelConfig] = field(default_factory=dict)
+    models: dict[str, ModelConfig] = field(default_factory=dict)
     embed: EmbedConfig = field(default_factory=EmbedConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
     tools: ToolsConfig = field(default_factory=ToolsConfig)
@@ -194,8 +281,19 @@ class AppConfig:
     unknown_core_keys: list[str] = field(default_factory=list)
     default_model: str = "local"
     max_agent_iterations: int = 10
+    environment: str = "development"  # "development" or "production"
 
-    def get_model(self, name: Optional[str] = None) -> ModelConfig:
+    @property
+    def is_production(self) -> bool:
+        """Return True when running in production mode."""
+        return self.environment == "production"
+
+    @property
+    def is_development(self) -> bool:
+        """Return True when running in development mode."""
+        return self.environment == "development"
+
+    def get_model(self, name: str | None = None) -> ModelConfig:
         """Get a model config by name, falling back to default."""
         key = name or self.default_model
         if key not in self.models:
@@ -239,12 +337,11 @@ class AppConfig:
         for m in self.models.values():
             errors.extend(m.validate())
         if self.default_model and self.default_model not in self.models:
-            errors.append(
-                f"default_model '{self.default_model}' not in models: "
-                f"{list(self.models.keys())}"
-            )
+            errors.append(f"default_model '{self.default_model}' not in models: " f"{list(self.models.keys())}")
         if self.max_agent_iterations < 1:
             errors.append("max_agent_iterations must be >= 1")
+        if self.max_agent_iterations > 100:
+            errors.append("max_agent_iterations must be <= 100")
         if self.failover.cooldown_seconds < 0:
             errors.append("failover.cooldown_seconds must be >= 0")
         for name in self.failover.profiles:
@@ -253,6 +350,7 @@ class AppConfig:
                     f"failover.profiles contains unknown model profile '{name}'. "
                     f"Available: {list(self.models.keys())}"
                 )
+        errors.extend(self.embed.validate())
         errors.extend(self.server.validate())
         errors.extend(self.quality.validate())
         for key in self.unknown_core_keys:
@@ -260,7 +358,7 @@ class AppConfig:
         return errors
 
 
-def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
+def _env_override(data: dict[str, Any], prefix: str = "THOMAS") -> None:
     """Apply environment variable overrides.
 
     Examples:
@@ -273,7 +371,7 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
       THOMAS_MEMORY_ROOT=./runtime
     """
     model_fields = set(getattr(ModelConfig, "__dataclass_fields__", {}).keys()) - {"name"}
-    core_section_fields: Dict[str, set[str]] = {
+    core_section_fields: dict[str, set[str]] = {
         "memory": set(getattr(MemoryConfig, "__dataclass_fields__", {}).keys()),
         "tools": set(getattr(ToolsConfig, "__dataclass_fields__", {}).keys()),
         "embed": set(getattr(EmbedConfig, "__dataclass_fields__", {}).keys()),
@@ -340,25 +438,39 @@ def _env_override(data: Dict[str, Any], prefix: str = "THOMAS") -> None:
             continue
 
 
-def _coerce_types(data: Dict[str, Any]) -> None:
+def _auto_discover_bool_fields() -> set:
+    """Discover all boolean fields across config dataclasses automatically.
+
+    This prevents the bug where adding a new bool field to a dataclass
+    would silently not coerce from env-var strings to bool.
+    """
+    import dataclasses as _dc
+
+    discovered: set = set()
+    for cls in (ToolsConfig, MemoryConfig, ServerConfig, QualityConfig, FailoverConfig):
+        for f in _dc.fields(cls):
+            if f.type == "bool" or f.type is bool or str(f.type) == "bool":
+                discovered.add(f.name)
+    return discovered
+
+
+def _coerce_types(data: dict[str, Any]) -> None:
     """Coerce string values from env vars to appropriate types."""
-    int_fields = {"max_tokens", "context_window", "context_budget", "shell_timeout",
-                  "max_file_size", "max_agent_iterations", "batch_size", "cooldown_seconds",
-                  "rate_limit_max_requests", "rate_limit_window_seconds", "max_auto_retries"}
-    float_fields = {"temperature", "top_p", "timeout_s"}
-    bool_fields = {
-        "allow_shell",
-        "load_on_demand",
-        "enabled",
-        "chat_auto_failover",
-        "fallback_on_auth_error",
-        "allow_unauthenticated_version",
-        "rate_limit_enabled",
-        "enforce",
-        "require_verification_for_coding",
-        "require_tests_for_code_edits",
-        "require_monolith_guard_for_coding",
+    int_fields = {
+        "max_tokens",
+        "context_window",
+        "context_budget",
+        "shell_timeout",
+        "max_file_size",
+        "max_agent_iterations",
+        "batch_size",
+        "cooldown_seconds",
+        "rate_limit_max_requests",
+        "rate_limit_window_seconds",
+        "max_auto_retries",
     }
+    float_fields = {"temperature", "top_p", "timeout_s"}
+    bool_fields = _auto_discover_bool_fields()
 
     for key, val in list(data.items()):
         if isinstance(val, dict):
@@ -374,7 +486,7 @@ def _coerce_types(data: Dict[str, Any]) -> None:
                 data[key] = [x.strip() for x in val.split(",") if x.strip()]
 
 
-def _build_model_config(name: str, d: Dict[str, Any]) -> ModelConfig:
+def _build_model_config(name: str, d: dict[str, Any]) -> ModelConfig:
     return ModelConfig(
         name=name,
         provider=d.get("provider", "openai_compat"),
@@ -396,7 +508,7 @@ def _build_model_config(name: str, d: Dict[str, Any]) -> ModelConfig:
     )
 
 
-def _collect_unknown_core_keys(data: Dict[str, Any]) -> list[str]:
+def _collect_unknown_core_keys(data: dict[str, Any]) -> list[str]:
     unknown: list[str] = []
     top_allowed = {
         "models",
@@ -474,7 +586,7 @@ def _collect_unknown_core_keys(data: Dict[str, Any]) -> list[str]:
     return sorted(set(unknown))
 
 
-def load_config(path: Optional[Path] = None) -> AppConfig:
+def load_config(path: Path | None = None) -> AppConfig:
     """Load configuration from TOML file with env var overrides.
 
     Search order:
@@ -491,7 +603,7 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
             path = Path("thomas.toml")
     resolved_path = path.resolve()
 
-    data: Dict[str, Any] = {}
+    data: dict[str, Any] = {}
     if path.exists():
         with open(path, "rb") as f:
             data = tomllib.load(f)
@@ -501,14 +613,18 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
     unknown_core_keys = _collect_unknown_core_keys(data)
 
     # Build model profiles
-    models: Dict[str, ModelConfig] = {}
+    models: dict[str, ModelConfig] = {}
     for name, mdata in data.get("models", {}).items():
         if isinstance(mdata, dict):
             models[name] = _build_model_config(name, mdata)
 
     # If no models defined, create a default local profile
     if not models:
-        models["local"] = ModelConfig(name="local")
+        models["local"] = ModelConfig(
+            name="local",
+            base_url="http://127.0.0.1:11434/v1",
+            model="qwen2.5-coder:7b",
+        )
 
     # Build embed config
     embed_data = data.get("embed", {})
@@ -576,16 +692,15 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         enabled=bool(quality_data.get("enabled", True)),
         enforce=bool(quality_data.get("enforce", True)),
         max_auto_retries=int(quality_data.get("max_auto_retries", 1) or 0),
-        require_verification_for_coding=bool(
-            quality_data.get("require_verification_for_coding", True)
-        ),
-        require_tests_for_code_edits=bool(
-            quality_data.get("require_tests_for_code_edits", False)
-        ),
-        require_monolith_guard_for_coding=bool(
-            quality_data.get("require_monolith_guard_for_coding", True)
-        ),
+        require_verification_for_coding=bool(quality_data.get("require_verification_for_coding", True)),
+        require_tests_for_code_edits=bool(quality_data.get("require_tests_for_code_edits", False)),
+        require_monolith_guard_for_coding=bool(quality_data.get("require_monolith_guard_for_coding", True)),
     )
+
+    # Determine environment
+    environment = os.environ.get("THOMAS_ENV", "development").strip().lower()
+    if environment not in ("development", "production"):
+        environment = "development"
 
     cfg = AppConfig(
         models=models,
@@ -599,7 +714,26 @@ def load_config(path: Optional[Path] = None) -> AppConfig:
         unknown_core_keys=unknown_core_keys,
         default_model=data.get("default_model", "local"),
         max_agent_iterations=data.get("max_agent_iterations", 10),
+        environment=environment,
     )
+
+    # Apply production-mode safety overrides.
+    # These enforce secure defaults that cannot be weakened by TOML alone.
+    allow_remote_production = str(os.environ.get("THOMAS_ALLOW_REMOTE_PRODUCTION", "")).strip().lower() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+    if cfg.is_production:
+        cfg.tools.allow_shell = False
+        cfg.quality.enabled = True
+        cfg.quality.enforce = True
+
+        if not allow_remote_production:
+            cfg.server.access_mode = "local"
+
     # Non-schema runtime attribute used by CLI/reporting surfaces.
-    setattr(cfg, "config_path", resolved_path)
+    cfg.config_path = resolved_path
     return cfg

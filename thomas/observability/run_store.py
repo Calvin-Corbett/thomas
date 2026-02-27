@@ -1,4 +1,3 @@
-
 """Thomas Observability: persistent run store for time-travel debugging.
 
 Design goals:
@@ -34,19 +33,21 @@ import sqlite3
 import threading
 import time
 import uuid
+from collections.abc import Iterator
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any
 
 MAX_RUNS: int = 500
 MAX_DB_BYTES: int = 200 * 1024 * 1024  # ~200MB
 BUSY_TIMEOUT_MS: int = 8000
 ENABLE_FTS5: bool = True
 
-_DB_PATH: Optional[Path] = None
+_DB_PATH: Path | None = None
 _LOCK = threading.Lock()
-_ACTIVE_WRITERS: set["ThreadedRunWriter"] = set()
+_ACTIVE_WRITERS: set[ThreadedRunWriter] = set()
 _ACTIVE_WRITERS_LOCK = threading.Lock()
 log = logging.getLogger(__name__)
+
 
 def init_db(path: str | os.PathLike[str]) -> Path:
     global _DB_PATH
@@ -76,16 +77,17 @@ def shutdown(*, close_timeout: float = 5.0, reset_db_path: bool = False) -> None
         _DB_PATH = None
 
 
-def _register_writer(writer: "ThreadedRunWriter") -> None:
+def _register_writer(writer: ThreadedRunWriter) -> None:
     with _ACTIVE_WRITERS_LOCK:
         _ACTIVE_WRITERS.add(writer)
 
 
-def _unregister_writer(writer: "ThreadedRunWriter") -> None:
+def _unregister_writer(writer: ThreadedRunWriter) -> None:
     with _ACTIVE_WRITERS_LOCK:
         _ACTIVE_WRITERS.discard(writer)
 
-def create_run(metadata: Dict[str, Any]) -> str:
+
+def create_run(metadata: dict[str, Any]) -> str:
     db = _require_db()
     run_id = metadata.get("run_id") or uuid.uuid4().hex
     started_at = metadata.get("started_at") or _utcnow_iso()
@@ -117,7 +119,8 @@ def create_run(metadata: Dict[str, Any]) -> str:
         _enforce_retention(conn)
     return run_id
 
-def append_event(run_id: str, event_type: str, payload: Dict[str, Any], t_ms: int, seq: int) -> None:
+
+def append_event(run_id: str, event_type: str, payload: dict[str, Any], t_ms: int, seq: int) -> None:
     db = _require_db()
     payload_json = _json_dumps(payload)
     search_text = _extract_search_text(payload)
@@ -132,7 +135,15 @@ def append_event(run_id: str, event_type: str, payload: Dict[str, Any], t_ms: in
             search_text,
         )
 
-def finalize_run(run_id: str, ok: bool, error: Optional[str], iterations: Optional[int], tool_calls: Optional[int], usage: Optional[Dict[str, Any]]) -> None:
+
+def finalize_run(
+    run_id: str,
+    ok: bool,
+    error: str | None,
+    iterations: int | None,
+    tool_calls: int | None,
+    usage: dict[str, Any] | None,
+) -> None:
     db = _require_db()
     ended_at = _utcnow_iso()
     with _connect(db) as conn:
@@ -142,11 +153,20 @@ def finalize_run(run_id: str, ok: bool, error: Optional[str], iterations: Option
             SET ended_at = ?, ok = ?, error = ?, iterations = ?, tool_calls = ?, usage_json = ?
             WHERE run_id = ?
             """,
-            (ended_at, 1 if ok else 0, error, iterations, tool_calls, _json_dumps(usage) if usage is not None else None, run_id),
+            (
+                ended_at,
+                1 if ok else 0,
+                error,
+                iterations,
+                tool_calls,
+                _json_dumps(usage) if usage is not None else None,
+                run_id,
+            ),
         )
         _enforce_retention(conn)
 
-def list_runs(limit: int = 50, offset: int = 0, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
+
+def list_runs(limit: int = 50, offset: int = 0, filters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
     db = _require_db()
     filters = filters or {}
     session_id = str(filters["session_id"]) if filters.get("session_id") not in (None, "") else None
@@ -230,7 +250,8 @@ def list_runs(limit: int = 50, offset: int = 0, filters: Optional[Dict[str, Any]
             ).fetchall()
     return [_row_to_run_dict(r) for r in rows]
 
-def get_run(run_id: str) -> Dict[str, Any]:
+
+def get_run(run_id: str) -> dict[str, Any]:
     db = _require_db()
     with _connect(db) as conn:
         run_row = conn.execute(
@@ -253,7 +274,7 @@ def get_run(run_id: str) -> Dict[str, Any]:
             (run_id,),
         ).fetchall()
     run = _row_to_run_dict(run_row)
-    events: List[Dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
     for er in event_rows:
         payload = _json_loads(er["payload_json"])
         events.append(
@@ -268,7 +289,8 @@ def get_run(run_id: str) -> Dict[str, Any]:
         )
     return {"run": run, "events": events}
 
-def stream_replay(run_id: str) -> Iterator[Dict[str, Any]]:
+
+def stream_replay(run_id: str) -> Iterator[dict[str, Any]]:
     db = _require_db()
     with _connect(db) as conn:
         cur = conn.execute(
@@ -289,18 +311,20 @@ def stream_replay(run_id: str) -> Iterator[Dict[str, Any]]:
             payload.setdefault("seq", row["seq"])
             yield payload
 
+
 class ThreadedRunWriter:
     """Single-writer thread that batches event inserts for streaming performance."""
+
     def __init__(self, run_id: str, *, flush_every: int = 50, flush_interval_s: float = 0.05) -> None:
         self.run_id = run_id
         self.flush_every = max(1, int(flush_every))
         self.flush_interval_s = float(flush_interval_s)
         self._t0_ns = time.perf_counter_ns()
         self._seq = 0
-        self._q: "queue.Queue[Optional[Tuple[int,int,str,str,str]]]" = queue.Queue()
+        self._q: queue.Queue[tuple[int, int, str, str, str] | None] = queue.Queue()
         self._thr = threading.Thread(target=self._worker, name=f"RunWriter-{run_id[:8]}", daemon=True)
         self._started = False
-        self._exc: Optional[BaseException] = None
+        self._exc: BaseException | None = None
         self._fallback_events = 0
         self._dropped_events = 0
         self._warned_fallback = False
@@ -313,7 +337,7 @@ class ThreadedRunWriter:
         _register_writer(self)
         self._thr.start()
 
-    def record(self, obj: Dict[str, Any]) -> None:
+    def record(self, obj: dict[str, Any]) -> None:
         if not self._started:
             self.start()
         event_type = str(obj.get("type", "unknown"))
@@ -354,7 +378,7 @@ class ThreadedRunWriter:
         try:
             with _connect(db) as conn:
                 fts = _fts_enabled(conn)
-                batch: List[Tuple[int, int, str, str, str]] = []
+                batch: list[tuple[int, int, str, str, str]] = []
                 last_flush = time.monotonic()
 
                 def flush() -> bool:
@@ -365,10 +389,7 @@ class ThreadedRunWriter:
                         conn.execute("BEGIN;")
                         conn.executemany(
                             "INSERT INTO events (run_id, t_ms, seq, event_type, payload_json, search_text) VALUES (?,?,?,?,?,?)",
-                            [
-                                (self.run_id, tms, sq, et, pj, st)
-                                for (tms, sq, et, pj, st) in batch
-                            ],
+                            [(self.run_id, tms, sq, et, pj, st) for (tms, sq, et, pj, st) in batch],
                         )
                         if fts:
                             conn.executemany(
@@ -418,7 +439,7 @@ class ThreadedRunWriter:
 
     def _record_direct(
         self,
-        item: Tuple[int, int, str, str, str],
+        item: tuple[int, int, str, str, str],
         *,
         reason: str,
         track_stats: bool = True,
@@ -438,12 +459,12 @@ class ThreadedRunWriter:
                 )
             if track_stats:
                 self._note_fallback(added=1, dropped=0, reason=reason)
-        except Exception:
+        except (ValueError, TypeError):
             if track_stats:
                 self._note_fallback(added=0, dropped=1, reason=reason)
             raise
 
-    def _write_direct_batch(self, items: List[Tuple[int, int, str, str, str]], *, reason: str) -> None:
+    def _write_direct_batch(self, items: list[tuple[int, int, str, str, str]], *, reason: str) -> None:
         if not items:
             return
         added = 0
@@ -452,7 +473,7 @@ class ThreadedRunWriter:
             try:
                 self._record_direct(item, reason=reason, track_stats=False)
                 added += 1
-            except Exception:
+            except (ValueError, TypeError):
                 dropped += 1
         if added or dropped:
             self._note_fallback(added=added, dropped=dropped, reason=reason)
@@ -485,8 +506,8 @@ class ThreadedRunWriter:
                 total_dropped,
             )
 
-    def _drain_pending(self) -> List[Tuple[int, int, str, str, str]]:
-        out: List[Tuple[int, int, str, str, str]] = []
+    def _drain_pending(self) -> list[tuple[int, int, str, str, str]]:
+        out: list[tuple[int, int, str, str, str]] = []
         while True:
             try:
                 item = self._q.get_nowait()
@@ -532,10 +553,12 @@ def _ensure_parent_run(conn: sqlite3.Connection, run_id: str) -> None:
             (run_id, _utcnow_iso()),
         )
 
+
 def _require_db() -> Path:
     if _DB_PATH is None:
         raise RuntimeError("run_store.init_db(path) must be called before using the run store.")
     return _DB_PATH
+
 
 @contextlib.contextmanager
 def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
@@ -555,6 +578,7 @@ def _connect(db_path: Path) -> Iterator[sqlite3.Connection]:
     finally:
         with contextlib.suppress(Exception):
             conn.close()
+
 
 def _create_schema(conn: sqlite3.Connection) -> None:
     conn.executescript(
@@ -595,6 +619,7 @@ def _create_schema(conn: sqlite3.Connection) -> None:
         with contextlib.suppress(Exception):
             conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(run_id, seq, search_text);")
 
+
 def _migrate_schema(conn: sqlite3.Connection) -> None:
     cols = {r["name"] for r in conn.execute("PRAGMA table_info(events);").fetchall()}
     if "search_text" not in cols:
@@ -606,6 +631,7 @@ def _migrate_schema(conn: sqlite3.Connection) -> None:
     if ENABLE_FTS5 and _fts5_available(conn):
         with contextlib.suppress(Exception):
             conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS events_fts USING fts5(run_id, seq, search_text);")
+
 
 def _enforce_retention(conn: sqlite3.Connection) -> None:
     with _LOCK:
@@ -636,6 +662,7 @@ def _enforce_retention(conn: sqlite3.Connection) -> None:
                 if remaining == 0:
                     break
 
+
 def _delete_oldest_runs(conn: sqlite3.Connection, n: int) -> None:
     if n <= 0:
         return
@@ -643,14 +670,16 @@ def _delete_oldest_runs(conn: sqlite3.Connection, n: int) -> None:
     run_ids = [r["run_id"] for r in rows]
     _delete_runs_by_id(conn, run_ids)
 
-def _delete_runs_by_id(conn: sqlite3.Connection, run_ids: List[str]) -> None:
+
+def _delete_runs_by_id(conn: sqlite3.Connection, run_ids: list[str]) -> None:
     if not run_ids:
         return
     if _fts_enabled(conn):
         conn.executemany("DELETE FROM events_fts WHERE run_id = ?;", [(rid,) for rid in run_ids])
     conn.executemany("DELETE FROM runs WHERE run_id = ?;", [(rid,) for rid in run_ids])
 
-def _normalize_ok_filter(value: Any) -> Optional[int]:
+
+def _normalize_ok_filter(value: Any) -> int | None:
     if value in (None, ""):
         return None
     ok_val = value
@@ -663,13 +692,14 @@ def _normalize_ok_filter(value: Any) -> Optional[int]:
     return int(ok_val)
 
 
-def _normalize_query_filter(value: Any) -> Optional[str]:
+def _normalize_query_filter(value: Any) -> str | None:
     if value in (None, ""):
         return None
     q = str(value).strip()
     return q or None
 
-def _row_to_run_dict(row: sqlite3.Row) -> Dict[str, Any]:
+
+def _row_to_run_dict(row: sqlite3.Row) -> dict[str, Any]:
     usage = _json_loads(row["usage_json"]) if row["usage_json"] else None
     return {
         "run_id": row["run_id"],
@@ -687,19 +717,25 @@ def _row_to_run_dict(row: sqlite3.Row) -> Dict[str, Any]:
         "thomas_version": row["thomas_version"],
     }
 
+
 def _utcnow_iso() -> str:
     return _dt.datetime.now(tz=_dt.timezone.utc).isoformat(timespec="seconds")
+
 
 def _json_dumps(obj: Any) -> str:
     return json.dumps(obj, ensure_ascii=False, separators=(",", ":"))
 
+
 def _json_loads(s: str) -> Any:
     return json.loads(s)
 
+
 _TEXT_KEYS = ("text", "content", "message", "error", "name", "tool", "tool_name", "tool_call_id", "arguments")
 
+
 def _extract_search_text(payload: Any) -> str:
-    parts: List[str] = []
+    parts: list[str] = []
+
     def walk(x: Any, depth: int = 0) -> None:
         if depth > 4:
             return
@@ -723,24 +759,28 @@ def _extract_search_text(payload: Any) -> str:
         if isinstance(x, list):
             for it in x[:20]:
                 walk(it, depth + 1)
+
     walk(payload)
     out = " ".join(parts)
     out = re.sub(r"\s+", " ", out).strip()
     return out[:4000]
+
 
 def _fts5_available(conn: sqlite3.Connection) -> bool:
     try:
         conn.execute("CREATE VIRTUAL TABLE IF NOT EXISTS __fts5_probe USING fts5(x);")
         conn.execute("DROP TABLE IF EXISTS __fts5_probe;")
         return True
-    except Exception:
+    except (ValueError, TypeError):
         return False
+
 
 def _fts_enabled(conn: sqlite3.Connection) -> bool:
     if not ENABLE_FTS5:
         return False
     row = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='events_fts';").fetchone()
     return row is not None
+
 
 def _fts_query(q: str) -> str:
     tokens = re.findall(r"[A-Za-z0-9_]+", q)

@@ -19,10 +19,10 @@ import ast
 import importlib.util
 import json
 import os
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, Iterable, List, Literal, Mapping, Optional, Sequence, Tuple
-
+from typing import Any, Literal
 
 SCHEMA_VERSION = 1
 
@@ -43,13 +43,13 @@ class ChannelDocsGeneratorError(Exception):
         code: ErrorCode,
         message: str,
         *,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": False,
             "schema_version": SCHEMA_VERSION,
@@ -69,7 +69,7 @@ class ChannelConfigField:
     kind: Literal["env", "config"]
     required: bool
     description: str
-    default: Optional[str] = None
+    default: str | None = None
 
 
 @dataclass(frozen=True)
@@ -79,8 +79,8 @@ class ChannelDoc:
     name: str
     title: str
     summary: str
-    config: Tuple[ChannelConfigField, ...] = field(default_factory=tuple)
-    examples: Tuple[str, ...] = field(default_factory=tuple)
+    config: tuple[ChannelConfigField, ...] = field(default_factory=tuple)
+    examples: tuple[str, ...] = field(default_factory=tuple)
 
 
 @dataclass(frozen=True)
@@ -88,7 +88,7 @@ class ChannelDocsResult:
     """Structured output of the generator."""
 
     generated_at: str
-    channels: Tuple[ChannelDoc, ...]
+    channels: tuple[ChannelDoc, ...]
 
 
 @dataclass(frozen=True)
@@ -96,20 +96,20 @@ class ChannelDocsRequest:
     """Input contract for docs generation."""
 
     # If provided, only these channel names will be included.
-    channel_names: Optional[Tuple[str, ...]] = None
+    channel_names: tuple[str, ...] | None = None
 
     # Optional safety/automation check: fail if required env config is missing.
     validate_required_config: bool = False
 
     # Optional env override (useful for tests). When omitted, `os.environ` is used.
-    env: Optional[Mapping[str, str]] = None
+    env: Mapping[str, str] | None = None
 
 
 def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _module_origin(module_path: str) -> Optional[str]:
+def _module_origin(module_path: str) -> str | None:
     """Return the filesystem path for a module without importing it."""
 
     spec = importlib.util.find_spec(module_path)
@@ -121,7 +121,7 @@ def _module_origin(module_path: str) -> Optional[str]:
     return origin
 
 
-def _extract_literal_string_constants(py_file: str, names: Sequence[str]) -> Dict[str, str]:
+def _extract_literal_string_constants(py_file: str, names: Sequence[str]) -> dict[str, str]:
     """Extract simple module-level string constants via AST parsing.
 
     Only captures assignments like:
@@ -133,7 +133,7 @@ def _extract_literal_string_constants(py_file: str, names: Sequence[str]) -> Dic
     """
 
     try:
-        with open(py_file, "r", encoding="utf-8") as f:
+        with open(py_file, encoding="utf-8") as f:
             source = f.read()
     except OSError:
         return {}
@@ -144,7 +144,7 @@ def _extract_literal_string_constants(py_file: str, names: Sequence[str]) -> Dic
         return {}
 
     wanted = set(names)
-    found: Dict[str, str] = {}
+    found: dict[str, str] = {}
 
     for node in tree.body:
         if isinstance(node, ast.Assign):
@@ -173,7 +173,7 @@ def _telegram_doc() -> ChannelDoc:
     """
 
     origin = _module_origin("thomas.integrations.telegram")
-    constants: Dict[str, str] = {}
+    constants: dict[str, str] = {}
     if origin and origin.endswith(".py") and os.path.exists(origin):
         constants = _extract_literal_string_constants(
             origin,
@@ -193,16 +193,8 @@ def _telegram_doc() -> ChannelDoc:
     summary = constants.get("CHANNEL_SUMMARY") or "Send and receive messages using the Telegram Bot API."
 
     # Support a couple of common constant name variants.
-    bot_token_env = (
-        constants.get("TELEGRAM_BOT_TOKEN_ENV")
-        or constants.get("BOT_TOKEN_ENV")
-        or "TELEGRAM_BOT_TOKEN"
-    )
-    chat_id_env = (
-        constants.get("TELEGRAM_CHAT_ID_ENV")
-        or constants.get("CHAT_ID_ENV")
-        or "TELEGRAM_CHAT_ID"
-    )
+    bot_token_env = constants.get("TELEGRAM_BOT_TOKEN_ENV") or constants.get("BOT_TOKEN_ENV") or "TELEGRAM_BOT_TOKEN"
+    chat_id_env = constants.get("TELEGRAM_CHAT_ID_ENV") or constants.get("CHAT_ID_ENV") or "TELEGRAM_CHAT_ID"
 
     config_fields = (
         ChannelConfigField(
@@ -234,14 +226,14 @@ def _telegram_doc() -> ChannelDoc:
     )
 
 
-def discover_channels() -> Tuple[ChannelDoc, ...]:
+def discover_channels() -> tuple[ChannelDoc, ...]:
     """Discover channels supported by this Thomas build.
 
     This P094 implementation is intentionally conservative and documents the
     baseline Telegram integration described in the prompt context.
     """
 
-    channels: List[ChannelDoc] = []
+    channels: list[ChannelDoc] = []
     if _module_origin("thomas.integrations.telegram") is not None:
         channels.append(_telegram_doc())
 
@@ -249,14 +241,12 @@ def discover_channels() -> Tuple[ChannelDoc, ...]:
     return tuple(channels)
 
 
-def _validate_required_config(
-    channels: Iterable[ChannelDoc], *, env: Optional[Mapping[str, str]]
-) -> None:
+def _validate_required_config(channels: Iterable[ChannelDoc], *, env: Mapping[str, str] | None) -> None:
     """Fail if required env config is missing."""
 
     env_map = env if env is not None else os.environ
 
-    missing: List[str] = []
+    missing: list[str] = []
     for channel in channels:
         for field_doc in channel.config:
             if field_doc.kind != "env" or not field_doc.required:
@@ -274,7 +264,7 @@ def _validate_required_config(
         )
 
 
-def generate_channel_docs(request: Optional[ChannelDocsRequest] = None) -> ChannelDocsResult:
+def generate_channel_docs(request: ChannelDocsRequest | None = None) -> ChannelDocsResult:
     """Generate structured channel documentation."""
 
     req = request or ChannelDocsRequest()
@@ -309,7 +299,7 @@ def generate_channel_docs(request: Optional[ChannelDocsRequest] = None) -> Chann
 def render_markdown(result: ChannelDocsResult) -> str:
     """Render docs to Markdown."""
 
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append("# Thomas Channels")
     lines.append("")
     lines.append(f"Generated: `{result.generated_at}`")
@@ -333,14 +323,8 @@ def render_markdown(result: ChannelDocsResult) -> str:
             lines.append("")
             for field_doc in sorted(channel.config, key=lambda f: (f.kind, f.key)):
                 req = "required" if field_doc.required else "optional"
-                default = (
-                    f" (default: `{field_doc.default}`)"
-                    if field_doc.default is not None
-                    else ""
-                )
-                lines.append(
-                    f"- **{field_doc.key}** ({field_doc.kind}, {req}){default}: {field_doc.description}"
-                )
+                default = f" (default: `{field_doc.default}`)" if field_doc.default is not None else ""
+                lines.append(f"- **{field_doc.key}** ({field_doc.kind}, {req}){default}: {field_doc.description}")
             lines.append("")
 
         if channel.examples:
@@ -354,12 +338,10 @@ def render_markdown(result: ChannelDocsResult) -> str:
     return "\n".join(lines).rstrip() + "\n"
 
 
-def to_machine_readable(
-    result: ChannelDocsResult, *, include_markdown: bool = False
-) -> Dict[str, Any]:
+def to_machine_readable(result: ChannelDocsResult, *, include_markdown: bool = False) -> dict[str, Any]:
     """Convert result into a JSON-serializable dict."""
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "ok": True,
         "schema_version": SCHEMA_VERSION,
         "generated_at": result.generated_at,
@@ -385,7 +367,7 @@ def dumps_json(data: Mapping[str, Any]) -> str:
     return json.dumps(data, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
 
 
-def normalize_channel_names(value: Optional[str]) -> Optional[Tuple[str, ...]]:
+def normalize_channel_names(value: str | None) -> tuple[str, ...] | None:
     """Parse a comma-separated channel list into a tuple."""
 
     if value is None:
@@ -395,7 +377,7 @@ def normalize_channel_names(value: Optional[str]) -> Optional[Tuple[str, ...]]:
     return tuple(names)
 
 
-def validate_output_path(path: Optional[str]) -> None:
+def validate_output_path(path: str | None) -> None:
     if path is None:
         return
     if not str(path).strip():
@@ -406,7 +388,7 @@ def write_text_file(path: str, content: str) -> None:
     try:
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
-    except Exception as exc:  # pragma: no cover
+    except (OSError, ConnectionError) as exc:  # pragma: no cover
         raise ChannelDocsGeneratorError(
             "OUTPUT_WRITE_FAILED",
             "Failed to write output file.",

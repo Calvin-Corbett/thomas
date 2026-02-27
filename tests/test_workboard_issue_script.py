@@ -26,7 +26,8 @@ def _write_workboard(
             f"{claims_block}\n\n"
             "## Active Tasks\n\n"
             "Task format:\n"
-            "`- \\`task_id=<id>; agent=<id>; scope=<path[,path...]>; summary=<short text>; status=<active|blocked>\\``\n\n"
+            "`- \\`task_id=<id>; agent=<id>; scope=<path[,path...]>; summary=<short text>; "
+            "status=<queued|claimed|in_progress|blocked|review|done>\\``\n\n"
             f"{active_tasks_block}\n\n"
             "## Issues / Blockers\n\n"
             "Issue format:\n"
@@ -122,7 +123,7 @@ def test_resolve_issue_reactivates_task(tmp_path: Path, capsys) -> None:
 
     assert rc == 0
     assert "Workboard issue tool: PASS" in out
-    assert "status=active" in text
+    assert "status=in_progress" in text
     assert "issue_id=dom-snapshot-runtime-issue;" in text
     assert "state=resolved;" in text
     assert gate.evaluate(workboard) == []
@@ -189,7 +190,9 @@ def test_up_for_grabs_keeps_claim_when_agent_has_other_task(tmp_path: Path, caps
     assert "Workboard issue tool: PASS" in out
     assert "agent=Codex 3;" in text
     assert "task_id=dom-tests;" in text
-    assert "task_id=dom-snapshot-runtime; scope=thomas/cli/commands/browser/p011_browser_artifact_dom_snapshot.py;" in text
+    assert (
+        "task_id=dom-snapshot-runtime; scope=thomas/cli/commands/browser/p011_browser_artifact_dom_snapshot.py;" in text
+    )
     assert gate.evaluate(workboard) == []
 
 

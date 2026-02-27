@@ -14,10 +14,11 @@ import json
 import os
 import sqlite3
 import time
+from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Cross-platform file lock
@@ -25,12 +26,14 @@ from typing import Any, Dict, Iterable, Iterator, List, Optional, Tuple
 
 try:
     import msvcrt
+
     _HAS_MSVCRT = True
 except ImportError:
     _HAS_MSVCRT = False
 
 try:
     import fcntl
+
     _HAS_FCNTL = True
 except ImportError:
     _HAS_FCNTL = False
@@ -45,33 +48,35 @@ def _ids_json(ids: Iterable[int]) -> str:
 def file_lock(lock_path: str, timeout_s: float = 10.0, poll_s: float = 0.05):
     """Cross-platform advisory file lock (Windows msvcrt / Unix fcntl)."""
     fp = open(lock_path, "a+b")
+    lock_acquired = False
     deadline = time.monotonic() + timeout_s
-    while True:
-        try:
-            if _HAS_MSVCRT:
-                fp.seek(0)
-                msvcrt.locking(fp.fileno(), msvcrt.LK_NBLCK, 1)
-            elif _HAS_FCNTL:
-                fcntl.flock(fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
-            else:
-                break  # No locking available — proceed anyway
-            break
-        except (OSError, IOError):
-            if time.monotonic() >= deadline:
-                fp.close()
-                raise TimeoutError(f"Could not acquire lock: {lock_path}")
-            time.sleep(poll_s)
     try:
+        while True:
+            try:
+                if _HAS_MSVCRT:
+                    fp.seek(0)
+                    msvcrt.locking(fp.fileno(), msvcrt.LK_NBLCK, 1)
+                elif _HAS_FCNTL:
+                    fcntl.flock(fp.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+                else:
+                    break  # No locking available — proceed anyway
+                lock_acquired = True
+                break
+            except OSError:
+                if time.monotonic() >= deadline:
+                    raise TimeoutError(f"Could not acquire lock: {lock_path}")
+                time.sleep(poll_s)
         yield
     finally:
-        try:
-            if _HAS_MSVCRT:
-                fp.seek(0)
-                msvcrt.locking(fp.fileno(), msvcrt.LK_UNLCK, 1)
-            elif _HAS_FCNTL:
-                fcntl.flock(fp.fileno(), fcntl.LOCK_UN)
-        except (OSError, IOError):
-            pass
+        if lock_acquired:
+            try:
+                if _HAS_MSVCRT:
+                    fp.seek(0)
+                    msvcrt.locking(fp.fileno(), msvcrt.LK_UNLCK, 1)
+                elif _HAS_FCNTL:
+                    fcntl.flock(fp.fileno(), fcntl.LOCK_UN)
+            except OSError:
+                pass
         fp.close()
 
 
@@ -83,6 +88,7 @@ def file_lock(lock_path: str, timeout_s: float = 10.0, poll_s: float = 0.05):
 @dataclass(frozen=True)
 class MemoryPaths:
     """All paths derived from a single root directory."""
+
     root: Path
     data_dir: Path
     blobs_dir: Path
@@ -104,8 +110,7 @@ class MemoryPaths:
         )
 
     def ensure_dirs(self) -> None:
-        for d in (self.data_dir, self.blobs_dir, self.indices_dir,
-                  self.builds_dir, self.delta_dir):
+        for d in (self.data_dir, self.blobs_dir, self.indices_dir, self.builds_dir, self.delta_dir):
             d.mkdir(parents=True, exist_ok=True)
 
 
@@ -121,8 +126,8 @@ class EventRow:
     thread: str
     etype: str
     text: str
-    metadata: Dict[str, Any]
-    blob_id: Optional[str] = None
+    metadata: dict[str, Any]
+    blob_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +143,7 @@ def _sanitize_fts5(query: str) -> str:
     This strips them to produce a safe implicit-AND query.
     """
     import re
+
     # Remove characters that are FTS5 syntax: . : ( ) { } ^ * " ~
     cleaned = re.sub(r'[.:()\[\]{}\^*"~@#$!?/\\<>]', " ", query)
     # Split into tokens, filter FTS5 reserved words used bare
@@ -213,31 +219,34 @@ class ImmortalLog:
         thread: str,
         etype: str,
         text: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        blob_id: Optional[str] = None,
+        metadata: dict[str, Any] | None = None,
+        blob_id: str | None = None,
     ) -> int:
         meta_json = json.dumps(metadata or {}, ensure_ascii=False)
         cur = self._conn.execute(
-            "INSERT INTO events (ts_utc, thread, etype, text, metadata_json, blob_id) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO events (ts_utc, thread, etype, text, metadata_json, blob_id) " "VALUES (?, ?, ?, ?, ?, ?)",
             (int(time.time()), thread, etype, text, meta_json, blob_id),
         )
         self._conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
 
-    def get_event(self, eid: int) -> Optional[EventRow]:
+    def get_event(self, eid: int) -> EventRow | None:
         row = self._conn.execute(
-            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id "
-            "FROM events WHERE id = ?", (eid,)
+            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id " "FROM events WHERE id = ?", (eid,)
         ).fetchone()
         if row is None:
             return None
         return EventRow(
-            id=row[0], ts_utc=row[1], thread=row[2], etype=row[3],
-            text=row[4], metadata=json.loads(row[5]), blob_id=row[6],
+            id=row[0],
+            ts_utc=row[1],
+            thread=row[2],
+            etype=row[3],
+            text=row[4],
+            metadata=json.loads(row[5]),
+            blob_id=row[6],
         )
 
-    def get_events_batch(self, eids: List[int]) -> Dict[int, EventRow]:
+    def get_events_batch(self, eids: list[int]) -> dict[int, EventRow]:
         """Batch load events by ID — fixes N+1 query pattern."""
         if not eids:
             return {}
@@ -253,34 +262,33 @@ class ImmortalLog:
             rows = []
             for eid in eids:
                 row = self._conn.execute(
-                    "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id "
-                    "FROM events WHERE id = ?",
+                    "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id " "FROM events WHERE id = ?",
                     (int(eid),),
                 ).fetchone()
                 if row is not None:
                     rows.append(row)
         return {
             r[0]: EventRow(
-                id=r[0], ts_utc=r[1], thread=r[2], etype=r[3],
-                text=r[4], metadata=json.loads(r[5]), blob_id=r[6],
+                id=r[0],
+                ts_utc=r[1],
+                thread=r[2],
+                etype=r[3],
+                text=r[4],
+                metadata=json.loads(r[5]),
+                blob_id=r[6],
             )
             for r in rows
         }
 
-    def recent_events(self, thread: str, limit: int = 20) -> List[EventRow]:
+    def recent_events(self, thread: str, limit: int = 20) -> list[EventRow]:
         rows = self._conn.execute(
             "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id "
             "FROM events WHERE thread = ? ORDER BY id DESC LIMIT ?",
             (thread, limit),
         ).fetchall()
-        return [
-            EventRow(r[0], r[1], r[2], r[3], r[4], json.loads(r[5]), r[6])
-            for r in reversed(rows)
-        ]
+        return [EventRow(r[0], r[1], r[2], r[3], r[4], json.loads(r[5]), r[6]) for r in reversed(rows)]
 
-    def search_fts(
-        self, query: str, thread: Optional[str] = None, limit: int = 80
-    ) -> List[Tuple[int, float]]:
+    def search_fts(self, query: str, thread: str | None = None, limit: int = 80) -> list[tuple[int, float]]:
         """BM25 full-text search. Returns (event_id, score) pairs."""
         sanitized = _sanitize_fts5(query)
         if not sanitized.strip():
@@ -294,8 +302,7 @@ class ImmortalLog:
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT rowid, rank FROM events_fts "
-                "WHERE events_fts MATCH ? ORDER BY rank LIMIT ?",
+                "SELECT rowid, rank FROM events_fts " "WHERE events_fts MATCH ? ORDER BY rank LIMIT ?",
                 (sanitized, limit),
             ).fetchall()
         # Convert rank (negative BM25) to positive score
@@ -308,8 +315,7 @@ class ImmortalLog:
             after_id: Only yield events with id > after_id (0 = all events)
         """
         cur = self._conn.execute(
-            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id "
-            "FROM events WHERE id > ? ORDER BY id",
+            "SELECT id, ts_utc, thread, etype, text, metadata_json, blob_id " "FROM events WHERE id > ? ORDER BY id",
             (after_id,),
         )
         for r in cur:
@@ -401,10 +407,8 @@ class MetaDB:
         self._conn.execute("DELETE FROM pins WHERE key = ?", (key,))
         self._conn.commit()
 
-    def pin_list(self) -> List[Tuple[str, str, int]]:
-        return self._conn.execute(
-            "SELECT key, text, created_ts_utc FROM pins ORDER BY created_ts_utc DESC"
-        ).fetchall()
+    def pin_list(self) -> list[tuple[str, str, int]]:
+        return self._conn.execute("SELECT key, text, created_ts_utc FROM pins ORDER BY created_ts_utc DESC").fetchall()
 
     def lex_add(self, phrase: str, meaning: str) -> None:
         self._conn.execute(
@@ -413,7 +417,7 @@ class MetaDB:
         )
         self._conn.commit()
 
-    def lex_list(self) -> List[Tuple[str, str, int]]:
+    def lex_list(self) -> list[tuple[str, str, int]]:
         return self._conn.execute("SELECT * FROM lexicon").fetchall()
 
     def lex_translate(self, text: str) -> str:
@@ -421,15 +425,14 @@ class MetaDB:
             text = text.replace(phrase, meaning)
         return text
 
-    def trace_add(self, thread: str, mode: str, query: str, trace: Dict[str, Any]) -> None:
+    def trace_add(self, thread: str, mode: str, query: str, trace: dict[str, Any]) -> None:
         self._conn.execute(
-            "INSERT INTO traces (ts_utc, thread, mode, query, trace_json) "
-            "VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO traces (ts_utc, thread, mode, query, trace_json) " "VALUES (?, ?, ?, ?, ?)",
             (int(time.time()), thread, mode, query, json.dumps(trace)),
         )
         self._conn.commit()
 
-    def trace_recent(self, thread: Optional[str] = None, limit: int = 20) -> List[Dict[str, Any]]:
+    def trace_recent(self, thread: str | None = None, limit: int = 20) -> list[dict[str, Any]]:
         if thread:
             rows = self._conn.execute(
                 "SELECT id, ts_utc, thread, mode, query, trace_json "
@@ -438,16 +441,15 @@ class MetaDB:
             ).fetchall()
         else:
             rows = self._conn.execute(
-                "SELECT id, ts_utc, thread, mode, query, trace_json "
-                "FROM traces ORDER BY id DESC LIMIT ?",
+                "SELECT id, ts_utc, thread, mode, query, trace_json " "FROM traces ORDER BY id DESC LIMIT ?",
                 (int(limit),),
             ).fetchall()
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for r in rows:
             try:
                 parsed = json.loads(r[5]) if r[5] else {}
-            except Exception:
+            except (ValueError, json.JSONDecodeError):
                 parsed = {}
             out.append(
                 {
@@ -472,8 +474,15 @@ class MetaDB:
 
 
 _DEFAULT_TYPES = [
-    "User", "Project", "Task", "Concept", "Preference",
-    "Artifact", "Fact", "Thread", "Mode",
+    "User",
+    "Project",
+    "Task",
+    "Concept",
+    "Preference",
+    "Artifact",
+    "Fact",
+    "Thread",
+    "Mode",
 ]
 
 
@@ -536,10 +545,7 @@ class DerivedDB:
         c.execute("CREATE INDEX IF NOT EXISTS idx_edges_dst ON g_edges(dst_node)")
         c.execute("CREATE INDEX IF NOT EXISTS idx_edges_rel ON g_edges(rel)")
         # NEW: compound index for efficient graph traversal
-        c.execute(
-            "CREATE INDEX IF NOT EXISTS idx_edges_src_rel_live "
-            "ON g_edges(src_node, rel, tombstoned)"
-        )
+        c.execute("CREATE INDEX IF NOT EXISTS idx_edges_src_rel_live " "ON g_edges(src_node, rel, tombstoned)")
 
         # Rollups
         c.execute("""
@@ -562,9 +568,7 @@ class DerivedDB:
     def _bootstrap_types(self) -> None:
         ts = int(time.time())
         for t in _DEFAULT_TYPES:
-            self._conn.execute(
-                "INSERT OR IGNORE INTO schema_types VALUES (?, ?)", (t, ts)
-            )
+            self._conn.execute("INSERT OR IGNORE INTO schema_types VALUES (?, ?)", (t, ts))
         self._conn.commit()
 
     # --- Vector operations ---
@@ -575,8 +579,8 @@ class DerivedDB:
         thread: str,
         ts_utc: int,
         etype: str,
-        vec: Dict[str, float],
-        vec_dense: Optional[bytes] = None,
+        vec: dict[str, float],
+        vec_dense: bytes | None = None,
     ) -> None:
         """Store sparse vector (and optionally dense) for an event."""
         # L2 normalize sparse
@@ -591,28 +595,22 @@ class DerivedDB:
         )
         self._conn.commit()
 
-    def vec_get_dense(self, event_id: int) -> Optional[bytes]:
-        row = self._conn.execute(
-            "SELECT vec_dense FROM vec WHERE event_id = ?", (event_id,)
-        ).fetchone()
+    def vec_get_dense(self, event_id: int) -> bytes | None:
+        row = self._conn.execute("SELECT vec_dense FROM vec WHERE event_id = ?", (event_id,)).fetchone()
         return row[0] if row and row[0] else None
 
-    def vec_candidates_by_thread(self, thread: str, limit: int = 2000) -> List[int]:
+    def vec_candidates_by_thread(self, thread: str, limit: int = 2000) -> list[int]:
         rows = self._conn.execute(
             "SELECT event_id FROM vec WHERE thread = ? ORDER BY ts_utc DESC LIMIT ?",
             (thread, limit),
         ).fetchall()
         return [r[0] for r in rows]
 
-    def vec_candidates_recent(self, limit: int = 2000) -> List[int]:
-        rows = self._conn.execute(
-            "SELECT event_id FROM vec ORDER BY ts_utc DESC LIMIT ?", (limit,)
-        ).fetchall()
+    def vec_candidates_recent(self, limit: int = 2000) -> list[int]:
+        rows = self._conn.execute("SELECT event_id FROM vec ORDER BY ts_utc DESC LIMIT ?", (limit,)).fetchall()
         return [r[0] for r in rows]
 
-    def vec_similarity_sparse(
-        self, qvec: Dict[str, float], event_ids: List[int]
-    ) -> Dict[int, float]:
+    def vec_similarity_sparse(self, qvec: dict[str, float], event_ids: list[int]) -> dict[int, float]:
         """Compute cosine similarity using sparse vectors."""
         if not event_ids:
             return {}
@@ -632,14 +630,14 @@ class DerivedDB:
                 ).fetchone()
                 if row is not None:
                     rows.append(row)
-        scores: Dict[int, float] = {}
+        scores: dict[int, float] = {}
         for eid, vj in rows:
             doc = json.loads(vj)
             dot = sum(qvec.get(k, 0.0) * v for k, v in doc.items())
             scores[eid] = dot
         return scores
 
-    def vec_get_dense_batch(self, event_ids: List[int]) -> Dict[int, bytes]:
+    def vec_get_dense_batch(self, event_ids: list[int]) -> dict[int, bytes]:
         """Batch load dense vectors."""
         if not event_ids:
             return {}
@@ -655,8 +653,7 @@ class DerivedDB:
             rows = []
             for event_id in event_ids:
                 row = self._conn.execute(
-                    "SELECT event_id, vec_dense FROM vec "
-                    "WHERE event_id = ? AND vec_dense IS NOT NULL",
+                    "SELECT event_id, vec_dense FROM vec " "WHERE event_id = ? AND vec_dense IS NOT NULL",
                     (int(event_id),),
                 ).fetchone()
                 if row is not None:
@@ -665,9 +662,7 @@ class DerivedDB:
 
     # --- Graph operations ---
 
-    def node_upsert(
-        self, type_name: str, key: str, label: str, user_asserted: bool = False
-    ) -> int:
+    def node_upsert(self, type_name: str, key: str, label: str, user_asserted: bool = False) -> int:
         ts = int(time.time())
         self._conn.execute(
             "INSERT INTO g_nodes (type_name, key, label, created_ts_utc, user_asserted) "
@@ -689,22 +684,19 @@ class DerivedDB:
         dst_node: int,
         confidence: float = 0.5,
         user_asserted: bool = False,
-        receipts: Optional[List[int]] = None,
+        receipts: list[int] | None = None,
     ) -> int:
         ts = int(time.time())
         cur = self._conn.execute(
             "INSERT INTO g_edges "
             "(src_node, rel, dst_node, created_ts_utc, confidence, user_asserted, receipts_json) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (src_node, rel, dst_node, ts, confidence, int(user_asserted),
-             json.dumps(receipts or [])),
+            (src_node, rel, dst_node, ts, confidence, int(user_asserted), json.dumps(receipts or [])),
         )
         self._conn.commit()
         return cur.lastrowid  # type: ignore[return-value]
 
-    def edges_from(
-        self, src_node: int, rel: Optional[str] = None, limit: int = 50
-    ) -> List[Dict[str, Any]]:
+    def edges_from(self, src_node: int, rel: str | None = None, limit: int = 50) -> list[dict[str, Any]]:
         if rel:
             rows = self._conn.execute(
                 "SELECT edge_id, src_node, rel, dst_node, confidence, receipts_json "
@@ -718,23 +710,21 @@ class DerivedDB:
                 (src_node, limit),
             ).fetchall()
         return [
-            {"edge_id": r[0], "src": r[1], "rel": r[2], "dst": r[3],
-             "confidence": r[4], "receipts": json.loads(r[5])}
+            {"edge_id": r[0], "src": r[1], "rel": r[2], "dst": r[3], "confidence": r[4], "receipts": json.loads(r[5])}
             for r in rows
         ]
 
-    def node_get_by_id(self, node_id: int) -> Optional[Dict[str, Any]]:
+    def node_get_by_id(self, node_id: int) -> dict[str, Any] | None:
         """Look up a single node by its ID."""
         row = self._conn.execute(
-            "SELECT node_id, type_name, key, label FROM g_nodes "
-            "WHERE node_id = ? AND tombstoned = 0",
+            "SELECT node_id, type_name, key, label FROM g_nodes " "WHERE node_id = ? AND tombstoned = 0",
             (node_id,),
         ).fetchone()
         if row is None:
             return None
         return {"node_id": row[0], "type": row[1], "key": row[2], "label": row[3]}
 
-    def nodes_get_by_ids(self, node_ids: List[int]) -> Dict[int, Dict[str, Any]]:
+    def nodes_get_by_ids(self, node_ids: list[int]) -> dict[int, dict[str, Any]]:
         """Batch look up nodes by their IDs."""
         if not node_ids:
             return {}
@@ -750,30 +740,23 @@ class DerivedDB:
             rows = []
             for node_id in node_ids:
                 row = self._conn.execute(
-                    "SELECT node_id, type_name, key, label FROM g_nodes "
-                    "WHERE node_id = ? AND tombstoned = 0",
+                    "SELECT node_id, type_name, key, label FROM g_nodes " "WHERE node_id = ? AND tombstoned = 0",
                     (int(node_id),),
                 ).fetchone()
                 if row is not None:
                     rows.append(row)
-        return {
-            r[0]: {"node_id": r[0], "type": r[1], "key": r[2], "label": r[3]}
-            for r in rows
-        }
+        return {r[0]: {"node_id": r[0], "type": r[1], "key": r[2], "label": r[3]} for r in rows}
 
-    def nodes_search_label(self, like: str, limit: int = 50) -> List[Dict[str, Any]]:
+    def nodes_search_label(self, like: str, limit: int = 50) -> list[dict[str, Any]]:
         rows = self._conn.execute(
-            "SELECT node_id, type_name, key, label FROM g_nodes "
-            "WHERE label LIKE ? AND tombstoned = 0 LIMIT ?",
+            "SELECT node_id, type_name, key, label FROM g_nodes " "WHERE label LIKE ? AND tombstoned = 0 LIMIT ?",
             (f"%{like}%", limit),
         ).fetchall()
         return [{"node_id": r[0], "type": r[1], "key": r[2], "label": r[3]} for r in rows]
 
     def tombstone_edge(self, edge_id: int, reason: str = "") -> None:
         ts = int(time.time())
-        self._conn.execute(
-            "UPDATE g_edges SET tombstoned = 1 WHERE edge_id = ?", (edge_id,)
-        )
+        self._conn.execute("UPDATE g_edges SET tombstoned = 1 WHERE edge_id = ?", (edge_id,))
         self._conn.execute(
             "INSERT OR REPLACE INTO tombstones VALUES ('edge', ?, ?, ?, '{}')",
             (edge_id, ts, reason),
@@ -782,17 +765,15 @@ class DerivedDB:
 
     # --- Rollups ---
 
-    def rollup_set(self, key: str, text: str, meta: Optional[Dict] = None) -> None:
+    def rollup_set(self, key: str, text: str, meta: dict | None = None) -> None:
         self._conn.execute(
             "INSERT OR REPLACE INTO rollups VALUES (?, ?, ?, ?)",
             (key, int(time.time()), text, json.dumps(meta or {})),
         )
         self._conn.commit()
 
-    def rollup_get(self, key: str) -> Optional[str]:
-        row = self._conn.execute(
-            "SELECT text FROM rollups WHERE key = ?", (key,)
-        ).fetchone()
+    def rollup_get(self, key: str) -> str | None:
+        row = self._conn.execute("SELECT text FROM rollups WHERE key = ?", (key,)).fetchone()
         return row[0] if row else None
 
     def commit(self) -> None:
@@ -841,10 +822,12 @@ class IndexManager:
         return ActiveIndex(data["active_build"], data["updated_ts_utc"])
 
     def set_active(self, build_name: str) -> None:
-        data = json.dumps({
-            "active_build": build_name,
-            "updated_ts_utc": int(time.time()),
-        })
+        data = json.dumps(
+            {
+                "active_build": build_name,
+                "updated_ts_utc": int(time.time()),
+            }
+        )
         tmp = self._active_path.with_suffix(".tmp")
         with file_lock(self._lock_path):
             tmp.write_text(data, encoding="utf-8")

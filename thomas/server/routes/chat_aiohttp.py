@@ -1,18 +1,23 @@
 """aiohttp route registration for the chat execution endpoint."""
+
 from __future__ import annotations
+
 import asyncio
 import contextlib
 import json
 import logging
+import re
 import secrets
 import time
 from dataclasses import dataclass, replace
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any
+
 from aiohttp import web
+
 from thomas import __version__ as THOMAS_VERSION
 from thomas.agent.loop import AgentLoop
-from thomas.core.autonomy import clamp_autonomy_level
-from thomas.core.config import AppConfig
+from thomas.core.autonomy import clamp_autonomy_level, parse_autonomy_level
+from thomas.core.config import AppConfig, load_config
 from thomas.core.llm import LLMClient
 from thomas.core.token_economy import (
     apply_token_economy_policy,
@@ -20,6 +25,30 @@ from thomas.core.token_economy import (
 )
 from thomas.models.capabilities import supports as model_supports
 from thomas.models.chat_controls import resolve_ui_control_request
+from thomas.observability.task_ledger import (
+    derive_active_goal,
+    extract_missing_inputs,
+)
+from thomas.preferences.store import (
+    PreferencesStore,
+    get_db_path,
+    normalize_profile_type,
+    normalize_review_depth,
+    profile_prefers_non_coder_mode,
+)
+from thomas.server.app_keys import (
+    APP_ACTION_AUDIT,
+    APP_CONFIG,
+    APP_ENGINE_MANAGER,
+    APP_GUARDED_TOOL_RUNNER,
+    APP_GUARDRAILS_ENABLED,
+    APP_MEMORY,
+    APP_RUN_STORE_ENABLED,
+    APP_RUN_STORE_MODULE,
+    APP_SESSIONS,
+    APP_TASK_LEDGER,
+    ChatSession,
+)
 from thomas.server.chat_control_mode import ChatControlDeps, handle_ui_control_chat
 from thomas.server.routes.chat_helpers import (
     _normalize_usage_payload,
@@ -33,28 +62,89 @@ from thomas.server.routes.chat_modes import (
 from thomas.server.routes.chat_stream_events import stream_agent_events
 from thomas.tools.registry import ToolRegistry
 from thomas.tools.shell import register_shell_tools
-from thomas.observability.task_ledger import (
-    derive_active_goal,
-    extract_missing_inputs,
-)
-from thomas.preferences.store import PreferencesStore, get_db_path
-from thomas.server.app_keys import (
-    APP_CONFIG, APP_MEMORY, APP_SECRETS,
-    APP_SESSIONS, APP_SESSION_LOCKS, APP_SESSION_LOCKS_LOCK,
-    APP_SESSION_ACTIVE_RUNS, APP_SESSION_ACTIVE_RUNS_LOCK,
-    APP_RUN_STORE_ENABLED, APP_RUN_STORE_MODULE,
-    APP_ACTION_AUDIT,
-    APP_GUARDRAILS_ENABLED, APP_GUARDED_TOOL_RUNNER, APP_GUARDRAILS_CTX,
-    APP_CODEX_BRIDGE, APP_ENGINE_MANAGER, APP_TASK_LEDGER,
-    ChatSession,
-)
+
 log = logging.getLogger(__name__)
+_DEFAULT_AGENT_LOOP = AgentLoop
+_DEFAULT_MODEL_SUPPORTS = model_supports
+_DEFAULT_RESOLVE_UI_CONTROL_REQUEST = resolve_ui_control_request
+_DEFAULT_HANDLE_UI_CONTROL_CHAT = handle_ui_control_chat
+ORCHESTRATOR_ONLY_MODE = "swarm"
 
 # Per-session message queues for mid-run interruption.
 # When a session has an active run, incoming messages are pushed here
 # instead of being rejected. The AgentLoop checks this queue between
 # tool completions and injects the message as a new user turn.
-_SESSION_MSG_QUEUES: Dict[str, "asyncio.Queue[Optional[str]]"] = {}
+_SESSION_MSG_QUEUES: dict[str, asyncio.Queue[str | None]] = {}
+
+
+def _appkey_identity(key: Any) -> str:
+    rep = repr(key)
+    match = re.match(r"^<AppKey\(([^,]+),\s*type=.*\)>$", rep)
+    if match:
+        name = str(match.group(1) or "")
+        marker = "thomas.server.app_keys."
+        idx = name.find(marker)
+        if idx >= 0:
+            return name[idx:]
+        return name
+    return str(key)
+
+
+def _resolve_app_value(
+    app: web.Application,
+    key: Any,
+    *,
+    expected_type: Any = None,
+    default: Any = None,
+    required: bool = False,
+) -> Any:
+    value = app.get(key)
+    if expected_type is None:
+        if value is not None:
+            return value
+    elif isinstance(value, expected_type):
+        return value
+
+    target_identity = _appkey_identity(key)
+    for existing_key, existing_value in app.items():
+        if _appkey_identity(existing_key) != target_identity:
+            continue
+        if expected_type is not None and not isinstance(existing_value, expected_type):
+            continue
+        app[key] = existing_value
+        return existing_value
+
+    if required:
+        raise KeyError(key)
+    return default
+
+
+def _resolve_runtime_config(app: web.Application) -> AppConfig:
+    """Return runtime AppConfig, tolerating AppKey identity drift after restarts."""
+    cfg = _resolve_app_value(app, APP_CONFIG, expected_type=AppConfig)
+    if isinstance(cfg, AppConfig):
+        return cfg
+    for value in app.values():
+        if isinstance(value, AppConfig):
+            app[APP_CONFIG] = value
+            return value
+    cfg = load_config()
+    app[APP_CONFIG] = cfg
+    return cfg
+
+
+COMPANION_PHONE_SYSTEM_PROMPT = (
+    "You are Thomas Infinite Companion, the purpose-built mobile control agent for Thomas. "
+    "Your primary job is helping the user control Thomas from their phone and ship companion apps safely.\n"
+    "Treat app creation, app-store publishing, and device-targeted app push as first-class flows. "
+    "When the user asks for website-style experiences, prefer websocket-backed headless web modules "
+    "that run inside companion app surfaces.\n"
+    "Always include setup guidance when device pairing/app setup is missing. "
+    "Keep responses concise and action-oriented by default. "
+    "When a request implies an action, execute safely and report progress clearly. "
+    "Ask only the minimum clarifying question required when intent is ambiguous."
+)
+
 
 # ---------------------------------------------------------------------------
 # Dependency bundle
@@ -62,6 +152,7 @@ _SESSION_MSG_QUEUES: Dict[str, "asyncio.Queue[Optional[str]]"] = {}
 @dataclass
 class ChatRouteDeps:
     """Dependency bundle for the chat route (closures from create_app)."""
+
     require_api_access: Any
     read_json: Any
     session_lock_for: Any
@@ -75,6 +166,8 @@ class ChatRouteDeps:
     read_chat_from_disk: Any
     save_chat_to_disk: Any
     build_tools: Any
+
+
 # ---------------------------------------------------------------------------
 # Route registration
 # ---------------------------------------------------------------------------
@@ -98,9 +191,7 @@ def register_chat_routes(
             # Session has an active run. Try to push the message into the
             # interrupt queue so the agent loop can pick it up between
             # tool calls instead of rejecting outright.
-            msg_text = str(
-                payload.get("text") or payload.get("message") or payload.get("prompt") or ""
-            ).strip()
+            msg_text = str(payload.get("text") or payload.get("message") or payload.get("prompt") or "").strip()
             q = _SESSION_MSG_QUEUES.get(sid)
             if q is not None and msg_text:
                 try:
@@ -128,29 +219,28 @@ def register_chat_routes(
                 source="chat.setup_error",
                 force_event=True,
             )
-            raise web.HTTPInternalServerError(
-                text=f"chat setup failed: {type(exc).__name__}: {exc}"
-            )
+            raise web.HTTPInternalServerError(text=f"chat setup failed: {type(exc).__name__}: {exc}")
         finally:
             if session_run_guard_active:
                 try:
                     await deps.end_session_run(sid)
                 except Exception as guard_err:
                     log.warning("[thomas] session run guard cleanup failed: %s", guard_err)
+
     async def _api_chat_inner(
         request: web.Request,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
         sid: str,
         start_t: float,
     ) -> web.StreamResponse:
-        session_run_guard_active = False  # outer wrapper handles this now
         session_lock = await deps.session_lock_for(sid)
-        cfg: AppConfig = request.app[APP_CONFIG]
+        cfg: AppConfig = _resolve_runtime_config(request.app)
         # Sessions are in-memory. If the server restarts, the UI may still have a
         # stale session_id persisted locally; recover by recreating the session.
-        if sid not in request.app[APP_SESSIONS]:
+        sessions = _resolve_app_value(request.app, APP_SESSIONS, expected_type=dict, required=True)
+        if sid not in sessions:
             # Try to recover conversation from persisted chat on disk.
-            recovered_conversation: List[Dict[str, Any]] = []
+            recovered_conversation: list[dict[str, Any]] = []
             try:
                 chat_path = deps.chat_file_for(sid)
                 if chat_path.exists():
@@ -158,21 +248,23 @@ def register_chat_routes(
                     if saved and isinstance(saved.get("messages"), list):
                         for m in saved["messages"]:
                             if isinstance(m, dict) and m.get("role") in ("user", "assistant"):
-                                recovered_conversation.append(
-                                    {"role": m["role"], "content": str(m.get("content", ""))}
-                                )
+                                recovered_conversation.append({"role": m["role"], "content": str(m.get("content", ""))})
                         if recovered_conversation:
                             log.info(
                                 "Recovered %d messages from disk for stale session %s",
-                                len(recovered_conversation), sid[:12],
+                                len(recovered_conversation),
+                                sid[:12],
                             )
             except Exception as e:
                 log.debug("Session recovery from disk failed for %s: %s", sid[:12], e)
-            request.app[APP_SESSIONS][sid] = ChatSession(
-                id=sid, conversation=recovered_conversation,
-                profile=cfg.default_model, model_id=None, autonomy_level=3,
+            sessions[sid] = ChatSession(
+                id=sid,
+                conversation=recovered_conversation,
+                profile=cfg.default_model,
+                model_id=None,
+                autonomy_level=3,
             )
-        session: ChatSession = request.app[APP_SESSIONS][sid]
+        session: ChatSession = sessions[sid]
         try:
             runtime_prefs = PreferencesStore(get_db_path()).get(user_id="default")
         except Exception:
@@ -185,7 +277,32 @@ def register_chat_routes(
         advanced_model = getattr(advanced_prefs, "model", None)
         advanced_failover = getattr(advanced_prefs, "failover", None)
         advanced_memory = getattr(advanced_prefs, "memory", None)
-        async def _apply_usage_budget(used_tokens: int) -> Optional[Dict[str, Any]]:
+        profile_prefs = getattr(runtime_prefs, "profile", None)
+        onboarding_prefs = getattr(runtime_prefs, "onboarding", None)
+        onboarding_answers = getattr(onboarding_prefs, "answers", None)
+        if not isinstance(onboarding_answers, dict):
+            onboarding_answers = {}
+        resolved_profile_type = normalize_profile_type(
+            getattr(profile_prefs, "profile_type", None),
+            default="adaptive",
+        )
+        non_coder_profile = bool(
+            resolved_profile_type == "non_coder"
+            or profile_prefers_non_coder_mode(
+                profile_prefs,
+                onboarding_answers=onboarding_answers,
+            )
+        )
+        if resolved_profile_type == "adaptive" and non_coder_profile:
+            resolved_profile_type = "non_coder"
+        resolved_review_depth = normalize_review_depth(
+            getattr(profile_prefs, "review_depth", None),
+            default="adaptive",
+        )
+        if resolved_review_depth == "adaptive" and non_coder_profile:
+            resolved_review_depth = "simple"
+
+        async def _apply_usage_budget(used_tokens: int) -> dict[str, Any] | None:
             if advanced_cost is None:
                 return None
             used = max(0, int(used_tokens or 0))
@@ -206,6 +323,7 @@ def register_chat_routes(
                     "remaining_tokens": max(0, int(daily_budget) - int(session_tokens_used)),
                 },
             }
+
         profile_payload = str(payload.get("profile") or "").strip()
         model_payload = str(payload.get("model") or "").strip()
         profile = str(profile_payload or model_payload or session.profile).strip()
@@ -233,19 +351,35 @@ def register_chat_routes(
         model_id = payload.get("model_id")
         if isinstance(model_id, str) and model_id.strip():
             session.model_id = model_id.strip()
+        companion_hints: list[str] = []
+        for _key in ("channel", "source", "client", "surface"):
+            _val = str(payload.get(_key) or "").strip().lower()
+            if _val:
+                companion_hints.append(_val)
+        is_companion_chat = any(("companion" in token) or ("infinite" in token) for token in companion_hints)
+        explicit_autonomy_requested = "autonomy_level" in payload
+        explicit_system_prompt_requested = "system_prompt" in payload
         if "autonomy_level" in payload:
             session.autonomy_level = clamp_autonomy_level(
                 payload.get("autonomy_level"),
                 default=getattr(session, "autonomy_level", 3),
             )
         elif runtime_prefs is not None:
-            pref_level = str(getattr(getattr(runtime_prefs, "autonomy", None), "default_level", "") or "").strip().upper()
-            level_map = {"L1": 1, "L2": 2, "L3": 3, "L4": 4}
-            if pref_level in level_map:
-                session.autonomy_level = int(level_map[pref_level])
+            pref_level = getattr(getattr(runtime_prefs, "autonomy", None), "default_level", None)
+            if pref_level:
+                session.autonomy_level = parse_autonomy_level(
+                    pref_level,
+                    default=getattr(session, "autonomy_level", 3),
+                )
         if "system_prompt" in payload:
             val = payload.get("system_prompt")
             session.system_prompt = val.strip() if isinstance(val, str) and val.strip() else None
+        if is_companion_chat:
+            if not explicit_autonomy_requested:
+                # Companion phone UX should stay in guarded-auto mode by default.
+                session.autonomy_level = 2
+            if not explicit_system_prompt_requested and not str(getattr(session, "system_prompt", "") or "").strip():
+                session.system_prompt = COMPANION_PHONE_SYSTEM_PROMPT
         if "reasoning_effort" in payload:
             val = str(payload.get("reasoning_effort") or "").strip().lower()
             if val in ("low", "medium", "high", "xhigh", ""):
@@ -256,6 +390,11 @@ def register_chat_routes(
             if pref_effort in {"high", "xhigh", "max"}:
                 default_mode = "thinking"
         requested_mode = str(payload.get("mode") or default_mode or "auto").strip().lower()
+        orchestrator_only_raw = payload.get("orchestrator_only")
+        if isinstance(orchestrator_only_raw, bool):
+            orchestrator_only = bool(orchestrator_only_raw)
+        else:
+            orchestrator_only = str(orchestrator_only_raw or "").strip().lower() in {"1", "true", "yes", "on"}
         default_token_economy = str(getattr(advanced_runtime, "default_token_economy", "") or "").strip().lower()
         requested_token_economy = str(payload.get("token_economy") or default_token_economy).strip().lower()
         applied_token_economy, mode, run_cfg, run_max_iterations = apply_token_economy_policy(
@@ -263,10 +402,18 @@ def register_chat_routes(
             requested_level=requested_token_economy,
             requested_mode=requested_mode,
         )
+        if orchestrator_only and mode != ORCHESTRATOR_ONLY_MODE:
+            log.info("orchestrator_only forced chat mode '%s' -> '%s'", mode, ORCHESTRATOR_ONLY_MODE)
+            mode = ORCHESTRATOR_ONLY_MODE
         token_economy_meta = build_token_economy_meta(
             requested_level=requested_token_economy,
             applied_level=applied_token_economy,
         )
+        # Attach pass limit so spawned agents (swarm workers, pipelines) can
+        # pick it up.  The orchestrator itself ignores this — see
+        # chat_stream_events.py for details.
+        if run_max_iterations is not None:
+            token_economy_meta["max_passes"] = int(run_max_iterations)
         if advanced_runtime is not None:
             run_cfg = replace(
                 run_cfg,
@@ -299,6 +446,18 @@ def register_chat_routes(
             pref_iters = int(getattr(advanced_runtime, "max_agent_iterations", 0) or 0)
             if pref_iters > 0:
                 run_max_iterations = pref_iters
+        if non_coder_profile:
+            # Hard gate: non-coder profiles always run with strict quality enforcement.
+            run_cfg = replace(
+                run_cfg,
+                quality=replace(
+                    run_cfg.quality,
+                    enforce=True,
+                    require_verification_for_coding=True,
+                    require_tests_for_code_edits=True,
+                    require_monolith_guard_for_coding=True,
+                ),
+            )
         if advanced_failover is not None:
             run_cfg = replace(
                 run_cfg,
@@ -321,7 +480,7 @@ def register_chat_routes(
         requested_job_type = str(payload.get("job_type") or "").strip().lower() or None
         docs = payload.get("docs") or []
         images = payload.get("images") or []
-        manager = request.app.get(APP_ENGINE_MANAGER)
+        manager = _resolve_app_value(request.app, APP_ENGINE_MANAGER)
         if manager is not None:
             with contextlib.suppress(Exception):
                 manager.record_user_message()
@@ -334,7 +493,7 @@ def register_chat_routes(
                 model_id=session.model_id,
                 autonomy_level=int(getattr(session, "autonomy_level", 3) or 3),
             )
-        ledger = request.app.get(APP_TASK_LEDGER)
+        ledger = _resolve_app_value(request.app, APP_TASK_LEDGER)
         if ledger is not None:
             try:
                 current_state = ledger.get_current(sid)
@@ -353,8 +512,11 @@ def register_chat_routes(
                 )
             except Exception as e:
                 log.debug("Task ledger pre-chat update failed: %s", e)
-        run_store_mod = request.app.get(APP_RUN_STORE_MODULE)
-        run_store_enabled = bool(request.app.get(APP_RUN_STORE_ENABLED)) and run_store_mod is not None
+        run_store_mod = _resolve_app_value(request.app, APP_RUN_STORE_MODULE)
+        run_store_enabled = (
+            bool(_resolve_app_value(request.app, APP_RUN_STORE_ENABLED, default=False)) and run_store_mod is not None
+        )
+
         def _start_run_writer(run_id: str, run_mode: str):
             if not run_store_enabled:
                 return None
@@ -376,34 +538,62 @@ def register_chat_routes(
             except Exception as e:
                 log.warning("Run store start failed: %s", e)
                 return None
+
         switch_req = await deps.resolve_natural_model_switch(text, current_profile=session.profile)
-        control_req = resolve_ui_control_request(text, model_switch=switch_req)
+        resolve_control_req_fn = resolve_ui_control_request
+        handle_ui_control_chat_fn = handle_ui_control_chat
+        try:
+            from thomas.server import app as server_app
+
+            if resolve_control_req_fn is _DEFAULT_RESOLVE_UI_CONTROL_REQUEST:
+                resolve_candidate = getattr(
+                    server_app,
+                    "resolve_ui_control_request",
+                    _DEFAULT_RESOLVE_UI_CONTROL_REQUEST,
+                )
+                if callable(resolve_candidate):
+                    resolve_control_req_fn = resolve_candidate
+            if handle_ui_control_chat_fn is _DEFAULT_HANDLE_UI_CONTROL_CHAT:
+                handle_candidate = getattr(
+                    server_app,
+                    "handle_ui_control_chat",
+                    _DEFAULT_HANDLE_UI_CONTROL_CHAT,
+                )
+                if callable(handle_candidate):
+                    handle_ui_control_chat_fn = handle_candidate
+        except Exception:
+            resolve_control_req_fn = resolve_ui_control_request
+            handle_ui_control_chat_fn = handle_ui_control_chat
+
+        control_req = resolve_control_req_fn(text, model_switch=switch_req)
+        if orchestrator_only and control_req is not None:
+            control_patch = getattr(control_req, "patch", None)
+            if isinstance(control_patch, dict):
+                requested_control_mode = str(control_patch.get("mode") or "").strip().lower()
+                if requested_control_mode and requested_control_mode != ORCHESTRATOR_ONLY_MODE:
+                    control_patch["mode"] = ORCHESTRATOR_ONLY_MODE
         if control_req is not None:
-            try:
-                async with session_lock:
-                    return await handle_ui_control_chat(
-                        request,
-                        cfg=cfg,
-                        session=session,
-                        payload=payload,
-                        text=text,
-                        profile=profile,
-                        mode=mode,
-                        start_t=start_t,
-                        token_economy_meta=token_economy_meta,
-                        switch_req=switch_req,
-                        control_req=control_req,
-                        run_store_enabled=run_store_enabled,
-                        run_store_mod=run_store_mod,
-                        start_run_writer=_start_run_writer,
-                        deps=ChatControlDeps(
-                            clamp_autonomy_level=clamp_autonomy_level,
-                            normalize_usage_payload=_normalize_usage_payload,
-                        ),
-                    )
-            finally:
-                if session_run_guard_active:
-                    await deps.end_session_run(sid)
+            async with session_lock:
+                return await handle_ui_control_chat_fn(
+                    request,
+                    cfg=cfg,
+                    session=session,
+                    payload=payload,
+                    text=text,
+                    profile=profile,
+                    mode=mode,
+                    start_t=start_t,
+                    token_economy_meta=token_economy_meta,
+                    switch_req=switch_req,
+                    control_req=control_req,
+                    run_store_enabled=run_store_enabled,
+                    run_store_mod=run_store_mod,
+                    start_run_writer=_start_run_writer,
+                    deps=ChatControlDeps(
+                        clamp_autonomy_level=clamp_autonomy_level,
+                        normalize_usage_payload=_normalize_usage_payload,
+                    ),
+                )
         quick_reply = await maybe_handle_quick_casual_reply(
             request=request,
             session_lock=session_lock,
@@ -416,14 +606,10 @@ def register_chat_routes(
             deps=deps,
         )
         if quick_reply is not None:
-            try:
-                return quick_reply
-            finally:
-                if session_run_guard_active:
-                    await deps.end_session_run(sid)
+            return quick_reply
         # Attach docs as plain text blocks.
         if isinstance(docs, list) and docs:
-            blocks: List[str] = []
+            blocks: list[str] = []
             for d in docs[:6]:
                 if not isinstance(d, dict):
                     continue
@@ -456,18 +642,27 @@ def register_chat_routes(
         if advanced_model is not None:
             model_cfg = replace(
                 model_cfg,
-                temperature=float(getattr(advanced_model, "temperature", model_cfg.temperature) or model_cfg.temperature),
+                temperature=float(
+                    getattr(advanced_model, "temperature", model_cfg.temperature) or model_cfg.temperature
+                ),
                 top_p=float(getattr(advanced_model, "top_p", model_cfg.top_p) or model_cfg.top_p),
-                max_tokens=int(getattr(advanced_model, "max_output_tokens", model_cfg.max_tokens) or model_cfg.max_tokens),
-                reasoning_effort=str(getattr(advanced_model, "reasoning_effort", model_cfg.reasoning_effort) or model_cfg.reasoning_effort),
+                max_tokens=int(
+                    getattr(advanced_model, "max_output_tokens", model_cfg.max_tokens) or model_cfg.max_tokens
+                ),
+                reasoning_effort=str(
+                    getattr(advanced_model, "reasoning_effort", model_cfg.reasoning_effort)
+                    or model_cfg.reasoning_effort
+                ),
             )
         if getattr(session, "reasoning_effort", None):
             model_cfg = replace(model_cfg, reasoning_effort=session.reasoning_effort)
         fallback_cfgs = deps.failover_cfgs_with_secrets(profile)
         if advanced_cost is not None:
-            chain = [s.strip() for s in str(getattr(advanced_cost, "model_failover_chain", "") or "").split(",") if s.strip()]
+            chain = [
+                s.strip() for s in str(getattr(advanced_cost, "model_failover_chain", "") or "").split(",") if s.strip()
+            ]
             if chain:
-                cfgs: List[Any] = []
+                cfgs: list[Any] = []
                 for item in chain:
                     if item == profile:
                         continue
@@ -476,8 +671,20 @@ def register_chat_routes(
                 fallback_cfgs = cfgs
         # Capability fallback: if this profile does not support batch, transparently
         # fall back to normal chat mode instead of erroring.
-        if mode == "batch" and not model_supports(model_cfg, "batch"):
-            mode = "auto"
+        model_supports_fn = model_supports
+        if model_supports_fn is _DEFAULT_MODEL_SUPPORTS:
+            try:
+                from thomas.server import app as server_app
+
+                candidate = getattr(server_app, "model_supports", _DEFAULT_MODEL_SUPPORTS)
+                if callable(candidate):
+                    model_supports_fn = candidate
+            except Exception:
+                model_supports_fn = model_supports
+        if mode == "batch" and not model_supports_fn(model_cfg, "batch"):
+            mode = ORCHESTRATOR_ONLY_MODE if orchestrator_only else "auto"
+        if orchestrator_only and mode != ORCHESTRATOR_ONLY_MODE:
+            mode = ORCHESTRATOR_ONLY_MODE
         # Batch mode orchestration path.
         batch_response = await maybe_handle_batch_mode(
             request=request,
@@ -500,11 +707,7 @@ def register_chat_routes(
             deps=deps,
         )
         if batch_response is not None:
-            try:
-                return batch_response
-            finally:
-                if session_run_guard_active:
-                    await deps.end_session_run(sid)
+            return batch_response
         # Swarm mode orchestration path.
         swarm_response = await maybe_handle_swarm_mode(
             request=request,
@@ -526,15 +729,13 @@ def register_chat_routes(
             deps=deps,
         )
         if swarm_response is not None:
-            try:
-                return swarm_response
-            finally:
-                if session_run_guard_active:
-                    await deps.end_session_run(sid)
+            return swarm_response
+        if orchestrator_only:
+            raise web.HTTPInternalServerError(text="orchestrator_only mode requires swarm orchestration")
         setup_elapsed = time.monotonic() - start_t
         run_id = secrets.token_urlsafe(10)
         writer = _start_run_writer(run_id, mode)
-        run_done: Dict[str, Any] = {
+        run_done: dict[str, Any] = {
             "ok": None,
             "error": None,
             "iterations": None,
@@ -543,7 +744,7 @@ def register_chat_routes(
         }
         chat_auto_failover = bool(getattr(run_cfg.failover, "chat_auto_failover", False))
         failover_enabled_for_chat = bool(run_cfg.failover.enabled and chat_auto_failover)
-        request_overrides: Dict[str, Any] = {}
+        request_overrides: dict[str, Any] = {}
         if advanced_model is not None:
             request_overrides["frequency_penalty"] = float(getattr(advanced_model, "frequency_penalty", 0.0) or 0.0)
             request_overrides["presence_penalty"] = float(getattr(advanced_model, "presence_penalty", 0.0) or 0.0)
@@ -574,7 +775,10 @@ def register_chat_routes(
                 register_shell_tools(
                     tools,
                     config.tools.sandbox_path,
-                    config_timeout=int(getattr(advanced_tools, "tool_timeout_s", config.tools.shell_timeout) or config.tools.shell_timeout),
+                    config_timeout=int(
+                        getattr(advanced_tools, "tool_timeout_s", config.tools.shell_timeout)
+                        or config.tools.shell_timeout
+                    ),
                     allowed=True,
                 )
             if not allow_shell:
@@ -586,48 +790,61 @@ def register_chat_routes(
             blocked_commands = [s.strip().lower() for s in raw_blocked.split(",") if s.strip()]
             allowed_paths_value = str(getattr(advanced_tools, "allowed_paths", "") or "").strip()
             require_command_approval = bool(getattr(advanced_tools, "require_command_approval", False))
+
             class _PolicyWrappedTools:
                 """Wraps ToolRegistry to enforce tool policies.
                 Delegates everything to _base except execute() which applies
                 policy checks first. Uses __getattr__ as catch-all plus explicit
                 dunder methods (Python bypasses __getattr__ for data model methods).
                 """
+
                 def __init__(self, base: ToolRegistry):
                     self._base = base
-                async def execute(self, name: str, args: Dict[str, Any]):
+
+                async def execute(self, name: str, args: dict[str, Any]):
                     n = str(name or "").strip().lower()
                     if n == "shell.exec":
                         if require_command_approval:
                             from thomas.tools.base import ToolResult
+
                             return ToolResult(ok=False, error="require_command_approval policy blocks shell.exec")
                         cmd_text = str((args or {}).get("command") or "").strip().lower()
                         for token in blocked_commands:
                             if token and token in cmd_text:
                                 from thomas.tools.base import ToolResult
+
                                 return ToolResult(ok=False, error="blocked_commands policy denied shell command")
                     if allowed_paths_value and n.startswith("fs."):
                         path_text = str((args or {}).get("path") or "").strip().replace("/", "\\").lower()
                         allowed = str(allowed_paths_value).replace("/", "\\").lower()
                         if path_text.startswith("..") or (allowed and allowed not in path_text):
                             from thomas.tools.base import ToolResult
+
                             return ToolResult(ok=False, error="allowed_paths policy denied filesystem access")
                     return await self._base.execute(name, args)
+
                 # Catch-all for any method not explicitly overridden
                 def __getattr__(self, name: str):
                     return getattr(self._base, name)
+
                 # Explicit dunder delegation (Python skips __getattr__ for these)
                 def __len__(self) -> int:
                     return len(self._base)
+
                 def __contains__(self, item) -> bool:
                     return item in self._base
+
                 def __iter__(self):
                     return iter(self._base)
+
                 def __bool__(self) -> bool:
                     return bool(self._base)
+
             tools = _PolicyWrappedTools(tools)  # type: ignore[assignment]
-        memory = request.app[APP_MEMORY]
-        guarded_runner = request.app[APP_GUARDED_TOOL_RUNNER] if request.app.get(APP_GUARDRAILS_ENABLED) else None
-        action_audit = request.app.get(APP_ACTION_AUDIT)
+        memory = _resolve_app_value(request.app, APP_MEMORY, required=True)
+        guardrails_enabled = bool(_resolve_app_value(request.app, APP_GUARDRAILS_ENABLED, default=False))
+        guarded_runner = _resolve_app_value(request.app, APP_GUARDED_TOOL_RUNNER) if guardrails_enabled else None
+        action_audit = _resolve_app_value(request.app, APP_ACTION_AUDIT)
         resp = web.StreamResponse(
             status=200,
             headers={
@@ -638,6 +855,7 @@ def register_chat_routes(
         await resp.prepare(request)
         send_lock = asyncio.Lock()
         next_seq = {"value": 0}
+
         def _next_seq() -> int:
             try:
                 value = int(next_seq["value"])
@@ -647,8 +865,10 @@ def register_chat_routes(
                 value = 0
             next_seq["value"] = value + 1
             return value
+
         _stream_broken = False
-        async def send(obj: Dict[str, Any]) -> None:
+
+        async def send(obj: dict[str, Any]) -> None:
             nonlocal _stream_broken
             if _stream_broken:
                 return  # client disconnected -- silently drop
@@ -672,11 +892,14 @@ def register_chat_routes(
                 except (ConnectionResetError, ConnectionAbortedError, BrokenPipeError, OSError) as write_err:
                     _stream_broken = True
                     log.debug("Client disconnected during stream write: %s", write_err)
+
         async def send_timing(label: str) -> None:
             elapsed = round((time.monotonic() - start_t) * 1000)
             await send({"type": "timing", "label": label, "elapsed_ms": elapsed})
-        async def _emit_guardrails_event(evt_type: str, payload_obj: Dict[str, Any]) -> None:
+
+        async def _emit_guardrails_event(evt_type: str, payload_obj: dict[str, Any]) -> None:
             await send({"type": "guardrails", "event": str(evt_type), "payload": payload_obj})
+
         requested_runtime = {
             "profile": str(model_cfg.name or profile or ""),
             "provider": str(model_cfg.provider or ""),
@@ -684,27 +907,60 @@ def register_chat_routes(
             "base_url": str(model_cfg.base_url or ""),
         }
         # Create per-run message queue for mid-run interruption support.
-        msg_queue: asyncio.Queue[Optional[str]] = asyncio.Queue(maxsize=4)
+        msg_queue: asyncio.Queue[str | None] = asyncio.Queue(maxsize=4)
         _SESSION_MSG_QUEUES[sid] = msg_queue
-        agent = AgentLoop(
-            run_cfg,
-            llm,
-            tools,
-            system_prompt=session.system_prompt,
-            conversation=session.conversation,
-            memory=memory,
-            thread_id=sid,
-            guarded_tool_runner=guarded_runner,
-            action_audit=action_audit,
-            run_id=run_id,
-            session_id=sid,
-            guardrails_event_cb=_emit_guardrails_event if guarded_runner is not None else None,
-            autonomy_level=int(getattr(session, "autonomy_level", 3) or 3),
-            max_parallel_tools=int(getattr(advanced_tools, "max_parallel_tools", 6) or 6),
-            tool_timeout_s=int(getattr(advanced_tools, "tool_timeout_s", 120) or 120),
-            message_queue=msg_queue,
-        )
-        journal: Optional[Any] = None
+        agent_cls = AgentLoop
+        if agent_cls is _DEFAULT_AGENT_LOOP:
+            try:
+                from thomas.server import app as server_app
+
+                candidate = getattr(server_app, "AgentLoop", _DEFAULT_AGENT_LOOP)
+                if candidate is not None:
+                    agent_cls = candidate
+            except Exception:
+                agent_cls = AgentLoop
+        agent_base_kwargs = {
+            "system_prompt": session.system_prompt,
+            "conversation": session.conversation,
+            "memory": memory,
+            "thread_id": sid,
+            "guarded_tool_runner": guarded_runner,
+            "action_audit": action_audit,
+            "run_id": run_id,
+            "session_id": sid,
+            "guardrails_event_cb": _emit_guardrails_event if guarded_runner is not None else None,
+            "autonomy_level": int(getattr(session, "autonomy_level", 3) or 3),
+            "max_parallel_tools": int(getattr(advanced_tools, "max_parallel_tools", 6) or 6),
+            "tool_timeout_s": int(getattr(advanced_tools, "tool_timeout_s", 120) or 120),
+            "message_queue": msg_queue,
+        }
+        agent_profile_kwargs = {
+            "non_coder_profile": bool(non_coder_profile),
+            "profile_type": str(resolved_profile_type),
+            "review_depth": str(resolved_review_depth),
+        }
+        try:
+            agent = agent_cls(
+                run_cfg,
+                llm,
+                tools,
+                **agent_base_kwargs,
+                **agent_profile_kwargs,
+            )
+        except TypeError as exc:
+            if "unexpected keyword argument" not in str(exc):
+                raise
+            log.warning(
+                "AgentLoop signature does not accept profile flags; continuing without them: %s",
+                exc,
+            )
+            agent = agent_cls(
+                run_cfg,
+                llm,
+                tools,
+                **agent_base_kwargs,
+            )
+        journal: Any | None = None
         try:
             await send_timing("stream_ready")
             await send(
@@ -809,4 +1065,5 @@ def register_chat_routes(
                 except Exception as e:
                     log.warning("Session run guard cleanup failed: %s", e)
         return resp
+
     app.router.add_post("/api/chat", api_chat)

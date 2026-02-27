@@ -1,4 +1,11 @@
 repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
   - repo: local
     hooks:
       - id: thomas-active-folder-guard
@@ -21,13 +28,19 @@ repos:
 
       - id: thomas-workboard-claims-gate
         name: Thomas Workboard Claims Gate
-        entry: python scripts/check_workboard_claims.py
+        entry: python scripts/check_workboard_claims.py --require-identity-metadata
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-changed-files-gate
+        name: Thomas Workboard Changed Files Gate
+        entry: python scripts/check_workboard_changed_files.py --staged --require-identity-metadata
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-agent-claim-gate
         name: Thomas Workboard Agent Claim Gate
-        entry: python scripts/check_workboard_agent_claim.py --enforce-staged-scope
+        entry: python scripts/check_workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2
         language: system
         pass_filenames: false
 

@@ -4,12 +4,12 @@ import unittest
 from datetime import datetime, timezone
 
 from aiohttp import web
-from aiohttp.test_utils import AioHTTPTestCase, unittest_run_loop
+from aiohttp.test_utils import AioHTTPTestCase
 
-from thomas.autonomy.store import AutonomyStore
+from thomas.autonomy.api import register_autonomy_routes
 from thomas.autonomy.engine import AutonomyEngine
 from thomas.autonomy.policy import AutonomyPolicy
-from thomas.autonomy.api import register_autonomy_routes
+from thomas.autonomy.store import AutonomyStore
 
 
 class TestAutonomyAPI(AioHTTPTestCase):
@@ -21,18 +21,20 @@ class TestAutonomyAPI(AioHTTPTestCase):
         engine = AutonomyEngine(store=store, policy=policy)
         app = web.Application()
         register_autonomy_routes(app, engine=engine, store=store, policy=policy, api_token=None)
+
         # start engine in app lifecycle
         async def on_startup(app):
             await engine.start()
+
         async def on_cleanup(app):
             await engine.stop()
             store.close()
             self.tmpdir.cleanup()
+
         app.on_startup.append(on_startup)
         app.on_cleanup.append(on_cleanup)
         return app
 
-    @unittest_run_loop
     async def test_create_and_list(self):
         payload = {
             "name": "r",

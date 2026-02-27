@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Any, Optional
+from typing import Any
 
 from .kernel import CompanionKernel
 
@@ -55,7 +55,7 @@ class DeviceRecord:
     last_seen_at: str
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DeviceRecord":
+    def from_dict(cls, data: dict[str, Any]) -> DeviceRecord:
         return cls(
             device_id=str(data.get("device_id") or ""),
             platform=str(data.get("platform") or ""),
@@ -111,7 +111,7 @@ class DeviceRegistry:
         path = self.kernel.paths.devices_file
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except json.JSONDecodeError:
             payload = {"schema_version": 1, "devices": {}}
         if not isinstance(payload, dict):
             payload = {"schema_version": 1, "devices": {}}
@@ -126,7 +126,7 @@ class DeviceRegistry:
             encoding="utf-8",
         )
 
-    def get(self, device_id: str) -> Optional[DeviceRecord]:
+    def get(self, device_id: str) -> DeviceRecord | None:
         did = str(device_id or "").strip()
         if not did:
             return None
@@ -197,9 +197,7 @@ class DeviceRegistry:
             "app_build_id": str(app_build_id or old.get("app_build_id") or "").strip(),
             "tailscale_identity": str(tailscale_identity or old.get("tailscale_identity") or "").strip(),
             "capabilities": [
-                str(x).strip()
-                for x in list(capabilities or old.get("capabilities") or [])
-                if str(x).strip()
+                str(x).strip() for x in list(capabilities or old.get("capabilities") or []) if str(x).strip()
             ],
             "runtime_capability_set": [
                 str(x).strip()
@@ -230,7 +228,7 @@ class DeviceRegistry:
         release_id: str,
         *,
         timestamp: str = "",
-    ) -> Optional[DeviceRecord]:
+    ) -> DeviceRecord | None:
         did = str(device_id or "").strip()
         rid = str(release_id or "").strip()
         if not did:

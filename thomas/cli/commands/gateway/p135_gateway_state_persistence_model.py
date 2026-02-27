@@ -24,7 +24,7 @@ import sys
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 DEFAULT_BASE_URL_ENV_VARS = ("THOMAS_BASE_URL", "THOMAS_SERVER_URL", "THOMAS_GATEWAY_URL")
 DEFAULT_BASE_URL = "http://127.0.0.1:8000"
@@ -34,7 +34,7 @@ DEFAULT_BASE_URL = "http://127.0.0.1:8000"
 class CliResult:
     ok: bool
     status: int
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
 
     def to_json(self) -> str:
         return json.dumps(self.payload, indent=2, sort_keys=True)
@@ -50,8 +50,8 @@ def _resolve_base_url(args: argparse.Namespace) -> str:
     return DEFAULT_BASE_URL
 
 
-def _http_json(method: str, url: str, body: Optional[Dict[str, Any]] = None, timeout_s: float = 10.0) -> CliResult:
-    data: Optional[bytes] = None
+def _http_json(method: str, url: str, body: dict[str, Any] | None = None, timeout_s: float = 10.0) -> CliResult:
+    data: bytes | None = None
     headers = {"Accept": "application/json"}
     if body is not None:
         data = json.dumps(body).encode("utf-8")
@@ -63,14 +63,14 @@ def _http_json(method: str, url: str, body: Optional[Dict[str, Any]] = None, tim
             raw = resp.read()
             try:
                 payload = json.loads(raw.decode("utf-8")) if raw else {}
-            except Exception:
+            except json.JSONDecodeError:
                 payload = {"raw": raw.decode("utf-8", errors="replace")}
             return CliResult(ok=True, status=getattr(resp, "status", 200), payload=payload)
     except urllib.error.HTTPError as e:
         raw = e.read()
         try:
             payload = json.loads(raw.decode("utf-8")) if raw else {}
-        except Exception:
+        except json.JSONDecodeError:
             payload = {"raw": raw.decode("utf-8", errors="replace")}
         return CliResult(ok=False, status=e.code, payload=payload)
     except urllib.error.URLError as e:
@@ -93,7 +93,9 @@ def build_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPar
     # State controls
     parser.add_argument("--get-state", action="store_true", help="Fetch current gateway state")
     parser.add_argument("--set-state", help="Set gateway state from a JSON object string")
-    parser.add_argument("--expected-version", type=int, help="Optimistic concurrency: expected current version for --set-state")
+    parser.add_argument(
+        "--expected-version", type=int, help="Optimistic concurrency: expected current version for --set-state"
+    )
 
     parser.set_defaults(func=run)
     return parser
@@ -107,7 +109,7 @@ def run(args: argparse.Namespace) -> int:
     base = _resolve_base_url(args)
 
     if args.mode:
-        body: Dict[str, Any] = {"mode": args.mode}
+        body: dict[str, Any] = {"mode": args.mode}
         if args.state_dir:
             body["state_dir"] = args.state_dir
         if args.max_state_bytes is not None:
@@ -125,11 +127,15 @@ def run(args: argparse.Namespace) -> int:
             _emit(err, json_mode=args.json)
             return 2
         if not isinstance(parsed, dict):
-            err = CliResult(ok=False, status=2, payload={"error": {"code": "invalid_request", "message": "--set-state must be a JSON object"}})
+            err = CliResult(
+                ok=False,
+                status=2,
+                payload={"error": {"code": "invalid_request", "message": "--set-state must be a JSON object"}},
+            )
             _emit(err, json_mode=args.json)
             return 2
 
-        body: Dict[str, Any] = {"state": parsed}
+        body: dict[str, Any] = {"state": parsed}
         if args.expected_version is not None:
             body["expected_version"] = int(args.expected_version)
 

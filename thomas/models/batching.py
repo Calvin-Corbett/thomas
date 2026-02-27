@@ -14,9 +14,12 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
 from thomas.core.config import ModelConfig
 
@@ -28,11 +31,11 @@ class BatchAPIError(RuntimeError):
 def _to_int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except Exception:
+    except ImportError:
         return int(default)
 
 
-def _root_obj(payload: Dict[str, Any]) -> Dict[str, Any]:
+def _root_obj(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(payload, dict):
         return {}
     inner = payload.get("batch")
@@ -41,7 +44,7 @@ def _root_obj(payload: Dict[str, Any]) -> Dict[str, Any]:
     return payload
 
 
-def extract_batch_id(payload: Dict[str, Any]) -> str:
+def extract_batch_id(payload: dict[str, Any]) -> str:
     obj = _root_obj(payload)
     candidates = (
         obj.get("batch_id"),
@@ -57,49 +60,30 @@ def extract_batch_id(payload: Dict[str, Any]) -> str:
     return ""
 
 
-def parse_batch_state(payload: Dict[str, Any]) -> Dict[str, Any]:
+def parse_batch_state(payload: dict[str, Any]) -> dict[str, Any]:
     """Parse batch progress counters and completion state from loose payloads."""
     obj = _root_obj(payload)
     state = obj.get("state") if isinstance(obj.get("state"), dict) else {}
-    status = str(
-        obj.get("status")
-        or payload.get("status")
-        or ""
-    ).strip().lower()
+    status = str(obj.get("status") or payload.get("status") or "").strip().lower()
 
     num_requests = _to_int(
-        state.get("num_requests")
-        or state.get("numRequests")
-        or obj.get("num_requests")
-        or obj.get("numRequests"),
+        state.get("num_requests") or state.get("numRequests") or obj.get("num_requests") or obj.get("numRequests"),
         0,
     )
     num_pending = _to_int(
-        state.get("num_pending")
-        or state.get("numPending")
-        or obj.get("num_pending")
-        or obj.get("numPending"),
+        state.get("num_pending") or state.get("numPending") or obj.get("num_pending") or obj.get("numPending"),
         0,
     )
     num_success = _to_int(
-        state.get("num_success")
-        or state.get("numSuccess")
-        or obj.get("num_success")
-        or obj.get("numSuccess"),
+        state.get("num_success") or state.get("numSuccess") or obj.get("num_success") or obj.get("numSuccess"),
         0,
     )
     num_error = _to_int(
-        state.get("num_error")
-        or state.get("numError")
-        or obj.get("num_error")
-        or obj.get("numError"),
+        state.get("num_error") or state.get("numError") or obj.get("num_error") or obj.get("numError"),
         0,
     )
     num_cancelled = _to_int(
-        state.get("num_cancelled")
-        or state.get("numCancelled")
-        or obj.get("num_cancelled")
-        or obj.get("numCancelled"),
+        state.get("num_cancelled") or state.get("numCancelled") or obj.get("num_cancelled") or obj.get("numCancelled"),
         0,
     )
 
@@ -114,7 +98,7 @@ def parse_batch_state(payload: Dict[str, Any]) -> Dict[str, Any]:
         "canceled",
         "expired",
     }
-    counters_done = (num_requests > 0 and num_pending <= 0)
+    counters_done = num_requests > 0 and num_pending <= 0
     done = bool(terminal_status or counters_done)
     if not status:
         if done:
@@ -135,7 +119,7 @@ def parse_batch_state(payload: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def extract_batch_results(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
+def extract_batch_results(payload: dict[str, Any]) -> list[dict[str, Any]]:
     if not isinstance(payload, dict):
         return []
     for key in ("results", "batch_results", "data"):
@@ -150,7 +134,7 @@ def extract_batch_results(payload: Dict[str, Any]) -> List[Dict[str, Any]]:
     return []
 
 
-def extract_result_request_id(result: Dict[str, Any]) -> str:
+def extract_result_request_id(result: dict[str, Any]) -> str:
     if not isinstance(result, dict):
         return ""
     return str(
@@ -162,7 +146,7 @@ def extract_result_request_id(result: Dict[str, Any]) -> str:
     ).strip()
 
 
-def extract_result_error(result: Dict[str, Any]) -> str:
+def extract_result_error(result: dict[str, Any]) -> str:
     if not isinstance(result, dict):
         return ""
     err = result.get("error")
@@ -180,7 +164,7 @@ def _normalize_text_content(content: Any) -> str:
     if isinstance(content, str):
         return content
     if isinstance(content, list):
-        parts: List[str] = []
+        parts: list[str] = []
         for item in content:
             if isinstance(item, str):
                 parts.append(item)
@@ -193,7 +177,7 @@ def _normalize_text_content(content: Any) -> str:
     return ""
 
 
-def extract_result_text(result: Dict[str, Any]) -> str:
+def extract_result_text(result: dict[str, Any]) -> str:
     """Extract assistant text from one batch result across common schemas."""
     if not isinstance(result, dict):
         return ""
@@ -227,9 +211,9 @@ def extract_result_text(result: Dict[str, Any]) -> str:
 def build_completion_request(
     *,
     model_cfg: ModelConfig,
-    messages: List[Dict[str, Any]],
-) -> Dict[str, Any]:
-    req: Dict[str, Any] = {
+    messages: list[dict[str, Any]],
+) -> dict[str, Any]:
+    req: dict[str, Any] = {
         "model": str(model_cfg.model or ""),
         "messages": list(messages or []),
         "max_tokens": int(model_cfg.max_tokens or 4096),
@@ -245,8 +229,8 @@ def build_completion_request(
 class BatchSubmission:
     batch_id: str
     request_id: str
-    create_payload: Dict[str, Any]
-    add_payload: Dict[str, Any]
+    create_payload: dict[str, Any]
+    add_payload: dict[str, Any]
 
 
 class OpenAICompatBatchClient:
@@ -254,7 +238,7 @@ class OpenAICompatBatchClient:
 
     def __init__(self, model_cfg: ModelConfig):
         self.model_cfg = model_cfg
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def close(self) -> None:
         if self._client and not self._client.is_closed:
@@ -264,7 +248,7 @@ class OpenAICompatBatchClient:
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is not None and not self._client.is_closed:
             return self._client
-        headers: Dict[str, str] = {"Content-Type": "application/json"}
+        headers: dict[str, str] = {"Content-Type": "application/json"}
         if self.model_cfg.extra_headers:
             headers.update(self.model_cfg.extra_headers)
         if self.model_cfg.api_key:
@@ -292,17 +276,15 @@ class OpenAICompatBatchClient:
         method: str,
         path: str,
         *,
-        json_body: Optional[Dict[str, Any]] = None,
-        params: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        json_body: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         client = await self._get_client()
         url = self._url(path)
         resp = await client.request(method=method.upper(), url=url, json=json_body, params=params)
         if resp.status_code >= 400:
             body = resp.text
-            raise BatchAPIError(
-                f"batch API {resp.status_code} at {path}: {body[:400]}"
-            )
+            raise BatchAPIError(f"batch API {resp.status_code} at {path}: {body[:400]}")
         if not resp.content:
             return {}
         ctype = str(resp.headers.get("content-type") or "").lower()
@@ -311,20 +293,20 @@ class OpenAICompatBatchClient:
                 payload = resp.json()
                 if isinstance(payload, dict):
                     return payload
-            except Exception:
+            except json.JSONDecodeError:
                 pass
         try:
             payload = json.loads(resp.text)
             if isinstance(payload, dict):
                 return payload
-        except Exception:
+        except json.JSONDecodeError:
             pass
         return {}
 
-    async def create_batch(self, *, name: str) -> Dict[str, Any]:
+    async def create_batch(self, *, name: str) -> dict[str, Any]:
         return await self._request("POST", "/batches", json_body={"name": str(name or "thomas-batch").strip()})
 
-    async def add_batch_requests(self, *, batch_id: str, batch_requests: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def add_batch_requests(self, *, batch_id: str, batch_requests: list[dict[str, Any]]) -> dict[str, Any]:
         bid = str(batch_id or "").strip()
         if not bid:
             raise BatchAPIError("missing batch_id")
@@ -334,7 +316,7 @@ class OpenAICompatBatchClient:
         }
         return await self._request("POST", f"/batches/{bid}/requests", json_body=body)
 
-    async def get_batch(self, *, batch_id: str) -> Dict[str, Any]:
+    async def get_batch(self, *, batch_id: str) -> dict[str, Any]:
         bid = str(batch_id or "").strip()
         if not bid:
             raise BatchAPIError("missing batch_id")
@@ -346,11 +328,11 @@ class OpenAICompatBatchClient:
         batch_id: str,
         limit: int = 100,
         pagination_token: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         bid = str(batch_id or "").strip()
         if not bid:
             raise BatchAPIError("missing batch_id")
-        params: Dict[str, Any] = {"limit": max(1, int(limit))}
+        params: dict[str, Any] = {"limit": max(1, int(limit))}
         if pagination_token.strip():
             params["pagination_token"] = pagination_token.strip()
         return await self._request("GET", f"/batches/{bid}/requests", params=params)
@@ -361,11 +343,11 @@ class OpenAICompatBatchClient:
         batch_id: str,
         limit: int = 200,
         pagination_token: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         bid = str(batch_id or "").strip()
         if not bid:
             raise BatchAPIError("missing batch_id")
-        params: Dict[str, Any] = {"limit": max(1, int(limit))}
+        params: dict[str, Any] = {"limit": max(1, int(limit))}
         if pagination_token.strip():
             params["pagination_token"] = pagination_token.strip()
         return await self._request("GET", f"/batches/{bid}/results", params=params)
@@ -374,7 +356,7 @@ class OpenAICompatBatchClient:
         self,
         *,
         batch_name: str,
-        requests: List[Dict[str, Any]],
+        requests: list[dict[str, Any]],
     ) -> BatchSubmission:
         create_payload = await self.create_batch(name=batch_name)
         batch_id = extract_batch_id(create_payload)

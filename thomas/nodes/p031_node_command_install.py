@@ -21,9 +21,10 @@ import os
 import re
 import sys
 import uuid
+from collections.abc import Callable, Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping
+from typing import Any
 
 PROMPT_ID = "p031"
 PARITY_COMMAND = "node install"
@@ -295,7 +296,7 @@ def _read_existing_config(path: Path, *, strict: bool) -> tuple[dict[str, Any] |
         )
     except NodeInstallError:
         raise
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         if strict:
             raise NodeInstallConfigError(
                 "NODE_INSTALL_INVALID_EXISTING_CONFIG",
@@ -532,7 +533,7 @@ async def aiohttp_node_install(request: Any):
         payload = await request.json()
         if not isinstance(payload, dict):
             payload = {}
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         payload = {}
 
     req = NodeInstallRequest(
@@ -553,7 +554,7 @@ async def aiohttp_node_install(request: Any):
     except NodeInstallError as e:
         response_obj = render_install_error_json(e)
         status = 400
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         response_obj = {
             "ok": False,
             "error": {"code": "NODE_INSTALL_INTERNAL_ERROR", "message": str(e), "details": {}},

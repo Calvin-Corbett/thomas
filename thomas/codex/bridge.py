@@ -16,9 +16,9 @@ import logging
 import os
 import shutil
 import webbrowser
-from dataclasses import dataclass, field
-from pathlib import Path
-from typing import Any, AsyncIterator, Callable, Dict, List, Optional
+from collections.abc import AsyncIterator, Callable
+from dataclasses import dataclass
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -75,20 +75,20 @@ class CodexBridge:
         await bridge.stop()
     """
 
-    def __init__(self, codex_cmd: Optional[str] = None, cwd: Optional[str] = None):
+    def __init__(self, codex_cmd: str | None = None, cwd: str | None = None):
         self._codex_cmd = codex_cmd or _find_codex()
         self._cwd = cwd or os.getcwd()
-        self._proc: Optional[asyncio.subprocess.Process] = None
+        self._proc: asyncio.subprocess.Process | None = None
         self._next_id = 1
-        self._pending: Dict[int, asyncio.Future] = {}
-        self._notification_handlers: Dict[str, List[Callable]] = {}
-        self._reader_task: Optional[asyncio.Task] = None
+        self._pending: dict[int, asyncio.Future] = {}
+        self._notification_handlers: dict[str, list[Callable]] = {}
+        self._reader_task: asyncio.Task | None = None
         self._initialized = False
-        self._thread_id: Optional[str] = None
+        self._thread_id: str | None = None
         # Accumulate streamed text for the current turn
         self._current_turn_text: str = ""
         # Track active turn for interruption
-        self._active_turn_id: Optional[str] = None
+        self._active_turn_id: str | None = None
 
     @property
     def is_running(self) -> bool:
@@ -106,7 +106,8 @@ class CodexBridge:
         env["CODEX_NONINTERACTIVE"] = "1"
 
         self._proc = await asyncio.create_subprocess_exec(
-            self._codex_cmd, "app-server",
+            self._codex_cmd,
+            "app-server",
             stdin=asyncio.subprocess.PIPE,
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE,
@@ -118,16 +119,20 @@ class CodexBridge:
         self._reader_task = asyncio.create_task(self._read_loop())
 
         # Initialize handshake
-        result = await self._request("initialize", {
-            "clientInfo": {
-                "name": "thomas",
-                "title": "Thomas AI Assistant",
-                "version": "0.2.0",
+        result = await self._request(
+            "initialize",
+            {
+                "clientInfo": {
+                    "name": "thomas",
+                    "title": "Thomas AI Assistant",
+                    "version": "0.2.0",
+                },
+                "capabilities": {
+                    "experimentalApi": False,
+                },
             },
-            "capabilities": {
-                "experimentalApi": False,
-            },
-        }, timeout=_INIT_TIMEOUT)
+            timeout=_INIT_TIMEOUT,
+        )
 
         # Send initialized notification
         await self._notify("initialized", {})
@@ -176,26 +181,18 @@ class CodexBridge:
         if not acct:
             return CodexAccount(logged_in=False)
         profile = acct.get("profile") if isinstance(acct.get("profile"), dict) else {}
-        display_name = (
-            str(
-                acct.get("displayName")
-                or acct.get("name")
-                or profile.get("displayName")
-                or profile.get("name")
-                or ""
-            ).strip()
-        )
-        avatar_url = (
-            str(
-                acct.get("avatarUrl")
-                or acct.get("imageUrl")
-                or acct.get("picture")
-                or profile.get("avatarUrl")
-                or profile.get("imageUrl")
-                or profile.get("picture")
-                or ""
-            ).strip()
-        )
+        display_name = str(
+            acct.get("displayName") or acct.get("name") or profile.get("displayName") or profile.get("name") or ""
+        ).strip()
+        avatar_url = str(
+            acct.get("avatarUrl")
+            or acct.get("imageUrl")
+            or acct.get("picture")
+            or profile.get("avatarUrl")
+            or profile.get("imageUrl")
+            or profile.get("picture")
+            or ""
+        ).strip()
         return CodexAccount(
             logged_in=True,
             auth_type=acct.get("type", ""),
@@ -212,18 +209,16 @@ class CodexBridge:
         Returns the authenticated account.
         """
         login_done: asyncio.Future = asyncio.get_event_loop().create_future()
-        login_id: Optional[str] = None
+        login_id: str | None = None
 
-        def on_login_completed(params: Dict[str, Any]) -> None:
+        def on_login_completed(params: dict[str, Any]) -> None:
             nonlocal login_id
             if params.get("loginId") == login_id:
                 if not login_done.done():
                     if params.get("success"):
                         login_done.set_result(True)
                     else:
-                        login_done.set_exception(
-                            CodexBridgeError(f"Login failed: {params.get('error', 'unknown')}")
-                        )
+                        login_done.set_exception(CodexBridgeError(f"Login failed: {params.get('error', 'unknown')}"))
 
         self._on("account/login/completed", on_login_completed)
 
@@ -250,10 +245,13 @@ class CodexBridge:
 
     async def login_api_key(self, api_key: str) -> CodexAccount:
         """Login with an OpenAI API key."""
-        await self._request("account/login/start", {
-            "type": "apiKey",
-            "apiKey": api_key,
-        })
+        await self._request(
+            "account/login/start",
+            {
+                "type": "apiKey",
+                "apiKey": api_key,
+            },
+        )
         return await self.check_auth()
 
     async def logout(self) -> None:
@@ -263,16 +261,18 @@ class CodexBridge:
 
     # ── Models ──────────────────────────────────────────────
 
-    async def list_models(self) -> List[CodexModel]:
+    async def list_models(self) -> list[CodexModel]:
         """List available models."""
         result = await self._request("model/list", {"limit": 50})
         models = []
         for m in result.get("data", []):
-            models.append(CodexModel(
-                id=m.get("id", m.get("model", "")),
-                display_name=m.get("displayName", ""),
-                is_default=m.get("isDefault", False),
-            ))
+            models.append(
+                CodexModel(
+                    id=m.get("id", m.get("model", "")),
+                    display_name=m.get("displayName", ""),
+                    is_default=m.get("isDefault", False),
+                )
+            )
         return models
 
     # ── Chat ────────────────────────────────────────────────
@@ -282,10 +282,11 @@ class CodexBridge:
         text: str,
         *,
         model: str = "",
-        cwd: Optional[str] = None,
+        cwd: str | None = None,
         effort: str = "medium",
         allow_tools: bool = True,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        instructions: str = "",
+    ) -> AsyncIterator[dict[str, Any]]:
         """Send a message and stream back events.
 
         Yields dicts like:
@@ -297,7 +298,9 @@ class CodexBridge:
         """
         # Ensure we have a thread
         if not self._thread_id:
-            await self._start_thread(model=model, cwd=cwd or self._cwd, allow_tools=allow_tools)
+            await self._start_thread(
+                model=model, cwd=cwd or self._cwd, allow_tools=allow_tools, instructions=instructions
+            )
 
         # Start a turn
         turn_done: asyncio.Future = asyncio.get_event_loop().create_future()
@@ -305,25 +308,27 @@ class CodexBridge:
         self._current_turn_text = ""
         tools_blocked = {"triggered": False}
 
-        def on_turn_completed(params: Dict[str, Any]) -> None:
+        def on_turn_completed(params: dict[str, Any]) -> None:
             if not turn_done.done():
                 turn = params.get("turn", {})
                 status = turn.get("status", "completed")
                 error = turn.get("error")
                 if error:
-                    events_queue.put_nowait({
-                        "type": "error",
-                        "error": error.get("message", str(error)),
-                    })
+                    events_queue.put_nowait(
+                        {
+                            "type": "error",
+                            "error": error.get("message", str(error)),
+                        }
+                    )
                 turn_done.set_result(status)
 
-        def on_text_delta(params: Dict[str, Any]) -> None:
+        def on_text_delta(params: dict[str, Any]) -> None:
             delta = params.get("delta", "")
             if delta:
                 self._current_turn_text += delta
                 events_queue.put_nowait({"type": "text", "text": delta})
 
-        def on_item_started(params: Dict[str, Any]) -> None:
+        def on_item_started(params: dict[str, Any]) -> None:
             item = params.get("item", {})
             itype = item.get("type", "")
             is_tool_item = itype in {"commandExecution", "fileChange", "mcpToolCall"}
@@ -333,53 +338,61 @@ class CodexBridge:
             if not allow_tools:
                 if not tools_blocked["triggered"]:
                     tools_blocked["triggered"] = True
-                    asyncio.get_event_loop().call_soon(
-                        lambda: asyncio.ensure_future(self.interrupt())
-                    )
+                    asyncio.get_event_loop().call_soon(lambda: asyncio.ensure_future(self.interrupt()))
                 return
 
             if itype == "commandExecution":
-                events_queue.put_nowait({
-                    "type": "tool_start",
-                    "name": " ".join(item.get("command", ["?"])),
-                    "id": item.get("id", ""),
-                })
+                events_queue.put_nowait(
+                    {
+                        "type": "tool_start",
+                        "name": " ".join(item.get("command", ["?"])),
+                        "id": item.get("id", ""),
+                    }
+                )
             elif itype == "fileChange":
-                events_queue.put_nowait({
-                    "type": "tool_start",
-                    "name": f"edit:{item.get('filePath', '?')}",
-                    "id": item.get("id", ""),
-                })
+                events_queue.put_nowait(
+                    {
+                        "type": "tool_start",
+                        "name": f"edit:{item.get('filePath', '?')}",
+                        "id": item.get("id", ""),
+                    }
+                )
             elif itype == "mcpToolCall":
-                events_queue.put_nowait({
-                    "type": "tool_start",
-                    "name": item.get("toolName", "mcp_tool"),
-                    "id": item.get("id", ""),
-                })
+                events_queue.put_nowait(
+                    {
+                        "type": "tool_start",
+                        "name": item.get("toolName", "mcp_tool"),
+                        "id": item.get("id", ""),
+                    }
+                )
 
-        def on_item_completed(params: Dict[str, Any]) -> None:
+        def on_item_completed(params: dict[str, Any]) -> None:
             item = params.get("item", {})
             itype = item.get("type", "")
             if not allow_tools and itype in {"commandExecution", "fileChange", "mcpToolCall"}:
                 return
             if itype == "commandExecution":
-                events_queue.put_nowait({
-                    "type": "tool_output",
-                    "id": item.get("id", ""),
-                    "output": item.get("aggregatedOutput", ""),
-                    "exit_code": item.get("exitCode"),
-                })
+                events_queue.put_nowait(
+                    {
+                        "type": "tool_output",
+                        "id": item.get("id", ""),
+                        "output": item.get("aggregatedOutput", ""),
+                        "exit_code": item.get("exitCode"),
+                    }
+                )
             elif itype == "fileChange":
-                events_queue.put_nowait({
-                    "type": "tool_output",
-                    "id": item.get("id", ""),
-                    "output": f"File changed: {item.get('filePath', '?')}",
-                })
+                events_queue.put_nowait(
+                    {
+                        "type": "tool_output",
+                        "id": item.get("id", ""),
+                        "output": f"File changed: {item.get('filePath', '?')}",
+                    }
+                )
 
-        def on_cmd_approval(params: Dict[str, Any]) -> None:
+        def on_cmd_approval(params: dict[str, Any]) -> None:
             req_id = params.get("_request_id")
             if req_id is not None:
-                decision_payload: Dict[str, Any]
+                decision_payload: dict[str, Any]
                 if allow_tools:
                     # Auto-approve commands (Thomas handles its own sandboxing)
                     decision_payload = {
@@ -389,19 +402,15 @@ class CodexBridge:
                 else:
                     decision_payload = {"decision": "decline"}
                 asyncio.get_event_loop().call_soon(
-                    lambda: asyncio.ensure_future(
-                        self._respond(req_id, decision_payload)
-                    )
+                    lambda: asyncio.ensure_future(self._respond(req_id, decision_payload))
                 )
 
-        def on_file_approval(params: Dict[str, Any]) -> None:
+        def on_file_approval(params: dict[str, Any]) -> None:
             req_id = params.get("_request_id")
             if req_id is not None:
                 decision_payload = {"decision": "accept"} if allow_tools else {"decision": "decline"}
                 asyncio.get_event_loop().call_soon(
-                    lambda: asyncio.ensure_future(
-                        self._respond(req_id, decision_payload)
-                    )
+                    lambda: asyncio.ensure_future(self._respond(req_id, decision_payload))
                 )
 
         self._on("turn/completed", on_turn_completed)
@@ -412,7 +421,7 @@ class CodexBridge:
         self._on("item/fileChange/requestApproval", on_file_approval)
 
         try:
-            turn_params: Dict[str, Any] = {
+            turn_params: dict[str, Any] = {
                 "threadId": self._thread_id,
                 "input": [{"type": "text", "text": text}],
                 "effort": effort,
@@ -421,6 +430,8 @@ class CodexBridge:
                 turn_params["cwd"] = cwd
             if model:
                 turn_params["model"] = model
+            if instructions:
+                turn_params["instructions"] = instructions
             # Auto-approve everything — Thomas handles its own sandboxing
             if allow_tools:
                 turn_params["approvalPolicy"] = "never"
@@ -467,15 +478,22 @@ class CodexBridge:
     async def interrupt(self) -> None:
         """Interrupt the current turn."""
         if self._thread_id and self._active_turn_id:
-            await self._request("turn/interrupt", {
-                "threadId": self._thread_id,
-                "turnId": self._active_turn_id,
-            })
+            await self._request(
+                "turn/interrupt",
+                {
+                    "threadId": self._thread_id,
+                    "turnId": self._active_turn_id,
+                },
+            )
 
-    async def _start_thread(self, model: str = "", cwd: str = "", allow_tools: bool = True) -> str:
-        params: Dict[str, Any] = {"cwd": cwd or self._cwd}
+    async def _start_thread(
+        self, model: str = "", cwd: str = "", allow_tools: bool = True, instructions: str = ""
+    ) -> str:
+        params: dict[str, Any] = {"cwd": cwd or self._cwd}
         if model:
             params["model"] = model
+        if instructions:
+            params["instructions"] = instructions
         if allow_tools:
             params["approvalPolicy"] = "never"
             params["sandbox"] = "danger-full-access"
@@ -491,9 +509,7 @@ class CodexBridge:
 
     # ── JSON-RPC transport ──────────────────────────────────
 
-    async def _request(
-        self, method: str, params: Dict[str, Any], timeout: float = _REQUEST_TIMEOUT
-    ) -> Dict[str, Any]:
+    async def _request(self, method: str, params: dict[str, Any], timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """Send a request and wait for the response."""
         if not self._proc or not self._proc.stdin:
             raise CodexBridgeError("App-server not running")
@@ -518,7 +534,7 @@ class CodexBridge:
             self._pending.pop(req_id, None)
             raise CodexBridgeError(f"Request {method} timed out after {timeout}s")
 
-    async def _notify(self, method: str, params: Dict[str, Any]) -> None:
+    async def _notify(self, method: str, params: dict[str, Any]) -> None:
         """Send a notification (no response expected)."""
         if not self._proc or not self._proc.stdin:
             raise CodexBridgeError("App-server not running")
@@ -530,7 +546,7 @@ class CodexBridge:
         self._proc.stdin.write(line.encode("utf-8"))
         await self._proc.stdin.drain()
 
-    async def _respond(self, req_id: int, result: Dict[str, Any]) -> None:
+    async def _respond(self, req_id: int, result: dict[str, Any]) -> None:
         """Send a response to a server request (e.g. approval)."""
         if not self._proc or not self._proc.stdin:
             return
@@ -606,7 +622,7 @@ class CodexBridge:
                 log.error("Error in codex read loop: %s", e)
                 await asyncio.sleep(0.1)
 
-    def _dispatch_notification(self, method: str, params: Dict[str, Any]) -> None:
+    def _dispatch_notification(self, method: str, params: dict[str, Any]) -> None:
         handlers = self._notification_handlers.get(method, [])
         for handler in handlers:
             try:
@@ -641,6 +657,4 @@ def _find_codex() -> str:
             if os.path.isfile(p):
                 return p
 
-    raise CodexBridgeError(
-        "Could not find 'codex' CLI. Install it with: npm i -g @openai/codex"
-    )
+    raise CodexBridgeError("Could not find 'codex' CLI. Install it with: npm i -g @openai/codex")

@@ -41,8 +41,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Protocol, TypedDict, runtime_checkable
-
+from typing import Any, Literal, Protocol, TypedDict, runtime_checkable
 
 ACTION_NAME = "nodes.reject_action"
 ACTION_VERSION = "1.0"
@@ -51,13 +50,13 @@ ACTION_VERSION = "1.0"
 class NodesRejectActionError(RuntimeError):
     """Deterministic error for nodes reject-action operations."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": False,
             "error": {"code": self.code, "message": self.message, "details": self.details},
@@ -87,7 +86,7 @@ def _as_str_field(value: Any, field: str, *, max_len: int) -> str:
     return cleaned
 
 
-def _as_optional_str_field(value: Any, field: str, *, max_len: int) -> Optional[str]:
+def _as_optional_str_field(value: Any, field: str, *, max_len: int) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -112,10 +111,10 @@ class NodesRejectActionInput:
 
     node_id: str
     action_id: str
-    reason: Optional[str] = None
+    reason: str | None = None
 
     @classmethod
-    def from_mapping(cls, raw: Dict[str, Any]) -> "NodesRejectActionInput":
+    def from_mapping(cls, raw: dict[str, Any]) -> NodesRejectActionInput:
         return cls(
             node_id=_as_str_field(raw.get("node_id"), "node_id", max_len=200),
             action_id=_as_str_field(raw.get("action_id"), "action_id", max_len=200),
@@ -130,10 +129,10 @@ class NodesRejectActionOutput:
     node_id: str
     action_id: str
     status: Literal["rejected"]
-    reason: Optional[str]
+    reason: str | None
     updated_at: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": True,
             "result": {
@@ -150,7 +149,7 @@ class ActionRecord(TypedDict, total=False):
     node_id: str
     action_id: str
     status: str
-    reason: Optional[str]
+    reason: str | None
     created_at: str
     updated_at: str
 
@@ -160,7 +159,7 @@ class ActionStore(Protocol):
     def reject_action(self, payload: NodesRejectActionInput) -> NodesRejectActionOutput: ...
 
 
-def resolve_state_dir(explicit: Optional[str | Path] = None) -> Path:
+def resolve_state_dir(explicit: str | Path | None = None) -> Path:
     """Resolve the Thomas state directory."""
     if explicit is not None:
         return Path(explicit).expanduser()
@@ -176,7 +175,7 @@ def resolve_state_dir(explicit: Optional[str | Path] = None) -> Path:
     return Path.home() / ".thomas"
 
 
-def resolve_actions_store_path(state_dir: Optional[str | Path] = None) -> Path:
+def resolve_actions_store_path(state_dir: str | Path | None = None) -> Path:
     """Resolve the file path for the node action store."""
     env_path = os.environ.get("THOMAS_NODE_ACTIONS_PATH")
     if env_path:
@@ -201,7 +200,7 @@ class FileActionStore:
     def __init__(self, path: Path):
         self.path = path
 
-    def _load(self) -> Dict[str, Any]:
+    def _load(self) -> dict[str, Any]:
         try:
             raw = self.path.read_text(encoding="utf-8")
         except FileNotFoundError as e:
@@ -245,7 +244,7 @@ class FileActionStore:
 
         return {"actions": actions}
 
-    def _atomic_write(self, data: Dict[str, Any]) -> None:
+    def _atomic_write(self, data: dict[str, Any]) -> None:
         # Best-effort atomic update: write to temp file then replace.
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
@@ -262,13 +261,13 @@ class FileActionStore:
             try:
                 if tmp.exists():
                     tmp.unlink()
-            except Exception:
+            except (OSError, ConnectionError):
                 # If replace succeeded, tmp won't exist. If it didn't, cleanup is best-effort.
                 pass
 
     def reject_action(self, payload: NodesRejectActionInput) -> NodesRejectActionOutput:
         data = self._load()
-        actions: Dict[str, Any] = data["actions"]
+        actions: dict[str, Any] = data["actions"]
 
         rec_raw = actions.get(payload.action_id)
         if rec_raw is None:
@@ -325,8 +324,8 @@ class FileActionStore:
 def reject_node_action(
     payload: NodesRejectActionInput,
     *,
-    store: Optional[ActionStore] = None,
-    state_dir: Optional[str | Path] = None,
+    store: ActionStore | None = None,
+    state_dir: str | Path | None = None,
 ) -> NodesRejectActionOutput:
     """Reject an action for a node."""
     if store is None:
@@ -338,7 +337,7 @@ def reject_node_action(
 reject_action = reject_node_action
 
 
-def run(raw: Dict[str, Any], *, state_dir: Optional[str | Path] = None) -> Dict[str, Any]:
+def run(raw: dict[str, Any], *, state_dir: str | Path | None = None) -> dict[str, Any]:
     """Automation-friendly wrapper: dict-in / dict-out."""
     payload = NodesRejectActionInput.from_mapping(raw)
     return reject_node_action(payload, state_dir=state_dir).to_dict()
@@ -354,7 +353,7 @@ def http_status_for_error(code: str) -> int:
     return 502
 
 
-INPUT_JSON_SCHEMA: Dict[str, Any] = {
+INPUT_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["node_id", "action_id"],
     "properties": {
@@ -365,7 +364,7 @@ INPUT_JSON_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
-OUTPUT_JSON_SCHEMA: Dict[str, Any] = {
+OUTPUT_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["ok"],
     "properties": {
@@ -395,7 +394,7 @@ OUTPUT_JSON_SCHEMA: Dict[str, Any] = {
 }
 
 
-def _aiohttp_json(payload: Dict[str, Any], *, status: int):
+def _aiohttp_json(payload: dict[str, Any], *, status: int):
     from aiohttp import web
 
     return web.json_response(payload, status=status)
@@ -410,7 +409,7 @@ async def aiohttp_handler(request):  # pragma: no cover
     """
     try:
         raw = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         err = NodesRejectActionError("invalid_input", "Invalid JSON body", details={})
         return _aiohttp_json(err.to_dict(), status=http_status_for_error(err.code))
 
@@ -419,7 +418,7 @@ async def aiohttp_handler(request):  # pragma: no cover
         state_dir = None
         try:
             state_dir = request.app.get("state_dir")  # type: ignore[attr-defined]
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             state_dir = None
 
         result = reject_node_action(payload, state_dir=state_dir)
@@ -452,7 +451,7 @@ try:  # pragma: no cover
     from aiohttp import web
 
     ROUTES = [web.post("/nodes/reject-action", aiohttp_handler)]
-except Exception:  # pragma: no cover
+except (ImportError, AttributeError, RuntimeError):  # pragma: no cover
     ROUTES = []
 
 
@@ -461,6 +460,6 @@ def register_routes(app) -> None:  # pragma: no cover
     try:
         if ROUTES:
             app.add_routes(ROUTES)
-    except Exception:
+    except (ConnectionError, TimeoutError, RuntimeError):
         # If an upstream system uses ROUTE_SPECS instead, this is fine.
         pass

@@ -2,9 +2,8 @@ from __future__ import annotations
 
 import json
 import os
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Dict, Optional
 
 
 def default_state_dir() -> Path:
@@ -21,7 +20,7 @@ class IntakeServerConfig:
     dedupe_window_s: float = 120.0
 
     @staticmethod
-    def from_env() -> "IntakeServerConfig":
+    def from_env() -> IntakeServerConfig:
         token = os.getenv("THOMAS_INTAKE_TOKEN", "").strip()
         max_bytes = int(os.getenv("THOMAS_INTAKE_MAX_BYTES", str(8 * 1024 * 1024)))
         dedupe_window_s = float(os.getenv("THOMAS_INTAKE_DEDUPE_WINDOW_S", "120"))
@@ -33,7 +32,7 @@ class IntakeStorageConfig:
     base_dir: Path
 
     @staticmethod
-    def from_env() -> "IntakeStorageConfig":
+    def from_env() -> IntakeStorageConfig:
         return IntakeStorageConfig(base_dir=default_state_dir() / "intake")
 
 
@@ -55,13 +54,13 @@ class ClientConfig:
         return default_state_dir() / "intake_client.json"
 
     @staticmethod
-    def load() -> "ClientConfig":
+    def load() -> ClientConfig:
         p = ClientConfig.path()
         try:
             if p.exists():
                 data = json.loads(p.read_text(encoding="utf-8"))
                 return ClientConfig(**data)
-        except Exception:
+        except json.JSONDecodeError:
             pass
         return ClientConfig()
 
@@ -70,8 +69,8 @@ class ClientConfig:
         p.parent.mkdir(parents=True, exist_ok=True)
         p.write_text(json.dumps(asdict(self), indent=2), encoding="utf-8")
 
-    def headers(self) -> Dict[str, str]:
-        h: Dict[str, str] = {}
+    def headers(self) -> dict[str, str]:
+        h: dict[str, str] = {}
         if self.token:
             h["Authorization"] = f"Bearer {self.token}"
         if self.active_chat_id:

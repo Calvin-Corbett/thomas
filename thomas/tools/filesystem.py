@@ -5,7 +5,7 @@ from __future__ import annotations
 import fnmatch
 import os
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
 
@@ -63,7 +63,7 @@ class ReadFileTool(Tool):
         self._root = sandbox_root.resolve()
         self._max_size = max_file_size
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         rel = args["path"]
         try:
             path = _safe_path(self._root, rel)
@@ -129,7 +129,7 @@ class WriteFileTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         rel = args["path"]
         try:
             path = _safe_path(self._root, rel)
@@ -145,8 +145,7 @@ class ListDirTool(Tool):
     name = "fs.list_dir"
     category = "filesystem"
     description = (
-        "List files and directories. Supports glob patterns. "
-        "Returns file names with type indicators (/ for dirs)."
+        "List files and directories. Supports glob patterns. " "Returns file names with type indicators (/ for dirs)."
     )
     parameters = {
         "type": "object",
@@ -169,7 +168,7 @@ class ListDirTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         rel = args.get("path", ".")
         pattern = args.get("pattern", "*")
         max_results = args.get("max_results", 200)
@@ -184,7 +183,7 @@ class ListDirTool(Tool):
         if not base.is_dir():
             return ToolResult(ok=False, error=f"Not a directory: {rel}")
 
-        entries: List[str] = []
+        entries: list[str] = []
         try:
             for p in sorted(base.glob(pattern)):
                 if len(entries) >= max_results:
@@ -193,7 +192,7 @@ class ListDirTool(Tool):
                 rel_path = p.relative_to(self._root)
                 suffix = "/" if p.is_dir() else ""
                 entries.append(f"{rel_path}{suffix}")
-        except Exception as e:
+        except (OSError, ValueError) as e:
             return ToolResult(ok=False, error=f"Glob error: {e}")
 
         if not entries:
@@ -234,7 +233,7 @@ class SearchFilesTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         import re
 
         pattern_str = args["pattern"]
@@ -252,7 +251,7 @@ class SearchFilesTool(Tool):
         except re.error as e:
             return ToolResult(ok=False, error=f"Invalid regex: {e}")
 
-        matches: List[str] = []
+        matches: list[str] = []
         files_searched = 0
         _skip_dirs = {".git", "node_modules", "__pycache__", ".venv", "venv", ".tox"}
 
@@ -291,9 +290,7 @@ class SearchFilesTool(Tool):
         return ToolResult(ok=True, data=header + "\n".join(matches))
 
 
-def register_filesystem_tools(
-    registry: Any, sandbox_root: Path, max_file_size: int = 5_000_000
-) -> None:
+def register_filesystem_tools(registry: Any, sandbox_root: Path, max_file_size: int = 5_000_000) -> None:
     """Register all filesystem tools with the registry."""
     registry.register(ReadFileTool(sandbox_root, max_file_size))
     registry.register(WriteFileTool(sandbox_root))

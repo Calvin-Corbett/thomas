@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 VALID_JOB_TYPES = {
     "coding",
@@ -28,13 +28,47 @@ _MONOLITH_GUARD_RE = re.compile(
     r"\bcheck_monolith_guard(?:\.py)?\b",
     re.I,
 )
+_ISSUE_WORD_RE = re.compile(
+    r"\b(issue|bug|error|failure|failing|broken|regression|problem|defect|incident)\b",
+    re.I,
+)
+_UNRESOLVED_ISSUE_STRONG_RE = re.compile(
+    r"\b("
+    r"unresolved|"
+    r"not fixed|"
+    r"not resolved|"
+    r"still (?:failing|broken|erroring)|"
+    r"left (?:unfixed|unresolved)|"
+    r"unable to fix|"
+    r"can't fix|"
+    r"cannot fix|"
+    r"couldn't fix|"
+    r"won't fix"
+    r")\b",
+    re.I,
+)
+_WORKAROUND_LANGUAGE_RE = re.compile(
+    r"\b("
+    r"workaround|"
+    r"temporary fix|"
+    r"quick fix|"
+    r"band[- ]?aid|"
+    r"for now|"
+    r"until (?:a )?proper fix|"
+    r"follow(?:-| )?up later|"
+    r"defer(?:red)?|"
+    r"ship with known"
+    r")\b",
+    re.I,
+)
+_SKIP_IGNORE_RE = re.compile(r"\b(skip(?:ped|ping)?|ignore(?:d|s|ing)?)\b", re.I)
 
 
 def normalize_job_type(
     *,
     route_path: str,
     prompt_text: str,
-    requested_job_type: Optional[str],
+    requested_job_type: str | None,
     config_change_detected: bool,
 ) -> str:
     requested = str(requested_job_type or "").strip().lower()
@@ -81,12 +115,40 @@ def _is_verification_tool(name: str) -> bool:
     return n.startswith("git.diff") or n.startswith("code.search")
 
 
-def _shell_command_from_event(evt: Dict[str, Any]) -> str:
+def _shell_command_from_event(evt: dict[str, Any]) -> str:
     return str(evt.get("command") or "").strip()
 
 
-def _config_path_from_event(evt: Dict[str, Any]) -> str:
+def _config_path_from_event(evt: dict[str, Any]) -> str:
     return str(evt.get("path") or "").strip()
+
+
+def _response_has_unresolved_issue_language(response_text: str) -> bool:
+    text = str(response_text or "")
+    if not text.strip():
+        return False
+    if _UNRESOLVED_ISSUE_STRONG_RE.search(text):
+        return True
+
+    has_issue_word = bool(_ISSUE_WORD_RE.search(text))
+    has_workaround = bool(_WORKAROUND_LANGUAGE_RE.search(text))
+    if has_issue_word and has_workaround:
+        return True
+    if (
+        has_issue_word
+        and _SKIP_IGNORE_RE.search(text)
+        and re.search(r"\b(fix|issue|bug|error|failure|test)\b", text, re.I)
+    ):
+        return True
+    return False
+
+
+def required_failed_checks(report: dict[str, Any]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for check in list(report.get("checks") or []):
+        if bool(check.get("required")) and (not bool(check.get("passed"))):
+            out.append(check)
+    return out
 
 
 def evaluate_rules(
@@ -94,16 +156,17 @@ def evaluate_rules(
     route_path: str,
     prompt_text: str,
     response_text: str,
-    tool_events: List[Dict[str, Any]],
-    requested_job_type: Optional[str],
-    config_errors: List[str],
-    unknown_core_keys: List[str],
+    tool_events: list[dict[str, Any]],
+    requested_job_type: str | None,
+    config_errors: list[str],
+    unknown_core_keys: list[str],
     require_verification_for_coding: bool,
     require_tests_for_code_edits: bool,
     require_monolith_guard_for_coding: bool,
+    strict_issue_ownership: bool = False,
     attempt: int = 0,
-) -> Dict[str, Any]:
-    checks: List[Dict[str, Any]] = []
+) -> dict[str, Any]:
+    checks: list[dict[str, Any]] = []
     prompt_text = str(prompt_text or "")
     response_text = str(response_text or "")
 
@@ -184,6 +247,15 @@ def evaluate_rules(
         detail=f"tool_failures={failed_tools}, tool_calls={len(tool_events)}",
     )
 
+    unresolved_issue_detected = _response_has_unresolved_issue_language(response_text)
+    add_check(
+        "issue_ownership",
+        "No unresolved issues or workaround-only completion",
+        required=bool(strict_issue_ownership),
+        passed=not unresolved_issue_detected,
+        detail="Complete the direct fix. Do not close with unresolved issues or workaround-only outcomes.",
+    )
+
     if job_type == "coding":
         if writes_detected and require_verification_for_coding:
             add_check(
@@ -223,11 +295,7 @@ def evaluate_rules(
             "No unknown core config keys",
             required=True,
             passed=(len(unknown_core_keys) == 0),
-            detail=(
-                "Unknown core keys: " + ", ".join(unknown_core_keys[:6])
-                if unknown_core_keys
-                else "None."
-            ),
+            detail=("Unknown core keys: " + ", ".join(unknown_core_keys[:6]) if unknown_core_keys else "None."),
         )
         if writes_detected:
             add_check(
@@ -270,11 +338,9 @@ def evaluate_rules(
             detail="Concrete specs improve repeatability across operators.",
         )
 
-    failed_required = [c for c in checks if c["required"] and (not c["passed"])]
+    failed_required = required_failed_checks({"checks": checks})
     passed = len(failed_required) == 0
-    recommendations = [
-        f"{c['title']}: {c['detail']}" for c in failed_required
-    ]
+    recommendations = [f"{c['title']}: {c['detail']}" for c in failed_required]
 
     if passed:
         summary = "Rules-of-the-road checks passed."
@@ -298,11 +364,13 @@ def evaluate_rules(
             "tool_calls": len(tool_events),
             "tool_failures": failed_tools,
             "config_change_detected": config_change_detected,
+            "strict_issue_ownership": bool(strict_issue_ownership),
+            "unresolved_issue_detected": bool(unresolved_issue_detected),
         },
     }
 
 
-def build_remediation_prompt(report: Dict[str, Any]) -> str:
+def build_remediation_prompt(report: dict[str, Any]) -> str:
     if bool(report.get("passed", False)):
         return ""
     lines = [
@@ -310,10 +378,12 @@ def build_remediation_prompt(report: Dict[str, Any]) -> str:
         f"Job type: {report.get('job_type', 'general')}",
         "Required failures:",
     ]
-    for check in list(report.get("checks") or []):
-        if bool(check.get("required")) and (not bool(check.get("passed"))):
-            lines.append(f"- {check.get('title')}: {check.get('detail')}")
-    lines.append(
-        "When done, provide the final answer only after these checks pass."
-    )
+    failed_required = required_failed_checks(report)
+    for check in failed_required:
+        lines.append(f"- {check.get('title')}: {check.get('detail')}")
+    if any(str(check.get("id") or "") == "issue_ownership" for check in failed_required):
+        lines.append(
+            "Do not ship a workaround-only outcome. Own the issue and complete the actual fix before final answer."
+        )
+    lines.append("When done, provide the final answer only after these checks pass.")
     return "\n".join(lines)

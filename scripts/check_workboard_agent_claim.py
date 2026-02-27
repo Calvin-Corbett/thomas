@@ -7,15 +7,17 @@ import argparse
 import fnmatch
 import json
 import subprocess
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Sequence
 
 try:
     from scripts import agent_identity
     from scripts import check_workboard_claims as claims_gate
+    from scripts import workboard_claim as workboard_claim_tool
 except Exception:  # pragma: no cover
     import agent_identity  # type: ignore
     import check_workboard_claims as claims_gate  # type: ignore
+    import workboard_claim as workboard_claim_tool  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -56,6 +58,14 @@ def _scope_matches_path(scope: str, rel_path: str) -> bool:
     return path_norm == scope_norm or path_norm.startswith(scope_norm + "/")
 
 
+def _claim_role(claim: claims_gate.Claim) -> str:
+    explicit = str(getattr(claim, "role", "") or "").strip().lower()
+    if explicit:
+        return explicit
+    parent = str(getattr(claim, "parent", "") or "").strip()
+    return "worker" if parent else "solo"
+
+
 def _staged_files() -> list[str]:
     try:
         proc = subprocess.run(
@@ -75,6 +85,98 @@ def _staged_files() -> list[str]:
         if item:
             rows.append(item)
     return sorted(set(rows))
+
+
+def _split_patterns(values: Sequence[str]) -> list[str]:
+    out: list[str] = []
+    for raw in values:
+        for token in str(raw or "").split(","):
+            item = _normalize_path(token)
+            if item:
+                out.append(item)
+    return sorted(set(out), key=str.lower)
+
+
+def _git_status_porcelain() -> list[str]:
+    try:
+        proc = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(ROOT),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except Exception:
+        return []
+    if proc.returncode != 0:
+        return []
+    rows: list[str] = []
+    for raw in str(proc.stdout or "").splitlines():
+        line = str(raw or "").rstrip()
+        if line:
+            rows.append(line)
+    return rows
+
+
+def _porcelain_path(line: str) -> str:
+    raw = str(line or "")
+    if len(raw) <= 3:
+        return _normalize_path(raw)
+    token = raw[3:].strip()
+    if " -> " in token:
+        token = token.split(" -> ", 1)[1].strip()
+    return _normalize_path(token)
+
+
+def _is_ignored_path(rel_path: str, ignore_patterns: Sequence[str]) -> bool:
+    path = _normalize_path(rel_path)
+    if not path:
+        return True
+    for pattern in ignore_patterns:
+        pat = _normalize_path(pattern)
+        if not pat:
+            continue
+        if _scope_matches_path(pat, path):
+            return True
+    return False
+
+
+def _claimed_scope_dirty_paths(
+    scopes: Sequence[str],
+    *,
+    enforce_untracked: bool = False,
+    ignore_patterns: Sequence[str] = (),
+) -> dict[str, list[str]]:
+    unstaged: list[str] = []
+    untracked: list[str] = []
+    normalized_scopes = [scope for scope in scopes if _normalize_path(scope)]
+    if not normalized_scopes:
+        return {"unstaged": [], "untracked": []}
+
+    for line in _git_status_porcelain():
+        rel_path = _porcelain_path(line)
+        if not rel_path:
+            continue
+        if _is_ignored_path(rel_path, ignore_patterns):
+            continue
+        if not any(_scope_matches_path(scope, rel_path) for scope in normalized_scopes):
+            continue
+
+        if line.startswith("??"):
+            if enforce_untracked:
+                untracked.append(rel_path)
+            continue
+        if line.startswith("!!"):
+            continue
+
+        worktree_status = line[1] if len(line) > 1 else " "
+        if worktree_status not in (" ", "?", "!"):
+            unstaged.append(rel_path)
+
+    return {
+        "unstaged": sorted(set(unstaged)),
+        "untracked": sorted(set(untracked)),
+    }
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -100,10 +202,55 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--enforce-staged-scope",
         action="store_true",
+        help=("Require all staged files to be covered by the current agent's active " "claim scope."),
+    )
+    parser.add_argument(
+        "--enforce-clean-claimed-scope",
+        action="store_true",
+        help=("Require claimed scope files to be clean in the working tree " "(no unstaged edits in claimed paths)."),
+    )
+    parser.add_argument(
+        "--enforce-untracked-claimed-scope",
+        action="store_true",
+        help=("With --enforce-clean-claimed-scope, also fail on untracked files " "inside claimed scope."),
+    )
+    parser.add_argument(
+        "--claimed-scope-ignore",
+        action="append",
+        default=[],
+        help=("Ignore claimed-scope cleanliness path patterns (repeatable or " "comma-separated)."),
+    )
+    parser.add_argument(
+        "--enforce-parent-throughput",
+        action="store_true",
         help=(
-            "Require all staged files to be covered by the current agent's active "
-            "claim scope."
+            "For parent-role agents, require worker fan-out when there are "
+            "non-overlapping Up For Grabs tasks available."
         ),
+    )
+    parser.add_argument(
+        "--parent-target-workers",
+        type=int,
+        default=2,
+        help=(
+            "Target minimum active workers for parent-role claims when throughput "
+            "enforcement is active (default: 2)."
+        ),
+    )
+    parser.add_argument(
+        "--parent-min-ready-suggestions",
+        type=int,
+        default=2,
+        help=(
+            "Only enforce parent throughput when at least this many delegation "
+            "suggestions are currently ready (default: 2)."
+        ),
+    )
+    parser.add_argument(
+        "--parent-max-suggestions",
+        type=int,
+        default=5,
+        help=("Maximum delegation suggestions to inspect when evaluating parent " "throughput (default: 5)."),
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)
@@ -177,9 +324,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 1
 
     unresolved_owned = [
-        issue
-        for issue in issues
-        if _norm(issue.owner) == normalized and _norm(issue.state) != "resolved"
+        issue for issue in issues if _norm(issue.owner) == normalized and _norm(issue.state) != "resolved"
     ]
     if unresolved_owned:
         issue_ids = [str(issue.issue_id).strip() for issue in unresolved_owned if str(issue.issue_id).strip()]
@@ -206,6 +351,103 @@ def run(argv: Sequence[str] | None = None) -> int:
             print("Workboard agent claim gate: FAIL")
             print(f"- {message}")
         return 1
+
+    parent_throughput: dict[str, object] = {
+        "checked": bool(args.enforce_parent_throughput),
+        "applied": False,
+        "ready_suggestion_count": 0,
+        "active_worker_count": 0,
+        "required_worker_count": 0,
+        "target_worker_count": max(1, int(args.parent_target_workers or 1)),
+        "min_ready_suggestions": max(1, int(args.parent_min_ready_suggestions or 1)),
+        "generated_claim_commands": [],
+    }
+    if args.enforce_parent_throughput:
+        mine_parent_claims = [claim for claim in mine if _claim_role(claim) == "parent"]
+        if mine_parent_claims:
+            parent_throughput["applied"] = True
+            max_suggestions = max(
+                max(1, int(args.parent_target_workers or 1)),
+                max(1, int(args.parent_min_ready_suggestions or 1)),
+                max(1, int(args.parent_max_suggestions or 1)),
+            )
+            ok_suggest, suggest_result = workboard_claim_tool.suggest_delegation(
+                workboard_path,
+                parent_agent=mine_parent_claims[0].agent,
+                max_suggestions=max_suggestions,
+            )
+            if not ok_suggest:
+                message = f"parent throughput check failed: {suggest_result}"
+                if args.json:
+                    payload = {
+                        "gate": "workboard_agent_claim",
+                        "ok": False,
+                        "agent": agent,
+                        "active_claim_count": len(claims),
+                        "matching_claim_count": len(mine),
+                        "unresolved_issue_count": 0,
+                        "unresolved_issue_ids": [],
+                        "scopes": sorted({scope for claim in mine for scope in claim.scopes}),
+                        "workboard": str(workboard_path),
+                        "error": message,
+                        "parent_throughput": parent_throughput,
+                    }
+                    print(json.dumps(payload, sort_keys=True))
+                else:
+                    print("Workboard agent claim gate: FAIL")
+                    print(f"- {message}")
+                return 1
+
+            suggest_payload = dict(suggest_result) if isinstance(suggest_result, dict) else {}
+            ready_suggestions = list(suggest_payload.get("ready_suggestions") or [])
+            commands = list(suggest_payload.get("generated_claim_commands") or [])
+            active_worker_count = int(suggest_payload.get("active_worker_count") or 0)
+            ready_count = len(ready_suggestions)
+            min_ready = max(1, int(args.parent_min_ready_suggestions or 1))
+            target_workers = max(1, int(args.parent_target_workers or 1))
+            required_workers = 0
+            if ready_count >= min_ready:
+                required_workers = min(target_workers, ready_count)
+
+            parent_throughput.update(
+                {
+                    "ready_suggestion_count": int(ready_count),
+                    "active_worker_count": int(active_worker_count),
+                    "required_worker_count": int(required_workers),
+                    "generated_claim_commands": commands,
+                }
+            )
+
+            if required_workers > active_worker_count:
+                message = (
+                    f"parent agent '{agent}' has {active_worker_count} active worker claim(s), "
+                    f"but {ready_count} delegation candidate(s) are ready. "
+                    f"Expected at least {required_workers} active worker claim(s). "
+                    "Delegate or claim additional tasks before committing."
+                )
+                if args.json:
+                    payload = {
+                        "gate": "workboard_agent_claim",
+                        "ok": False,
+                        "agent": agent,
+                        "active_claim_count": len(claims),
+                        "matching_claim_count": len(mine),
+                        "unresolved_issue_count": 0,
+                        "unresolved_issue_ids": [],
+                        "scopes": sorted({scope for claim in mine for scope in claim.scopes}),
+                        "workboard": str(workboard_path),
+                        "error": message,
+                        "parent_throughput": parent_throughput,
+                    }
+                    print(json.dumps(payload, sort_keys=True))
+                else:
+                    print("Workboard agent claim gate: FAIL")
+                    print(f"- {message}")
+                    if commands:
+                        print("- suggested worker claim command(s):")
+                        for cmd in commands[: max(1, required_workers - active_worker_count)]:
+                            print(f"  - {cmd}")
+                return 1
 
     scopes = sorted({scope for claim in mine for scope in claim.scopes})
     staged_files: list[str] = []
@@ -248,6 +490,61 @@ def run(argv: Sequence[str] | None = None) -> int:
             for path in unclaimed_staged_files:
                 print(f"  - {path}")
         return 1
+    claimed_scope_ignore = _split_patterns(args.claimed_scope_ignore)
+    claimed_scope_dirty = {"unstaged": [], "untracked": []}
+    if args.enforce_clean_claimed_scope:
+        claimed_scope_dirty = _claimed_scope_dirty_paths(
+            scopes,
+            enforce_untracked=bool(args.enforce_untracked_claimed_scope),
+            ignore_patterns=claimed_scope_ignore,
+        )
+    dirty_unstaged = list(claimed_scope_dirty.get("unstaged") or [])
+    dirty_untracked = list(claimed_scope_dirty.get("untracked") or [])
+    if dirty_unstaged or dirty_untracked:
+        message = (
+            f"agent '{agent}' has dirty files in claimed scope. " "Stage/commit or stash these files before committing."
+        )
+        if args.json:
+            payload = {
+                "gate": "workboard_agent_claim",
+                "ok": False,
+                "agent": agent,
+                "active_claim_count": len(claims),
+                "matching_claim_count": len(mine),
+                "unresolved_issue_count": 0,
+                "unresolved_issue_ids": [],
+                "scopes": scopes,
+                "workboard": str(workboard_path),
+                "error": message,
+                "enforce_staged_scope": bool(args.enforce_staged_scope),
+                "staged_file_count": len(staged_files),
+                "staged_files_outside_scope_count": 0,
+                "staged_files_outside_scope": [],
+                "enforce_clean_claimed_scope": True,
+                "enforce_untracked_claimed_scope": bool(args.enforce_untracked_claimed_scope),
+                "claimed_scope_ignored_patterns": claimed_scope_ignore,
+                "claimed_scope_unstaged_count": len(dirty_unstaged),
+                "claimed_scope_unstaged_files": dirty_unstaged,
+                "claimed_scope_untracked_count": len(dirty_untracked),
+                "claimed_scope_untracked_files": dirty_untracked,
+            }
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print("Workboard agent claim gate: FAIL")
+            print(f"- {message}")
+            if claimed_scope_ignore:
+                print("- claimed-scope ignore patterns:")
+                for pattern in claimed_scope_ignore:
+                    print(f"  - {pattern}")
+            if dirty_unstaged:
+                print("- claimed-scope unstaged files:")
+                for path in dirty_unstaged:
+                    print(f"  - {path}")
+            if dirty_untracked:
+                print("- claimed-scope untracked files:")
+                for path in dirty_untracked:
+                    print(f"  - {path}")
+        return 1
     if args.json:
         payload = {
             "gate": "workboard_agent_claim",
@@ -262,6 +559,14 @@ def run(argv: Sequence[str] | None = None) -> int:
             "staged_file_count": len(staged_files),
             "staged_files_outside_scope_count": 0,
             "staged_files_outside_scope": [],
+            "enforce_clean_claimed_scope": bool(args.enforce_clean_claimed_scope),
+            "enforce_untracked_claimed_scope": bool(args.enforce_untracked_claimed_scope),
+            "claimed_scope_ignored_patterns": claimed_scope_ignore,
+            "claimed_scope_unstaged_count": 0,
+            "claimed_scope_unstaged_files": [],
+            "claimed_scope_untracked_count": 0,
+            "claimed_scope_untracked_files": [],
+            "parent_throughput": parent_throughput,
             "workboard": str(workboard_path),
         }
         print(json.dumps(payload, sort_keys=True))
@@ -269,6 +574,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         print("Workboard agent claim gate: PASS")
         print(f"- agent: {agent}")
         print(f"- matching claims: {len(mine)}")
+        if bool(parent_throughput.get("applied")):
+            print(
+                "- parent throughput: "
+                f"{int(parent_throughput.get('active_worker_count', 0))}/"
+                f"{int(parent_throughput.get('required_worker_count', 0))} workers "
+                f"(ready suggestions: {int(parent_throughput.get('ready_suggestion_count', 0))})"
+            )
     return 0
 
 

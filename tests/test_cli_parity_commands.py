@@ -7,6 +7,8 @@ from types import SimpleNamespace
 import click
 from click.testing import CliRunner
 
+import thomas.cli.agents_runtime as agents_runtime
+from thomas.cli.parity_commands import register_parity_commands
 from thomas.cli.parity_compat import register_compat_commands
 
 
@@ -21,6 +23,13 @@ def _build_root_cli() -> click.Group:
 
 def _fake_config(tmp_path: Path) -> SimpleNamespace:
     return SimpleNamespace(
+        embed=SimpleNamespace(
+            provider="local",
+            model="all-MiniLM-L6-v2",
+            device="cpu",
+            load_on_demand=True,
+            batch_size=8,
+        ),
         memory=SimpleNamespace(root_path=tmp_path),
         server=SimpleNamespace(access_mode="local", api_token=""),
         tools=SimpleNamespace(allow_shell=False, sandbox_path=tmp_path, max_file_size=5_000_000),
@@ -35,6 +44,26 @@ def _memory_cli_context(tmp_path: Path) -> tuple[click.Group, CliRunner, SimpleN
     runner = CliRunner()
     cfg = _fake_config(tmp_path)
     return root, runner, cfg
+
+
+def _parity_cli_context(tmp_path: Path) -> tuple[click.Group, CliRunner, SimpleNamespace]:
+    root = _build_root_cli()
+    register_parity_commands(root)
+    runner = CliRunner()
+    cfg = _fake_config(tmp_path)
+    return root, runner, cfg
+
+
+def _seed_legacy_memory_event(cfg: SimpleNamespace, *, text: str) -> None:
+    from thomas.memory import MemoryEngine
+
+    engine = MemoryEngine(cfg)
+    engine.start()
+    try:
+        engine.add_event("thread-test", "user_message", text)
+        engine.ingest_pending()
+    finally:
+        engine.close()
 
 
 def _assert_memory_payload(
@@ -64,6 +93,143 @@ def test_claude_style_alias_commands_are_registered() -> None:
     register_compat_commands(root)
     for name in ("plugin", "mcp", "install", "setup-token"):
         assert name in root.commands
+
+
+def test_agents_start_detached_records_gateway_state(tmp_path: Path, monkeypatch) -> None:
+    root, runner, cfg = _parity_cli_context(tmp_path)
+
+    monkeypatch.setattr(agents_runtime, "_resolve_bind_port", lambda host, port, auto_port: int(port))
+    monkeypatch.setattr(agents_runtime, "_is_pid_running", lambda pid: int(pid) == 4242)
+    call_state = {"count": 0}
+
+    def _fake_probe_gateway(host: str, port: int, token: str = "") -> dict[str, object]:
+        call_state["count"] += 1
+        if call_state["count"] == 1:
+            return {"healthy": False, "engines": {"ok": False, "payload": {}}}
+        return {
+            "healthy": True,
+            "engines": {
+                "ok": True,
+                "payload": {"running": True, "engines": {"workspace_sync_engine": {"running": True}}},
+            },
+        }
+
+    monkeypatch.setattr(
+        agents_runtime,
+        "_probe_gateway",
+        _fake_probe_gateway,
+    )
+    monkeypatch.setattr(agents_runtime, "_gateway_spawn", lambda **_kwargs: SimpleNamespace(pid=4242))
+    monkeypatch.setattr(agents_runtime.time, "sleep", lambda _seconds: None)
+
+    res = runner.invoke(root, ["agents", "start", "--json"], obj={"config": cfg, "config_path": ""})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["ok"] is True
+    assert payload["mode"] == "gateway_detached"
+    assert payload["pid"] == 4242
+
+    state_path = tmp_path / ".thomas" / "cli" / "gateway_state.json"
+    assert state_path.exists()
+    saved = json.loads(state_path.read_text(encoding="utf-8"))
+    assert int(saved["pid"]) == 4242
+
+
+def test_agents_status_prefers_detached_runtime_when_gateway_running(tmp_path: Path, monkeypatch) -> None:
+    root, runner, cfg = _parity_cli_context(tmp_path)
+    state_path = tmp_path / ".thomas" / "cli" / "gateway_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(
+        json.dumps({"pid": 4242, "host": "127.0.0.1", "port": 8899, "log_file": str(tmp_path / "gateway.log")}),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(agents_runtime, "_is_pid_running", lambda pid: int(pid) == 4242)
+    monkeypatch.setattr(
+        agents_runtime,
+        "_probe_gateway",
+        lambda host, port, token="": {
+            "healthy": True,
+            "engines": {
+                "ok": True,
+                "payload": {"running": True, "engines": {"workspace_sync_engine": {"running": True}}},
+            },
+        },
+    )
+
+    res = runner.invoke(root, ["agents", "status", "--json"], obj={"config": cfg})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["running"] is True
+    assert payload["source"] == "gateway_detached"
+    assert "workspace_sync_engine" in payload["engines"]
+
+
+def test_agents_start_detects_existing_external_gateway(tmp_path: Path, monkeypatch) -> None:
+    root, runner, cfg = _parity_cli_context(tmp_path)
+
+    monkeypatch.setattr(
+        agents_runtime,
+        "_probe_gateway",
+        lambda host, port, token="": {
+            "healthy": True,
+            "engines": {"ok": True, "payload": {"running": True, "engines": {}}},
+        },
+    )
+
+    res = runner.invoke(root, ["agents", "start", "--json"], obj={"config": cfg, "config_path": ""})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["ok"] is True
+    assert payload["already_running"] is True
+    assert payload["external_runtime"] is True
+    assert payload["pid"] == 0
+
+
+def test_agents_stop_detached_kills_pid_and_clears_state(tmp_path: Path, monkeypatch) -> None:
+    root, runner, cfg = _parity_cli_context(tmp_path)
+    state_path = tmp_path / ".thomas" / "cli" / "gateway_state.json"
+    state_path.parent.mkdir(parents=True, exist_ok=True)
+    state_path.write_text(json.dumps({"pid": 4242, "host": "127.0.0.1", "port": 8899}), encoding="utf-8")
+
+    state = {"running": True}
+
+    def _fake_is_pid_running(pid: int) -> bool:
+        return bool(int(pid) == 4242 and state["running"])
+
+    def _fake_kill_pid(pid: int) -> bool:
+        if int(pid) == 4242:
+            state["running"] = False
+            return True
+        return False
+
+    monkeypatch.setattr(agents_runtime, "_is_pid_running", _fake_is_pid_running)
+    monkeypatch.setattr(agents_runtime, "_kill_pid", _fake_kill_pid)
+
+    res = runner.invoke(root, ["agents", "stop", "--json"], obj={"config": cfg})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["ok"] is True
+    assert payload["mode"] == "gateway_detached"
+    assert payload["pid"] == 4242
+    assert payload["killed"] is True
+    assert not state_path.exists()
+
+
+def test_agents_stop_reports_external_untracked_runtime(tmp_path: Path, monkeypatch) -> None:
+    root, runner, cfg = _parity_cli_context(tmp_path)
+    monkeypatch.setattr(
+        agents_runtime,
+        "_probe_gateway",
+        lambda host, port, token="": {"healthy": True, "engines": {"ok": True, "payload": {}}},
+    )
+
+    res = runner.invoke(root, ["agents", "stop", "--json"], obj={"config": cfg})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["ok"] is False
+    assert payload["mode"] == "gateway_detached"
+    assert "external/untracked" in payload["error"]
 
 
 def test_install_compat_json_contract(tmp_path: Path) -> None:
@@ -237,7 +403,7 @@ def test_skills_resolve_returns_runtime_selection(tmp_path: Path, monkeypatch) -
     assert int(payload.get("selected_count", 0) or 0) >= 1
     selected_names = {str(row.get("name") or "") for row in payload.get("selected") or []}
     assert skill_name in selected_names
-    assert "--- Runtime Skills ---" in str(payload.get("context") or "")
+    assert "<runtime_skills" in str(payload.get("context") or "")
 
 
 def _block_memory_backend_imports(monkeypatch) -> None:  # noqa: ANN001
@@ -245,6 +411,7 @@ def _block_memory_backend_imports(monkeypatch) -> None:  # noqa: ANN001
 
     blocked = {
         "thomas.memory.search",
+        "thomas.memory.listing",
         "thomas.memory.indexer",
         "thomas.memory.compaction",
     }
@@ -381,3 +548,32 @@ def test_memory_index_run_mode_success_contract(tmp_path: Path, monkeypatch) -> 
     payload = json.loads(res.output)
     _assert_memory_payload(payload, action="index", mode="run", ok=True, executed=True)
     assert payload["indexed"] == 42
+
+
+def test_memory_run_mode_real_backends_execute(tmp_path: Path) -> None:
+    root, runner, cfg = _memory_cli_context(tmp_path)
+    _seed_legacy_memory_event(cfg, text="compat query needle alpha")
+
+    search = runner.invoke(root, ["memory", "search", "needle", "--run", "--json"], obj={"config": cfg})
+    assert search.exit_code == 0, search.output
+    search_payload = json.loads(search.output)
+    _assert_memory_payload(search_payload, action="search", mode="run", ok=True, executed=True)
+    assert int(search_payload["count"]) >= 1
+
+    listing = runner.invoke(root, ["memory", "list", "--run", "--json"], obj={"config": cfg})
+    assert listing.exit_code == 0, listing.output
+    listing_payload = json.loads(listing.output)
+    _assert_memory_payload(listing_payload, action="list", mode="run", ok=True, executed=True)
+    assert "snapshots" in listing_payload
+
+    index = runner.invoke(root, ["memory", "index", "--run", "--json"], obj={"config": cfg})
+    assert index.exit_code == 0, index.output
+    index_payload = json.loads(index.output)
+    _assert_memory_payload(index_payload, action="index", mode="run", ok=True, executed=True)
+    assert "ingest" in index_payload
+
+    compact = runner.invoke(root, ["memory", "compact", "--run", "--json"], obj={"config": cfg})
+    assert compact.exit_code == 0, compact.output
+    compact_payload = json.loads(compact.output)
+    _assert_memory_payload(compact_payload, action="compact", mode="run", ok=True, executed=True)
+    assert "global" in compact_payload

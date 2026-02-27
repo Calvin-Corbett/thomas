@@ -21,9 +21,10 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, Tuple, TypedDict
+from typing import Any, TypedDict
 
 # Keep this module importable even in environments where aiohttp is not installed
 # (e.g., CLI-only installs). Route objects will only be defined when aiohttp exists.
@@ -32,16 +33,21 @@ try:
 except Exception:  # pragma: no cover
     web = None  # type: ignore
 
+if web is not None:  # pragma: no cover
+    CONFIG_APP_KEY = web.AppKey("config", object)
+else:  # pragma: no cover
+    CONFIG_APP_KEY = "config"
+
 
 PROMPT_ID = "p132"
 
 
 class GatewayConfiguredResponse(TypedDict):
     configured: bool
-    gateway_mode: Optional[str]
-    config_path: Optional[str]
+    gateway_mode: str | None
+    config_path: str | None
     missing: list[str]
-    reason: Optional[str]
+    reason: str | None
     message: str
     source: str
 
@@ -56,10 +62,10 @@ REASON_UNEXPECTED = "unexpected_error"
 @dataclass(frozen=True)
 class GatewayConfiguredStatus:
     configured: bool
-    gateway_mode: Optional[str]
-    config_path: Optional[str]
-    missing: Tuple[str, ...]
-    reason: Optional[str]
+    gateway_mode: str | None
+    config_path: str | None
+    missing: tuple[str, ...]
+    reason: str | None
     message: str
     source: str
 
@@ -69,14 +75,31 @@ class GatewayConfiguredStatus:
         return data  # type: ignore[return-value]
 
 
-def _first_present(mapping: Mapping[str, Any], keys: Sequence[str]) -> Optional[Any]:
+def _first_present(mapping: Mapping[str, Any], keys: Sequence[str]) -> Any | None:
     for k in keys:
-        if k in mapping:
-            return mapping[k]
+        found, value = _mapping_try_get(mapping, k)
+        if found:
+            return value
     return None
 
 
-def _safe_str(value: Any) -> Optional[str]:
+def _mapping_try_get(mapping: Mapping[str, Any], key_name: str) -> tuple[bool, Any]:
+    try:
+        if key_name in mapping:
+            return True, mapping[key_name]
+    except Exception:
+        pass
+    try:
+        for mk, mv in mapping.items():
+            mk_name = getattr(mk, "name", "") or getattr(mk, "_name", "")
+            if mk_name == key_name or str(mk_name).endswith(f".{key_name}"):
+                return True, mv
+    except Exception:
+        pass
+    return False, None
+
+
+def _safe_str(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
@@ -89,7 +112,7 @@ def _safe_str(value: Any) -> Optional[str]:
         return None
 
 
-def _extract_gateway_mode(config_obj: Any) -> Optional[str]:
+def _extract_gateway_mode(config_obj: Any) -> str | None:
     """Best-effort extraction of a gateway mode from a config object.
 
     Tries common shapes:
@@ -110,18 +133,18 @@ def _extract_gateway_mode(config_obj: Any) -> Optional[str]:
                 return mode
 
         if hasattr(config_obj, "gateway_mode"):
-            mode = _safe_str(getattr(config_obj, "gateway_mode"))
+            mode = _safe_str(config_obj.gateway_mode)
             if mode:
                 return mode
 
         if hasattr(config_obj, "gateway"):
-            gateway_obj = getattr(config_obj, "gateway")
+            gateway_obj = config_obj.gateway
             if isinstance(gateway_obj, Mapping):
                 mode = _safe_str(gateway_obj.get("mode"))
                 if mode:
                     return mode
             if hasattr(gateway_obj, "mode"):
-                mode = _safe_str(getattr(gateway_obj, "mode"))
+                mode = _safe_str(gateway_obj.mode)
                 if mode:
                     return mode
     except Exception:
@@ -129,7 +152,7 @@ def _extract_gateway_mode(config_obj: Any) -> Optional[str]:
     return None
 
 
-def _resolve_config_path(app_like: Mapping[str, Any], config_obj: Any) -> Optional[Path]:
+def _resolve_config_path(app_like: Mapping[str, Any], config_obj: Any) -> Path | None:
     """Resolve a plausible config path.
 
     Preference:
@@ -171,7 +194,7 @@ def _resolve_config_path(app_like: Mapping[str, Any], config_obj: Any) -> Option
     return candidates[0]
 
 
-def _load_config_from_disk(path: Path) -> tuple[Optional[Mapping[str, Any]], Optional[str]]:
+def _load_config_from_disk(path: Path) -> tuple[Mapping[str, Any] | None, str | None]:
     """Load a JSON config file (fallback only).
 
     Returns (config_mapping, reason_code). If parsing fails, config_mapping is None.
@@ -196,7 +219,7 @@ def _load_config_from_disk(path: Path) -> tuple[Optional[Mapping[str, Any]], Opt
 def evaluate_gateway_configured(
     app_like: Mapping[str, Any],
     *,
-    config_path_override: Optional[str] = None,
+    config_path_override: str | None = None,
 ) -> GatewayConfiguredStatus:
     """Compute whether the gateway is configured.
 
@@ -232,7 +255,7 @@ def evaluate_gateway_configured(
         else:
             config_path = _resolve_config_path(app_like, config_obj)
 
-        disk_reason: Optional[str] = None
+        disk_reason: str | None = None
         if config_obj is None and config_path is not None:
             loaded, disk_reason = _load_config_from_disk(config_path)
             config_obj = loaded
@@ -292,27 +315,27 @@ if web is not None:  # pragma: no cover
     routes = web.RouteTableDef()
     ROUTES = routes  # common alias used by some route loaders
 
-    async def _handle_gateway_configured(request: "web.Request") -> "web.Response":
+    async def _handle_gateway_configured(request: web.Request) -> web.Response:
         status = evaluate_gateway_configured(request.app)
         return web.json_response(status.to_response())
 
     @routes.get("/configured")
-    async def gateway_configured(request: "web.Request") -> "web.Response":
+    async def gateway_configured(request: web.Request) -> web.Response:
         return await _handle_gateway_configured(request)
 
     @routes.get("/gateway/configured")
-    async def gateway_configured_with_prefix(request: "web.Request") -> "web.Response":
+    async def gateway_configured_with_prefix(request: web.Request) -> web.Response:
         # This extra path makes the endpoint resilient to different router prefixing strategies.
         return await _handle_gateway_configured(request)
 
-    def get_routes() -> "web.RouteTableDef":
+    def get_routes() -> web.RouteTableDef:
         return routes
 
-    def register(app: "web.Application") -> None:
+    def register(app: web.Application) -> None:
         """Register this module's routes into an existing aiohttp app."""
         app.add_routes(routes)
 
-    def build_subapp() -> "web.Application":
+    def build_subapp() -> web.Application:
         subapp = web.Application()
         subapp.add_routes(routes)
         return subapp

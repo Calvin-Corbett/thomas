@@ -1,8 +1,8 @@
 # tests/test_webhooks.py
+import hashlib
+import hmac
 import importlib
 import json
-import hmac
-import hashlib
 
 import pytest
 from fastapi import FastAPI
@@ -14,9 +14,7 @@ class FakePersistence:
         self.goals = []
 
     def create_goal(self, goal_text: str, source: str, metadata: dict, goal_id: str):
-        self.goals.append(
-            {"id": goal_id, "text": goal_text, "source": source, "metadata": metadata}
-        )
+        self.goals.append({"id": goal_id, "text": goal_text, "source": source, "metadata": metadata})
         return goal_id
 
 
@@ -25,7 +23,7 @@ def _hmac_hex(secret: str, body: bytes) -> str:
 
 
 def _stripe_sig(secret: str, body: bytes, ts: int) -> str:
-    signed = (f"{ts}.".encode("utf-8") + body)
+    signed = f"{ts}.".encode() + body
     v1 = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
     return f"t={ts},v1={v1}"
 
@@ -59,6 +57,7 @@ def _build_webhooks_app(
     monkeypatch.setenv("THOMAS_WEBHOOK_STORE_RAW_PAYLOAD", "0")  # keep tests lean
 
     import thomas.server.routes.webhooks as webhooks_mod
+
     importlib.reload(webhooks_mod)
 
     fake_p = FakePersistence()
@@ -91,14 +90,22 @@ def test_register_list_patch_get(app):
     a, _fake_p, _mod, _tmp = app
     c = TestClient(a)
 
-    r = c.post("/webhooks/register", headers={"X-Admin-Token": "adm"}, json={"id": "abc", "goal_template": "Hi {payload.name}", "rate_limit_per_min": 10})
+    r = c.post(
+        "/webhooks/register",
+        headers={"X-Admin-Token": "adm"},
+        json={"id": "abc", "goal_template": "Hi {payload.name}", "rate_limit_per_min": 10},
+    )
     assert r.status_code == 200
 
     r = c.get("/webhooks", headers={"X-Admin-Token": "adm"})
     assert r.status_code == 200
     assert r.json()[0]["rate_limit_per_min"] == 10
 
-    r = c.patch("/webhooks/abc", headers={"X-Admin-Token": "adm"}, json={"goal_template": "Hello {payload.name} from {payload.org}"})
+    r = c.patch(
+        "/webhooks/abc",
+        headers={"X-Admin-Token": "adm"},
+        json={"goal_template": "Hello {payload.name} from {payload.org}"},
+    )
     assert r.status_code == 200
 
     r = c.get("/webhooks/abc", headers={"X-Admin-Token": "adm"})
@@ -110,7 +117,11 @@ def test_template_dotpath_and_test_endpoint(app):
     a, fake_p, _mod, _tmp = app
     c = TestClient(a)
 
-    c.post("/webhooks/register", headers={"X-Admin-Token": "adm"}, json={"id": "abc", "secret": "s3cr3t", "goal_template": "Lead {payload.name} email {payload.customer.email}"})
+    c.post(
+        "/webhooks/register",
+        headers={"X-Admin-Token": "adm"},
+        json={"id": "abc", "secret": "s3cr3t", "goal_template": "Lead {payload.name} email {payload.customer.email}"},
+    )
 
     payload = {"name": "Calvin", "customer": {"email": "c@example.com"}}
     r = c.post("/webhooks/test/abc", headers={"X-Admin-Token": "adm"}, json=payload)
@@ -124,16 +135,36 @@ def test_receive_generic_signature_and_dedupe_and_inbox(app):
     a, fake_p, _mod, tmp = app
     c = TestClient(a)
 
-    c.post("/webhooks/register", headers={"X-Admin-Token": "adm"}, json={"id": "abc", "secret": "s3cr3t", "goal_template": "X {payload.x}"})
+    c.post(
+        "/webhooks/register",
+        headers={"X-Admin-Token": "adm"},
+        json={"id": "abc", "secret": "s3cr3t", "goal_template": "X {payload.x}"},
+    )
     body = json.dumps({"x": 1}).encode("utf-8")
     sig = _hmac_hex("s3cr3t", body)
 
-    r1 = c.post("/webhooks/receive/abc", data=body, headers={"content-type": "application/json", "X-Webhook-Signature": f"sha256={sig}", "X-Webhook-Delivery": "d1"})
+    r1 = c.post(
+        "/webhooks/receive/abc",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "X-Webhook-Signature": f"sha256={sig}",
+            "X-Webhook-Delivery": "d1",
+        },
+    )
     assert r1.status_code == 200
     gid = r1.json()["goal_id"]
     assert len(fake_p.goals) == 1
 
-    r2 = c.post("/webhooks/receive/abc", data=body, headers={"content-type": "application/json", "X-Webhook-Signature": f"sha256={sig}", "X-Webhook-Delivery": "d1"})
+    r2 = c.post(
+        "/webhooks/receive/abc",
+        content=body,
+        headers={
+            "content-type": "application/json",
+            "X-Webhook-Signature": f"sha256={sig}",
+            "X-Webhook-Delivery": "d1",
+        },
+    )
     assert r2.status_code == 200
     assert r2.json()["status"] == "duplicate"
     assert r2.json()["goal_id"] == gid
@@ -165,13 +196,13 @@ def test_github_push_and_dedupe(app, monkeypatch):
         "X-Hub-Signature-256": f"sha256={sig}",
         "X-GitHub-Delivery": "delivery-1",
     }
-    r1 = c.post("/webhooks/receive/github", data=body, headers=headers)
+    r1 = c.post("/webhooks/receive/github", content=body, headers=headers)
     assert r1.status_code == 200
     gid = r1.json()["goal_id"]
     assert len(fake_p.goals) == 1
     assert "owner/repo" in fake_p.goals[0]["text"]
 
-    r2 = c.post("/webhooks/receive/github", data=body, headers=headers)
+    r2 = c.post("/webhooks/receive/github", content=body, headers=headers)
     assert r2.status_code == 200
     assert r2.json()["status"] == "duplicate"
     assert r2.json()["goal_id"] == gid
@@ -195,7 +226,11 @@ def test_stripe_signature_optional_and_zero_decimal(app, monkeypatch):
     body = json.dumps(payload).encode("utf-8")
     stripe_sig = _stripe_sig("sk_test", body, 1700000000)
 
-    r = c.post("/webhooks/receive/stripe", data=body, headers={"content-type": "application/json", "Stripe-Signature": stripe_sig})
+    r = c.post(
+        "/webhooks/receive/stripe",
+        content=body,
+        headers={"content-type": "application/json", "Stripe-Signature": stripe_sig},
+    )
     assert r.status_code == 200
     assert len(fake_p.goals) == 1
     assert "500 JPY" in fake_p.goals[0]["text"]
@@ -232,13 +267,13 @@ def test_generic_receive_rejects_unsigned_when_signature_enforcement_enabled(str
     )
 
     body = json.dumps({"x": 1}).encode("utf-8")
-    missing_sig = c.post("/webhooks/receive/abc", data=body, headers={"content-type": "application/json"})
+    missing_sig = c.post("/webhooks/receive/abc", content=body, headers={"content-type": "application/json"})
     assert missing_sig.status_code == 401
     assert "Missing X-Webhook-Signature header." in str(missing_sig.json().get("detail", ""))
 
     bad_sig = c.post(
         "/webhooks/receive/abc",
-        data=body,
+        content=body,
         headers={
             "content-type": "application/json",
             "X-Webhook-Signature": "sha256=deadbeef",
@@ -279,7 +314,7 @@ def test_stripe_receive_requires_secret_and_signature_when_enforced(strict_app, 
     }
     body = json.dumps(payload).encode("utf-8")
 
-    no_secret = c.post("/webhooks/receive/stripe", data=body, headers={"content-type": "application/json"})
+    no_secret = c.post("/webhooks/receive/stripe", content=body, headers={"content-type": "application/json"})
     assert no_secret.status_code == 503
     assert "Stripe webhook signature enforcement is enabled" in str(no_secret.json().get("detail", ""))
 
@@ -288,7 +323,7 @@ def test_stripe_receive_requires_secret_and_signature_when_enforced(strict_app, 
     monkeypatch.setattr(mod, "get_persistence", lambda: fake_p)
     monkeypatch.setattr(mod, "_unix_now", lambda: 1700000000)
 
-    missing_signature = c.post("/webhooks/receive/stripe", data=body, headers={"content-type": "application/json"})
+    missing_signature = c.post("/webhooks/receive/stripe", content=body, headers={"content-type": "application/json"})
     assert missing_signature.status_code == 401
     assert "Missing Stripe-Signature header." in str(missing_signature.json().get("detail", ""))
 
@@ -306,7 +341,7 @@ def test_github_receive_requires_secret_and_signature_when_enforced(strict_app, 
 
     no_secret = c.post(
         "/webhooks/receive/github",
-        data=body,
+        content=body,
         headers={"content-type": "application/json", "X-GitHub-Event": "push"},
     )
     assert no_secret.status_code == 503
@@ -318,7 +353,7 @@ def test_github_receive_requires_secret_and_signature_when_enforced(strict_app, 
 
     missing_signature = c.post(
         "/webhooks/receive/github",
-        data=body,
+        content=body,
         headers={"content-type": "application/json", "X-GitHub-Event": "push"},
     )
     assert missing_signature.status_code == 401

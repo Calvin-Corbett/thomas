@@ -6,7 +6,8 @@ param(
   [switch]$NoBrowser,
   [switch]$NoInstall,
   [switch]$NoTray,
-  [switch]$Headless
+  [switch]$Headless,
+  [switch]$NoMonolithWatch
 )
 
 $ErrorActionPreference = "Stop"
@@ -14,23 +15,66 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
 
+function Invoke-NativeCore {
+  param(
+    [Parameter(Mandatory = $true)][string]$Exe,
+    [Parameter(Mandatory = $true)][string[]]$Args,
+    [switch]$Quiet
+  )
+
+  $quotedArgs = @()
+  foreach ($arg in $Args) {
+    $text = [string]$arg
+    if ($text -match '[\s"]') {
+      $text = '"' + ($text -replace '"', '\"') + '"'
+    }
+    $quotedArgs += $text
+  }
+  $argLine = ($quotedArgs -join " ")
+
+  $outFile = [System.IO.Path]::GetTempFileName()
+  $errFile = [System.IO.Path]::GetTempFileName()
+  try {
+    $proc = Start-Process `
+      -FilePath $Exe `
+      -ArgumentList $argLine `
+      -NoNewWindow `
+      -Wait `
+      -PassThru `
+      -RedirectStandardOutput $outFile `
+      -RedirectStandardError $errFile `
+      -ErrorAction Stop
+
+    if (-not $Quiet) {
+      if (Test-Path $outFile) {
+        $stdout = Get-Content -Path $outFile -ErrorAction SilentlyContinue
+        if ($stdout) { $stdout | Out-Host }
+      }
+      if (Test-Path $errFile) {
+        $stderr = Get-Content -Path $errFile -ErrorAction SilentlyContinue
+        if ($stderr) { $stderr | Out-Host }
+      }
+    }
+
+    return [int]$proc.ExitCode
+  } catch {
+    if (-not $Quiet) {
+      Write-Host ("[thomas] ERROR: failed to run native command: {0} ({1})" -f $Exe, $_.Exception.Message)
+    }
+    return 1
+  } finally {
+    try { Remove-Item -Path $outFile -Force -ErrorAction SilentlyContinue } catch { }
+    try { Remove-Item -Path $errFile -Force -ErrorAction SilentlyContinue } catch { }
+  }
+}
+
 function Invoke-NativeQuiet {
   param(
     [Parameter(Mandatory = $true)][string]$Exe,
     [Parameter(Mandatory = $true)][string[]]$Args
   )
 
-  # In Windows PowerShell 5.1, redirecting stderr on a native command can emit
-  # a NativeCommandError which (with $ErrorActionPreference="Stop") terminates
-  # the script. Temporarily relax error handling for these probes.
-  $old = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  try {
-    & $Exe @Args 2>$null | Out-Null
-    return $LASTEXITCODE
-  } finally {
-    $ErrorActionPreference = $old
-  }
+  return (Invoke-NativeCore -Exe $Exe -Args $Args -Quiet)
 }
 
 function Invoke-Native {
@@ -39,14 +83,7 @@ function Invoke-Native {
     [Parameter(Mandatory = $true)][string[]]$Args
   )
 
-  $old = $ErrorActionPreference
-  $ErrorActionPreference = "Continue"
-  try {
-    & $Exe @Args 2>&1 | Out-Host
-    return [int]$LASTEXITCODE
-  } finally {
-    $ErrorActionPreference = $old
-  }
+  return (Invoke-NativeCore -Exe $Exe -Args $Args)
 }
 
 function Find-SystemPython {
@@ -208,6 +245,23 @@ function Test-ThomasHttpOnPort([int]$P) {
   }
 }
 
+function Wait-ThomasHttpOnPort {
+  param(
+    [Parameter(Mandatory = $true)][int]$P,
+    [int]$Attempts = 12,
+    [int]$DelayMs = 300
+  )
+
+  $attemptCount = [Math]::Max(1, $Attempts)
+  for ($i = 0; $i -lt $attemptCount; $i++) {
+    if (Test-ThomasHttpOnPort $P) { return $true }
+    if ($i -lt ($attemptCount - 1)) {
+      Start-Sleep -Milliseconds ([Math]::Max(50, $DelayMs))
+    }
+  }
+  return $false
+}
+
 function Invoke-BootDoctor {
   param(
     [Parameter(Mandatory = $true)][string]$Reason,
@@ -221,14 +275,50 @@ function Invoke-BootDoctor {
   New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
   $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
   $report = Join-Path $diagDir ("boot_doctor_{0}.txt" -f $stamp)
+  $runner = Join-Path $Root "scripts\\run_boot_doctor_direct.py"
+  $cliExit = -1
+  $directExit = -1
+  $succeeded = $false
 
   try {
-    & $VenvPy -m thomas boot-doctor --port $DiagPort --reason $Reason --report $report
-    if ($LASTEXITCODE -ne 0) {
-      throw ("boot-doctor exit code {0}" -f $LASTEXITCODE)
+    $cliExit = Invoke-Native $VenvPy @("-m", "thomas.bootdoctor", "report", "--force", "--port", "$DiagPort", "--reason", $Reason, "--report", $report)
+    if ($cliExit -eq 0) {
+      $succeeded = $true
+    } else {
+      Write-Host ("[thomas] bootdoctor report runner failed (exit {0}); trying direct core fallback..." -f $cliExit)
+      if (Test-Path $runner) {
+        $directExit = Invoke-Native $VenvPy @($runner, "--root", $Root, "--port", "$DiagPort", "--reason", $Reason, "--report", $report)
+        if ($directExit -eq 0) {
+          $succeeded = $true
+        }
+      } else {
+        Write-Host ("[thomas] WARNING: direct Boot Doctor runner missing: {0}" -f $runner)
+      }
     }
   } catch {
-    Set-Content -Path $report -Value ("Boot Doctor failed: {0}" -f $_.Exception.Message) -Encoding UTF8
+    $detail = $_.Exception.Message
+    $failure = @(
+      "Thomas Boot Doctor invocation raised an exception."
+      ("Reason: {0}" -f $Reason)
+      ("Port: {0}" -f $DiagPort)
+      ("Error: {0}" -f $detail)
+      ("Generated (UTC): {0}" -f (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+    ) -join [Environment]::NewLine
+    Set-Content -Path $report -Value $failure -Encoding UTF8
+  }
+
+  if (-not $succeeded) {
+    $failure = @(
+      "Thomas Boot Doctor execution failed."
+      ("Reason: {0}" -f $Reason)
+      ("Port: {0}" -f $DiagPort)
+      ("CLI exit code: {0}" -f $cliExit)
+      ("Direct fallback exit code: {0}" -f $directExit)
+      ("Generated (UTC): {0}" -f (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ"))
+      ""
+      "Review console output above for traceback details."
+    ) -join [Environment]::NewLine
+    Set-Content -Path $report -Value $failure -Encoding UTF8
   }
 
   Write-Host ("[thomas] Boot Doctor report: {0}" -f $report)
@@ -236,8 +326,20 @@ function Invoke-BootDoctor {
 }
 
 function Get-ThomasListenersOnPort([int]$P) {
+  $hits = Get-ThomasListeners
+  if (-not $hits) { return @() }
+  return @($hits | Where-Object { [int]$_.Port -eq $P })
+}
+
+function Test-ThomasProcessCommand([string]$CommandLine) {
+  $cmd = [string]$CommandLine
+  if ([string]::IsNullOrWhiteSpace($cmd)) { return $false }
+  return $cmd -match '(?i)(-m\s+thomas(\.server)?(\s+serve)?\b|-m\s+thomas\.tray_agent\b|\bthomas(\.exe)?\s+serve\b)'
+}
+
+function Get-ThomasListeners {
   $hits = @()
-  $listeners = Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue
+  $listeners = Get-NetTCPConnection -State Listen -ErrorAction SilentlyContinue
   if (-not $listeners) { return $hits }
   foreach ($l in $listeners) {
     $owningPid = [int]$l.OwningProcess
@@ -246,14 +348,43 @@ function Get-ThomasListenersOnPort([int]$P) {
     try {
       $cmd = (Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
     } catch { }
-    if ($cmd -and $cmd -match '(?i)(-m\s+thomas(\.server)?(\s+serve)?\b|-m\s+thomas\.tray_agent\b|\bthomas(\.exe)?\s+serve\b)') {
+    if (Test-ThomasProcessCommand $cmd) {
       $hits += [pscustomobject]@{
+        Port = [int]$l.LocalPort
         Pid = $owningPid
         CommandLine = $cmd
       }
     }
   }
   return $hits
+}
+
+function Get-ThomasHealthyCandidate {
+  param([int]$PreferredPort)
+
+  $listeners = @(Get-ThomasListeners)
+  if (-not $listeners.Count) { return $null }
+
+  $ports = @($listeners | Select-Object -ExpandProperty Port -Unique | Sort-Object)
+  $orderedPorts = @()
+  if ($ports -contains $PreferredPort) { $orderedPorts += $PreferredPort }
+  $orderedPorts += @($ports | Where-Object { [int]$_ -ne $PreferredPort })
+
+  foreach ($candidatePort in $orderedPorts) {
+    if (Wait-ThomasHttpOnPort -P ([int]$candidatePort)) {
+      return [pscustomobject]@{
+        Port = [int]$candidatePort
+        Listeners = @($listeners | Where-Object { [int]$_.Port -eq [int]$candidatePort })
+        AllListeners = $listeners
+      }
+    }
+  }
+
+  return [pscustomobject]@{
+    Port = $null
+    Listeners = @()
+    AllListeners = $listeners
+  }
 }
 
 Ensure-Installed
@@ -295,7 +426,7 @@ function Stop-ThomasServerOnPort([int]$P) {
       if ($procId -le 0) { continue }
       $procCmd = [string]$proc.CommandLine
       if (-not $procCmd) { continue }
-      if ($procCmd -match '(?i)-m\\s+thomas\\.tray_agent\\b' -and $procCmd -match ("(?i)(--port\\s+{0}\\b|--port={0}\\b)" -f $P)) {
+      if ($procCmd -match '(?i)-m\s+thomas\.tray_agent\b' -and $procCmd -match ("(?i)(--port\s+{0}\b|--port={0}\b)" -f $P)) {
         Write-Host ("[thomas] Found Thomas tray agent on port {0} (pid {1}); stopping it..." -f $P, $procId)
         try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch { }
         $stoppedAny = $true
@@ -319,7 +450,22 @@ function Stop-ThomasServerOnPort([int]$P) {
       $cmd = (Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
     } catch { }
 
-    if ($cmd -and $cmd -match '(?i)(-m\\s+thomas(\\.server)?(\\s+serve)?\\b|\\bthomas(\\.exe)?\\s+serve\\b)') {
+    if ($cmd -and $cmd -match '(?i)(-m\s+thomas(\.server)?(\s+serve)?\b|\bthomas(\.exe)?\s+serve\b)') {
+      # If this server is managed by a tray agent, stop the parent tray first
+      # so it does not immediately respawn the duplicate server.
+      try {
+        $procObj = Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $owningPid) -ErrorAction SilentlyContinue
+        $parentPid = [int]$procObj.ParentProcessId
+        if ($parentPid -gt 0) {
+          $parentCmd = [string](Get-CimInstance Win32_Process -Filter ("ProcessId={0}" -f $parentPid) -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine)
+          if ($parentCmd -and $parentCmd -match '(?i)-m\s+thomas\.tray_agent\b') {
+            Write-Host ("[thomas] Found tray parent for duplicate server on port {0} (pid {1}); stopping tray parent..." -f $P, $parentPid)
+            try { Stop-Process -Id $parentPid -Force -ErrorAction SilentlyContinue } catch { }
+            $stoppedAny = $true
+          }
+        }
+      } catch { }
+
       Write-Host ("[thomas] Port {0} is in use by an existing Thomas server (pid {1}); stopping it..." -f $P, $owningPid)
       try { Stop-Process -Id $owningPid -Force -ErrorAction SilentlyContinue } catch { }
       $stoppedAny = $true
@@ -334,7 +480,7 @@ function Uses-OllamaLocal {
   $cfgPath = Join-Path $Root "thomas.toml"
   if (-not (Test-Path $cfgPath)) { return $false }
   $t = Get-Content $cfgPath -Raw
-  if ($t -match 'default_model\\s*=\\s*\"local\"' -and $t -match 'base_url\\s*=\\s*\"http://(localhost|127\\.0\\.0\\.1):11434') {
+  if ($t -match 'default_model\s*=\s*\"local\"' -and $t -match 'base_url\s*=\s*\"http://(localhost|127\.0\.0\.1):11434') {
     return $true
   }
   return $false
@@ -344,7 +490,7 @@ function Get-DefaultModelName {
   $cfgPath = Join-Path $Root "thomas.toml"
   if (-not (Test-Path $cfgPath)) { return "" }
   $t = Get-Content $cfgPath -Raw
-  $m = [regex]::Match($t, '(?m)^\\s*default_model\\s*=\\s*\"(?<value>[^\"]+)\"')
+  $m = [regex]::Match($t, '(?m)^\s*default_model\s*=\s*\"(?<value>[^\"]+)\"')
   if (-not $m.Success) { return "" }
   return $m.Groups["value"].Value.Trim().ToLowerInvariant()
 }
@@ -355,9 +501,9 @@ function Get-ProfileApiKeyFromToml {
   if (-not (Test-Path $cfgPath)) { return "" }
   $t = Get-Content $cfgPath -Raw
   $escaped = [regex]::Escape($Profile)
-  $section = [regex]::Match($t, "(?ms)^\\[models\\.$escaped\\]\\s*(?<body>.*?)(?=^\\[|\\z)")
+  $section = [regex]::Match($t, "(?ms)^\[models\.$escaped\]\s*(?<body>.*?)(?=^\[|\z)")
   if (-not $section.Success) { return "" }
-  $api = [regex]::Match($section.Groups["body"].Value, '(?m)^\\s*api_key\\s*=\\s*\"(?<key>[^\"]*)\"')
+  $api = [regex]::Match($section.Groups["body"].Value, '(?m)^\s*api_key\s*=\s*\"(?<key>[^\"]*)\"')
   if (-not $api.Success) { return "" }
   return $api.Groups["key"].Value.Trim()
 }
@@ -423,19 +569,35 @@ if (Uses-OllamaLocal) {
 }
 Show-DefaultModelWarning
 
-# Fast-path: if a healthy Thomas instance is already bound to the target port, reuse it.
-$existingThomas = Get-ThomasListenersOnPort $Port
-if ($existingThomas.Count -gt 0 -and (Test-ThomasHttpOnPort $Port)) {
-  $existingUrl = "http://$BindHost`:$Port/"
-  $pidText = ($existingThomas | ForEach-Object { $_.Pid } | Select-Object -Unique) -join ","
-  Write-Host ("[thomas] Thomas is already healthy on port {0} (pid {1}); reusing existing instance." -f $Port, $pidText)
-  if (-not $NoBrowser) {
-    try { Start-Process $existingUrl | Out-Null } catch { }
+# ── ALWAYS start fresh ──────────────────────────────────────────────
+# Kill ALL existing Thomas servers and tray agents so we always run the
+# current version from this working tree.  The old "reuse" logic caused
+# stale servers to persist after code updates.
+$allListeners = @(Get-ThomasListeners)
+if ($allListeners.Count -gt 0) {
+  $allPorts = @($allListeners | Select-Object -ExpandProperty Port -Unique)
+  Write-Host ("[thomas] Stopping {0} existing Thomas instance(s) on port(s): {1}" -f $allListeners.Count, ($allPorts -join ", "))
+  foreach ($existingPort in $allPorts) {
+    Stop-ThomasServerOnPort ([int]$existingPort) | Out-Null
   }
-  exit 0
+  # Also kill any orphaned tray agents that aren't listening on a port
+  try {
+    $pyProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue
+    foreach ($proc in $pyProcs) {
+      $procCmd = [string]$proc.CommandLine
+      if ($procCmd -and $procCmd -match '(?i)-m\s+thomas\.tray_agent\b') {
+        $procId = [int]$proc.ProcessId
+        if ($procId -gt 0) {
+          Write-Host ("[thomas] Stopping orphaned tray agent (pid {0})" -f $procId)
+          try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch { }
+        }
+      }
+    }
+  } catch { }
+  Start-Sleep -Milliseconds 800
 }
 
-# Prefer a stable URL. If the chosen port is already taken by another Thomas server/tray, stop it.
+# Also ensure the target port is clear (non-Thomas process might hold it)
 Stop-ThomasServerOnPort $Port | Out-Null
 
 $FreePort = Find-FreePort $Port
@@ -460,11 +622,55 @@ if ($FreePort -ne $Port) {
   $Port = $FreePort
 }
 
+# Show what version we're about to start so the user can confirm it's current.
+$startingVersion = ""
+try {
+  $vOut = & $VenvPy -c "from thomas import __version__; print(__version__)" 2>$null
+  if ($vOut) { $startingVersion = $vOut.Trim() }
+} catch { }
+if (-not $startingVersion) { $startingVersion = "unknown" }
+
 $Url = "http://$BindHost`:$Port/"
 Write-Host ""
+Write-Host ("[thomas] Starting Thomas v{0}" -f $startingVersion)
 Write-Host "[thomas] UI: $Url"
 Write-Host "[thomas] If this stays on \"ready\" but won't answer, check thomas.toml model endpoints."
 Write-Host ""
+
+function Start-MonolithWatch {
+  if ($NoMonolithWatch) { return $null }
+
+  $raw = [string]$env:THOMAS_MONOLITH_WATCH
+  if ($raw) {
+    $flag = $raw.Trim().ToLowerInvariant()
+    if ($flag -in @("0", "false", "no", "off")) {
+      return $null
+    }
+  }
+
+  Write-Host "[thomas] Live monolith guard watcher: enabled (use -NoMonolithWatch to disable)."
+  try {
+    $proc = Start-Process `
+      -FilePath $VenvPy `
+      -ArgumentList @("-u", "scripts/watch_monolith_guard.py", "--repo-root", $Root, "--interval", "2.0") `
+      -NoNewWindow `
+      -PassThru
+    return $proc
+  } catch {
+    Write-Host ("[thomas] WARNING: unable to start live monolith watcher: {0}" -f $_.Exception.Message)
+    return $null
+  }
+}
+
+function Stop-MonolithWatch {
+  param($WatchProc)
+  if ($null -eq $WatchProc) { return }
+  try {
+    if (-not $WatchProc.HasExited) {
+      Stop-Process -Id $WatchProc.Id -Force -ErrorAction SilentlyContinue
+    }
+  } catch { }
+}
 
 # ---------------------------------------------------------------------------
 # Mode selection: Tray Agent (default) or direct server
@@ -489,12 +695,16 @@ if (-not $NoTray) {
     try { Start-Process $Url | Out-Null } catch { }
   }
 
-  # Run tray agent (which starts and manages the server)
-  & $VenvPy -m thomas.tray_agent --port $Port 2>&1
-  $exitCode = $LASTEXITCODE
-  if ($exitCode -ne 0) {
-    Invoke-BootDoctor -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port
-    exit $exitCode
+  $watchProc = Start-MonolithWatch
+  try {
+    # Run tray agent (which starts and manages the server)
+    $exitCode = Invoke-Native $VenvPy @("-m", "thomas.tray_agent", "--port", "$Port")
+    if ($exitCode -ne 0) {
+      Invoke-BootDoctor -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port
+      exit $exitCode
+    }
+  } finally {
+    Stop-MonolithWatch $watchProc
   }
 } else {
   # -NoTray: Run server directly (original behavior)
@@ -505,10 +715,14 @@ if (-not $NoTray) {
     try { Start-Process $Url | Out-Null } catch { }
   }
 
-  & $VenvPy -m thomas.server --host $BindHost --port $Port 2>&1
-  $exitCode = $LASTEXITCODE
-  if ($exitCode -ne 0) {
-    Invoke-BootDoctor -Reason ("Server exited with code {0}" -f $exitCode) -DiagPort $Port
-    exit $exitCode
+  $watchProc = Start-MonolithWatch
+  try {
+    $exitCode = Invoke-Native $VenvPy @("-m", "thomas.server", "--host", "$BindHost", "--port", "$Port")
+    if ($exitCode -ne 0) {
+      Invoke-BootDoctor -Reason ("Server exited with code {0}" -f $exitCode) -DiagPort $Port
+      exit $exitCode
+    }
+  } finally {
+    Stop-MonolithWatch $watchProc
   }
 }

@@ -16,19 +16,19 @@ import os
 import urllib.error
 import urllib.request
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import typer
 
 
 @dataclass(frozen=True)
 class GatewayLogsFilterCliArgs:
-    contains: Optional[str] = None
-    regex: Optional[str] = None
+    contains: str | None = None
+    regex: str | None = None
     ignore_case: bool = False
-    levels: Optional[List[str]] = None
-    after: Optional[str] = None
-    before: Optional[str] = None
+    levels: list[str] | None = None
+    after: str | None = None
+    before: str | None = None
     limit: int = 200
     newest_first: bool = False
 
@@ -37,7 +37,7 @@ def _default_server_url() -> str:
     return os.getenv("THOMAS_SERVER_URL") or os.getenv("THOMAS_GATEWAY_URL") or "http://127.0.0.1:8080"
 
 
-def _post_json(url: str, payload: Dict[str, Any], *, timeout_s: float = 10.0) -> Dict[str, Any]:
+def _post_json(url: str, payload: dict[str, Any], *, timeout_s: float = 10.0) -> dict[str, Any]:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
         url=url,
@@ -52,25 +52,30 @@ def _post_json(url: str, payload: Dict[str, Any], *, timeout_s: float = 10.0) ->
                 parsed = json.loads(body)
                 if isinstance(parsed, dict):
                     return parsed
-            except Exception:
+            except json.JSONDecodeError:
                 pass
-            return {"ok": False, "error": {"code": "BAD_RESPONSE", "message": "Server returned non-JSON response.", "fields": {}}}
+            return {
+                "ok": False,
+                "error": {"code": "BAD_RESPONSE", "message": "Server returned non-JSON response.", "fields": {}},
+            }
     except urllib.error.HTTPError as e:
         body = e.read().decode("utf-8", errors="replace") if hasattr(e, "read") else ""
         try:
             parsed = json.loads(body)
             if isinstance(parsed, dict):
                 return parsed
-        except Exception:
+        except json.JSONDecodeError:
             pass
         return {"ok": False, "error": {"code": "HTTP_ERROR", "message": f"HTTP {e.code}", "fields": {}}}
     except Exception as e:
         return {"ok": False, "error": {"code": "CLIENT_ERROR", "message": str(e), "fields": {}}}
 
 
-def call_gateway_logs_filter(*, server_url: str, args: GatewayLogsFilterCliArgs, timeout_s: float = 10.0) -> Dict[str, Any]:
+def call_gateway_logs_filter(
+    *, server_url: str, args: GatewayLogsFilterCliArgs, timeout_s: float = 10.0
+) -> dict[str, Any]:
     endpoint = server_url.rstrip("/") + "/gateway/logs/filter"
-    payload: Dict[str, Any] = {k: v for k, v in asdict(args).items() if v is not None}
+    payload: dict[str, Any] = {k: v for k, v in asdict(args).items() if v is not None}
     return _post_json(endpoint, payload, timeout_s=timeout_s)
 
 
@@ -79,12 +84,12 @@ app = typer.Typer(add_completion=False, help="Gateway log utilities.")
 
 @app.command("logs-filter")
 def logs_filter_command(
-    contains: Optional[str] = typer.Option(None, "--contains", help="Substring to match."),
-    regex: Optional[str] = typer.Option(None, "--regex", help="Regex to match."),
+    contains: str | None = typer.Option(None, "--contains", help="Substring to match."),
+    regex: str | None = typer.Option(None, "--regex", help="Regex to match."),
     ignore_case: bool = typer.Option(False, "--ignore-case", help="Case-insensitive matching."),
-    level: Optional[List[str]] = typer.Option(None, "--level", help="Filter by log level. May be repeated."),
-    after: Optional[str] = typer.Option(None, "--after", help="Only include entries on/after this ISO timestamp."),
-    before: Optional[str] = typer.Option(None, "--before", help="Only include entries on/before this ISO timestamp."),
+    level: list[str] | None = typer.Option(None, "--level", help="Filter by log level. May be repeated."),
+    after: str | None = typer.Option(None, "--after", help="Only include entries on/after this ISO timestamp."),
+    before: str | None = typer.Option(None, "--before", help="Only include entries on/before this ISO timestamp."),
     limit: int = typer.Option(200, "--limit", help="Maximum number of matches to return."),
     newest_first: bool = typer.Option(False, "--newest-first", help="Return newest matches first."),
     server_url: str = typer.Option(_default_server_url(), "--server-url", help="Thomas server base URL."),

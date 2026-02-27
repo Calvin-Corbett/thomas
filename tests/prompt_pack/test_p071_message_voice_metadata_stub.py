@@ -4,6 +4,7 @@ from pathlib import Path
 
 import pytest
 
+from thomas.cli.commands.messages import p071_message_voice_metadata_stub as cli
 from thomas.messages.p071_message_voice_metadata_stub import (
     InvalidVoiceMetadataRequestError,
     MissingVoiceMetadataConfigError,
@@ -11,8 +12,6 @@ from thomas.messages.p071_message_voice_metadata_stub import (
     VoiceMetadataStubRequest,
     create_voice_metadata_stub,
 )
-
-from thomas.cli.commands.messages import p071_message_voice_metadata_stub as cli
 
 
 def _write_wav(path: Path, *, seconds: float = 1.0, sample_rate: int = 8000) -> None:
@@ -34,8 +33,9 @@ def test_voice_metadata_stub_success_with_wav(tmp_path: Path) -> None:
     d = res.to_dict()
     assert d["schema_version"] == 1
     assert d["message_id"] == "msg-123"
-    assert d["is_stub"] is True
+    assert d["is_stub"] is False
     assert d["source"]["kind"] == "file"
+    assert d["source"]["inspection_mode"] == "file_best_effort"
     assert d["metadata"]["size_bytes"] is not None
     assert d["metadata"]["sha256"] is not None
     assert d["metadata"]["container"] == "wav"
@@ -49,6 +49,7 @@ def test_voice_metadata_stub_no_source_is_ok_stub() -> None:
     res = create_voice_metadata_stub(req)
     d = res.to_dict()
     assert d["ok"] is False if "ok" in d else True  # defensive; core result has no ok field
+    assert d["is_stub"] is True
     assert d["warnings"] == ["no_audio_source"]
     assert d["source"]["kind"] == "none"
 
@@ -95,6 +96,8 @@ def test_voice_metadata_stub_audio_url_allowed_records_only() -> None:
     res = create_voice_metadata_stub(req, config={"voice_metadata_allow_urls": True})
     d = res.to_dict()
     assert d["source"]["kind"] == "url"
+    assert d["source"]["inspection_mode"] == "url_record_only"
+    assert d["is_stub"] is True
     assert "url_source_not_fetched" in d["warnings"]
     assert d["metadata"]["sha256"] is None
 
@@ -120,3 +123,23 @@ def test_cli_json_failure(capsys: pytest.CaptureFixture[str]) -> None:
     payload = json.loads(out)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "invalid_request"
+
+
+def test_cli_json_url_allowed_with_flag(capsys: pytest.CaptureFixture[str]) -> None:
+    exit_code = cli.main(
+        [
+            "--message-id",
+            "m-url",
+            "--audio-url",
+            "https://example.com/a.wav",
+            "--allow-urls",
+            "--json",
+        ]
+    )
+    assert exit_code == 0
+
+    out = capsys.readouterr().out.strip()
+    payload = json.loads(out)
+    assert payload["ok"] is True
+    assert payload["result"]["source"]["kind"] == "url"
+    assert payload["result"]["is_stub"] is True

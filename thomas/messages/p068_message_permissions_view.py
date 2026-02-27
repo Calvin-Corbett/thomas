@@ -19,9 +19,9 @@ import json
 import os
 import urllib.parse
 import urllib.request
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
-from typing import Any, Callable, Mapping, TypedDict
-
+from typing import Any, TypedDict
 
 # ----------------------------
 # Contracts
@@ -287,7 +287,7 @@ def view_message_permissions(
 
     try:
         resp = getter(cfg.endpoint, params, headers, cfg.timeout_s)
-    except Exception as exc:
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:
         raise MessagePermissionsViewError(
             code="external_failure",
             message="Failed to fetch permissions from remote backend",

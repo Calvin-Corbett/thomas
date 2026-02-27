@@ -4,13 +4,14 @@ import asyncio
 import json
 import os
 import time
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Any, Mapping, MutableMapping, Optional, Protocol, Sequence
+from typing import Any, Protocol
 
 try:
     # aiohttp is part of Thomas server stack; keep optional for pure logic tests.
     from aiohttp import web
-except Exception:  # pragma: no cover
+except (json.JSONDecodeError, ValueError, KeyError):  # pragma: no cover
     web = None  # type: ignore[assignment]
 
 
@@ -36,32 +37,32 @@ class NodeCommandRunRequest:
     """Input contract for running a command on a node."""
 
     # Node selector (id/name/ip). Optional if server has a default node context.
-    node: Optional[str] = None
+    node: str | None = None
 
     # Exactly one of `argv` or `raw` must be provided.
-    argv: Optional[list[str]] = None
-    raw: Optional[str] = None
+    argv: list[str] | None = None
+    raw: str | None = None
 
     # Execution options.
-    cwd: Optional[str] = None
-    env: Optional[dict[str, str]] = None
+    cwd: str | None = None
+    env: dict[str, str] | None = None
 
     # Timeouts.
-    command_timeout_ms: Optional[int] = None
-    invoke_timeout_ms: Optional[int] = None
+    command_timeout_ms: int | None = None
+    invoke_timeout_ms: int | None = None
 
     # Policy/pass-through options.
     needs_screen_recording: bool = False
-    agent: Optional[str] = None
-    ask: Optional[str] = None
-    security: Optional[str] = None
+    agent: str | None = None
+    ask: str | None = None
+    security: str | None = None
 
 
 @dataclass(frozen=True)
 class NodeCommandRunResult:
     """Successful result contract."""
 
-    node: Optional[str]
+    node: str | None
     argv: list[str]
     exit_code: int
     stdout: str
@@ -75,7 +76,7 @@ class NodeCommandRunError:
 
     code: str
     message: str
-    details: Optional[dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -83,8 +84,8 @@ class NodeCommandRunResponse:
     """Output contract for `nodes run`."""
 
     ok: bool
-    result: Optional[NodeCommandRunResult] = None
-    error: Optional[NodeCommandRunError] = None
+    result: NodeCommandRunResult | None = None
+    error: NodeCommandRunError | None = None
 
     def to_dict(self) -> dict[str, Any]:
         data: dict[str, Any] = {"ok": self.ok}
@@ -101,7 +102,7 @@ class NodeCommandRunResponse:
 class NodeCommandRunException(RuntimeError):
     """Exception with a stable error code."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = details
@@ -155,7 +156,7 @@ def _platform_shell_argv(raw: str) -> list[str]:
     return ["/bin/sh", "-lc", raw]
 
 
-def _preferred_timeout_s(req: NodeCommandRunRequest) -> Optional[float]:
+def _preferred_timeout_s(req: NodeCommandRunRequest) -> float | None:
     # Prefer command timeout; fall back to invoke timeout.
     timeout_ms = req.command_timeout_ms if req.command_timeout_ms is not None else req.invoke_timeout_ms
     if timeout_ms is None:
@@ -174,7 +175,7 @@ class LocalSubprocessBackend:
 
         argv = list(req.argv) if req.argv else _platform_shell_argv(req.raw or "")
 
-        merged_env: Optional[MutableMapping[str, str]] = None
+        merged_env: MutableMapping[str, str] | None = None
         if req.env is not None:
             merged_env = dict(os.environ)
             for k, v in req.env.items():
@@ -289,22 +290,54 @@ class AiohttpAppBackend:
 
         if hasattr(manager, "invoke"):
             # invoke(node, action, params, timeout_ms?)
-            candidates.append((getattr(manager, "invoke"), (req.node, "nodes.run", params, req.invoke_timeout_ms), {}))
-            candidates.append((getattr(manager, "invoke"), (), {"node": req.node, "action": "nodes.run", "params": params, "timeout_ms": req.invoke_timeout_ms}))
+            candidates.append((manager.invoke, (req.node, "nodes.run", params, req.invoke_timeout_ms), {}))
+            candidates.append(
+                (
+                    manager.invoke,
+                    (),
+                    {"node": req.node, "action": "nodes.run", "params": params, "timeout_ms": req.invoke_timeout_ms},
+                )
+            )
 
         if hasattr(manager, "invoke_node"):
-            candidates.append((getattr(manager, "invoke_node"), (req.node, "nodes.run", params), {"timeout_ms": req.invoke_timeout_ms}))
-            candidates.append((getattr(manager, "invoke_node"), (), {"node": req.node, "action": "nodes.run", "params": params, "timeout_ms": req.invoke_timeout_ms}))
+            candidates.append(
+                (manager.invoke_node, (req.node, "nodes.run", params), {"timeout_ms": req.invoke_timeout_ms})
+            )
+            candidates.append(
+                (
+                    manager.invoke_node,
+                    (),
+                    {"node": req.node, "action": "nodes.run", "params": params, "timeout_ms": req.invoke_timeout_ms},
+                )
+            )
 
         if hasattr(manager, "run_command"):
-            candidates.append((getattr(manager, "run_command"), (), {"node": req.node, "argv": argv, "cwd": req.cwd, "env": req.env, "timeout_ms": req.command_timeout_ms}))
-            candidates.append((getattr(manager, "run_command"), (req.node, argv), {"cwd": req.cwd, "env": req.env, "timeout_ms": req.command_timeout_ms}))
+            candidates.append(
+                (
+                    manager.run_command,
+                    (),
+                    {
+                        "node": req.node,
+                        "argv": argv,
+                        "cwd": req.cwd,
+                        "env": req.env,
+                        "timeout_ms": req.command_timeout_ms,
+                    },
+                )
+            )
+            candidates.append(
+                (
+                    manager.run_command,
+                    (req.node, argv),
+                    {"cwd": req.cwd, "env": req.env, "timeout_ms": req.command_timeout_ms},
+                )
+            )
 
         if hasattr(manager, "run"):
-            candidates.append((getattr(manager, "run"), (params,), {}))
+            candidates.append((manager.run, (params,), {}))
 
-        last_type_error: Optional[TypeError] = None
-        last_exc: Optional[Exception] = None
+        last_type_error: TypeError | None = None
+        last_exc: Exception | None = None
 
         for fn, args, kwargs in candidates:
             try:
@@ -319,7 +352,7 @@ class AiohttpAppBackend:
                 continue
             except NodeCommandRunException:
                 raise
-            except Exception as e:  # pragma: no cover
+            except (RuntimeError, asyncio.QueueFull, ValueError) as e:  # pragma: no cover
                 last_exc = e
                 continue
 
@@ -362,11 +395,11 @@ def _unwrap_manager_envelope(res: Any) -> Any:
     return res
 
 
-def _raise(code: str, message: str, details: Optional[dict[str, Any]]) -> Any:
+def _raise(code: str, message: str, details: dict[str, Any] | None) -> Any:
     raise NodeCommandRunException(code, message, details=details)
 
 
-def _normalize_result(node: Optional[str], argv: Sequence[str], res: Any) -> NodeCommandRunResult:
+def _normalize_result(node: str | None, argv: Sequence[str], res: Any) -> NodeCommandRunResult:
     """Normalize backend result shapes into NodeCommandRunResult.
 
     Supported shapes:
@@ -390,14 +423,14 @@ def _normalize_result(node: Optional[str], argv: Sequence[str], res: Any) -> Nod
     stdout: str = ""
     stderr: str = ""
     exit_code: int = 0
-    duration_ms: Optional[int] = None
+    duration_ms: int | None = None
 
     if isinstance(res, tuple) and len(res) == 3:
         stdout = str(res[0] or "")
         stderr = str(res[1] or "")
         try:
             exit_code = int(res[2] or 0)
-        except Exception:
+        except (RuntimeError, ValueError, KeyError, AttributeError, TypeError):
             exit_code = 0
 
     elif isinstance(res, Mapping):
@@ -411,12 +444,12 @@ def _normalize_result(node: Optional[str], argv: Sequence[str], res: Any) -> Nod
         if exit_code_val is not None:
             try:
                 exit_code = int(exit_code_val)
-            except Exception:
+            except (ConnectionError, TimeoutError, RuntimeError):
                 exit_code = 0
         if duration_val is not None:
             try:
                 duration_ms = int(duration_val)
-            except Exception:
+            except (RuntimeError, ValueError, KeyError, AttributeError, TypeError):
                 duration_ms = None
 
     else:
@@ -433,14 +466,14 @@ def _normalize_result(node: Optional[str], argv: Sequence[str], res: Any) -> Nod
             if hasattr(res, attr):
                 try:
                     exit_code = int(getattr(res, attr))
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     exit_code = 0
                 break
         for attr in ("duration_ms", "durationMs"):
             if hasattr(res, attr):
                 try:
                     duration_ms = int(getattr(res, attr))
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     duration_ms = None
                 break
 
@@ -465,7 +498,7 @@ async def node_command_run(req: NodeCommandRunRequest, backend: NodeCommandRunBa
         return NodeCommandRunResponse(ok=True, result=result)
     except NodeCommandRunException as e:
         return NodeCommandRunResponse(ok=False, error=e.to_error())
-    except Exception as e:  # pragma: no cover
+    except (ConnectionError, TimeoutError, RuntimeError) as e:  # pragma: no cover
         # Keep deterministic outer errors and avoid exposing tracebacks.
         return NodeCommandRunResponse(
             ok=False,
@@ -488,12 +521,12 @@ def _coerce_bool(val: Any) -> bool:
     return s in {"1", "true", "yes", "y", "on"}
 
 
-def _coerce_int(val: Any) -> Optional[int]:
+def _coerce_int(val: Any) -> int | None:
     if val is None:
         return None
     try:
         return int(val)
-    except Exception:
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError):
         return None
 
 
@@ -504,12 +537,12 @@ def request_from_json(data: Mapping[str, Any]) -> NodeCommandRunRequest:
     if argv_val is None:
         argv_val = data.get("command")
 
-    argv: Optional[list[str]] = None
+    argv: list[str] | None = None
     if isinstance(argv_val, list):
         argv = [str(x) for x in argv_val]
 
     env_val = data.get("env")
-    env: Optional[dict[str, str]] = None
+    env: dict[str, str] | None = None
     if isinstance(env_val, Mapping):
         env = {str(k): str(v) for k, v in env_val.items()}
 
@@ -522,9 +555,7 @@ def request_from_json(data: Mapping[str, Any]) -> NodeCommandRunRequest:
         command_timeout_ms=_coerce_int(data.get("command_timeout_ms") or data.get("commandTimeoutMs")),
         invoke_timeout_ms=_coerce_int(data.get("invoke_timeout_ms") or data.get("invokeTimeoutMs")),
         needs_screen_recording=_coerce_bool(
-            data.get("needs_screen_recording")
-            or data.get("needsScreenRecording")
-            or data.get("needs-screen-recording")
+            data.get("needs_screen_recording") or data.get("needsScreenRecording") or data.get("needs-screen-recording")
         ),
         agent=(str(data.get("agent")) if data.get("agent") is not None else None),
         ask=(str(data.get("ask")) if data.get("ask") is not None else None),
@@ -550,7 +581,7 @@ async def handle_nodes_run(request: Any) -> Any:
     except NodeCommandRunException as e:
         resp = NodeCommandRunResponse(ok=False, error=e.to_error())
         return web.json_response(resp.to_dict(), status=200)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         resp = NodeCommandRunResponse(
             ok=False,
             error=NodeCommandRunError(
@@ -582,18 +613,18 @@ def register_routes(target: Any) -> None:
         return
 
     # RouteTableDef style (callable .post decorator).
-    if hasattr(target, "post") and callable(getattr(target, "post")):
+    if hasattr(target, "post") and callable(target.post):
         try:
             target.post(NODES_RUN_ROUTE)(handle_nodes_run)
             return
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             pass
 
     # web.Application style.
     if hasattr(target, "router"):
         try:
             target.router.add_post(NODES_RUN_ROUTE, handle_nodes_run)
-        except Exception:
+        except (ConnectionError, TimeoutError, RuntimeError):
             return
 
 

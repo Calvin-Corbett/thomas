@@ -5,7 +5,7 @@ import json
 import sys
 import urllib.error
 import urllib.request
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from thomas.server.routes.gateway.p140_openai_chat_completions_non_stream import (
     _chat_completions_url,
@@ -17,14 +17,14 @@ from thomas.server.routes.gateway.p140_openai_chat_completions_non_stream import
 COMMAND_NAME = "p140-openai-chat-completions-non-stream"
 
 
-def _build_request_from_args(args: argparse.Namespace) -> Dict[str, Any]:
+def _build_request_from_args(args: argparse.Namespace) -> dict[str, Any]:
     if args.request_json:
         return json.loads(args.request_json)
 
     if not args.model:
         raise ValueError("--model is required when --request-json is not provided")
 
-    messages: List[Dict[str, Any]] = []
+    messages: list[dict[str, Any]] = []
     if args.system:
         messages.append({"role": "system", "content": args.system})
     if args.user:
@@ -33,7 +33,7 @@ def _build_request_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     if not messages:
         raise ValueError("Provide at least one message via --user and/or --system, or use --request-json")
 
-    req: Dict[str, Any] = {"model": args.model, "messages": messages, "stream": False}
+    req: dict[str, Any] = {"model": args.model, "messages": messages, "stream": False}
     if args.temperature is not None:
         req["temperature"] = args.temperature
     if args.max_tokens is not None:
@@ -41,7 +41,7 @@ def _build_request_from_args(args: argparse.Namespace) -> Dict[str, Any]:
     return req
 
 
-def _post_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], timeout_s: float) -> tuple[int, bytes, str]:
+def _post_json(url: str, headers: dict[str, str], payload: dict[str, Any], timeout_s: float) -> tuple[int, bytes, str]:
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     try:
@@ -53,7 +53,7 @@ def _post_json(url: str, headers: Dict[str, str], payload: Dict[str, Any], timeo
         raise ConnectionError(str(e)) from e
 
 
-def run_cli(argv: Optional[List[str]] = None) -> int:
+def run_cli(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         prog=f"thomas gateway {COMMAND_NAME}",
         description="Call OpenAI Chat Completions (non-stream) and print the result.",
@@ -115,7 +115,7 @@ def run_cli(argv: Optional[List[str]] = None) -> int:
     if looks_like_json:
         try:
             data = json.loads(body.decode("utf-8"))
-        except Exception:
+        except json.JSONDecodeError:
             data = _error(
                 message="Upstream OpenAI returned invalid JSON.",
                 error_type="upstream_error",
@@ -148,7 +148,7 @@ def _print_output(data: Any, *, json_only: bool) -> None:
             content = data["choices"][0]["message"]["content"]
             sys.stdout.write(str(content).rstrip() + "\n")
             return
-        except Exception:
+        except json.JSONDecodeError:
             pass
 
     sys.stdout.write(json.dumps(data, ensure_ascii=False, indent=2))
@@ -171,8 +171,8 @@ def register(subparsers: Any) -> None:
     p.set_defaults(func=lambda ns: run_cli(_argv_from_namespace(ns)))
 
 
-def _argv_from_namespace(ns: Any) -> List[str]:
-    argv: List[str] = []
+def _argv_from_namespace(ns: Any) -> list[str]:
+    argv: list[str] = []
     for key, flag in [
         ("model", "--model"),
         ("system", "--system"),

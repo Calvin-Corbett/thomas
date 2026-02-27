@@ -1,10 +1,11 @@
-﻿"""Dependency policy checks for Thomas release hygiene."""
+"""Dependency policy checks for Thomas release hygiene."""
 
 from __future__ import annotations
 
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Tuple
+from typing import Any
 
 if sys.version_info >= (3, 11):
     import tomllib
@@ -16,15 +17,13 @@ DISALLOWED_URL_MARKERS = ("git+", "http://", "https://")
 VERSION_OPERATORS = ("==", ">=", "<=", "~=", ">", "<", "!=")
 
 
-
-def _read_toml(path: Path) -> Dict[str, Any]:
+def _read_toml(path: Path) -> dict[str, Any]:
     with path.open("rb") as handle:
         data = tomllib.load(handle)
     return data if isinstance(data, dict) else {}
 
 
-
-def _iter_declared_dependencies(pyproject: Dict[str, Any]) -> Iterable[Tuple[str, str]]:
+def _iter_declared_dependencies(pyproject: dict[str, Any]) -> Iterable[tuple[str, str]]:
     project = pyproject.get("project") if isinstance(pyproject.get("project"), dict) else {}
 
     runtime = project.get("dependencies") if isinstance(project.get("dependencies"), list) else []
@@ -44,7 +43,6 @@ def _iter_declared_dependencies(pyproject: Dict[str, Any]) -> Iterable[Tuple[str
                     yield f"project.optional-dependencies.{group}", text
 
 
-
 def _normalize_dep_text(raw: str) -> str:
     text = str(raw or "").strip()
     if ";" in text:
@@ -52,16 +50,14 @@ def _normalize_dep_text(raw: str) -> str:
     return text
 
 
-
 def _has_any_version_constraint(dep_text: str) -> bool:
     return any(op in dep_text for op in VERSION_OPERATORS)
 
 
-
-def evaluate_dependency_policy(pyproject_path: Path) -> Dict[str, Any]:
+def evaluate_dependency_policy(pyproject_path: Path) -> dict[str, Any]:
     data = _read_toml(pyproject_path)
-    errors: List[Dict[str, str]] = []
-    warnings: List[Dict[str, str]] = []
+    errors: list[dict[str, str]] = []
+    warnings: list[dict[str, str]] = []
 
     seen: set[str] = set()
     for section, raw_dep in _iter_declared_dependencies(data):
