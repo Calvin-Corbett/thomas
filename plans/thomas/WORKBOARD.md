@@ -150,7 +150,11 @@ Task format:
 ## Task Plans
 
 
-- task_id=audit-24h-backstop; plan=plans/thomas/tasks/audit-24h-backstop/PLAN.md; owner=Codex Live 2; status=active; updated_at=2026-02-25T21:58:19+00:00; summary=[WIP] [WIP] [P2][LATER] ensure every major module is audited in last 24h and fix findings
+- task_id=audit-24h-backstop; plan=plans/thomas/tasks/audit-24h-backstop/PLAN.md; owner=unassigned; status=up_for_grabs; updated_at=2026-02-27T18:22:14+00:00; summary=ensure every major module is audited in last 24h and fix findings
+- task_id=codex-5-task; plan=plans/thomas/tasks/codex-5-task/PLAN.md; owner=Codex 5; status=in_progress; updated_at=2026-02-27T18:22:14+00:00; summary=[WIP][HSK-05] clear monolith regression deltas in loop and agent comparison suite
+- task_id=codex-8-task; plan=plans/thomas/tasks/codex-8-task/PLAN.md; owner=Codex 8; status=in_progress; updated_at=2026-02-27T18:22:14+00:00; summary=[READY][HSK-C8-E2E] mission-control integrated e2e regression slice (30 mission tests collected)
+- task_id=codex-main-task; plan=plans/thomas/tasks/codex-main-task/PLAN.md; owner=Codex Main; status=claimed; updated_at=2026-02-27T18:22:14+00:00; summary=[WIP][HSK-gate-hardening] harden skip policy and changed-files guard
+- task_id=codex-task; plan=plans/thomas/tasks/codex-task/PLAN.md; owner=codex; status=claimed; updated_at=2026-02-27T18:22:14+00:00; summary=[WIP][HSK-chat-ui] Fix chat composer alignment, overlap, and robot style
 ## Agent Sessions
 
 
@@ -513,9 +517,16 @@ Backlog quality bar (task-creator checklist):
 - task_id=audit-24h-backstop; task_type=security_compliance; specialist=specialist-security-compliance; status=active; matched_keywords=audit; reason=matched specialist keywords: audit; updated_at=2026-02-25T21:58:19+00:00
 ## Swarm Sessions
 
-
 - swarm_id=swarm-20260225182401-critical-benchmark-evidence-globs-wiring; task_id=critical-benchmark-evidence-globs-wiring; coordinator=task-manager-agent; state=cancelled; size=8; agents=Codex 1,Codex 2,Codex 3,Codex 4,Codex 5,Codex 6,Codex 7,Codex 8; manifest=plans/thomas/swarm/swarm-20260225182401-critical-benchmark-evidence-globs-wiring.json; created_at=2026-02-25T18:24:01+00:00; updated_at=2026-02-25T18:44:31+00:00
 - swarm_id=swarm-20260225184348-critical-benchmark-evidence-globs-wiring; task_id=critical-benchmark-evidence-globs-wiring; coordinator=task-manager-agent; state=active; size=8; agents=Codex 1,Codex 2,Codex 3,Codex 4,Codex 5,Codex 6,Codex 7,Codex 8; manifest=plans/thomas/swarm/swarm-20260225184348-critical-benchmark-evidence-globs-wiring.json; created_at=2026-02-25T18:43:48+00:00; updated_at=2026-02-25T19:29:56+00:00
+## Task Problems
+
+
+- task_id=audit-24h-backstop; problem=plans/thomas/problems/audit-24h-backstop/PROBLEM.md; owner=unassigned; status=up_for_grabs; updated_at=2026-02-27T18:22:14+00:00; summary=ensure every major module is audited in last 24h and fix findings
+- task_id=codex-5-task; problem=plans/thomas/problems/codex-5-task/PROBLEM.md; owner=Codex 5; status=in_progress; updated_at=2026-02-27T18:22:14+00:00; summary=[WIP][HSK-05] clear monolith regression deltas in loop and agent comparison suite
+- task_id=codex-8-task; problem=plans/thomas/problems/codex-8-task/PROBLEM.md; owner=Codex 8; status=in_progress; updated_at=2026-02-27T18:22:14+00:00; summary=[READY][HSK-C8-E2E] mission-control integrated e2e regression slice (30 mission tests collected)
+- task_id=codex-main-task; problem=plans/thomas/problems/codex-main-task/PROBLEM.md; owner=Codex Main; status=claimed; updated_at=2026-02-27T18:22:14+00:00; summary=[WIP][HSK-gate-hardening] harden skip policy and changed-files guard
+- task_id=codex-task; problem=plans/thomas/problems/codex-task/PROBLEM.md; owner=codex; status=claimed; updated_at=2026-02-27T18:22:14+00:00; summary=[WIP][HSK-chat-ui] Fix chat composer alignment, overlap, and robot style
 ## Supporting Docs (Not Plan Sources)
 
 - `docs/COMPANION_PLATFORM_SCOPE.md`

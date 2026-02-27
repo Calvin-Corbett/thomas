@@ -24,6 +24,7 @@ def _seed_required_structure(root: Path) -> None:
 def test_generated_task_plan_docs_are_exempt_from_reference_coverage(monkeypatch, tmp_path: Path) -> None:
     _seed_required_structure(tmp_path)
     _write(tmp_path / "plans" / "thomas" / "tasks" / "task-a" / "PLAN.md", "# plan\n")
+    _write(tmp_path / "plans" / "thomas" / "problems" / "task-a" / "PROBLEM.md", "# problem\n")
     _write(tmp_path / "plans" / "thomas" / "swarm" / "swarm-a" / "lanes" / "codex-1.md", "# lane\n")
 
     monkeypatch.setattr(mod, "ROOT", tmp_path)

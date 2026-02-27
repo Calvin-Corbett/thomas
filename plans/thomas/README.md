@@ -29,4 +29,5 @@ Use this folder first when starting work.
 - If a new product/domain is added, create `plans/<domain>/`.
 - Keep pointer files at old paths when moving a plan.
 - Treat `tasks/` plan-like notes as historical transcripts, not active source of truth.
+- Keep task problem records under `plans/thomas/problems/<task_id>/PROBLEM.md` via `workboard_task_manager --sync-plans`.
 

@@ -19,6 +19,7 @@ This guard keeps Thomas scalable by preventing root-file sprawl, tracked runtime
   - `.inbox_extract_*`
 - Block tracked transient suffixes (`.pyc`, `.tmp`, `.log`).
 - Clean worktree enforcement (default): fail when staged, unstaged, or untracked paths exist.
+- Canonical repo identity: fail when clone path or remote slug drifts from `docs/ops/repo_identity_policy.json`.
 
 Canonical baseline:
 - `docs/repo_hygiene_baseline.json`
@@ -27,6 +28,12 @@ Gate command:
 
 ```bash
 python scripts/check_repo_hygiene.py
+```
+
+Canonical identity guard:
+
+```bash
+python scripts/check_repo_identity.py
 ```
 
 Layout-only mode (skip clean-worktree enforcement):

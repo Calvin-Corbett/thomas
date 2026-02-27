@@ -31,6 +31,7 @@ POINTER_RE = re.compile(r"Canonical location:\s*\n- `([^`]+)`", re.IGNORECASE)
 PATH_REF_RE = re.compile(r"`(plans/thomas/[^`]+\.md)`")
 GENERATED_PLAN_PREFIXES: Sequence[str] = (
     "plans/thomas/tasks/",
+    "plans/thomas/problems/",
     "plans/thomas/swarm/",
 )
 

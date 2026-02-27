@@ -1,6 +1,6 @@
 # Task Ecosystem Protocol
 
-Last updated: 2026-02-25
+Last updated: 2026-02-27
 
 This is the canonical start-to-finish workflow for Thomas task orchestration.
 
@@ -19,6 +19,8 @@ This is the canonical start-to-finish workflow for Thomas task orchestration.
 4. Every active or queued task must exist on `plans/thomas/WORKBOARD.md`.
 5. Agent-to-agent communication must use workboard message traffic.
 6. Task manager must maintain a task-type to specialist routing map.
+7. Every tracked task must have a canonical problem record under `plans/thomas/problems/<task_id>/PROBLEM.md`.
+8. Agents must operate from the canonical Thomas clone and remote identity defined in `docs/ops/repo_identity_policy.json`.
 
 ## Task manager priority loop
 
@@ -89,6 +91,7 @@ Task manager automation:
 
 ```bash
 python scripts/workboard_task_manager.py --sync-plans --apply
+python scripts/check_workboard_task_problems.py
 python scripts/workboard_task_manager.py --sync-sessions --apply
 python scripts/workboard_task_manager.py --sync-specialists --apply
 python scripts/workboard_task_manager.py --specialist-for-task --task-id "<task_id>"
@@ -97,6 +100,7 @@ python scripts/workboard_task_manager.py --sweep-inactive --max-idle-minutes 1 -
 python scripts/workboard_task_manager.py --monitor --apply --cycles 0 --interval-seconds 30 --task-manager-agent "task-manager-agent"
 python scripts/workboard_task_manager.py --reactivate --task-id "<task_id>" --agent "<agent>"
 python scripts/workboard_task_manager.py --capture-preference --preference-summary "<summary>" --preference-verbatim "<verbatim>"
+python scripts/check_repo_identity.py
 ```
 
 Monitor behavior highlights:

@@ -105,8 +105,10 @@ Optional hard lock for active edits:
 Guard rails:
 - Check active claims: `python scripts/workboard_claim.py --list`
 - Validate claims gate: `python scripts/check_workboard_claims.py --require-identity-metadata`
+- Validate task-problem coverage gate: `python scripts/check_workboard_task_problems.py`
 - Validate changed-file ownership gate: `python scripts/check_workboard_changed_files.py --staged --require-identity-metadata`
 - Validate per-agent gate: `python scripts/check_workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2`
+- Validate canonical repo identity gate: `python scripts/check_repo_identity.py`
 - Never commit another agent's scope unless they are marked `[READY]` and ACK is logged.
 - Never use `git commit --no-verify` except explicit emergency approval from maintainers.
 - If using `SKIP=<hook-id[,hook-id...]>`, set both `AGENT_ID` and `THOMAS_SKIP_REASON` (>=12 chars).
@@ -123,9 +125,12 @@ Core rules:
 3. Keep the board ordered by priority and urgency (`[P0][NOW]`, `[P1][NEXT]`, `[P2][LATER]`).
 4. All agent-to-agent and agent-to-manager coordination requests go through workboard message traffic.
 5. Keep alias identity stable (`Codex 1`, `Codex 2`, etc.) and track unique session ids per run.
+6. Every tracked task must have both `PLAN.md` and `PROBLEM.md` records generated via task-manager sync.
+7. Use only the canonical Thomas clone and remote identity defined by `docs/ops/repo_identity_policy.json`.
 
 Required commands:
 - Sync plans: `python scripts/workboard_task_manager.py --sync-plans --apply`
+- Sync plans with explicit roots: `python scripts/workboard_task_manager.py --sync-plans --plan-root "<path>" --problem-root "<path>" --apply`
 - Sync sessions: `python scripts/workboard_task_manager.py --sync-sessions --apply`
 - Sweep inactive: `python scripts/workboard_task_manager.py --sweep-inactive --max-idle-minutes 1 --apply --task-manager-agent "task-manager-agent"`
 - Message send: `python scripts/workboard_message.py --send --from-agent "<agent>" --to-agent "<agent|task-manager-agent>" --summary "<text>" --task-id "<task_id>"`
