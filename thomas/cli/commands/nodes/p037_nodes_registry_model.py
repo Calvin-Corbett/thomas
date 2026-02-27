@@ -17,15 +17,15 @@ Registration behavior:
 
 from __future__ import annotations
 
-from typing import Any, Optional
 import json
+from typing import Any
 
 import typer
 
 from thomas.nodes.p037_nodes_registry_model import (
     NodesRegistryError,
-    load_nodes_registry,
     filter_nodes,
+    load_nodes_registry,
 )
 
 app = typer.Typer(help="Work with the configured nodes registry.")
@@ -47,10 +47,10 @@ def _emit_text_registry(registry: Any) -> None:
 
 
 def _registry_model_impl(
-    source: Optional[str],
+    source: str | None,
     *,
-    label: Optional[str],
-    node_id: Optional[str],
+    label: str | None,
+    node_id: str | None,
     json_output: bool,
     timeout_s: float,
 ) -> None:
@@ -73,15 +73,15 @@ def _registry_model_impl(
 
 @app.command("registry-model")
 def registry_model(
-    source: Optional[str] = typer.Option(
+    source: str | None = typer.Option(
         None,
         "--source",
         "-s",
         help="Registry source (file path or https:// URL). If omitted, config/env is used.",
         show_default=False,
     ),
-    label: Optional[str] = typer.Option(None, "--label", help="Filter nodes by label.", show_default=False),
-    node_id: Optional[str] = typer.Option(None, "--id", help="Filter nodes by id.", show_default=False),
+    label: str | None = typer.Option(None, "--label", help="Filter nodes by label.", show_default=False),
+    node_id: str | None = typer.Option(None, "--id", help="Filter nodes by id.", show_default=False),
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
     timeout_s: float = typer.Option(5.0, "--timeout", help="URL fetch timeout in seconds."),
 ) -> None:
@@ -99,15 +99,15 @@ def registry_model(
 
 @app.command("registry")
 def registry_alias(
-    source: Optional[str] = typer.Option(
+    source: str | None = typer.Option(
         None,
         "--source",
         "-s",
         help="Registry source (file path or https:// URL). If omitted, config/env is used.",
         show_default=False,
     ),
-    label: Optional[str] = typer.Option(None, "--label", help="Filter nodes by label.", show_default=False),
-    node_id: Optional[str] = typer.Option(None, "--id", help="Filter nodes by id.", show_default=False),
+    label: str | None = typer.Option(None, "--label", help="Filter nodes by label.", show_default=False),
+    node_id: str | None = typer.Option(None, "--id", help="Filter nodes by id.", show_default=False),
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
     timeout_s: float = typer.Option(5.0, "--timeout", help="URL fetch timeout in seconds."),
 ) -> None:
@@ -137,7 +137,7 @@ def register(parent_app: Any) -> None:
     """
     try:
         import typer as _typer  # local import to avoid hard dependency cycles
-    except Exception:
+    except ImportError:
         return
 
     if not isinstance(parent_app, _typer.Typer):

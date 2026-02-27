@@ -4,8 +4,9 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping
+from typing import Any
 
 DEFAULT_PLACEHOLDER = "[REDACTED]"
 
@@ -43,6 +44,7 @@ DEFAULT_SECRET_PATTERNS: list[re.Pattern[str]] = [
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{30,}\b"),
 ]
 
+
 def _load_extra_patterns_from_env() -> list[re.Pattern[str]]:
     raw = os.getenv("THOMAS_REDACTION_REGEXES", "").strip()
     if not raw:
@@ -59,8 +61,9 @@ def _load_extra_patterns_from_env() -> list[re.Pattern[str]]:
                 except re.error:
                     pass
         return out
-    except Exception:
+    except json.JSONDecodeError:
         return []
+
 
 @dataclass(frozen=True)
 class RedactionConfig:
@@ -71,7 +74,7 @@ class RedactionConfig:
     max_string_len: int = 200_000
 
     @staticmethod
-    def default() -> "RedactionConfig":
+    def default() -> RedactionConfig:
         extra = _load_extra_patterns_from_env()
         return RedactionConfig(
             placeholder=DEFAULT_PLACEHOLDER,
@@ -79,11 +82,13 @@ class RedactionConfig:
             patterns=[*DEFAULT_SECRET_PATTERNS, *extra],
         )
 
+
 def _is_sensitive_key(key: str, cfg: RedactionConfig) -> bool:
     try:
         return key.strip().lower() in (cfg.sensitive_keys or set())
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         return False
+
 
 def redact_string(s: str, cfg: RedactionConfig) -> str:
     if not s:
@@ -91,9 +96,10 @@ def redact_string(s: str, cfg: RedactionConfig) -> str:
     if len(s) > cfg.max_string_len:
         s = s[: cfg.max_string_len] + "…(truncated)"
     out = s
-    for pat in (cfg.patterns or []):
+    for pat in cfg.patterns or []:
         out = pat.sub(cfg.placeholder, out)
     return out
+
 
 def redact_obj(obj: Any, cfg: RedactionConfig | None = None, _depth: int = 0) -> Any:
     if cfg is None:
@@ -121,5 +127,5 @@ def redact_obj(obj: Any, cfg: RedactionConfig | None = None, _depth: int = 0) ->
 
     try:
         return redact_string(str(obj), cfg)
-    except Exception:
+    except (ValueError, TypeError):
         return cfg.placeholder

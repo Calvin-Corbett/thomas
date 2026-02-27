@@ -4,8 +4,9 @@ import asyncio
 import json
 import sqlite3
 import uuid
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from .runtime_common import _normalize_tags, _now_iso, _safe_int, _safe_string
 
@@ -114,7 +115,7 @@ class AssetStudioJobStore:
         for row in rows:
             try:
                 name = str(row["name"])
-            except Exception:
+            except (ValueError, TypeError):
                 name = str(row[1]) if len(row) > 1 else ""
             if name == column_name:
                 return True
@@ -132,7 +133,7 @@ class AssetStudioJobStore:
             return default
         try:
             return json.loads(text)
-        except Exception:
+        except json.JSONDecodeError:
             return default
 
     @classmethod
@@ -471,7 +472,7 @@ class AssetStudioJobStore:
                 where_clauses.append("favorite = 1")
             if normalized_tag:
                 where_clauses.append("lower(tags_json) LIKE ?")
-                params.append(f"%\"{normalized_tag.lower()}\"%")
+                params.append(f'%"{normalized_tag.lower()}"%')
             sql = (
                 "SELECT * FROM asset_studio_templates"
                 + (f" WHERE {' AND '.join(where_clauses)}" if where_clauses else "")

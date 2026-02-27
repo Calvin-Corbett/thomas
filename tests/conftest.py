@@ -1,3 +1,4 @@
+import importlib.util
 import sys
 from pathlib import Path
 
@@ -8,8 +9,9 @@ if str(ROOT) not in sys.path:
 
 pytest_plugins = []
 try:
-    import aiohttp.pytest_plugin  # noqa: F401
+    plugin_spec = importlib.util.find_spec("aiohttp.pytest_plugin")
 except Exception:
     pass
 else:
-    pytest_plugins.append("aiohttp.pytest_plugin")
+    if plugin_spec is not None:
+        pytest_plugins.append("aiohttp.pytest_plugin")

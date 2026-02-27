@@ -1,6 +1,7 @@
 import json
 import tempfile
 import unittest
+from pathlib import Path
 
 from aiohttp.test_utils import AioHTTPTestCase
 
@@ -175,6 +176,82 @@ class TestServerMissionControl(AioHTTPTestCase):
         self.assertIs(stop_payload.get("ok"), True)
         self.assertGreaterEqual(int(stop_payload.get("matched_jobs") or 0), 1)
 
+    async def test_mission_objective_flow_reflects_in_control_and_stream(self):
+        bootstrap = await self.client.post("/api/mission/autopilot/bootstrap", json={})
+        self.assertEqual(bootstrap.status, 200)
+        bootstrap_payload = await bootstrap.json()
+        self.assertIs(bootstrap_payload.get("ok"), True)
+
+        create_resp = await self.client.post(
+            "/api/mission/autopilot/objectives",
+            json={
+                "goal": "Continuously triage urgent incidents and keep mission dashboard current",
+                "cadence": "continuous",
+                "every_seconds": 120,
+                "workflow": "orchestrator_worker",
+                "worker_count": 2,
+            },
+        )
+        self.assertEqual(create_resp.status, 200)
+        create_payload = await create_resp.json()
+        self.assertIs(create_payload.get("ok"), True)
+        objective_id = str(create_payload.get("objective_id") or "")
+        self.assertTrue(objective_id)
+        created_job = create_payload.get("job") or {}
+        job_id = str(created_job.get("id") or "")
+        self.assertTrue(job_id)
+
+        control_resp = await self.client.get("/api/mission/control")
+        self.assertEqual(control_resp.status, 200)
+        control_payload = await control_resp.json()
+        self.assertIs(control_payload.get("ok"), True)
+        control_agents = control_payload.get("agents") or []
+        control_job_ids = {
+            str(row.get("job_id") or "") for row in control_agents if str(row.get("source") or "") == "autonomy_job"
+        }
+        self.assertIn(job_id, control_job_ids)
+
+        stream_resp = await self.client.get("/api/mission/stream?max_updates=1&interval=0.01")
+        self.assertEqual(stream_resp.status, 200)
+        stream_events = _parse_ndjson(await stream_resp.text())
+        self.assertGreaterEqual(len(stream_events), 1)
+        stream_payload = (stream_events[0] or {}).get("payload") or {}
+        stream_agents = stream_payload.get("agents") or []
+        stream_job_ids = {
+            str(row.get("job_id") or "") for row in stream_agents if str(row.get("source") or "") == "autonomy_job"
+        }
+        self.assertIn(job_id, stream_job_ids)
+
+        stop_resp = await self.client.post(f"/api/mission/autopilot/objectives/{objective_id}/stop", json={})
+        self.assertEqual(stop_resp.status, 200)
+        stop_payload = await stop_resp.json()
+        self.assertIs(stop_payload.get("ok"), True)
+        self.assertGreaterEqual(int(stop_payload.get("matched_jobs") or 0), 1)
+
+        active_resp = await self.client.get(
+            f"/api/mission/autopilot/objectives?objective_id={objective_id}&active_only=1&limit=10"
+        )
+        self.assertEqual(active_resp.status, 200)
+        active_payload = await active_resp.json()
+        self.assertIs(active_payload.get("ok"), True)
+        self.assertEqual(active_payload.get("objectives"), [])
+
+        all_resp = await self.client.get(
+            f"/api/mission/autopilot/objectives?objective_id={objective_id}&active_only=0&limit=10"
+        )
+        self.assertEqual(all_resp.status, 200)
+        all_payload = await all_resp.json()
+        self.assertIs(all_payload.get("ok"), True)
+        all_rows = all_payload.get("objectives") or []
+        self.assertGreaterEqual(len(all_rows), 1)
+        terminal_statuses = {
+            str(row.get("status") or "").strip().lower()
+            for row in all_rows
+            if str(row.get("objective_id") or "") == objective_id
+        }
+        self.assertTrue(terminal_statuses)
+        self.assertTrue(terminal_statuses.issubset({"cancelled", "canceled", "failed", "succeeded", "dead"}))
+
     async def test_chat_prompt_auto_starts_autopilot_objective(self):
         session_resp = await self.client.post("/api/session/new")
         self.assertEqual(session_resp.status, 200)
@@ -216,6 +293,72 @@ class TestServerMissionControl(AioHTTPTestCase):
             json={"run_id": "run-1", "tool_call_id": "call-1", "approve": True},
         )
         self.assertEqual(guardrails.status, 404)
+
+    async def test_mission_guardrails_approval_resolve_succeeds_with_broker(self):
+        class _Broker:
+            def __init__(self) -> None:
+                self.calls = []
+
+            async def resolve(
+                self,
+                *,
+                run_id: str,
+                tool_call_id: str,
+                approved: bool,
+                allow_session_tool: bool,
+                tool_name: str | None,
+                session_id: str | None,
+            ) -> bool:
+                self.calls.append(
+                    {
+                        "run_id": run_id,
+                        "tool_call_id": tool_call_id,
+                        "approved": approved,
+                        "allow_session_tool": allow_session_tool,
+                        "tool_name": tool_name,
+                        "session_id": session_id,
+                    }
+                )
+                return True
+
+        broker = _Broker()
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state["approvals"] = broker
+        else:
+            self.app["approvals"] = broker
+
+        resp = await self.client.post(
+            "/api/mission/approvals/guardrails/resolve",
+            json={
+                "run_id": "run-42",
+                "tool_call_id": "call-7",
+                "approve": True,
+                "allow_session_tool": True,
+                "tool_name": "shell.exec",
+                "session_id": "sess-9",
+            },
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertIs(payload.get("ok"), True)
+        self.assertEqual(str(payload.get("run_id") or ""), "run-42")
+        self.assertEqual(str(payload.get("tool_call_id") or ""), "call-7")
+        self.assertEqual(str(payload.get("decision") or ""), "approve")
+        self.assertIs(payload.get("allow_session_tool"), True)
+
+        self.assertEqual(len(broker.calls), 1)
+        self.assertEqual(
+            broker.calls[0],
+            {
+                "run_id": "run-42",
+                "tool_call_id": "call-7",
+                "approved": True,
+                "allow_session_tool": True,
+                "tool_name": "shell.exec",
+                "session_id": "sess-9",
+            },
+        )
 
     async def test_mission_alert_notify_noop_when_channels_missing(self):
         resp = await self.client.post(
@@ -385,6 +528,469 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertEqual(with_auth.status, 200)
         payload = await with_auth.json()
         self.assertIs(payload.get("ok"), True)
+
+    async def test_mission_autopilot_objective_routes_require_token_and_support_lifecycle(self):
+        no_auth_create = await self.client.post(
+            "/api/mission/autopilot/objectives",
+            json={"goal": "Keep mission queue healthy", "cadence": "continuous", "every_seconds": 90},
+        )
+        self.assertEqual(no_auth_create.status, 401)
+
+        with_auth_create = await self.client.post(
+            "/api/mission/autopilot/objectives",
+            headers={"Authorization": "Bearer test-token"},
+            json={"goal": "Keep mission queue healthy", "cadence": "continuous", "every_seconds": 90},
+        )
+        self.assertEqual(with_auth_create.status, 200)
+        create_payload = await with_auth_create.json()
+        self.assertIs(create_payload.get("ok"), True)
+        objective_id = str(create_payload.get("objective_id") or "")
+        self.assertTrue(objective_id)
+
+        no_auth_list = await self.client.get("/api/mission/autopilot/objectives?active_only=0&limit=20")
+        self.assertEqual(no_auth_list.status, 401)
+
+        with_auth_list = await self.client.get(
+            f"/api/mission/autopilot/objectives?objective_id={objective_id}&active_only=0&limit=20",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(with_auth_list.status, 200)
+        list_payload = await with_auth_list.json()
+        self.assertIs(list_payload.get("ok"), True)
+        objective_ids = {str(row.get("objective_id") or "") for row in (list_payload.get("objectives") or [])}
+        self.assertIn(objective_id, objective_ids)
+
+        no_auth_stop = await self.client.post(f"/api/mission/autopilot/objectives/{objective_id}/stop", json={})
+        self.assertEqual(no_auth_stop.status, 401)
+
+        with_auth_stop = await self.client.post(
+            f"/api/mission/autopilot/objectives/{objective_id}/stop",
+            headers={"Authorization": "Bearer test-token"},
+            json={},
+        )
+        self.assertEqual(with_auth_stop.status, 200)
+        stop_payload = await with_auth_stop.json()
+        self.assertIs(stop_payload.get("ok"), True)
+        self.assertGreaterEqual(int(stop_payload.get("matched_jobs") or 0), 1)
+
+        with_auth_active = await self.client.get(
+            f"/api/mission/autopilot/objectives?objective_id={objective_id}&active_only=1&limit=20",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(with_auth_active.status, 200)
+        active_payload = await with_auth_active.json()
+        self.assertIs(active_payload.get("ok"), True)
+        self.assertEqual(active_payload.get("objectives"), [])
+
+    async def test_mission_job_routes_require_token_and_support_mutations(self):
+        no_auth_create = await self.client.post(
+            "/api/mission/jobs",
+            json={
+                "kind": "workflow_task",
+                "name": "Remote Job Auth",
+                "goal": "Summarize top incidents",
+                "schedule": {"type": "interval", "every_seconds": 120},
+            },
+        )
+        self.assertEqual(no_auth_create.status, 401)
+
+        with_auth_create = await self.client.post(
+            "/api/mission/jobs",
+            headers={"Authorization": "Bearer test-token"},
+            json={
+                "kind": "workflow_task",
+                "name": "Remote Job Auth",
+                "goal": "Summarize top incidents",
+                "schedule": {"type": "interval", "every_seconds": 120},
+            },
+        )
+        self.assertEqual(with_auth_create.status, 200)
+        create_payload = await with_auth_create.json()
+        self.assertIs(create_payload.get("ok"), True)
+        job = create_payload.get("job") or {}
+        job_id = str(job.get("id") or "")
+        self.assertTrue(job_id)
+
+        no_auth_list = await self.client.get("/api/mission/jobs?limit=20")
+        self.assertEqual(no_auth_list.status, 401)
+
+        with_auth_list = await self.client.get(
+            "/api/mission/jobs?limit=20",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(with_auth_list.status, 200)
+        list_payload = await with_auth_list.json()
+        self.assertIs(list_payload.get("ok"), True)
+        listed_ids = {str(row.get("id") or "") for row in (list_payload.get("jobs") or [])}
+        self.assertIn(job_id, listed_ids)
+
+        no_auth_run_now = await self.client.post(f"/api/mission/jobs/{job_id}/run_now", json={})
+        self.assertEqual(no_auth_run_now.status, 401)
+
+        with_auth_run_now = await self.client.post(
+            f"/api/mission/jobs/{job_id}/run_now",
+            headers={"Authorization": "Bearer test-token"},
+            json={},
+        )
+        self.assertEqual(with_auth_run_now.status, 200)
+        run_now_payload = await with_auth_run_now.json()
+        self.assertIs(run_now_payload.get("ok"), True)
+        self.assertEqual(str(run_now_payload.get("action") or ""), "run_now")
+
+        no_auth_requeue = await self.client.post(f"/api/mission/jobs/{job_id}/requeue", json={})
+        self.assertEqual(no_auth_requeue.status, 401)
+
+        with_auth_requeue = await self.client.post(
+            f"/api/mission/jobs/{job_id}/requeue",
+            headers={"Authorization": "Bearer test-token"},
+            json={},
+        )
+        self.assertEqual(with_auth_requeue.status, 200)
+        requeue_payload = await with_auth_requeue.json()
+        self.assertIs(requeue_payload.get("ok"), True)
+        self.assertEqual(str(requeue_payload.get("action") or ""), "requeue")
+
+        no_auth_cancel = await self.client.post(f"/api/mission/jobs/{job_id}/cancel", json={})
+        self.assertEqual(no_auth_cancel.status, 401)
+
+        with_auth_cancel = await self.client.post(
+            f"/api/mission/jobs/{job_id}/cancel",
+            headers={"Authorization": "Bearer test-token"},
+            json={},
+        )
+        self.assertEqual(with_auth_cancel.status, 200)
+        cancel_payload = await with_auth_cancel.json()
+        self.assertIs(cancel_payload.get("ok"), True)
+        self.assertEqual(str(cancel_payload.get("action") or ""), "cancel")
+
+    async def test_mission_approval_routes_require_token_and_return_not_found_when_unavailable(self):
+        no_auth_autonomy = await self.client.post(
+            "/api/mission/approvals/autonomy/approval-123/decision",
+            json={"approve": True},
+        )
+        self.assertEqual(no_auth_autonomy.status, 401)
+
+        with_auth_autonomy = await self.client.post(
+            "/api/mission/approvals/autonomy/approval-123/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": True},
+        )
+        self.assertEqual(with_auth_autonomy.status, 404)
+        self.assertIn("autonomy store is not available", await with_auth_autonomy.text())
+
+        no_auth_guardrails = await self.client.post(
+            "/api/mission/approvals/guardrails/resolve",
+            json={"run_id": "run-1", "tool_call_id": "call-1", "approve": True},
+        )
+        self.assertEqual(no_auth_guardrails.status, 401)
+
+        with_auth_guardrails = await self.client.post(
+            "/api/mission/approvals/guardrails/resolve",
+            headers={"Authorization": "Bearer test-token"},
+            json={"run_id": "run-1", "tool_call_id": "call-1", "approve": True},
+        )
+        self.assertEqual(with_auth_guardrails.status, 404)
+        self.assertIn("guardrails approvals are not available", await with_auth_guardrails.text())
+
+    async def test_mission_autonomy_approval_decision_succeeds_with_seeded_store(self):
+        from thomas.autonomy.store import AutonomyStore
+
+        store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote.sqlite3").resolve()))
+        self.addCleanup(store.close)
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state["autonomy_store"] = store
+        else:
+            self.app["autonomy_store"] = store
+
+        job = store.create_job(
+            name="Seeded Approval Job",
+            kind="workflow_task",
+            payload={"goal": "Verify approval decision path"},
+            schedule=None,
+            next_run_at=None,
+            risk_class="high",
+            requires_approval=True,
+        )
+        approval = store.create_approval(
+            job_id=job.id,
+            action={"kind": "tool.execute", "tool_name": "shell.exec"},
+            risk_class="high",
+        )
+
+        resp = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": True, "actor": "e2e-test", "reason": "safe and expected"},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertIs(payload.get("ok"), True)
+        self.assertEqual(str(payload.get("approval_id") or ""), approval.id)
+        self.assertEqual(str(payload.get("job_id") or ""), job.id)
+        self.assertEqual(str(payload.get("status") or ""), "approved")
+
+        updated_approval = store.get_approval(approval.id)
+        self.assertEqual(updated_approval.status, "approved")
+        self.assertEqual(updated_approval.decided_by, "e2e-test")
+        self.assertEqual(updated_approval.decision_reason, "safe and expected")
+
+        updated_job = store.get_job(job.id)
+        self.assertIs(updated_job.approved, True)
+        self.assertIs(updated_job.requires_approval, False)
+
+    async def test_mission_autonomy_approval_decision_denied_cancels_job(self):
+        from thomas.autonomy.store import AutonomyStore
+
+        store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-deny.sqlite3").resolve()))
+        self.addCleanup(store.close)
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state["autonomy_store"] = store
+        else:
+            self.app["autonomy_store"] = store
+
+        job = store.create_job(
+            name="Seeded Deny Approval Job",
+            kind="workflow_task",
+            payload={"goal": "Verify deny path"},
+            schedule=None,
+            next_run_at=None,
+            risk_class="critical",
+            requires_approval=True,
+        )
+        approval = store.create_approval(
+            job_id=job.id,
+            action={"kind": "tool.execute", "tool_name": "shell.exec"},
+            risk_class="critical",
+        )
+
+        resp = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": False, "actor": "e2e-deny", "reason": "unsafe operation"},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertIs(payload.get("ok"), True)
+        self.assertEqual(str(payload.get("approval_id") or ""), approval.id)
+        self.assertEqual(str(payload.get("job_id") or ""), job.id)
+        self.assertEqual(str(payload.get("status") or ""), "denied")
+
+        updated_approval = store.get_approval(approval.id)
+        self.assertEqual(updated_approval.status, "denied")
+        self.assertEqual(updated_approval.decided_by, "e2e-deny")
+        self.assertEqual(updated_approval.decision_reason, "unsafe operation")
+
+        updated_job = store.get_job(job.id)
+        self.assertEqual(updated_job.status, "cancelled")
+        self.assertIs(updated_job.cancelled, True)
+
+    async def test_mission_autonomy_approval_decision_is_idempotent_after_terminal_state(self):
+        from thomas.autonomy.store import AutonomyStore
+
+        store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-idempotent.sqlite3").resolve()))
+        self.addCleanup(store.close)
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state["autonomy_store"] = store
+        else:
+            self.app["autonomy_store"] = store
+
+        job = store.create_job(
+            name="Seeded Idempotent Approval Job",
+            kind="workflow_task",
+            payload={"goal": "Verify idempotent decision"},
+            schedule=None,
+            next_run_at=None,
+            risk_class="high",
+            requires_approval=True,
+        )
+        approval = store.create_approval(
+            job_id=job.id,
+            action={"kind": "tool.execute", "tool_name": "shell.exec"},
+            risk_class="high",
+        )
+
+        first = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": True, "actor": "first-actor", "reason": "approved once"},
+        )
+        self.assertEqual(first.status, 200)
+        first_payload = await first.json()
+        self.assertIs(first_payload.get("ok"), True)
+        self.assertEqual(str(first_payload.get("status") or ""), "approved")
+
+        second = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": False, "actor": "second-actor", "reason": "try to reverse"},
+        )
+        self.assertEqual(second.status, 200)
+        second_payload = await second.json()
+        self.assertIs(second_payload.get("ok"), True)
+        self.assertEqual(str(second_payload.get("status") or ""), "approved")
+
+        updated_approval = store.get_approval(approval.id)
+        self.assertEqual(updated_approval.status, "approved")
+        self.assertEqual(updated_approval.decided_by, "first-actor")
+        self.assertEqual(updated_approval.decision_reason, "approved once")
+
+    async def test_mission_autonomy_approval_decision_emits_expected_audit_events(self):
+        from thomas.autonomy.store import AutonomyStore
+
+        store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-audit.sqlite3").resolve()))
+        self.addCleanup(store.close)
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state["autonomy_store"] = store
+        else:
+            self.app["autonomy_store"] = store
+
+        job = store.create_job(
+            name="Seeded Audit Approval Job",
+            kind="workflow_task",
+            payload={"goal": "Verify approval audit events"},
+            schedule=None,
+            next_run_at=None,
+            risk_class="high",
+            requires_approval=True,
+        )
+        approval = store.create_approval(
+            job_id=job.id,
+            action={"kind": "tool.execute", "tool_name": "shell.exec"},
+            risk_class="high",
+        )
+
+        resp = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": True, "actor": "audit-actor", "reason": "audit coverage"},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertIs(payload.get("ok"), True)
+
+        audit_rows = store.list_audit(job_id=job.id, limit=20)
+        event_types = [str(row.event_type or "") for row in audit_rows]
+        self.assertIn("approval.requested", event_types)
+        self.assertIn("approval.decided", event_types)
+
+        decided = next(row for row in audit_rows if str(row.event_type or "") == "approval.decided")
+        self.assertEqual(str(decided.actor or ""), "audit-actor")
+        decided_detail = decided.detail if isinstance(decided.detail, dict) else {}
+        self.assertEqual(str(decided_detail.get("approval_id") or ""), approval.id)
+        self.assertEqual(str(decided_detail.get("status") or ""), "approved")
+        self.assertEqual(str(decided_detail.get("reason") or ""), "audit coverage")
+
+    async def test_mission_autonomy_approval_repeat_decision_does_not_duplicate_decided_audit(self):
+        from thomas.autonomy.store import AutonomyStore
+
+        store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-audit-idempotent.sqlite3").resolve()))
+        self.addCleanup(store.close)
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state["autonomy_store"] = store
+        else:
+            self.app["autonomy_store"] = store
+
+        job = store.create_job(
+            name="Seeded Audit Idempotent Job",
+            kind="workflow_task",
+            payload={"goal": "Verify approval decided audit idempotency"},
+            schedule=None,
+            next_run_at=None,
+            risk_class="high",
+            requires_approval=True,
+        )
+        approval = store.create_approval(
+            job_id=job.id,
+            action={"kind": "tool.execute", "tool_name": "shell.exec"},
+            risk_class="high",
+        )
+
+        first = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": True, "actor": "audit-first", "reason": "first decision"},
+        )
+        self.assertEqual(first.status, 200)
+        first_payload = await first.json()
+        self.assertEqual(str(first_payload.get("status") or ""), "approved")
+
+        second = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": False, "actor": "audit-second", "reason": "second decision"},
+        )
+        self.assertEqual(second.status, 200)
+        second_payload = await second.json()
+        self.assertEqual(str(second_payload.get("status") or ""), "approved")
+
+        audit_rows = store.list_audit(job_id=job.id, limit=30)
+        decided_rows = [row for row in audit_rows if str(row.event_type or "") == "approval.decided"]
+        self.assertEqual(len(decided_rows), 1)
+        decided = decided_rows[0]
+        self.assertEqual(str(decided.actor or ""), "audit-first")
+        decided_detail = decided.detail if isinstance(decided.detail, dict) else {}
+        self.assertEqual(str(decided_detail.get("approval_id") or ""), approval.id)
+        self.assertEqual(str(decided_detail.get("status") or ""), "approved")
+        self.assertEqual(str(decided_detail.get("reason") or ""), "first decision")
+
+    async def test_mission_autonomy_approval_audit_timestamps_are_chronological(self):
+        from thomas.autonomy.store import AutonomyStore
+
+        store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-audit-chronology.sqlite3").resolve()))
+        self.addCleanup(store.close)
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state["autonomy_store"] = store
+        else:
+            self.app["autonomy_store"] = store
+
+        job = store.create_job(
+            name="Seeded Audit Chronology Job",
+            kind="workflow_task",
+            payload={"goal": "Verify approval audit chronology"},
+            schedule=None,
+            next_run_at=None,
+            risk_class="high",
+            requires_approval=True,
+        )
+        approval = store.create_approval(
+            job_id=job.id,
+            action={"kind": "tool.execute", "tool_name": "shell.exec"},
+            risk_class="high",
+        )
+
+        resp = await self.client.post(
+            f"/api/mission/approvals/autonomy/{approval.id}/decision",
+            headers={"Authorization": "Bearer test-token"},
+            json={"approve": True, "actor": "chrono-actor", "reason": "chronology check"},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertIs(payload.get("ok"), True)
+
+        audit_rows = store.list_audit(job_id=job.id, limit=30)
+
+        def _event_for(event_type: str):
+            for row in audit_rows:
+                if str(row.event_type or "") != event_type:
+                    continue
+                detail = row.detail if isinstance(row.detail, dict) else {}
+                if str(detail.get("approval_id") or "") == approval.id:
+                    return row
+            return None
+
+        requested = _event_for("approval.requested")
+        decided = _event_for("approval.decided")
+        self.assertIsNotNone(requested)
+        self.assertIsNotNone(decided)
+        assert requested is not None
+        assert decided is not None
+        self.assertLessEqual(requested.ts, decided.ts)
 
 
 if __name__ == "__main__":

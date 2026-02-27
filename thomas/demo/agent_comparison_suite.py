@@ -11,17 +11,17 @@ import re
 import subprocess
 import sys
 import time
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean, pstdev
-from typing import Any, Dict, Iterable, List, Mapping, Sequence
+from typing import Any
 
+from thomas.plugins.benchmark_program import evaluate_benchmark_program
 from thomas.plugins.competitor_evo_scope import build_prediction_evo_scope
 from thomas.plugins.competitor_intel_store import load_registry, render_registry_markdown
-from thomas.plugins.benchmark_program import evaluate_benchmark_program
 from thomas.plugins.test_suite_contract import evaluate_test_suite_contract, load_test_suite_contract
-
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_SUITE_CONFIG = ROOT / "demo" / "baselines" / "agent_comparison_suite.current.json"
@@ -129,7 +129,7 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _read_json(path: Path) -> Dict[str, Any]:
+def _read_json(path: Path) -> dict[str, Any]:
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -149,7 +149,7 @@ def _write_json(path: Path, payload: Any) -> None:
 def _safe_float(value: Any) -> float | None:
     try:
         out = float(value)
-    except Exception:
+    except json.JSONDecodeError:
         return None
     if not math.isfinite(out):
         return None
@@ -198,7 +198,7 @@ def _iter_files(root_paths: Iterable[Path], *, suffixes: set[str] | None = None)
 def _count_non_empty_lines(path: Path) -> int:
     try:
         text = path.read_text(encoding="utf-8", errors="ignore")
-    except Exception:
+    except (OSError, FileNotFoundError):
         return 0
     return sum(1 for line in text.splitlines() if line.strip())
 
@@ -215,7 +215,7 @@ def _is_test_file(path: Path) -> bool:
     return False
 
 
-def _count_code(root_paths: Iterable[Path]) -> Dict[str, int]:
+def _count_code(root_paths: Iterable[Path]) -> dict[str, int]:
     files = 0
     loc = 0
     for path in _iter_files(root_paths, suffixes=CODE_EXTENSIONS):
@@ -229,14 +229,14 @@ def _count_test_code(
     *,
     include_all: bool = False,
     seen_files: set[str] | None = None,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     files = 0
     loc = 0
     seen = seen_files if seen_files is not None else set()
     for path in _iter_files(root_paths, suffixes=CODE_EXTENSIONS):
         try:
             key = str(path.resolve())
-        except Exception:
+        except (ValueError, TypeError):
             key = str(path)
         if key in seen:
             continue
@@ -269,7 +269,7 @@ def _count_empty_code_files(root_paths: Iterable[Path]) -> int:
         try:
             if path.stat().st_size == 0:
                 empty += 1
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             continue
     return empty
 
@@ -281,7 +281,7 @@ def _count_python_syntax_errors(root_paths: Iterable[Path]) -> int:
             # Use utf-8-sig so BOM-prefixed files are parsed correctly.
             text = path.read_text(encoding="utf-8-sig", errors="ignore")
             ast.parse(text)
-        except Exception:
+        except (OSError, FileNotFoundError):
             failures += 1
     return failures
 
@@ -291,18 +291,18 @@ def _count_invalid_json_files(root_paths: Iterable[Path]) -> int:
     for path in _iter_files(root_paths, suffixes={".json"}):
         try:
             json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except json.JSONDecodeError:
             failures += 1
     return failures
 
 
-def _count_text_occurrences(root_paths: Iterable[Path], needle: str) -> Dict[str, int]:
+def _count_text_occurrences(root_paths: Iterable[Path], needle: str) -> dict[str, int]:
     files = 0
     occurrences = 0
     for path in _iter_files(root_paths, suffixes=CODE_EXTENSIONS):
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
+        except json.JSONDecodeError:
             continue
         hits = int(text.count(needle))
         if hits > 0:
@@ -316,7 +316,7 @@ def _count_immediate_dirs(path: Path) -> int:
         return 0
     try:
         return sum(1 for child in path.iterdir() if child.is_dir() and not child.name.startswith("."))
-    except Exception:
+    except (OSError, FileNotFoundError):
         return 0
 
 
@@ -338,12 +338,12 @@ def _count_empty_files(root_paths: Iterable[Path]) -> int:
         try:
             if path.is_file() and path.stat().st_size == 0:
                 empty += 1
-        except Exception:
+        except (OSError, FileNotFoundError):
             continue
     return empty
 
 
-def _parse_click_commands(help_text: str) -> List[str]:
+def _parse_click_commands(help_text: str) -> list[str]:
     lines = help_text.splitlines()
     start = None
     for idx, line in enumerate(lines):
@@ -352,7 +352,7 @@ def _parse_click_commands(help_text: str) -> List[str]:
             break
     if start is None:
         return []
-    names: List[str] = []
+    names: list[str] = []
     for line in lines[start:]:
         stripped = line.strip()
         if not stripped:
@@ -372,8 +372,8 @@ def _parse_click_commands(help_text: str) -> List[str]:
     return names
 
 
-def _materialize_command(parts: Sequence[str]) -> List[str]:
-    out: List[str] = []
+def _materialize_command(parts: Sequence[str]) -> list[str]:
+    out: list[str] = []
     for part in parts:
         text = str(part)
         if text == "{python}":
@@ -383,7 +383,7 @@ def _materialize_command(parts: Sequence[str]) -> List[str]:
     return out
 
 
-def _run_command(command: Sequence[str], *, cwd: Path, timeout_seconds: float = 60.0) -> Dict[str, Any]:
+def _run_command(command: Sequence[str], *, cwd: Path, timeout_seconds: float = 60.0) -> dict[str, Any]:
     cmd = _materialize_command(command)
     started = time.monotonic()
     try:
@@ -423,15 +423,14 @@ def _first_line(text: Any) -> str:
     return raw.splitlines()[0].strip()
 
 
-def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) -> Dict[str, Any]:
+def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) -> dict[str, Any]:
     enabled = bool(sync_cfg.get("enabled") or False)
     remote = str(sync_cfg.get("remote") or "origin").strip() or "origin"
     branch = str(sync_cfg.get("branch") or "main").strip() or "main"
     fetch = bool(sync_cfg.get("fetch", True))
     pull_ff_only = bool(sync_cfg.get("pull_ff_only", False))
     timeout_seconds = float(sync_cfg.get("timeout_seconds") or 120.0)
-
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "kind": "git",
         "root": str(agent_root),
         "enabled": enabled,
@@ -447,7 +446,6 @@ def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) 
         "is_up_to_date": None,
         "errors": [],
     }
-
     if not (agent_root / ".git").exists():
         return {
             "kind": "none",
@@ -455,7 +453,6 @@ def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) 
             "enabled": enabled,
             "errors": [],
         }
-
     local_branch_run = _run_command(
         ["git", "rev-parse", "--abbrev-ref", "HEAD"],
         cwd=agent_root,
@@ -467,13 +464,11 @@ def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) 
             out["branch"] = str(out["local_branch"] or "main")
     else:
         out["errors"].append(f"git branch query failed: {_first_line(local_branch_run.get('stderr'))}")
-
     local_head_before = _run_command(["git", "rev-parse", "HEAD"], cwd=agent_root, timeout_seconds=timeout_seconds)
     if local_head_before["ok"]:
         out["local_head_before"] = _first_line(local_head_before.get("stdout"))
     else:
         out["errors"].append(f"git HEAD query failed: {_first_line(local_head_before.get('stderr'))}")
-
     if enabled and fetch:
         fetch_run = _run_command(
             ["git", "fetch", remote, out["branch"], "--quiet"],
@@ -483,14 +478,12 @@ def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) 
         out["fetched"] = bool(fetch_run["ok"])
         if not fetch_run["ok"]:
             out["errors"].append(f"git fetch failed: {_first_line(fetch_run.get('stderr'))}")
-
     remote_ref = f"{remote}/{out['branch']}"
     remote_head_run = _run_command(["git", "rev-parse", remote_ref], cwd=agent_root, timeout_seconds=timeout_seconds)
     if remote_head_run["ok"]:
         out["remote_head"] = _first_line(remote_head_run.get("stdout"))
     else:
         out["errors"].append(f"git remote head query failed: {_first_line(remote_head_run.get('stderr'))}")
-
     if enabled and pull_ff_only:
         pull_run = _run_command(
             ["git", "pull", "--ff-only", remote, out["branch"]],
@@ -500,13 +493,11 @@ def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) 
         out["pulled"] = bool(pull_run["ok"])
         if not pull_run["ok"]:
             out["errors"].append(f"git pull failed: {_first_line(pull_run.get('stderr'))}")
-
     local_head_after = _run_command(["git", "rev-parse", "HEAD"], cwd=agent_root, timeout_seconds=timeout_seconds)
     if local_head_after["ok"]:
         out["local_head"] = _first_line(local_head_after.get("stdout"))
     else:
         out["errors"].append(f"git HEAD query (after sync) failed: {_first_line(local_head_after.get('stderr'))}")
-
     if out["local_head"] and out["remote_head"]:
         ahead_behind_run = _run_command(
             ["git", "rev-list", "--left-right", "--count", f"HEAD...{remote_ref}"],
@@ -522,22 +513,20 @@ def _collect_git_version_info(agent_root: Path, *, sync_cfg: Mapping[str, Any]) 
                 out["is_up_to_date"] = bool(out["ahead"] == 0 and out["behind"] == 0)
         else:
             out["errors"].append(f"git ahead/behind query failed: {_first_line(ahead_behind_run.get('stderr'))}")
-
     return out
 
 
-def _collect_model_snapshot(agent: Mapping[str, Any], *, agent_root: Path) -> Dict[str, Any]:
+def _collect_model_snapshot(agent: Mapping[str, Any], *, agent_root: Path) -> dict[str, Any]:
     captured_at = _now_iso()
     day_utc = captured_at[:10]
     aid = str(agent.get("id") or "").strip()
     required = bool(agent.get("model_snapshot_required") or (aid == "thomas"))
-    snapshot: Dict[str, Any] = {
+    snapshot: dict[str, Any] = {
         "captured_at_utc": captured_at,
         "day_utc": day_utc,
         "required": required,
         "ok": False,
     }
-
     command = agent.get("model_snapshot_command") or []
     if isinstance(command, list) and command:
         timeout_seconds = float(agent.get("model_snapshot_timeout_seconds") or 45.0)
@@ -553,7 +542,7 @@ def _collect_model_snapshot(agent: Mapping[str, Any], *, agent_root: Path) -> Di
             if stdout_raw:
                 try:
                     parsed = json.loads(stdout_raw)
-                except Exception:
+                except json.JSONDecodeError:
                     parsed = None
             if isinstance(parsed, dict):
                 snapshot["ok"] = True
@@ -575,7 +564,6 @@ def _collect_model_snapshot(agent: Mapping[str, Any], *, agent_root: Path) -> Di
         else:
             snapshot["error"] = "model snapshot command failed"
         return snapshot
-
     # Built-in Thomas snapshot path for daily model capture.
     if aid == "thomas":
         try:
@@ -597,7 +585,6 @@ def _collect_model_snapshot(agent: Mapping[str, Any], *, agent_root: Path) -> Di
         except Exception as exc:
             snapshot["error"] = f"{type(exc).__name__}: {exc}"
         return snapshot
-
     snapshot["source"] = "none"
     snapshot["error"] = "no model snapshot command configured"
     return snapshot
@@ -622,7 +609,6 @@ def _update_competitor_registry(
         for item in (dict(result.get("scoreboard") or {}).get("ranking") or [])
         if str(item.get("agent") or "").strip()
     }
-
     competitors = dict(registry.get("competitors") or {})
     for agent in list(result.get("agents") or []):
         aid = str(agent.get("id") or "").strip()
@@ -647,7 +633,6 @@ def _update_competitor_registry(
         if result_md_path is not None:
             entry["last_result_markdown"] = str(result_md_path)
         competitors[aid] = entry
-
     run_record = {
         "computed_at_utc": computed_at,
         "suite_id": suite_id,
@@ -665,18 +650,16 @@ def _update_competitor_registry(
     runs = list(registry.get("runs") or [])
     runs.append(run_record)
     runs = runs[-200:]
-
     registry["updated_at_utc"] = computed_at
     registry["competitors"] = competitors
     registry["runs"] = runs
-
     _write_json(registry_path, registry)
     registry_md_path.parent.mkdir(parents=True, exist_ok=True)
     registry_md_path.write_text(render_registry_markdown(registry), encoding="utf-8")
 
 
-def _existing_rel_roots(root: Path, candidates: Sequence[str]) -> List[str]:
-    out: List[str] = []
+def _existing_rel_roots(root: Path, candidates: Sequence[str]) -> list[str]:
+    out: list[str] = []
     for rel in candidates:
         text = str(rel or "").strip()
         if not text:
@@ -686,21 +669,31 @@ def _existing_rel_roots(root: Path, candidates: Sequence[str]) -> List[str]:
     return out
 
 
-def _default_competitor_agent(entry: Mapping[str, Any], *, suite_root: Path) -> Dict[str, Any]:
+def _default_competitor_agent(entry: Mapping[str, Any], *, suite_root: Path) -> dict[str, Any]:
     cid = str(entry.get("id") or "").strip()
     label = str(entry.get("label") or cid).strip() or cid
     root_text = str(entry.get("root") or f"runtime/competitors/{cid}").strip()
     root_abs = _resolve(suite_root, root_text)
-
-    source_roots = _existing_rel_roots(root_abs, [str(x) for x in (entry.get("source_roots") or DEFAULT_COMPETITOR_SOURCE_ROOTS)])
+    source_roots = _existing_rel_roots(
+        root_abs, [str(x) for x in (entry.get("source_roots") or DEFAULT_COMPETITOR_SOURCE_ROOTS)]
+    )
     if not source_roots:
         source_roots = ["."]
-    test_roots = _existing_rel_roots(root_abs, [str(x) for x in (entry.get("test_roots") or DEFAULT_COMPETITOR_TEST_ROOTS)])
-    browser_roots = _existing_rel_roots(root_abs, [str(x) for x in (entry.get("browser_roots") or DEFAULT_COMPETITOR_BROWSER_ROOTS)])
-    plugin_roots = _existing_rel_roots(root_abs, [str(x) for x in (entry.get("plugin_roots") or DEFAULT_COMPETITOR_PLUGIN_ROOTS)])
-    gateway_roots = _existing_rel_roots(root_abs, [str(x) for x in (entry.get("gateway_roots") or DEFAULT_COMPETITOR_GATEWAY_ROOTS)])
-    cli_roots = _existing_rel_roots(root_abs, [str(x) for x in (entry.get("cli_roots") or DEFAULT_COMPETITOR_CLI_ROOTS)])
-
+    test_roots = _existing_rel_roots(
+        root_abs, [str(x) for x in (entry.get("test_roots") or DEFAULT_COMPETITOR_TEST_ROOTS)]
+    )
+    browser_roots = _existing_rel_roots(
+        root_abs, [str(x) for x in (entry.get("browser_roots") or DEFAULT_COMPETITOR_BROWSER_ROOTS)]
+    )
+    plugin_roots = _existing_rel_roots(
+        root_abs, [str(x) for x in (entry.get("plugin_roots") or DEFAULT_COMPETITOR_PLUGIN_ROOTS)]
+    )
+    gateway_roots = _existing_rel_roots(
+        root_abs, [str(x) for x in (entry.get("gateway_roots") or DEFAULT_COMPETITOR_GATEWAY_ROOTS)]
+    )
+    cli_roots = _existing_rel_roots(
+        root_abs, [str(x) for x in (entry.get("cli_roots") or DEFAULT_COMPETITOR_CLI_ROOTS)]
+    )
     return {
         "id": cid,
         "label": label,
@@ -737,13 +730,12 @@ def _materialize_competitor_catalog_agents(
     *,
     suite_config: Mapping[str, Any],
     suite_root: Path,
-) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     agents = [dict(a) for a in (suite_config.get("agents") or []) if isinstance(a, dict)]
-    by_id: Dict[str, Dict[str, Any]] = {
+    by_id: dict[str, dict[str, Any]] = {
         str(a.get("id") or "").strip(): a for a in agents if str(a.get("id") or "").strip()
     }
-
-    prep: List[Dict[str, Any]] = []
+    prep: list[dict[str, Any]] = []
     catalog = [c for c in (suite_config.get("competitor_catalog") or []) if isinstance(c, dict)]
     for raw in catalog:
         cid = str(raw.get("id") or "").strip()
@@ -758,7 +750,6 @@ def _materialize_competitor_catalog_agents(
         repo_url = str(raw.get("repo_url") or "").strip()
         branch = str(raw.get("branch") or "main").strip() or "main"
         clone_timeout_seconds = float(raw.get("clone_timeout_seconds") or 600.0)
-
         cloned = False
         clone_error = ""
         if not root_abs.exists() and repo_url:
@@ -771,7 +762,6 @@ def _materialize_competitor_catalog_agents(
             cloned = bool(clone_run.get("ok"))
             if not cloned:
                 clone_error = _first_line(clone_run.get("stderr"))
-
         prep.append(
             {
                 "id": cid,
@@ -783,7 +773,6 @@ def _materialize_competitor_catalog_agents(
                 "error": clone_error,
             }
         )
-
         if cid not in by_id:
             auto_agent = _default_competitor_agent(raw, suite_root=suite_root)
             agents.append(auto_agent)
@@ -804,7 +793,6 @@ def _materialize_competitor_catalog_agents(
                 agent["model_snapshot_required"] = False
             if not isinstance(agent.get("benchmark_aliases"), list):
                 agent["benchmark_aliases"] = [cid]
-
     return agents, prep
 
 
@@ -853,12 +841,12 @@ def _assertion_ok(actual: Any, op: str, expected: Any) -> bool:
     return False
 
 
-def _run_strict_checks(agent: Mapping[str, Any], *, agent_root: Path) -> Dict[str, Any]:
+def _run_strict_checks(agent: Mapping[str, Any], *, agent_root: Path) -> dict[str, Any]:
     checks = list(agent.get("strict_checks") or [])
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     passed = 0
     failed = 0
-    elapsed_values: List[float] = []
+    elapsed_values: list[float] = []
     assertion_failures = 0
     command_failures = 0
 
@@ -886,7 +874,7 @@ def _run_strict_checks(agent: Mapping[str, Any], *, agent_root: Path) -> Dict[st
         elapsed_values.append(float(run.get("elapsed_seconds") or 0.0))
         cmd_ok = int(run.get("returncode") or 0) == expect_returncode
 
-        assertion_rows: List[Dict[str, Any]] = []
+        assertion_rows: list[dict[str, Any]] = []
         all_assertions_ok = True
         assertions = raw.get("assertions") or []
         if assertions:
@@ -988,7 +976,7 @@ def _percentile(values: Sequence[float], pct: float) -> float | None:
     return round(float(val), 6)
 
 
-def _safe_stats(values: Sequence[float]) -> Dict[str, float | None]:
+def _safe_stats(values: Sequence[float]) -> dict[str, float | None]:
     if not values:
         return {"mean": None, "stddev": None, "p50": None, "p95": None, "min": None, "max": None}
     vals = [float(v) for v in values]
@@ -1027,7 +1015,7 @@ def _count_regex_hits(
     *,
     flags: int = re.IGNORECASE,
     ignore_globs: Sequence[str] | None = None,
-) -> Dict[str, int]:
+) -> dict[str, int]:
     files_with_hits = 0
     total_hits = 0
     compiled = [re.compile(pattern, flags=flags) for pattern in patterns if str(pattern).strip()]
@@ -1039,7 +1027,7 @@ def _count_regex_hits(
             continue
         try:
             text = path.read_text(encoding="utf-8", errors="ignore")
-        except Exception:
+        except (OSError, FileNotFoundError):
             continue
         file_hits = 0
         for regex in compiled:
@@ -1055,12 +1043,12 @@ def _run_probe_suite(
     *,
     agent_root: Path,
     probe_key: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     probes = list(agent.get(probe_key) or [])
-    runs: List[Dict[str, Any]] = []
-    elapsed_values: List[float] = []
-    throughput_values: List[float] = []
-    extracted_values: Dict[str, List[float]] = {}
+    runs: list[dict[str, Any]] = []
+    elapsed_values: list[float] = []
+    throughput_values: list[float] = []
+    extracted_values: dict[str, list[float]] = {}
     passed = 0
     failed = 0
     command_failures = 0
@@ -1100,7 +1088,7 @@ def _run_probe_suite(
                 except Exception as exc:
                     json_error = f"{type(exc).__name__}: {exc}"
 
-            assertion_rows: List[Dict[str, Any]] = []
+            assertion_rows: list[dict[str, Any]] = []
             assertions_ok = True
             if assertions:
                 if json_error:
@@ -1152,14 +1140,14 @@ def _run_probe_suite(
                     if nval is not None and elapsed > 0:
                         throughput = float(nval) / elapsed
                         throughput_values.append(float(throughput))
-                except Exception:
+                except (ValueError, TypeError):
                     throughput = None
 
             if payload is not None and value_paths:
                 for path in value_paths:
                     try:
                         raw_val = _resolve_path_value(payload, path)
-                    except Exception:
+                    except (ValueError, TypeError):
                         continue
                     nval = _safe_float(raw_val)
                     if nval is None:
@@ -1192,10 +1180,7 @@ def _run_probe_suite(
     total = passed + failed
     elapsed_stats = _safe_stats(elapsed_values)
     throughput_stats = _safe_stats(throughput_values)
-    extracted_stats = {
-        key: _safe_stats(values)
-        for key, values in extracted_values.items()
-    }
+    extracted_stats = {key: _safe_stats(values) for key, values in extracted_values.items()}
     return {
         "total_runs": int(total),
         "passed_runs": int(passed),
@@ -1210,8 +1195,13 @@ def _run_probe_suite(
     }
 
 
-def _fallback_performance_probe(source_roots: Sequence[Path]) -> Dict[str, Any]:
+def _fallback_performance_probe(source_roots: Sequence[Path]) -> dict[str, Any]:
     code = _count_code(source_roots)
+    extracted = {
+        "code.files": _safe_stats([float(code.get("files") or 0)]),
+        "code.loc": _safe_stats([float(code.get("loc") or 0)]),
+    }
+    runs = [{"id": "fallback_performance_scan", "attempt": 1, "pass": True, "elapsed_seconds": None}]
     return {
         "total_runs": 1,
         "passed_runs": 1,
@@ -1219,28 +1209,15 @@ def _fallback_performance_probe(source_roots: Sequence[Path]) -> Dict[str, Any]:
         "pass_rate": 1.0,
         "command_failures": 0,
         "assertion_failures": 0,
-        # Fallback mode is static scan metadata, not command benchmark timing.
         "elapsed": _safe_stats([]),
-        # Throughput is intentionally omitted in fallback mode because it is not
-        # comparable to explicit probe command throughput.
         "throughput": _safe_stats([]),
-        "extracted": {
-            "code.files": _safe_stats([float(code.get("files") or 0)]),
-            "code.loc": _safe_stats([float(code.get("loc") or 0)]),
-        },
-        "runs": [
-            {
-                "id": "fallback_performance_scan",
-                "attempt": 1,
-                "pass": True,
-                "elapsed_seconds": None,
-            }
-        ],
+        "extracted": extracted,
+        "runs": runs,
     }
 
 
-def _fallback_resilience_probe(source_roots: Sequence[Path], *, repeats: int = 3) -> Dict[str, Any]:
-    runs: List[Dict[str, Any]] = []
+def _fallback_resilience_probe(source_roots: Sequence[Path], *, repeats: int = 3) -> dict[str, Any]:
+    runs: list[dict[str, Any]] = []
     expected: tuple[int, int] | None = None
     passed = 0
     failed = 0
@@ -1275,7 +1252,6 @@ def _fallback_resilience_probe(source_roots: Sequence[Path], *, repeats: int = 3
         "pass_rate": (round(passed / total, 6) if total > 0 else None),
         "command_failures": 0,
         "assertion_failures": int(failed),
-        # Fallback mode is static consistency metadata, not timed probe execution.
         "elapsed": _safe_stats([]),
         "throughput": _safe_stats([]),
         "extracted": {},
@@ -1286,8 +1262,9 @@ def _fallback_resilience_probe(source_roots: Sequence[Path], *, repeats: int = 3
 def _fallback_security_probe(
     secret_hits: Mapping[str, int],
     risky_hits: Mapping[str, int],
-) -> Dict[str, Any]:
-    # Fallback probe indicates static security scan executed successfully.
+) -> dict[str, Any]:
+    secret_total = int(secret_hits.get("total_hits") or 0)
+    risky_total = int(risky_hits.get("total_hits") or 0)
     return {
         "total_runs": 1,
         "passed_runs": 1,
@@ -1295,32 +1272,32 @@ def _fallback_security_probe(
         "pass_rate": 1.0,
         "command_failures": 0,
         "assertion_failures": 0,
-        # Fallback mode is static findings metadata, not timed probe execution.
         "elapsed": _safe_stats([]),
         "throughput": _safe_stats([]),
         "extracted": {
-            "secret_like_hits": _safe_stats([float(secret_hits.get("total_hits") or 0)]),
-            "risky_construct_hits": _safe_stats([float(risky_hits.get("total_hits") or 0)]),
+            "secret_like_hits": _safe_stats([float(secret_total)]),
+            "risky_construct_hits": _safe_stats([float(risky_total)]),
         },
         "runs": [
             {
                 "id": "fallback_security_static_scan",
                 "attempt": 1,
                 "pass": True,
-                "secret_like_hits": int(secret_hits.get("total_hits") or 0),
-                "risky_construct_hits": int(risky_hits.get("total_hits") or 0),
+                "secret_like_hits": secret_total,
+                "risky_construct_hits": risky_total,
             }
         ],
     }
 
 
-def _fallback_cost_probe(benchmark: Mapping[str, Any]) -> Dict[str, Any]:
+def _fallback_cost_probe(benchmark: Mapping[str, Any]) -> dict[str, Any]:
     rows = int(benchmark.get("raw_rows_count") or 0)
     ok = rows > 0
-    elapsed_values: List[float] = []
+    elapsed_values: list[float] = []
     raw_elapsed = _safe_float(benchmark.get("raw_elapsed_seconds_mean"))
     if raw_elapsed is not None and raw_elapsed >= 0:
         elapsed_values.append(float(raw_elapsed))
+    run = {"id": "fallback_cost_benchmark_presence", "attempt": 1, "pass": ok, "raw_rows_count": rows}
     return {
         "total_runs": 1,
         "passed_runs": (1 if ok else 0),
@@ -1333,22 +1310,15 @@ def _fallback_cost_probe(benchmark: Mapping[str, Any]) -> Dict[str, Any]:
         "extracted": {
             "raw_rows_count": _safe_stats([float(rows)]),
         },
-        "runs": [
-            {
-                "id": "fallback_cost_benchmark_presence",
-                "attempt": 1,
-                "pass": ok,
-                "raw_rows_count": rows,
-            }
-        ],
+        "runs": [run],
     }
 
 
-def _collect_benchmark_summary(agent: Mapping[str, Any], *, suite_root: Path) -> Dict[str, Any]:
+def _collect_benchmark_summary(agent: Mapping[str, Any], *, suite_root: Path) -> dict[str, Any]:
     patterns = [str(item).strip() for item in (agent.get("benchmark_scorecard_globs") or []) if str(item).strip()]
     aliases = [str(item).strip().lower() for item in (agent.get("benchmark_aliases") or []) if str(item).strip()]
     seen: set[str] = set()
-    scorecards: List[Path] = []
+    scorecards: list[Path] = []
     for pattern in patterns:
         path = Path(pattern)
         if not path.is_absolute():
@@ -1361,19 +1331,19 @@ def _collect_benchmark_summary(agent: Mapping[str, Any], *, suite_root: Path) ->
             seen.add(key)
             scorecards.append(match)
 
-    weighted_scores: List[float] = []
-    success_rates: List[float] = []
-    evidence_coverages: List[float] = []
-    elapsed_means: List[float] = []
-    credibility_scores: List[float] = []
-    raw_row_elapsed: List[float] = []
-    raw_row_tokens_prompt: List[float] = []
-    raw_row_tokens_completion: List[float] = []
-    raw_row_tokens_total: List[float] = []
-    raw_row_tool_calls: List[float] = []
-    raw_row_successes: List[float] = []
-    used_files: List[str] = []
-    errors: List[str] = []
+    weighted_scores: list[float] = []
+    success_rates: list[float] = []
+    evidence_coverages: list[float] = []
+    elapsed_means: list[float] = []
+    credibility_scores: list[float] = []
+    raw_row_elapsed: list[float] = []
+    raw_row_tokens_prompt: list[float] = []
+    raw_row_tokens_completion: list[float] = []
+    raw_row_tokens_total: list[float] = []
+    raw_row_tool_calls: list[float] = []
+    raw_row_successes: list[float] = []
+    used_files: list[str] = []
+    errors: list[str] = []
 
     for scorecard in scorecards:
         try:
@@ -1426,7 +1396,7 @@ def _collect_benchmark_summary(agent: Mapping[str, Any], *, suite_root: Path) ->
         raw_patterns = [pattern.replace("scorecard.json", "benchmark_results.raw.json") for pattern in patterns]
 
     raw_seen: set[str] = set()
-    raw_files: List[Path] = []
+    raw_files: list[Path] = []
     for pattern in raw_patterns:
         path = Path(pattern)
         if not path.is_absolute():
@@ -1447,7 +1417,7 @@ def _collect_benchmark_summary(agent: Mapping[str, Any], *, suite_root: Path) ->
             continue
         if not isinstance(payload, list):
             continue
-        selected_rows: List[Mapping[str, Any]] = []
+        selected_rows: list[Mapping[str, Any]] = []
         for row in payload:
             if not isinstance(row, dict):
                 continue
@@ -1564,7 +1534,7 @@ def _compute_token_efficiency(
     *,
     benchmark: Mapping[str, Any],
     cost_probe: Mapping[str, Any],
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     tokens_per_success = _positive_float(benchmark.get("raw_tokens_per_success"))
     total_tokens_mean = _positive_float(benchmark.get("raw_total_tokens_mean"))
     prompt_tokens_mean = _positive_float(benchmark.get("raw_prompt_tokens_mean"))
@@ -1648,11 +1618,15 @@ def _compute_token_efficiency(
     }
 
 
-def _collect_benchmark_evidence(agent: Mapping[str, Any], *, suite_root: Path) -> Dict[str, Any]:
+def _collect_benchmark_evidence(agent: Mapping[str, Any], *, suite_root: Path) -> dict[str, Any]:
     patterns = [str(item).strip() for item in (agent.get("benchmark_evidence_globs") or []) if str(item).strip()]
-    files_used: List[str] = []
-    checks: Dict[str, Dict[str, Any]] = {}
-    errors: List[str] = []
+    aliases = [str(item).strip().lower() for item in (agent.get("benchmark_aliases") or []) if str(item).strip()]
+    aid = str(agent.get("id") or "").strip().lower()
+    if aid and aid not in aliases:
+        aliases.append(aid)
+    files_used: list[str] = []
+    checks: dict[str, dict[str, Any]] = {}
+    errors: list[str] = []
     if not patterns:
         return {"files_used": files_used, "checks": checks, "errors": errors}
 
@@ -1673,22 +1647,54 @@ def _collect_benchmark_evidence(agent: Mapping[str, Any], *, suite_root: Path) -
             except Exception as exc:
                 errors.append(f"{match}: {type(exc).__name__}: {exc}")
                 continue
-            if not isinstance(payload, dict):
-                errors.append(f"{match}: evidence payload must be an object")
-                continue
-            raw_checks = payload.get("checks")
-            if not isinstance(raw_checks, dict):
-                continue
-            for cid, raw in raw_checks.items():
-                check_id = str(cid or "").strip()
-                if not check_id:
+            if isinstance(payload, dict):
+                raw_checks = payload.get("checks")
+                if not isinstance(raw_checks, dict):
                     continue
-                row = dict(raw) if isinstance(raw, dict) else {"value": raw}
-                merged = dict(checks.get(check_id) or {})
-                for key_name in ["pass", "score", "value", "notes", "source", "updated_at_utc"]:
-                    if key_name in row:
-                        merged[key_name] = row[key_name]
-                checks[check_id] = merged
+                for cid, raw in raw_checks.items():
+                    check_id = str(cid or "").strip()
+                    if not check_id:
+                        continue
+                    row = dict(raw) if isinstance(raw, dict) else {"value": raw}
+                    merged = dict(checks.get(check_id) or {})
+                    for key_name in ["pass", "score", "value", "notes", "source", "updated_at_utc"]:
+                        if key_name in row:
+                            merged[key_name] = row[key_name]
+                    checks[check_id] = merged
+                continue
+            if isinstance(payload, list):
+                rows = [row for row in payload if isinstance(row, dict)]
+                for row in rows:
+                    track = str(row.get("track") or "").strip().lower()
+                    if aliases:
+                        if track and track not in aliases:
+                            continue
+                        if not track and len(rows) > 1:
+                            continue
+                    check_id = str(row.get("evidence_id") or row.get("task_id") or "").strip()
+                    if not check_id:
+                        continue
+                    pass_value = row.get("pass")
+                    if not isinstance(pass_value, bool):
+                        pass_value = row.get("success")
+                    if not isinstance(pass_value, bool):
+                        check_summary = row.get("checks")
+                        if isinstance(check_summary, dict) and isinstance(check_summary.get("success"), bool):
+                            pass_value = bool(check_summary.get("success"))
+                    score_value = _safe_float(row.get("score"))
+                    if score_value is None:
+                        score_value = _safe_float(row.get("quality_score"))
+                    evidence_path = str(row.get("evidence") or "").strip()
+                    merged = dict(checks.get(check_id) or {})
+                    if isinstance(pass_value, bool):
+                        merged["pass"] = bool(pass_value)
+                    if score_value is not None:
+                        merged["score"] = score_value
+                    if evidence_path:
+                        merged["source"] = evidence_path
+                    checks[check_id] = merged
+                continue
+            errors.append(f"{match}: evidence payload must be an object or list")
     return {"files_used": files_used, "checks": checks, "errors": errors}
 
 
@@ -1697,15 +1703,15 @@ def _collect_cli_metrics(
     *,
     tracked_commands: Sequence[str],
     agent_root: Path,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     cli = dict(agent.get("cli") or {})
     command = cli.get("command") or []
     fixed_top = cli.get("fixed_top_level_commands")
     fixed_depth = dict(cli.get("fixed_subcommand_depth") or {})
-    errors: List[str] = []
+    errors: list[str] = []
 
     top_level: int | None = None
-    depth: Dict[str, int | None] = {}
+    depth: dict[str, int | None] = {}
 
     if isinstance(command, list) and command:
         top_run = _run_command([*command, "--help"], cwd=agent_root, timeout_seconds=45.0)
@@ -1752,7 +1758,7 @@ def _collect_agent_metrics(
     *,
     tracked_commands: Sequence[str],
     suite_root: Path,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     aid = str(agent.get("id") or "").strip()
     label = str(agent.get("label") or aid)
     root = _resolve(suite_root, str(agent.get("root") or "."))
@@ -1773,19 +1779,17 @@ def _collect_agent_metrics(
     mobile_roots = [str(item).strip() for item in (agent.get("mobile_roots") or [".", "apps"]) if str(item).strip()]
     required_paths = [_resolve(root, rel) for rel in (agent.get("required_paths") or [])]
     production_asset_roots = [_resolve(root, rel) for rel in (agent.get("production_asset_roots") or [])]
-    security_scan_roots_raw = [str(item).strip() for item in (agent.get("security_scan_roots") or []) if str(item).strip()]
+    security_scan_roots_raw = [
+        str(item).strip() for item in (agent.get("security_scan_roots") or []) if str(item).strip()
+    ]
     security_scan_roots = (
-        [_resolve(root, rel) for rel in security_scan_roots_raw]
-        if security_scan_roots_raw
-        else list(source_roots)
+        [_resolve(root, rel) for rel in security_scan_roots_raw] if security_scan_roots_raw else list(source_roots)
     )
     security_scan_ignore_globs = [
-        str(item).strip()
-        for item in (agent.get("security_scan_ignore_globs") or [])
-        if str(item).strip()
+        str(item).strip() for item in (agent.get("security_scan_ignore_globs") or []) if str(item).strip()
     ]
 
-    errors: List[str] = []
+    errors: list[str] = []
     if not root.exists():
         errors.append(f"agent root does not exist: {root}")
 
@@ -1828,7 +1832,7 @@ def _collect_agent_metrics(
 
     gateway_patterns = dict(DEFAULT_GATEWAY_PATTERNS)
     gateway_patterns.update(dict(agent.get("gateway_patterns") or {}))
-    compat_metrics: Dict[str, int] = {}
+    compat_metrics: dict[str, int] = {}
     for key, needle in gateway_patterns.items():
         counts = _count_text_occurrences(gateway_roots, str(needle))
         if key == "chat_completions":
@@ -1886,7 +1890,7 @@ def _collect_agent_metrics(
         cost_probe = _fallback_cost_probe(benchmark)
     token_efficiency = _compute_token_efficiency(benchmark=benchmark, cost_probe=cost_probe)
 
-    metrics: Dict[str, Any] = {}
+    metrics: dict[str, Any] = {}
     metrics["loc.total_files"] = int(code["files"])
     metrics["loc.total_loc"] = int(code["loc"])
     metrics["tests.files"] = int(tests["files"])
@@ -1934,7 +1938,9 @@ def _collect_agent_metrics(
         round((float(risky_hits["total_hits"]) * 100000.0) / float(code["loc"]), 6) if int(code["loc"]) > 0 else None
     )
     metrics["security.risky_construct_files"] = (
-        round((float(risky_hits["files_with_hits"]) * 1000.0) / float(code["files"]), 6) if int(code["files"]) > 0 else None
+        round((float(risky_hits["files_with_hits"]) * 1000.0) / float(code["files"]), 6)
+        if int(code["files"]) > 0
+        else None
     )
     metrics["security.risky_construct_hits_count"] = int(risky_hits["total_hits"])
     metrics["security.risky_construct_files_count"] = int(risky_hits["files_with_hits"])
@@ -2053,8 +2059,8 @@ def _build_metric_specs(
     gateway_pattern_keys: Sequence[str],
     category_weights: Mapping[str, Any],
     weight_overrides: Mapping[str, Any],
-) -> Dict[str, MetricSpec]:
-    specs: Dict[str, MetricSpec] = {}
+) -> dict[str, MetricSpec]:
+    specs: dict[str, MetricSpec] = {}
     dynamic_categories = {
         "performance_load",
         "resilience",
@@ -2066,7 +2072,7 @@ def _build_metric_specs(
     }
 
     def add(metric: str, category: str, preference: str, rationale: str) -> None:
-        mode = ("dynamic" if category in dynamic_categories else "quick")
+        mode = "dynamic" if category in dynamic_categories else "quick"
         specs[metric] = MetricSpec(
             metric=metric,
             category=category,
@@ -2091,8 +2097,18 @@ def _build_metric_specs(
 
     add("tests.files", "test_rigor", "higher_is_better", "Test file breadth.")
     add("tests.loc", "test_rigor", "higher_is_better", "Test implementation depth.")
-    add("tests.dataset_files", "test_rigor", "higher_is_better", "Structured evaluation dataset files counted as executable test assets.")
-    add("tests.dataset_loc", "test_rigor", "higher_is_better", "Structured evaluation dataset LOC counted as executable test assets.")
+    add(
+        "tests.dataset_files",
+        "test_rigor",
+        "higher_is_better",
+        "Structured evaluation dataset files counted as executable test assets.",
+    )
+    add(
+        "tests.dataset_loc",
+        "test_rigor",
+        "higher_is_better",
+        "Structured evaluation dataset LOC counted as executable test assets.",
+    )
     add("tests.loc_per_file", "test_rigor", "higher_is_better", "Average depth per test file.")
     add("tests.to_code_file_ratio", "test_rigor", "higher_is_better", "Test-to-code file ratio.")
     add("tests.to_code_loc_ratio", "test_rigor", "higher_is_better", "Test-to-code LOC ratio.")
@@ -2345,9 +2361,9 @@ def _build_metric_rows(
     *,
     metric_specs: Mapping[str, MetricSpec],
     agents: Sequence[Mapping[str, Any]],
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     agent_ids = [str(agent.get("id") or "").strip() for agent in agents if str(agent.get("id") or "").strip()]
-    rows: List[Dict[str, Any]] = []
+    rows: list[dict[str, Any]] = []
     for metric in sorted(metric_specs.keys()):
         spec = metric_specs[metric]
         values = {}
@@ -2359,7 +2375,7 @@ def _build_metric_rows(
         missing = [aid for aid in agent_ids if aid not in participants]
 
         status = "no_data"
-        winners: List[str] = []
+        winners: list[str] = []
         spread = None
         if len(participants) == 1:
             status = "single_agent"
@@ -2380,7 +2396,7 @@ def _build_metric_rows(
             else:
                 raise ValueError(f"unsupported preference: {spec.preference}")
 
-        normalized: Dict[str, float] = {aid: 0.0 for aid in agent_ids}
+        normalized: dict[str, float] = {aid: 0.0 for aid in agent_ids}
         if participants:
             vals = list(participants.values())
             lo = min(vals)
@@ -2396,20 +2412,16 @@ def _build_metric_rows(
                         normalized[aid] = (hi - value) / (hi - lo)
         normalized = {aid: round(val, 6) for aid, val in normalized.items()}
 
-        gap_to_best: Dict[str, float | None] = {}
+        gap_to_best: dict[str, float | None] = {}
         if participants and winners:
             if spec.preference == "higher_is_better":
                 best = max(participants.values())
                 for aid in agent_ids:
-                    gap_to_best[aid] = (
-                        round(best - participants[aid], 6) if aid in participants else None
-                    )
+                    gap_to_best[aid] = round(best - participants[aid], 6) if aid in participants else None
             else:
                 best = min(participants.values())
                 for aid in agent_ids:
-                    gap_to_best[aid] = (
-                        round(participants[aid] - best, 6) if aid in participants else None
-                    )
+                    gap_to_best[aid] = round(participants[aid] - best, 6) if aid in participants else None
         else:
             for aid in agent_ids:
                 gap_to_best[aid] = None
@@ -2435,7 +2447,7 @@ def _build_metric_rows(
     return rows
 
 
-def _build_scoreboard(rows: Sequence[Mapping[str, Any]], *, agents: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+def _build_scoreboard(rows: Sequence[Mapping[str, Any]], *, agents: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     agent_ids = [str(agent.get("id") or "").strip() for agent in agents if str(agent.get("id") or "").strip()]
     wins = {aid: 0 for aid in agent_ids}
     tie_metrics = 0
@@ -2446,10 +2458,10 @@ def _build_scoreboard(rows: Sequence[Mapping[str, Any]], *, agents: Sequence[Map
     comparable_measured_count = {aid: 0 for aid in agent_ids}
     max_weight = 0.0
 
-    category_totals: Dict[str, float] = {}
-    category_points: Dict[str, Dict[str, float]] = {aid: {} for aid in agent_ids}
-    category_measured_counts: Dict[str, Dict[str, int]] = {aid: {} for aid in agent_ids}
-    category_comparable_measured_counts: Dict[str, Dict[str, int]] = {aid: {} for aid in agent_ids}
+    category_totals: dict[str, float] = {}
+    category_points: dict[str, dict[str, float]] = {aid: {} for aid in agent_ids}
+    category_measured_counts: dict[str, dict[str, int]] = {aid: {} for aid in agent_ids}
+    category_comparable_measured_counts: dict[str, dict[str, int]] = {aid: {} for aid in agent_ids}
 
     for row in rows:
         participants = list(row.get("participants") or [])
@@ -2473,8 +2485,7 @@ def _build_scoreboard(rows: Sequence[Mapping[str, Any]], *, agents: Sequence[Map
             for aid in agent_ids:
                 weighted_points[aid] += float(normalized.get(aid) or 0.0) * weight
                 category_points[aid][category] = (
-                    float(category_points[aid].get(category) or 0.0)
-                    + float(normalized.get(aid) or 0.0) * weight
+                    float(category_points[aid].get(category) or 0.0) + float(normalized.get(aid) or 0.0) * weight
                 )
 
         for aid in agent_ids:
@@ -2488,11 +2499,13 @@ def _build_scoreboard(rows: Sequence[Mapping[str, Any]], *, agents: Sequence[Map
                     )
 
     total_metrics = len(rows)
-    ranking: List[Dict[str, Any]] = []
+    ranking: list[dict[str, Any]] = []
     for aid in agent_ids:
         composite = round((weighted_points[aid] / max_weight) * 100.0, 3) if max_weight > 0 else 0.0
         coverage = round((measured_count[aid] / total_metrics), 6) if total_metrics > 0 else 0.0
-        comparable_coverage = round((comparable_measured_count[aid] / measured_metrics), 6) if measured_metrics > 0 else 0.0
+        comparable_coverage = (
+            round((comparable_measured_count[aid] / measured_metrics), 6) if measured_metrics > 0 else 0.0
+        )
         ranking.append(
             {
                 "agent": aid,
@@ -2511,7 +2524,7 @@ def _build_scoreboard(rows: Sequence[Mapping[str, Any]], *, agents: Sequence[Map
     for idx, row in enumerate(ranking, start=1):
         row["rank"] = idx
 
-    category_scores: Dict[str, Dict[str, Any]] = {}
+    category_scores: dict[str, dict[str, Any]] = {}
     for aid in agent_ids:
         category_scores[aid] = {}
         for category, category_weight_total in category_totals.items():
@@ -2536,9 +2549,9 @@ def _build_scoreboard(rows: Sequence[Mapping[str, Any]], *, agents: Sequence[Map
     }
 
 
-def _focus_gaps(rows: Sequence[Mapping[str, Any]], *, focus_agent: str, top_n: int) -> List[Dict[str, Any]]:
+def _focus_gaps(rows: Sequence[Mapping[str, Any]], *, focus_agent: str, top_n: int) -> list[dict[str, Any]]:
     focus = str(focus_agent or "").strip()
-    gaps: List[Dict[str, Any]] = []
+    gaps: list[dict[str, Any]] = []
     for row in rows:
         participants = set(row.get("participants") or [])
         if focus not in participants:
@@ -2568,12 +2581,12 @@ def _build_competitor_pressure(
     rows: Sequence[Mapping[str, Any]],
     scoreboard: Mapping[str, Any],
     focus_agent: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     focus = str(focus_agent or "").strip()
     ranking = [dict(item) for item in (scoreboard.get("ranking") or []) if isinstance(item, dict)]
     by_agent = {str(item.get("agent") or "").strip(): item for item in ranking if str(item.get("agent") or "").strip()}
     focus_score = _safe_float(dict(by_agent.get(focus) or {}).get("composite_score")) or 0.0
-    pressure_rows: List[Dict[str, Any]] = []
+    pressure_rows: list[dict[str, Any]] = []
     for competitor, score_row in by_agent.items():
         if not competitor or competitor == focus:
             continue
@@ -2627,12 +2640,12 @@ def _build_competitor_pressure(
     }
 
 
-def load_suite_config(path: Path) -> Dict[str, Any]:
+def load_suite_config(path: Path) -> dict[str, Any]:
     data = _read_json(path)
     agents = data.get("agents")
     if not isinstance(agents, list) or not agents:
         raise ValueError("suite config requires non-empty 'agents' list")
-    normalized_agents: List[Dict[str, Any]] = []
+    normalized_agents: list[dict[str, Any]] = []
     for idx, raw in enumerate(agents, start=1):
         if not isinstance(raw, dict):
             raise ValueError(f"agents[{idx}] must be an object")
@@ -2647,10 +2660,10 @@ def load_suite_config(path: Path) -> Dict[str, Any]:
 
     tracked_cli = [str(item).strip() for item in (data.get("tracked_cli_commands") or []) if str(item).strip()]
     if not tracked_cli:
-        infer: List[str] = []
+        infer: list[str] = []
         for agent in normalized_agents:
             fixed_depth = dict((dict(agent.get("cli") or {})).get("fixed_subcommand_depth") or {})
-            for name in fixed_depth.keys():
+            for name in fixed_depth:
                 text = str(name).strip()
                 if text and text not in infer:
                     infer.append(text)
@@ -2660,7 +2673,9 @@ def load_suite_config(path: Path) -> Dict[str, Any]:
     category_weights.update(dict(data.get("category_weights") or {}))
     metric_weight_overrides = dict(data.get("metric_weight_overrides") or {})
     competitor_catalog = [item for item in (data.get("competitor_catalog") or []) if isinstance(item, dict)]
-    test_suite_contract_path = str(data.get("test_suite_contract_path") or str(DEFAULT_TEST_SUITE_CONTRACT_PATH)).strip()
+    test_suite_contract_path = str(
+        data.get("test_suite_contract_path") or str(DEFAULT_TEST_SUITE_CONTRACT_PATH)
+    ).strip()
     execution_policy = dict(DEFAULT_EXECUTION_POLICY)
     execution_policy.update(dict(data.get("execution_policy") or {}))
     head_to_head_pair = [str(item).strip() for item in (data.get("head_to_head_pair") or []) if str(item).strip()]
@@ -2694,7 +2709,7 @@ def build_suite_result(
     top_gaps: int,
     head_to_head_pair: Sequence[str] | None = None,
     previous_registry_competitors: Mapping[str, Any] | None = None,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     tracked_cli = list(suite_config.get("tracked_cli_commands") or [])
     category_weights = dict(suite_config.get("category_weights") or {})
     metric_weight_overrides = dict(suite_config.get("metric_weight_overrides") or {})
@@ -2710,7 +2725,7 @@ def build_suite_result(
         suite_root=suite_root,
     )
 
-    agent_payloads: List[Dict[str, Any]] = []
+    agent_payloads: list[dict[str, Any]] = []
     gateway_keys: set[str] = set()
     for agent in prepared_agents:
         agent_payload = _collect_agent_metrics(
@@ -2743,7 +2758,7 @@ def build_suite_result(
         focus_agent=focus_agent,
     )
 
-    result: Dict[str, Any] = {
+    result: dict[str, Any] = {
         "computed_at_utc": _now_iso(),
         "suite": {
             "id": str(suite_config.get("id") or ""),
@@ -2785,15 +2800,11 @@ def build_suite_result(
     )
     contract_scores = list((dict(result.get("test_suite_contract") or {}).get("scores") or {}).get("agents") or [])
     score_map = {
-        str(row.get("agent") or "").strip(): dict(row)
-        for row in contract_scores
-        if str(row.get("agent") or "").strip()
+        str(row.get("agent") or "").strip(): dict(row) for row in contract_scores if str(row.get("agent") or "").strip()
     }
-    benchmark_rows = list((dict(result.get("benchmark_program") or {}).get("ranking") or []))
+    benchmark_rows = list(dict(result.get("benchmark_program") or {}).get("ranking") or [])
     benchmark_map = {
-        str(row.get("agent") or "").strip(): dict(row)
-        for row in benchmark_rows
-        if str(row.get("agent") or "").strip()
+        str(row.get("agent") or "").strip(): dict(row) for row in benchmark_rows if str(row.get("agent") or "").strip()
     }
     ranking_rows = list((dict(result.get("scoreboard") or {})).get("ranking") or [])
     for row in ranking_rows:
@@ -2840,13 +2851,15 @@ def build_suite_result(
         row["quick_lane_score"] = round(float(dict(lane_scores.get("quick") or {}).get("score") or 0.0), 3)
         row["dynamic_lane_score"] = round(float(dict(lane_scores.get("dynamic") or {}).get("score") or 0.0), 3)
     result["overall_suite_scoreboard"] = {
-        "methodology": dict((dict(result.get("test_suite_contract") or {}).get("scoring_methodology") or {})),
+        "methodology": dict(dict(result.get("test_suite_contract") or {}).get("scoring_methodology") or {}),
         "ranking": sorted(
             [
                 {
                     "agent": str(row.get("agent") or ""),
                     "head_to_head_score": (
-                        round(float(row.get("head_to_head_score")), 3) if _is_number(row.get("head_to_head_score")) else None
+                        round(float(row.get("head_to_head_score")), 3)
+                        if _is_number(row.get("head_to_head_score"))
+                        else None
                     ),
                     "head_to_head_decisive_score": (
                         round(float(row.get("head_to_head_decisive_score")), 3)
@@ -2885,7 +2898,9 @@ def build_suite_result(
                 }
                 for row in ranking_rows
             ],
-            key=lambda item: int(item.get("overall_suite_rank") or 0) if int(item.get("overall_suite_rank") or 0) > 0 else 9999,
+            key=lambda item: int(item.get("overall_suite_rank") or 0)
+            if int(item.get("overall_suite_rank") or 0) > 0
+            else 9999,
         ),
     }
     return result
@@ -2908,14 +2923,12 @@ def _print_human(result: Mapping[str, Any]) -> None:
     scoring_methodology = dict(dual_scoring.get("methodology") or {})
     ranking = list(dual_scoring.get("ranking") or [])
     runtime_map = {
-        str(row.get("agent") or "").strip(): dict(row)
-        for row in runtime_ranking
-        if str(row.get("agent") or "").strip()
+        str(row.get("agent") or "").strip(): dict(row) for row in runtime_ranking if str(row.get("agent") or "").strip()
     }
     benchmark_program = dict(result.get("benchmark_program") or {})
     benchmark_ranking = list(benchmark_program.get("ranking") or [])
-    h2h = dict((dict(contract.get("scores") or {}).get("head_to_head") or {}))
-    token_efficiency = dict((dict(contract.get("scores") or {}).get("token_efficiency") or {}))
+    h2h = dict(dict(contract.get("scores") or {}).get("head_to_head") or {})
+    token_efficiency = dict(dict(contract.get("scores") or {}).get("token_efficiency") or {})
     token_h2h = dict(token_efficiency.get("head_to_head") or {})
     token_ranking = list(token_efficiency.get("overall_ranking") or [])
 
@@ -3113,18 +3126,16 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
     scoring_methodology = dict(dual_scoring.get("methodology") or {})
     ranking = list(dual_scoring.get("ranking") or [])
     runtime_map = {
-        str(row.get("agent") or "").strip(): dict(row)
-        for row in runtime_ranking
-        if str(row.get("agent") or "").strip()
+        str(row.get("agent") or "").strip(): dict(row) for row in runtime_ranking if str(row.get("agent") or "").strip()
     }
-    h2h = dict((dict(contract.get("scores") or {}).get("head_to_head") or {}))
-    token_efficiency = dict((dict(contract.get("scores") or {}).get("token_efficiency") or {}))
+    h2h = dict(dict(contract.get("scores") or {}).get("head_to_head") or {})
+    token_efficiency = dict(dict(contract.get("scores") or {}).get("token_efficiency") or {})
     token_h2h = dict(token_efficiency.get("head_to_head") or {})
     token_ranking = list(token_efficiency.get("overall_ranking") or [])
     benchmark_program = dict(result.get("benchmark_program") or {})
     benchmark_ranking = list(benchmark_program.get("ranking") or [])
     agents = list(result.get("agents") or [])
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append(f"# Full Agent Comparison Suite ({suite.get('id')})")
     lines.append("")
     lines.append(f"- Computed at: `{result.get('computed_at_utc')}`")
@@ -3158,7 +3169,9 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
         lines.append(
             "- lane_suite_scores: same formula as overall, filtered by `test_mode` (`quick`, `dynamic`, `human`)"
         )
-        lines.append("- token_efficiency: separate token-only scoring block, emitted only with token telemetry evidence")
+        lines.append(
+            "- token_efficiency: separate token-only scoring block, emitted only with token telemetry evidence"
+        )
         lines.append("")
     for row in ranking:
         aid = str(row.get("agent") or "")
@@ -3280,7 +3293,9 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
             lines.append(
                 f"- Model snapshot: ok={bool(model_snapshot.get('ok'))}, day=`{model_snapshot.get('day_utc')}`, model=`{model_value}`"
             )
-        lines.append(f"- Strict checks: {dict(agent.get('strict_checks') or {}).get('passed')} passed / {dict(agent.get('strict_checks') or {}).get('total')} total")
+        lines.append(
+            f"- Strict checks: {dict(agent.get('strict_checks') or {}).get('passed')} passed / {dict(agent.get('strict_checks') or {}).get('total')} total"
+        )
         lines.append(f"- Benchmark runs used: {dict(agent.get('benchmark') or {}).get('runs_count')}")
         if errors:
             lines.append("- Errors:")
@@ -3334,24 +3349,46 @@ def _render_markdown(result: Mapping[str, Any]) -> str:
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run a comprehensive multi-agent comparison suite.")
-    parser.add_argument("--suite-config", default=str(DEFAULT_SUITE_CONFIG), help=f"Suite config path (default: {DEFAULT_SUITE_CONFIG})")
+    parser.add_argument(
+        "--suite-config", default=str(DEFAULT_SUITE_CONFIG), help=f"Suite config path (default: {DEFAULT_SUITE_CONFIG})"
+    )
     parser.add_argument("--focus-agent", default="thomas", help="Agent id to show open-gap list for.")
     parser.add_argument("--h2h-a", default="", help="Head-to-head agent A id (explicit 1v1 mode).")
     parser.add_argument("--h2h-b", default="", help="Head-to-head agent B id (explicit 1v1 mode).")
     parser.add_argument("--top-gaps", type=int, default=25, help="Maximum focus gaps to include.")
     parser.add_argument("--json", action="store_true", help="Print JSON result.")
     parser.add_argument("--write", action="store_true", help=f"Write JSON artifact (default: {DEFAULT_WRITE_PATH}).")
-    parser.add_argument("--write-path", default=str(DEFAULT_WRITE_PATH), help=f"JSON output path for --write (default: {DEFAULT_WRITE_PATH})")
-    parser.add_argument("--write-md", action="store_true", help=f"Write markdown report (default: {DEFAULT_WRITE_MD_PATH}).")
-    parser.add_argument("--write-md-path", default=str(DEFAULT_WRITE_MD_PATH), help=f"Markdown output path for --write-md (default: {DEFAULT_WRITE_MD_PATH})")
+    parser.add_argument(
+        "--write-path",
+        default=str(DEFAULT_WRITE_PATH),
+        help=f"JSON output path for --write (default: {DEFAULT_WRITE_PATH})",
+    )
+    parser.add_argument(
+        "--write-md", action="store_true", help=f"Write markdown report (default: {DEFAULT_WRITE_MD_PATH})."
+    )
+    parser.add_argument(
+        "--write-md-path",
+        default=str(DEFAULT_WRITE_MD_PATH),
+        help=f"Markdown output path for --write-md (default: {DEFAULT_WRITE_MD_PATH})",
+    )
     parser.add_argument(
         "--test-suite-contract-path",
         default="",
         help=f"Override full coverage contract path (default from config or {DEFAULT_TEST_SUITE_CONTRACT_PATH}).",
     )
-    parser.add_argument("--registry-path", default=str(DEFAULT_REGISTRY_PATH), help=f"Competitor registry JSON path (default: {DEFAULT_REGISTRY_PATH})")
-    parser.add_argument("--registry-md-path", default=str(DEFAULT_REGISTRY_MD_PATH), help=f"Competitor registry markdown path (default: {DEFAULT_REGISTRY_MD_PATH})")
-    parser.add_argument("--no-registry-write", action="store_true", help="Disable competitor registry updates for this run.")
+    parser.add_argument(
+        "--registry-path",
+        default=str(DEFAULT_REGISTRY_PATH),
+        help=f"Competitor registry JSON path (default: {DEFAULT_REGISTRY_PATH})",
+    )
+    parser.add_argument(
+        "--registry-md-path",
+        default=str(DEFAULT_REGISTRY_MD_PATH),
+        help=f"Competitor registry markdown path (default: {DEFAULT_REGISTRY_MD_PATH})",
+    )
+    parser.add_argument(
+        "--no-registry-write", action="store_true", help="Disable competitor registry updates for this run."
+    )
     return parser.parse_args(argv)
 
 
@@ -3367,7 +3404,9 @@ def run(argv: Sequence[str] | None = None) -> int:
     if str(args.h2h_a or "").strip() and str(args.h2h_b or "").strip():
         suite_config = dict(suite_config)
         suite_config["head_to_head_pair"] = [str(args.h2h_a).strip(), str(args.h2h_b).strip()]
-    head_to_head_pair = [str(item).strip() for item in (suite_config.get("head_to_head_pair") or []) if str(item).strip()]
+    head_to_head_pair = [
+        str(item).strip() for item in (suite_config.get("head_to_head_pair") or []) if str(item).strip()
+    ]
     if len(head_to_head_pair) != 2:
         head_to_head_pair = []
 
@@ -3394,14 +3433,12 @@ def run(argv: Sequence[str] | None = None) -> int:
         head_to_head_pair=head_to_head_pair,
         previous_registry_competitors=previous_competitors,
     )
-    required_model_failures: List[str] = []
+    required_model_failures: list[str] = []
     for agent in list(result.get("agents") or []):
         aid = str(agent.get("id") or "").strip()
         snapshot = dict(agent.get("model_snapshot") or {})
         if bool(snapshot.get("required")) and not bool(snapshot.get("ok")):
-            required_model_failures.append(
-                f"{aid}: {snapshot.get('error') or 'required model snapshot missing'}"
-            )
+            required_model_failures.append(f"{aid}: {snapshot.get('error') or 'required model snapshot missing'}")
     result["validation"] = {"required_model_snapshot_failures": required_model_failures}
 
     if bool(args.write):

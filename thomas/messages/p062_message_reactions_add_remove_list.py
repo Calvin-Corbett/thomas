@@ -29,8 +29,9 @@ import os
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping, MutableMapping, Sequence
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Mapping, MutableMapping, Optional, Protocol, Sequence, Tuple
+from typing import Any, Protocol
 
 
 def _resolve_error_base() -> type[Exception]:
@@ -48,7 +49,7 @@ def _resolve_error_base() -> type[Exception]:
             base = getattr(module, attr)
             if isinstance(base, type) and issubclass(base, Exception):
                 return base
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
     return Exception
 
@@ -60,26 +61,26 @@ class MessageReactionsError(_ThomasErrorBase):
     """Deterministic error for message reaction operations."""
 
     code: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
-    def __init__(self, code: str, message: str, *, details: Optional[Dict[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: dict[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = details or {}
 
     @classmethod
-    def invalid_input(cls, message: str, *, details: Optional[Dict[str, Any]] = None) -> "MessageReactionsError":
+    def invalid_input(cls, message: str, *, details: dict[str, Any] | None = None) -> MessageReactionsError:
         return cls("invalid_input", message, details=details)
 
     @classmethod
-    def missing_config(cls, message: str, *, details: Optional[Dict[str, Any]] = None) -> "MessageReactionsError":
+    def missing_config(cls, message: str, *, details: dict[str, Any] | None = None) -> MessageReactionsError:
         return cls("missing_config", message, details=details)
 
     @classmethod
-    def external_failure(cls, message: str, *, details: Optional[Dict[str, Any]] = None) -> "MessageReactionsError":
+    def external_failure(cls, message: str, *, details: dict[str, Any] | None = None) -> MessageReactionsError:
         return cls("external_failure", message, details=details)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": False,
             "error": {"code": self.code, "message": str(self), "details": self.details},
@@ -98,7 +99,7 @@ def _non_empty_str(value: Any, field_name: str) -> str:
     return s
 
 
-def _optional_str(value: Any, field_name: str) -> Optional[str]:
+def _optional_str(value: Any, field_name: str) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -125,11 +126,11 @@ def _normalize_emoji(raw: Any) -> str:
 class MessageReactionAddInput:
     message_id: str
     emoji: str
-    channel_id: Optional[str] = None
-    user_id: Optional[str] = None
+    channel_id: str | None = None
+    user_id: str | None = None
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "MessageReactionAddInput":
+    def from_mapping(cls, data: Mapping[str, Any]) -> MessageReactionAddInput:
         return cls(
             message_id=_non_empty_str(data.get("message_id"), "message_id"),
             emoji=_normalize_emoji(data.get("emoji")),
@@ -142,11 +143,11 @@ class MessageReactionAddInput:
 class MessageReactionRemoveInput:
     message_id: str
     emoji: str
-    channel_id: Optional[str] = None
-    user_id: Optional[str] = None
+    channel_id: str | None = None
+    user_id: str | None = None
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "MessageReactionRemoveInput":
+    def from_mapping(cls, data: Mapping[str, Any]) -> MessageReactionRemoveInput:
         return cls(
             message_id=_non_empty_str(data.get("message_id"), "message_id"),
             emoji=_normalize_emoji(data.get("emoji")),
@@ -158,10 +159,10 @@ class MessageReactionRemoveInput:
 @dataclass(frozen=True, slots=True)
 class MessageReactionListInput:
     message_id: str
-    channel_id: Optional[str] = None
+    channel_id: str | None = None
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "MessageReactionListInput":
+    def from_mapping(cls, data: Mapping[str, Any]) -> MessageReactionListInput:
         return cls(
             message_id=_non_empty_str(data.get("message_id"), "message_id"),
             channel_id=_optional_str(data.get("channel_id"), "channel_id"),
@@ -172,9 +173,9 @@ class MessageReactionListInput:
 class ReactionSummary:
     emoji: str
     count: int
-    user_ids: Tuple[str, ...] = field(default_factory=tuple)
+    user_ids: tuple[str, ...] = field(default_factory=tuple)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"emoji": self.emoji, "count": self.count, "user_ids": list(self.user_ids)}
 
 
@@ -183,11 +184,11 @@ class ReactionMutationResult:
     ok: bool
     action: str
     message_id: str
-    channel_id: Optional[str]
+    channel_id: str | None
     emoji: str
     applied: bool
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "action": self.action,
@@ -203,10 +204,10 @@ class ReactionListResult:
     ok: bool
     action: str
     message_id: str
-    channel_id: Optional[str]
-    reactions: Tuple[ReactionSummary, ...]
+    channel_id: str | None
+    reactions: tuple[ReactionSummary, ...]
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "action": self.action,
@@ -221,13 +222,13 @@ class ReactionBackend(Protocol):
 
     name: str
 
-    def add_reaction(self, *, message_id: str, emoji: str, channel_id: Optional[str], user_id: Optional[str]) -> bool:
+    def add_reaction(self, *, message_id: str, emoji: str, channel_id: str | None, user_id: str | None) -> bool:
         """Return True if a state change was applied, False if no-op."""
 
-    def remove_reaction(self, *, message_id: str, emoji: str, channel_id: Optional[str], user_id: Optional[str]) -> bool:
+    def remove_reaction(self, *, message_id: str, emoji: str, channel_id: str | None, user_id: str | None) -> bool:
         """Return True if a state change was applied, False if no-op."""
 
-    def list_reactions(self, *, message_id: str, channel_id: Optional[str]) -> Sequence[ReactionSummary]:
+    def list_reactions(self, *, message_id: str, channel_id: str | None) -> Sequence[ReactionSummary]:
         """Return a list of reaction summaries."""
 
 
@@ -240,14 +241,14 @@ class InMemoryReactionBackend:
 
     name = "memory"
 
-    def __init__(self, store: Optional[MutableMapping[str, MutableMapping[str, set[str]]]] = None):
+    def __init__(self, store: MutableMapping[str, MutableMapping[str, set[str]]] | None = None):
         self._store = store if store is not None else _DEFAULT_MEMORY_STORE
 
     @staticmethod
-    def _key(message_id: str, channel_id: Optional[str]) -> str:
+    def _key(message_id: str, channel_id: str | None) -> str:
         return f"{channel_id or ''}:{message_id}"
 
-    def add_reaction(self, *, message_id: str, emoji: str, channel_id: Optional[str], user_id: Optional[str]) -> bool:
+    def add_reaction(self, *, message_id: str, emoji: str, channel_id: str | None, user_id: str | None) -> bool:
         key = self._key(message_id, channel_id)
         emoji_map = self._store.setdefault(key, {})
         users = emoji_map.setdefault(emoji, set())
@@ -257,7 +258,7 @@ class InMemoryReactionBackend:
         users.add(uid)
         return True
 
-    def remove_reaction(self, *, message_id: str, emoji: str, channel_id: Optional[str], user_id: Optional[str]) -> bool:
+    def remove_reaction(self, *, message_id: str, emoji: str, channel_id: str | None, user_id: str | None) -> bool:
         key = self._key(message_id, channel_id)
         emoji_map = self._store.get(key)
         if not emoji_map:
@@ -275,10 +276,10 @@ class InMemoryReactionBackend:
             self._store.pop(key, None)
         return True
 
-    def list_reactions(self, *, message_id: str, channel_id: Optional[str]) -> Sequence[ReactionSummary]:
+    def list_reactions(self, *, message_id: str, channel_id: str | None) -> Sequence[ReactionSummary]:
         key = self._key(message_id, channel_id)
         emoji_map = self._store.get(key, {})
-        out: List[ReactionSummary] = []
+        out: list[ReactionSummary] = []
         for emoji in sorted(emoji_map.keys()):
             user_ids = tuple(sorted(emoji_map[emoji]))
             out.append(ReactionSummary(emoji=emoji, count=len(user_ids), user_ids=user_ids))
@@ -292,8 +293,8 @@ class InMemoryReactionBackend:
 @dataclass(frozen=True, slots=True)
 class MessageReactionsConfig:
     backend: str
-    api_base_url: Optional[str] = None
-    api_token: Optional[str] = None
+    api_base_url: str | None = None
+    api_token: str | None = None
     timeout_seconds: float = 10.0
 
 
@@ -310,15 +311,15 @@ class HttpReactionBackend:
 
     name = "http"
 
-    def __init__(self, *, base_url: str, token: Optional[str], timeout_seconds: float = 10.0):
+    def __init__(self, *, base_url: str, token: str | None, timeout_seconds: float = 10.0):
         self._base_url = base_url.rstrip("/")
         self._token = token
         self._timeout = timeout_seconds
 
-    def _request(self, method: str, path: str, *, json_body: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    def _request(self, method: str, path: str, *, json_body: dict[str, Any] | None = None) -> dict[str, Any]:
         url = f"{self._base_url}{path}"
         headers = {"Accept": "application/json"}
-        data_bytes: Optional[bytes] = None
+        data_bytes: bytes | None = None
         if json_body is not None:
             data_bytes = json.dumps(json_body, separators=(",", ":"), sort_keys=True).encode("utf-8")
             headers["Content-Type"] = "application/json"
@@ -336,7 +337,7 @@ class HttpReactionBackend:
             body = ""
             try:
                 body = e.read().decode("utf-8")
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 pass
             raise MessageReactionsError.external_failure(
                 "HTTP backend returned an error",
@@ -358,7 +359,7 @@ class HttpReactionBackend:
                 details={"backend": self.name, "error": str(e)},
             ) from e
 
-    def add_reaction(self, *, message_id: str, emoji: str, channel_id: Optional[str], user_id: Optional[str]) -> bool:
+    def add_reaction(self, *, message_id: str, emoji: str, channel_id: str | None, user_id: str | None) -> bool:
         resp = self._request(
             "POST",
             "/messages/reactions/add",
@@ -367,7 +368,7 @@ class HttpReactionBackend:
         applied = resp.get("applied")
         return bool(applied) if applied is not None else True
 
-    def remove_reaction(self, *, message_id: str, emoji: str, channel_id: Optional[str], user_id: Optional[str]) -> bool:
+    def remove_reaction(self, *, message_id: str, emoji: str, channel_id: str | None, user_id: str | None) -> bool:
         resp = self._request(
             "POST",
             "/messages/reactions/remove",
@@ -376,7 +377,7 @@ class HttpReactionBackend:
         applied = resp.get("applied")
         return bool(applied) if applied is not None else True
 
-    def list_reactions(self, *, message_id: str, channel_id: Optional[str]) -> Sequence[ReactionSummary]:
+    def list_reactions(self, *, message_id: str, channel_id: str | None) -> Sequence[ReactionSummary]:
         query = urllib.parse.urlencode({"message_id": message_id, "channel_id": channel_id or ""})
         resp = self._request("GET", f"/messages/reactions/list?{query}")
         reactions = resp.get("reactions")
@@ -387,7 +388,7 @@ class HttpReactionBackend:
                 "HTTP backend returned unexpected reactions payload",
                 details={"backend": self.name, "value_type": type(reactions).__name__},
             )
-        out: List[ReactionSummary] = []
+        out: list[ReactionSummary] = []
         for item in reactions:
             if not isinstance(item, dict):
                 continue
@@ -458,7 +459,7 @@ def _env_fallback(cfg: MessageReactionsConfig) -> MessageReactionsConfig:
     )
 
 
-def build_backend(config: Optional[Any] = None) -> ReactionBackend:
+def build_backend(config: Any | None = None) -> ReactionBackend:
     """Create a backend from explicit config or environment."""
     if config is None:
         backend = os.environ.get("THOMAS_MESSAGE_REACTIONS_BACKEND")
@@ -497,8 +498,8 @@ def build_backend(config: Optional[Any] = None) -> ReactionBackend:
 def add_reaction(
     request: MessageReactionAddInput,
     *,
-    backend: Optional[ReactionBackend] = None,
-    config: Optional[MessageReactionsConfig] = None,
+    backend: ReactionBackend | None = None,
+    config: MessageReactionsConfig | None = None,
 ) -> ReactionMutationResult:
     be = backend or build_backend(config)
     try:
@@ -510,7 +511,7 @@ def add_reaction(
         )
     except MessageReactionsError:
         raise
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise MessageReactionsError.external_failure(
             "Backend failed while adding reaction",
             details={"backend": getattr(be, "name", type(be).__name__), "error": str(e)},
@@ -528,8 +529,8 @@ def add_reaction(
 def remove_reaction(
     request: MessageReactionRemoveInput,
     *,
-    backend: Optional[ReactionBackend] = None,
-    config: Optional[MessageReactionsConfig] = None,
+    backend: ReactionBackend | None = None,
+    config: MessageReactionsConfig | None = None,
 ) -> ReactionMutationResult:
     be = backend or build_backend(config)
     try:
@@ -541,7 +542,7 @@ def remove_reaction(
         )
     except MessageReactionsError:
         raise
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise MessageReactionsError.external_failure(
             "Backend failed while removing reaction",
             details={"backend": getattr(be, "name", type(be).__name__), "error": str(e)},
@@ -559,15 +560,15 @@ def remove_reaction(
 def list_reactions(
     request: MessageReactionListInput,
     *,
-    backend: Optional[ReactionBackend] = None,
-    config: Optional[MessageReactionsConfig] = None,
+    backend: ReactionBackend | None = None,
+    config: MessageReactionsConfig | None = None,
 ) -> ReactionListResult:
     be = backend or build_backend(config)
     try:
         reactions = be.list_reactions(message_id=request.message_id, channel_id=request.channel_id)
     except MessageReactionsError:
         raise
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise MessageReactionsError.external_failure(
             "Backend failed while listing reactions",
             details={"backend": getattr(be, "name", type(be).__name__), "error": str(e)},
@@ -585,10 +586,10 @@ def list_reactions(
 def run(
     payload: Mapping[str, Any],
     *,
-    backend: Optional[ReactionBackend] = None,
-    config: Optional[MessageReactionsConfig] = None,
+    backend: ReactionBackend | None = None,
+    config: MessageReactionsConfig | None = None,
     **_: Any,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Generic dispatcher for add/remove/list.
 
     Payload fields:
@@ -598,7 +599,13 @@ def run(
       - channel_id (optional)
       - user_id (optional)
     """
-    op_raw = payload.get("operation") or payload.get("action") or payload.get("op") or payload.get("verb") or payload.get("type")
+    op_raw = (
+        payload.get("operation")
+        or payload.get("action")
+        or payload.get("op")
+        or payload.get("verb")
+        or payload.get("type")
+    )
     if not isinstance(op_raw, str) or not op_raw.strip():
         raise MessageReactionsError.invalid_input(
             "operation is required",

@@ -10,7 +10,7 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 
@@ -43,7 +43,7 @@ def is_pid_running(pid: int) -> bool:
     try:
         os.kill(int(pid), 0)
         return True
-    except Exception:
+    except ImportError:
         return False
 
 
@@ -61,7 +61,7 @@ def kill_pid(pid: int) -> bool:
     try:
         os.kill(int(pid), signal.SIGTERM)
         return True
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
         return False
 
 
@@ -73,7 +73,7 @@ def port_in_use(host: str, port: int) -> bool:
         return False
 
 
-def find_free_port(host: str, preferred: int, max_offset: int = 25) -> Optional[int]:
+def find_free_port(host: str, preferred: int, max_offset: int = 25) -> int | None:
     for candidate in range(int(preferred), int(preferred) + int(max_offset) + 1):
         if not port_in_use(host, candidate):
             return candidate
@@ -109,19 +109,19 @@ def http_get_json(url: str, timeout_s: float = 2.0, token: str = "") -> dict[str
         payload: Any
         try:
             payload = json.loads(body)
-        except Exception:
+        except ImportError:
             payload = {"raw": body[:2000]}
         return {"ok": True, "status": status, "payload": payload}
     except urllib.error.HTTPError as e:
         body = ""
         try:
             body = e.read().decode("utf-8", errors="replace")
-        except Exception:
+        except ImportError:
             body = ""
         payload: Any
         try:
             payload = json.loads(body) if body else {}
-        except Exception:
+        except json.JSONDecodeError:
             payload = {"raw": body[:2000]}
         return {"ok": False, "status": int(getattr(e, "code", 0) or 0), "error": str(e), "payload": payload}
     except Exception as e:
@@ -159,8 +159,8 @@ def clear_gateway_state(config: AppConfig) -> None:
 
 def active_gateway_target(
     config: AppConfig,
-    host: Optional[str],
-    port: Optional[int],
+    host: str | None,
+    port: int | None,
 ) -> tuple[str, int, dict[str, Any]]:
     state = load_gateway_state(config)
     state_host = str(state.get("host") or "").strip()

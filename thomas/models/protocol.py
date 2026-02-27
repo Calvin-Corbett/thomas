@@ -7,7 +7,7 @@ import ipaddress
 import json
 import logging
 from dataclasses import dataclass, replace
-from typing import Any, Dict, Optional
+from typing import Any
 from urllib.parse import urlparse
 
 from thomas.core.config import ModelConfig
@@ -38,8 +38,7 @@ _TOOL_SMOKE_MESSAGES = [
     {
         "role": "system",
         "content": (
-            "You are running a tool-calling smoke test. "
-            f"You must call the '{_TOOL_SMOKE_NAME}' tool exactly once."
+            "You are running a tool-calling smoke test. " f"You must call the '{_TOOL_SMOKE_NAME}' tool exactly once."
         ),
     },
     {
@@ -55,10 +54,10 @@ class ToolSmokeResult:
 
     ok: bool
     status: str  # ok | skipped | no_tool_call | invalid_tool | invalid_args | error
-    error: Optional[str] = None
+    error: str | None = None
     tool_name: str = ""
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": bool(self.ok),
             "status": str(self.status),
@@ -77,7 +76,7 @@ class ModelValidationReport:
     tool_smoke: ToolSmokeResult
     ok: bool
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "profile": str(self.profile),
             "provider": str(self.provider),
@@ -104,7 +103,7 @@ def is_loopback_base_url(base_url: str) -> bool:
     """Return True when base_url points to localhost/loopback."""
     try:
         u = urlparse(str(base_url or "").strip())
-    except Exception:
+    except (ValueError, TypeError):
         return False
     return _is_loopback_host(u.hostname or "")
 
@@ -155,7 +154,7 @@ async def run_tool_smoke_async(
     finally:
         try:
             await llm.close()
-        except Exception:
+        except (ConnectionError, TimeoutError):
             log.debug("Failed to close LLM client after tool smoke for %s", cfg.name, exc_info=True)
 
     calls = result.get("tool_calls") or []

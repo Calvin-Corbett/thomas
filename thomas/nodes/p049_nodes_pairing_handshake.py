@@ -20,10 +20,10 @@ import os
 import re
 import time
 import uuid
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, Literal, Optional, TypedDict
-
+from typing import Any, Literal, TypedDict
 
 DEFAULT_PENDING_TTL_MS: int = 5 * 60 * 1000  # 5 minutes
 DEFAULT_LOCK_TIMEOUT_MS: int = 1500
@@ -42,7 +42,7 @@ class NodesPairingHandshakeError(RuntimeError):
         self.code = code
         self.message = message
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"ok": False, "error": {"code": self.code, "message": self.message}}
 
 
@@ -58,7 +58,7 @@ class NodesPairingHandshakeInput:
     """
 
     node_id: str
-    display_name: Optional[str] = None
+    display_name: str | None = None
     silent: bool = False
 
 
@@ -73,11 +73,11 @@ class NodesPairingHandshakeOutput:
     ok: Literal[True]
     request_id: str
     node_id: str
-    display_name: Optional[str]
+    display_name: str | None
     expires_at_ms: int
     created: bool
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         payload = asdict(self)
         payload.pop("ok", None)
         return {"ok": True, "payload": payload}
@@ -86,7 +86,7 @@ class NodesPairingHandshakeOutput:
 class _PendingRecord(TypedDict):
     request_id: str
     node_id: str
-    display_name: Optional[str]
+    display_name: str | None
     created_at_ms: int
     expires_at_ms: int
     silent: bool
@@ -100,7 +100,7 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
-def _maybe_resolve_state_dir_from_parity_compat() -> Optional[Path]:
+def _maybe_resolve_state_dir_from_parity_compat() -> Path | None:
     """
     Best-effort integration point:
 
@@ -109,7 +109,7 @@ def _maybe_resolve_state_dir_from_parity_compat() -> Optional[Path]:
     """
     try:
         from thomas.cli import parity_compat as _pc  # type: ignore
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return None
 
     candidates = (
@@ -130,14 +130,14 @@ def _maybe_resolve_state_dir_from_parity_compat() -> Optional[Path]:
         except TypeError:
             # helper might require args
             continue
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
         if isinstance(value, (str, os.PathLike)):
             return Path(value)
     return None
 
 
-def resolve_state_dir(state_dir: Optional[Path] = None) -> Path:
+def resolve_state_dir(state_dir: Path | None = None) -> Path:
     """
     Resolve the Thomas state directory.
 
@@ -169,11 +169,11 @@ def _ensure_dir(path: Path) -> None:
         )
     try:
         path.mkdir(parents=True, exist_ok=True)
-    except Exception as e:
+    except (OSError, ConnectionError) as e:
         raise NodesPairingHandshakeError("external_failure", f"Could not create directory {path}: {e}") from e
 
 
-def _load_json_dict(path: Path) -> Dict[str, Any]:
+def _load_json_dict(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {}
     try:
@@ -181,7 +181,7 @@ def _load_json_dict(path: Path) -> Dict[str, Any]:
             data = json.load(f)
     except json.JSONDecodeError as e:
         raise NodesPairingHandshakeError("storage_error", f"Invalid JSON in {path}") from e
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesPairingHandshakeError("external_failure", f"Could not read {path}: {e}") from e
 
     if data is None:
@@ -198,14 +198,14 @@ def _atomic_write_json(path: Path, data: Any) -> None:
             json.dump(data, f, indent=2, sort_keys=True)
             f.write("\n")
         tmp.replace(path)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesPairingHandshakeError("external_failure", f"Could not write {path}: {e}") from e
 
 
 class _Lock:
     def __init__(self, lock_path: Path) -> None:
         self.lock_path = lock_path
-        self._fd: Optional[int] = None
+        self._fd: int | None = None
 
     def acquire(self, *, timeout_ms: int, stale_ms: int, now_ms: Callable[[], int]) -> None:
         start = now_ms()
@@ -215,18 +215,18 @@ class _Lock:
             try:
                 # Atomic create works cross-platform; fails if file already exists.
                 self._fd = os.open(str(self.lock_path), os.O_CREAT | os.O_EXCL | os.O_WRONLY)
-                os.write(self._fd, f"pid={os.getpid()} created_at_ms={now_ms()}\n".encode("utf-8"))
+                os.write(self._fd, f"pid={os.getpid()} created_at_ms={now_ms()}\n".encode())
                 return
             except FileExistsError:
                 # If the lock is stale, best-effort break it.
                 try:
                     mtime_ms = int(self.lock_path.stat().st_mtime * 1000)
-                except Exception:
+                except (ConnectionError, TimeoutError, RuntimeError):
                     mtime_ms = 0
                 if mtime_ms and (now_ms() - mtime_ms) > stale_ms:
                     try:
                         self.lock_path.unlink(missing_ok=True)  # py3.8+: missing_ok; ok in 3.11
-                    except Exception:
+                    except (OSError, ConnectionError):
                         # If we cannot remove it, fall through to timeout handling.
                         pass
                 if (now_ms() - start) >= timeout_ms:
@@ -235,8 +235,10 @@ class _Lock:
                         f"Pending store is locked: {self.lock_path}",
                     )
                 time.sleep(0.02)
-            except Exception as e:
-                raise NodesPairingHandshakeError("external_failure", f"Could not acquire lock {self.lock_path}: {e}") from e
+            except (OSError, ConnectionError) as e:
+                raise NodesPairingHandshakeError(
+                    "external_failure", f"Could not acquire lock {self.lock_path}: {e}"
+                ) from e
 
     def release(self) -> None:
         try:
@@ -247,13 +249,13 @@ class _Lock:
                     self._fd = None
             try:
                 self.lock_path.unlink(missing_ok=True)
-            except Exception:
+            except (OSError, ConnectionError):
                 # Best effort: don't crash release.
                 pass
-        except Exception:
+        except (OSError, ConnectionError):
             pass
 
-    def __enter__(self) -> "_Lock":
+    def __enter__(self) -> _Lock:
         return self
 
     def __exit__(self, exc_type: Any, exc: Any, tb: Any) -> None:
@@ -268,7 +270,7 @@ def _nodes_store_paths(state_dir: Path) -> tuple[Path, Path, Path]:
     return pending_path, lock_path, paired_path
 
 
-def _validate_input(data: NodesPairingHandshakeInput) -> tuple[str, Optional[str], bool]:
+def _validate_input(data: NodesPairingHandshakeInput) -> tuple[str, str | None, bool]:
     node_id = data.node_id
     if not isinstance(node_id, str):
         node_id = str(node_id)
@@ -299,7 +301,7 @@ def _validate_input(data: NodesPairingHandshakeInput) -> tuple[str, Optional[str
 def nodes_pairing_handshake(
     data: NodesPairingHandshakeInput,
     *,
-    state_dir: Optional[Path] = None,
+    state_dir: Path | None = None,
     now_ms: Callable[[], int] = _now_ms,
     ttl_ms: int = DEFAULT_PENDING_TTL_MS,
     lock_timeout_ms: int = DEFAULT_LOCK_TIMEOUT_MS,
@@ -332,7 +334,7 @@ def nodes_pairing_handshake(
         lk.acquire(timeout_ms=lock_timeout_ms, stale_ms=lock_stale_ms, now_ms=now_ms)
 
         pending_raw = _load_json_dict(pending_path)
-        pending: Dict[str, _PendingRecord] = {}
+        pending: dict[str, _PendingRecord] = {}
 
         # Normalize records and drop obviously invalid ones.
         for req_id, rec in pending_raw.items():
@@ -342,7 +344,7 @@ def nodes_pairing_handshake(
                 continue
             try:
                 exp = int(rec.get("expires_at_ms", 0))
-            except Exception:
+            except (ConnectionError, TimeoutError, RuntimeError):
                 exp = 0
             if exp and exp <= now:
                 continue
@@ -350,7 +352,9 @@ def nodes_pairing_handshake(
             pending[req_id] = {
                 "request_id": str(rec.get("request_id") or req_id),
                 "node_id": str(rec.get("node_id") or ""),
-                "display_name": rec.get("display_name") if isinstance(rec.get("display_name"), (str, type(None))) else None,
+                "display_name": rec.get("display_name")
+                if isinstance(rec.get("display_name"), (str, type(None)))
+                else None,
                 "created_at_ms": int(rec.get("created_at_ms") or now),
                 "expires_at_ms": int(exp or (now + ttl_ms)),
                 "silent": bool(rec.get("silent", False)),
@@ -414,7 +418,7 @@ def nodes_pairing_handshake(
 # JSON schema (machine readable contracts)
 # ---------------------------------------------------------------------------
 
-INPUT_JSON_SCHEMA: Dict[str, Any] = {
+INPUT_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["node_id"],
     "properties": {
@@ -425,7 +429,7 @@ INPUT_JSON_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
-OUTPUT_JSON_SCHEMA: Dict[str, Any] = {
+OUTPUT_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["ok"],
     "properties": {
@@ -437,7 +441,7 @@ OUTPUT_JSON_SCHEMA: Dict[str, Any] = {
 }
 
 
-def run(payload: Dict[str, Any], *, state_dir: Optional[Path] = None) -> Dict[str, Any]:
+def run(payload: dict[str, Any], *, state_dir: Path | None = None) -> dict[str, Any]:
     """
     Execute the handshake from a plain dict payload.
 
@@ -461,6 +465,7 @@ def run(payload: Dict[str, Any], *, state_dir: Optional[Path] = None) -> Dict[st
 # Aiohttp integration point (optional)
 # ---------------------------------------------------------------------------
 
+
 async def handle(request: Any) -> Any:
     """
     Aiohttp handler for the pairing handshake.
@@ -473,12 +478,12 @@ async def handle(request: Any) -> Any:
     """
     try:
         from aiohttp import web  # type: ignore
-    except Exception as e:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
         raise RuntimeError("aiohttp is required to use this route") from e
 
     try:
         body = await request.json()
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return web.json_response(
             {"ok": False, "error": {"code": "invalid_input", "message": "Request body must be JSON"}},
             status=400,
@@ -502,7 +507,7 @@ async def handle(request: Any) -> Any:
     except NodesPairingHandshakeError as e:
         status = 400 if e.code in {"invalid_input", "missing_config"} else 500
         return web.json_response(e.to_dict(), status=status)
-    except Exception as e:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
         return web.json_response(
             {"ok": False, "error": {"code": "external_failure", "message": str(e)}},
             status=500,

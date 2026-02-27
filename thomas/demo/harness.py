@@ -1,28 +1,28 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import hashlib
 import json
 import random
-import csv
 from collections import defaultdict
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 from statistics import mean
-from typing import Any, Callable, Dict, Iterable, List, Mapping, MutableMapping, Optional, Sequence, Set, Tuple
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TASK_PACK = ROOT / "demo" / "task_pack.default.json"
 DEFAULT_RUNS_DIR = ROOT / "demo" / "runs"
 DEFAULT_COMPETITORS: Sequence[str] = ("thomas", "openclaw")
-DEFAULT_WEIGHTS: Dict[str, float] = {
+DEFAULT_WEIGHTS: dict[str, float] = {
     "success_rate": 0.40,
     "speed": 0.20,
     "follow_up": 0.20,
     "quality": 0.20,
 }
-DEFAULT_QUALITY_SCALE: Dict[str, int] = {"min": 1, "max": 5}
+DEFAULT_QUALITY_SCALE: dict[str, int] = {"min": 1, "max": 5}
 
 
 def _read_json(path: Path) -> Any:
@@ -36,7 +36,7 @@ def _read_json(path: Path) -> Any:
         raise ValueError(f"Invalid JSON in {path}: {exc}") from exc
 
 
-def load_task_pack(path: Path) -> Dict[str, Any]:
+def load_task_pack(path: Path) -> dict[str, Any]:
     data = _read_json(path)
     if not isinstance(data, dict):
         raise ValueError("Task pack must be a JSON object.")
@@ -46,7 +46,7 @@ def load_task_pack(path: Path) -> Dict[str, Any]:
         raise ValueError("Task pack must include a non-empty 'tasks' list.")
 
     task_ids: set[str] = set()
-    normalized_tasks: List[Dict[str, Any]] = []
+    normalized_tasks: list[dict[str, Any]] = []
     for idx, task in enumerate(tasks, start=1):
         if not isinstance(task, dict):
             raise ValueError(f"Task #{idx} must be an object.")
@@ -123,12 +123,12 @@ def build_execution_plan(
     task_pack: Mapping[str, Any],
     competitors: Sequence[str],
     randomize: bool = False,
-    seed: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+    seed: int | None = None,
+) -> list[dict[str, Any]]:
     tasks = [str(task.get("id") or "").strip() for task in (task_pack.get("tasks") or [])]
     tasks = [task_id for task_id in tasks if task_id]
     competitor_list = [str(c).strip() for c in competitors if str(c).strip()]
-    steps: List[Dict[str, Any]] = []
+    steps: list[dict[str, Any]] = []
     rng = random.Random(seed if seed is not None else 0)
 
     task_order = list(tasks)
@@ -152,11 +152,11 @@ def build_execution_plan(
     return steps
 
 
-def build_results_template(task_pack: Mapping[str, Any], competitors: Sequence[str]) -> List[Dict[str, Any]]:
+def build_results_template(task_pack: Mapping[str, Any], competitors: Sequence[str]) -> list[dict[str, Any]]:
     tasks = list(task_pack.get("tasks") or [])
     scale = dict(task_pack.get("quality_scale") or DEFAULT_QUALITY_SCALE)
     min_quality = int(scale["min"])
-    template: List[Dict[str, Any]] = []
+    template: list[dict[str, Any]] = []
     for task in tasks:
         task_id = str(task.get("id") or "")
         for competitor in competitors:
@@ -184,13 +184,13 @@ def validate_records(
     require_evidence: bool = False,
 ) -> None:
     tasks = list(task_pack.get("tasks") or [])
-    task_ids: Set[str] = {str(task.get("id") or "").strip() for task in tasks}
-    competitor_ids: Set[str] = {str(c).strip() for c in competitors if str(c).strip()}
+    task_ids: set[str] = {str(task.get("id") or "").strip() for task in tasks}
+    competitor_ids: set[str] = {str(c).strip() for c in competitors if str(c).strip()}
     scale = dict(task_pack.get("quality_scale") or DEFAULT_QUALITY_SCALE)
     min_quality = int(scale["min"])
     max_quality = int(scale["max"])
-    errors: List[str] = []
-    seen: Set[Tuple[str, str]] = set()
+    errors: list[str] = []
+    seen: set[tuple[str, str]] = set()
 
     if not records:
         errors.append("No result records found.")
@@ -218,13 +218,11 @@ def validate_records(
         if follow_up < 0:
             errors.append(f"Record #{idx}: follow_up_prompts must be >= 0.")
         if quality < min_quality or quality > max_quality:
-            errors.append(
-                f"Record #{idx}: quality_score must be in [{min_quality}, {max_quality}]."
-            )
+            errors.append(f"Record #{idx}: quality_score must be in [{min_quality}, {max_quality}].")
         if require_evidence and success and not evidence:
             errors.append(f"Record #{idx}: evidence is required when success=true.")
 
-    expected: Set[Tuple[str, str]] = {(task_id, competitor) for task_id in task_ids for competitor in competitor_ids}
+    expected: set[tuple[str, str]] = {(task_id, competitor) for task_id in task_ids for competitor in competitor_ids}
     missing = sorted(expected - seen)
     for task_id, competitor in missing:
         errors.append(f"Missing result for task '{task_id}' competitor '{competitor}'.")
@@ -242,7 +240,7 @@ def _clamp(value: float, low: float, high: float) -> float:
     return max(low, min(high, value))
 
 
-def _normalize_higher(values: Mapping[str, float]) -> Dict[str, float]:
+def _normalize_higher(values: Mapping[str, float]) -> dict[str, float]:
     if not values:
         return {}
     lo = min(values.values())
@@ -252,7 +250,7 @@ def _normalize_higher(values: Mapping[str, float]) -> Dict[str, float]:
     return {k: (v - lo) / (hi - lo) for k, v in values.items()}
 
 
-def _normalize_lower(values: Mapping[str, float]) -> Dict[str, float]:
+def _normalize_lower(values: Mapping[str, float]) -> dict[str, float]:
     if not values:
         return {}
     lo = min(values.values())
@@ -262,7 +260,7 @@ def _normalize_lower(values: Mapping[str, float]) -> Dict[str, float]:
     return {k: (hi - v) / (hi - lo) for k, v in values.items()}
 
 
-def _task_winners(task_id: str, records: Sequence[Mapping[str, Any]]) -> List[str]:
+def _task_winners(task_id: str, records: Sequence[Mapping[str, Any]]) -> list[str]:
     per_task = [r for r in records if str(r.get("task_id")) == task_id]
     if not per_task:
         return []
@@ -280,7 +278,7 @@ def _task_winners(task_id: str, records: Sequence[Mapping[str, Any]]) -> List[st
     return sorted(set(winners))
 
 
-def compute_summary(task_pack: Mapping[str, Any], records: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+def compute_summary(task_pack: Mapping[str, Any], records: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     tasks = list(task_pack.get("tasks") or [])
     task_ids = [str(t.get("id")) for t in tasks]
     weights = dict(task_pack.get("weights") or DEFAULT_WEIGHTS)
@@ -290,17 +288,17 @@ def compute_summary(task_pack: Mapping[str, Any], records: Sequence[Mapping[str,
     quality_range = float(quality_max - quality_min)
     task_count = max(1, len(task_ids))
 
-    grouped: MutableMapping[str, List[Mapping[str, Any]]] = defaultdict(list)
+    grouped: MutableMapping[str, list[Mapping[str, Any]]] = defaultdict(list)
     for record in records:
         competitor = str(record.get("competitor") or "").strip()
         if competitor:
             grouped[competitor].append(record)
 
     competitors = sorted(grouped.keys())
-    competitor_metrics: Dict[str, Dict[str, Any]] = {}
+    competitor_metrics: dict[str, dict[str, Any]] = {}
 
-    speed_basis: Dict[str, float] = {}
-    follow_basis: Dict[str, float] = {}
+    speed_basis: dict[str, float] = {}
+    follow_basis: dict[str, float] = {}
 
     for competitor in competitors:
         row = grouped[competitor]
@@ -387,7 +385,7 @@ def compute_summary(task_pack: Mapping[str, Any], records: Sequence[Mapping[str,
 
 
 def _render_prompts_markdown(task_pack: Mapping[str, Any]) -> str:
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append(f"# {task_pack.get('name')}")
     lines.append("")
     description = str(task_pack.get("description") or "").strip()
@@ -427,7 +425,7 @@ def _render_report_markdown(
     task_pack: Mapping[str, Any],
     summary: Mapping[str, Any],
 ) -> str:
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append(f"# Head-to-Head Report: {run_id}")
     lines.append("")
     lines.append(f"Task pack: `{task_pack.get('id')}` v{task_pack.get('version')}")
@@ -440,10 +438,7 @@ def _render_report_markdown(
         lines.append("- No ranking data available.")
     else:
         for row in ranking:
-            lines.append(
-                f"- #{row.get('rank')} `{row.get('competitor')}`: "
-                f"{row.get('weighted_score')} / 100"
-            )
+            lines.append(f"- #{row.get('rank')} `{row.get('competitor')}`: " f"{row.get('weighted_score')} / 100")
     lines.append("")
 
     credibility = list(summary.get("credibility_ranking") or [])
@@ -454,8 +449,7 @@ def _render_report_markdown(
     else:
         for row in credibility:
             lines.append(
-                f"- #{row.get('rank')} `{row.get('competitor')}`: "
-                f"{row.get('credibility_weighted_score')} / 100"
+                f"- #{row.get('rank')} `{row.get('competitor')}`: " f"{row.get('credibility_weighted_score')} / 100"
             )
     lines.append("")
 
@@ -514,13 +508,10 @@ def _render_execution_plan_markdown(
     task_pack: Mapping[str, Any],
     execution_plan: Sequence[Mapping[str, Any]],
     randomized: bool,
-    seed: Optional[int],
+    seed: int | None,
 ) -> str:
-    task_titles = {
-        str(task.get("id") or ""): str(task.get("title") or "")
-        for task in (task_pack.get("tasks") or [])
-    }
-    lines: List[str] = []
+    task_titles = {str(task.get("id") or ""): str(task.get("title") or "") for task in (task_pack.get("tasks") or [])}
+    lines: list[str] = []
     lines.append("# Execution Plan")
     lines.append("")
     lines.append(f"- Randomized order: {'yes' if randomized else 'no'}")
@@ -532,17 +523,15 @@ def _render_execution_plan_markdown(
     for row in execution_plan:
         task_id = str(row.get("task_id") or "")
         title = task_titles.get(task_id, task_id)
-        lines.append(
-            f"- Step {row.get('step')}: `{row.get('competitor')}` -> `{task_id}` ({title})"
-        )
+        lines.append(f"- Step {row.get('step')}: `{row.get('competitor')}` -> `{task_id}` ({title})")
     lines.append("")
     return "\n".join(lines).strip() + "\n"
 
 
-def load_scorecards(runs_dir: Path) -> List[Dict[str, Any]]:
+def load_scorecards(runs_dir: Path) -> list[dict[str, Any]]:
     if not runs_dir.exists():
         raise ValueError(f"Runs directory not found: {runs_dir}")
-    scorecards: List[Dict[str, Any]] = []
+    scorecards: list[dict[str, Any]] = []
     for child in sorted(runs_dir.iterdir()):
         if not child.is_dir():
             continue
@@ -557,10 +546,10 @@ def load_scorecards(runs_dir: Path) -> List[Dict[str, Any]]:
     return scorecards
 
 
-def aggregate_scorecards(scorecards: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+def aggregate_scorecards(scorecards: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     if not scorecards:
         raise ValueError("No scorecards provided for aggregation.")
-    bucket: MutableMapping[str, Dict[str, Any]] = {}
+    bucket: MutableMapping[str, dict[str, Any]] = {}
     for card in scorecards:
         run_id = str(card.get("run_id") or "")
         summary = dict(card.get("summary") or {})
@@ -590,7 +579,7 @@ def aggregate_scorecards(scorecards: Sequence[Mapping[str, Any]]) -> Dict[str, A
             row["avg_quality_scores"].append(float(metrics.get("avg_quality_score") or 0.0))
             row["evidence_coverage"].append(float(metrics.get("evidence_coverage") or 0.0))
 
-    competitors: Dict[str, Dict[str, Any]] = {}
+    competitors: dict[str, dict[str, Any]] = {}
     for competitor, stats in bucket.items():
         competitors[competitor] = {
             "runs": stats["runs"],
@@ -641,12 +630,12 @@ def build_blind_pack(
     records: Sequence[Mapping[str, Any]],
     *,
     seed: int = 0,
-) -> Tuple[List[Dict[str, Any]], Dict[str, Dict[str, str]]]:
+) -> tuple[list[dict[str, Any]], dict[str, dict[str, str]]]:
     rows = list(records)
     rng = random.Random(int(seed))
     rng.shuffle(rows)
-    samples: List[Dict[str, Any]] = []
-    answer_key: Dict[str, Dict[str, str]] = {}
+    samples: list[dict[str, Any]] = []
+    answer_key: dict[str, dict[str, str]] = {}
     for idx, row in enumerate(rows, start=1):
         sample_id = f"S{idx:03d}"
         task_id = str(row.get("task_id") or "")
@@ -675,7 +664,7 @@ def write_blind_pack(
     run_dir: Path,
     records: Sequence[Mapping[str, Any]],
     seed: int = 0,
-    out_dir: Optional[Path] = None,
+    out_dir: Path | None = None,
 ) -> Path:
     target = out_dir if out_dir is not None else (run_dir / "blind_pack")
     target.mkdir(parents=True, exist_ok=True)
@@ -713,7 +702,7 @@ def write_run_artifacts(
     competitors: Sequence[str],
     execution_plan: Sequence[Mapping[str, Any]],
     randomized_order: bool,
-    random_seed: Optional[int],
+    random_seed: int | None,
     require_evidence: bool,
     records: Sequence[Mapping[str, Any]],
     summary: Mapping[str, Any],
@@ -812,7 +801,7 @@ def _ask(
         raw = str(input_fn(label)).strip()
         try:
             value = parse_fn(raw)
-        except Exception:
+        except (ValueError, TypeError):
             value = None
         if value is not None and validate_fn(value):
             return value
@@ -830,12 +819,12 @@ def collect_records_interactive(
     execution_plan: Sequence[Mapping[str, Any]],
     input_fn: Callable[[str], str] = input,
     output_fn: Callable[[str], None] = print,
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     tasks = list(task_pack.get("tasks") or [])
     task_map = {str(task.get("id") or ""): task for task in tasks}
     min_quality = int((task_pack.get("quality_scale") or DEFAULT_QUALITY_SCALE)["min"])
     max_quality = int((task_pack.get("quality_scale") or DEFAULT_QUALITY_SCALE)["max"])
-    records: List[Dict[str, Any]] = []
+    records: list[dict[str, Any]] = []
 
     output_fn("")
     output_fn("Paste each prompt into each assistant, then enter observed metrics.")
@@ -913,11 +902,11 @@ def collect_records_interactive(
     return records
 
 
-def load_records_json(path: Path) -> List[Dict[str, Any]]:
+def load_records_json(path: Path) -> list[dict[str, Any]]:
     data = _read_json(path)
     if not isinstance(data, list):
         raise ValueError("results JSON must be a list of records.")
-    normalized: List[Dict[str, Any]] = []
+    normalized: list[dict[str, Any]] = []
     for idx, item in enumerate(data, start=1):
         if not isinstance(item, dict):
             raise ValueError(f"Record #{idx} must be an object.")
@@ -948,10 +937,7 @@ def _print_summary(summary: Mapping[str, Any]) -> None:
         print("")
         print("Credibility ranking (evidence-adjusted):")
         for row in credibility:
-            print(
-                f"  #{row.get('rank')} {row.get('competitor')}: "
-                f"{row.get('credibility_weighted_score')} / 100"
-            )
+            print(f"  #{row.get('rank')} {row.get('competitor')}: " f"{row.get('credibility_weighted_score')} / 100")
     print("")
     for competitor, metrics in (summary.get("competitors") or {}).items():
         print(
@@ -1076,10 +1062,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         if ranking:
             print("Aggregate ranking:")
             for row in ranking:
-                print(
-                    f"  #{row.get('rank')} {row.get('competitor')}: "
-                    f"{row.get('weighted_score_mean')} / 100"
-                )
+                print(f"  #{row.get('rank')} {row.get('competitor')}: " f"{row.get('weighted_score_mean')} / 100")
         return 0
 
     task_pack = load_task_pack(Path(args.task_pack).resolve())
@@ -1089,7 +1072,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     run_id = str(args.run_id).strip() or datetime.now(timezone.utc).strftime("run-%Y%m%d-%H%M%S")
     runs_dir = Path(args.runs_dir).resolve()
-    random_seed: Optional[int] = int(args.seed) if args.randomize_order else None
+    random_seed: int | None = int(args.seed) if args.randomize_order else None
     execution_plan = build_execution_plan(
         task_pack=task_pack,
         competitors=competitors,

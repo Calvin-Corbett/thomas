@@ -15,10 +15,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 
 import click
 
@@ -27,10 +25,11 @@ log = logging.getLogger(__name__)
 
 def _get_store():
     from thomas.investigation.store import InvestigationStore
+
     return InvestigationStore()
 
 
-def _resolve_case(store, case_id: Optional[str]):
+def _resolve_case(store, case_id: str | None):
     """Resolve case by ID or return latest."""
     if case_id:
         case = store.get_case(case_id)
@@ -49,10 +48,11 @@ def _ocr_augment(prompt: str, image_path) -> str:
     """Append OCR text to prompt as a fallback when vision model not available."""
     try:
         from thomas.vision.ocr_fallback import extract_text_from_images
+
         texts = extract_text_from_images([Path(image_path)])
         if texts and texts[0] and not texts[0].startswith("(OCR"):
             return prompt + "\n\nExtracted text from image (via OCR):\n---\n" + texts[0] + "\n---"
-    except Exception:
+    except ImportError:
         pass
     return prompt + "\n\n(Image could not be read — no vision model or OCR available.)"
 
@@ -74,8 +74,9 @@ async def _create_llm_call(config, model_profile: str):
         if "ok" not in _vision_checked:
             try:
                 from thomas.vision.handler import model_supports_vision
+
                 _vision_checked["ok"] = model_supports_vision(model_profile)
-            except Exception:
+            except ImportError:
                 _vision_checked["ok"] = False
         return _vision_checked["ok"]
 
@@ -86,16 +87,22 @@ async def _create_llm_call(config, model_profile: str):
             if _check_vision():
                 try:
                     from thomas.vision.handler import _read_image_b64
+
                     media_type, b64 = _read_image_b64(Path(image_path))
-                    messages.append({
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": prompt},
-                            {"type": "image_url", "image_url": {
-                                "url": f"data:{media_type};base64,{b64}",
-                            }},
-                        ],
-                    })
+                    messages.append(
+                        {
+                            "role": "user",
+                            "content": [
+                                {"type": "text", "text": prompt},
+                                {
+                                    "type": "image_url",
+                                    "image_url": {
+                                        "url": f"data:{media_type};base64,{b64}",
+                                    },
+                                },
+                            ],
+                        }
+                    )
                 except Exception as img_err:
                     log.warning("Vision failed, falling back to OCR: %s", img_err)
                     prompt = _ocr_augment(prompt, image_path)
@@ -129,7 +136,7 @@ def investigate_run(ctx, folder_path, case_name, profile, resume, no_synthesis, 
     """Ingest and analyze a folder of documents for evidence patterns."""
     from thomas.core.config import load_config
     from thomas.investigation.analyzer import DocumentAnalyzer
-    from thomas.investigation.ingest import DocumentIngester, IngestResult
+    from thomas.investigation.ingest import DocumentIngester
     from thomas.investigation.store import InvestigationStore
     from thomas.investigation.synthesizer import InvestigationSynthesizer
 
@@ -158,7 +165,8 @@ def investigate_run(ctx, folder_path, case_name, profile, resume, no_synthesis, 
             click.echo(f"[ingest    ] Processing: {fname} ({current}/{total})")
 
     result = ingester.ingest_folder(
-        folder, case.id,
+        folder,
+        case.id,
         skip_existing=True,
         on_progress=on_ingest_progress,
     )
@@ -185,9 +193,7 @@ def investigate_run(ctx, folder_path, case_name, profile, resume, no_synthesis, 
             def on_analyze_progress(fname, current, total, claims):
                 click.echo(f"[analyze   ] {fname} ({current}/{total}) -> {claims} claims")
 
-            batch = await analyzer.analyze_pending(
-                case.id, llm_call, on_progress=on_analyze_progress
-            )
+            batch = await analyzer.analyze_pending(case.id, llm_call, on_progress=on_analyze_progress)
             click.echo(
                 f"[analyze   ] Done: {batch.analyzed} analyzed, "
                 f"{batch.failed} failed, {batch.total_claims} total claims"
@@ -208,15 +214,12 @@ def investigate_run(ctx, folder_path, case_name, profile, resume, no_synthesis, 
         finally:
             try:
                 await llm.close()
-            except Exception:
+            except Exception:  # REVIEWED: async context
                 pass
 
     pending = store.get_pending_documents(case.id)
     if pending:
-        image_count = sum(
-            1 for d in pending
-            if d.file_type == "image" or d.extraction_method == "image_placeholder"
-        )
+        image_count = sum(1 for d in pending if d.file_type == "image" or d.extraction_method == "image_placeholder")
         text_count = len(pending) - image_count
         click.echo(f"[analyze   ] Analyzing {len(pending)} documents with profile '{model_profile}'...")
         if image_count:
@@ -227,10 +230,12 @@ def investigate_run(ctx, folder_path, case_name, profile, resume, no_synthesis, 
 
     # Summary
     summary = store.get_case_summary(case.id)
-    click.echo(f"[done      ] {summary['documents']['total']} docs, "
-               f"{summary['claims']} claims, {summary['patterns']} patterns, "
-               f"{summary['timeline_events']} timeline events")
-    click.echo(f"[done      ] Query with 'thomas investigate status' or ask Thomas in chat.")
+    click.echo(
+        f"[done      ] {summary['documents']['total']} docs, "
+        f"{summary['claims']} claims, {summary['patterns']} patterns, "
+        f"{summary['timeline_events']} timeline events"
+    )
+    click.echo("[done      ] Query with 'thomas investigate status' or ask Thomas in chat.")
     store.close()
 
 
@@ -293,9 +298,7 @@ def investigate_transcribe(case_id, profile, save_txt, verbose):
                     click.echo(f" {len(transcript):,} chars")
 
                     if save_txt:
-                        txt_path = Path(doc.file_path).with_suffix(
-                            Path(doc.file_path).suffix + ".txt"
-                        )
+                        txt_path = Path(doc.file_path).with_suffix(Path(doc.file_path).suffix + ".txt")
                         try:
                             txt_path.write_text(transcript, encoding="utf-8")
                             if verbose:
@@ -306,14 +309,13 @@ def investigate_transcribe(case_id, profile, save_txt, verbose):
                     click.echo(" FAILED")
 
             click.echo(
-                f"[transcribe] Done: {transcribed}/{len(image_docs)} transcribed, "
-                f"{total_chars:,} total chars"
+                f"[transcribe] Done: {transcribed}/{len(image_docs)} transcribed, " f"{total_chars:,} total chars"
             )
 
         finally:
             try:
                 await llm.close()
-            except Exception:
+            except (OSError, FileNotFoundError):
                 pass
 
     click.echo(f"[transcribe] Using profile '{model_profile}'...")
@@ -337,8 +339,10 @@ def investigate_status(case_id, as_json):
         click.echo(f"Case: {summary['case_name']} ({summary['case_id']})")
         click.echo(f"Source: {summary['source_path']}")
         docs = summary["documents"]
-        click.echo(f"Documents: {docs['total']} total ({docs['analyzed']} analyzed, "
-                    f"{docs['pending']} pending, {docs['failed']} failed)")
+        click.echo(
+            f"Documents: {docs['total']} total ({docs['analyzed']} analyzed, "
+            f"{docs['pending']} pending, {docs['failed']} failed)"
+        )
         click.echo(f"Claims: {summary['claims']}")
         click.echo(f"Patterns: {summary['patterns']}")
         click.echo(f"Timeline events: {summary['timeline_events']}")
@@ -364,8 +368,7 @@ def investigate_patterns(case_id, category, min_strength, as_json):
             return
         click.echo(f"Patterns for case: {case.name} ({len(patterns)} found)\n")
         for p in patterns:
-            click.echo(f"  [{p['category']}] strength={p['strength']:.2f} "
-                        f"evidence={p['evidence_count']}")
+            click.echo(f"  [{p['category']}] strength={p['strength']:.2f} " f"evidence={p['evidence_count']}")
             click.echo(f"    {p['pattern_text']}")
             if p.get("first_seen") or p.get("last_seen"):
                 click.echo(f"    Period: {p.get('first_seen', '?')} → {p.get('last_seen', '?')}")
@@ -437,11 +440,13 @@ def investigate_cases(as_json):
     store.close()
 
     if as_json:
-        click.echo(json.dumps(
-            [{"id": c.id, "name": c.name, "source_path": c.source_path, "status": c.status}
-             for c in cases],
-            ensure_ascii=False, indent=2,
-        ))
+        click.echo(
+            json.dumps(
+                [{"id": c.id, "name": c.name, "source_path": c.source_path, "status": c.status} for c in cases],
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
     else:
         if not cases:
             click.echo("No investigation cases. Run 'thomas investigate run <folder>' to start.")
@@ -455,7 +460,10 @@ def investigate_cases(as_json):
 @click.option("--format", "fmt", type=click.Choice(["json", "md", "court"]), default="md")
 @click.option("--output", "output_path", type=click.Path(), default=None)
 @click.option(
-    "--copy-sources", "copy_sources_dir", type=click.Path(), default=None,
+    "--copy-sources",
+    "copy_sources_dir",
+    type=click.Path(),
+    default=None,
     help="Copy all referenced source files (images, etc.) to this directory alongside the report.",
 )
 def investigate_export(case_id, fmt, output_path, copy_sources_dir):
@@ -488,11 +496,10 @@ def investigate_export(case_id, fmt, output_path, copy_sources_dir):
         # Markdown (simple) — now with source file references
         lines = [
             f"# Investigation Report: {case.name}",
-            f"",
+            "",
             f"**Case ID:** {case.id}",
             f"**Source:** {case.source_path}",
-            f"**Documents:** {summary['documents']['total']} "
-            f"({summary['documents']['analyzed']} analyzed)",
+            f"**Documents:** {summary['documents']['total']} " f"({summary['documents']['analyzed']} analyzed)",
             f"**Claims:** {summary['claims']}",
             f"**Exported:** {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M UTC')}",
             "",
@@ -557,7 +564,7 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
     now_str = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
 
     # Build document index (id → index number)
-    doc_index: Dict[int, int] = {}
+    doc_index: dict[int, int] = {}
     for idx, d in enumerate(documents, 1):
         doc_index[d.id] = idx
 
@@ -566,27 +573,29 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
     date_range = f"{min(dated)} to {max(dated)}" if dated else "undetermined"
 
     # Group claims by doc_id for counting
-    claims_per_doc: Dict[int, int] = {}
+    claims_per_doc: dict[int, int] = {}
     for c in claims:
         did = c.get("doc_id", 0)
         claims_per_doc[did] = claims_per_doc.get(did, 0) + 1
 
-    lines: List[str] = []
+    lines: list[str] = []
 
     # ── Header ──
-    lines.extend([
-        f"# Evidence Analysis Report: {case.name}",
-        "",
-        "| Field | Value |",
-        "| --- | --- |",
-        f"| **Report Date** | {now_str} |",
-        f"| **Evidence Period** | {date_range} |",
-        f"| **Documents Analyzed** | {summary['documents']['analyzed']} of {summary['documents']['total']} |",
-        f"| **Evidence Claims** | {summary['claims']} |",
-        f"| **Patterns Detected** | {summary['patterns']} |",
-        f"| **Timeline Events** | {summary['timeline_events']} |",
-        "",
-    ])
+    lines.extend(
+        [
+            f"# Evidence Analysis Report: {case.name}",
+            "",
+            "| Field | Value |",
+            "| --- | --- |",
+            f"| **Report Date** | {now_str} |",
+            f"| **Evidence Period** | {date_range} |",
+            f"| **Documents Analyzed** | {summary['documents']['analyzed']} of {summary['documents']['total']} |",
+            f"| **Evidence Claims** | {summary['claims']} |",
+            f"| **Patterns Detected** | {summary['patterns']} |",
+            f"| **Timeline Events** | {summary['timeline_events']} |",
+            "",
+        ]
+    )
 
     # ── Executive Summary ──
     lines.extend(["## Executive Summary", ""])
@@ -614,8 +623,7 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
         lines.append("")
 
     # ── Evidence by Category ──
-    categories = ["communication", "visitation", "safety", "emotional",
-                   "financial", "legal", "medical", "other"]
+    categories = ["communication", "visitation", "safety", "emotional", "financial", "legal", "medical", "other"]
     lines.extend(["---", "", "## Evidence Analysis by Category", ""])
 
     for cat in categories:
@@ -654,10 +662,7 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
         cited_all = set()
         for p in cat_patterns:
             cited_all.update(p.get("claim_ids", []))
-        uncited_high = [
-            c for c in cat_claims
-            if c.get("id") not in cited_all and c.get("severity", 0) >= 3
-        ]
+        uncited_high = [c for c in cat_claims if c.get("id") not in cited_all and c.get("severity", 0) >= 3]
         if uncited_high:
             lines.append(f"**Additional high-severity claims ({cat.title()}):**")
             for c in uncited_high[:10]:
@@ -665,10 +670,7 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
                 src_name = c.get("source_file_name", "")
                 src_ref = f" ({src_name})" if src_name else ""
                 date_str = f" [{c['date_referenced']}]" if c.get("date_referenced") else ""
-                lines.append(
-                    f"- {c['claim_text']}{date_str} — severity {c['severity']} "
-                    f"*(Doc #{dnum}{src_ref})*"
-                )
+                lines.append(f"- {c['claim_text']}{date_str} — severity {c['severity']} " f"*(Doc #{dnum}{src_ref})*")
                 if c.get("quote_excerpt"):
                     lines.append(f"  > \"{c['quote_excerpt']}\"")
             lines.append("")
@@ -715,12 +717,14 @@ def _build_court_report(case, summary, patterns, timeline, claims, documents) ->
                 lines.append(f"> {line}")
             lines.append("")
 
-    lines.extend([
-        "---",
-        "",
-        f"*Report generated {now_str}. "
-        f"This report was produced by automated document analysis and should be reviewed for accuracy.*",
-    ])
+    lines.extend(
+        [
+            "---",
+            "",
+            f"*Report generated {now_str}. "
+            f"This report was produced by automated document analysis and should be reviewed for accuracy.*",
+        ]
+    )
 
     return "\n".join(lines)
 

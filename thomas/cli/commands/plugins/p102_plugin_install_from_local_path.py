@@ -12,12 +12,14 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import click
 
 from thomas.plugins.p102_plugin_install_from_local_path import (
     PluginInstallFromLocalPathError,
+)
+from thomas.plugins.p102_plugin_install_from_local_path import (
     run as run_install_from_local_path,
 )
 
@@ -27,8 +29,8 @@ COMMAND_NAME = "install-from-local-path"
 def _payload(
     *,
     source_path: Path,
-    plugin_name: Optional[str],
-    install_root: Optional[Path],
+    plugin_name: str | None,
+    install_root: Path | None,
     overwrite: bool,
 ) -> dict[str, Any]:
     p: dict[str, Any] = {"source_path": str(source_path)}
@@ -52,8 +54,8 @@ def _human_success_message(result: dict[str, Any]) -> str:
 def _run(
     *,
     source_path: Path,
-    plugin_name: Optional[str],
-    install_root: Optional[Path],
+    plugin_name: str | None,
+    install_root: Path | None,
     overwrite: bool,
     json_output: bool,
     echo: Any,
@@ -96,8 +98,8 @@ def _run(
 @click.option("--json", "json_output", is_flag=True, default=False, help="Emit machine-readable JSON output.")
 def command(
     source_path: Path,
-    plugin_name: Optional[str],
-    install_root: Optional[Path],
+    plugin_name: str | None,
+    install_root: Path | None,
     overwrite: bool,
     json_output: bool,
 ) -> None:
@@ -147,8 +149,8 @@ def register(app: Any) -> None:
             @app.command(COMMAND_NAME)
             def _typer_cmd(
                 source_path: Path,
-                name: Optional[str] = typer.Option(None, "--name"),
-                install_root: Optional[Path] = typer.Option(None, "--install-root"),
+                name: str | None = typer.Option(None, "--name"),
+                install_root: Path | None = typer.Option(None, "--install-root"),
                 overwrite: bool = typer.Option(False, "--overwrite"),
                 json_output: bool = typer.Option(False, "--json"),
             ) -> None:
@@ -162,7 +164,7 @@ def register(app: Any) -> None:
                 )
 
             return
-    except Exception:
+    except (subprocess.CalledProcessError, OSError):
         pass
 
     raise RuntimeError("Unsupported CLI app type for command registration.")

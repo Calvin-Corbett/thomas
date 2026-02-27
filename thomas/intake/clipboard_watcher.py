@@ -10,11 +10,7 @@ import sys
 import threading
 import time
 import webbrowser
-from dataclasses import dataclass
-from pathlib import Path
-from typing import Optional
 
-import requests
 from PIL import Image, ImageDraw, ImageFont, ImageGrab
 
 from ._internal.config import ClientConfig
@@ -25,7 +21,7 @@ from ._internal.win_clipboard_read import read_clipboard_text
 
 try:
     import pystray  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     pystray = None  # type: ignore
 
 
@@ -42,13 +38,13 @@ def _image_to_png_bytes(img: Image.Image) -> bytes:
     return buf.getvalue()
 
 
-def _get_image_from_clipboard() -> Optional[Image.Image]:
+def _get_image_from_clipboard() -> Image.Image | None:
     try:
         grabbed = ImageGrab.grabclipboard()
         if isinstance(grabbed, Image.Image):
             return grabbed
         return None
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         return None
 
 
@@ -58,7 +54,7 @@ def _make_icon() -> Image.Image:
     d.ellipse((4, 4, 60, 60), fill=(18, 18, 18, 255))
     try:
         font = ImageFont.truetype("arial.ttf", 36)
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         font = ImageFont.load_default()
     d.text((24, 14), "T", font=font, fill=(245, 245, 245, 255))
     return img
@@ -77,9 +73,9 @@ class ThomasIntakeAgent:
         self._listener = None
         self._hotkey_listener = None
 
-        self._last_text_hash: Optional[str] = None
-        self._last_img_hash: Optional[str] = None
-        self._last_clip_img_hash_for_snip: Optional[str] = None
+        self._last_text_hash: str | None = None
+        self._last_img_hash: str | None = None
+        self._last_clip_img_hash_for_snip: str | None = None
 
     def start(self) -> None:
         self._start_clipboard_listener()
@@ -91,17 +87,17 @@ class ThomasIntakeAgent:
         self._stop.set()
         try:
             self._sendq.stop()
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             pass
         try:
             if self._listener:
                 self._listener.stop()
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             pass
         try:
             if self._hotkey_listener:
                 self._hotkey_listener.stop()
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             pass
 
     def toggle_pause(self) -> None:
@@ -132,7 +128,7 @@ class ThomasIntakeAgent:
             self._listener = ClipboardListener(on_update=self._on_clip_update)
             self._listener.start()
             logger.info("Clipboard listener active (event-driven).")
-        except Exception:
+        except ImportError:
             self._listener = None
             logger.info("Clipboard listener unavailable; will poll.")
 
@@ -141,13 +137,13 @@ class ThomasIntakeAgent:
             logger.info("Non-Windows OS; hotkey listener disabled.")
             return
         try:
-            from ._internal.win_hotkey import HotkeyListener, Hotkey, MOD_WIN, MOD_SHIFT, vk_from_char
+            from ._internal.win_hotkey import MOD_SHIFT, MOD_WIN, Hotkey, HotkeyListener, vk_from_char
 
             hk = Hotkey(modifiers=MOD_WIN | MOD_SHIFT, vk=vk_from_char("T"))
             self._hotkey_listener = HotkeyListener(hotkey=hk, on_fire=self._on_hotkey)
             self._hotkey_listener.start()
             logger.info("Hotkey listener active: Win+Shift+T")
-        except Exception:
+        except ImportError:
             self._hotkey_listener = None
             logger.info("Hotkey listener unavailable.")
 
@@ -158,7 +154,7 @@ class ThomasIntakeAgent:
         # Trigger screenshot flow
         try:
             self.capture_screenshot_and_send()
-        except Exception:
+        except ImportError:
             logger.exception("Screenshot capture failed")
 
     def capture_screenshot_and_send(self) -> None:
@@ -175,12 +171,17 @@ class ThomasIntakeAgent:
         # Fallback fullscreen
         try:
             img = ImageGrab.grab(all_screens=True)
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             img = ImageGrab.grab()
         self._send_image(img, source="screenshot", meta={"mode": "fullscreen", "hotkey": "win+shift+t"})
 
     def _loop(self) -> None:
-        logger.info("Thomas intake agent running. send_text=%s send_images=%s mode=%s", self.cfg.send_text, self.cfg.send_images, self.cfg.screenshot_mode)
+        logger.info(
+            "Thomas intake agent running. send_text=%s send_images=%s mode=%s",
+            self.cfg.send_text,
+            self.cfg.send_images,
+            self.cfg.screenshot_mode,
+        )
         while not self._stop.is_set():
             if self._paused.is_set():
                 time.sleep(0.25)
@@ -194,7 +195,7 @@ class ThomasIntakeAgent:
 
             try:
                 self._check_clipboard_once()
-            except Exception:
+            except (ValueError, TypeError):
                 logger.exception("Clipboard processing failed")
 
     def _check_clipboard_once(self) -> None:
@@ -214,7 +215,7 @@ class ThomasIntakeAgent:
             if os.name == "nt":
                 try:
                     text = read_clipboard_text()
-                except Exception:
+                except Exception:  # REVIEWED: broad catch
                     text = None
             if not text:
                 # fallback to pyperclip/tk if user wants; we keep it minimal here.
@@ -240,7 +241,9 @@ class ThomasIntakeAgent:
 
     def _submit(self, payload: dict) -> None:
         url = self.cfg.server.rstrip("/") + "/api/intake/clipboard"
-        job = SendJob(url=url, json_payload=payload, headers=self.cfg.headers(), timeout_s=float(self.cfg.request_timeout_s))
+        job = SendJob(
+            url=url, json_payload=payload, headers=self.cfg.headers(), timeout_s=float(self.cfg.request_timeout_s)
+        )
         ok = self._sendq.submit(job)
         if not ok:
             logger.warning("Send queue full; dropping intake event.")
@@ -317,14 +320,14 @@ def main() -> int:
         p = str(ClientConfig.path())
         try:
             os.startfile(p)  # type: ignore[attr-defined]
-        except Exception:
+        except (OSError, FileNotFoundError):
             webbrowser.open(f"file:///{p}")
 
     def _open_state_dir(icon, item):  # type: ignore[no-untyped-def]
         d = str(ClientConfig.path().parent)
         try:
             os.startfile(d)  # type: ignore[attr-defined]
-        except Exception:
+        except (OSError, FileNotFoundError):
             webbrowser.open(f"file:///{d}")
 
     def _toggle_pause(icon, item):  # type: ignore[no-untyped-def]

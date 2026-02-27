@@ -7,18 +7,31 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from fastapi import APIRouter, Body, FastAPI, HTTPException, Query, Request
-from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 
-from .store import Notification, NotificationCreate, NotificationStore
 from .dispatcher import (
     NotificationBroadcaster,
     NotificationDispatcher,
-    build_vapid_from_env,
     _env_flag,
+    build_vapid_from_env,
 )
+from .store import Notification, NotificationCreate, NotificationStore
+
+
+def _model_to_dict(model: Any) -> dict[str, Any]:
+    model_dump = getattr(model, "model_dump", None)
+    if callable(model_dump):
+        return dict(model_dump())
+    legacy_dict = getattr(model, "dict", None)
+    if callable(legacy_dict):
+        return dict(legacy_dict())
+    if isinstance(model, dict):
+        return dict(model)
+    return {}
+
 
 # Service worker JS (served at /sw.js)
 # Keeps everything self-contained (no extra file required).
@@ -57,7 +70,7 @@ def _default_db_path() -> str:
     return os.getenv("THOMAS_NOTIFICATIONS_DB") or os.path.join(".", "data", "notifications.sqlite")
 
 
-def init_notifications(app: FastAPI, db_path: Optional[str] = None) -> None:
+def init_notifications(app: FastAPI, db_path: str | None = None) -> None:
     """
     Call once during app initialization.
     - Creates store + dispatcher + broadcaster
@@ -68,7 +81,9 @@ def init_notifications(app: FastAPI, db_path: Optional[str] = None) -> None:
     broadcaster = NotificationBroadcaster()
     vapid = build_vapid_from_env()
     enable_toasts = _env_flag("THOMAS_DESKTOP_TOASTS", "0")
-    dispatcher = NotificationDispatcher(store=store, broadcaster=broadcaster, vapid=vapid, enable_desktop_toasts=enable_toasts)
+    dispatcher = NotificationDispatcher(
+        store=store, broadcaster=broadcaster, vapid=vapid, enable_desktop_toasts=enable_toasts
+    )
 
     app.state.notification_store = store
     app.state.notification_broadcaster = broadcaster
@@ -101,21 +116,21 @@ def build_router() -> APIRouter:
             raise HTTPException(status_code=500, detail="Notification broadcaster not initialized")
         return b
 
-    @router.get("/api/notifications", response_model=Dict[str, Any])
+    @router.get("/api/notifications", response_model=dict[str, Any])
     def list_notifications(
         request: Request,
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
-        type: Optional[str] = Query(None),
-        severity: Optional[str] = Query(None),
+        type: str | None = Query(None),
+        severity: str | None = Query(None),
         unread_only: bool = Query(False),
     ):
         store = _store(request)
         items = store.list(limit=limit, offset=offset, type_=type, severity=severity, unread_only=unread_only)
         unread_count = store.unread_count()
-        return {"items": [i.dict() for i in items], "unread_count": unread_count}
+        return {"items": [_model_to_dict(i) for i in items], "unread_count": unread_count}
 
-    @router.get("/api/notifications/unread_count", response_model=Dict[str, int])
+    @router.get("/api/notifications/unread_count", response_model=dict[str, int])
     def get_unread_count(request: Request):
         store = _store(request)
         return {"unread_count": store.unread_count()}
@@ -145,7 +160,7 @@ def build_router() -> APIRouter:
             raise HTTPException(status_code=404, detail="Notification not found")
         return n
 
-    @router.delete("/api/notifications/clear", response_model=Dict[str, int])
+    @router.delete("/api/notifications/clear", response_model=dict[str, int])
     def clear_notifications(
         request: Request,
         mode: str = Query("all", description="all|read"),
@@ -191,7 +206,7 @@ def build_router() -> APIRouter:
         return {"publicKey": dispatcher.vapid.public_key}
 
     @router.post("/api/notifications/push/subscribe")
-    async def push_subscribe(request: Request, body: Dict[str, Any] = Body(...)):
+    async def push_subscribe(request: Request, body: dict[str, Any] = Body(...)):
         """
         Expected browser subscription format:
         {
@@ -212,7 +227,7 @@ def build_router() -> APIRouter:
         return {"ok": True}
 
     @router.post("/api/notifications/push/unsubscribe")
-    async def push_unsubscribe(request: Request, body: Dict[str, Any] = Body(...)):
+    async def push_unsubscribe(request: Request, body: dict[str, Any] = Body(...)):
         store = _store(request)
         endpoint = body.get("endpoint")
         if not endpoint:

@@ -46,12 +46,12 @@
 | Feature | Status | Source ZIP |
 | :--- | :--- | :--- |
 | **Swarm Mode** | ✅ DONE | Implemented at `thomas/agent/swarm.py` |
-| **Audit Log / Time Travel** | ✅ DONE | Implemented at `thomas/server/routes/runs.py` (replay via `/api/runs/*/replay`) |
+| **Audit Log / Time Travel** | ✅ DONE | Implemented at `thomas/server/routes/runs.py` |
 | **Guardrails** | ✅ DONE | Implemented at `thomas/policy/policy.py` |
 | **Plugin Loader** | ✅ DONE | Implemented at `thomas/autonomy/plugin.py` |
 | **User Preferences** | ✅ DONE | Implemented at `thomas/preferences/store.py` |
 
 ---
-**Last Updated:** 2026-02-22
+**Last Updated:** 2026-02-25
 **Source of Truth:** Generated from `docs/feature_master_manifest.json` via `python scripts/sync_feature_master_list.py`.
 **Summary:** 30 done, 0 inbox, 0 missing.

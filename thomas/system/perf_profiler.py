@@ -1,4 +1,4 @@
-﻿"""Latency/perf probe utilities for command-level baselining."""
+"""Latency/perf probe utilities for command-level baselining."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import json
 import statistics
 import subprocess
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
-
+from typing import Any
 
 Runner = Callable[[str, float], subprocess.CompletedProcess[str]]
 
@@ -19,7 +19,6 @@ class PerfOptions:
     command: str
     runs: int
     timeout_seconds: float
-
 
 
 def _default_runner(command: str, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
@@ -32,8 +31,7 @@ def _default_runner(command: str, timeout_seconds: float) -> subprocess.Complete
     )
 
 
-
-def _percentile(values: List[float], percentile: float) -> float:
+def _percentile(values: list[float], percentile: float) -> float:
     if not values:
         return 0.0
     ordered = sorted(values)
@@ -46,9 +44,8 @@ def _percentile(values: List[float], percentile: float) -> float:
     return float(ordered[low] + (ordered[high] - ordered[low]) * fraction)
 
 
-
-def run_perf_probe(options: PerfOptions, *, runner: Runner = _default_runner) -> Dict[str, Any]:
-    durations_ms: List[float] = []
+def run_perf_probe(options: PerfOptions, *, runner: Runner = _default_runner) -> dict[str, Any]:
+    durations_ms: list[float] = []
     success_count = 0
 
     for _ in range(max(1, int(options.runs))):
@@ -79,8 +76,7 @@ def run_perf_probe(options: PerfOptions, *, runner: Runner = _default_runner) ->
     }
 
 
-
-def _format_text_report(report: Dict[str, Any]) -> str:
+def _format_text_report(report: dict[str, Any]) -> str:
     summary = dict(report.get("summary") or {})
     return "\n".join(
         [
@@ -96,8 +92,7 @@ def _format_text_report(report: Dict[str, Any]) -> str:
     )
 
 
-
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a command multiple times and report latency percentiles.")
     parser.add_argument("--command", required=True, help="Command to execute.")
     parser.add_argument("--runs", type=int, default=25, help="Number of runs (default: 25).")
@@ -118,7 +113,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     else:
         print(_format_text_report(report))
 
-    success_rate = float(((report.get("summary") or {}).get("success_rate") or 0.0))
+    success_rate = float((report.get("summary") or {}).get("success_rate") or 0.0)
     return 0 if success_rate >= float(args.min_success_rate) else 3
 
 

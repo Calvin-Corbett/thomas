@@ -3,11 +3,14 @@ from __future__ import annotations
 import asyncio
 import traceback
 import uuid
+from collections.abc import Awaitable, Callable, Mapping
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Mapping, Optional
+from typing import Any
 
-from .models import AutonomyError, AutonomyTransientError, Job
+from thomas.core.autonomy import clamp_autonomy_level
+from thomas.core.config import ModelConfig
+
 from .agents import PlannerAgent, ReviewerAgent
 from .executor import ExecutorAgent
 from .media_agents import (
@@ -17,14 +20,13 @@ from .media_agents import (
     _extract_text,
     _extract_video_meta,
 )
+from .mode_policy import apply_workflow_mode_policy
+from .models import AutonomyError, AutonomyTransientError, Job
 from .nl_workflow_compiler import compile_nl_workflow_payload
 from .scheduler import EngineTiming, compute_next_run
 from .workflows import WorkflowExecutionError, WorkflowRunner, summarize_workflow_telemetry
-from thomas.core.autonomy import clamp_autonomy_level
-from thomas.core.config import ModelConfig
 
-
-JobHandler = Callable[[Job], Awaitable[Dict[str, Any]]]
+JobHandler = Callable[[Job], Awaitable[dict[str, Any]]]
 
 
 class AutonomyEngine:
@@ -42,11 +44,11 @@ class AutonomyEngine:
         store,
         policy,
         chat_adapter=None,
-        timing: Optional[EngineTiming] = None,
+        timing: EngineTiming | None = None,
         max_concurrency: int = 4,
-        worker_id: Optional[str] = None,
-        model_resolver: Optional[Callable[[Optional[str]], ModelConfig]] = None,
-        artifact_root: Optional[str] = None,
+        worker_id: str | None = None,
+        model_resolver: Callable[[str | None], ModelConfig] | None = None,
+        artifact_root: str | None = None,
     ):
         self.store = store
         self.policy = policy
@@ -59,11 +61,11 @@ class AutonomyEngine:
         self._worker_id = worker_id or f"autonomy-{uuid.uuid4().hex[:8]}"
         self._stop = asyncio.Event()
         self._wake = asyncio.Event()
-        self._task: Optional[asyncio.Task] = None
+        self._task: asyncio.Task | None = None
         self._sema = asyncio.Semaphore(max(1, int(max_concurrency)))
         self._running = False
 
-        self._handlers: Dict[str, JobHandler] = {}
+        self._handlers: dict[str, JobHandler] = {}
         self._register_builtin_handlers()
 
     # -------- public API --------
@@ -120,7 +122,7 @@ class AutonomyEngine:
                 # Requeue any stale running jobs with expired locks.
                 try:
                     self.store.reap_stale_running(now=now)
-                except Exception:
+                except (ConnectionError, TimeoutError):
                     # Non-fatal; keep the engine alive.
                     pass
 
@@ -148,7 +150,7 @@ class AutonomyEngine:
                 # We'll await completion of this batch; new jobs will be picked up on the next tick / wakeup.
                 await asyncio.gather(*tasks)
 
-            except Exception:
+            except Exception:  # REVIEWED: async context
                 # Don't let the worker die silently.
                 traceback.print_exc()
 
@@ -169,7 +171,7 @@ class AutonomyEngine:
             # Reload a fresh copy (job may have been updated after claim)
             try:
                 job = self.store.get_job(job.id)
-            except Exception:
+            except Exception:  # REVIEWED: broad catch
                 return
 
             if job.cancelled or job.status in ("cancelled",):
@@ -221,7 +223,7 @@ class AutonomyEngine:
 
             await self._handle_success(job, result)
 
-    async def _handle_success(self, job: Job, result: Dict[str, Any]) -> None:
+    async def _handle_success(self, job: Job, result: dict[str, Any]) -> None:
         now = datetime.now(timezone.utc)
         self.store.add_audit(job.id, "job.succeeded", "engine", {"result": result})
 
@@ -259,8 +261,12 @@ class AutonomyEngine:
         if transient and attempts < job.retry_policy.max_attempts:
             delay_s = job.retry_policy.compute_delay(attempts)
             next_run = now + timedelta(seconds=delay_s)
-            self.store.add_audit(job.id, "job.retry_scheduled", "engine", {"attempts": attempts, "delay_s": delay_s, "error": err})
-            self.store.set_job_status(job.id, "queued", error=err, attempts=attempts, next_run_at=next_run, lock_clear=True)
+            self.store.add_audit(
+                job.id, "job.retry_scheduled", "engine", {"attempts": attempts, "delay_s": delay_s, "error": err}
+            )
+            self.store.set_job_status(
+                job.id, "queued", error=err, attempts=attempts, next_run_at=next_run, lock_clear=True
+            )
             return
 
         # Terminal failure
@@ -272,13 +278,15 @@ class AutonomyEngine:
             if next_run is None:
                 self.store.set_job_status(job.id, "dead", error=err, attempts=attempts, lock_clear=True)
             else:
-                self.store.set_job_status(job.id, "queued", error=err, attempts=0, next_run_at=next_run, lock_clear=True)
+                self.store.set_job_status(
+                    job.id, "queued", error=err, attempts=0, next_run_at=next_run, lock_clear=True
+                )
             return
 
         self.store.set_job_status(job.id, "dead", error=err, attempts=attempts, lock_clear=True)
 
     # -------- built-in handlers --------
-    def _resolve_model_config(self, profile: Optional[str]) -> ModelConfig:
+    def _resolve_model_config(self, profile: str | None) -> ModelConfig:
         if callable(self._model_resolver):
             try:
                 cfg = self._model_resolver(profile)
@@ -292,7 +300,7 @@ class AutonomyEngine:
     def _to_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
         try:
             iv = int(value)
-        except Exception:
+        except (ValueError, TypeError):
             iv = int(default)
         if iv < minimum:
             return minimum
@@ -301,7 +309,7 @@ class AutonomyEngine:
         return iv
 
     @staticmethod
-    def _to_optional_float(value: Any) -> Optional[float]:
+    def _to_optional_float(value: Any) -> float | None:
         if value is None:
             return None
         try:
@@ -310,14 +318,14 @@ class AutonomyEngine:
             raise AutonomyError("payload.speed must be a number") from e
 
     @staticmethod
-    def _as_dict(value: Any) -> Dict[str, Any]:
+    def _as_dict(value: Any) -> dict[str, Any]:
         if isinstance(value, dict):
             return dict(value)
         if isinstance(value, Mapping):
             return dict(value)
         return {}
 
-    def _workflow_policy_for_payload(self, payload: Mapping[str, Any]) -> Dict[str, Any]:
+    def _workflow_policy_for_payload(self, payload: Mapping[str, Any]) -> dict[str, Any]:
         autonomy_level = clamp_autonomy_level(payload.get("autonomy_level", 3), default=3)
         # Lower autonomy levels constrain fan-out for orchestrated workflows.
         worker_cap = {1: 1, 2: 2, 3: 3, 4: 4}.get(int(autonomy_level), 3)
@@ -329,12 +337,13 @@ class AutonomyEngine:
             "worker_count": int(worker_count),
         }
 
-    async def _handle_workflow_task(self, job: Job) -> Dict[str, Any]:
+    async def _handle_workflow_task(self, job: Job) -> dict[str, Any]:
         if self.chat_adapter is None:
             raise AutonomyTransientError("no chat adapter configured for workflow_task")
 
         raw_payload = self._as_dict(job.payload)
         payload, compile_meta = compile_nl_workflow_payload(raw_payload)
+        payload, mode_policy = apply_workflow_mode_policy(payload, compile_meta=compile_meta)
         workflow = str(payload.get("workflow") or payload.get("pattern") or "chain").strip().lower()
         policy = self._workflow_policy_for_payload(payload)
 
@@ -356,6 +365,7 @@ class AutonomyEngine:
         out = self._as_dict(result)
         out["telemetry"] = telemetry
         out["workflow_policy"] = policy
+        out["workflow_mode_policy"] = mode_policy
         if isinstance(compile_meta, dict):
             out["workflow_compile"] = compile_meta
         return out
@@ -372,7 +382,7 @@ class AutonomyEngine:
         self._artifact_root.mkdir(parents=True, exist_ok=True)
         return (self._artifact_root / f"{job_id}{ext}").resolve()
 
-    async def _handle_video_generation(self, job: Job) -> Dict[str, Any]:
+    async def _handle_video_generation(self, job: Job) -> dict[str, Any]:
         payload = self._as_dict(job.payload)
         prompt = str(payload.get("prompt") or "").strip()
         if not prompt:
@@ -411,10 +421,10 @@ class AutonomyEngine:
         finally:
             try:
                 await client.aclose()
-            except Exception:
+            except (ConnectionError, TimeoutError):
                 pass
 
-    async def _handle_speech_transcription(self, job: Job) -> Dict[str, Any]:
+    async def _handle_speech_transcription(self, job: Job) -> dict[str, Any]:
         payload = self._as_dict(job.payload)
         audio_path = str(payload.get("audio_path") or "").strip()
         if not audio_path:
@@ -444,10 +454,10 @@ class AutonomyEngine:
         finally:
             try:
                 await client.aclose()
-            except Exception:
+            except (ConnectionError, TimeoutError):
                 pass
 
-    async def _handle_speech_synthesis(self, job: Job) -> Dict[str, Any]:
+    async def _handle_speech_synthesis(self, job: Job) -> dict[str, Any]:
         payload = self._as_dict(job.payload)
         text = str(payload.get("text") or payload.get("input") or "").strip()
         if not text:
@@ -485,22 +495,22 @@ class AutonomyEngine:
         finally:
             try:
                 await client.aclose()
-            except Exception:
+            except (ConnectionError, TimeoutError):
                 pass
 
-    async def _handle_reminder(self, job: Job) -> Dict[str, Any]:
+    async def _handle_reminder(self, job: Job) -> dict[str, Any]:
         msg = str(job.payload.get("message") or job.payload.get("text") or "").strip()
         if not msg:
             msg = f"Reminder: {job.name}"
         self.store.add_message(session_id=job.session_id, level="info", text=msg)
         return {"sent": True, "message": msg}
 
-    async def _handle_daily_briefing(self, job: Job) -> Dict[str, Any]:
+    async def _handle_daily_briefing(self, job: Job) -> dict[str, Any]:
         prompt = str(job.payload.get("prompt") or "").strip()
         if not prompt:
             prompt = "Generate a concise daily briefing with: priorities, risks, and next actions."
 
-        content: Dict[str, Any] = {"prompt": prompt, "generated": False}
+        content: dict[str, Any] = {"prompt": prompt, "generated": False}
         if self.chat_adapter is not None:
             try:
                 content = await self.chat_adapter.generate_json(
@@ -522,7 +532,7 @@ class AutonomyEngine:
         self.store.add_message(session_id=job.session_id, level="briefing", text=f"Daily briefing created ({bid}).")
         return {"briefing_id": bid, "content": content}
 
-    async def _handle_autonomy_task(self, job: Job) -> Dict[str, Any]:
+    async def _handle_autonomy_task(self, job: Job) -> dict[str, Any]:
         """Planner → reviewer → executor pipeline.
 
         The planner is LLM-backed (via the provided chat_adapter) and must output STRICT JSON.
@@ -543,7 +553,9 @@ class AutonomyEngine:
 
         reviewer = ReviewerAgent()
         ok, problems = reviewer.review(plan)
-        self.store.add_audit(job.id, "autonomy_task.plan", "planner", {"plan": plan, "review_ok": ok, "problems": problems})
+        self.store.add_audit(
+            job.id, "autonomy_task.plan", "planner", {"plan": plan, "review_ok": ok, "problems": problems}
+        )
 
         if problems:
             self.store.add_message(

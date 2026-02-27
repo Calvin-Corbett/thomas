@@ -11,9 +11,9 @@
       "text": "```json\n{\n  \"name\": \"fs_write_file\",\n  \"arguments\": {\n    \"path\": \"runtime/agentic_bench/agentic-20260220-012000/thomas_os/smoke_probe.txt\",\n    \"content\": \"THOMAS_SMOKE_PROBE=1\"\n  }\n}\n```\n\nsmoke_probe.txt was created.",
       "error": "",
       "usage": {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0
+        "prompt_tokens": 5,
+        "completion_tokens": 55,
+        "total_tokens": 60
       },
       "tool_calls": 0,
       "elapsed_seconds": 22.187

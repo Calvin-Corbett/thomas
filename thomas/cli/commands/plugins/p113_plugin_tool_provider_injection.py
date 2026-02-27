@@ -12,11 +12,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 try:  # pragma: no cover
     import typer
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
 from thomas.plugins.p113_plugin_tool_provider_injection import (
@@ -42,8 +42,8 @@ class CliInput:
 @dataclass(frozen=True)
 class CliOutput:
     ok: bool
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[Dict[str, Any]] = None
+    result: dict[str, Any] | None = None
+    error: dict[str, Any] | None = None
 
     def to_json(self) -> str:
         payload = asdict(self)
@@ -61,7 +61,7 @@ def run_cli(
     tool_name: str,
     json_output: bool = False,
     registry: Any = None,
-) -> Tuple[int, str]:
+) -> tuple[int, str]:
     """Execute the injection flow and return (exit_code, stdout)."""
 
     try:
@@ -97,7 +97,7 @@ def _format_human_success(result: ToolProviderInjectionResult) -> str:
     return f"Injected provider '{result.provider_id}' with tools: {tools}\n"
 
 
-def _format_human_error(err: Dict[str, Any]) -> str:
+def _format_human_error(err: dict[str, Any]) -> str:
     return f"ERROR[{err.get('code')}]: {err.get('message')}\n"
 
 
@@ -108,7 +108,9 @@ def _resolve_registry() -> Any:
     try:
         from thomas.tools import registry as registry_mod  # type: ignore
     except Exception as exc:  # pragma: no cover
-        raise ToolProviderInjectionError(InjectionErrorCode.MISSING_CONFIG, "Thomas tool registry module not available.") from exc
+        raise ToolProviderInjectionError(
+            InjectionErrorCode.MISSING_CONFIG, "Thomas tool registry module not available."
+        ) from exc
 
     # 1) Global singleton
     for attr in ("REGISTRY", "registry", "tool_registry", "TOOLS"):
@@ -128,7 +130,7 @@ def _resolve_registry() -> Any:
         if cls is not None:
             try:
                 return cls()
-            except Exception:
+            except AttributeError:
                 continue
 
     raise ToolProviderInjectionError(
@@ -165,7 +167,7 @@ COMMAND_NAME = "p113-tool-provider-injection"
 # Provide both, without making import-time assumptions about the registry.
 try:  # pragma: no cover
     from typer.main import get_command as _typer_get_command  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     _typer_get_command = None  # type: ignore
 
 click_command = _typer_get_command(app) if (_typer_get_command is not None and app is not None) else None

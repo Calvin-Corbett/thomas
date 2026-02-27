@@ -13,13 +13,13 @@ This module is intentionally filesystem-only and does not depend on Playwright.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
-from pathlib import Path
 import re
 import shutil
-from typing import Any, Iterable, List, Optional
-
+from collections.abc import Iterable
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 _PROFILE_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$")
 
@@ -30,7 +30,7 @@ class BrowserProfileError(Exception):
     code: str = "browser_profile_error"
     exit_code: int = 1
 
-    def __init__(self, message: str, *, code: Optional[str] = None) -> None:
+    def __init__(self, message: str, *, code: str | None = None) -> None:
         super().__init__(message)
         if code is not None:
             self.code = code
@@ -70,7 +70,7 @@ class BrowserProfileRef:
 @dataclass(frozen=True, slots=True)
 class CreateBrowserProfileRequest:
     name: str
-    profiles_root: Optional[Path] = None
+    profiles_root: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -84,7 +84,7 @@ class CreateBrowserProfileResult:
 @dataclass(frozen=True, slots=True)
 class DeleteBrowserProfileRequest:
     name: str
-    profiles_root: Optional[Path] = None
+    profiles_root: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -98,12 +98,12 @@ class DeleteBrowserProfileResult:
 
 @dataclass(frozen=True, slots=True)
 class ListBrowserProfilesRequest:
-    profiles_root: Optional[Path] = None
+    profiles_root: Path | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class ListBrowserProfilesResult:
-    profiles: List[BrowserProfileRef]
+    profiles: list[BrowserProfileRef]
 
     def to_dict(self) -> dict[str, Any]:
         return {"profiles": [p.to_dict() for p in self.profiles], "count": len(self.profiles)}
@@ -120,20 +120,18 @@ def _validate_profile_name(name: str) -> str:
     if "/" in cleaned or "\\" in cleaned:
         raise InvalidProfileNameError("Profile name may not contain path separators.")
     if not _PROFILE_NAME_RE.fullmatch(cleaned):
-        raise InvalidProfileNameError(
-            "Profile name must match /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/."
-        )
+        raise InvalidProfileNameError("Profile name must match /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/.")
     return cleaned
 
 
-def _try_import_attr(module_name: str, attr_names: Iterable[str]) -> Optional[Any]:
+def _try_import_attr(module_name: str, attr_names: Iterable[str]) -> Any | None:
     """Best-effort lookup for an attribute in an optional dependency."""
 
     try:
         from importlib import import_module
 
         module = import_module(module_name)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
     for attr in attr_names:
@@ -147,7 +145,7 @@ def _lexists(path: Path) -> bool:
     return os.path.lexists(str(path))
 
 
-def resolve_profiles_root(explicit_root: Optional[Path] = None) -> Path:
+def resolve_profiles_root(explicit_root: Path | None = None) -> Path:
     """Resolve the root directory where profiles live.
 
     Resolution order:
@@ -196,9 +194,7 @@ def resolve_profiles_root(explicit_root: Optional[Path] = None) -> Path:
     try:
         root.mkdir(parents=True, exist_ok=True)
     except OSError as e:
-        raise BrowserProfileExternalError(
-            f"Failed to ensure profiles root directory exists: {root}"
-        ) from e
+        raise BrowserProfileExternalError(f"Failed to ensure profiles root directory exists: {root}") from e
 
     return root
 
@@ -233,7 +229,7 @@ def list_browser_profiles(request: ListBrowserProfilesRequest) -> ListBrowserPro
     except OSError as e:
         raise BrowserProfileExternalError(f"Failed to list profiles under '{root}'.") from e
 
-    profiles: List[BrowserProfileRef] = []
+    profiles: list[BrowserProfileRef] = []
     for p in entries:
         if not _PROFILE_NAME_RE.fullmatch(p.name):
             continue

@@ -15,13 +15,14 @@ from __future__ import annotations
 import json
 import os
 import re
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Mapping, TypedDict
+from typing import Any, Literal, TypedDict
 
 try:
     import tomllib  # py3.11+
-except Exception:  # pragma: no cover
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
     tomllib = None  # type: ignore[assignment]
 
 
@@ -43,7 +44,7 @@ class PluginListError(RuntimeError):
             return f"{self.code}: {self.message} ({self.detail})"
         return f"{self.code}: {self.message}"
 
-    def to_dict(self) -> "PluginListErrorJSON":
+    def to_dict(self) -> PluginListErrorJSON:
         payload: PluginListErrorJSON = {"code": self.code, "message": self.message}
         if self.detail is not None:
             payload["detail"] = self.detail
@@ -80,7 +81,7 @@ class PluginListItem:
     path: str | None = None
     error: str | None = None
 
-    def to_dict(self) -> "PluginListItemJSON":
+    def to_dict(self) -> PluginListItemJSON:
         return {
             "id": self.plugin_id,
             "enabled": self.enabled,
@@ -116,7 +117,7 @@ class PluginListResult:
     plugins_dir: str
     plugins: tuple[PluginListItem, ...]
 
-    def to_json(self) -> "PluginListResultJSON":
+    def to_json(self) -> PluginListResultJSON:
         return {
             "ok": True,
             "config_path": self.config_path,
@@ -233,7 +234,7 @@ def list_plugins_runtime_backed(request: PluginListRequest) -> PluginListResult:
                 manifest = _read_manifest(plugin_path)
                 name = _infer_name(plugin_id, manifest)
                 version = _infer_version(version, manifest)
-            except Exception as exc:  # noqa: BLE001
+            except (OSError, json.JSONDecodeError, ValueError, KeyError) as exc:  # noqa: BLE001
                 status = "error"
                 error = f"manifest_error: {type(exc).__name__}: {exc}"
 
@@ -259,6 +260,7 @@ def list_plugins_runtime_backed(request: PluginListRequest) -> PluginListResult:
 
 
 # ------------------------- config discovery/parsing -------------------------
+
 
 def _resolve_config_path(explicit: Path | None) -> Path:
     if explicit is not None:
@@ -317,7 +319,7 @@ def _load_config(config_path: Path) -> dict[str, Any]:
 def _json_load(raw: str) -> Any:
     try:
         return json.loads(raw)
-    except Exception as exc:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError) as exc:  # noqa: BLE001
         raise PluginListError("CONFIG_INVALID", "invalid JSON", detail=f"{type(exc).__name__}: {exc}") from exc
 
 
@@ -326,18 +328,18 @@ def _toml_load(raw: str) -> Any:
         raise PluginListError("CONFIG_INVALID", "TOML parsing unavailable", detail="tomllib not available")
     try:
         return tomllib.loads(raw)
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError, TypeError) as exc:  # noqa: BLE001
         raise PluginListError("CONFIG_INVALID", "invalid TOML", detail=f"{type(exc).__name__}: {exc}") from exc
 
 
 def _yaml_load(raw: str) -> Any:
     try:
         import yaml  # type: ignore
-    except Exception as exc:  # noqa: BLE001
+    except (ImportError, ModuleNotFoundError) as exc:  # noqa: BLE001
         raise PluginListError("CONFIG_INVALID", "YAML parsing unavailable", detail=str(exc)) from exc
     try:
         return yaml.safe_load(raw)
-    except Exception as exc:  # noqa: BLE001
+    except (ValueError, OSError, AttributeError, KeyError, TypeError) as exc:  # noqa: BLE001
         raise PluginListError("CONFIG_INVALID", "invalid YAML", detail=f"{type(exc).__name__}: {exc}") from exc
 
 
@@ -369,6 +371,7 @@ def _resolve_plugins_dir(explicit: Path | None, config_path: Path, config: Mappi
 
 
 # -------------------------- plugin extraction --------------------------------
+
 
 def _extract_plugin_sections(config: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
     plugins = config.get("plugins")
@@ -434,6 +437,7 @@ def _resolve_plugin_path(plugin_id: str, install_meta: Mapping[str, Any], plugin
 
 
 # ------------------------------ manifest -------------------------------------
+
 
 def _read_manifest(plugin_path: Path) -> dict[str, Any]:
     if not plugin_path.exists():

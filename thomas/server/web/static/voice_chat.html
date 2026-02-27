@@ -1,0 +1,1389 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thomas Voice Chat</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --primary: #6366f1;
+            --primary-dark: #4f46e5;
+            --bg-dark: #0f1117;
+            --bg-secondary: #1a1d27;
+            --bg-tertiary: #2a2d37;
+            --text-primary: #e6edf3;
+            --text-secondary: #8b949e;
+            --border: #30363d;
+            --success: #10b981;
+            --warning: #f59e0b;
+            --error: #ef4444;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+            background: linear-gradient(135deg, var(--bg-dark) 0%, #0d1117 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        #root {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            width: 100%;
+        }
+
+        .voice-chat-app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            max-width: 900px;
+            margin: 0 auto;
+            width: 100%;
+        }
+
+        /* Header */
+        .header {
+            padding: 16px 24px;
+            border-bottom: 1px solid var(--border);
+            background: rgba(26, 29, 39, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .header-content h1 {
+            font-size: 1.6rem;
+            font-weight: 600;
+            margin: 0;
+        }
+
+        .header-content p {
+            color: var(--text-secondary);
+            font-size: 0.9rem;
+            margin: 4px 0 0 0;
+        }
+
+        .header-controls {
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .continuous-indicator {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            font-size: 0.85rem;
+            color: var(--warning);
+            padding: 6px 12px;
+            background: rgba(245, 158, 11, 0.1);
+            border-radius: 6px;
+            border: 1px solid rgba(245, 158, 11, 0.3);
+        }
+
+        .continuous-indicator.inactive {
+            display: none;
+        }
+
+        .settings-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 6px;
+            transition: color 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .settings-btn:hover {
+            color: var(--primary);
+        }
+
+        /* Conversation Area */
+        .conversation-area {
+            flex: 1;
+            overflow-y: auto;
+            padding: 20px 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+        }
+
+        .messages-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        .message {
+            display: flex;
+            gap: 12px;
+            animation: messageSlideIn 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+
+        .message.user {
+            justify-content: flex-end;
+        }
+
+        .message.assistant {
+            justify-content: flex-start;
+        }
+
+        .message.system {
+            justify-content: center;
+        }
+
+        .message-bubble {
+            max-width: 70%;
+            padding: 12px 16px;
+            border-radius: 12px;
+            word-wrap: break-word;
+            line-height: 1.5;
+            font-size: 0.95rem;
+        }
+
+        .message.user .message-bubble {
+            background: var(--primary);
+            color: white;
+            border-radius: 18px 18px 4px 18px;
+        }
+
+        .message.assistant .message-bubble {
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-primary);
+            border-radius: 18px 18px 18px 4px;
+        }
+
+        .message.system .message-bubble {
+            background: transparent;
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            font-size: 0.85rem;
+            padding: 8px 12px;
+        }
+
+        .message-footer {
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+        }
+
+        .message.user .message-footer {
+            text-align: right;
+        }
+
+        .message.assistant .message-footer {
+            text-align: left;
+        }
+
+        .voice-message-waveform {
+            height: 40px;
+            display: flex;
+            align-items: flex-end;
+            gap: 2px;
+            margin-top: 8px;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 8px;
+        }
+
+        .waveform-bar {
+            width: 2px;
+            background: currentColor;
+            opacity: 0.6;
+            border-radius: 1px;
+        }
+
+        .typing-indicator {
+            display: flex;
+            gap: 4px;
+            padding: 8px 0;
+        }
+
+        .typing-dot {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: var(--text-secondary);
+            animation: typingDot 1.4s infinite;
+        }
+
+        .typing-dot:nth-child(2) {
+            animation-delay: 0.2s;
+        }
+
+        .typing-dot:nth-child(3) {
+            animation-delay: 0.4s;
+        }
+
+        @keyframes typingDot {
+            0%, 60%, 100% { opacity: 0.3; }
+            30% { opacity: 1; }
+        }
+
+        @keyframes messageSlideIn {
+            from {
+                opacity: 0;
+                transform: translateY(10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        /* Voice Control Area */
+        .voice-control-area {
+            height: 200px;
+            padding: 20px 24px;
+            border-top: 1px solid var(--border);
+            background: rgba(26, 29, 39, 0.6);
+            backdrop-filter: blur(10px);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .mic-control-wrapper {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .mic-button-container {
+            position: relative;
+            width: 100px;
+            height: 100px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .circular-waveform {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            inset: 0;
+        }
+
+        .waveform-circle {
+            position: absolute;
+            border: 2px solid;
+            border-radius: 50%;
+            opacity: 0.3;
+        }
+
+        .mic-button {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            border: none;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            font-size: 2rem;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+            position: relative;
+            z-index: 2;
+            box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+        }
+
+        .mic-button:hover:not(.processing):not(.speaking) {
+            transform: scale(1.05);
+            box-shadow: 0 10px 32px rgba(99, 102, 241, 0.2);
+        }
+
+        .mic-button:active {
+            transform: scale(0.95);
+        }
+
+        .mic-button.listening {
+            background: var(--primary);
+            color: white;
+            box-shadow: 0 0 0 20px rgba(99, 102, 241, 0.1),
+                        0 8px 24px rgba(99, 102, 241, 0.3);
+            animation: micListenPulse 1.5s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+        }
+
+        .mic-button.processing {
+            background: var(--primary);
+            color: white;
+            animation: micSpin 2s linear infinite;
+        }
+
+        .mic-button.speaking {
+            background: var(--success);
+            color: white;
+            box-shadow: 0 0 0 20px rgba(16, 185, 129, 0.1),
+                        0 8px 24px rgba(16, 185, 129, 0.3);
+        }
+
+        @keyframes micListenPulse {
+            0%, 100% {
+                box-shadow: 0 0 0 0 rgba(99, 102, 241, 0.4),
+                            0 8px 24px rgba(99, 102, 241, 0.3);
+            }
+            50% {
+                box-shadow: 0 0 0 30px rgba(99, 102, 241, 0),
+                            0 8px 24px rgba(99, 102, 241, 0.3);
+            }
+        }
+
+        @keyframes micSpin {
+            from { transform: rotate(0deg); }
+            to { transform: rotate(360deg); }
+        }
+
+        .recording-dot {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: var(--error);
+            border-radius: 50%;
+            top: 8px;
+            right: 8px;
+            z-index: 3;
+            animation: recordingPulse 1s ease-in-out infinite;
+        }
+
+        @keyframes recordingPulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.4; }
+        }
+
+        .control-buttons {
+            display: flex;
+            gap: 12px;
+            z-index: 1;
+        }
+
+        .control-btn {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            border: 1px solid var(--border);
+            background: var(--bg-secondary);
+            color: var(--text-secondary);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.2rem;
+            transition: all 0.2s;
+        }
+
+        .control-btn:hover {
+            border-color: var(--primary);
+            color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+
+        .control-btn:active {
+            transform: scale(0.95);
+        }
+
+        .status-section {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .status-text {
+            font-size: 0.95rem;
+            color: var(--text-secondary);
+            text-align: center;
+            min-height: 20px;
+        }
+
+        .transcription-hint {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            font-style: italic;
+            text-align: center;
+            min-height: 16px;
+        }
+
+        .volume-indicator {
+            width: 120px;
+            height: 4px;
+            background: var(--bg-tertiary);
+            border-radius: 2px;
+            overflow: hidden;
+        }
+
+        .volume-bar {
+            height: 100%;
+            background: linear-gradient(90deg, var(--primary), var(--success));
+            width: 0%;
+            transition: width 0.05s linear;
+        }
+
+        /* Settings Panel */
+        .settings-panel {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 360px;
+            height: 100vh;
+            background: var(--bg-secondary);
+            border-left: 1px solid var(--border);
+            transform: translateX(100%);
+            transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+            z-index: 999;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+        }
+
+        .settings-panel.open {
+            transform: translateX(0);
+        }
+
+        .settings-panel-header {
+            padding: 20px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .settings-panel-header h2 {
+            font-size: 1.4rem;
+            margin: 0;
+        }
+
+        .close-settings-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            font-size: 1.4rem;
+            cursor: pointer;
+            padding: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .close-settings-btn:hover {
+            color: var(--text-primary);
+        }
+
+        .settings-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .settings-group {
+            margin-bottom: 24px;
+        }
+
+        .settings-group label {
+            display: block;
+            font-size: 0.9rem;
+            font-weight: 500;
+            color: var(--text-primary);
+            margin-bottom: 8px;
+        }
+
+        .settings-group select,
+        .settings-group input[type="text"],
+        .settings-group input[type="number"] {
+            width: 100%;
+            padding: 8px 12px;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            color: var(--text-primary);
+            font-size: 0.9rem;
+            transition: border-color 0.2s;
+        }
+
+        .settings-group select:focus,
+        .settings-group input:focus {
+            outline: none;
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
+        }
+
+        .range-slider {
+            width: 100%;
+            -webkit-appearance: none;
+            appearance: none;
+            height: 6px;
+            border-radius: 3px;
+            background: var(--bg-dark);
+            outline: none;
+            cursor: pointer;
+            border: 1px solid var(--border);
+        }
+
+        .range-slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+
+        .range-slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--primary);
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+        }
+
+        .range-value {
+            font-size: 0.85rem;
+            color: var(--text-secondary);
+            margin-top: 6px;
+            text-align: center;
+        }
+
+        .toggle-switch {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .toggle-switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .toggle-slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: var(--bg-dark);
+            border: 1px solid var(--border);
+            transition: 0.3s;
+            border-radius: 24px;
+        }
+
+        .toggle-slider::before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 2px;
+            bottom: 2px;
+            background: var(--text-secondary);
+            transition: 0.3s;
+            border-radius: 50%;
+        }
+
+        .toggle-switch input:checked + .toggle-slider {
+            background: var(--primary);
+            border-color: var(--primary);
+        }
+
+        .toggle-switch input:checked + .toggle-slider::before {
+            transform: translateX(20px);
+            background: white;
+        }
+
+        .toggle-group {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .settings-divider {
+            height: 1px;
+            background: var(--border);
+            margin: 24px 0;
+        }
+
+        /* Settings Overlay */
+        .settings-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.4);
+            z-index: 998;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s;
+        }
+
+        .settings-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        /* Accessibility */
+        @media (prefers-reduced-motion: reduce) {
+            * {
+                animation: none !important;
+                transition: none !important;
+            }
+        }
+
+        @media (prefers-color-scheme: light) {
+            :root {
+                --bg-dark: #ffffff;
+                --bg-secondary: #f6f8fa;
+                --bg-tertiary: #eaeef2;
+                --text-primary: #24292f;
+                --text-secondary: #656d76;
+                --border: #d0d7de;
+            }
+
+            body {
+                background: linear-gradient(135deg, #ffffff 0%, #f6f8fa 100%);
+            }
+        }
+
+        /* Responsive */
+        @media (max-width: 768px) {
+            .settings-panel {
+                width: 100%;
+            }
+
+            .message-bubble {
+                max-width: 85%;
+            }
+
+            .header {
+                padding: 12px 16px;
+            }
+
+            .header-content h1 {
+                font-size: 1.4rem;
+            }
+
+            .conversation-area {
+                padding: 12px 16px;
+            }
+
+            .voice-control-area {
+                padding: 16px;
+                height: auto;
+            }
+
+            .mic-button-container {
+                width: 80px;
+                height: 80px;
+            }
+
+            .mic-button {
+                width: 70px;
+                height: 70px;
+                font-size: 1.8rem;
+            }
+        }
+
+        @media (max-width: 480px) {
+            .header {
+                padding: 10px 12px;
+                flex-direction: column;
+                gap: 8px;
+                align-items: flex-start;
+            }
+
+            .header-content h1 {
+                font-size: 1.2rem;
+            }
+
+            .header-content p {
+                font-size: 0.8rem;
+            }
+
+            .conversation-area {
+                padding: 8px 12px;
+                gap: 8px;
+            }
+
+            .message-bubble {
+                max-width: 90%;
+                font-size: 0.9rem;
+            }
+
+            .voice-control-area {
+                gap: 12px;
+            }
+
+            .mic-button {
+                width: 60px;
+                height: 60px;
+                font-size: 1.5rem;
+            }
+
+            .control-btn {
+                width: 40px;
+                height: 40px;
+                font-size: 1rem;
+            }
+
+            .settings-panel {
+                width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <script type="text/babel">
+        const { useState, useReducer, useCallback, useEffect, useRef } = React;
+
+        // Custom Hooks
+        const useVoiceCapture = () => {
+            const mediaRecorderRef = useRef(null);
+            const audioContextRef = useRef(null);
+            const analyserRef = useRef(null);
+            const audioChunksRef = useRef([]);
+            const streamRef = useRef(null);
+
+            const startRecording = useCallback(async () => {
+                try {
+                    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    streamRef.current = stream;
+
+                    audioContextRef.current = new (window.AudioContext || window.webkitAudioContext)();
+                    analyserRef.current = audioContextRef.current.createAnalyser();
+                    const source = audioContextRef.current.createMediaStreamSource(stream);
+                    source.connect(analyserRef.current);
+
+                    audioChunksRef.current = [];
+                    mediaRecorderRef.current = new MediaRecorder(stream);
+
+                    mediaRecorderRef.current.ondataavailable = (event) => {
+                        audioChunksRef.current.push(event.data);
+                    };
+
+                    mediaRecorderRef.current.start();
+                    return { success: true };
+                } catch (error) {
+                    console.error("Microphone access error:", error);
+                    return { success: false, error };
+                }
+            }, []);
+
+            const stopRecording = useCallback(() => {
+                return new Promise((resolve) => {
+                    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+                        mediaRecorderRef.current.onstop = () => {
+                            const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm;codecs=opus" });
+                            if (streamRef.current) {
+                                streamRef.current.getTracks().forEach(track => track.stop());
+                            }
+                            resolve(audioBlob);
+                        };
+                        mediaRecorderRef.current.stop();
+                    } else {
+                        resolve(null);
+                    }
+                });
+            }, []);
+
+            const getAudioLevel = useCallback(() => {
+                if (!analyserRef.current) return 0;
+                const dataArray = new Uint8Array(analyserRef.current.frequencyBinCount);
+                analyserRef.current.getByteFrequencyData(dataArray);
+                const average = dataArray.reduce((a, b) => a + b) / dataArray.length;
+                return Math.min(100, (average / 255) * 100);
+            }, []);
+
+            return { startRecording, stopRecording, getAudioLevel };
+        };
+
+        const useSpeechRecognition = () => {
+            const [isSupported] = useState(() => {
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                return !!SpeechRecognition;
+            });
+
+            const recognitionRef = useRef(null);
+
+            const startListening = useCallback((language, onResult, onFinal) => {
+                if (!isSupported) return false;
+
+                const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+                recognitionRef.current = new SpeechRecognition();
+                recognitionRef.current.language = language;
+                recognitionRef.current.continuous = false;
+                recognitionRef.current.interimResults = true;
+
+                recognitionRef.current.onresult = (event) => {
+                    let interim = "";
+                    let final = "";
+                    for (let i = event.resultIndex; i < event.results.length; i++) {
+                        const transcript = event.results[i][0].transcript;
+                        if (event.results[i].isFinal) {
+                            final += transcript;
+                        } else {
+                            interim += transcript;
+                        }
+                    }
+                    if (interim) onResult(interim);
+                    if (final) onFinal(final);
+                };
+
+                recognitionRef.current.start();
+                return true;
+            }, [isSupported]);
+
+            const stopListening = useCallback(() => {
+                if (recognitionRef.current) {
+                    recognitionRef.current.stop();
+                }
+            }, []);
+
+            return { startListening, stopListening, isSupported };
+        };
+
+        const useAudioPlayback = () => {
+            const audioRef = useRef(new Audio());
+
+            const play = useCallback((audioBlob) => {
+                const url = URL.createObjectURL(audioBlob);
+                audioRef.current.src = url;
+                return audioRef.current.play().catch(err => console.error("Playback error:", err));
+            }, []);
+
+            const stop = useCallback(() => {
+                audioRef.current.pause();
+                audioRef.current.currentTime = 0;
+            }, []);
+
+            return { play, stop, audioElement: audioRef.current };
+        };
+
+        const useWaveform = () => {
+            const [waveformData, setWaveformData] = useState([]);
+
+            const generateWaveform = useCallback((audioBlob) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                    audioContext.decodeAudioData(event.target.result, (buffer) => {
+                        const rawData = buffer.getChannelData(0);
+                        const samples = Math.floor(rawData.length / 64);
+                        const waveform = [];
+                        for (let i = 0; i < samples; i++) {
+                            let sum = 0;
+                            for (let j = 0; j < 64; j++) {
+                                sum += Math.abs(rawData[i * 64 + j]);
+                            }
+                            waveform.push((sum / 64) * 100);
+                        }
+                        setWaveformData(waveform);
+                    });
+                };
+                reader.readAsArrayBuffer(audioBlob);
+            }, []);
+
+            return { waveformData, generateWaveform };
+        };
+
+        // Chat State Reducer
+        const chatReducer = (state, action) => {
+            switch (action.type) {
+                case "ADD_MESSAGE":
+                    return {
+                        ...state,
+                        messages: [...state.messages, { ...action.payload, id: Date.now() }],
+                    };
+                case "SET_TYPING":
+                    return { ...state, isTyping: action.payload };
+                case "CLEAR_MESSAGES":
+                    return { ...state, messages: [] };
+                case "SET_STATUS":
+                    return { ...state, status: action.payload };
+                default:
+                    return state;
+            }
+        };
+
+        // Main App Component
+        function VoiceChatApp() {
+            const [chatState, dispatch] = useReducer(chatReducer, {
+                messages: [],
+                isTyping: false,
+                status: "idle",
+            });
+
+            const [recordingState, setRecordingState] = useState("idle"); // idle, listening, processing, speaking
+            const [settings, setSettings] = useState({
+                voiceMode: "push-to-talk", // push-to-talk, hold-to-talk, continuous
+                silenceTimeout: 2000,
+                language: "en-US",
+                ttsVoice: "google",
+                ttsSpeed: 1,
+                ttsPitch: 1,
+                autoPlay: true,
+                soundEffects: true,
+                continuousMode: false,
+            });
+            const [showSettings, setShowSettings] = useState(false);
+            const [transcription, setTranscription] = useState("");
+            const [audioLevel, setAudioLevel] = useState(0);
+
+            const voiceCapture = useVoiceCapture();
+            const speechRecognition = useSpeechRecognition();
+            const audioPlayback = useAudioPlayback();
+            const waveform = useWaveform();
+            const silenceTimeoutRef = useRef(null);
+            const audioLevelIntervalRef = useRef(null);
+
+            // Sound Effects
+            const playSound = useCallback((type) => {
+                if (!settings.soundEffects) return;
+                const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+                const oscillator = audioContext.createOscillator();
+                const gainNode = audioContext.createGain();
+
+                oscillator.connect(gainNode);
+                gainNode.connect(audioContext.destination);
+
+                const now = audioContext.currentTime;
+
+                switch (type) {
+                    case "activate":
+                        oscillator.frequency.value = 800;
+                        gainNode.gain.setValueAtTime(0.1, now);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.1);
+                        break;
+                    case "stop":
+                        oscillator.frequency.value = 400;
+                        gainNode.gain.setValueAtTime(0.1, now);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.15);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.15);
+                        break;
+                    case "notification":
+                        oscillator.frequency.value = 1000;
+                        gainNode.gain.setValueAtTime(0.05, now);
+                        gainNode.gain.exponentialRampToValueAtTime(0.01, now + 0.2);
+                        oscillator.start(now);
+                        oscillator.stop(now + 0.2);
+                        break;
+                }
+            }, [settings.soundEffects]);
+
+            const startRecording = useCallback(async () => {
+                const result = await voiceCapture.startRecording();
+                if (result.success) {
+                    setRecordingState("listening");
+                    playSound("activate");
+                    dispatch({ type: "SET_STATUS", payload: "Listening..." });
+
+                    // Start audio level monitoring
+                    audioLevelIntervalRef.current = setInterval(() => {
+                        const level = voiceCapture.getAudioLevel();
+                        setAudioLevel(level);
+                    }, 50);
+
+                    // Speech recognition
+                    speechRecognition.startListening(
+                        settings.language,
+                        (interim) => setTranscription(interim),
+                        (final) => {
+                            setTranscription(final);
+                            stopRecording(final);
+                        }
+                    );
+
+                    // Silence detection
+                    clearTimeout(silenceTimeoutRef.current);
+                    silenceTimeoutRef.current = setTimeout(() => {
+                        stopRecording();
+                    }, settings.silenceTimeout);
+                }
+            }, [voiceCapture, speechRecognition, settings.language, settings.silenceTimeout, playSound]);
+
+            const stopRecording = useCallback(async (finalTranscript = null) => {
+                clearInterval(audioLevelIntervalRef.current);
+                clearTimeout(silenceTimeoutRef.current);
+                speechRecognition.stopListening();
+
+                const audioBlob = await voiceCapture.stopRecording();
+                setRecordingState("processing");
+                playSound("stop");
+                dispatch({ type: "SET_STATUS", payload: "Processing..." });
+
+                if (audioBlob) {
+                    waveform.generateWaveform(audioBlob);
+                    dispatch({
+                        type: "ADD_MESSAGE",
+                        payload: {
+                            role: "user",
+                            type: "voice",
+                            content: finalTranscript || transcription,
+                            timestamp: new Date(),
+                            duration: 0,
+                        },
+                    });
+                }
+
+                // Simulate response
+                setTimeout(() => {
+                    dispatch({ type: "SET_TYPING", payload: true });
+                    dispatch({ type: "SET_STATUS", payload: "Processing..." });
+
+                    setTimeout(() => {
+                        const responses = [
+                            "That's an interesting question! Tell me more.",
+                            "I understand. How can I help you further?",
+                            "Great point! Let me think about that.",
+                            "Absolutely! I can help with that.",
+                        ];
+                        const response = responses[Math.floor(Math.random() * responses.length)];
+
+                        dispatch({ type: "SET_TYPING", payload: false });
+                        dispatch({
+                            type: "ADD_MESSAGE",
+                            payload: {
+                                role: "assistant",
+                                type: "text",
+                                content: response,
+                                timestamp: new Date(),
+                            },
+                        });
+
+                        setRecordingState("speaking");
+                        dispatch({ type: "SET_STATUS", payload: "Thomas is speaking..." });
+                        playSound("notification");
+
+                        setTimeout(() => {
+                            setRecordingState("idle");
+                            dispatch({ type: "SET_STATUS", payload: "Ready to listen" });
+
+                            if (settings.continuousMode || settings.voiceMode === "continuous") {
+                                setTimeout(() => startRecording(), 500);
+                            }
+                        }, 2000);
+                    }, 1000);
+                }, 500);
+
+                setTranscription("");
+                setAudioLevel(0);
+            }, [voiceCapture, speechRecognition, waveform, settings.language, settings.silenceTimeout, settings.continuousMode, settings.voiceMode, playSound, transcription, startRecording]);
+
+            const handleMicClick = useCallback(() => {
+                if (recordingState === "idle") {
+                    startRecording();
+                } else if (recordingState === "listening") {
+                    stopRecording();
+                }
+            }, [recordingState, startRecording, stopRecording]);
+
+            const handlePause = useCallback(() => {
+                if (recordingState === "listening") {
+                    speechRecognition.stopListening();
+                    setRecordingState("idle");
+                    dispatch({ type: "SET_STATUS", payload: "Paused" });
+                }
+            }, [recordingState, speechRecognition]);
+
+            const handleCancel = useCallback(() => {
+                speechRecognition.stopListening();
+                setRecordingState("idle");
+                setTranscription("");
+                setAudioLevel(0);
+                dispatch({ type: "SET_STATUS", payload: "Cancelled" });
+                clearInterval(audioLevelIntervalRef.current);
+                clearTimeout(silenceTimeoutRef.current);
+            }, [speechRecognition]);
+
+            return (
+                <div className="voice-chat-app">
+                    {/* Header */}
+                    <div className="header">
+                        <div className="header-content">
+                            <h1>Thomas Voice Chat</h1>
+                            <p>Speak naturally with your AI assistant</p>
+                        </div>
+                        <div className="header-controls">
+                            {settings.continuousMode && (
+                                <div className="continuous-indicator">
+                                    <span>👂</span>
+                                    <span>Always Listening</span>
+                                </div>
+                            )}
+                            <button
+                                className="settings-btn"
+                                onClick={() => setShowSettings(!showSettings)}
+                                aria-label="Settings"
+                            >
+                                ⚙️
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Conversation Area */}
+                    <div className="conversation-area">
+                        <div className="messages-container">
+                            {chatState.messages.map((msg) => (
+                                <div key={msg.id} className={`message ${msg.role}`}>
+                                    <div>
+                                        <div className="message-bubble">
+                                            {msg.content}
+                                            {msg.type === "voice" && (
+                                                <div className="voice-message-waveform">
+                                                    {waveform.waveformData.slice(0, 20).map((val, idx) => (
+                                                        <div
+                                                            key={idx}
+                                                            className="waveform-bar"
+                                                            style={{ height: `${val * 0.5}%` }}
+                                                        />
+                                                    ))}
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="message-footer">
+                                            <span>{msg.timestamp.toLocaleTimeString()}</span>
+                                            {msg.duration && <span>{msg.duration}s</span>}
+                                        </div>
+                                    </div>
+                                </div>
+                            ))}
+                            {chatState.isTyping && (
+                                <div className="message assistant">
+                                    <div className="message-bubble">
+                                        <div className="typing-indicator">
+                                            <div className="typing-dot"></div>
+                                            <div className="typing-dot"></div>
+                                            <div className="typing-dot"></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Voice Control Area */}
+                    <div className="voice-control-area">
+                        <div className="mic-control-wrapper">
+                            <div className="mic-button-container">
+                                <canvas className="circular-waveform" width="100" height="100" />
+                                <button
+                                    className={`mic-button ${recordingState}`}
+                                    onClick={handleMicClick}
+                                    aria-label={recordingState === "idle" ? "Start recording" : "Stop recording"}
+                                >
+                                    {recordingState === "speaking" ? "🔊" : "🎤"}
+                                    {recordingState === "listening" && <div className="recording-dot" />}
+                                </button>
+                            </div>
+
+                            <div className="control-buttons">
+                                <button
+                                    className="control-btn"
+                                    onClick={handlePause}
+                                    disabled={recordingState !== "listening"}
+                                    aria-label="Pause recording"
+                                    title="Pause"
+                                >
+                                    ⏸️
+                                </button>
+                                <button
+                                    className="control-btn"
+                                    onClick={handleCancel}
+                                    disabled={recordingState === "idle"}
+                                    aria-label="Cancel recording"
+                                    title="Cancel"
+                                >
+                                    ✕
+                                </button>
+                            </div>
+
+                            <div className="status-section">
+                                <div className="status-text">{chatState.status}</div>
+                                {transcription && (
+                                    <div className="transcription-hint">{transcription}</div>
+                                )}
+                            </div>
+
+                            {recordingState === "listening" && (
+                                <div className="volume-indicator">
+                                    <div
+                                        className="volume-bar"
+                                        style={{ width: `${audioLevel}%` }}
+                                    />
+                                </div>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Settings Panel */}
+                    <div className={`settings-overlay ${showSettings ? "open" : ""}`}
+                         onClick={() => setShowSettings(false)} />
+                    <div className={`settings-panel ${showSettings ? "open" : ""}`}>
+                        <div className="settings-panel-header">
+                            <h2>Settings</h2>
+                            <button
+                                className="close-settings-btn"
+                                onClick={() => setShowSettings(false)}
+                                aria-label="Close settings"
+                            >
+                                ✕
+                            </button>
+                        </div>
+                        <div className="settings-content">
+                            <div className="settings-group">
+                                <label>Voice Mode</label>
+                                <select
+                                    value={settings.voiceMode}
+                                    onChange={(e) => setSettings({ ...settings, voiceMode: e.target.value })}
+                                >
+                                    <option value="push-to-talk">Push-to-Talk</option>
+                                    <option value="hold-to-talk">Hold-to-Talk</option>
+                                    <option value="continuous">Continuous</option>
+                                </select>
+                            </div>
+
+                            <div className="settings-group">
+                                <label>Language</label>
+                                <select
+                                    value={settings.language}
+                                    onChange={(e) => setSettings({ ...settings, language: e.target.value })}
+                                >
+                                    <option value="en-US">English (US)</option>
+                                    <option value="es-ES">Spanish</option>
+                                    <option value="fr-FR">French</option>
+                                    <option value="de-DE">German</option>
+                                </select>
+                            </div>
+
+                            <div className="settings-group">
+                                <label>Silence Timeout (ms)</label>
+                                <input
+                                    type="number"
+                                    min="1000"
+                                    max="5000"
+                                    step="100"
+                                    value={settings.silenceTimeout}
+                                    onChange={(e) => setSettings({ ...settings, silenceTimeout: parseInt(e.target.value) })}
+                                />
+                            </div>
+
+                            <div className="settings-group">
+                                <label>TTS Speed</label>
+                                <input
+                                    type="range"
+                                    min="0.5"
+                                    max="2"
+                                    step="0.1"
+                                    value={settings.ttsSpeed}
+                                    onChange={(e) => setSettings({ ...settings, ttsSpeed: parseFloat(e.target.value) })}
+                                    className="range-slider"
+                                />
+                                <div className="range-value">{settings.ttsSpeed.toFixed(1)}x</div>
+                            </div>
+
+                            <div className="settings-group">
+                                <label>TTS Pitch</label>
+                                <input
+                                    type="range"
+                                    min="0.5"
+                                    max="2"
+                                    step="0.1"
+                                    value={settings.ttsPitch}
+                                    onChange={(e) => setSettings({ ...settings, ttsPitch: parseFloat(e.target.value) })}
+                                    className="range-slider"
+                                />
+                                <div className="range-value">{settings.ttsPitch.toFixed(1)}</div>
+                            </div>
+
+                            <div className="settings-divider" />
+
+                            <div className="settings-group">
+                                <div className="toggle-group">
+                                    <label>Auto-Play Responses</label>
+                                    <label className="toggle-switch">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.autoPlay}
+                                            onChange={(e) => setSettings({ ...settings, autoPlay: e.target.checked })}
+                                        />
+                                        <span className="toggle-slider" />
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="settings-group">
+                                <div className="toggle-group">
+                                    <label>Sound Effects</label>
+                                    <label className="toggle-switch">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.soundEffects}
+                                            onChange={(e) => setSettings({ ...settings, soundEffects: e.target.checked })}
+                                        />
+                                        <span className="toggle-slider" />
+                                    </label>
+                                </div>
+                            </div>
+
+                            <div className="settings-group">
+                                <div className="toggle-group">
+                                    <label>Continuous Listening</label>
+                                    <label className="toggle-switch">
+                                        <input
+                                            type="checkbox"
+                                            checked={settings.continuousMode}
+                                            onChange={(e) => setSettings({ ...settings, continuousMode: e.target.checked })}
+                                        />
+                                        <span className="toggle-slider" />
+                                    </label>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        // Render App
+        ReactDOM.createRoot(document.getElementById("root")).render(<VoiceChatApp />);
+    </script>
+</body>
+</html>

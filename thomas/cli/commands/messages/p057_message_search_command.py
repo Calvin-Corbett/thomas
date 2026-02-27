@@ -11,9 +11,8 @@ Key features
 
 from __future__ import annotations
 
-from typing import Any, Optional
-
 import json
+from typing import Any
 
 import typer
 
@@ -55,14 +54,18 @@ def _emit_human(payload: dict[str, Any]) -> None:
 
 def message_search_command(
     ctx: typer.Context,
-    query: str = typer.Option(..., "--query", help="Search query (substring match for local store; content filter for Discord)"),
-    guild_id: Optional[str] = typer.Option(None, "--guild-id", help="Guild/server id (required for Discord backend)"),
-    channel_id: Optional[str] = typer.Option(None, "--channel-id", help="Single channel id filter"),
+    query: str = typer.Option(
+        ..., "--query", help="Search query (substring match for local store; content filter for Discord)"
+    ),
+    guild_id: str | None = typer.Option(None, "--guild-id", help="Guild/server id (required for Discord backend)"),
+    channel_id: str | None = typer.Option(None, "--channel-id", help="Single channel id filter"),
     channel_ids: list[str] = typer.Option([], "--channel-ids", help="Repeatable channel id filters"),
-    author_id: Optional[str] = typer.Option(None, "--author-id", help="Single author/user id filter"),
+    author_id: str | None = typer.Option(None, "--author-id", help="Single author/user id filter"),
     author_ids: list[str] = typer.Option([], "--author-ids", help="Repeatable author/user id filters"),
     limit: int = typer.Option(25, "--limit", min=1, max=100, help="Max matches returned (1-100)"),
-    backend: MessageSearchBackend = typer.Option(MessageSearchBackend.AUTO, "--backend", help="Backend: auto, local, or discord"),
+    backend: MessageSearchBackend = typer.Option(
+        MessageSearchBackend.AUTO, "--backend", help="Backend: auto, local, or discord"
+    ),
     json_out: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
 ) -> None:
     """Search messages."""
@@ -105,7 +108,7 @@ def register(parent_app: Any) -> None:
     command_attr = getattr(parent_app, "command", None)
     if callable(command_attr):
         parent_app.command("search")(message_search_command)
-        setattr(parent_app, "_p057_message_search_registered", True)
+        parent_app._p057_message_search_registered = True
         return
 
     add_command = getattr(parent_app, "add_command", None)
@@ -113,7 +116,7 @@ def register(parent_app: Any) -> None:
         tmp = typer.Typer(add_completion=False)
         tmp.command("search")(message_search_command)
         add_command(typer.main.get_command(tmp), "search")
-        setattr(parent_app, "_p057_message_search_registered", True)
+        parent_app._p057_message_search_registered = True
         return
 
     raise RuntimeError("Unsupported CLI container for message search command registration")
@@ -122,11 +125,11 @@ def register(parent_app: Any) -> None:
 # Best-effort side-effect registration when imported inside the messages commands package.
 try:
     from . import app as _messages_app  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     _messages_app = None  # type: ignore
 
 if _messages_app is not None:  # pragma: no cover
     try:
         register(_messages_app)
-    except Exception:
+    except ImportError:
         pass

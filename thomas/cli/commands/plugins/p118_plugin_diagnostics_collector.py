@@ -7,7 +7,6 @@ registered tools. It supports a machine-readable JSON output mode.
 from __future__ import annotations
 
 import json
-from typing import List, Optional
 
 import typer
 
@@ -22,7 +21,7 @@ COMMAND_NAME = "p118-plugin-diagnostics-collector"
 
 
 def _run(
-    plugin: Optional[List[str]] = typer.Option(
+    plugin: list[str] | None = typer.Option(
         None,
         "--plugin",
         "-p",
@@ -104,14 +103,14 @@ def _auto_register() -> None:
     """
     try:
         from thomas.cli.commands.plugins import app as plugins_app  # type: ignore
-    except Exception:
+    except ImportError:
         return
 
     if plugins_app is app:
         return
     try:
         register(plugins_app)
-    except Exception:
+    except ImportError:
         # Do not fail import of the module due to CLI wiring differences.
         return
 

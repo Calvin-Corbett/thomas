@@ -10,6 +10,7 @@ Engines managed:
   4. testing_suite  — background quality testing
   5. code_issue     — iterative detect/fix loops for code issues
   6. self_upgrade   — autonomous upgrade opportunity management
+  7. local_agent    — hardware-aware local background task orchestration
 
 Usage (automatic on server start):
     from thomas.core.engine_manager import EngineManager
@@ -26,10 +27,10 @@ from __future__ import annotations
 import contextlib
 import logging
 import threading
-import time
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -37,15 +38,16 @@ log = logging.getLogger(__name__)
 @dataclass
 class EngineStatus:
     """Status of a single engine."""
+
     name: str
     running: bool = False
-    started_at: Optional[str] = None
-    error: Optional[str] = None
+    started_at: str | None = None
+    error: str | None = None
     cycles_completed: int = 0
-    last_activity: Optional[str] = None
-    details: Dict[str, Any] = field(default_factory=dict)
+    last_activity: str | None = None
+    details: dict[str, Any] = field(default_factory=dict)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         payload = {
             "name": self.name,
             "running": self.running,
@@ -70,14 +72,15 @@ class EngineManager:
       - TestingSuite (background quality cycles)
       - CodeIssueEngine (iterative code issue detection/fix)
       - SelfUpgradeEngine (durable self-upgrade backlog management)
+      - LocalAgentEngine (local model + memory/workspace background maintenance)
     """
 
     def __init__(self) -> None:
-        self._engines: Dict[str, Any] = {}
-        self._status: Dict[str, EngineStatus] = {}
+        self._engines: dict[str, Any] = {}
+        self._status: dict[str, EngineStatus] = {}
         self._lock = threading.Lock()
         self._running = False
-        self._notify_fn: Optional[Callable[[str], None]] = None
+        self._notify_fn: Callable[[str], None] | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -85,9 +88,9 @@ class EngineManager:
 
     def start_all(
         self,
-        executor_fn: Optional[Callable] = None,
-        notify_fn: Optional[Callable[[str], None]] = None,
-    ) -> Dict[str, bool]:
+        executor_fn: Callable | None = None,
+        notify_fn: Callable[[str], None] | None = None,
+    ) -> dict[str, bool]:
         """
         Start all engines. Returns dict of {engine_name: success}.
         """
@@ -118,6 +121,9 @@ class EngineManager:
         # 8. Workspace Sync Engine (automatic git commit/push workflow)
         results["workspace_sync_engine"] = self._start_workspace_sync_engine(notify_fn)
 
+        # 9. Local Agent Engine (hardware-aware local background tasks)
+        results["local_agent_engine"] = self._start_local_agent_engine(notify_fn)
+
         self._running = True
         log.info("EngineManager: all engines started — %s", results)
 
@@ -135,6 +141,7 @@ class EngineManager:
         # Stop initiative
         try:
             from thomas.core.initiative import get_initiative_engine
+
             get_initiative_engine().stop()
         except Exception:
             pass
@@ -142,6 +149,7 @@ class EngineManager:
         # Stop testing suite
         try:
             from thomas.core.testing_suite import get_testing_suite
+
             get_testing_suite().stop()
         except Exception:
             pass
@@ -149,6 +157,7 @@ class EngineManager:
         # Stop code issue engine
         try:
             from thomas.core.code_issue_engine import get_code_issue_engine
+
             get_code_issue_engine().stop()
         except Exception:
             pass
@@ -156,6 +165,7 @@ class EngineManager:
         # Stop self-upgrade engine
         try:
             from thomas.core.self_upgrade_engine import get_self_upgrade_engine
+
             get_self_upgrade_engine().stop()
         except Exception:
             pass
@@ -163,6 +173,7 @@ class EngineManager:
         # Stop UI workflow engine
         try:
             from thomas.core.ui_workflow_engine import get_ui_workflow_engine
+
             get_ui_workflow_engine().stop()
         except Exception:
             pass
@@ -170,20 +181,30 @@ class EngineManager:
         # Stop workspace sync engine
         try:
             from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+
             get_workspace_sync_engine().stop()
+        except Exception:
+            pass
+
+        # Stop local agent engine
+        try:
+            from thomas.core.local_agent_engine import get_local_agent_engine
+
+            get_local_agent_engine().stop()
         except Exception:
             pass
 
         # Save persistence state
         try:
             from thomas.core.persistence import get_persistence
+
             get_persistence().save()
         except Exception:
             pass
 
         log.info("EngineManager: all engines stopped.")
 
-    def status(self) -> Dict[str, Any]:
+    def status(self) -> dict[str, Any]:
         """Return status of all engines."""
         with self._lock:
             for name, engine in self._engines.items():
@@ -224,32 +245,44 @@ class EngineManager:
         """Reset idle timers on all engines."""
         try:
             from thomas.core.initiative import get_initiative_engine
+
             get_initiative_engine().record_user_message()
         except Exception:
             pass
         try:
             from thomas.core.testing_suite import get_testing_suite
+
             get_testing_suite().record_user_message()
         except Exception:
             pass
         try:
             from thomas.core.code_issue_engine import get_code_issue_engine
+
             get_code_issue_engine().record_user_message()
         except Exception:
             pass
         try:
             from thomas.core.self_upgrade_engine import get_self_upgrade_engine
+
             get_self_upgrade_engine().record_user_message()
         except Exception:
             pass
         try:
             from thomas.core.ui_workflow_engine import get_ui_workflow_engine
+
             get_ui_workflow_engine().record_user_message()
         except Exception:
             pass
         try:
             from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+
             get_workspace_sync_engine().record_user_message()
+        except Exception:
+            pass
+        try:
+            from thomas.core.local_agent_engine import get_local_agent_engine
+
+            get_local_agent_engine().record_user_message()
         except Exception:
             pass
 
@@ -262,6 +295,7 @@ class EngineManager:
         name = "persistence"
         try:
             from thomas.core.persistence import get_persistence
+
             pe = get_persistence()
             pe.load()
             self._engines[name] = pe
@@ -270,8 +304,7 @@ class EngineManager:
                 running=True,
                 started_at=datetime.now(timezone.utc).isoformat(),
             )
-            log.info("PersistenceEngine: started (%d turns, %d goals)",
-                     len(pe.turn_history), len(pe.goals))
+            log.info("PersistenceEngine: started (%d turns, %d goals)", len(pe.turn_history), len(pe.goals))
             return True
         except Exception as e:
             log.error("PersistenceEngine: failed to start: %s", e)
@@ -283,6 +316,7 @@ class EngineManager:
         name = "tool_factory"
         try:
             from thomas.core.tool_factory import get_tool_factory
+
             tf = get_tool_factory()
             count = tf.load()
             self._engines[name] = tf
@@ -301,13 +335,14 @@ class EngineManager:
 
     def _start_initiative(
         self,
-        executor_fn: Optional[Callable],
-        notify_fn: Optional[Callable[[str], None]],
+        executor_fn: Callable | None,
+        notify_fn: Callable[[str], None] | None,
     ) -> bool:
         """Start initiative engine (autonomous work when idle)."""
         name = "initiative"
         try:
             from thomas.core.initiative import get_initiative_engine
+
             ie = get_initiative_engine()
             ie.start(executor_fn=executor_fn, notify_fn=notify_fn)
             self._engines[name] = ie
@@ -325,13 +360,14 @@ class EngineManager:
 
     def _start_testing_suite(
         self,
-        executor_fn: Optional[Callable],
-        notify_fn: Optional[Callable[[str], None]],
+        executor_fn: Callable | None,
+        notify_fn: Callable[[str], None] | None,
     ) -> bool:
         """Start testing suite (background quality testing)."""
         name = "testing_suite"
         try:
             from thomas.core.testing_suite import get_testing_suite
+
             ts = get_testing_suite()
             ts.start(executor_fn=executor_fn, notify_fn=notify_fn)
             self._engines[name] = ts
@@ -349,7 +385,7 @@ class EngineManager:
 
     def _start_code_issue_engine(
         self,
-        notify_fn: Optional[Callable[[str], None]],
+        notify_fn: Callable[[str], None] | None,
     ) -> bool:
         """Start code issue engine (iterative detect/fix loops)."""
         name = "code_issue_engine"
@@ -373,7 +409,7 @@ class EngineManager:
 
     def _start_self_upgrade_engine(
         self,
-        notify_fn: Optional[Callable[[str], None]],
+        notify_fn: Callable[[str], None] | None,
     ) -> bool:
         """Start self-upgrade engine (upgrade backlog management)."""
         name = "self_upgrade_engine"
@@ -398,7 +434,7 @@ class EngineManager:
 
     def _start_ui_workflow_engine(
         self,
-        notify_fn: Optional[Callable[[str], None]],
+        notify_fn: Callable[[str], None] | None,
     ) -> bool:
         """Start UI workflow engine (consistency audits and polish recommendations)."""
         name = "ui_workflow_engine"
@@ -422,7 +458,7 @@ class EngineManager:
 
     def _start_workspace_sync_engine(
         self,
-        notify_fn: Optional[Callable[[str], None]],
+        notify_fn: Callable[[str], None] | None,
     ) -> bool:
         """Start workspace sync engine (automatic git commit/push handling)."""
         name = "workspace_sync_engine"
@@ -444,6 +480,30 @@ class EngineManager:
             self._status[name] = EngineStatus(name=name, error=str(e))
             return False
 
+    def _start_local_agent_engine(
+        self,
+        notify_fn: Callable[[str], None] | None,
+    ) -> bool:
+        """Start local agent engine (hardware-aware local background tasks)."""
+        name = "local_agent_engine"
+        try:
+            from thomas.core.local_agent_engine import get_local_agent_engine
+
+            engine = get_local_agent_engine()
+            engine.start(notify_fn=notify_fn)
+            self._engines[name] = engine
+            self._status[name] = EngineStatus(
+                name=name,
+                running=True,
+                started_at=datetime.now(timezone.utc).isoformat(),
+            )
+            log.info("LocalAgentEngine: started")
+            return True
+        except Exception as e:
+            log.error("LocalAgentEngine: failed to start: %s", e)
+            self._status[name] = EngineStatus(name=name, error=str(e))
+            return False
+
     # ------------------------------------------------------------------
     # Summary for UI
     # ------------------------------------------------------------------
@@ -461,7 +521,7 @@ class EngineManager:
 # Process-level singleton
 # ---------------------------------------------------------------------------
 
-_manager: Optional[EngineManager] = None
+_manager: EngineManager | None = None
 _manager_lock = threading.Lock()
 
 

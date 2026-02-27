@@ -6,8 +6,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, Optional
+from typing import Any
 
 DEFAULT_ROUTE_PATHS: tuple[str, ...] = (
     "/v1/gateway/p142_openai_tool_call_passthrough_mapping",
@@ -25,13 +26,13 @@ class CliError(Exception):
     code: str
     message: str
     exit_code: int = 2
-    details: Optional[Dict[str, Any]] = None
+    details: dict[str, Any] | None = None
 
     def __str__(self) -> str:  # pragma: no cover
         return self.message
 
 
-def _load_json_input(path: Optional[str]) -> Any:
+def _load_json_input(path: str | None) -> Any:
     """Load request JSON.
     - If `path` is None: returns a small sample request.
     - If `path` is "-": reads stdin.
@@ -63,7 +64,7 @@ def _load_json_input(path: Optional[str]) -> Any:
             raise CliError(code="invalid_json", message=f"stdin is not valid JSON: {e}") from e
 
     try:
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError as e:
         raise CliError(code="missing_input", message=f"Input file not found: {path}") from e
@@ -96,7 +97,7 @@ def _post_json(url: str, payload: Any, *, timeout_s: float = 30.0) -> Any:
 
 
 def _call_first_working(base_url: str, payload: Any, paths: Iterable[str]) -> Any:
-    last_http_error: Optional[urllib.error.HTTPError] = None
+    last_http_error: urllib.error.HTTPError | None = None
     for path in paths:
         url = base_url.rstrip("/") + path
         try:
@@ -111,7 +112,7 @@ def _call_first_working(base_url: str, payload: Any, paths: Iterable[str]) -> An
 
 
 def _get_first_working(base_url: str, paths: Iterable[str]) -> Any:
-    last_http_error: Optional[urllib.error.HTTPError] = None
+    last_http_error: urllib.error.HTTPError | None = None
     for path in paths:
         url = base_url.rstrip("/") + path
         try:
@@ -157,7 +158,7 @@ def run_from_args(args: argparse.Namespace) -> int:
         try:
             body = e.read().decode("utf-8")
             parsed = json.loads(body) if body else None
-        except Exception:
+        except json.JSONDecodeError:
             parsed = None
         raise CliError(
             code="http_error",
@@ -177,7 +178,7 @@ def run_from_args(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[list[str]] = None) -> int:  # pragma: no cover
+def main(argv: list[str] | None = None) -> int:  # pragma: no cover
     argv = argv if argv is not None else sys.argv[1:]
     parser = argparse.ArgumentParser(prog="thomas gateway")
     sub = parser.add_subparsers(dest="command")

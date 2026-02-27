@@ -40,10 +40,10 @@ import json
 import os
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Optional, Protocol, TypedDict, cast
-
+from typing import Any, Protocol, TypedDict, cast
 
 _ALLOWED_STATES = {"queued", "running", "succeeded", "failed", "unknown"}
 
@@ -145,8 +145,7 @@ class NodeCommandStatusResponse:
 
 
 class _StatusBackend(Protocol):
-    def get_status(self, req: NodeCommandStatusRequest) -> NodeCommandStatusResponse:
-        ...
+    def get_status(self, req: NodeCommandStatusRequest) -> NodeCommandStatusResponse: ...
 
 
 def get_node_command_status(req: NodeCommandStatusRequest) -> NodeCommandStatusResponse:
@@ -250,7 +249,7 @@ def _read_config_for_state_dir(cfg_path: Path) -> Path | None:
     try:
         cfg_raw = cfg_path.read_text(encoding="utf-8")
         cfg = json.loads(cfg_raw)
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         raise NodeCommandStatusConfigError("failed to load config for node command status")
 
     if not isinstance(cfg, dict):
@@ -345,10 +344,10 @@ def _response_from_record(req: NodeCommandStatusRequest, record: Mapping[str, An
             done = False
 
     exit_code = _coerce_optional_int(record.get("exit_code"))
-    message = cast(Optional[str], record.get("message") or record.get("error"))
+    message = cast(str | None, record.get("message") or record.get("error"))
 
-    stdout = cast(Optional[str], record.get("stdout"))
-    stderr = cast(Optional[str], record.get("stderr"))
+    stdout = cast(str | None, record.get("stdout"))
+    stderr = cast(str | None, record.get("stderr"))
     if not req.include_output:
         stdout = None
         stderr = None
@@ -449,7 +448,7 @@ def _try_native_backend(req: NodeCommandStatusRequest) -> NodeCommandStatusRespo
     for mod_name, func_name in candidates:
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
         func = getattr(mod, func_name, None)
         if not callable(func):
@@ -458,7 +457,7 @@ def _try_native_backend(req: NodeCommandStatusRequest) -> NodeCommandStatusRespo
             result = _call_with_compatible_signature(func, req)
         except NodeCommandStatusError:
             raise
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             raise NodeCommandStatusExternalError(
                 "native backend failed while querying command status",
                 detail=f"backend={mod_name}.{func_name}",
@@ -466,7 +465,7 @@ def _try_native_backend(req: NodeCommandStatusRequest) -> NodeCommandStatusRespo
 
         try:
             return _coerce_native_result(req, result)
-        except Exception:
+        except (RuntimeError, ValueError, KeyError, AttributeError, TypeError):
             continue
 
     return None
@@ -575,7 +574,7 @@ def _coerce_native_result(req: NodeCommandStatusRequest, result: Any) -> NodeCom
 
 try:  # pragma: no cover
     from aiohttp import web as _aiohttp_web  # type: ignore
-except Exception:  # pragma: no cover
+except (ImportError, AttributeError, RuntimeError):  # pragma: no cover
     _aiohttp_web = None  # type: ignore
 
 

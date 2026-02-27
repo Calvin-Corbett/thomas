@@ -18,25 +18,33 @@ import json
 import os
 import re
 from collections import deque
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Deque, Dict, List, Mapping, Optional, Sequence, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 from aiohttp import web
 
+_AppKey = getattr(web, "AppKey", None)
+if _AppKey is not None:  # pragma: no cover
+    CONFIG_APP_KEY = web.AppKey("config", dict)  # type: ignore[attr-defined]
+else:  # pragma: no cover
+    CONFIG_APP_KEY = "config"
+
 
 # ----------------------------- Contracts -----------------------------
+
 
 class GatewayLogMatch(TypedDict, total=False):
     line_number: int
     text: str
     timestamp: str
     level: str
-    json: Dict[str, Any]
+    json: dict[str, Any]
 
 
 class GatewayLogsFilterResponse(TypedDict):
     ok: bool
-    matches: List[GatewayLogMatch]
+    matches: list[GatewayLogMatch]
     scanned_lines: int
     truncated: bool
 
@@ -44,7 +52,7 @@ class GatewayLogsFilterResponse(TypedDict):
 class GatewayLogsFilterErrorBody(TypedDict):
     code: str
     message: str
-    fields: Dict[str, str]
+    fields: dict[str, str]
 
 
 class GatewayLogsFilterFailure(TypedDict):
@@ -57,7 +65,7 @@ class GatewayLogsFilterRequest(TypedDict, total=False):
     contains: str
     regex: str
     ignore_case: bool
-    levels: List[str]
+    levels: list[str]
     after: str  # ISO 8601
     before: str  # ISO 8601
 
@@ -72,6 +80,7 @@ class GatewayLogsFilterRequest(TypedDict, total=False):
 
 # ----------------------------- Errors -----------------------------
 
+
 class GatewayLogsFilterError(Exception):
     """Deterministic, user-facing error for the gateway logs filter API."""
 
@@ -81,7 +90,7 @@ class GatewayLogsFilterError(Exception):
         code: str,
         message: str,
         http_status: int = 400,
-        fields: Optional[Dict[str, str]] = None,
+        fields: dict[str, str] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -98,17 +107,18 @@ class GatewayLogsFilterError(Exception):
 
 # ----------------------------- Internal model -----------------------------
 
+
 @dataclasses.dataclass(frozen=True)
 class _ParsedRequest:
-    contains: Optional[str]
-    regex: Optional[re.Pattern[str]]
+    contains: str | None
+    regex: re.Pattern[str] | None
     ignore_case: bool
-    levels: Optional[Sequence[str]]
-    after: Optional[_dt.datetime]
-    before: Optional[_dt.datetime]
+    levels: Sequence[str] | None
+    after: _dt.datetime | None
+    before: _dt.datetime | None
     limit: int
     newest_first: bool
-    path_override: Optional[Path]
+    path_override: Path | None
 
 
 _DEFAULT_LIMIT = 200
@@ -117,6 +127,7 @@ _TAIL_BLOCK_BYTES = 8192
 
 
 # ----------------------------- Helpers -----------------------------
+
 
 def _parse_iso_datetime(value: str, *, field: str) -> _dt.datetime:
     raw = value.strip()
@@ -141,7 +152,7 @@ def _parse_iso_datetime(value: str, *, field: str) -> _dt.datetime:
     return dt
 
 
-def _extract_timestamp_from_line(line: str) -> Optional[_dt.datetime]:
+def _extract_timestamp_from_line(line: str) -> _dt.datetime | None:
     stripped = line.strip()
     if not stripped:
         return None
@@ -174,7 +185,7 @@ def _extract_timestamp_from_line(line: str) -> Optional[_dt.datetime]:
         return None
 
 
-def _extract_level_from_line(line: str) -> Optional[str]:
+def _extract_level_from_line(line: str) -> str | None:
     # JSON line might provide a level field.
     stripped = line.strip()
     if stripped.startswith("{") and stripped.endswith("}"):
@@ -196,12 +207,28 @@ def _extract_level_from_line(line: str) -> Optional[str]:
 
 
 def _resolve_config_mapping(app: web.Application) -> Mapping[str, Any]:
-    cfg = app.get("config") or app.get("settings") or app.get("cfg")
+    cfg = _app_get_named(app, "config") or _app_get_named(app, "settings") or _app_get_named(app, "cfg")
     if isinstance(cfg, Mapping):
         return cfg
     if cfg is not None:
         return cast(Mapping[str, Any], getattr(cfg, "__dict__", {}))
     return {}
+
+
+def _app_get_named(app: Mapping[Any, Any], key_name: str) -> Any:
+    try:
+        if key_name in app:
+            return app[key_name]  # type: ignore[index]
+    except Exception:
+        pass
+    try:
+        for mk, mv in app.items():
+            mk_name = getattr(mk, "name", "") or getattr(mk, "_name", "")
+            if mk_name == key_name or str(mk_name).endswith(f".{key_name}"):
+                return mv
+    except Exception:
+        pass
+    return None
 
 
 def _is_path_override_allowed(request: web.Request) -> bool:
@@ -248,7 +275,7 @@ def _resolve_log_path(request: web.Request, parsed: _ParsedRequest) -> Path:
 
 
 def parse_filter_request(payload: Mapping[str, Any]) -> _ParsedRequest:
-    fields: Dict[str, str] = {}
+    fields: dict[str, str] = {}
 
     contains = payload.get("contains")
     if contains is not None and not isinstance(contains, str):
@@ -256,7 +283,7 @@ def parse_filter_request(payload: Mapping[str, Any]) -> _ParsedRequest:
 
     regex_text = payload.get("regex")
     ignore_case = bool(payload.get("ignore_case", False))
-    regex: Optional[re.Pattern[str]] = None
+    regex: re.Pattern[str] | None = None
     if regex_text is not None and not isinstance(regex_text, str):
         fields["regex"] = "must be a string"
     elif isinstance(regex_text, str):
@@ -267,17 +294,17 @@ def parse_filter_request(payload: Mapping[str, Any]) -> _ParsedRequest:
             fields["regex"] = f"invalid regex: {e.msg}"
 
     levels_val = payload.get("levels")
-    levels: Optional[Sequence[str]] = None
+    levels: Sequence[str] | None = None
     if levels_val is not None:
         if isinstance(levels_val, str):
             levels = [levels_val]
         elif isinstance(levels_val, list) and all(isinstance(x, str) for x in levels_val):
-            levels = cast(List[str], levels_val)
+            levels = cast(list[str], levels_val)
         else:
             fields["levels"] = "must be a string or list of strings"
 
     after_val = payload.get("after")
-    after: Optional[_dt.datetime] = None
+    after: _dt.datetime | None = None
     if after_val is not None:
         if not isinstance(after_val, str):
             fields["after"] = "must be a string timestamp"
@@ -288,7 +315,7 @@ def parse_filter_request(payload: Mapping[str, Any]) -> _ParsedRequest:
                 fields["after"] = e.fields.get("after", "invalid timestamp")
 
     before_val = payload.get("before")
-    before: Optional[_dt.datetime] = None
+    before: _dt.datetime | None = None
     if before_val is not None:
         if not isinstance(before_val, str):
             fields["before"] = "must be a string timestamp"
@@ -311,7 +338,7 @@ def parse_filter_request(payload: Mapping[str, Any]) -> _ParsedRequest:
     newest_first = bool(payload.get("newest_first", False))
 
     path_val = payload.get("path")
-    path_override: Optional[Path] = None
+    path_override: Path | None = None
     if path_val is not None:
         if not isinstance(path_val, str) or not path_val.strip():
             fields["path"] = "must be a non-empty string"
@@ -322,7 +349,7 @@ def parse_filter_request(payload: Mapping[str, Any]) -> _ParsedRequest:
         raise GatewayLogsFilterError(code="INVALID_INPUT", message="Invalid request.", fields=fields)
 
     return _ParsedRequest(
-        contains=cast(Optional[str], contains),
+        contains=cast(str | None, contains),
         regex=regex,
         ignore_case=ignore_case,
         levels=levels,
@@ -334,7 +361,7 @@ def parse_filter_request(payload: Mapping[str, Any]) -> _ParsedRequest:
     )
 
 
-def _tail_lines(path: Path, n: int) -> List[str]:
+def _tail_lines(path: Path, n: int) -> list[str]:
     # Efficiently read the last n lines of a (potentially large) file.
     if n <= 0:
         return []
@@ -354,7 +381,9 @@ def _tail_lines(path: Path, n: int) -> List[str]:
         return [ln.decode("utf-8", errors="replace") for ln in lines]
 
 
-def _matches_filters(text: str, parsed: _ParsedRequest, *, contains_norm: Optional[str], levels_norm: Optional[List[str]]) -> bool:
+def _matches_filters(
+    text: str, parsed: _ParsedRequest, *, contains_norm: str | None, levels_norm: list[str] | None
+) -> bool:
     if not text:
         return False
 
@@ -398,11 +427,11 @@ def filter_log_file(log_path: Path, parsed: _ParsedRequest) -> GatewayLogsFilter
             http_status=500,
         )
 
-    contains_norm: Optional[str] = None
+    contains_norm: str | None = None
     if parsed.contains is not None:
         contains_norm = parsed.contains.lower() if parsed.ignore_case else parsed.contains
 
-    levels_norm: Optional[List[str]] = None
+    levels_norm: list[str] | None = None
     if parsed.levels is not None:
         levels_norm = [lvl.upper() for lvl in parsed.levels]
 
@@ -418,7 +447,7 @@ def filter_log_file(log_path: Path, parsed: _ParsedRequest) -> GatewayLogsFilter
     )
     if not has_any_filter:
         lines = _tail_lines(log_path, parsed.limit)
-        matches: List[GatewayLogMatch] = []
+        matches: list[GatewayLogMatch] = []
         # We don't know exact line numbers without scanning; omit for tail-mode.
         for t in lines:
             m: GatewayLogMatch = {"text": t}
@@ -433,7 +462,7 @@ def filter_log_file(log_path: Path, parsed: _ParsedRequest) -> GatewayLogsFilter
                 try:
                     obj = json.loads(st)
                     if isinstance(obj, dict):
-                        m["json"] = cast(Dict[str, Any], obj)
+                        m["json"] = cast(dict[str, Any], obj)
                 except Exception:
                     pass
             matches.append(m)
@@ -446,7 +475,7 @@ def filter_log_file(log_path: Path, parsed: _ParsedRequest) -> GatewayLogsFilter
     truncated = False
     if parsed.newest_first:
         # Keep only the newest `limit` matches using a ring buffer.
-        ring: Deque[GatewayLogMatch] = deque(maxlen=parsed.limit)
+        ring: deque[GatewayLogMatch] = deque(maxlen=parsed.limit)
         total_matches = 0
         try:
             with log_path.open("r", encoding="utf-8", errors="replace") as f:
@@ -468,7 +497,7 @@ def filter_log_file(log_path: Path, parsed: _ParsedRequest) -> GatewayLogsFilter
                         try:
                             obj = json.loads(st)
                             if isinstance(obj, dict):
-                                match["json"] = cast(Dict[str, Any], obj)
+                                match["json"] = cast(dict[str, Any], obj)
                         except Exception:
                             pass
                     ring.append(match)
@@ -484,7 +513,7 @@ def filter_log_file(log_path: Path, parsed: _ParsedRequest) -> GatewayLogsFilter
         return {"ok": True, "matches": matches, "scanned_lines": scanned, "truncated": truncated}
 
     # Oldest-first (default): we can early-exit once we hit `limit`.
-    matches2: List[GatewayLogMatch] = []
+    matches2: list[GatewayLogMatch] = []
     try:
         with log_path.open("r", encoding="utf-8", errors="replace") as f:
             for idx, line in enumerate(f, start=1):
@@ -504,7 +533,7 @@ def filter_log_file(log_path: Path, parsed: _ParsedRequest) -> GatewayLogsFilter
                     try:
                         obj = json.loads(st)
                         if isinstance(obj, dict):
-                            match["json"] = cast(Dict[str, Any], obj)
+                            match["json"] = cast(dict[str, Any], obj)
                     except Exception:
                         pass
                 matches2.append(match)
@@ -535,10 +564,14 @@ async def gateway_logs_filter_handler(request: web.Request) -> web.Response:
         try:
             payload = await request.json()
         except Exception:
-            raise GatewayLogsFilterError(code="INVALID_INPUT", message="Invalid request.", fields={"body": "must be valid JSON"})
+            raise GatewayLogsFilterError(
+                code="INVALID_INPUT", message="Invalid request.", fields={"body": "must be valid JSON"}
+            )
 
         if not isinstance(payload, dict):
-            raise GatewayLogsFilterError(code="INVALID_INPUT", message="Invalid request.", fields={"body": "must be a JSON object"})
+            raise GatewayLogsFilterError(
+                code="INVALID_INPUT", message="Invalid request.", fields={"body": "must be a JSON object"}
+            )
 
         parsed = parse_filter_request(payload)
         log_path = _resolve_log_path(request, parsed)

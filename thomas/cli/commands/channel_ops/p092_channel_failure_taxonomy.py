@@ -8,7 +8,7 @@ register a `failure-taxonomy` subcommand.
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from thomas.channels.p092_channel_failure_taxonomy import (
     ChannelFailureTaxonomyError,
@@ -26,7 +26,7 @@ SUBCOMMAND = COMMAND_NAME
 OPERATION_ID = "channel_failure_taxonomy"
 
 
-def _load_event(*, event: Optional[str], event_file: Optional[Path]) -> Optional[dict[str, Any]]:
+def _load_event(*, event: str | None, event_file: Path | None) -> dict[str, Any] | None:
     if event is not None and event_file is not None:
         raise InvalidTaxonomyInputError(
             "Provide only one of --event or --event-file.",
@@ -43,7 +43,7 @@ def _load_event(*, event: Optional[str], event_file: Optional[Path]) -> Optional
     return None
 
 
-def _load_config(config: Optional[str]) -> Optional[dict[str, Any]]:
+def _load_config(config: str | None) -> dict[str, Any] | None:
     if config is None:
         return None
     try:
@@ -83,11 +83,11 @@ def _render_human(report: Any, *, echo: Any) -> None:
 
 def _run(
     *,
-    channel: Optional[str],
-    event: Optional[str],
-    event_file: Optional[Path],
+    channel: str | None,
+    event: str | None,
+    event_file: Path | None,
     probe: bool,
-    config: Optional[str],
+    config: str | None,
     schema: bool,
     json_output: bool,
     echo: Any,
@@ -165,20 +165,16 @@ def add_subcommand(app: Any) -> None:  # pragma: no cover
 def _register_typer(parent: Any) -> None:
     try:
         import typer
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         return
 
     app = typer.Typer(add_completion=False, help="Show channel failure taxonomy and optionally classify an event.")
 
     @app.callback(invoke_without_command=True)
     def failure_taxonomy(
-        channel: Optional[str] = typer.Option(
-            None, "--channel", "-c", help="Channel identifier (e.g., telegram)."
-        ),
-        event: Optional[str] = typer.Option(
-            None, "--event", help="Failure event as a JSON object string."
-        ),
-        event_file: Optional[Path] = typer.Option(
+        channel: str | None = typer.Option(None, "--channel", "-c", help="Channel identifier (e.g., telegram)."),
+        event: str | None = typer.Option(None, "--event", help="Failure event as a JSON object string."),
+        event_file: Path | None = typer.Option(
             None,
             "--event-file",
             exists=True,
@@ -191,7 +187,7 @@ def _register_typer(parent: Any) -> None:
             "--probe",
             help="Validate channel configuration (offline-safe by default).",
         ),
-        config: Optional[str] = typer.Option(
+        config: str | None = typer.Option(
             None,
             "--config",
             help="Channel configuration as JSON (used with --probe).",

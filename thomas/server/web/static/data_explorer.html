@@ -1,0 +1,1670 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thomas Data Explorer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        :root {
+            --bg-primary: #12161f;
+            --bg-secondary: #1a1f2e;
+            --bg-tertiary: #232d3e;
+            --accent: #6c5ce7;
+            --accent-hover: #7e69ff;
+            --text-primary: #e8e9f3;
+            --text-secondary: #a8aab8;
+            --border: #323a4d;
+            --success: #00d4aa;
+            --error: #ff6b6b;
+            --warning: #ffa502;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background-color: var(--bg-primary);
+            color: var(--text-primary);
+            height: 100vh;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            flex-direction: column;
+        }
+
+        /* Header */
+        .header {
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 12px 16px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+
+        .header h1 {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        /* Main Content */
+        .main-content {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        /* Panels */
+        .panel {
+            display: flex;
+            flex-direction: column;
+            background-color: var(--bg-secondary);
+            border-right: 1px solid var(--border);
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            font-size: 13px;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-content {
+            flex: 1;
+            overflow-y: auto;
+            overflow-x: hidden;
+        }
+
+        /* Left Panel - Schema Browser */
+        .left-panel {
+            width: 260px;
+            flex-shrink: 0;
+        }
+
+        .connection-selector {
+            padding: 12px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .connection-selector select {
+            width: 100%;
+            padding: 8px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+
+        /* Tree view */
+        .tree-node {
+            padding: 6px 12px;
+            font-size: 12px;
+            cursor: pointer;
+            user-select: none;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tree-node:hover {
+            background-color: var(--bg-tertiary);
+        }
+
+        .tree-node.table {
+            padding-left: 32px;
+            color: var(--text-secondary);
+        }
+
+        .tree-node.column {
+            padding-left: 52px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+
+        .tree-toggle {
+            width: 16px;
+            text-align: center;
+            flex-shrink: 0;
+        }
+
+        .tree-toggle.expanded::before {
+            content: '▼';
+        }
+
+        .tree-toggle.collapsed::before {
+            content: '▶';
+        }
+
+        .column-type {
+            font-size: 10px;
+            color: var(--accent);
+            margin-left: auto;
+        }
+
+        /* Center Panel */
+        .center-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+        }
+
+        /* Tabs */
+        .tabs {
+            display: flex;
+            background-color: var(--bg-secondary);
+            border-bottom: 1px solid var(--border);
+            padding: 0 8px;
+            gap: 4px;
+        }
+
+        .tab {
+            padding: 10px 14px;
+            background-color: var(--bg-tertiary);
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 12px;
+            border-radius: 4px 4px 0 0;
+            position: relative;
+            white-space: nowrap;
+        }
+
+        .tab.active {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .tab-close {
+            margin-left: 6px;
+            cursor: pointer;
+            opacity: 0.6;
+        }
+
+        .tab-close:hover {
+            opacity: 1;
+        }
+
+        /* Query Section */
+        .query-section {
+            display: flex;
+            flex-direction: column;
+            flex: 1;
+            overflow: hidden;
+        }
+
+        .query-input-area {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            padding: 12px;
+            background-color: var(--bg-tertiary);
+            border-bottom: 1px solid var(--border);
+        }
+
+        .query-mode-toggle {
+            display: flex;
+            gap: 4px;
+            background-color: var(--bg-secondary);
+            padding: 4px;
+            border-radius: 4px;
+            width: fit-content;
+        }
+
+        .query-mode-btn {
+            padding: 6px 12px;
+            background-color: transparent;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 11px;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .query-mode-btn.active {
+            background-color: var(--accent);
+            color: white;
+        }
+
+        .editor-container {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .code-editor {
+            display: flex;
+            height: 100%;
+            background-color: var(--bg-secondary);
+        }
+
+        .line-numbers {
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            padding: 8px 12px;
+            text-align: right;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            border-right: 1px solid var(--border);
+            white-space: pre;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .editor-input {
+            flex: 1;
+            padding: 8px 12px;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border: none;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            resize: none;
+            outline: none;
+            tab-size: 4;
+        }
+
+        .syntax-highlight {
+            position: absolute;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+            font-family: 'Monaco', 'Menlo', monospace;
+            font-size: 12px;
+            line-height: 1.5;
+            color: transparent;
+            padding: 8px 12px;
+        }
+
+        .kw { color: var(--accent); font-weight: 600; }
+        .fn { color: #74b8ff; }
+        .str { color: var(--success); }
+        .num { color: #ff9ff3; }
+        .cmt { color: var(--text-secondary); }
+
+        .nl-input {
+            width: 100%;
+            padding: 10px 12px;
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+
+        .nl-input:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.1);
+        }
+
+        /* Results Area */
+        .results-area {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .results-toolbar {
+            padding: 12px;
+            background-color: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 12px;
+            font-size: 12px;
+        }
+
+        .exec-stats {
+            display: flex;
+            gap: 16px;
+            color: var(--text-secondary);
+        }
+
+        .stat-item {
+            display: flex;
+            align-items: center;
+            gap: 4px;
+        }
+
+        .stat-value {
+            color: var(--success);
+            font-weight: 600;
+        }
+
+        .results-table-container {
+            flex: 1;
+            overflow: auto;
+            background-color: var(--bg-secondary);
+        }
+
+        .results-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+        }
+
+        .results-table thead {
+            position: sticky;
+            top: 0;
+            background-color: var(--bg-tertiary);
+        }
+
+        .results-table th {
+            padding: 10px 12px;
+            text-align: left;
+            border-bottom: 1px solid var(--border);
+            font-weight: 600;
+            color: var(--text-secondary);
+            white-space: nowrap;
+            user-select: none;
+            cursor: pointer;
+        }
+
+        .results-table th:hover {
+            background-color: var(--bg-primary);
+        }
+
+        .results-table th.sortable:after {
+            content: ' ⇅';
+            opacity: 0;
+            font-size: 10px;
+        }
+
+        .results-table th.sortable:hover:after {
+            opacity: 0.5;
+        }
+
+        .results-table th.sorted-asc:after,
+        .results-table th.sorted-desc:after {
+            opacity: 1;
+            color: var(--accent);
+        }
+
+        .results-table th.sorted-desc:after {
+            content: ' ↓';
+        }
+
+        .results-table td {
+            padding: 8px 12px;
+            border-bottom: 1px solid var(--border);
+            color: var(--text-primary);
+            word-break: break-word;
+        }
+
+        .results-table tbody tr:hover {
+            background-color: var(--bg-tertiary);
+        }
+
+        .empty-state {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 100%;
+            color: var(--text-secondary);
+            font-size: 13px;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        .pagination {
+            display: flex;
+            gap: 4px;
+            padding: 8px 12px;
+            background-color: var(--bg-tertiary);
+            border-top: 1px solid var(--border);
+            justify-content: center;
+            align-items: center;
+            font-size: 11px;
+        }
+
+        .pagination-btn {
+            padding: 4px 8px;
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            border-radius: 3px;
+            font-size: 11px;
+        }
+
+        .pagination-btn:hover:not(:disabled) {
+            background-color: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        .pagination-btn:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+
+        /* Right Panel - History */
+        .right-panel {
+            width: 280px;
+            flex-shrink: 0;
+            display: flex;
+            flex-direction: column;
+            border-right: 1px solid var(--border);
+        }
+
+        .history-item {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--border);
+            font-size: 11px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+
+        .history-item:hover {
+            background-color: var(--bg-tertiary);
+        }
+
+        .history-timestamp {
+            color: var(--text-secondary);
+            font-size: 10px;
+            margin-bottom: 4px;
+        }
+
+        .history-query {
+            color: var(--text-primary);
+            word-break: break-word;
+            line-height: 1.4;
+            margin-bottom: 4px;
+            font-family: monospace;
+            max-height: 40px;
+            overflow: hidden;
+            white-space: pre-wrap;
+        }
+
+        .history-actions {
+            display: flex;
+            gap: 4px;
+        }
+
+        .history-btn {
+            flex: 1;
+            padding: 4px 6px;
+            background-color: var(--bg-tertiary);
+            border: 1px solid var(--border);
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 10px;
+            border-radius: 3px;
+            transition: all 0.2s;
+        }
+
+        .history-btn:hover {
+            background-color: var(--accent);
+            color: white;
+            border-color: var(--accent);
+        }
+
+        /* Buttons */
+        button {
+            padding: 8px 12px;
+            background-color: var(--accent);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background-color: var(--accent-hover);
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        button.secondary {
+            background-color: var(--bg-tertiary);
+            color: var(--text-secondary);
+            border: 1px solid var(--border);
+        }
+
+        button.secondary:hover {
+            background-color: var(--border);
+            color: var(--text-primary);
+        }
+
+        /* Modal */
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 24px;
+            width: 90%;
+            max-width: 500px;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-header {
+            font-size: 16px;
+            font-weight: 600;
+            margin-bottom: 16px;
+        }
+
+        .modal-body {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .form-group label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--text-secondary);
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 8px 12px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 12px;
+            font-family: inherit;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            border-color: var(--accent);
+            outline: none;
+            box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.1);
+        }
+
+        .modal-footer {
+            display: flex;
+            gap: 8px;
+            justify-content: flex-end;
+        }
+
+        /* Loading spinner */
+        .spinner {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border: 2px solid var(--border);
+            border-top-color: var(--accent);
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        /* Alerts */
+        .alert {
+            padding: 10px 12px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-bottom: 8px;
+        }
+
+        .alert.success {
+            background-color: rgba(0, 212, 170, 0.1);
+            color: var(--success);
+            border: 1px solid rgba(0, 212, 170, 0.3);
+        }
+
+        .alert.error {
+            background-color: rgba(255, 107, 107, 0.1);
+            color: var(--error);
+            border: 1px solid rgba(255, 107, 107, 0.3);
+        }
+
+        /* Visualizer */
+        .visualizer-container {
+            display: none;
+            flex: 1;
+            padding: 12px;
+            overflow: hidden;
+        }
+
+        .visualizer-container.active {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .chart-wrapper {
+            position: relative;
+            flex: 1;
+            min-height: 300px;
+        }
+
+        .chart-options {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            flex-wrap: wrap;
+        }
+
+        .chart-select {
+            padding: 6px 10px;
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border);
+            border-radius: 4px;
+            font-size: 11px;
+        }
+
+        /* Toggles */
+        .toggle-panel-btn {
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 16px;
+            padding: 4px 8px;
+        }
+
+        .toggle-panel-btn:hover {
+            color: var(--accent);
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: var(--bg-secondary);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: var(--border);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: var(--text-secondary);
+        }
+
+        /* Text overflow fixes */
+        .nl-input,
+        .query-mode-toggle {
+            overflow: hidden;
+            word-wrap: break-word;
+        }
+
+        .results-table td {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 200px;
+            word-break: break-word;
+        }
+
+        .tree-toggle {
+            flex-shrink: 0;
+        }
+
+        .spinner {
+            flex-shrink: 0;
+        }
+
+        .history-query {
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        /* Responsive */
+        @media (max-width: 1200px) {
+            .left-panel {
+                width: 200px;
+            }
+
+            .right-panel {
+                width: 220px;
+            }
+        }
+
+        @media (max-width: 900px) {
+            .right-panel {
+                display: none;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>🔍 Thomas Data Explorer</h1>
+            <div class="header-actions">
+                <button class="secondary" id="addConnectionBtn" title="Add database connection">+ Connection</button>
+                <button class="secondary" id="testConnectionBtn" title="Test selected connection">Test</button>
+                <button id="executeBtn" title="Execute query (Ctrl+Enter)">▶ Execute</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="main-content">
+            <!-- Left Panel: Schema Browser -->
+            <div class="left-panel panel">
+                <div class="panel-header">
+                    <span>Schema</span>
+                    <button class="toggle-panel-btn" id="toggleLeftPanel" title="Collapse schema">−</button>
+                </div>
+                <div class="connection-selector">
+                    <select id="connectionSelect">
+                        <option value="">Select connection...</option>
+                    </select>
+                </div>
+                <div class="panel-content" id="schemaContainer">
+                    <div class="empty-state">No connection selected</div>
+                </div>
+            </div>
+
+            <!-- Center Panel: Editor and Results -->
+            <div class="center-panel">
+                <!-- Tabs -->
+                <div class="tabs" id="queryTabs"></div>
+
+                <!-- Query Input Area -->
+                <div class="query-input-area">
+                    <div class="query-mode-toggle">
+                        <button class="query-mode-btn active" data-mode="sql">SQL</button>
+                        <button class="query-mode-btn" data-mode="nl">Natural Language</button>
+                    </div>
+
+                    <!-- SQL Editor -->
+                    <div id="sqlEditorMode" class="editor-container">
+                        <div class="code-editor">
+                            <div class="line-numbers" id="lineNumbers"></div>
+                            <textarea class="editor-input" id="queryEditor" spellcheck="false" placeholder="SELECT * FROM table WHERE ..."></textarea>
+                        </div>
+                    </div>
+
+                    <!-- NL Input -->
+                    <div id="nlEditorMode" style="display: none;">
+                        <input type="text" id="nlInput" class="nl-input" placeholder="Describe what data you want in natural language...">
+                    </div>
+                </div>
+
+                <!-- Results Area -->
+                <div class="results-area">
+                    <!-- Toolbar -->
+                    <div class="results-toolbar">
+                        <div class="exec-stats">
+                            <div class="stat-item">
+                                <span>Rows:</span>
+                                <span class="stat-value" id="rowCount">0</span>
+                            </div>
+                            <div class="stat-item">
+                                <span>Time:</span>
+                                <span class="stat-value" id="execTime">—</span>
+                            </div>
+                        </div>
+                        <div>
+                            <button class="secondary" id="exportCSVBtn" title="Export to CSV" style="display: none;">📥 CSV</button>
+                            <button class="secondary" id="exportJSONBtn" title="Export to JSON" style="display: none;">📥 JSON</button>
+                            <button class="secondary" id="toggleVisualizerBtn" title="Toggle chart visualizer" style="display: none;">📊 Chart</button>
+                        </div>
+                    </div>
+
+                    <!-- Table -->
+                    <div class="results-table-container" id="resultsTableContainer">
+                        <div class="empty-state">Execute a query to see results</div>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div class="pagination" id="paginationContainer" style="display: none;"></div>
+
+                    <!-- Visualizer -->
+                    <div class="visualizer-container" id="visualizerContainer">
+                        <div class="chart-options">
+                            <select class="chart-select" id="chartType">
+                                <option value="bar">Bar Chart</option>
+                                <option value="line">Line Chart</option>
+                                <option value="pie">Pie Chart</option>
+                            </select>
+                            <select class="chart-select" id="chartX">
+                                <option value="">Select X axis</option>
+                            </select>
+                            <select class="chart-select" id="chartY">
+                                <option value="">Select Y axis</option>
+                            </select>
+                        </div>
+                        <div class="chart-wrapper">
+                            <canvas id="resultsChart"></canvas>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: History -->
+            <div class="right-panel panel">
+                <div class="panel-header">
+                    <span>History & Saved</span>
+                    <button class="toggle-panel-btn" id="toggleRightPanel" title="Collapse history">−</button>
+                </div>
+                <div class="panel-content">
+                    <div style="padding: 8px; border-bottom: 1px solid var(--border); font-size: 11px; color: var(--text-secondary); font-weight: 600;">RECENT QUERIES</div>
+                    <div id="historyContainer"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modals -->
+    <div class="modal" id="connectionModal">
+        <div class="modal-content">
+            <div class="modal-header">Add Database Connection</div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Connection Name</label>
+                    <input type="text" id="connName" placeholder="My Database">
+                </div>
+                <div class="form-group">
+                    <label>Database Type</label>
+                    <select id="connType">
+                        <option value="sqlite">SQLite</option>
+                        <option value="postgresql">PostgreSQL</option>
+                    </select>
+                </div>
+                <div class="form-group" id="sqlitePathGroup">
+                    <label>File Path</label>
+                    <input type="text" id="sqlitePath" placeholder="/path/to/database.db">
+                </div>
+                <div class="form-group" id="postgresConnGroup" style="display: none;">
+                    <label>Connection String</label>
+                    <input type="text" id="postgresConn" placeholder="postgresql://user:password@localhost/dbname">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary" onclick="closeModal('connectionModal')">Cancel</button>
+                <button onclick="saveConnection()">Add Connection</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal" id="saveQueryModal">
+        <div class="modal-content">
+            <div class="modal-header">Save Query</div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Query Name</label>
+                    <input type="text" id="queryName" placeholder="My Awesome Query">
+                </div>
+                <div class="form-group">
+                    <label>Description (optional)</label>
+                    <textarea id="queryDesc" placeholder="What does this query do?" rows="3"></textarea>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="secondary" onclick="closeModal('saveQueryModal')">Cancel</button>
+                <button onclick="confirmSaveQuery()">Save</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ===== State Management =====
+        const state = {
+            connections: JSON.parse(localStorage.getItem('connections')) || [],
+            selectedConnection: localStorage.getItem('selectedConnection') || '',
+            currentQuery: '',
+            queryResults: null,
+            queryHistory: JSON.parse(localStorage.getItem('queryHistory')) || [],
+            savedQueries: JSON.parse(localStorage.getItem('savedQueries')) || [],
+            currentPage: 0,
+            pageSize: 50,
+            sortColumn: null,
+            sortDirection: 'asc',
+            schema: null,
+            chart: null,
+        };
+
+        const ROWS_PER_PAGE = 50;
+        const MAX_HISTORY = 50;
+        const API_BASE = '/api/tools';
+
+        // ===== Initialization =====
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeConnections();
+            setupEventListeners();
+            createNewTab();
+            loadHistory();
+        });
+
+        function initializeConnections() {
+            const select = document.getElementById('connectionSelect');
+            select.innerHTML = '<option value="">Select connection...</option>';
+            state.connections.forEach(conn => {
+                const opt = document.createElement('option');
+                opt.value = conn.id;
+                opt.textContent = conn.name;
+                select.appendChild(opt);
+            });
+            if (state.selectedConnection) {
+                select.value = state.selectedConnection;
+                loadSchema();
+            }
+        }
+
+        function setupEventListeners() {
+            // Buttons
+            document.getElementById('addConnectionBtn').addEventListener('click', () => openModal('connectionModal'));
+            document.getElementById('testConnectionBtn').addEventListener('click', testConnection);
+            document.getElementById('executeBtn').addEventListener('click', executeQuery);
+            document.getElementById('exportCSVBtn').addEventListener('click', () => exportResults('csv'));
+            document.getElementById('exportJSONBtn').addEventListener('click', () => exportResults('json'));
+            document.getElementById('toggleVisualizerBtn').addEventListener('click', toggleVisualizer);
+            document.getElementById('toggleLeftPanel').addEventListener('click', togglePanel.bind(null, 'left'));
+            document.getElementById('toggleRightPanel').addEventListener('click', togglePanel.bind(null, 'right'));
+
+            // Connection selector
+            document.getElementById('connectionSelect').addEventListener('change', (e) => {
+                state.selectedConnection = e.target.value;
+                localStorage.setItem('selectedConnection', state.selectedConnection);
+                if (state.selectedConnection) {
+                    loadSchema();
+                } else {
+                    document.getElementById('schemaContainer').innerHTML = '<div class="empty-state">No connection selected</div>';
+                }
+            });
+
+            // Query editor
+            const editor = document.getElementById('queryEditor');
+            editor.addEventListener('keydown', (e) => {
+                if (e.key === 'Tab') {
+                    e.preventDefault();
+                    const start = editor.selectionStart;
+                    const end = editor.selectionEnd;
+                    editor.value = editor.value.substring(0, start) + '\t' + editor.value.substring(end);
+                    editor.selectionStart = editor.selectionEnd = start + 1;
+                    updateLineNumbers();
+                }
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    executeQuery();
+                }
+            });
+            editor.addEventListener('input', (e) => {
+                state.currentQuery = e.target.value;
+                updateLineNumbers();
+            });
+
+            // NL input
+            document.getElementById('nlInput').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && e.ctrlKey) {
+                    executeQuery();
+                }
+            });
+
+            // Query mode toggle
+            document.querySelectorAll('.query-mode-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.query-mode-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    switchQueryMode(e.target.dataset.mode);
+                });
+            });
+
+            // Connection type selector
+            document.getElementById('connType').addEventListener('change', (e) => {
+                document.getElementById('sqlitePathGroup').style.display = e.target.value === 'sqlite' ? 'flex' : 'none';
+                document.getElementById('postgresConnGroup').style.display = e.target.value === 'postgresql' ? 'flex' : 'none';
+            });
+
+            // Chart options
+            document.getElementById('chartType').addEventListener('change', renderChart);
+            document.getElementById('chartX').addEventListener('change', renderChart);
+            document.getElementById('chartY').addEventListener('change', renderChart);
+        }
+
+        function updateLineNumbers() {
+            const editor = document.getElementById('queryEditor');
+            const lineCount = editor.value.split('\n').length;
+            let lines = '';
+            for (let i = 1; i <= Math.max(lineCount, 10); i++) {
+                lines += i + '\n';
+            }
+            document.getElementById('lineNumbers').textContent = lines;
+        }
+
+        function switchQueryMode(mode) {
+            document.getElementById('sqlEditorMode').style.display = mode === 'sql' ? 'flex' : 'none';
+            document.getElementById('nlEditorMode').style.display = mode === 'nl' ? 'block' : 'none';
+            updateLineNumbers();
+        }
+
+        // ===== Schema Loading =====
+        async function loadSchema() {
+            if (!state.selectedConnection) return;
+            const container = document.getElementById('schemaContainer');
+            container.innerHTML = '<div class="empty-state"><div class="spinner"></div> Loading...</div>';
+
+            try {
+                const resp = await fetch(`${API_BASE}/database/schema?connection_id=${encodeURIComponent(state.selectedConnection)}`);
+                if (!resp.ok) throw new Error('Failed to load schema');
+                state.schema = await resp.json();
+                renderSchema();
+            } catch (err) {
+                container.innerHTML = `<div class="empty-state" style="color: var(--error);">Error: ${err.message}</div>`;
+            }
+        }
+
+        function renderSchema() {
+            const container = document.getElementById('schemaContainer');
+            if (!state.schema || !state.schema.databases || state.schema.databases.length === 0) {
+                container.innerHTML = '<div class="empty-state">No schema available</div>';
+                return;
+            }
+
+            let html = '';
+            state.schema.databases.forEach(db => {
+                const dbId = `db-${Math.random()}`;
+                html += `
+                    <div class="tree-node">
+                        <span class="tree-toggle collapsed" onclick="toggleNode(this)"></span>
+                        <span>📦 ${escapeHtml(db.name)}</span>
+                    </div>
+                    <div id="${dbId}" style="display: none;">
+                `;
+                if (db.tables) {
+                    db.tables.forEach(table => {
+                        const tableId = `tbl-${Math.random()}`;
+                        html += `
+                            <div class="tree-node table">
+                                <span class="tree-toggle collapsed" onclick="toggleNode(this)"></span>
+                                <span>📋 ${escapeHtml(table.name)}</span>
+                            </div>
+                            <div id="${tableId}" style="display: none;">
+                        `;
+                        if (table.columns) {
+                            table.columns.forEach(col => {
+                                html += `
+                                    <div class="tree-node column">
+                                        <span>📄</span>
+                                        <span>${escapeHtml(col.name)}</span>
+                                        <span class="column-type">${escapeHtml(col.type)}</span>
+                                    </div>
+                                `;
+                            });
+                        }
+                        html += '</div>';
+                    });
+                }
+                html += '</div>';
+            });
+
+            container.innerHTML = html;
+        }
+
+        function toggleNode(el) {
+            const toggle = el.classList.toggle('expanded') || el.classList.toggle('collapsed');
+            const parent = el.closest('.tree-node');
+            const nextDiv = parent.nextElementSibling;
+            if (nextDiv && nextDiv.id) {
+                nextDiv.style.display = el.classList.contains('expanded') ? 'block' : 'none';
+            }
+        }
+
+        // ===== Query Execution =====
+        async function executeQuery() {
+            const mode = document.querySelector('.query-mode-btn.active').dataset.mode;
+            let query = state.currentQuery;
+
+            if (mode === 'nl') {
+                query = await convertNLToSQL();
+                if (!query) return;
+                document.getElementById('queryEditor').value = query;
+                state.currentQuery = query;
+                updateLineNumbers();
+            }
+
+            if (!query.trim()) {
+                showAlert('Please enter a query', 'error');
+                return;
+            }
+
+            if (!state.selectedConnection) {
+                showAlert('Please select a connection', 'error');
+                return;
+            }
+
+            const startTime = performance.now();
+            const execBtn = document.getElementById('executeBtn');
+            execBtn.disabled = true;
+            execBtn.innerHTML = '<span class="spinner"></span>';
+
+            try {
+                const resp = await fetch(`${API_BASE}/database/query`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        connection_id: state.selectedConnection,
+                        query: query
+                    })
+                });
+
+                if (!resp.ok) throw new Error('Query execution failed');
+                const data = await resp.json();
+
+                state.queryResults = data.rows || [];
+                state.columns = data.columns || (state.queryResults.length > 0 ? Object.keys(state.queryResults[0]) : []);
+                state.currentPage = 0;
+                state.sortColumn = null;
+
+                const execTime = ((performance.now() - startTime) / 1000).toFixed(2);
+                document.getElementById('execTime').textContent = `${execTime}s`;
+                document.getElementById('rowCount').textContent = state.queryResults.length;
+
+                addToHistory(query);
+                renderResults();
+
+                // Show export buttons
+                document.getElementById('exportCSVBtn').style.display = 'inline-block';
+                document.getElementById('exportJSONBtn').style.display = 'inline-block';
+                document.getElementById('toggleVisualizerBtn').style.display = 'inline-block';
+
+                showAlert(`Query executed: ${state.queryResults.length} rows returned`, 'success');
+            } catch (err) {
+                showAlert(`Error: ${err.message}`, 'error');
+            } finally {
+                execBtn.disabled = false;
+                execBtn.innerHTML = '▶ Execute';
+            }
+        }
+
+        async function convertNLToSQL() {
+            const nlText = document.getElementById('nlInput').value.trim();
+            if (!nlText) {
+                showAlert('Please describe your query', 'error');
+                return null;
+            }
+
+            try {
+                const resp = await fetch(`${API_BASE}/nl-to-sql`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        natural_language: nlText,
+                        schema: state.schema
+                    })
+                });
+
+                if (!resp.ok) throw new Error('NL conversion failed');
+                const data = await resp.json();
+                return data.sql || null;
+            } catch (err) {
+                showAlert(`Error: ${err.message}`, 'error');
+                return null;
+            }
+        }
+
+        // ===== Results Rendering =====
+        function renderResults() {
+            const container = document.getElementById('resultsTableContainer');
+            if (!state.queryResults || state.queryResults.length === 0) {
+                container.innerHTML = '<div class="empty-state">No results</div>';
+                return;
+            }
+
+            const start = state.currentPage * ROWS_PER_PAGE;
+            const end = start + ROWS_PER_PAGE;
+            const pageData = state.queryResults.slice(start, end);
+
+            let html = '<table class="results-table"><thead><tr>';
+            state.columns.forEach(col => {
+                const sorted = state.sortColumn === col ? ` sorted-${state.sortDirection}` : '';
+                html += `<th class="sortable${sorted}" onclick="sortResults('${col}')">${escapeHtml(col)}</th>`;
+            });
+            html += '</tr></thead><tbody>';
+
+            pageData.forEach(row => {
+                html += '<tr>';
+                state.columns.forEach(col => {
+                    const value = row[col];
+                    const displayValue = value === null ? '<em>NULL</em>' : escapeHtml(String(value));
+                    html += `<td>${displayValue}</td>`;
+                });
+                html += '</tr>';
+            });
+
+            html += '</tbody></table>';
+            container.innerHTML = html;
+
+            // Pagination
+            const totalPages = Math.ceil(state.queryResults.length / ROWS_PER_PAGE);
+            if (totalPages > 1) {
+                renderPagination(totalPages);
+            } else {
+                document.getElementById('paginationContainer').style.display = 'none';
+            }
+        }
+
+        function sortResults(column) {
+            if (state.sortColumn === column) {
+                state.sortDirection = state.sortDirection === 'asc' ? 'desc' : 'asc';
+            } else {
+                state.sortColumn = column;
+                state.sortDirection = 'asc';
+            }
+
+            state.queryResults.sort((a, b) => {
+                const aVal = a[column];
+                const bVal = b[column];
+                if (aVal === null) return 1;
+                if (bVal === null) return -1;
+                if (typeof aVal === 'string') {
+                    return state.sortDirection === 'asc' ? aVal.localeCompare(bVal) : bVal.localeCompare(aVal);
+                }
+                return state.sortDirection === 'asc' ? aVal - bVal : bVal - aVal;
+            });
+
+            state.currentPage = 0;
+            renderResults();
+        }
+
+        function renderPagination(totalPages) {
+            const container = document.getElementById('paginationContainer');
+            let html = '';
+
+            if (state.currentPage > 0) {
+                html += '<button class="pagination-btn" onclick="goToPage(0)">First</button>';
+                html += '<button class="pagination-btn" onclick="goToPage(' + (state.currentPage - 1) + ')">Prev</button>';
+            }
+
+            const start = Math.max(0, state.currentPage - 2);
+            const end = Math.min(totalPages, state.currentPage + 3);
+
+            for (let i = start; i < end; i++) {
+                if (i === state.currentPage) {
+                    html += `<button class="pagination-btn" style="background-color: var(--accent); color: white;">${i + 1}</button>`;
+                } else {
+                    html += `<button class="pagination-btn" onclick="goToPage(${i})">${i + 1}</button>`;
+                }
+            }
+
+            if (state.currentPage < totalPages - 1) {
+                html += '<button class="pagination-btn" onclick="goToPage(' + (state.currentPage + 1) + ')">Next</button>';
+                html += '<button class="pagination-btn" onclick="goToPage(' + (totalPages - 1) + ')">Last</button>';
+            }
+
+            container.innerHTML = html;
+            container.style.display = 'flex';
+        }
+
+        function goToPage(page) {
+            state.currentPage = page;
+            renderResults();
+            document.getElementById('resultsTableContainer').scrollTop = 0;
+        }
+
+        // ===== Export Functions =====
+        function exportResults(format) {
+            if (!state.queryResults || state.queryResults.length === 0) {
+                showAlert('No results to export', 'error');
+                return;
+            }
+
+            let content, filename, type;
+
+            if (format === 'csv') {
+                content = state.columns.join(',') + '\n';
+                state.queryResults.forEach(row => {
+                    const vals = state.columns.map(col => {
+                        const val = row[col];
+                        if (val === null) return '';
+                        if (typeof val === 'string' && (val.includes(',') || val.includes('"'))) {
+                            return '"' + val.replace(/"/g, '""') + '"';
+                        }
+                        return val;
+                    });
+                    content += vals.join(',') + '\n';
+                });
+                filename = 'export_' + Date.now() + '.csv';
+                type = 'text/csv';
+            } else {
+                content = JSON.stringify(state.queryResults, null, 2);
+                filename = 'export_' + Date.now() + '.json';
+                type = 'application/json';
+            }
+
+            const blob = new Blob([content], { type });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = filename;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showAlert(`Exported ${state.queryResults.length} rows to ${format.toUpperCase()}`, 'success');
+        }
+
+        // ===== Visualizer =====
+        function toggleVisualizer() {
+            const viz = document.getElementById('visualizerContainer');
+            viz.classList.toggle('active');
+            if (viz.classList.contains('active')) {
+                updateChartSelects();
+                renderChart();
+            }
+        }
+
+        function updateChartSelects() {
+            const xSelect = document.getElementById('chartX');
+            const ySelect = document.getElementById('chartY');
+            xSelect.innerHTML = '<option value="">Select X axis</option>';
+            ySelect.innerHTML = '<option value="">Select Y axis</option>';
+
+            state.columns.forEach(col => {
+                xSelect.appendChild(new Option(col, col));
+                ySelect.appendChild(new Option(col, col));
+            });
+
+            if (state.columns.length > 0) xSelect.value = state.columns[0];
+            if (state.columns.length > 1) ySelect.value = state.columns[1];
+        }
+
+        function renderChart() {
+            if (!state.queryResults || state.queryResults.length === 0) return;
+
+            const type = document.getElementById('chartType').value;
+            const xCol = document.getElementById('chartX').value;
+            const yCol = document.getElementById('chartY').value;
+
+            if (!xCol || !yCol) return;
+
+            const labels = state.queryResults.map(r => r[xCol]);
+            const data = state.queryResults.map(r => r[yCol]);
+
+            const ctx = document.getElementById('resultsChart').getContext('2d');
+            if (state.chart) state.chart.destroy();
+
+            state.chart = new Chart(ctx, {
+                type: type === 'pie' ? 'doughnut' : type,
+                data: {
+                    labels,
+                    datasets: [{
+                        label: yCol,
+                        data,
+                        backgroundColor: type === 'pie' ? [
+                            'rgba(108, 92, 231, 0.8)',
+                            'rgba(116, 184, 255, 0.8)',
+                            'rgba(0, 212, 170, 0.8)',
+                            'rgba(255, 159, 243, 0.8)',
+                            'rgba(255, 107, 107, 0.8)',
+                        ] : 'rgba(108, 92, 231, 0.7)',
+                        borderColor: 'rgba(108, 92, 231, 1)',
+                        borderWidth: 1,
+                        tension: 0.3,
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            labels: { color: 'rgba(232, 233, 243, 0.8)' }
+                        }
+                    },
+                    scales: type !== 'pie' ? {
+                        y: {
+                            ticks: { color: 'rgba(232, 233, 243, 0.6)' },
+                            grid: { color: 'rgba(50, 58, 77, 0.3)' }
+                        },
+                        x: {
+                            ticks: { color: 'rgba(232, 233, 243, 0.6)' },
+                            grid: { color: 'rgba(50, 58, 77, 0.3)' }
+                        }
+                    } : {}
+                }
+            });
+        }
+
+        // ===== Tab Management =====
+        function createNewTab() {
+            const tabsContainer = document.getElementById('queryTabs');
+            const tabId = 'tab-' + Date.now();
+            const html = `
+                <button class="tab active" data-tab="${tabId}">
+                    Untitled Query
+                    <span class="tab-close" onclick="closeTab('${tabId}')">✕</span>
+                </button>
+            `;
+            tabsContainer.insertAdjacentHTML('beforeend', html);
+            document.querySelector(`button[data-tab="${tabId}"]`).addEventListener('click', switchTab.bind(null, tabId));
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.querySelector(`button[data-tab="${tabId}"]`).classList.add('active');
+            state.currentQuery = document.getElementById('queryEditor').value;
+        }
+
+        function closeTab(tabId) {
+            const tab = document.querySelector(`button[data-tab="${tabId}"]`);
+            tab.remove();
+            if (document.querySelectorAll('.tab').length === 0) {
+                createNewTab();
+            }
+        }
+
+        // ===== History =====
+        function addToHistory(query) {
+            state.queryHistory.unshift({
+                id: Date.now(),
+                query,
+                timestamp: new Date().toLocaleTimeString()
+            });
+            if (state.queryHistory.length > MAX_HISTORY) {
+                state.queryHistory.pop();
+            }
+            localStorage.setItem('queryHistory', JSON.stringify(state.queryHistory));
+            loadHistory();
+        }
+
+        function loadHistory() {
+            const container = document.getElementById('historyContainer');
+            if (state.queryHistory.length === 0) {
+                container.innerHTML = '<div class="empty-state">No queries yet</div>';
+                return;
+            }
+
+            let html = '';
+            state.queryHistory.forEach(item => {
+                html += `
+                    <div class="history-item">
+                        <div class="history-timestamp">${item.timestamp}</div>
+                        <div class="history-query">${escapeHtml(item.query.substring(0, 100))}</div>
+                        <div class="history-actions">
+                            <button class="history-btn" onclick="rerunQuery('${item.id}')">⟲ Run</button>
+                            <button class="history-btn" onclick="copyQuery('${item.id}')">📋 Copy</button>
+                        </div>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function rerunQuery(id) {
+            const item = state.queryHistory.find(h => h.id === parseInt(id));
+            if (item) {
+                document.getElementById('queryEditor').value = item.query;
+                state.currentQuery = item.query;
+                updateLineNumbers();
+                executeQuery();
+            }
+        }
+
+        function copyQuery(id) {
+            const item = state.queryHistory.find(h => h.id === parseInt(id));
+            if (item) {
+                navigator.clipboard.writeText(item.query);
+                showAlert('Copied to clipboard', 'success');
+            }
+        }
+
+        // ===== Connections =====
+        async function saveConnection() {
+            const name = document.getElementById('connName').value.trim();
+            const type = document.getElementById('connType').value;
+            const path = document.getElementById('sqlitePath').value.trim();
+            const connStr = document.getElementById('postgresConn').value.trim();
+
+            if (!name || (type === 'sqlite' && !path) || (type === 'postgresql' && !connStr)) {
+                showAlert('Please fill in all required fields', 'error');
+                return;
+            }
+
+            const conn = {
+                id: 'conn-' + Date.now(),
+                name,
+                type,
+                sqlite_path: type === 'sqlite' ? path : null,
+                postgresql_connection_string: type === 'postgresql' ? connStr : null
+            };
+
+            state.connections.push(conn);
+            localStorage.setItem('connections', JSON.stringify(state.connections));
+            closeModal('connectionModal');
+            document.getElementById('connName').value = '';
+            document.getElementById('sqlitePath').value = '';
+            document.getElementById('postgresConn').value = '';
+            initializeConnections();
+            showAlert('Connection added', 'success');
+        }
+
+        async function testConnection() {
+            if (!state.selectedConnection) {
+                showAlert('Please select a connection', 'error');
+                return;
+            }
+
+            const btn = document.getElementById('testConnectionBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner"></span>';
+
+            try {
+                const resp = await fetch(`${API_BASE}/database/schema?connection_id=${encodeURIComponent(state.selectedConnection)}`);
+                if (resp.ok) {
+                    showAlert('Connection successful!', 'success');
+                } else {
+                    showAlert('Connection failed', 'error');
+                }
+            } catch (err) {
+                showAlert(`Error: ${err.message}`, 'error');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Test';
+            }
+        }
+
+        // ===== Utilities =====
+        function openModal(id) {
+            document.getElementById(id).classList.add('active');
+        }
+
+        function closeModal(id) {
+            document.getElementById(id).classList.remove('active');
+        }
+
+        function showAlert(message, type) {
+            const container = document.querySelector('.query-input-area');
+            const alert = document.createElement('div');
+            alert.className = `alert ${type}`;
+            alert.textContent = message;
+            container.insertBefore(alert, container.firstChild);
+            setTimeout(() => alert.remove(), 4000);
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        function togglePanel(panel) {
+            const panelEl = panel === 'left' ? document.querySelector('.left-panel') : document.querySelector('.right-panel');
+            panelEl.style.display = panelEl.style.display === 'none' ? 'flex' : 'none';
+        }
+
+        function confirmSaveQuery() {
+            // Placeholder for save query functionality
+            closeModal('saveQueryModal');
+            showAlert('Query saved', 'success');
+        }
+
+        // Initialize
+        updateLineNumbers();
+    </script>
+</body>
+</html>

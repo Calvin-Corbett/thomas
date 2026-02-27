@@ -5,7 +5,7 @@ import contextlib
 import json
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Optional
+from typing import Any
 
 import aiohttp
 
@@ -14,7 +14,7 @@ import aiohttp
 class ChatAdapterConfig:
     base_url: str = "http://127.0.0.1:8080"
     timeout_s: float = 120.0
-    api_token: Optional[str] = None
+    api_token: str | None = None
 
 
 class ChatAdapter:
@@ -27,12 +27,12 @@ class ChatAdapter:
       app["chat_submit_json"]: async callable(payload: dict) -> dict
     """
 
-    def __init__(self, *, app: Optional[Any] = None, cfg: Optional[ChatAdapterConfig] = None):
+    def __init__(self, *, app: Any | None = None, cfg: ChatAdapterConfig | None = None):
         self._app = app
         self._cfg = cfg or ChatAdapterConfig()
 
     @staticmethod
-    def _extract_first_json_object(text: Any) -> Optional[Dict[str, Any]]:
+    def _extract_first_json_object(text: Any) -> dict[str, Any] | None:
         raw = str(text or "").strip()
         if not raw:
             return None
@@ -72,17 +72,17 @@ class ChatAdapter:
         return None
 
     @staticmethod
-    def _parse_streaming_chat_blob(blob: str) -> Optional[Dict[str, Any]]:
-        events: list[Dict[str, Any]] = []
+    def _parse_streaming_chat_blob(blob: str) -> dict[str, Any] | None:
+        events: list[dict[str, Any]] = []
         text_parts: list[str] = []
-        done_event: Dict[str, Any] | None = None
+        done_event: dict[str, Any] | None = None
         for raw_line in str(blob or "").splitlines():
             line = raw_line.strip()
             if not line:
                 continue
             try:
                 obj = json.loads(line)
-            except Exception:
+            except json.JSONDecodeError:
                 continue
             if not isinstance(obj, dict):
                 continue
@@ -96,7 +96,7 @@ class ChatAdapter:
                 done_event = dict(obj)
         if not events:
             return None
-        out: Dict[str, Any] = {
+        out: dict[str, Any] = {
             "events": events,
             "text": "".join(text_parts),
         }
@@ -104,7 +104,7 @@ class ChatAdapter:
             out["done"] = done_event
         return out
 
-    async def submit_chat_json(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+    async def submit_chat_json(self, payload: dict[str, Any]) -> dict[str, Any]:
         # Prefer in-process hook
         if self._app is not None and hasattr(self._app, "get"):
             fn = self._app.get("chat_submit_json")
@@ -140,7 +140,9 @@ class ChatAdapter:
 
         timeout = aiohttp.ClientTimeout(total=self._cfg.timeout_s)
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(self._cfg.base_url.rstrip("/") + "/api/chat", json=wire_payload, headers=headers) as resp:
+            async with session.post(
+                self._cfg.base_url.rstrip("/") + "/api/chat", json=wire_payload, headers=headers
+            ) as resp:
                 text = await resp.text()
                 if resp.status >= 400:
                     raise RuntimeError(f"/api/chat HTTP {resp.status}: {text[:500]}")
@@ -150,24 +152,24 @@ class ChatAdapter:
                 # We don't know exact response shape; try JSON
                 try:
                     return json.loads(text)
-                except Exception:
+                except json.JSONDecodeError:
                     return {"raw": text}
 
     async def generate_json(
         self,
         *,
-        schema_hint: Dict[str, Any],
-        session_id: Optional[str] = None,
+        schema_hint: dict[str, Any],
+        session_id: str | None = None,
         # Preferred parameter names (used by some Thomas codepaths)
-        system_prompt: Optional[str] = None,
-        user_prompt: Optional[str] = None,
-        profile: Optional[str] = None,
-        model: Optional[str] = None,
+        system_prompt: str | None = None,
+        user_prompt: str | None = None,
+        profile: str | None = None,
+        model: str | None = None,
         # Aliases for compatibility with other internal helpers
-        system: Optional[str] = None,
-        user: Optional[str] = None,
+        system: str | None = None,
+        user: str | None = None,
         **_: Any,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Ask Thomas chat to return a JSON object.
 
         This adapter is intentionally flexible about argument names because
@@ -233,10 +235,10 @@ class MemoryAdapter:
       app["memory_query"]: callable(query: dict) -> dict/list OR async callable
     """
 
-    def __init__(self, *, app: Optional[Any] = None):
+    def __init__(self, *, app: Any | None = None):
         self._app = app
 
-    async def append(self, event: Dict[str, Any]) -> None:
+    async def append(self, event: dict[str, Any]) -> None:
         if self._app is None or not hasattr(self._app, "get"):
             return
         fn = self._app.get("memory_append")
@@ -246,7 +248,7 @@ class MemoryAdapter:
         if asyncio.iscoroutine(res):
             await res
 
-    async def query(self, query: Dict[str, Any]) -> Any:
+    async def query(self, query: dict[str, Any]) -> Any:
         if self._app is None or not hasattr(self._app, "get"):
             return None
         fn = self._app.get("memory_query")

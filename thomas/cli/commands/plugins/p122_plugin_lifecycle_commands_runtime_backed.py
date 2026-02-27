@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -108,8 +108,8 @@ def _register_commands(app: typer.Typer) -> None:
 
     @app.command("list")
     def list_cmd(
-        gateway_url: Optional[str] = opts["gateway_url"],
-        config: Optional[Path] = opts["config"],
+        gateway_url: str | None = opts["gateway_url"],
+        config: Path | None = opts["config"],
         timeout: float = opts["timeout"],
         json_output: bool = opts["json_output"],
     ) -> None:
@@ -125,8 +125,8 @@ def _register_commands(app: typer.Typer) -> None:
     @app.command("status")
     def status_cmd(
         plugin: str = typer.Argument(..., help="Plugin identifier"),
-        gateway_url: Optional[str] = opts["gateway_url"],
-        config: Optional[Path] = opts["config"],
+        gateway_url: str | None = opts["gateway_url"],
+        config: Path | None = opts["config"],
         timeout: float = opts["timeout"],
         json_output: bool = opts["json_output"],
     ) -> None:
@@ -142,8 +142,8 @@ def _register_commands(app: typer.Typer) -> None:
     @app.command("start")
     def start_cmd(
         plugin: str = typer.Argument(..., help="Plugin identifier"),
-        gateway_url: Optional[str] = opts["gateway_url"],
-        config: Optional[Path] = opts["config"],
+        gateway_url: str | None = opts["gateway_url"],
+        config: Path | None = opts["config"],
         timeout: float = opts["timeout"],
         json_output: bool = opts["json_output"],
     ) -> None:
@@ -159,8 +159,8 @@ def _register_commands(app: typer.Typer) -> None:
     @app.command("stop")
     def stop_cmd(
         plugin: str = typer.Argument(..., help="Plugin identifier"),
-        gateway_url: Optional[str] = opts["gateway_url"],
-        config: Optional[Path] = opts["config"],
+        gateway_url: str | None = opts["gateway_url"],
+        config: Path | None = opts["config"],
         timeout: float = opts["timeout"],
         json_output: bool = opts["json_output"],
     ) -> None:
@@ -176,8 +176,8 @@ def _register_commands(app: typer.Typer) -> None:
     @app.command("restart")
     def restart_cmd(
         plugin: str = typer.Argument(..., help="Plugin identifier"),
-        gateway_url: Optional[str] = opts["gateway_url"],
-        config: Optional[Path] = opts["config"],
+        gateway_url: str | None = opts["gateway_url"],
+        config: Path | None = opts["config"],
         timeout: float = opts["timeout"],
         json_output: bool = opts["json_output"],
     ) -> None:
@@ -201,7 +201,7 @@ def _resolve_parent_plugins_app() -> typer.Typer | None:
             candidate = getattr(plugins_pkg, attr, None)
             if isinstance(candidate, typer.Typer):
                 return candidate
-    except Exception:
+    except ImportError:
         return None
 
     return None
@@ -231,5 +231,5 @@ app = _standalone_app
 
 try:  # pragma: no cover
     cli = typer.main.get_command(app)
-except Exception:  # pragma: no cover
+except Exception:  # REVIEWED: broad catch:  # pragma: no cover
     cli = None

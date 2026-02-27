@@ -15,10 +15,10 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Set, Tuple
+from typing import Any
 
-from thomas.core.config import AppConfig, EmbedConfig, MemoryConfig
-from thomas.memory.embedder import Embedder, bytes_to_dense, cosine_similarity_dense
+from thomas.core.config import MemoryConfig
+from thomas.memory.embedder import Embedder, bytes_to_dense
 from thomas.memory.graph import GraphStore
 from thomas.memory.rerank import (
     CandidateFeatures,
@@ -48,15 +48,15 @@ class PackedContext:
     text: str = ""
     event_count: int = 0
     token_estimate: int = 0
-    sources: List[str] = field(default_factory=list)
-    trace: Dict[str, Any] = field(default_factory=dict)
+    sources: list[str] = field(default_factory=list)
+    trace: dict[str, Any] = field(default_factory=dict)
 
 
 def pack_context(
-    events: List[EventRow],
+    events: list[EventRow],
     budget: int = 12000,
     graph_summary: str = "",
-    pins: Optional[List[Tuple[str, str, int]]] = None,
+    pins: list[tuple[str, str, int]] | None = None,
 ) -> PackedContext:
     """Pack retrieved events into a context string within token budget.
 
@@ -72,8 +72,8 @@ def pack_context(
         PackedContext with assembled text and metadata
     """
     char_budget = budget * 4  # ~4 chars per token
-    parts: List[str] = []
-    sources: List[str] = []
+    parts: list[str] = []
+    sources: list[str] = []
     used_chars = 0
     packed_events = 0
 
@@ -164,8 +164,8 @@ class RetrievalPipeline:
     def retrieve(
         self,
         query: str,
-        thread: Optional[str] = None,
-        budget: Optional[int] = None,
+        thread: str | None = None,
+        budget: int | None = None,
         mode: str = "auto",
     ) -> PackedContext:
         """Run the full retrieval pipeline.
@@ -181,7 +181,7 @@ class RetrievalPipeline:
         """
         start = time.monotonic()
         budget = budget or self._config.context_budget
-        trace: Dict[str, Any] = {"query": query, "thread": thread, "mode": mode}
+        trace: dict[str, Any] = {"query": query, "thread": thread, "mode": mode}
 
         # 1. Expand query via lexicon
         expanded = self._meta.lex_translate(query)
@@ -220,7 +220,7 @@ class RetrievalPipeline:
         trace["events_loaded"] = len(events)
 
         # 6. Build candidate features
-        candidates: List[CandidateFeatures] = []
+        candidates: list[CandidateFeatures] = []
         for eid, rrf_score in merged.items():
             if eid not in events:
                 continue
@@ -229,12 +229,14 @@ class RetrievalPipeline:
             fts_score = dict(fts_results).get(eid, 0.0)
             sparse_score = dict(sparse_results).get(eid, 0.0)
 
-            candidates.append(CandidateFeatures(
-                event_id=eid,
-                event=ev,
-                fts_score=fts_score,
-                sparse_score=sparse_score,
-            ))
+            candidates.append(
+                CandidateFeatures(
+                    event_id=eid,
+                    event=ev,
+                    fts_score=fts_score,
+                    sparse_score=sparse_score,
+                )
+            )
 
         # 7. Tier 1 reranking
         candidates = self._tier1.score(candidates)
@@ -274,21 +276,17 @@ class RetrievalPipeline:
 
         return result
 
-    def _search_fts(
-        self, query: str, thread: Optional[str]
-    ) -> List[Tuple[int, float]]:
+    def _search_fts(self, query: str, thread: str | None) -> list[tuple[int, float]]:
         """Full-text search via BM25."""
         try:
             return self._log.search_fts(query, thread=thread, limit=80)
-        except Exception as e:
+        except (RuntimeError, OSError) as e:
             log.warning("FTS search failed: %s", e)
             return []
 
-    def _search_sparse(
-        self, q_sparse: Dict[str, float], thread: Optional[str]
-    ) -> List[Tuple[int, float]]:
+    def _search_sparse(self, q_sparse: dict[str, float], thread: str | None) -> list[tuple[int, float]]:
         """Sparse vector similarity search across base + delta."""
-        results: List[Tuple[int, float]] = []
+        results: list[tuple[int, float]] = []
 
         for db in (self._base, self._delta):
             try:
@@ -300,31 +298,27 @@ class RetrievalPipeline:
                 if eids:
                     scores = db.vec_similarity_sparse(q_sparse, eids)
                     results.extend(scores.items())
-            except Exception as e:
+            except (RuntimeError, OSError) as e:
                 log.warning("Sparse search failed on %s: %s", db, e)
 
         # Sort and deduplicate (keep highest score per event_id)
-        best: Dict[int, float] = {}
+        best: dict[int, float] = {}
         for eid, score in results:
             if eid not in best or score > best[eid]:
                 best[eid] = score
 
         return sorted(best.items(), key=lambda x: x[1], reverse=True)
 
-    def _tier2_rerank(
-        self, query: str, candidates: List[CandidateFeatures]
-    ) -> List[CandidateFeatures]:
+    def _tier2_rerank(self, query: str, candidates: list[CandidateFeatures]) -> list[CandidateFeatures]:
         """Apply Tier 2 dense reranking."""
         try:
-            import numpy as np
-
             q_dense = self._embedder.dense(query)
             if q_dense is None:
                 return candidates
 
             # Batch-load dense vectors from base + delta
             eids = [c.event_id for c in candidates]
-            dense_vecs: Dict[int, Any] = {}
+            dense_vecs: dict[int, Any] = {}
 
             for db in (self._base, self._delta):
                 batch = db.vec_get_dense_batch(eids)
@@ -337,6 +331,6 @@ class RetrievalPipeline:
 
             return self._tier2.score(candidates, q_dense, dense_vecs)
 
-        except Exception as e:
+        except (RuntimeError, ValueError) as e:
             log.warning("Tier 2 reranking failed: %s", e)
             return candidates

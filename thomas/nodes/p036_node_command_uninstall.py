@@ -9,12 +9,12 @@ runtime.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from pathlib import Path
 import json
 import subprocess
-from typing import Any, Mapping
-
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any
 
 # -----------------
 # Public contracts
@@ -50,7 +50,7 @@ class NodeCommandUninstallRequest:
     timeout_s: int | None = DEFAULT_TIMEOUT_S
 
     @classmethod
-    def from_dict(cls, data: Mapping[str, Any]) -> "NodeCommandUninstallRequest":
+    def from_dict(cls, data: Mapping[str, Any]) -> NodeCommandUninstallRequest:
         if not isinstance(data, Mapping):
             raise NodeCommandUninstallError(
                 code="invalid_input",
@@ -228,7 +228,7 @@ def uninstall_node_command(req: NodeCommandUninstallRequest) -> NodeCommandUnins
             message="npm uninstall timed out.",
             details={"command": cmd, "timeout_s": timeout_s},
         ) from e
-    except Exception as e:  # pragma: no cover
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as e:  # pragma: no cover
         raise NodeCommandUninstallError(
             code="external_failure",
             message="Failed to invoke npm uninstall.",

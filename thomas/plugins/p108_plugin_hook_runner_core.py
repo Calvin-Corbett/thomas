@@ -27,10 +27,10 @@ import dataclasses
 import importlib
 import inspect
 import json
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Sequence
-
+from typing import Any
 
 JsonPrimitive = str | int | float | bool | None
 JsonValue = JsonPrimitive | list["JsonValue"] | dict[str, "JsonValue"]
@@ -254,7 +254,14 @@ def run_hook(
                     error=None,
                 )
             )
-        except Exception as exc:  # noqa: BLE001 - isolate plugin failures
+        except (
+            RuntimeError,
+            TypeError,
+            AttributeError,
+            KeyError,
+            ValueError,
+            OSError,
+        ) as exc:  # REVIEWED: broad catch — isolate plugin hook failures
             ok = False
             results.append(
                 PluginHookResult(
@@ -293,7 +300,9 @@ def _validate_request(request: HookRunRequest) -> None:
         )
 
     if request.plugin_filter is not None:
-        if not isinstance(request.plugin_filter, Sequence) or isinstance(request.plugin_filter, (str, bytes, bytearray)):
+        if not isinstance(request.plugin_filter, Sequence) or isinstance(
+            request.plugin_filter, (str, bytes, bytearray)
+        ):
             raise HookRunnerError(
                 "invalid_request",
                 "plugin_filter must be a list of plugin identifiers",
@@ -347,7 +356,7 @@ def _resolve_plugins(
     ):
         try:
             mod = importlib.import_module(module_name)
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             continue
 
         # Common symbols.
@@ -363,7 +372,7 @@ def _resolve_plugins(
             if callable(fn):
                 try:
                     discovered = _plugins_from_manager(fn())
-                except Exception:
+                except (RuntimeError, TypeError, AttributeError):  # REVIEWED: broad catch — best-effort discovery
                     continue
                 if discovered:
                     return discovered
@@ -395,7 +404,7 @@ def _plugins_from_manager(manager: Any) -> list[Any]:
         if isinstance(value, Iterable) and not isinstance(value, (str, bytes, bytearray, Mapping)):
             try:
                 return list(value)
-            except Exception:
+            except (TypeError, ValueError):  # REVIEWED: broad catch — iterable conversion
                 continue
 
     # Common manager methods.
@@ -412,7 +421,7 @@ def _plugins_from_manager(manager: Any) -> list[Any]:
             if isinstance(value, Iterable) and not isinstance(value, (str, bytes, bytearray, Mapping)):
                 try:
                     return list(value)
-                except Exception:
+                except (TypeError, ValueError):  # REVIEWED: broad catch — iterable conversion
                     continue
 
     return []
@@ -434,7 +443,7 @@ def _plugins_from_config(path: Path) -> list[Any]:
 
     try:
         raw = path.read_text(encoding="utf-8")
-    except Exception as exc:
+    except (OSError, UnicodeDecodeError) as exc:
         raise HookRunnerError(
             "invalid_config",
             "Failed to read config file",
@@ -471,7 +480,13 @@ def _plugins_from_config(path: Path) -> list[Any]:
             plugins.append(_instantiate_plugin_spec(spec))
         except HookRunnerError:
             raise
-        except Exception as exc:
+        except (
+            ImportError,
+            ModuleNotFoundError,
+            AttributeError,
+            TypeError,
+            RuntimeError,
+        ) as exc:  # REVIEWED: broad catch — plugin instantiation
             raise HookRunnerError(
                 "invalid_config",
                 "Failed to load plugin from config",
@@ -571,7 +586,7 @@ def _get_hook_callable(plugin: Any, hook: str) -> Callable[..., Any] | None:
     if callable(getter):
         try:
             candidate = getter(hook)
-        except Exception:
+        except (KeyError, RuntimeError, TypeError, AttributeError):  # REVIEWED: broad catch — best-effort getter
             candidate = None
         if callable(candidate):
             return candidate
@@ -628,9 +643,7 @@ def _call_hook(hook_fn: Callable[..., Any], *, hook: str, payload: Mapping[str, 
             return hook_fn(hook=hook, payload=payload)
 
         positional = [
-            p
-            for p in params
-            if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
+            p for p in params if p.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD)
         ]
         required_positional = [p for p in positional if p.default is inspect.Parameter.empty]
 
@@ -685,7 +698,7 @@ def _to_json_value(value: Any) -> JsonValue:
     if callable(to_dict):
         try:
             return _to_json_value(to_dict())
-        except Exception:
+        except (RuntimeError, TypeError, ValueError, AttributeError):  # REVIEWED: broad catch — fallback to_dict
             pass
 
     return {"__type__": value.__class__.__name__}

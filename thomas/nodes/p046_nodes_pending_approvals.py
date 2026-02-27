@@ -17,13 +17,14 @@ The implementation avoids OpenClaw naming reuse.
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-import inspect
 import importlib
+import inspect
 import json
 import os
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
+from typing import Any
 
 
 class NodesPendingApprovalsError(RuntimeError):
@@ -155,7 +156,7 @@ def _try_state_dir_from_parity_compat() -> str | None:
 
     try:
         pc = importlib.import_module("thomas.cli.parity_compat")
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return None
 
     # Direct helpers
@@ -164,7 +165,7 @@ def _try_state_dir_from_parity_compat() -> str | None:
         if callable(fn):
             try:
                 val = _call_if_no_required_args(fn)
-            except Exception:
+            except (ImportError, AttributeError, RuntimeError):
                 return None
             if isinstance(val, (str, Path)) and str(val).strip():
                 return str(val).strip()
@@ -175,7 +176,7 @@ def _try_state_dir_from_parity_compat() -> str | None:
         if callable(obj):
             try:
                 obj = _call_if_no_required_args(obj)
-            except Exception:
+            except (ImportError, AttributeError, RuntimeError):
                 obj = None
         if isinstance(obj, Mapping):
             for key in ("state_dir", "data_dir", "runtime_dir"):
@@ -195,7 +196,7 @@ def _try_state_dir_from_parity_compat() -> str | None:
         if callable(fn):
             try:
                 cfg = _call_if_no_required_args(fn)
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 continue
             val = _extract_state_dir_from_config(cfg)
             if val:
@@ -215,7 +216,7 @@ def _try_load_thomas_config() -> Any | None:
     ):
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
 
         for fn_name in ("load_config", "get_config", "load", "config"):
@@ -223,7 +224,7 @@ def _try_load_thomas_config() -> Any | None:
             if callable(fn):
                 try:
                     cfg = _call_if_no_required_args(fn)
-                except Exception:
+                except (json.JSONDecodeError, ValueError, KeyError):
                     cfg = None
                 if cfg is not None:
                     return cfg
@@ -464,7 +465,7 @@ def nodes_pending_approvals(inp: NodesPendingApprovalsInput) -> NodesPendingAppr
 
 try:  # pragma: no cover
     from aiohttp import web
-except Exception:  # pragma: no cover
+except (ImportError, AttributeError, RuntimeError):  # pragma: no cover
     web = None  # type: ignore
 
 
@@ -472,7 +473,7 @@ if web is not None:  # pragma: no cover
     routes = web.RouteTableDef()
 
     @routes.get("/nodes/pending-approvals")
-    async def aiohttp_nodes_pending_approvals(request: "web.Request") -> "web.Response":
+    async def aiohttp_nodes_pending_approvals(request: web.Request) -> web.Response:
         try:
             result = nodes_pending_approvals(NodesPendingApprovalsInput())
             payload = {"ok": True, **result.to_dict()}
@@ -486,7 +487,7 @@ if web is not None:  # pragma: no cover
 
     ROUTES = routes
 
-    def register_aiohttp_routes(app: "web.Application") -> None:
+    def register_aiohttp_routes(app: web.Application) -> None:
         app.add_routes(routes)
 
 

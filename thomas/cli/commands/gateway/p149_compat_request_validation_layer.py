@@ -13,7 +13,7 @@ def _read_json_arg(value: str) -> Any:
 
     if value.startswith("@"):
         path = value[1:]
-        with open(path, "r", encoding="utf-8") as f:
+        with open(path, encoding="utf-8") as f:
             return json.load(f)
     return json.loads(value)
 
@@ -52,7 +52,7 @@ def run(argv: list[str] | None = None) -> int:
         else:
             print("file_not_found: $ Payload file not found.", file=sys.stderr)
         return 2
-    except Exception:
+    except json.JSONDecodeError:
         out = {
             "ok": False,
             "kind": str(args.kind),

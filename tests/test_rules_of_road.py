@@ -1,4 +1,4 @@
-from thomas.core.rules_of_road import evaluate_rules, build_remediation_prompt
+from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
 
 
 def test_coding_write_without_verification_fails_required_gate():
@@ -25,11 +25,7 @@ def test_coding_write_without_verification_fails_required_gate():
     assert report["job_type"] == "coding"
     assert report["passed"] is False
     assert report["required_failed_count"] >= 1
-    failed_ids = {
-        c["id"]
-        for c in report["checks"]
-        if c["required"] and not c["passed"]
-    }
+    failed_ids = {c["id"] for c in report["checks"] if c["required"] and not c["passed"]}
     assert "coding_verification" in failed_ids
 
 
@@ -98,11 +94,7 @@ def test_coding_write_with_only_prewrite_verification_fails():
     )
     assert report["job_type"] == "coding"
     assert report["passed"] is False
-    failed_ids = {
-        c["id"]
-        for c in report["checks"]
-        if c["required"] and not c["passed"]
-    }
+    failed_ids = {c["id"] for c in report["checks"] if c["required"] and not c["passed"]}
     assert "coding_verification" in failed_ids
 
 
@@ -133,11 +125,7 @@ def test_coding_write_without_monolith_guard_fails_required_gate():
         require_monolith_guard_for_coding=True,
         attempt=0,
     )
-    failed_ids = {
-        c["id"]
-        for c in report["checks"]
-        if c["required"] and not c["passed"]
-    }
+    failed_ids = {c["id"] for c in report["checks"] if c["required"] and not c["passed"]}
     assert "coding_monolith_guard" in failed_ids
 
 
@@ -173,3 +161,46 @@ def test_config_job_fails_on_unknown_keys():
     prompt = build_remediation_prompt(report)
     assert "Quality gate failed" in prompt
     assert "No unknown core config keys" in prompt
+
+
+def test_strict_issue_ownership_fails_workaround_only_completion() -> None:
+    report = evaluate_rules(
+        route_path="coding_task",
+        prompt_text="fix this bug end-to-end",
+        response_text="I applied a temporary workaround for now. The issue is still failing.",
+        tool_events=[],
+        requested_job_type="coding",
+        config_errors=[],
+        unknown_core_keys=[],
+        require_verification_for_coding=True,
+        require_tests_for_code_edits=False,
+        require_monolith_guard_for_coding=True,
+        strict_issue_ownership=True,
+        attempt=0,
+    )
+    assert report["passed"] is False
+    failed_ids = {c["id"] for c in report["checks"] if c["required"] and not c["passed"]}
+    assert "issue_ownership" in failed_ids
+
+
+def test_non_strict_issue_ownership_does_not_require_gate() -> None:
+    report = evaluate_rules(
+        route_path="coding_task",
+        prompt_text="fix this bug end-to-end",
+        response_text="I applied a temporary workaround for now. The issue is still failing.",
+        tool_events=[],
+        requested_job_type="coding",
+        config_errors=[],
+        unknown_core_keys=[],
+        require_verification_for_coding=False,
+        require_tests_for_code_edits=False,
+        require_monolith_guard_for_coding=False,
+        strict_issue_ownership=False,
+        attempt=0,
+    )
+    issue_check = next(
+        (c for c in report["checks"] if c.get("id") == "issue_ownership"),
+        None,
+    )
+    assert isinstance(issue_check, dict)
+    assert issue_check["required"] is False

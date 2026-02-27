@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -16,15 +17,23 @@ def register_codex_routes(
     require_api_access: Callable[[web.Request], None],
     codex_bridge_key: Any,
 ) -> None:
+    bridge_ref: dict[str, Any]
+    existing = app.get(codex_bridge_key)
+    if isinstance(existing, dict) and "bridge" in existing:
+        bridge_ref = existing
+    else:
+        bridge_ref = {"bridge": existing}
+        app[codex_bridge_key] = bridge_ref
+
     async def _ensure_bridge() -> Any:
-        bridge = app.get(codex_bridge_key)
+        bridge = bridge_ref.get("bridge")
         if bridge is not None:
             return bridge
         from thomas.codex.bridge import CodexBridge
 
         bridge = CodexBridge()
         await bridge.start()
-        app[codex_bridge_key] = bridge
+        bridge_ref["bridge"] = bridge
         return bridge
 
     async def api_codex_status(request: web.Request) -> web.Response:
@@ -78,7 +87,7 @@ def register_codex_routes(
     async def api_codex_logout(request: web.Request) -> web.Response:
         require_api_access(request)
         try:
-            bridge = app.get(codex_bridge_key)
+            bridge = bridge_ref.get("bridge")
             if bridge is not None:
                 await bridge.logout()
             return web.json_response({"ok": True})
@@ -106,11 +115,12 @@ def register_codex_routes(
             return web.json_response({"models": [], "error": str(e)})
 
     async def on_codex_cleanup(app_: web.Application) -> None:
-        bridge = app_.get(codex_bridge_key)
+        bridge = bridge_ref.get("bridge")
         if bridge is None:
             return
         try:
             await bridge.stop()
+            bridge_ref["bridge"] = None
         except Exception as e:
             log.debug("Failed to stop Codex bridge during cleanup: %s", e)
 

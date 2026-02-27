@@ -20,7 +20,6 @@ Usage (CLI)::
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import py_compile
@@ -29,10 +28,11 @@ import shutil
 import subprocess
 import sys
 import time
+from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Sequence
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -55,10 +55,10 @@ class CheckResult:
     status: str  # "pass" | "warn" | "fail"
     message: str
     auto_fixable: bool = False
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
     elapsed_ms: float = 0.0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         if not d["details"]:
             del d["details"]
@@ -69,6 +69,7 @@ class CheckResult:
 # Registry
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _CheckEntry:
     name: str
@@ -77,8 +78,8 @@ class _CheckEntry:
     tags: tuple
 
 
-_REGISTRY: Dict[str, _CheckEntry] = {}
-_FIX_REGISTRY: Dict[str, Callable[[], CheckResult]] = {}
+_REGISTRY: dict[str, _CheckEntry] = {}
+_FIX_REGISTRY: dict[str, Callable[[], CheckResult]] = {}
 
 
 def heartbeat_check(
@@ -118,14 +119,14 @@ def register_fix(check_name: str):
 
 def run_heartbeat(
     *,
-    checks: Optional[Sequence[str]] = None,
+    checks: Sequence[str] | None = None,
     fix: bool = False,
-    tags: Optional[Sequence[str]] = None,
-) -> Dict[str, Any]:
+    tags: Sequence[str] | None = None,
+) -> dict[str, Any]:
     """Execute heartbeat checks and return a structured report."""
     started = time.monotonic()
     selected = _select_checks(checks, tags)
-    results: List[CheckResult] = []
+    results: list[CheckResult] = []
 
     for entry in selected:
         t0 = time.monotonic()
@@ -187,9 +188,9 @@ def run_heartbeat(
 
 
 def _select_checks(
-    names: Optional[Sequence[str]],
-    tags: Optional[Sequence[str]],
-) -> List[_CheckEntry]:
+    names: Sequence[str] | None,
+    tags: Sequence[str] | None,
+) -> list[_CheckEntry]:
     entries = list(_REGISTRY.values())
     if names:
         name_set = set(names)
@@ -200,7 +201,7 @@ def _select_checks(
     return entries
 
 
-def list_checks() -> List[Dict[str, Any]]:
+def list_checks() -> list[dict[str, Any]]:
     """Return metadata for all registered checks."""
     return [
         {
@@ -218,9 +219,9 @@ def list_checks() -> List[Dict[str, Any]]:
 # ---------------------------------------------------------------------------
 
 
-def format_text_report(report: Dict[str, Any]) -> str:
+def format_text_report(report: dict[str, Any]) -> str:
     """Format heartbeat report as human-readable text."""
-    lines: List[str] = []
+    lines: list[str] = []
     summary = report.get("summary", {})
     ts = report.get("timestamp", "")
 
@@ -268,6 +269,7 @@ def format_text_report(report: Dict[str, Any]) -> str:
 # ---------------------------------------------------------------------------
 # 1. changelog_sync
 # ---------------------------------------------------------------------------
+
 
 @heartbeat_check(
     "changelog_sync",
@@ -350,7 +352,7 @@ def _fix_changelog_sync() -> CheckResult:
     commits = [ln.strip() for ln in proc.stdout.strip().splitlines() if ln.strip()]
 
     # Group by conventional commit type
-    groups: Dict[str, List[str]] = {"Added": [], "Changed": [], "Fixed": []}
+    groups: dict[str, list[str]] = {"Added": [], "Changed": [], "Fixed": []}
     for line in commits:
         msg = re.sub(r"^[0-9a-f]+\s+", "", line)
         lower = msg.lower()
@@ -396,6 +398,7 @@ def _fix_changelog_sync() -> CheckResult:
 # ---------------------------------------------------------------------------
 # 2. version_consistency
 # ---------------------------------------------------------------------------
+
 
 @heartbeat_check(
     "version_consistency",
@@ -463,6 +466,7 @@ def _fix_version_consistency() -> CheckResult:
 # 3. server_boot
 # ---------------------------------------------------------------------------
 
+
 @heartbeat_check(
     "server_boot",
     description="Verify server app factory imports without error",
@@ -502,13 +506,14 @@ def _check_server_boot() -> CheckResult:
 # 4. python_compile
 # ---------------------------------------------------------------------------
 
+
 @heartbeat_check(
     "python_compile",
     description="Compile all .py files under thomas/ for syntax errors",
     tags=("syntax",),
 )
 def _check_python_compile() -> CheckResult:
-    errors: List[str] = []
+    errors: list[str] = []
     count = 0
     for py_file in THOMAS_ROOT.rglob("*.py"):
         if "__pycache__" in str(py_file):
@@ -534,6 +539,7 @@ def _check_python_compile() -> CheckResult:
 # 5. js_syntax
 # ---------------------------------------------------------------------------
 
+
 @heartbeat_check(
     "js_syntax",
     description="Run node --check on key JS files",
@@ -549,7 +555,7 @@ def _check_js_syntax() -> CheckResult:
     if not node:
         return CheckResult("js_syntax", "warn", "node not in PATH, skipping")
 
-    errors: List[str] = []
+    errors: list[str] = []
     for js_file in js_files:
         try:
             proc = subprocess.run(
@@ -579,6 +585,7 @@ def _check_js_syntax() -> CheckResult:
 # 6. index_freshness
 # ---------------------------------------------------------------------------
 
+
 @heartbeat_check(
     "index_freshness",
     description="Verify PROJECT_INDEX.md references still exist",
@@ -591,19 +598,18 @@ def _check_index_freshness() -> CheckResult:
 
     text = index.read_text(encoding="utf-8")
     # Extract repo-relative file paths like thomas/foo/bar.py or scripts/x.py
-    path_pattern = re.compile(
-        r"(?:thomas|scripts|tests|docs)/[\w/.\-]+\.(?:py|js|html|css|toml|json|md)"
-    )
+    path_pattern = re.compile(r"(?:thomas|scripts|tests|docs)/[\w/.\-]+\.(?:py|js|html|css|toml|json|md)")
     referenced = set(path_pattern.findall(text))
     # Exclude state-dir paths (e.g. ~/.thomas/foo.json matched as thomas/foo.json)
     # These are user-home state files, not repo files — they won't have a subdir
     referenced = {
-        r for r in referenced
+        r
+        for r in referenced
         if r.count("/") >= 2  # repo paths always have at least 2 segments: thomas/pkg/file.py
         or (ROOT / r).exists()  # if it's a shallow path, only keep if actually exists
     }
 
-    stale: List[str] = []
+    stale: list[str] = []
     for ref in sorted(referenced):
         if not (ROOT / ref).exists():
             stale.append(ref)
@@ -625,6 +631,7 @@ def _check_index_freshness() -> CheckResult:
 # ---------------------------------------------------------------------------
 # 7. architecture_fitness
 # ---------------------------------------------------------------------------
+
 
 @heartbeat_check(
     "architecture_fitness",
@@ -669,6 +676,7 @@ def _check_architecture_fitness() -> CheckResult:
 # 8. stale_locks
 # ---------------------------------------------------------------------------
 
+
 def _pid_alive(pid: int) -> bool:
     """Check if a PID is alive (cross-platform)."""
     if os.name == "nt":
@@ -680,7 +688,7 @@ def _pid_alive(pid: int) -> bool:
                 timeout=5,
             )
             return str(pid) in proc.stdout
-        except Exception:
+        except (subprocess.CalledProcessError, OSError):
             return True  # assume alive if we can't check
     else:
         try:
@@ -705,7 +713,7 @@ def _check_stale_locks() -> CheckResult:
     try:
         content = lock_path.read_text(encoding="utf-8").strip()
         pid = int(content.split()[0]) if content else 0
-    except Exception:
+    except (OSError, FileNotFoundError):
         return CheckResult(
             "stale_locks",
             "warn",
@@ -714,9 +722,7 @@ def _check_stale_locks() -> CheckResult:
         )
 
     if pid <= 0:
-        return CheckResult(
-            "stale_locks", "warn", "serve.lock has invalid PID", auto_fixable=True
-        )
+        return CheckResult("stale_locks", "warn", "serve.lock has invalid PID", auto_fixable=True)
 
     if _pid_alive(pid):
         return CheckResult("stale_locks", "pass", f"serve.lock PID {pid} is alive")
@@ -744,6 +750,7 @@ def _fix_stale_locks() -> CheckResult:
 # ---------------------------------------------------------------------------
 # 9. log_rotation
 # ---------------------------------------------------------------------------
+
 
 @heartbeat_check(
     "log_rotation",
@@ -798,6 +805,7 @@ def _fix_log_rotation() -> CheckResult:
 # 10. config_valid
 # ---------------------------------------------------------------------------
 
+
 @heartbeat_check(
     "config_valid",
     description="Validate thomas.toml configuration",
@@ -837,6 +845,7 @@ def _check_config_valid() -> CheckResult:
 # 11. monolith_guard
 # ---------------------------------------------------------------------------
 
+
 @heartbeat_check(
     "monolith_guard",
     description="Check monolith file size limits",
@@ -866,18 +875,18 @@ def _check_monolith_guard() -> CheckResult:
         return CheckResult("monolith_guard", "pass", "All files within size limits")
 
     # Try to parse JSON output for details
-    violations: List[str] = []
+    violations: list[str] = []
     try:
         data = json.loads(proc.stdout)
         for v in data.get("violations", [])[:5]:
             violations.append(f"{v.get('path', '?')}: {v.get('lines', '?')} lines ({v.get('reason', '')})")
-    except Exception:
+    except json.JSONDecodeError:
         violations = [proc.stdout[:200] if proc.stdout else ""]
 
     return CheckResult(
         "monolith_guard",
         "fail",
-        f"Monolith size violations found",
+        "Monolith size violations found",
         details={"violations": violations},
     )
 
@@ -885,6 +894,7 @@ def _check_monolith_guard() -> CheckResult:
 # ---------------------------------------------------------------------------
 # 12. dead_references
 # ---------------------------------------------------------------------------
+
 
 @heartbeat_check(
     "dead_references",
@@ -901,7 +911,7 @@ def _check_dead_references() -> CheckResult:
     refs = re.findall(r"thomas\.(\w+)\b", text)
     unique_refs = sorted(set(refs))
 
-    missing: List[str] = []
+    missing: list[str] = []
     for mod_name in unique_refs:
         mod_dir = THOMAS_ROOT / mod_name
         mod_file = THOMAS_ROOT / f"{mod_name}.py"
@@ -925,6 +935,7 @@ def _check_dead_references() -> CheckResult:
 # ---------------------------------------------------------------------------
 # 13. git_hygiene
 # ---------------------------------------------------------------------------
+
 
 @heartbeat_check(
     "git_hygiene",
@@ -952,7 +963,7 @@ def _check_git_hygiene() -> CheckResult:
     if not modified and not untracked_py:
         return CheckResult("git_hygiene", "pass", "Working tree clean")
 
-    parts: List[str] = []
+    parts: list[str] = []
     if modified:
         parts.append(f"{len(modified)} modified")
     if untracked_py:

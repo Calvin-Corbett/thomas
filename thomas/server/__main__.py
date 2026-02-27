@@ -7,15 +7,17 @@ Run with:
 from __future__ import annotations
 
 import argparse
+import logging
+import os
 import sys
+from collections.abc import Sequence
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Optional, Sequence
 
 from thomas.core.config import load_config
-from thomas.server.app import serve
 
 
-def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
+def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Run the Thomas web UI + HTTP API server.")
     parser.add_argument("--host", default="127.0.0.1", help="Bind host")
     parser.add_argument("--port", default=8899, type=int, help="Bind port")
@@ -29,19 +31,85 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
-    import logging
+def _setup_logging(environment: str) -> None:
+    """Configure logging based on environment."""
+    log_level_env = os.environ.get("THOMAS_LOG_LEVEL", "").upper()
 
-    logging.basicConfig(
-        level=logging.WARNING,
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-        datefmt="%H:%M:%S",
+    if log_level_env:
+        level = getattr(logging, log_level_env, logging.WARNING)
+    elif environment == "production":
+        level = logging.WARNING
+    else:
+        level = logging.INFO
+
+    log_format_env = os.environ.get("THOMAS_LOG_FORMAT", "").lower()
+    if log_format_env == "json" or (environment == "production" and log_format_env != "text"):
+        fmt = '{"time":"%(asctime)s","name":"%(name)s","level":"%(levelname)s","msg":"%(message)s"}'
+    else:
+        fmt = "%(asctime)s [%(name)s] %(levelname)s: %(message)s"
+
+    logging.basicConfig(level=level, format=fmt, datefmt="%H:%M:%S")
+
+    log_file = str(os.environ.get("THOMAS_LOG_FILE") or "").strip()
+    if not log_file:
+        return
+
+    log_path = Path(log_file)
+    log_path.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        max_bytes = max(1024 * 1024, int(os.environ.get("THOMAS_LOG_MAX_BYTES", "10485760")))
+    except Exception:
+        max_bytes = 10_485_760
+    try:
+        backup_count = max(1, int(os.environ.get("THOMAS_LOG_BACKUP_COUNT", "7")))
+    except Exception:
+        backup_count = 7
+
+    root = logging.getLogger()
+    handler = RotatingFileHandler(
+        log_path,
+        maxBytes=max(1024 * 1024, max_bytes),
+        backupCount=max(1, backup_count),
+        encoding="utf-8",
     )
+    handler.setLevel(level)
+    handler.setFormatter(logging.Formatter(fmt, datefmt="%H:%M:%S"))
+    root.addHandler(handler)
 
+
+def _print_startup_banner(config, host: str, port: int) -> None:
+    """Log environment, version, and config info on startup."""
+    try:
+        from thomas import __version__ as version
+    except ImportError:
+        version = "unknown"
+
+    config_path = getattr(config, "config_path", "defaults")
+    env = config.environment
+    default_model = config.default_model
+    model_count = len(config.models)
+
+    logger = logging.getLogger("thomas.server")
+    logger.info("=" * 60)
+    logger.info("Thomas v%s starting", version)
+    logger.info("  Environment : %s", env)
+    logger.info("  Config      : %s", config_path)
+    logger.info("  Bind        : %s:%d", host, port)
+    logger.info("  Default model: %s (%d profile(s) loaded)", default_model, model_count)
+    logger.info("  Shell access: %s", "enabled" if config.tools.allow_shell else "disabled")
+    logger.info("  Access mode : %s", config.server.access_mode)
+    logger.info("=" * 60)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
     cfg_path = Path(args.config_path).expanduser() if args.config_path else None
 
     config = load_config(cfg_path)
+
+    _setup_logging(config.environment)
+    _print_startup_banner(config, str(args.host), int(args.port))
+
     errors = config.validate()
     if errors:
         for err in errors:
@@ -49,6 +117,8 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         return 1
 
     try:
+        from thomas.server.app import serve
+
         serve(config, host=str(args.host), port=int(args.port))
     except ModuleNotFoundError as exc:
         print(f"Server dependencies missing: {exc}", file=sys.stderr)

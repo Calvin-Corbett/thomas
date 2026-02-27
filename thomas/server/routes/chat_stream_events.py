@@ -8,7 +8,8 @@ import inspect
 import json
 import logging
 import time
-from typing import Any, Awaitable, Callable, Dict, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from thomas.core.autonomy import autonomy_level_name
 from thomas.core.events import EventType
@@ -19,6 +20,14 @@ from thomas.observability.task_ledger import (
     extract_missing_inputs,
 )
 
+# Chat pipeline logger + training mode
+try:
+    from thomas.chat_logger import ChatEventKind, TrainingMode, chat_logger
+except Exception:  # pragma: no cover – graceful fallback
+    chat_logger = None  # type: ignore[assignment]
+    ChatEventKind = None  # type: ignore[assignment,misc]
+    TrainingMode = None  # type: ignore[assignment,misc]
+
 log = logging.getLogger(__name__)
 
 
@@ -26,7 +35,7 @@ async def stream_agent_events(
     *,
     agent: Any,
     prompt: Any,
-    send: Callable[[Dict[str, Any]], Awaitable[None]],
+    send: Callable[[dict[str, Any]], Awaitable[None]],
     send_timing: Callable[[str], Awaitable[None]],
     cfg: Any,
     session: Any,
@@ -36,34 +45,54 @@ async def stream_agent_events(
     deps: Any,
     run_id: str,
     model_cfg: Any,
-    requested_runtime: Dict[str, Any],
+    requested_runtime: dict[str, Any],
     failover_enabled_for_chat: bool,
     mode: str,
     advanced_tools: Any,
-    requested_job_type: Optional[str],
+    requested_job_type: str | None,
     applied_token_economy: str,
-    token_economy_meta: Dict[str, Any],
-    run_max_iterations: Optional[int],
-    run_done: Dict[str, Any],
+    token_economy_meta: dict[str, Any],
+    run_max_iterations: int | None,
+    run_done: dict[str, Any],
     llm: Any,
     memory: Any,
     start_t: float,
-    apply_usage_budget: Callable[[int], Awaitable[Optional[Dict[str, Any]]]],
-    normalize_usage_payload: Callable[[Any], Dict[str, int]],
-) -> Optional[TaskJournal]:
+    apply_usage_budget: Callable[[int], Awaitable[dict[str, Any] | None]],
+    normalize_usage_payload: Callable[[Any], dict[str, int]],
+) -> TaskJournal | None:
     await send_timing("llm_client_ready")
+
+    # --- Chat pipeline logging ---
+    if chat_logger is not None:
+        try:
+            chat_logger.set_session(sid, run_id)
+            chat_logger.log_event(
+                ChatEventKind.REQUEST_IN,
+                {
+                    "text": str(raw_user_text)[:300],
+                    "mode": mode,
+                    "job_type": requested_job_type,
+                    "token_economy": applied_token_economy,
+                },
+                session_id=sid,
+                run_id=run_id,
+            )
+        except Exception:
+            pass
 
     tools_policy_for_run = "auto"
     if advanced_tools is not None and float(getattr(advanced_tools, "auto_tool_threshold", 0.0) or 0.0) >= 0.9:
         tools_policy_for_run = "never"
-    run_kwargs: Dict[str, Any] = {
+    run_kwargs: dict[str, Any] = {
         "mode": str(mode or "auto"),
         "tools_policy": tools_policy_for_run,
         "job_type": requested_job_type,
         "token_economy": applied_token_economy,
     }
-    if run_max_iterations is not None:
-        run_kwargs["max_iterations"] = int(run_max_iterations)
+    # NOTE: Token economy pass limits (run_max_iterations) are intentionally
+    # NOT applied to the orchestrator — the user-facing chat must always
+    # respond quickly.  Token economy iteration caps only apply to spawned
+    # agents/tasks (swarm workers, coding pipelines, etc.).
     run_kwargs_effective = dict(run_kwargs)
     try:
         run_sig = inspect.signature(agent.run)
@@ -91,7 +120,7 @@ async def stream_agent_events(
     await send_timing("agent_loop_start")
     first_token_sent = False
     tool_call_args_buf = ""
-    journal: Optional[TaskJournal] = None
+    journal: TaskJournal | None = None
 
     async for event in agent.run(prompt, **run_kwargs_effective):
         if event.type == EventType.AGENT_START:
@@ -144,6 +173,24 @@ async def stream_agent_events(
                     log.debug("Failed to init task journal: %s", journal_err)
             else:
                 await send({"type": "journal_status", "status": "skipped", "reason": str(journal_reason or "")})
+
+            # Log routing decision
+            if chat_logger is not None:
+                try:
+                    chat_logger.log_event(
+                        ChatEventKind.ROUTING,
+                        {
+                            "path": route_path,
+                            "confidence": float((route_data or {}).get("confidence", 0)),
+                            "reasons": list((route_data or {}).get("reasons", [])),
+                            "mode": event.data.get("mode", "auto"),
+                            "tools_policy": event.data.get("tools_policy", "auto"),
+                        },
+                        session_id=sid,
+                        run_id=run_id,
+                    )
+                except Exception:
+                    pass
 
             route_reasons = (route_data or {}).get("reasons", [])
             route_conf = (route_data or {}).get("confidence", 0)
@@ -257,6 +304,17 @@ async def stream_agent_events(
 
         if event.type == EventType.AGENT_ERROR:
             err = str(event.data.get("error", "unknown error"))
+            # Log error
+            if chat_logger is not None:
+                try:
+                    chat_logger.log_event(
+                        ChatEventKind.ERROR,
+                        {"error": err[:300]},
+                        session_id=sid,
+                        run_id=run_id,
+                    )
+                except Exception:
+                    pass
             run_done["ok"] = False
             run_done["error"] = err
             deps.task_ledger_update(
@@ -356,6 +414,47 @@ async def stream_agent_events(
         run_done["usage"] = usage_obj
 
         assistant_text = str(event.data.get("text") or "")
+
+        # --- Training mode observation ---
+        if TrainingMode is not None and chat_logger is not None:
+            try:
+                route_info = {}
+                for recent in reversed(chat_logger.get_recent_events(20)):
+                    if recent.kind == "routing" and recent.session_id == sid:
+                        route_info = recent.data
+                        break
+                TrainingMode.observe_response(
+                    user_text=raw_user_text,
+                    assistant_text=assistant_text,
+                    route_path=str(route_info.get("path", "")),
+                    confidence=float(route_info.get("confidence", 0)),
+                    mode=mode,
+                    elapsed_ms=float((time.monotonic() - start_t) * 1000.0),
+                    tool_calls=done_tool_calls,
+                    session_id=sid,
+                )
+            except Exception as tm_err:
+                log.debug("Training mode observation failed: %s", tm_err)
+
+        # --- Log response output ---
+        if chat_logger is not None:
+            try:
+                chat_logger.log_event(
+                    ChatEventKind.RESPONSE_OUT,
+                    {
+                        "text_preview": assistant_text[:200],
+                        "text_len": len(assistant_text),
+                        "iterations": done_iterations,
+                        "tool_calls": done_tool_calls,
+                        "total_tokens": done_total_tokens,
+                        "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
+                    },
+                    session_id=sid,
+                    run_id=run_id,
+                )
+            except Exception:
+                pass
+
         ledger_status, ledger_missing_inputs, ledger_progress = classify_completion_state(
             assistant_text=assistant_text,
             token_report=token_report,

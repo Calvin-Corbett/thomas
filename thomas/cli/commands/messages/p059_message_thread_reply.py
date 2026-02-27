@@ -15,9 +15,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, Tuple
-
+from typing import Any
 
 PARITY_ID = "p059_message_thread_reply"
 COMMAND_NAME = "thread-reply"
@@ -33,11 +33,11 @@ def _load_impl():
 
     try:
         from thomas.messages.p059_message_thread_reply import (  # type: ignore
-            MessageThreadReplyRequest,
-            MessageThreadReplyError,
-            MessageThreadReplyInputError,
             MessageThreadReplyConfigError,
+            MessageThreadReplyError,
             MessageThreadReplyExternalError,
+            MessageThreadReplyInputError,
+            MessageThreadReplyRequest,
             message_thread_reply,
         )
 
@@ -49,7 +49,7 @@ def _load_impl():
             MessageThreadReplyExternalError,
             message_thread_reply,
         )
-    except Exception:
+    except ImportError:
         this_file = Path(__file__).resolve()
         repo_root = this_file.parents[4]
         impl_path = repo_root / "thomas" / "messages" / "p059_message_thread_reply.py"
@@ -102,7 +102,7 @@ def add_parser(subparsers: Any) -> argparse.ArgumentParser:
     return parser
 
 
-def _parse_provider_payload(raw: Optional[str]) -> Mapping[str, Any]:
+def _parse_provider_payload(raw: str | None) -> Mapping[str, Any]:
     if raw is None:
         return {}
     try:
@@ -130,9 +130,9 @@ def _render_error(err: Exception) -> str:
         payload = {
             "ok": False,
             "error": {
-                "code": getattr(err, "code"),
-                "message": getattr(err, "message"),
-                "details": getattr(err, "details"),
+                "code": err.code,
+                "message": err.message,
+                "details": err.details,
             },
         }
     else:
@@ -199,7 +199,7 @@ def run_from_args(args: argparse.Namespace) -> int:
     return 0
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="thomas messages thread-reply", description=COMMAND_HELP)
     build_parser(parser)
     args = parser.parse_args(list(argv) if argv is not None else None)
@@ -216,9 +216,9 @@ try:  # pragma: no cover
     def _typer_cmd(
         thread_id: str = typer.Option(..., "--thread-id", help="Identifier of the thread/root message"),
         text: str = typer.Option(..., "--text", help="Reply text"),
-        channel_id: Optional[str] = typer.Option(None, "--channel-id", help="Channel/conversation id (provider-specific)"),
-        provider: Optional[str] = typer.Option(None, "--provider", help="Force a specific provider/transport"),
-        provider_payload_json: Optional[str] = typer.Option(
+        channel_id: str | None = typer.Option(None, "--channel-id", help="Channel/conversation id (provider-specific)"),
+        provider: str | None = typer.Option(None, "--provider", help="Force a specific provider/transport"),
+        provider_payload_json: str | None = typer.Option(
             None,
             "--provider-payload-json",
             help="Provider-specific payload JSON object",
@@ -236,7 +236,7 @@ try:  # pragma: no cover
         code = run_from_args(args)
         raise typer.Exit(code=code)
 
-except Exception:  # pragma: no cover
+except Exception:  # REVIEWED: broad catch:  # pragma: no cover
     app = None  # type: ignore
 
 

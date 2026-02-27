@@ -1,4 +1,3 @@
-\
 from __future__ import annotations
 
 import hashlib
@@ -7,7 +6,7 @@ import sqlite3
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, Optional, List, Any
+from typing import Any
 
 
 DEFAULT_TEXT_EXTS = {".txt", ".md", ".py"}
@@ -21,7 +20,7 @@ DEFAULT_INCLUDE_EXTS = sorted(DEFAULT_TEXT_EXTS | DEFAULT_PDF_EXTS | DEFAULT_IMA
 class WatcherConfig:
     enabled: bool = True
     recursive: bool = False
-    paths: List[str] = field(default_factory=list)
+    paths: list[str] = field(default_factory=list)
 
     # extraction/safety
     max_file_size_mb: int = 64
@@ -35,15 +34,15 @@ class WatcherConfig:
     dedupe_ttl_seconds: int = 60
 
     # ignore temp noise
-    ignore_suffixes: List[str] = field(default_factory=lambda: [".tmp", ".part", ".crdownload", ".swp"])
-    ignore_prefixes: List[str] = field(default_factory=lambda: ["~$", "."])
-    ignore_globs: List[str] = field(default_factory=lambda: ["*.DS_Store", "Thumbs.db"])
+    ignore_suffixes: list[str] = field(default_factory=lambda: [".tmp", ".part", ".crdownload", ".swp"])
+    ignore_prefixes: list[str] = field(default_factory=lambda: ["~$", "."])
+    ignore_globs: list[str] = field(default_factory=lambda: ["*.DS_Store", "Thumbs.db"])
 
     # worker tuning
     worker_threads: int = 2
 
     # override supported ext list (optional)
-    include_exts: Optional[List[str]] = None
+    include_exts: list[str] | None = None
 
     def to_public_dict(self) -> dict:
         return {
@@ -65,7 +64,7 @@ class WatcherConfig:
         }
 
 
-def is_supported_file(path: str, include_exts: Optional[List[str]] = None) -> bool:
+def is_supported_file(path: str, include_exts: list[str] | None = None) -> bool:
     p = Path(path)
     ext = p.suffix.lower()
     exts = set(x.lower() for x in (include_exts or DEFAULT_INCLUDE_EXTS))
@@ -78,8 +77,8 @@ class IngestResult:
     indexed: bool
     skipped: bool = False
     text_len: int = 0
-    error: Optional[str] = None
-    fingerprint: Optional[str] = None
+    error: str | None = None
+    fingerprint: str | None = None
 
 
 def _sha256_file(path: Path, max_bytes: int) -> str:
@@ -95,7 +94,7 @@ def _sha256_file(path: Path, max_bytes: int) -> str:
     return h.hexdigest()
 
 
-def _basic_metadata(path: Path, fingerprint: str) -> Dict[str, Any]:
+def _basic_metadata(path: Path, fingerprint: str) -> dict[str, Any]:
     st = path.stat()
     return {
         "filename": path.name,
@@ -108,12 +107,12 @@ def _basic_metadata(path: Path, fingerprint: str) -> Dict[str, Any]:
     }
 
 
-def _resolve_config_path(config_path: Optional[str]) -> Path:
+def _resolve_config_path(config_path: str | None) -> Path:
     cp = config_path or os.environ.get("THOMAS_CONFIG_PATH") or "thomas.toml"
     return Path(cp)
 
 
-def load_watcher_config(config_path: Optional[str] = None) -> WatcherConfig:
+def load_watcher_config(config_path: str | None = None) -> WatcherConfig:
     """
     Loads watcher config from thomas.toml.
     """
@@ -123,7 +122,7 @@ def load_watcher_config(config_path: Optional[str] = None) -> WatcherConfig:
 
     try:
         import tomllib  # py3.11+
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         import tomli as tomllib  # type: ignore
 
     data = tomllib.loads(p.read_text(encoding="utf-8", errors="replace"))
@@ -177,8 +176,9 @@ def load_watcher_config(config_path: Optional[str] = None) -> WatcherConfig:
 # Extraction
 # -------------------------------
 
+
 def _read_text_with_retries(path: Path, attempts: int, sleep_ms: int) -> str:
-    last_err: Optional[Exception] = None
+    last_err: Exception | None = None
     for _ in range(max(1, attempts)):
         try:
             return path.read_text(encoding="utf-8", errors="replace")
@@ -212,12 +212,12 @@ def extract_text_pdf(path: str) -> str:
     except Exception as e:
         raise RuntimeError("pdfplumber is required for PDF ingestion") from e
 
-    chunks: List[str] = []
+    chunks: list[str] = []
     with pdfplumber.open(path) as pdf:
         for page in pdf.pages:
             try:
                 txt = page.extract_text() or ""
-            except Exception:
+            except ImportError:
                 txt = ""
             txt = txt.strip()
             if txt:
@@ -245,7 +245,8 @@ def extract_text_image(path: str, lang: str) -> str:
 # Persistent de-dupe state (SQLite)
 # -------------------------------
 
-def _state_db_path(config_path: Optional[str]) -> Path:
+
+def _state_db_path(config_path: str | None) -> Path:
     cp = _resolve_config_path(config_path)
     return cp.parent / "thomas_watcher_state.sqlite3"
 
@@ -271,7 +272,9 @@ def _state_seen(conn: sqlite3.Connection, fingerprint: str) -> bool:
     return cur.fetchone() is not None
 
 
-def _state_mark(conn: sqlite3.Connection, fingerprint: str, path: str, size_bytes: int, mtime: float, status: str) -> None:
+def _state_mark(
+    conn: sqlite3.Connection, fingerprint: str, path: str, size_bytes: int, mtime: float, status: str
+) -> None:
     conn.execute(
         "INSERT OR REPLACE INTO processed(fingerprint, path, size_bytes, mtime, status, created_at) VALUES(?,?,?,?,?,?)",
         (fingerprint, path, int(size_bytes), float(mtime), status, time.time()),
@@ -283,7 +286,8 @@ def _state_mark(conn: sqlite3.Connection, fingerprint: str, path: str, size_byte
 # Library adapter
 # -------------------------------
 
-def index_into_library(path: str, text: str, metadata: Dict[str, Any]) -> None:
+
+def index_into_library(path: str, text: str, metadata: dict[str, Any]) -> None:
     """
     Adapter to your existing library store.
 
@@ -323,7 +327,8 @@ def index_into_library(path: str, text: str, metadata: Dict[str, Any]) -> None:
 # Ingest entrypoint
 # -------------------------------
 
-def ingest_file(path: str, config_path: Optional[str] = None, cfg: Optional[WatcherConfig] = None) -> IngestResult:
+
+def ingest_file(path: str, config_path: str | None = None, cfg: WatcherConfig | None = None) -> IngestResult:
     """
     Extract text and index into library store.
     Includes persistent de-dupe (SQLite) keyed by bounded SHA-256 fingerprint.
@@ -356,7 +361,13 @@ def ingest_file(path: str, config_path: Optional[str] = None, cfg: Optional[Watc
             try:
                 _state_init(conn)
                 if _state_seen(conn, fingerprint):
-                    return IngestResult(path=path, indexed=False, skipped=True, error="Duplicate (already indexed)", fingerprint=fingerprint)
+                    return IngestResult(
+                        path=path,
+                        indexed=False,
+                        skipped=True,
+                        error="Duplicate (already indexed)",
+                        fingerprint=fingerprint,
+                    )
             finally:
                 conn.close()
 

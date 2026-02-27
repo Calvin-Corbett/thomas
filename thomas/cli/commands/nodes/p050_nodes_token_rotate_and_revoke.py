@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 from typer import Exit
@@ -10,8 +10,8 @@ from typer import Exit
 from thomas.nodes.p050_nodes_token_rotate_and_revoke import (
     NodesTokenError,
     NodesTokenRotateAndRevokeResult,
-    rotate_node_token,
     revoke_node_token,
+    rotate_node_token,
 )
 
 # This Typer app is intended to be mounted under:
@@ -55,7 +55,7 @@ def _emit_error(err: NodesTokenError, *, json_output: bool) -> None:
 @app.command("rotate")
 def rotate(
     node_id: str = typer.Argument(..., help="Node identifier"),
-    state: Optional[Path] = typer.Option(
+    state: Path | None = typer.Option(
         None,
         "--state",
         help="Path to token store JSON file (defaults to ~/.thomas/nodes_tokens.json or $THOMAS_NODES_TOKENS_PATH)",
@@ -76,7 +76,7 @@ def rotate(
 @app.command("revoke")
 def revoke(
     node_id: str = typer.Argument(..., help="Node identifier"),
-    state: Optional[Path] = typer.Option(
+    state: Path | None = typer.Option(
         None,
         "--state",
         help="Path to token store JSON file (defaults to ~/.thomas/nodes_tokens.json or $THOMAS_NODES_TOKENS_PATH)",
@@ -128,7 +128,7 @@ def register(parent: Any) -> None:
         if callable(add_command):
             parent.add_command(get_click_command(), name="token")
             return
-    except Exception:
+    except ImportError:
         # Best-effort: registration should never crash an import path.
         return
 

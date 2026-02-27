@@ -25,10 +25,11 @@ from __future__ import annotations
 import base64
 import os
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional, Protocol, Sequence
+from typing import Any, Protocol
 
 PROMPT_ID = "P043"
 ACTION_SLUG = "nodes.capture_screen"
@@ -109,7 +110,7 @@ class NodesScreenCaptureRequest:
 
     node_id: str
     image_format: str = "png"
-    save_path: Optional[Path] = None
+    save_path: Path | None = None
     save_path_is_dir: bool = False
     include_image_b64: bool = False
     timeout_s: float = DEFAULT_TIMEOUT_S
@@ -123,8 +124,8 @@ class NodesScreenCaptureResult:
     image_format: str
     captured_at: str
     bytes_captured: int
-    saved_path: Optional[str]
-    image_b64: Optional[str]
+    saved_path: str | None
+    image_b64: str | None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -157,7 +158,7 @@ def _safe_filename_component(value: str, *, fallback: str = "node") -> str:
     return cleaned[:120]
 
 
-def _first_nonempty_str(config: Optional[Mapping[str, Any]], keys: Sequence[str]) -> Optional[str]:
+def _first_nonempty_str(config: Mapping[str, Any] | None, keys: Sequence[str]) -> str | None:
     if not config:
         return None
     for key in keys:
@@ -178,14 +179,12 @@ def parse_nodes_screen_capture_request(data: Mapping[str, Any]) -> NodesScreenCa
         raise NodesScreenCaptureInputError("image_format must be a non-empty string")
     image_format = image_format.lower().strip()
     if image_format not in SUPPORTED_IMAGE_FORMATS:
-        raise NodesScreenCaptureInputError(
-            f"image_format must be one of {', '.join(SUPPORTED_IMAGE_FORMATS)}"
-        )
+        raise NodesScreenCaptureInputError(f"image_format must be one of {', '.join(SUPPORTED_IMAGE_FORMATS)}")
 
     timeout_s = data.get("timeout_s", DEFAULT_TIMEOUT_S)
     try:
         timeout_s_f = float(timeout_s)
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise NodesScreenCaptureInputError("timeout_s must be a number") from e
     if timeout_s_f <= 0:
         raise NodesScreenCaptureInputError("timeout_s must be > 0")
@@ -195,7 +194,7 @@ def parse_nodes_screen_capture_request(data: Mapping[str, Any]) -> NodesScreenCa
         raise NodesScreenCaptureInputError("include_image_b64 must be a boolean")
 
     save_path_raw = data.get("save_path", data.get("out"))
-    save_path: Optional[Path]
+    save_path: Path | None
     save_path_is_dir = False
 
     if save_path_raw is None or save_path_raw == "":
@@ -227,7 +226,7 @@ class HttpScreenCaptureTransport:
     """HTTP transport to request a screenshot from a node service."""
 
     base_url: str
-    api_key: Optional[str] = None
+    api_key: str | None = None
     path_template: str = DEFAULT_HTTP_PATH_TEMPLATE
     method: str = DEFAULT_HTTP_METHOD
 
@@ -240,7 +239,7 @@ class HttpScreenCaptureTransport:
     ) -> bytes:
         try:
             import aiohttp  # type: ignore
-        except Exception as e:  # pragma: no cover
+        except (ImportError, AttributeError, RuntimeError) as e:  # pragma: no cover
             raise NodesScreenCaptureExternalError("aiohttp is required for HTTP transport") from e
 
         url = self.base_url.rstrip("/") + self.path_template.format(node_id=node_id)
@@ -254,34 +253,28 @@ class HttpScreenCaptureTransport:
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:  # type: ignore[attr-defined]
                 if method == "POST":
-                    async with session.post(
-                        url, json={"image_format": image_format}, headers=headers
-                    ) as resp:
+                    async with session.post(url, json={"image_format": image_format}, headers=headers) as resp:
                         if resp.status != 200:
                             raise NodesScreenCaptureExternalError(
                                 f"screen capture request failed (status={resp.status})"
                             )
                         return await resp.read()
                 if method == "GET":
-                    async with session.get(
-                        url, params={"image_format": image_format}, headers=headers
-                    ) as resp:
+                    async with session.get(url, params={"image_format": image_format}, headers=headers) as resp:
                         if resp.status != 200:
                             raise NodesScreenCaptureExternalError(
                                 f"screen capture request failed (status={resp.status})"
                             )
                         return await resp.read()
 
-                raise NodesScreenCaptureExternalError(
-                    f"unsupported HTTP method for screen capture: {self.method!r}"
-                )
+                raise NodesScreenCaptureExternalError(f"unsupported HTTP method for screen capture: {self.method!r}")
         except NodesScreenCaptureError:
             raise
-        except Exception as e:
+        except (ConnectionError, TimeoutError, RuntimeError) as e:
             raise NodesScreenCaptureExternalError("screen capture request failed") from e
 
 
-def build_transport_from_config(config: Optional[Mapping[str, Any]] = None) -> ScreenCaptureTransport:
+def build_transport_from_config(config: Mapping[str, Any] | None = None) -> ScreenCaptureTransport:
     """Build the default transport from config and environment.
 
     Required:
@@ -292,28 +285,34 @@ def build_transport_from_config(config: Optional[Mapping[str, Any]] = None) -> S
         - nodes_screen_capture_path_template (or env THOMAS_NODES_SCREEN_CAPTURE_PATH_TEMPLATE)
         - nodes_screen_capture_method (or env THOMAS_NODES_SCREEN_CAPTURE_METHOD)
     """
-    base_url = _first_nonempty_str(
-        config, ("nodes_base_url", "nodes_url", "base_url", "url")
-    ) or os.getenv("THOMAS_NODES_BASE_URL") or os.getenv("NODES_BASE_URL")
+    base_url = (
+        _first_nonempty_str(config, ("nodes_base_url", "nodes_url", "base_url", "url"))
+        or os.getenv("THOMAS_NODES_BASE_URL")
+        or os.getenv("NODES_BASE_URL")
+    )
     if not base_url:
         raise NodesScreenCaptureConfigError("missing nodes base URL (nodes_base_url)")
 
-    api_key = _first_nonempty_str(config, ("nodes_api_key", "api_key")) or os.getenv(
-        "THOMAS_NODES_API_KEY"
+    api_key = _first_nonempty_str(config, ("nodes_api_key", "api_key")) or os.getenv("THOMAS_NODES_API_KEY")
+
+    path_template = (
+        _first_nonempty_str(
+            config,
+            (
+                "nodes_screen_capture_path_template",
+                "nodes_capture_screen_path_template",
+                "nodes_screen_capture_endpoint",
+            ),
+        )
+        or os.getenv("THOMAS_NODES_SCREEN_CAPTURE_PATH_TEMPLATE")
+        or DEFAULT_HTTP_PATH_TEMPLATE
     )
 
-    path_template = _first_nonempty_str(
-        config,
-        (
-            "nodes_screen_capture_path_template",
-            "nodes_capture_screen_path_template",
-            "nodes_screen_capture_endpoint",
-        ),
-    ) or os.getenv("THOMAS_NODES_SCREEN_CAPTURE_PATH_TEMPLATE") or DEFAULT_HTTP_PATH_TEMPLATE
-
-    method = _first_nonempty_str(
-        config, ("nodes_screen_capture_method", "method")
-    ) or os.getenv("THOMAS_NODES_SCREEN_CAPTURE_METHOD") or DEFAULT_HTTP_METHOD
+    method = (
+        _first_nonempty_str(config, ("nodes_screen_capture_method", "method"))
+        or os.getenv("THOMAS_NODES_SCREEN_CAPTURE_METHOD")
+        or DEFAULT_HTTP_METHOD
+    )
 
     return HttpScreenCaptureTransport(
         base_url=base_url,
@@ -326,8 +325,8 @@ def build_transport_from_config(config: Optional[Mapping[str, Any]] = None) -> S
 async def run_nodes_screen_capture(
     request: NodesScreenCaptureRequest,
     *,
-    transport: Optional[ScreenCaptureTransport] = None,
-    config: Optional[Mapping[str, Any]] = None,
+    transport: ScreenCaptureTransport | None = None,
+    config: Mapping[str, Any] | None = None,
 ) -> NodesScreenCaptureResult:
     """Execute the node screen capture action."""
     tr = transport or build_transport_from_config(config)
@@ -340,7 +339,7 @@ async def run_nodes_screen_capture(
         )
     except NodesScreenCaptureError:
         raise
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise NodesScreenCaptureExternalError("screen capture failed") from e
 
     if not isinstance(image_bytes, (bytes, bytearray)) or len(image_bytes) == 0:
@@ -348,7 +347,7 @@ async def run_nodes_screen_capture(
 
     image_b = bytes(image_bytes)
 
-    saved_path_str: Optional[str] = None
+    saved_path_str: str | None = None
     if request.save_path is not None:
         out_path = request.save_path
         try:
@@ -366,10 +365,10 @@ async def run_nodes_screen_capture(
 
             out_path.write_bytes(image_b)
             saved_path_str = str(out_path)
-        except Exception as e:
+        except (ConnectionError, TimeoutError, RuntimeError) as e:
             raise NodesScreenCaptureExternalError("failed to write screenshot to disk") from e
 
-    image_b64: Optional[str] = None
+    image_b64: str | None = None
     if request.include_image_b64:
         image_b64 = base64.b64encode(image_b).decode("ascii")
 
@@ -386,8 +385,8 @@ async def run_nodes_screen_capture(
 def run_nodes_screen_capture_sync(
     request: NodesScreenCaptureRequest,
     *,
-    transport: Optional[ScreenCaptureTransport] = None,
-    config: Optional[Mapping[str, Any]] = None,
+    transport: ScreenCaptureTransport | None = None,
+    config: Mapping[str, Any] | None = None,
 ) -> NodesScreenCaptureResult:
     """Synchronous wrapper."""
     import asyncio
@@ -435,8 +434,8 @@ def get_action_metadata() -> dict[str, Any]:
 async def run_action_from_raw(
     raw: Mapping[str, Any],
     *,
-    transport: Optional[ScreenCaptureTransport] = None,
-    config: Optional[Mapping[str, Any]] = None,
+    transport: ScreenCaptureTransport | None = None,
+    config: Mapping[str, Any] | None = None,
 ) -> Mapping[str, Any]:
     """JSON-friendly entrypoint for route handlers."""
     req = parse_nodes_screen_capture_request(raw)

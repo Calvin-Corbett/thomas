@@ -5,7 +5,8 @@ from __future__ import annotations
 import json
 import logging
 import secrets as stdlib_secrets
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -102,8 +103,16 @@ def register_sessions_routes(
         cfg: AppConfig = request.app[APP_CONFIG]
         payload = await read_json(request)
 
-        profile = str(payload.get("profile") or payload.get("model") or cfg.default_model).strip()
+        profile_payload = str(payload.get("profile") or "").strip()
+        model_payload = str(payload.get("model") or "").strip()
+        strict_model_alias_requested = bool(model_payload)
+        profile = str(profile_payload or model_payload or cfg.default_model).strip()
         if profile not in cfg.models:
+            # Backward-compat contract:
+            # - explicit `model` alias must be valid (400 on unknown)
+            # - explicit `profile` falls back to default model
+            if strict_model_alias_requested:
+                raise web.HTTPBadRequest(text=f"unknown profile: {profile}")
             # Graceful fallback: use default model or first available
             _fb = cfg.default_model
             if _fb not in cfg.models and cfg.models:
@@ -127,7 +136,7 @@ def register_sessions_routes(
         if len(raw_conv) > 250:
             raise web.HTTPBadRequest(text="conversation too long")
 
-        conversation: List[Dict[str, Any]] = []
+        conversation: list[dict[str, Any]] = []
         for m in raw_conv:
             if not isinstance(m, dict):
                 continue

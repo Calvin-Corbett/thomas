@@ -12,9 +12,11 @@ It is intentionally conservative:
 
 from __future__ import annotations
 
+import argparse
 import json
 import sys
-from typing import Any, Optional
+from collections.abc import Sequence
+from typing import Any
 
 import typer
 
@@ -25,7 +27,7 @@ from thomas.browser.p024_browser_error_normalization import (
 )
 
 
-def _find_typer_app(module: Any) -> Optional[typer.Typer]:
+def _find_typer_app(module: Any) -> typer.Typer | None:
     for attr in ("app", "browser_app", "cli", "typer_app"):
         maybe = getattr(module, attr, None)
         if isinstance(maybe, typer.Typer):
@@ -33,7 +35,7 @@ def _find_typer_app(module: Any) -> Optional[typer.Typer]:
     return None
 
 
-def _resolve_browser_typer_app() -> Optional[typer.Typer]:
+def _resolve_browser_typer_app() -> typer.Typer | None:
     """Best-effort lookup for the existing `browser` command group."""
 
     mod = sys.modules.get("thomas.cli.commands.browser")
@@ -46,7 +48,7 @@ def _resolve_browser_typer_app() -> Optional[typer.Typer]:
         import importlib
 
         browser_pkg = importlib.import_module("thomas.cli.commands.browser")
-    except Exception:
+    except ImportError:
         return None
 
     return _find_typer_app(browser_pkg)
@@ -75,7 +77,6 @@ def _browser_tools_callback() -> None:
     return
 
 
-
 def register_to(app: typer.Typer) -> None:
     """Register this command on the provided Typer app (idempotent)."""
 
@@ -94,22 +95,22 @@ register = register_to
 
 @_app.command("normalize-error", help="Normalize a browser error into a stable JSON shape.")
 def normalize_error(
-    error: Optional[str] = typer.Argument(
+    error: str | None = typer.Argument(
         None,
         help="Raw error text, '-' to read from stdin, or a JSON object/array string containing an error.",
     ),
-    operation: Optional[str] = typer.Option(
+    operation: str | None = typer.Option(
         None,
         "--operation",
         "--op",
         help="Optional operation context (e.g., snapshot, click, navigate).",
     ),
-    profile: Optional[str] = typer.Option(
+    profile: str | None = typer.Option(
         None,
         "--profile",
         help="Optional browser profile name.",
     ),
-    http_status: Optional[int] = typer.Option(
+    http_status: int | None = typer.Option(
         None,
         "--http-status",
         "--status",
@@ -214,3 +215,65 @@ if _real_browser_app is not None:
 
 # Export a conventional name for CLI loaders that expect `app`.
 app = _app
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser error-normalization",
+        description="Normalize raw browser error payloads into a stable shape.",
+    )
+    parser.add_argument("error", nargs="?", default=None)
+    parser.add_argument("--operation", "--op", dest="operation", default=None)
+    parser.add_argument("--profile", dest="profile", default=None)
+    parser.add_argument("--http-status", "--status", dest="http_status", type=int, default=None)
+    parser.add_argument("--schema", "--json-schema", dest="schema", action="store_true", default=False)
+    parser.add_argument("--json", dest="json_output", action="store_true", default=False)
+    parser.add_argument("--pretty", dest="pretty", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    if bool(args.schema):
+        _emit(browser_error_normalization_schema(), json_output=True, pretty=bool(args.pretty))
+        return 0
+
+    error = args.error
+    if error == "-":
+        error = sys.stdin.read()
+    elif error is None and not sys.stdin.isatty():
+        stdin_text = sys.stdin.read()
+        if stdin_text.strip():
+            error = stdin_text
+
+    if error is None:
+        result = normalize_browser_error(
+            BrowserErrorNormalizationRequest(
+                raw=None,
+                operation=args.operation,
+                profile=args.profile,
+                http_status=args.http_status,
+            )
+        )
+        _emit(result.to_dict(), json_output=bool(args.json_output or args.pretty), pretty=bool(args.pretty))
+        return 2
+
+    raw_obj: Any = error
+    stripped = str(error).strip()
+    if stripped.startswith("{") or stripped.startswith("["):
+        try:
+            raw_obj = json.loads(str(error))
+        except json.JSONDecodeError:
+            raw_obj = error
+
+    result = normalize_browser_error(
+        BrowserErrorNormalizationRequest(
+            raw=raw_obj,
+            operation=args.operation,
+            profile=args.profile,
+            http_status=args.http_status,
+        )
+    )
+    _emit(result.to_dict(), json_output=bool(args.json_output or args.pretty), pretty=bool(args.pretty))
+    return 0

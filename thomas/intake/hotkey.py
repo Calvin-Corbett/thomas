@@ -7,9 +7,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass
-from typing import Optional
 
-import requests
 from PIL import Image, ImageGrab, ImageOps
 
 from ._internal.config import ClientConfig
@@ -19,7 +17,7 @@ from ._internal.utils import launch_region_snip, wait_for_new_clipboard_image
 
 try:
     import pytesseract  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     pytesseract = None  # type: ignore
 
 logger = logging.getLogger(__name__)
@@ -35,7 +33,7 @@ def _preprocess_for_ocr(img: Image.Image) -> Image.Image:
     try:
         g = ImageOps.grayscale(img)
         return g
-    except Exception:
+    except ImportError:
         return img
 
 
@@ -46,12 +44,12 @@ def _try_ocr(img: Image.Image, lang: str, tesseract_cmd: str = "") -> str:
         if tesseract_cmd:
             pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
         _ = pytesseract.get_tesseract_version()
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         return ""
     try:
         pre = _preprocess_for_ocr(img)
         return (pytesseract.image_to_string(pre, lang=lang) or "").strip()
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         logger.exception("OCR failed")
         return ""
 
@@ -74,24 +72,24 @@ class HotkeyOnly:
         self.cfg = cfg
         self.hk = hk
         self._sendq = SenderQueue()
-        self._last_clip_img_hash: Optional[str] = None
+        self._last_clip_img_hash: str | None = None
         self._listener = None
 
     def stop(self) -> None:
         try:
             self._sendq.stop()
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             pass
         try:
             if self._listener:
                 self._listener.stop()
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             pass
 
     def _fire(self) -> None:
         try:
             self.capture_and_send()
-        except Exception:
+        except Exception:  # REVIEWED: broad catch
             logger.exception("hotkey capture failed")
 
     def capture_and_send(self) -> None:
@@ -106,7 +104,7 @@ class HotkeyOnly:
         if img is None:
             try:
                 img = ImageGrab.grab(all_screens=True)
-            except Exception:
+            except Exception:  # REVIEWED: broad catch
                 img = ImageGrab.grab()
 
         ocr_text = _try_ocr(img, lang=self.cfg.ocr_lang, tesseract_cmd=self.cfg.tesseract_cmd)
@@ -121,16 +119,20 @@ class HotkeyOnly:
         }
 
         url = self.cfg.server.rstrip("/") + self.hk.endpoint
-        job = SendJob(url=url, json_payload=payload, headers=self.cfg.headers(), timeout_s=float(self.cfg.request_timeout_s))
+        job = SendJob(
+            url=url, json_payload=payload, headers=self.cfg.headers(), timeout_s=float(self.cfg.request_timeout_s)
+        )
         ok = self._sendq.submit(job)
         if not ok:
             logger.warning("Send queue full; dropping screenshot")
 
     def run_forever(self) -> None:
         if os.name != "nt":
-            raise RuntimeError("Hotkey-only runner uses Windows RegisterHotKey. Use the tray agent or implement a cross-platform hotkey lib.")
+            raise RuntimeError(
+                "Hotkey-only runner uses Windows RegisterHotKey. Use the tray agent or implement a cross-platform hotkey lib."
+            )
 
-        from ._internal.win_hotkey import HotkeyListener, Hotkey, MOD_WIN, MOD_SHIFT, vk_from_char
+        from ._internal.win_hotkey import MOD_SHIFT, MOD_WIN, Hotkey, HotkeyListener, vk_from_char
 
         hk = Hotkey(modifiers=MOD_WIN | MOD_SHIFT, vk=vk_from_char("T"))
         self._listener = HotkeyListener(hotkey=hk, on_fire=self._fire)

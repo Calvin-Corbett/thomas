@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 import logging
+from collections.abc import Awaitable, Callable
 from functools import lru_cache
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 from pydantic import ValidationError
@@ -92,7 +93,11 @@ def register_preferences_routes(
         store = _get_store()
         thread_id = _parse_thread_id(request)
         user_id = _get_user_id(request)
-        return _prefs_json(store.get(user_id=user_id, thread_id=thread_id))
+        try:
+            return _prefs_json(store.get(user_id=user_id, thread_id=thread_id))
+        except Exception as exc:
+            log.exception("preferences get failed for user=%s", user_id)
+            raise web.HTTPInternalServerError(text=f"preferences read failed: {type(exc).__name__}: {exc}") from exc
 
     async def api_preferences_patch(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -116,6 +121,9 @@ def register_preferences_routes(
             updated = store.patch(patch=patch, user_id=user_id, thread_id=thread_id)
         except ValueError as exc:
             raise web.HTTPBadRequest(text=str(exc)) from exc
+        except Exception as exc:
+            log.exception("preferences patch failed for user=%s", user_id)
+            raise web.HTTPInternalServerError(text=f"preferences update failed: {type(exc).__name__}: {exc}") from exc
         _emit_onboarding_patch_telemetry(user_id=user_id, thread_id=thread_id, patch=patch)
 
         return _prefs_json(updated)

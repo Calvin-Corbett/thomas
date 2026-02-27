@@ -19,10 +19,10 @@ Design goals:
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping
-
+from typing import Any
 
 # ----------------------------- Public contracts -----------------------------
 
@@ -179,7 +179,7 @@ def _read_structured_file(path: Path, *, kind: str) -> Any:
         if suffix in {".yml", ".yaml"}:
             try:
                 import yaml  # type: ignore
-            except Exception as e:  # pragma: no cover
+            except (ImportError, ModuleNotFoundError) as e:  # pragma: no cover
                 raise PluginConfigSchemaValidatorError(
                     code="YAML_UNAVAILABLE",
                     message="YAML support is not available.",
@@ -201,7 +201,7 @@ def _read_structured_file(path: Path, *, kind: str) -> Any:
         )
     except PluginConfigSchemaValidatorError:
         raise
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as e:
         code = "SCHEMA_PARSE_ERROR" if kind == "schema" else "CONFIG_PARSE_ERROR"
         message = "Failed to parse schema file." if kind == "schema" else "Failed to parse config file."
         raise PluginConfigSchemaValidatorError(
@@ -216,6 +216,7 @@ def _read_structured_file(path: Path, *, kind: str) -> Any:
 
 def _json_pointer(parts: Iterable[Any]) -> str:
     """Convert an absolute_path iterable to an RFC6901-ish JSON pointer."""
+
     def esc(p: str) -> str:
         return p.replace("~", "~0").replace("/", "~1")
 
@@ -311,7 +312,7 @@ def _try_resolve_schema_via_registry(plugin: str) -> tuple[Mapping[str, Any] | N
 
     try:
         reg_mod = importlib.import_module("thomas.tools.registry")
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None, None
 
     candidates: list[Any] = []
@@ -332,11 +333,15 @@ def _try_resolve_schema_via_registry(plugin: str) -> tuple[Mapping[str, Any] | N
                 if callable(ctor):
                     try:
                         return ctor()
-                    except Exception:
+                    except (
+                        TypeError,
+                        RuntimeError,
+                        AttributeError,
+                    ):  # REVIEWED: broad catch — unknown class constructor
                         pass
             try:
                 return candidate()
-            except Exception:
+            except (TypeError, RuntimeError, AttributeError):  # REVIEWED: broad catch — unknown class constructor
                 return None
         return candidate
 
@@ -354,7 +359,12 @@ def _try_resolve_schema_via_registry(plugin: str) -> tuple[Mapping[str, Any] | N
                 continue
             try:
                 plugin_obj = method(plugin)
-            except Exception:
+            except (
+                KeyError,
+                ValueError,
+                RuntimeError,
+                AttributeError,
+            ):  # REVIEWED: broad catch — unknown registry method
                 continue
             if plugin_obj is not None:
                 break
@@ -410,7 +420,7 @@ def _import_plugin_module(plugin: str) -> Any:
                 message="Plugin module import failed due to a missing dependency.",
                 details={"plugin": plugin, "module": mod_name, "error": str(e)},
             ) from e
-        except Exception as e:
+        except (ImportError, RuntimeError, AttributeError, OSError) as e:
             last_err = e
             raise PluginConfigSchemaValidatorError(
                 code="PLUGIN_IMPORT_FAILED",
@@ -505,7 +515,7 @@ def validate_plugin_config(request: PluginConfigValidationRequest) -> PluginConf
 
     try:
         from jsonschema import validators
-    except Exception as e:  # pragma: no cover
+    except (ImportError, ModuleNotFoundError) as e:  # pragma: no cover
         raise PluginConfigSchemaValidatorError(
             code="VALIDATOR_UNAVAILABLE",
             message="jsonschema is required for schema validation but is unavailable.",
@@ -518,7 +528,12 @@ def validate_plugin_config(request: PluginConfigValidationRequest) -> PluginConf
         validator = validator_cls(schema)
     except PluginConfigSchemaValidatorError:
         raise
-    except Exception as e:
+    except (
+        ValueError,
+        TypeError,
+        RuntimeError,
+        AttributeError,
+    ) as e:  # REVIEWED: broad catch — schema validation check
         raise PluginConfigSchemaValidatorError(
             code="SCHEMA_INVALID",
             message="Schema failed validator checks.",
@@ -535,7 +550,7 @@ def validate_plugin_config(request: PluginConfigValidationRequest) -> PluginConf
                     validator=getattr(err, "validator", None),
                 )
             )
-    except Exception as e:
+    except (ValueError, TypeError, RuntimeError, AttributeError) as e:  # REVIEWED: broad catch — validator iteration
         raise PluginConfigSchemaValidatorError(
             code="VALIDATION_FAILED",
             message="Validator raised an unexpected error.",

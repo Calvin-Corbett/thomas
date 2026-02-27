@@ -9,12 +9,12 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from collections.abc import Iterable
 from datetime import date
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Set, Tuple
+from typing import Any
 
-
-DEFAULT_HARD_LIMITS: Dict[str, int] = {
+DEFAULT_HARD_LIMITS: dict[str, int] = {
     "py": 1200,
     "js": 1200,
     "ts": 1200,
@@ -22,7 +22,7 @@ DEFAULT_HARD_LIMITS: Dict[str, int] = {
     "html": 1000,
 }
 
-DEFAULT_SCAN_ROOTS: List[str] = ["thomas"]
+DEFAULT_SCAN_ROOTS: list[str] = ["thomas"]
 DEFAULT_BASELINE = "docs/monolith_guard_baseline.json"
 
 SKIP_DIR_NAMES = {
@@ -43,7 +43,7 @@ SKIP_DIR_NAMES = {
 }
 
 
-def _parse_iso_date(text: str) -> Optional[date]:
+def _parse_iso_date(text: str) -> date | None:
     value = str(text or "").strip()
     if not value:
         return None
@@ -72,8 +72,8 @@ def _is_skipped(path: Path) -> bool:
 def _iter_candidate_files(
     repo_root: Path,
     scan_roots: Iterable[str],
-    hard_limits: Dict[str, int],
-) -> Iterable[Tuple[Path, str]]:
+    hard_limits: dict[str, int],
+) -> Iterable[tuple[Path, str]]:
     for rel_root in scan_roots:
         base = (repo_root / rel_root).resolve()
         if not base.exists() or not base.is_dir():
@@ -89,7 +89,7 @@ def _iter_candidate_files(
             yield path, ext
 
 
-def load_baseline(path: Path) -> Dict[str, Any]:
+def load_baseline(path: Path) -> dict[str, Any]:
     if not path.exists():
         return {
             "version": 1,
@@ -103,7 +103,7 @@ def load_baseline(path: Path) -> Dict[str, Any]:
     return raw
 
 
-def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> Set[str]:
+def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> set[str]:
     proc = subprocess.run(
         ["git", "diff", "--name-only", f"{base_ref}...{head_ref}"],
         cwd=repo_root,
@@ -113,7 +113,7 @@ def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> Set[
     if proc.returncode != 0:
         msg = (proc.stderr or proc.stdout or "").strip() or "unknown git diff failure"
         raise RuntimeError(msg)
-    out: Set[str] = set()
+    out: set[str] = set()
     for line in proc.stdout.splitlines():
         rel = _normalize_rel_path(line)
         if rel:
@@ -121,7 +121,25 @@ def _git_changed_files(repo_root: Path, *, base_ref: str, head_ref: str) -> Set[
     return out
 
 
-def _git_blob_line_count(repo_root: Path, *, ref: str, rel_path: str) -> Optional[int]:
+def _git_staged_files(repo_root: Path) -> set[str]:
+    proc = subprocess.run(
+        ["git", "diff", "--name-only", "--cached"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        msg = (proc.stderr or proc.stdout or "").strip() or "unknown git diff --cached failure"
+        raise RuntimeError(msg)
+    out: set[str] = set()
+    for line in proc.stdout.splitlines():
+        rel = _normalize_rel_path(line)
+        if rel:
+            out.add(rel)
+    return out
+
+
+def _git_blob_line_count(repo_root: Path, *, ref: str, rel_path: str) -> int | None:
     rel = _normalize_rel_path(rel_path)
     if not rel:
         return None
@@ -143,9 +161,10 @@ def run_guard(
     repo_root: Path,
     baseline_path: Path,
     *,
-    base_ref: Optional[str] = None,
+    base_ref: str | None = None,
     head_ref: str = "HEAD",
-) -> Dict[str, Any]:
+    staged_only: bool = False,
+) -> dict[str, Any]:
     baseline = load_baseline(baseline_path)
     hard_limits = dict(DEFAULT_HARD_LIMITS)
     if isinstance(baseline.get("hard_limits"), dict):
@@ -176,20 +195,36 @@ def run_guard(
         default_growth = 0
     if default_growth < 0:
         default_growth = 0
+    soft_limit = 0
+    try:
+        soft_limit = int(waiver_policy.get("unbaselined_soft_limit_lines", 0))
+    except Exception:
+        soft_limit = 0
+    if soft_limit < 0:
+        soft_limit = 0
+    enforce_soft_limit_changed_only = bool(waiver_policy.get("enforce_soft_limit_changed_only", True))
 
-    violations: List[Dict[str, Any]] = []
-    measured: List[Dict[str, Any]] = []
-    growth_context: Dict[str, Any] = {
+    violations: list[dict[str, Any]] = []
+    measured: list[dict[str, Any]] = []
+    growth_context: dict[str, Any] = {
+        "staged_only": bool(staged_only),
         "enabled": bool(str(base_ref or "").strip()),
         "base_ref": str(base_ref or ""),
         "head_ref": str(head_ref or "HEAD"),
         "changed_file_count": 0,
     }
 
-    changed_files: Set[str] = set()
-    prior_line_cache: Dict[str, Optional[int]] = {}
+    changed_files: set[str] = set()
+    scoped_files: set[str] | None = None
+    prior_line_cache: dict[str, int | None] = {}
     growth_lookup_error = ""
-    if growth_context["enabled"]:
+    if staged_only:
+        try:
+            scoped_files = _git_staged_files(repo_root)
+            growth_context["changed_file_count"] = len(scoped_files)
+        except Exception as exc:
+            growth_lookup_error = f"{type(exc).__name__}: {exc}"
+    elif growth_context["enabled"]:
         try:
             changed_files = _git_changed_files(
                 repo_root,
@@ -202,10 +237,16 @@ def run_guard(
 
     for path, ext in _iter_candidate_files(repo_root, scan_roots, hard_limits):
         rel = path.relative_to(repo_root).as_posix()
+        if scoped_files is not None and rel not in scoped_files:
+            continue
         lines = _line_count(path)
         hard = int(hard_limits.get(ext, 0) or 0)
         measured.append({"path": rel, "lines": lines, "ext": ext, "hard_limit": hard})
-        if lines <= hard:
+        over_hard_limit = lines > hard
+        over_soft_limit = soft_limit > 0 and lines > soft_limit
+        changed_scope = scoped_files if scoped_files is not None else changed_files
+        soft_limit_enforced = over_soft_limit and (not enforce_soft_limit_changed_only or rel in changed_scope)
+        if not over_hard_limit and not soft_limit_enforced:
             continue
 
         entry = allowed.get(rel)
@@ -274,8 +315,9 @@ def run_guard(
                     }
                 )
             if growth_context["enabled"]:
+                growth_files = scoped_files if scoped_files is not None else changed_files
                 growth_raw = entry.get("max_growth_lines", default_growth)
-                if rel in changed_files:
+                if rel in growth_files:
                     try:
                         max_growth = int(growth_raw)
                     except Exception:
@@ -307,13 +349,26 @@ def run_guard(
                         )
             continue
 
+        if over_hard_limit:
+            violations.append(
+                {
+                    "path": rel,
+                    "ext": ext,
+                    "lines": lines,
+                    "hard_limit": hard,
+                    "reason": "file exceeds hard limit and is not baselined",
+                }
+            )
+            continue
+
         violations.append(
             {
                 "path": rel,
                 "ext": ext,
                 "lines": lines,
                 "hard_limit": hard,
-                "reason": "file exceeds hard limit and is not baselined",
+                "soft_limit": soft_limit,
+                "reason": "changed file exceeds soft limit and is not baselined",
             }
         )
 
@@ -360,6 +415,11 @@ def main() -> int:
         default="HEAD",
         help="Optional git head ref for growth checks (default: HEAD).",
     )
+    parser.add_argument(
+        "--staged-only",
+        action="store_true",
+        help="Scan only files currently staged in git index.",
+    )
     parser.add_argument("--json", action="store_true", help="Print JSON output.")
     args = parser.parse_args()
 
@@ -370,7 +430,13 @@ def main() -> int:
 
     base_ref = str(args.base or "").strip() or None
     head_ref = str(args.head or "").strip() or "HEAD"
-    result = run_guard(repo_root, baseline_path, base_ref=base_ref, head_ref=head_ref)
+    result = run_guard(
+        repo_root,
+        baseline_path,
+        base_ref=base_ref,
+        head_ref=head_ref,
+        staged_only=bool(args.staged_only),
+    )
     if args.json:
         print(json.dumps(result, ensure_ascii=False, indent=2))
     else:
@@ -382,6 +448,8 @@ def main() -> int:
                     f" Growth checks enabled for {growth_ctx.get('base_ref')}..."
                     f"{growth_ctx.get('head_ref')} ({growth_ctx.get('changed_file_count', 0)} changed files)."
                 )
+            elif bool(growth_ctx.get("staged_only")):
+                growth_note = f" Staged-only mode enabled " f"({growth_ctx.get('changed_file_count', 0)} staged files)."
             print(
                 f"Monolith guard OK. Scanned {result['measured_count']} files "
                 f"under {', '.join(result['scan_roots'])}.{growth_note}"

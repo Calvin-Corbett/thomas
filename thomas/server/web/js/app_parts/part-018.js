@@ -675,7 +675,7 @@ export default [
     "        ],",
     "    },",
     "    app_builder: {",
-    "        title: 'App Builder',",
+    "        title: 'UI Editor',",
     "        subtitle: 'Describe apps and let Thomas generate, wire, and publish them.',",
     "        pill: 'Builder',",
     "        kpis: [",

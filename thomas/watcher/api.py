@@ -1,15 +1,13 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import re
 from pathlib import Path
-from typing import List, Optional
 
 from fastapi import APIRouter, FastAPI, HTTPException, Request
 from pydantic import BaseModel, Field
 
-from .ingest import load_watcher_config, WatcherConfig
-
+from .ingest import WatcherConfig, load_watcher_config
 
 router = APIRouter(tags=["watcher"])
 
@@ -18,18 +16,18 @@ class StatusResponse(BaseModel):
     running: bool
     enabled: bool
     recursive: bool
-    paths: List[str]
+    paths: list[str]
     queue_depth: int
     processed: int
     skipped: int
     failed: int
-    last_event_path: Optional[str] = None
-    last_error: Optional[str] = None
+    last_event_path: str | None = None
+    last_error: str | None = None
     config: dict
 
 
 class PathsRequest(BaseModel):
-    paths: List[str] = Field(default_factory=list)
+    paths: list[str] = Field(default_factory=list)
     persist: bool = True
 
 
@@ -41,7 +39,7 @@ def _toml_quote(s: str) -> str:
     return '"' + s.replace("\\", "\\\\").replace('"', '\\"') + '"'
 
 
-def _render_paths_multiline(paths: List[str]) -> str:
+def _render_paths_multiline(paths: list[str]) -> str:
     if not paths:
         return "paths = []\n"
     inner = ",\n  ".join(_toml_quote(p) for p in paths)
@@ -115,7 +113,7 @@ def patch_watcher_section(toml_text: str, cfg: WatcherConfig) -> str:
 
     key_re = re.compile(r"^\s*([A-Za-z0-9_\-]+)\s*=")
 
-    out_block: List[str] = [watcher_block[0]]
+    out_block: list[str] = [watcher_block[0]]
     # Always write managed keys at the top; then keep unknown lines from the old block.
     out_block.append(render_cfg(cfg))
 
@@ -146,7 +144,7 @@ def patch_watcher_section(toml_text: str, cfg: WatcherConfig) -> str:
     return "".join(new_lines)
 
 
-def persist_config(cfg: WatcherConfig, config_path: Optional[str] = None) -> None:
+def persist_config(cfg: WatcherConfig, config_path: str | None = None) -> None:
     cp = Path(config_path or _config_path())
     existing = cp.read_text(encoding="utf-8", errors="replace") if cp.exists() else ""
     patched = patch_watcher_section(existing, cfg)
@@ -157,6 +155,7 @@ def _get_watcher_service(*, notifier=None, config_path: str):
     from .watcher import get_watcher_service as _factory
 
     return _factory(notifier=notifier, config_path=config_path)
+
 
 def _get_notifier_from_app(request: Request):
     fn = getattr(getattr(request.app, "state", object()), "watcher_notifier", None)
@@ -171,7 +170,7 @@ def watcher_status(request: Request):
 
 @router.post("/api/watcher/paths", response_model=StatusResponse)
 def watcher_paths(req: PathsRequest, request: Request):
-    normalized: List[str] = []
+    normalized: list[str] = []
     for p in req.paths:
         if not p:
             continue
@@ -201,6 +200,7 @@ def bind_watcher_lifecycle(app: FastAPI) -> None:
     Starts/stops watcher with the server.
     Uses FastAPI startup/shutdown hooks for broad compatibility.
     """
+
     @app.on_event("startup")
     def _startup():
         svc = _get_watcher_service(config_path=_config_path())
@@ -212,6 +212,3 @@ def bind_watcher_lifecycle(app: FastAPI) -> None:
     def _shutdown():
         svc = _get_watcher_service(config_path=_config_path())
         svc.stop()
-
-
-

@@ -19,19 +19,20 @@ Public surface
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import asyncio
 import hmac
 import os
 import re
-from typing import Any, Iterable, Mapping, MutableMapping, Protocol, Sequence, TypedDict, cast, runtime_checkable
+from collections.abc import Iterable, Mapping, MutableMapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Protocol, TypedDict, cast, runtime_checkable
 
 from aiohttp import web
-
 
 # -----------------------------
 # Contracts
 # -----------------------------
+
 
 class ErrorBody(TypedDict):
     code: str
@@ -46,6 +47,7 @@ class ErrorEnvelope(TypedDict):
 
 class NodesApiAuthSpec(TypedDict):
     """Machine-readable auth requirements for the Nodes API."""
+
     type: str  # e.g. "bearer"
     header: str  # e.g. "Authorization"
     scheme: str  # e.g. "Bearer"
@@ -56,6 +58,7 @@ class NodesApiAuthSpec(TypedDict):
 
 class NodesApiRouteSpec(TypedDict):
     """Machine-readable description of a single API route."""
+
     method: str
     path: str
     name: str
@@ -65,6 +68,7 @@ class NodesApiRouteSpec(TypedDict):
 
 class NodesApiSchema(TypedDict):
     """Machine-readable schema describing the Nodes API surface."""
+
     name: str
     version: str
     base_prefix: str
@@ -75,6 +79,7 @@ class NodesApiSchema(TypedDict):
 
 class NodeView(TypedDict, total=False):
     """A JSON-safe view of a node."""
+
     id: str
     label: str
     status: str
@@ -83,6 +88,7 @@ class NodeView(TypedDict, total=False):
 @dataclass(frozen=True)
 class NodeRecord:
     """Simple node record used by the default in-memory store."""
+
     id: str
     label: str | None = None
     status: str = "unknown"
@@ -97,15 +103,15 @@ class NodeRecord:
 @runtime_checkable
 class NodeStore(Protocol):
     """Abstract node storage interface expected by the API handlers."""
-    async def list_nodes(self) -> Sequence[NodeRecord | Mapping[str, Any]]:
-        ...
 
-    async def get_node(self, node_id: str) -> NodeRecord | Mapping[str, Any] | None:
-        ...
+    async def list_nodes(self) -> Sequence[NodeRecord | Mapping[str, Any]]: ...
+
+    async def get_node(self, node_id: str) -> NodeRecord | Mapping[str, Any] | None: ...
 
 
 class InMemoryNodeStore:
     """Trivial node store suitable for tests and local dev."""
+
     def __init__(self, nodes: Iterable[NodeRecord] | None = None) -> None:
         self._nodes: dict[str, NodeRecord] = {n.id: n for n in (nodes or [])}
 
@@ -116,9 +122,23 @@ class InMemoryNodeStore:
         return self._nodes.get(node_id)
 
 
+_AppKey = getattr(web, "AppKey", None)
+if _AppKey is not None:  # pragma: no cover
+    NODES_API_TOKEN_KEY = web.AppKey("nodes_api_token", str)  # type: ignore[attr-defined]
+    NODE_STORE_KEY = web.AppKey("node_store", object)  # type: ignore[attr-defined]
+    NODES_API_PREFIX_KEY = web.AppKey("nodes_api_prefix", str)  # type: ignore[attr-defined]
+    ROOT_APP_KEY = web.AppKey("root_app", object)  # type: ignore[attr-defined]
+else:  # pragma: no cover
+    NODES_API_TOKEN_KEY = "nodes_api_token"
+    NODE_STORE_KEY = "node_store"
+    NODES_API_PREFIX_KEY = "nodes_api_prefix"
+    ROOT_APP_KEY = "root_app"
+
+
 # -----------------------------
 # Errors
 # -----------------------------
+
 
 @dataclass(frozen=True)
 class NodesApiError(Exception):
@@ -228,8 +248,9 @@ def _iter_app_candidates(app: MutableMapping[str, Any]) -> Iterable[MutableMappi
 
         nxt: Any = None
         for k in _PARENT_APP_KEYS:
-            if isinstance(cur, Mapping) and k in cur:
-                nxt = cur.get(k)
+            _found, _value = _mapping_try_get(cur, k)
+            if _found:
+                nxt = _value
                 break
         if isinstance(nxt, MutableMapping):
             cur = cast(MutableMapping[str, Any], nxt)
@@ -237,20 +258,40 @@ def _iter_app_candidates(app: MutableMapping[str, Any]) -> Iterable[MutableMappi
             cur = None
 
 
+def _mapping_try_get(mapping: Mapping[str, Any], key_name: str) -> tuple[bool, Any]:
+    try:
+        if key_name in mapping:
+            return True, mapping[key_name]
+    except (ConnectionError, TimeoutError, RuntimeError):
+        pass
+    try:
+        for mk, mv in mapping.items():
+            mk_name = getattr(mk, "name", "") or getattr(mk, "_name", "")
+            if mk_name == key_name or str(mk_name).endswith(f".{key_name}"):
+                return True, mv
+    except (ImportError, AttributeError, RuntimeError):
+        pass
+    return False, None
+
+
 def _resolve_expected_token(app: MutableMapping[str, Any]) -> str | None:
     # Direct keys on the app mapping
     for key in DEFAULT_APP_TOKEN_KEYS:
-        value = app.get(key)
-        if isinstance(value, str) and value.strip():
+        found, value = _mapping_try_get(app, key)
+        if found and isinstance(value, str) and value.strip():
             return value.strip()
 
     # Nested config object, if present
-    cfg = app.get("config") or app.get("settings") or app.get("cfg")
+    _cfg_found, cfg = _mapping_try_get(app, "config")
+    if not _cfg_found:
+        _cfg_found, cfg = _mapping_try_get(app, "settings")
+    if not _cfg_found:
+        _cfg_found, cfg = _mapping_try_get(app, "cfg")
     if cfg is not None:
         if isinstance(cfg, Mapping):
             for key in DEFAULT_APP_TOKEN_KEYS:
-                value = cfg.get(key)  # type: ignore[arg-type]
-                if isinstance(value, str) and value.strip():
+                found, value = _mapping_try_get(cfg, key)
+                if found and isinstance(value, str) and value.strip():
                     return value.strip()
         else:
             for key in DEFAULT_APP_TOKEN_KEYS:
@@ -368,12 +409,12 @@ def _normalize_node(obj: NodeRecord | Mapping[str, Any]) -> NodeView:
 
 
 def _resolve_store(app: MutableMapping[str, Any]) -> NodeStore | None:
-    store = (
-        app.get("node_store")
-        or app.get("nodes_store")
-        or app.get("nodes")
-        or app.get("node_manager")
-    )
+    store = None
+    for key in ("node_store", "nodes_store", "nodes", "node_manager"):
+        found, value = _mapping_try_get(app, key)
+        if found and value is not None:
+            store = value
+            break
     if store is None:
         return None
     return cast(NodeStore, store)
@@ -452,7 +493,12 @@ def get_nodes_api_schema(*, prefix: str = "/api") -> NodesApiSchema:
 def _registered_prefix_from_request(request: web.Request) -> str:
     app = cast(MutableMapping[str, Any], request.app)
     for candidate in _iter_app_candidates(app):
-        pref = candidate.get("nodes_api_prefix") or candidate.get("api_prefix") or candidate.get("api_base")
+        pref = None
+        for key in ("nodes_api_prefix", "api_prefix", "api_base"):
+            found, value = _mapping_try_get(candidate, key)
+            if found and value:
+                pref = value
+                break
         if isinstance(pref, str) and pref:
             return pref
     return "/api"
@@ -475,7 +521,7 @@ async def list_nodes(request: web.Request) -> web.Response:
 
         try:
             raw = await _maybe_await(store.list_nodes())
-        except Exception as e:  # noqa: BLE001 - deterministic wrapper below
+        except (ConnectionError, TimeoutError, RuntimeError) as e:  # noqa: BLE001 - deterministic wrapper below
             raise _err_external_failure(
                 "Node store failed while listing nodes.",
                 details={"exception": type(e).__name__},
@@ -486,7 +532,7 @@ async def list_nodes(request: web.Request) -> web.Response:
 
     except NodesApiError as e:
         return _json_error(e)
-    except Exception as e:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
         return _json_error(_err_internal("Internal server error.", details={"exception": type(e).__name__}))
 
 
@@ -502,7 +548,7 @@ async def get_node(request: web.Request) -> web.Response:
 
         try:
             node = await _maybe_await(store.get_node(node_id))
-        except Exception as e:  # noqa: BLE001
+        except (ConnectionError, TimeoutError, RuntimeError) as e:  # noqa: BLE001
             raise _err_external_failure(
                 "Node store failed while fetching node.",
                 details={"exception": type(e).__name__, "node_id": node_id},
@@ -515,7 +561,7 @@ async def get_node(request: web.Request) -> web.Response:
 
     except NodesApiError as e:
         return _json_error(e)
-    except Exception as e:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
         return _json_error(_err_internal("Internal server error.", details={"exception": type(e).__name__}))
 
 
@@ -527,7 +573,7 @@ async def schema(request: web.Request) -> web.Response:
         return _json_ok({"schema": get_nodes_api_schema(prefix=prefix)})
     except NodesApiError as e:
         return _json_error(e)
-    except Exception as e:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
         return _json_error(_err_internal("Internal server error.", details={"exception": type(e).__name__}))
 
 
@@ -546,8 +592,8 @@ def register(app_or_router: Any, *, prefix: str = "/api") -> None:
     # Store prefix on anything mapping-like (aiohttp Application is a MutableMapping)
     try:
         if isinstance(app_or_router, MutableMapping):
-            cast(MutableMapping[str, Any], app_or_router)["nodes_api_prefix"] = prefix
-    except Exception:
+            cast(MutableMapping[str, Any], app_or_router)[NODES_API_PREFIX_KEY] = prefix
+    except (ConnectionError, TimeoutError, RuntimeError):
         # Not fatal; schema will fall back to /api.
         pass
 
@@ -559,8 +605,8 @@ def register(app_or_router: Any, *, prefix: str = "/api") -> None:
 
         # Prefix registration: mount as a subapp to preserve route metadata.
         subapp = web.Application()
-        subapp["nodes_api_prefix"] = prefix
-        subapp["root_app"] = app_or_router
+        subapp[NODES_API_PREFIX_KEY] = prefix
+        subapp[ROOT_APP_KEY] = app_or_router
         subapp.add_routes(routes)
 
         mount = prefix.rstrip("/")

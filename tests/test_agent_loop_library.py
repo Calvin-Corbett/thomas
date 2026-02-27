@@ -1,6 +1,7 @@
 import asyncio
 
 from thomas.agent.loop import AgentLoop
+from thomas.agent.routing import RouteDecision
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig
 from thomas.core.llm import StreamEvent, TokenUsage
 from thomas.library import ResearchLibrary, default_library_root
@@ -57,10 +58,48 @@ def test_research_route_injects_library_context_and_auto_captures(tmp_path, monk
     first_messages = llm.calls[0]["messages"]
     system = next((m for m in first_messages if m.get("role") == "system"), {})
     text = str(system.get("content", ""))
-    assert "--- Library Context ---" in text
+    assert "<library_context>" in text
     assert "HTTP Retry Patterns" in text
 
     rows = lib.list_entries(query="http retry strategy", limit=20)
     assert len(rows) >= 2
     assert any(bool(r.get("auto_captured")) for r in rows)
 
+
+def test_auto_capture_skips_benchmark_prompts(tmp_path, monkeypatch) -> None:  # noqa: ANN001
+    monkeypatch.setenv("THOMAS_LIBRARY_ENABLED", "1")
+    monkeypatch.setenv("THOMAS_LIBRARY_AUTO_CAPTURE_RESEARCH", "1")
+
+    cfg = AppConfig(
+        models={"local": ModelConfig(name="local", model="dummy")},
+        default_model="local",
+        memory=MemoryConfig(root=str(tmp_path / "runtime")),
+    )
+    llm = CaptureLLM()
+    agent = AgentLoop(cfg, llm, ToolRegistry(), conversation=[], memory=None, thread_id="t-bench")
+    lib = ResearchLibrary(default_library_root(cfg))
+    route = RouteDecision(
+        path="research",
+        confidence=1.0,
+        reasons=["test"],
+        mode="auto",
+        tools_policy="auto",
+        include_purpose=False,
+        memory_include_global=True,
+        memory_include_profile=False,
+        memory_budget_tokens=900,
+        is_followup=False,
+    )
+    query = (
+        "You are solving an official HumanEval task.\n"
+        "Entry point: increment\n"
+        "---PROMPT START---\n"
+        "def increment(n):\n"
+        "---PROMPT END---"
+    )
+    answer = "Use a return statement with proper indentation for the function body."
+
+    agent._auto_capture_research(route=route, query=query, answer=answer, job_type="benchmark")
+
+    rows = lib.list_entries(query="official HumanEval task", limit=20)
+    assert not any(bool(r.get("auto_captured")) for r in rows)

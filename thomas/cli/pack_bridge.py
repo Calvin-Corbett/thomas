@@ -1,4 +1,5 @@
 """Pack bridge module."""
+
 from __future__ import annotations
 
 import importlib
@@ -6,8 +7,9 @@ import importlib.util
 import inspect
 import json
 import re
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 import click
 
@@ -101,7 +103,7 @@ def _discover_click_commands(module: Any) -> list[click.Command]:
             continue
         try:
             value = fn()
-        except Exception:
+        except AttributeError:
             continue
         _add_click_candidate(value, commands, seen)
     return commands
@@ -164,7 +166,7 @@ def _invoke_click_command(
 def _main_accepts_argv(main_fn: Any) -> bool:
     try:
         sig = inspect.signature(main_fn)
-    except Exception:
+    except (ValueError, TypeError):
         return True
     params = list(sig.parameters.values())
     if not params:
@@ -183,10 +185,7 @@ def _invoke_main(
 ) -> dict[str, Any]:
     main_fn = getattr(module, "main", None)
     if not callable(main_fn):
-        msg = (
-            f"Module {getattr(module, '__name__', '?')} has no callable main(); "
-            "command is not implemented."
-        )
+        msg = f"Module {getattr(module, '__name__', '?')} has no callable main(); " "command is not implemented."
         if not strict_missing_main:
             return {
                 "ok": True,

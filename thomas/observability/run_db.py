@@ -4,7 +4,6 @@ from __future__ import annotations
 import os
 import sqlite3
 from pathlib import Path
-from typing import Iterable
 
 ENV_DB_PATH = "THOMAS_RUNS_DB_PATH"
 
@@ -32,6 +31,7 @@ CREATE TABLE IF NOT EXISTS events (
 CREATE INDEX IF NOT EXISTS idx_events_run_seq ON events(run_id, seq, id);
 """
 
+
 def resolve_runs_db_path() -> Path:
     env = os.getenv(ENV_DB_PATH, "").strip()
     if env:
@@ -40,16 +40,18 @@ def resolve_runs_db_path() -> Path:
     # Try to reuse an existing run_store if present in repo.
     try:
         from thomas.observability import run_store  # type: ignore
+
         for attr in ("RUNS_DB_PATH", "DB_PATH", "db_path"):
             p = getattr(run_store, attr, None)
             if p:
                 return Path(p)
         if hasattr(run_store, "get_db_path"):
             return Path(run_store.get_db_path())  # type: ignore
-    except Exception:
+    except ImportError:
         pass
 
     return Path.home() / ".thomas" / "runs.sqlite3"
+
 
 def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -57,15 +59,18 @@ def connect(db_path: Path) -> sqlite3.Connection:
     con.row_factory = sqlite3.Row
     return con
 
+
 def _table_columns(con: sqlite3.Connection, table: str) -> set[str]:
     cur = con.execute(f"PRAGMA table_info({table})")
     return {str(r["name"]) for r in cur.fetchall()}
+
 
 def _add_column(con: sqlite3.Connection, table: str, col: str, ddl: str) -> None:
     cols = _table_columns(con, table)
     if col in cols:
         return
     con.execute(f"ALTER TABLE {table} ADD COLUMN {ddl}")
+
 
 def ensure_schema(db_path: Path) -> None:
     con = connect(db_path)

@@ -26,11 +26,11 @@ Deterministic failures raise subclasses of MessageThreadReplyError with
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Literal
 import importlib
 import os
-
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Literal
 
 Provider = Literal["slack_webhook", "slack_web_api"]
 
@@ -44,8 +44,8 @@ class MessageThreadReplyRequest:
 
     thread_id: str
     text: str
-    channel_id: Optional[str] = None
-    provider: Optional[Provider] = None
+    channel_id: str | None = None
+    provider: Provider | None = None
 
     # Provider-specific payload fields, merged into the outgoing provider request.
     # Only allow-listed keys are accepted (unknown keys raise invalid_input).
@@ -60,17 +60,17 @@ class MessageThreadReplyResult:
     provider: Provider
     thread_id: str
     text: str
-    channel_id: Optional[str] = None
+    channel_id: str | None = None
 
     # Provider message identifier if available (e.g., Slack "ts").
-    message_id: Optional[str] = None
+    message_id: str | None = None
 
     # Provider raw response body (parsed JSON for web API; basic details for webhook).
     raw: Mapping[str, Any] = field(default_factory=dict)
 
     schema_version: int = SCHEMA_VERSION
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "schema_version": int(self.schema_version),
             "ok": bool(self.ok),
@@ -86,13 +86,13 @@ class MessageThreadReplyResult:
 class MessageThreadReplyError(Exception):
     """Base deterministic error."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         self.code = str(code)
         self.message = str(message)
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
         super().__init__(f"{self.code}: {self.message}")
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "message": self.message, "details": dict(self.details)}
 
 
@@ -110,11 +110,11 @@ class MessageThreadReplyExternalError(MessageThreadReplyError):
 
 @dataclass(frozen=True)
 class MessageThreadReplyConfig:
-    slack_webhook_url: Optional[str] = None
-    slack_bot_token: Optional[str] = None
+    slack_webhook_url: str | None = None
+    slack_bot_token: str | None = None
     slack_api_url: str = "https://slack.com/api/chat.postMessage"
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "slack_webhook_url": self.slack_webhook_url,
             "slack_bot_token": "***" if self.slack_bot_token else None,
@@ -138,17 +138,16 @@ def _require_non_empty_str(value: Any, field_name: str) -> str:
     return value
 
 
-def _normalize_optional_str(value: Any) -> Optional[str]:
+def _normalize_optional_str(value: Any) -> str | None:
     if not isinstance(value, str):
         return None
     v = value.strip()
     return v or None
 
 
-def _env_config() -> Dict[str, str]:
+def _env_config() -> dict[str, str]:
     return {
-        "slack_webhook_url": os.environ.get("THOMAS_SLACK_WEBHOOK_URL", "")
-        or os.environ.get("SLACK_WEBHOOK_URL", ""),
+        "slack_webhook_url": os.environ.get("THOMAS_SLACK_WEBHOOK_URL", "") or os.environ.get("SLACK_WEBHOOK_URL", ""),
         "slack_bot_token": os.environ.get("THOMAS_SLACK_BOT_TOKEN", "") or os.environ.get("SLACK_BOT_TOKEN", ""),
         "slack_api_url": os.environ.get("THOMAS_SLACK_API_URL", "") or os.environ.get("SLACK_API_URL", ""),
     }
@@ -166,7 +165,7 @@ def _dig(obj: Any, path: Sequence[str]) -> Any:
     return cur
 
 
-def _extract_config_from_object(obj: Any) -> Dict[str, Any]:
+def _extract_config_from_object(obj: Any) -> dict[str, Any]:
     if obj is None:
         return {}
 
@@ -197,7 +196,7 @@ def _extract_config_from_object(obj: Any) -> Dict[str, Any]:
         ("messages", "slack", "api_url"),
     ]
 
-    out: Dict[str, Any] = {}
+    out: dict[str, Any] = {}
 
     for p in webhook_paths:
         v = _dig(obj, p)
@@ -220,7 +219,7 @@ def _extract_config_from_object(obj: Any) -> Dict[str, Any]:
     return out
 
 
-def _resolve_thomas_config() -> Dict[str, Any]:
+def _resolve_thomas_config() -> dict[str, Any]:
     """Best-effort discovery of a Thomas settings/config object.
 
     This is intentionally defensive: if modules don't exist (or importing them
@@ -239,7 +238,7 @@ def _resolve_thomas_config() -> Dict[str, Any]:
     ):
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
 
         # Common settings holders.
@@ -254,10 +253,10 @@ def _resolve_thomas_config() -> Dict[str, Any]:
             if callable(f):
                 try:
                     candidates.append(f())
-                except Exception:
+                except (json.JSONDecodeError, ValueError, KeyError):
                     continue
 
-    merged: Dict[str, Any] = {}
+    merged: dict[str, Any] = {}
     for cand in candidates:
         extracted = _extract_config_from_object(cand)
         for k, v in extracted.items():
@@ -267,8 +266,8 @@ def _resolve_thomas_config() -> Dict[str, Any]:
     return merged
 
 
-def _merge_config_layers(*layers: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
-    merged: Dict[str, Any] = {}
+def _merge_config_layers(*layers: Mapping[str, Any] | None) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
     for layer in layers:
         if not layer:
             continue
@@ -287,7 +286,7 @@ def _parse_config(merged: Mapping[str, Any]) -> MessageThreadReplyConfig:
     return MessageThreadReplyConfig(slack_webhook_url=webhook, slack_bot_token=token, slack_api_url=api_url)
 
 
-def _validate_provider_payload(provider: Provider, payload: Mapping[str, Any]) -> Dict[str, Any]:
+def _validate_provider_payload(provider: Provider, payload: Mapping[str, Any]) -> dict[str, Any]:
     if not payload:
         return {}
 
@@ -381,14 +380,14 @@ def _http_post_json(
     url: str,
     payload: Mapping[str, Any],
     *,
-    headers: Optional[Mapping[str, str]] = None,
+    headers: Mapping[str, str] | None = None,
     timeout_s: float = 10.0,
-    http_post: Optional[Callable[..., Any]] = None,
+    http_post: Callable[..., Any] | None = None,
 ) -> Any:
     if http_post is None:
         try:
             import requests  # type: ignore
-        except Exception as e:  # pragma: no cover
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
             raise MessageThreadReplyExternalError(
                 "missing_dependency",
                 "requests is required for HTTP messaging operations",
@@ -401,7 +400,7 @@ def _http_post_json(
         return http_post(url, json=dict(payload), headers=dict(headers or {}), timeout=timeout_s)
     except MessageThreadReplyError:
         raise
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise MessageThreadReplyExternalError(
             "http_error",
             "Failed to contact messaging endpoint",
@@ -412,9 +411,9 @@ def _http_post_json(
 def message_thread_reply(
     request: MessageThreadReplyRequest,
     *,
-    config: Optional[Mapping[str, Any]] = None,
+    config: Mapping[str, Any] | None = None,
     timeout_s: float = 10.0,
-    http_post: Optional[Callable[..., Any]] = None,
+    http_post: Callable[..., Any] | None = None,
 ) -> MessageThreadReplyResult:
     """Reply within an existing message thread."""
 
@@ -435,7 +434,7 @@ def message_thread_reply(
                 "slack_webhook_url is required for slack_webhook provider",
             )
 
-        payload: Dict[str, Any] = {"text": text, "thread_ts": thread_id}
+        payload: dict[str, Any] = {"text": text, "thread_ts": thread_id}
         if channel_id:
             payload["channel"] = channel_id
         payload.update(provider_payload)
@@ -492,7 +491,7 @@ def message_thread_reply(
 
     try:
         data = resp.json()  # type: ignore[attr-defined]
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         data = {"raw_text": getattr(resp, "text", "")}
 
     if status != 200:

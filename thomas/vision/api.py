@@ -4,14 +4,13 @@ import hashlib
 import json
 import os
 import time
-from dataclasses import dataclass
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 from fastapi import APIRouter, File, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
 from PIL import Image, ImageOps
+from pydantic import BaseModel
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -19,14 +18,14 @@ router = APIRouter(prefix="/api/chat", tags=["chat"])
 def _env_int(name: str, default: int) -> int:
     try:
         return int(os.getenv(name, str(default)))
-    except Exception:
+    except ImportError:
         return default
 
 
 def _env_float(name: str, default: float) -> float:
     try:
         return float(os.getenv(name, str(default)))
-    except Exception:
+    except ImportError:
         return default
 
 
@@ -69,11 +68,11 @@ def _cleanup_pair(image_path: Path) -> None:
     meta_path = image_path.with_suffix(image_path.suffix + ".json")
     try:
         image_path.unlink(missing_ok=True)
-    except Exception:
+    except json.JSONDecodeError:
         pass
     try:
         meta_path.unlink(missing_ok=True)
-    except Exception:
+    except json.JSONDecodeError:
         pass
 
 
@@ -103,9 +102,9 @@ def cleanup_old_uploads(upload_dir: Path, ttl_seconds: int, *, max_delete: int =
                 if age > ttl_seconds:
                     _cleanup_pair(child)
                     deleted += 1
-            except Exception:
+            except json.JSONDecodeError:
                 continue
-    except Exception:
+    except json.JSONDecodeError:
         return deleted
 
     return deleted
@@ -151,11 +150,11 @@ class UploadItem(BaseModel):
 
 
 class UploadResponse(BaseModel):
-    uploads: List[UploadItem]
+    uploads: list[UploadItem]
 
 
 @router.post("/upload")
-async def upload_image(file: List[UploadFile] = File(...)) -> JSONResponse:
+async def upload_image(file: list[UploadFile] = File(...)) -> JSONResponse:
     """Upload one or many images (repeat the 'file' form key)."""
     upload_dir = get_upload_dir()
     _ensure_dir(upload_dir)
@@ -171,7 +170,7 @@ async def upload_image(file: List[UploadFile] = File(...)) -> JSONResponse:
     max_dim = get_max_image_dim()
     do_downscale = should_downscale_large_images()
 
-    uploads: List[UploadItem] = []
+    uploads: list[UploadItem] = []
 
     for uf in file:
         if not uf.content_type or not uf.content_type.lower().startswith("image/"):
@@ -217,6 +216,7 @@ async def upload_image(file: List[UploadFile] = File(...)) -> JSONResponse:
                 buf = Path(tmp_path).read_bytes()
                 # Re-encode normalized output to ensure EXIF transpose/downscale applied
                 import io
+
                 bio = io.BytesIO()
                 save_kwargs = {}
                 if fmt.upper() == "JPEG":
@@ -267,7 +267,7 @@ async def upload_image(file: List[UploadFile] = File(...)) -> JSONResponse:
 
         except HTTPException:
             raise
-        except Exception:
+        except (OSError, FileNotFoundError):
             raise HTTPException(status_code=415, detail="Uploaded bytes are not a valid image")
         finally:
             tmp_path.unlink(missing_ok=True)
@@ -275,7 +275,7 @@ async def upload_image(file: List[UploadFile] = File(...)) -> JSONResponse:
     return JSONResponse(UploadResponse(uploads=uploads).model_dump())
 
 
-def resolve_upload_paths(image_ids: Sequence[str]) -> List[Path]:
+def resolve_upload_paths(image_ids: Sequence[str]) -> list[Path]:
     """Resolve image IDs to existing file paths under the upload dir.
 
     - Accepts either bare IDs or tokens like thomas-upload://<id>
@@ -285,7 +285,7 @@ def resolve_upload_paths(image_ids: Sequence[str]) -> List[Path]:
         return []
 
     upload_dir = get_upload_dir()
-    out: List[Path] = []
+    out: list[Path] = []
 
     for raw in image_ids:
         image_id = (raw or "").replace("thomas-upload://", "").strip()

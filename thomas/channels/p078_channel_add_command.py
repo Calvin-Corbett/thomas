@@ -13,14 +13,14 @@ Philosophy:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
-from pathlib import Path
-from typing import Any, Dict, Optional, Tuple, Callable
 import importlib
 import json
 import os
 import tempfile
-
+from collections.abc import Callable
+from dataclasses import asdict, dataclass, field
+from pathlib import Path
+from typing import Any
 
 # -----------------------------
 # Contracts
@@ -34,8 +34,8 @@ class ChannelAddRequest:
     channel: str
     token: str
     account: str = "default"
-    name: Optional[str] = None
-    config_path: Optional[Path] = None
+    name: str | None = None
+    config_path: Path | None = None
     overwrite: bool = False
     verify: bool = False  # optional external validation (best-effort)
 
@@ -47,18 +47,18 @@ class ChannelAddResult:
     channel: str
     account: str
     config_path: Path
-    name: Optional[str] = None
+    name: str | None = None
 
     created_channel: bool = False
     created_account: bool = False
     overwritten: bool = False
 
     verified: bool = False
-    verification_subject: Optional[str] = None  # e.g. bot username
+    verification_subject: str | None = None  # e.g. bot username
 
     written_keys: list[str] = field(default_factory=list)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         d = asdict(self)
         d["config_path"] = str(self.config_path)
         return d
@@ -72,15 +72,13 @@ class ChannelAddResult:
 class ChannelAddError(Exception):
     """Base class for deterministic errors raised by this command."""
 
-    def __init__(
-        self, *, code: str, message: str, details: Optional[Dict[str, Any]] = None
-    ) -> None:
+    def __init__(self, *, code: str, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "message": self.message, "details": self.details}
 
 
@@ -151,7 +149,7 @@ def add_channel(request: ChannelAddRequest) -> ChannelAddResult:
     )
 
     verified = False
-    subject: Optional[str] = None
+    subject: str | None = None
     if request.verify:
         verified, subject = _verify_credentials(channel=channel, token=token)
 
@@ -171,9 +169,7 @@ def add_channel(request: ChannelAddRequest) -> ChannelAddResult:
     )
 
 
-def apply_channel_add(
-    config: Dict[str, Any], *, request: ChannelAddRequest
-) -> Tuple[Dict[str, Any], ChannelAddResult]:
+def apply_channel_add(config: dict[str, Any], *, request: ChannelAddRequest) -> tuple[dict[str, Any], ChannelAddResult]:
     """Pure-ish transformer: applies the add to an in-memory config dict."""
     channel = _normalize_key(request.channel, what="channel")
     account = _normalize_key(request.account or "default", what="account")
@@ -241,7 +237,7 @@ def apply_channel_add(
         overwritten = True
 
     created_account = existing is None
-    entry: Dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
+    entry: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
 
     entry["enabled"] = True
     if request.name is not None:
@@ -290,22 +286,20 @@ def _normalize_key(value: str, *, what: str) -> str:
         if not (ch.isalnum() or ch in ("-", "_")):
             raise ChannelAddValidationError(
                 code="invalid_input",
-                message=(
-                    f"Invalid {what} '{value}'. Only letters, digits, '-' and '_' are allowed."
-                ),
+                message=(f"Invalid {what} '{value}'. Only letters, digits, '-' and '_' are allowed."),
                 details={"field": what, "value": value},
             )
     return v
 
 
-def _token_field_for_channel(channel: str) -> Tuple[str, bool]:
+def _token_field_for_channel(channel: str) -> tuple[str, bool]:
     """Return (token_field_name, also_set_channel_level_for_default_account)."""
     if channel == "telegram":
         return "bot_token", True
     return "token", False
 
 
-def _read_config(path: Path) -> Dict[str, Any]:
+def _read_config(path: Path) -> dict[str, Any]:
     try:
         raw = path.read_text(encoding="utf-8")
     except OSError as e:
@@ -322,7 +316,7 @@ def _read_config(path: Path) -> Dict[str, Any]:
     loader = _json_loader()
     try:
         data = loader(raw)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ChannelAddConfigError(
             code="config_invalid",
             message="Config file is not valid JSON/JSON5.",
@@ -346,13 +340,13 @@ def _json_loader() -> Callable[[str], Any]:
         import json5  # type: ignore
 
         return json5.loads  # type: ignore[attr-defined]
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return json.loads
 
 
-def _write_config_atomic(path: Path, data: Dict[str, Any]) -> None:
+def _write_config_atomic(path: Path, data: dict[str, Any]) -> None:
     payload = json.dumps(data, indent=2) + "\n"
-    tmp_path: Optional[Path] = None
+    tmp_path: Path | None = None
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         with tempfile.NamedTemporaryFile(
@@ -368,7 +362,7 @@ def _write_config_atomic(path: Path, data: Dict[str, Any]) -> None:
             tmp.flush()
             try:
                 os.fsync(tmp.fileno())
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 pass
         os.replace(str(tmp_path), str(path))
     except OSError as e:
@@ -381,11 +375,11 @@ def _write_config_atomic(path: Path, data: Dict[str, Any]) -> None:
         try:
             if tmp_path is not None and tmp_path.exists():
                 tmp_path.unlink(missing_ok=True)
-        except Exception:
+        except (OSError, ConnectionError):
             pass
 
 
-def _verify_credentials(*, channel: str, token: str) -> Tuple[bool, Optional[str]]:
+def _verify_credentials(*, channel: str, token: str) -> tuple[bool, str | None]:
     """Optional, best-effort credential verification.
 
     If verification is requested and fails, raise a deterministic error.
@@ -399,7 +393,7 @@ def _verify_credentials(*, channel: str, token: str) -> Tuple[bool, Optional[str
     return True, None
 
 
-def _verify_telegram_bot_token(token: str) -> Dict[str, Any]:
+def _verify_telegram_bot_token(token: str) -> dict[str, Any]:
     """Verify a Telegram bot token.
 
     First tries Thomas' own telegram integration module if it exposes a helper.
@@ -421,7 +415,7 @@ def _verify_telegram_bot_token(token: str) -> Dict[str, Any]:
                     return out if isinstance(out, dict) else {"result": out}
                 except ChannelAddError:
                     raise
-                except Exception as e:
+                except (ImportError, AttributeError, RuntimeError) as e:
                     raise ChannelAddExternalError(
                         code="telegram_token_invalid",
                         message="Telegram token verification failed.",
@@ -429,24 +423,22 @@ def _verify_telegram_bot_token(token: str) -> Dict[str, Any]:
                     ) from e
     except ModuleNotFoundError:
         pass
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         pass
 
     try:
         import requests  # type: ignore
-    except Exception as e:
+    except (ImportError, AttributeError, RuntimeError) as e:
         raise ChannelAddExternalError(
             code="telegram_verify_unavailable",
-            message=(
-                "Cannot verify Telegram token (missing dependency 'requests' and no integration helper found)."
-            ),
+            message=("Cannot verify Telegram token (missing dependency 'requests' and no integration helper found)."),
             details={"error": str(e)},
         ) from e
 
     url = f"https://api.telegram.org/bot{token}/getMe"
     try:
         resp = requests.get(url, timeout=5)
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise ChannelAddExternalError(
             code="telegram_unreachable",
             message="Failed to reach Telegram Bot API while verifying token.",
@@ -455,7 +447,7 @@ def _verify_telegram_bot_token(token: str) -> Dict[str, Any]:
 
     try:
         payload = resp.json()
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         payload = {"ok": False, "error": resp.text}
 
     if resp.status_code != 200 or not isinstance(payload, dict) or not payload.get("ok"):

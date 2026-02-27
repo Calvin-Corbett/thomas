@@ -15,10 +15,10 @@ for internal prompt-pack tracking.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import json
-from typing import Any, Mapping, Optional, Protocol, Union
-
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any, Protocol
 
 PROMPT_ID = "P064"
 DOMAIN = "messages"
@@ -27,7 +27,7 @@ DOMAIN = "messages"
 class MessagePollVoteAndCloseError(RuntimeError):
     """Deterministic error for vote+close poll."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = dict(details or {})
@@ -49,8 +49,8 @@ class PollVoteAndCloseRequest:
 
     poll_id: str
     option: str
-    voter_id: Optional[str] = None
-    reason: Optional[str] = None
+    voter_id: str | None = None
+    reason: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -61,8 +61,8 @@ class PollVoteAndCloseResult:
     option: str
     voted: bool
     closed: bool
-    vote_receipt: Optional[Mapping[str, Any]] = None
-    close_receipt: Optional[Mapping[str, Any]] = None
+    vote_receipt: Mapping[str, Any] | None = None
+    close_receipt: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -108,7 +108,7 @@ def _validate_request(req: PollVoteAndCloseRequest) -> None:
         )
 
 
-def _coerce_mapping(value: Any) -> Optional[Mapping[str, Any]]:
+def _coerce_mapping(value: Any) -> Mapping[str, Any] | None:
     if value is None:
         return None
     if isinstance(value, Mapping):
@@ -116,12 +116,12 @@ def _coerce_mapping(value: Any) -> Optional[Mapping[str, Any]]:
     if hasattr(value, "__dict__"):
         try:
             return dict(value.__dict__)
-        except Exception:
+        except (AttributeError, TypeError):
             return {"value": repr(value)}
     return {"value": value}
 
 
-def _get_messages_client(config: Optional[Mapping[str, Any]] = None) -> Any:
+def _get_messages_client(config: Mapping[str, Any] | None = None) -> Any:
     """Resolve a messages client/backend from the surrounding runtime.
 
     This function is intentionally defensive: Thomas deployments may wire their
@@ -137,7 +137,7 @@ def _get_messages_client(config: Optional[Mapping[str, Any]] = None) -> Any:
         try:
             mod = __import__(mod_name, fromlist=[fn_name])
             fn = getattr(mod, fn_name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
         try:
             return fn(config=config)  # type: ignore[misc]
@@ -145,9 +145,9 @@ def _get_messages_client(config: Optional[Mapping[str, Any]] = None) -> Any:
             # Resolver may not accept keyword args.
             try:
                 return fn(config)  # type: ignore[misc]
-            except Exception:
+            except (ImportError, AttributeError, RuntimeError):
                 continue
-        except Exception:
+        except (KeyError, ValueError, AttributeError):
             continue
 
     # 2) Config can directly provide a backend client (tests/embedded runtimes).
@@ -240,7 +240,7 @@ def _call_close(close_fn: Any, req: PollVoteAndCloseRequest) -> Any:
 def vote_and_close_poll(
     req: PollVoteAndCloseRequest,
     *,
-    config: Optional[Mapping[str, Any]] = None,
+    config: Mapping[str, Any] | None = None,
     client: Any = None,
 ) -> PollVoteAndCloseResult:
     """Cast a poll vote then close the poll.
@@ -262,7 +262,7 @@ def vote_and_close_poll(
         vote_receipt = _call_vote(vote_fn, req)
     except MessagePollVoteAndCloseError:
         raise
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise MessagePollVoteAndCloseError(
             "external_failure",
             "Poll vote failed",
@@ -274,7 +274,7 @@ def vote_and_close_poll(
         close_receipt = _call_close(close_fn, req)
     except MessagePollVoteAndCloseError:
         raise
-    except Exception as e:
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as e:
         raise MessagePollVoteAndCloseError(
             "external_failure",
             "Poll close failed",
@@ -292,9 +292,9 @@ def vote_and_close_poll(
 
 
 def run(
-    payload: Union[Mapping[str, Any], PollVoteAndCloseRequest],
+    payload: Mapping[str, Any] | PollVoteAndCloseRequest,
     *,
-    config: Optional[Mapping[str, Any]] = None,
+    config: Mapping[str, Any] | None = None,
     client: Any = None,
 ) -> Mapping[str, Any]:
     """Compatibility entrypoint returning a plain mapping."""
@@ -314,9 +314,9 @@ def run(
 
 
 def safe_run(
-    payload: Union[Mapping[str, Any], PollVoteAndCloseRequest],
+    payload: Mapping[str, Any] | PollVoteAndCloseRequest,
     *,
-    config: Optional[Mapping[str, Any]] = None,
+    config: Mapping[str, Any] | None = None,
     client: Any = None,
 ) -> Mapping[str, Any]:
     """Run but return a deterministic error payload instead of raising."""

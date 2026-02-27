@@ -6,16 +6,15 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
-
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 
-REQUIRED_CLAIM_FIELDS: Tuple[str, ...] = ("agent", "scope", "task")
-REQUIRED_CLAIM_FIELDS_WITH_IDENTITY: Tuple[str, ...] = (
+REQUIRED_CLAIM_FIELDS: tuple[str, ...] = ("agent", "scope", "task")
+REQUIRED_CLAIM_FIELDS_WITH_IDENTITY: tuple[str, ...] = (
     "agent",
     "name",
     "role",
@@ -23,9 +22,9 @@ REQUIRED_CLAIM_FIELDS_WITH_IDENTITY: Tuple[str, ...] = (
     "scope",
     "task",
 )
-REQUIRED_ACTIVE_TASK_FIELDS: Tuple[str, ...] = ("task_id", "agent", "scope", "summary", "status")
-REQUIRED_UP_FOR_GRABS_FIELDS: Tuple[str, ...] = ("task_id", "scope", "summary", "reported_by")
-REQUIRED_ISSUE_FIELDS: Tuple[str, ...] = (
+REQUIRED_ACTIVE_TASK_FIELDS: tuple[str, ...] = ("task_id", "agent", "scope", "summary", "status")
+REQUIRED_UP_FOR_GRABS_FIELDS: tuple[str, ...] = ("task_id", "scope", "summary", "reported_by")
+REQUIRED_ISSUE_FIELDS: tuple[str, ...] = (
     "issue_id",
     "task_id",
     "reporter",
@@ -34,8 +33,18 @@ REQUIRED_ISSUE_FIELDS: Tuple[str, ...] = (
     "summary",
 )
 
-ACTIVE_TASK_STATES: Tuple[str, ...] = ("active", "blocked")
-ISSUE_STATES: Tuple[str, ...] = ("open", "triaged", "resolved")
+ACTIVE_TASK_STATES: tuple[str, ...] = (
+    "queued",
+    "claimed",
+    "in_progress",
+    "blocked",
+    "review",
+    "done",
+)
+ACTIVE_TASK_STATE_ALIASES: dict[str, str] = {
+    "active": "in_progress",
+}
+ISSUE_STATES: tuple[str, ...] = ("open", "triaged", "resolved")
 
 NONE_TOKENS = {"none", "_none_", "`none`", "`_none_`"}
 PARENT_NONE_TOKENS = {
@@ -58,7 +67,7 @@ class Claim:
     name: str
     role: str
     parent: str
-    scopes: Tuple[str, ...]
+    scopes: tuple[str, ...]
     task: str
 
 
@@ -67,7 +76,7 @@ class ActiveTask:
     line_no: int
     task_id: str
     agent: str
-    scopes: Tuple[str, ...]
+    scopes: tuple[str, ...]
     summary: str
     status: str
 
@@ -76,10 +85,10 @@ class ActiveTask:
 class UpForGrabTask:
     line_no: int
     task_id: str
-    scopes: Tuple[str, ...]
+    scopes: tuple[str, ...]
     summary: str
     reported_by: str
-    depends_on: Tuple[str, ...]
+    depends_on: tuple[str, ...]
     has_explicit_depends_on: bool
 
 
@@ -107,12 +116,26 @@ def _normalize_agent(agent: str) -> str:
     return str(agent or "").strip().lower()
 
 
+def normalize_active_task_status(status: str) -> tuple[str | None, str | None]:
+    raw = str(status or "").strip().lower()
+    if not raw:
+        return None, "status is required"
+    normalized = ACTIVE_TASK_STATE_ALIASES.get(raw, raw)
+    if normalized not in ACTIVE_TASK_STATES:
+        allowed = ", ".join(ACTIVE_TASK_STATES)
+        legacy = ", ".join(f"{source}->{target}" for source, target in sorted(ACTIVE_TASK_STATE_ALIASES.items()))
+        if legacy:
+            return None, (f"invalid active task status `{status}` " f"(allowed: {allowed}; legacy aliases: {legacy})")
+        return None, f"invalid active task status `{status}` (allowed: {allowed})"
+    return normalized, None
+
+
 def _is_glob(scope: str) -> bool:
     return any(ch in scope for ch in "*?[")
 
 
 def _glob_prefix(pattern: str) -> str:
-    out: List[str] = []
+    out: list[str] = []
     for ch in pattern:
         if ch in "*?[":
             break
@@ -167,9 +190,9 @@ def _extract_section_entries(
     *,
     heading_prefix: str,
     heading_label: str,
-) -> Tuple[List[Tuple[int, str]], List[str]]:
-    entries: List[Tuple[int, str]] = []
-    errors: List[str] = []
+) -> tuple[list[tuple[int, str]], list[str]]:
+    entries: list[tuple[int, str]] = []
+    errors: list[str] = []
 
     in_section = False
     found_section = False
@@ -196,9 +219,7 @@ def _extract_section_entries(
     if not found_section:
         errors.append(f"missing `## {heading_label}` section in workboard")
     if found_section and not entries:
-        errors.append(
-            f"`## {heading_label}` must include `- none` or at least one structured entry"
-        )
+        errors.append(f"`## {heading_label}` must include `- none` or at least one structured entry")
     return entries, errors
 
 
@@ -207,7 +228,7 @@ def _parse_kv_fields(
     entry: str,
     *,
     required_fields: Sequence[str],
-) -> Tuple[Dict[str, str] | None, str | None]:
+) -> tuple[dict[str, str] | None, str | None]:
     token = str(entry or "").strip()
     if not token:
         return None, f"line {line_no}: empty entry"
@@ -216,7 +237,7 @@ def _parse_kv_fields(
     if token.startswith("`") and token.endswith("`") and len(token) >= 2:
         token = token[1:-1].strip()
 
-    fields: Dict[str, str] = {}
+    fields: dict[str, str] = {}
     for part in [p.strip() for p in token.split(";") if p.strip()]:
         if "=" not in part:
             return None, f"line {line_no}: invalid field format `{part}` (expected key=value)"
@@ -233,14 +254,14 @@ def _parse_kv_fields(
     return fields, None
 
 
-def _parse_scope_field(line_no: int, scope: str) -> Tuple[Tuple[str, ...] | None, str | None]:
+def _parse_scope_field(line_no: int, scope: str) -> tuple[tuple[str, ...] | None, str | None]:
     scopes = tuple(_normalize_scope(item) for item in str(scope or "").split(",") if _normalize_scope(item))
     if not scopes:
         return None, f"line {line_no}: scope must include at least one non-empty path token"
     return scopes, None
 
 
-def _parse_dependency_field(line_no: int, raw: str) -> Tuple[Tuple[str, ...] | None, str | None]:
+def _parse_dependency_field(line_no: int, raw: str) -> tuple[tuple[str, ...] | None, str | None]:
     tokens = [str(item or "").strip() for item in str(raw or "").split(",") if str(item or "").strip()]
     if not tokens:
         return None, f"line {line_no}: depends_on must include at least one task id or `none`"
@@ -248,7 +269,7 @@ def _parse_dependency_field(line_no: int, raw: str) -> Tuple[Tuple[str, ...] | N
     if len(tokens) == 1 and tokens[0].lower() in NONE_TOKENS:
         return tuple(), None
 
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for token in tokens:
         if token.lower() in NONE_TOKENS:
@@ -266,12 +287,8 @@ def _parse_claim_entry(
     entry: str,
     *,
     require_identity_metadata: bool = False,
-) -> Tuple[Claim | None, str | None]:
-    required_fields = (
-        REQUIRED_CLAIM_FIELDS_WITH_IDENTITY
-        if require_identity_metadata
-        else REQUIRED_CLAIM_FIELDS
-    )
+) -> tuple[Claim | None, str | None]:
+    required_fields = REQUIRED_CLAIM_FIELDS_WITH_IDENTITY if require_identity_metadata else REQUIRED_CLAIM_FIELDS
     fields, err = _parse_kv_fields(line_no, entry, required_fields=required_fields)
     if err:
         return None, err
@@ -300,7 +317,7 @@ def _parse_claim_entry(
     return claim, None
 
 
-def _parse_active_task_entry(line_no: int, entry: str) -> Tuple[ActiveTask | None, str | None]:
+def _parse_active_task_entry(line_no: int, entry: str) -> tuple[ActiveTask | None, str | None]:
     fields, err = _parse_kv_fields(line_no, entry, required_fields=REQUIRED_ACTIVE_TASK_FIELDS)
     if err:
         return None, err
@@ -309,10 +326,11 @@ def _parse_active_task_entry(line_no: int, entry: str) -> Tuple[ActiveTask | Non
     scopes, scope_err = _parse_scope_field(line_no, fields["scope"])
     if scope_err:
         return None, scope_err
-    status = str(fields["status"]).strip().lower()
-    if status not in ACTIVE_TASK_STATES:
-        allowed = ", ".join(ACTIVE_TASK_STATES)
-        return None, f"line {line_no}: invalid active task status `{fields['status']}` (allowed: {allowed})"
+    status, status_err = normalize_active_task_status(fields["status"])
+    if status_err:
+        return None, f"line {line_no}: {status_err}"
+    if status is None:
+        return None, f"line {line_no}: invalid active task status `{fields['status']}`"
 
     item = ActiveTask(
         line_no=line_no,
@@ -325,7 +343,7 @@ def _parse_active_task_entry(line_no: int, entry: str) -> Tuple[ActiveTask | Non
     return item, None
 
 
-def _parse_up_for_grabs_entry(line_no: int, entry: str) -> Tuple[UpForGrabTask | None, str | None]:
+def _parse_up_for_grabs_entry(line_no: int, entry: str) -> tuple[UpForGrabTask | None, str | None]:
     fields, err = _parse_kv_fields(line_no, entry, required_fields=REQUIRED_UP_FOR_GRABS_FIELDS)
     if err:
         return None, err
@@ -353,7 +371,7 @@ def _parse_up_for_grabs_entry(line_no: int, entry: str) -> Tuple[UpForGrabTask |
     return item, None
 
 
-def _parse_issue_entry(line_no: int, entry: str) -> Tuple[WorkboardIssue | None, str | None]:
+def _parse_issue_entry(line_no: int, entry: str) -> tuple[WorkboardIssue | None, str | None]:
     fields, err = _parse_kv_fields(line_no, entry, required_fields=REQUIRED_ISSUE_FIELDS)
     if err:
         return None, err
@@ -381,12 +399,12 @@ def _evaluate_board(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
-) -> Tuple[List[str], List[Claim], List[ActiveTask], List[UpForGrabTask], List[WorkboardIssue]]:
-    violations: List[str] = []
-    claims: List[Claim] = []
-    active_tasks: List[ActiveTask] = []
-    up_for_grabs: List[UpForGrabTask] = []
-    issues: List[WorkboardIssue] = []
+) -> tuple[list[str], list[Claim], list[ActiveTask], list[UpForGrabTask], list[WorkboardIssue]]:
+    violations: list[str] = []
+    claims: list[Claim] = []
+    active_tasks: list[ActiveTask] = []
+    up_for_grabs: list[UpForGrabTask] = []
+    issues: list[WorkboardIssue] = []
 
     if not workboard_path.exists():
         return [f"missing workboard file: {workboard_path}"], claims, active_tasks, up_for_grabs, issues
@@ -453,15 +471,14 @@ def _evaluate_board(
         if item is not None:
             issues.append(item)
 
-    claims_by_agent: Dict[str, List[Claim]] = {}
-    claims_by_name: Dict[str, Claim] = {}
+    claims_by_agent: dict[str, list[Claim]] = {}
+    claims_by_name: dict[str, Claim] = {}
     for claim in claims:
         key = _normalize_agent(claim.agent)
         prior = claims_by_agent.get(key)
         if prior:
             violations.append(
-                "duplicate active claim for agent "
-                f"`{claim.agent}` (lines {prior[0].line_no} and {claim.line_no})"
+                "duplicate active claim for agent " f"`{claim.agent}` (lines {prior[0].line_no} and {claim.line_no})"
             )
         claims_by_agent.setdefault(key, []).append(claim)
 
@@ -470,8 +487,7 @@ def _evaluate_board(
             prior_name = claims_by_name.get(name_key)
             if prior_name is not None and _normalize_agent(prior_name.agent) != key:
                 violations.append(
-                    "duplicate active claim name "
-                    f"`{claim.name}` (lines {prior_name.line_no} and {claim.line_no})"
+                    "duplicate active claim name " f"`{claim.name}` (lines {prior_name.line_no} and {claim.line_no})"
                 )
             else:
                 claims_by_name[name_key] = claim
@@ -483,9 +499,7 @@ def _evaluate_board(
                 f"line {claim.line_no}: invalid role `{claim.role}` for `{claim.agent}` (allowed: {allowed})"
             )
         if role == "worker" and not claim.parent:
-            violations.append(
-                f"line {claim.line_no}: worker claim `{claim.agent}` must include a non-empty parent"
-            )
+            violations.append(f"line {claim.line_no}: worker claim `{claim.agent}` must include a non-empty parent")
         if role in {"solo", "parent"} and claim.parent:
             violations.append(
                 f"line {claim.line_no}: role `{role}` for `{claim.agent}` cannot include parent `{claim.parent}`"
@@ -495,49 +509,43 @@ def _evaluate_board(
 
     for claim in claims:
         if claim.parent and _normalize_agent(claim.parent) not in claims_by_agent:
-            violations.append(
-                f"line {claim.line_no}: claim `{claim.agent}` references unknown parent `{claim.parent}`"
-            )
+            violations.append(f"line {claim.line_no}: claim `{claim.agent}` references unknown parent `{claim.parent}`")
 
     for idx in range(len(claims)):
         left = claims[idx]
         for jdx in range(idx + 1, len(claims)):
             right = claims[jdx]
-            overlaps: List[Tuple[str, str]] = []
+            overlaps: list[tuple[str, str]] = []
             for left_scope in left.scopes:
                 for right_scope in right.scopes:
                     if _scope_overlaps(left_scope, right_scope):
                         overlaps.append((left_scope, right_scope))
             if overlaps:
-                examples = ", ".join(
-                    f"`{left_scope}` vs `{right_scope}`" for left_scope, right_scope in overlaps[:2]
-                )
+                examples = ", ".join(f"`{left_scope}` vs `{right_scope}`" for left_scope, right_scope in overlaps[:2])
                 violations.append(
                     "scope overlap between "
                     f"`{left.agent}` (line {left.line_no}) and "
                     f"`{right.agent}` (line {right.line_no}): {examples}"
                 )
 
-    active_task_ids: Dict[str, ActiveTask] = {}
+    active_task_ids: dict[str, ActiveTask] = {}
     for task in active_tasks:
         key = str(task.task_id).strip().lower()
         prior = active_task_ids.get(key)
         if prior is not None:
             violations.append(
-                "duplicate active task_id "
-                f"`{task.task_id}` (lines {prior.line_no} and {task.line_no})"
+                "duplicate active task_id " f"`{task.task_id}` (lines {prior.line_no} and {task.line_no})"
             )
         else:
             active_task_ids[key] = task
 
-    up_for_grabs_ids: Dict[str, UpForGrabTask] = {}
+    up_for_grabs_ids: dict[str, UpForGrabTask] = {}
     for item in up_for_grabs:
         key = str(item.task_id).strip().lower()
         prior = up_for_grabs_ids.get(key)
         if prior is not None:
             violations.append(
-                "duplicate up-for-grabs task_id "
-                f"`{item.task_id}` (lines {prior.line_no} and {item.line_no})"
+                "duplicate up-for-grabs task_id " f"`{item.task_id}` (lines {prior.line_no} and {item.line_no})"
             )
         else:
             up_for_grabs_ids[key] = item
@@ -562,36 +570,28 @@ def _evaluate_board(
             dep_key = str(dep or "").strip().lower()
             task_key = str(item.task_id or "").strip().lower()
             if dep_key == task_key:
-                violations.append(
-                    f"line {item.line_no}: task `{item.task_id}` cannot depend on itself"
-                )
+                violations.append(f"line {item.line_no}: task `{item.task_id}` cannot depend on itself")
                 continue
             if dep_key not in all_known_task_ids:
-                violations.append(
-                    f"line {item.line_no}: task `{item.task_id}` depends_on unknown task_id `{dep}`"
-                )
+                violations.append(f"line {item.line_no}: task `{item.task_id}` depends_on unknown task_id `{dep}`")
 
-    issue_ids: Dict[str, WorkboardIssue] = {}
+    issue_ids: dict[str, WorkboardIssue] = {}
     for item in issues:
         key = str(item.issue_id).strip().lower()
         prior = issue_ids.get(key)
         if prior is not None:
-            violations.append(
-                f"duplicate issue_id `{item.issue_id}` (lines {prior.line_no} and {item.line_no})"
-            )
+            violations.append(f"duplicate issue_id `{item.issue_id}` (lines {prior.line_no} and {item.line_no})")
         else:
             issue_ids[key] = item
 
-    active_tasks_by_agent: Dict[str, List[ActiveTask]] = {}
+    active_tasks_by_agent: dict[str, list[ActiveTask]] = {}
     for task in active_tasks:
         active_tasks_by_agent.setdefault(_normalize_agent(task.agent), []).append(task)
 
     for agent_key, claim_rows in claims_by_agent.items():
         if not active_tasks_by_agent.get(agent_key):
             agent_label = claim_rows[0].agent
-            violations.append(
-                f"agent `{agent_label}` has active claim but no matching entry in `## Active Tasks`"
-            )
+            violations.append(f"agent `{agent_label}` has active claim but no matching entry in `## Active Tasks`")
 
     for task in active_tasks:
         agent_key = _normalize_agent(task.agent)
@@ -614,29 +614,31 @@ def _evaluate_board(
             if overlap:
                 break
         if not overlap:
-            violations.append(
-                f"active task `{task.task_id}` scopes do not overlap claim scopes for `{task.agent}`"
-            )
+            violations.append(f"active task `{task.task_id}` scopes do not overlap claim scopes for `{task.agent}`")
 
     valid_task_ids = set(active_task_ids).union(up_for_grabs_ids)
     for issue in issues:
         if str(issue.task_id).strip().lower() not in valid_task_ids:
-            violations.append(
-                f"issue `{issue.issue_id}` references unknown task_id `{issue.task_id}`"
-            )
+            violations.append(f"issue `{issue.issue_id}` references unknown task_id `{issue.task_id}`")
 
-    blocked_task_ids = {
-        str(task.task_id).strip().lower() for task in active_tasks if task.status == "blocked"
-    }
-    open_issue_task_ids = {
-        str(item.task_id).strip().lower() for item in issues if item.state in {"open", "triaged"}
-    }
+    blocked_task_ids = {str(task.task_id).strip().lower() for task in active_tasks if task.status == "blocked"}
+    review_task_ids = {str(task.task_id).strip().lower() for task in active_tasks if task.status == "review"}
+    done_task_ids = {str(task.task_id).strip().lower() for task in active_tasks if task.status == "done"}
+    open_issue_task_ids = {str(item.task_id).strip().lower() for item in issues if item.state in {"open", "triaged"}}
     for task_id in sorted(blocked_task_ids):
         if task_id not in open_issue_task_ids:
             label = active_task_ids[task_id].task_id if task_id in active_task_ids else task_id
+            violations.append(f"blocked task `{label}` must have an open/triaged entry in `## Issues / Blockers`")
+    for task_id in sorted(review_task_ids):
+        if task_id in open_issue_task_ids:
+            label = active_task_ids[task_id].task_id if task_id in active_task_ids else task_id
             violations.append(
-                f"blocked task `{label}` must have an open/triaged entry in `## Issues / Blockers`"
+                f"review task `{label}` cannot have open/triaged blockers; resolve blockers or mark task blocked"
             )
+    for task_id in sorted(done_task_ids):
+        if task_id in open_issue_task_ids:
+            label = active_task_ids[task_id].task_id if task_id in active_task_ids else task_id
+            violations.append(f"done task `{label}` cannot have open/triaged blockers")
 
     return violations, claims, active_tasks, up_for_grabs, issues
 
@@ -645,7 +647,7 @@ def _evaluate_claims(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
-) -> Tuple[List[str], List[Claim]]:
+) -> tuple[list[str], list[Claim]]:
     violations, claims, _tasks, _grab, _issues = _evaluate_board(
         workboard_path,
         require_identity_metadata=require_identity_metadata,
@@ -657,7 +659,7 @@ def evaluate_claims(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
-) -> Tuple[List[str], List[Claim]]:
+) -> tuple[list[str], list[Claim]]:
     """Public claims-only evaluation helper for other coordination scripts."""
     return _evaluate_claims(
         workboard_path,
@@ -669,7 +671,7 @@ def evaluate_board(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
-) -> Tuple[List[str], List[Claim], List[ActiveTask], List[UpForGrabTask], List[WorkboardIssue]]:
+) -> tuple[list[str], list[Claim], list[ActiveTask], list[UpForGrabTask], list[WorkboardIssue]]:
     """Public full-board evaluation helper for coordination gates."""
     return _evaluate_board(
         workboard_path,
@@ -681,7 +683,7 @@ def evaluate(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
-) -> List[str]:
+) -> list[str]:
     violations, _claims = evaluate_claims(
         workboard_path,
         require_identity_metadata=require_identity_metadata,
@@ -701,10 +703,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--require-identity-metadata",
         action="store_true",
-        help=(
-            "Require claim identity metadata fields: "
-            "name, role, and parent."
-        ),
+        help=("Require claim identity metadata fields: " "name, role, and parent."),
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)

@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -30,7 +31,7 @@ try:
         BrowserRegistryError,
         build_browser_command_registry_scaffold,
     )
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     _core_path = Path(__file__).resolve().parents[3] / "browser" / "p001_browser_command_registry_scaffold.py"
     _spec = importlib.util.spec_from_file_location("thomas_browser_registry_scaffold_fallback", _core_path)
     if _spec is None or _spec.loader is None:
@@ -167,3 +168,18 @@ def register_browser_subcommand(browser_subparsers: Any) -> argparse.ArgumentPar
 # Compatibility aliases: different parts of the CLI may look for different hooks.
 register = register_browser_subcommand
 add_parser = register_browser_subcommand
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser command-registry-scaffold",
+        description="Print browser command registry metadata.",
+    )
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output")
+    parser.add_argument("--schema", action="store_true", help="Emit output JSON schema")
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+    return int(run_browser_registry_command(args))

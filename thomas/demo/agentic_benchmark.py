@@ -2,21 +2,42 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import inspect
 import json
+import os
 import re
-import subprocess
 import sys
 import time
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
 from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig, load_config
 from thomas.core.llm import LLMClient
+from thomas.demo.agentic_benchmark_core import (
+    _ensure_usage_telemetry,
+    _estimate_text_tokens,
+    _extract_reported_first_token_ms,
+    _extract_usage_from_token_report,
+    _harness_pack,
+    _normalize_usage,
+    _safe_float,
+    _select_elapsed_seconds,
+    _select_optional_elapsed_seconds,
+    apply_template_context,
+    compute_before_after_delta,
+    evaluate_task_success,
+    load_agentic_task_pack,
+    render_task,
+)
 from thomas.demo.harness import (
     build_execution_plan,
     compute_summary,
@@ -28,6 +49,7 @@ from thomas.tools.filesystem import register_filesystem_tools
 from thomas.tools.git import register_git_tools
 from thomas.tools.registry import ToolRegistry
 from thomas.tools.shell import register_shell_tools
+from thomas.tools.ssh import register_ssh_tools
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_TASK_PACK = ROOT / "demo" / "task_pack.agentic.local.json"
@@ -36,15 +58,25 @@ DEFAULT_SYSTEM_PROMPT = (
     "You are a baseline assistant. Do not claim to have executed tools unless you actually can. "
     "Respond concisely and truthfully."
 )
-ALLOWED_SUCCESS_KEYS = {
-    "response_contains",
-    "response_regex",
-    "required_files",
-    "required_file_contains",
-    "required_file_regex",
-    "check_command",
-    "check_timeout_seconds",
-}
+__all__ = [
+    "apply_template_context",
+    "compute_before_after_delta",
+    "evaluate_task_success",
+    "load_agentic_task_pack",
+    "main",
+    "parse_args",
+    "render_task",
+    "run_agentic_benchmark",
+    "_ensure_usage_telemetry",
+    "_estimate_text_tokens",
+    "_extract_reported_first_token_ms",
+    "_extract_usage_from_token_report",
+    "_resolve_config_path",
+    "_run_thomas_api_task",
+    "_safe_float",
+    "_select_elapsed_seconds",
+    "_select_optional_elapsed_seconds",
+]
 
 
 def _watch_line(enabled: bool, message: str) -> None:
@@ -58,11 +90,6 @@ def _watch_text(enabled: bool, text: str) -> None:
         sys.stdout.flush()
 
 
-def _read_json(path: Path) -> Any:
-    raw = path.read_text(encoding="utf-8-sig")
-    return json.loads(raw)
-
-
 def _write_json(path: Path, payload: Any) -> None:
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
@@ -71,280 +98,17 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
-def _coerce_str_list(value: Any, *, field: str) -> List[str]:
-    if value is None:
-        return []
-    if not isinstance(value, list):
-        raise ValueError(f"{field} must be a list of strings.")
-    out: List[str] = []
-    for idx, item in enumerate(value, start=1):
-        text = str(item or "").strip()
-        if not text:
-            raise ValueError(f"{field}[{idx}] cannot be empty.")
-        out.append(text)
-    return out
-
-
-def _coerce_str_map(value: Any, *, field: str) -> Dict[str, str]:
-    if value is None:
-        return {}
-    if not isinstance(value, dict):
-        raise ValueError(f"{field} must be an object of string keys/values.")
-    out: Dict[str, str] = {}
-    for k, v in value.items():
-        kk = str(k or "").strip()
-        vv = str(v or "").strip()
-        if not kk:
-            raise ValueError(f"{field} has an empty key.")
-        if not vv:
-            raise ValueError(f"{field}['{kk}'] cannot be empty.")
-        out[kk] = vv
-    return out
-
-
-def load_agentic_task_pack(path: Path) -> Dict[str, Any]:
-    data = _read_json(path)
-    if not isinstance(data, dict):
-        raise ValueError("Task pack must be a JSON object.")
-
-    tasks = data.get("tasks")
-    if not isinstance(tasks, list) or not tasks:
-        raise ValueError("Task pack must include a non-empty 'tasks' list.")
-
-    seen_ids: set[str] = set()
-    norm_tasks: List[Dict[str, Any]] = []
-    for idx, raw_task in enumerate(tasks, start=1):
-        if not isinstance(raw_task, dict):
-            raise ValueError(f"tasks[{idx}] must be an object.")
-        task_id = str(raw_task.get("id") or "").strip()
-        title = str(raw_task.get("title") or "").strip()
-        prompt = str(raw_task.get("prompt") or "").strip()
-        if not task_id:
-            raise ValueError(f"tasks[{idx}] is missing id.")
-        if task_id in seen_ids:
-            raise ValueError(f"Duplicate task id: {task_id}")
-        seen_ids.add(task_id)
-        if not title:
-            raise ValueError(f"Task '{task_id}' is missing title.")
-        if not prompt:
-            raise ValueError(f"Task '{task_id}' is missing prompt.")
-
-        budget_raw = raw_task.get("time_budget_seconds")
-        budget: Optional[int] = None
-        if budget_raw is not None:
-            try:
-                budget = int(budget_raw)
-            except Exception as exc:
-                raise ValueError(f"Task '{task_id}' has invalid time_budget_seconds.") from exc
-            if budget <= 0:
-                raise ValueError(f"Task '{task_id}' has non-positive time_budget_seconds.")
-
-        success = raw_task.get("success") or {}
-        if not isinstance(success, dict):
-            raise ValueError(f"Task '{task_id}' success config must be an object.")
-        unknown = sorted(set(success.keys()) - ALLOWED_SUCCESS_KEYS)
-        if unknown:
-            raise ValueError(
-                f"Task '{task_id}' has unknown success keys: {', '.join(unknown)}"
-            )
-
-        norm_tasks.append(
-            {
-                "id": task_id,
-                "title": title,
-                "prompt": prompt,
-                "success_criteria": str(raw_task.get("success_criteria") or "").strip(),
-                "time_budget_seconds": budget,
-                "success": {
-                    "response_contains": _coerce_str_list(
-                        success.get("response_contains"), field=f"tasks[{task_id}].success.response_contains"
-                    ),
-                    "response_regex": _coerce_str_list(
-                        success.get("response_regex"), field=f"tasks[{task_id}].success.response_regex"
-                    ),
-                    "required_files": _coerce_str_list(
-                        success.get("required_files"), field=f"tasks[{task_id}].success.required_files"
-                    ),
-                    "required_file_contains": _coerce_str_map(
-                        success.get("required_file_contains"),
-                        field=f"tasks[{task_id}].success.required_file_contains",
-                    ),
-                    "required_file_regex": _coerce_str_map(
-                        success.get("required_file_regex"),
-                        field=f"tasks[{task_id}].success.required_file_regex",
-                    ),
-                    "check_command": str(success.get("check_command") or "").strip(),
-                    "check_timeout_seconds": float(success.get("check_timeout_seconds") or 20.0),
-                },
-            }
-        )
-
-    weights_raw = data.get("weights") or {}
-    if not isinstance(weights_raw, dict):
-        raise ValueError("weights must be an object.")
-    weights = {
-        "success_rate": float(weights_raw.get("success_rate", 0.5)),
-        "speed": float(weights_raw.get("speed", 0.2)),
-        "follow_up": float(weights_raw.get("follow_up", 0.1)),
-        "quality": float(weights_raw.get("quality", 0.2)),
-    }
-    if sum(weights.values()) <= 0:
-        raise ValueError("weights must sum to a positive value.")
-
-    scale_raw = data.get("quality_scale") or {}
-    if not isinstance(scale_raw, dict):
-        raise ValueError("quality_scale must be an object.")
-    quality_scale = {
-        "min": int(scale_raw.get("min", 1)),
-        "max": int(scale_raw.get("max", 5)),
-    }
-    if quality_scale["min"] >= quality_scale["max"]:
-        raise ValueError("quality_scale requires min < max.")
-
-    return {
-        "id": str(data.get("id") or path.stem),
-        "name": str(data.get("name") or "Agentic Benchmark Pack"),
-        "version": int(data.get("version") or 1),
-        "description": str(data.get("description") or "").strip(),
-        "protocol": list(data.get("protocol") or []),
-        "weights": weights,
-        "quality_scale": quality_scale,
-        "tasks": norm_tasks,
-    }
-
-
-def apply_template_context(value: Any, context: Mapping[str, str]) -> Any:
-    if isinstance(value, str):
-        out = value
-        for key, replacement in context.items():
-            out = out.replace("{{" + str(key) + "}}", str(replacement))
-        return out
-    if isinstance(value, list):
-        return [apply_template_context(item, context) for item in value]
-    if isinstance(value, dict):
-        out: Dict[str, Any] = {}
-        for k, v in value.items():
-            key_text = apply_template_context(str(k), context)
-            out[str(key_text)] = apply_template_context(v, context)
-        return out
-    return value
-
-
-def render_task(task: Mapping[str, Any], context: Mapping[str, str]) -> Dict[str, Any]:
-    return apply_template_context(dict(task), context)
-
-
-def _resolve_path(path_text: str, workspace_root: Path) -> Path:
-    path = Path(path_text)
-    if path.is_absolute():
-        return path
-    return workspace_root / path
-
-
-def _normalize_usage(payload: Any) -> Dict[str, int]:
-    if not isinstance(payload, dict):
-        return {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
-    try:
-        p = max(0, int(payload.get("prompt_tokens", 0) or 0))
-    except Exception:
-        p = 0
-    try:
-        c = max(0, int(payload.get("completion_tokens", 0) or 0))
-    except Exception:
-        c = 0
-    try:
-        t = max(0, int(payload.get("total_tokens", 0) or 0))
-    except Exception:
-        t = p + c
-    t = max(t, p + c)
-    return {"prompt_tokens": p, "completion_tokens": c, "total_tokens": t}
-
-
-def evaluate_task_success(
-    task: Mapping[str, Any],
-    *,
-    response_text: str,
-    workspace_root: Path,
-) -> Dict[str, Any]:
-    success_cfg = dict(task.get("success") or {})
-    reasons: List[str] = []
-    checks: Dict[str, Any] = {}
-    response = str(response_text or "")
-    response_l = response.lower()
-
-    for needle in success_cfg.get("response_contains", []) or []:
-        ok = str(needle).lower() in response_l
-        checks[f"response_contains:{needle}"] = bool(ok)
-        if not ok:
-            reasons.append(f"response missing expected text: {needle}")
-
-    for pattern in success_cfg.get("response_regex", []) or []:
-        ok = bool(re.search(str(pattern), response, re.IGNORECASE | re.MULTILINE))
-        checks[f"response_regex:{pattern}"] = bool(ok)
-        if not ok:
-            reasons.append(f"response regex not matched: {pattern}")
-
-    for rel in success_cfg.get("required_files", []) or []:
-        target = _resolve_path(str(rel), workspace_root)
-        ok = target.exists()
-        checks[f"required_file:{rel}"] = bool(ok)
-        if not ok:
-            reasons.append(f"required file not found: {rel}")
-
-    for rel, needle in (success_cfg.get("required_file_contains", {}) or {}).items():
-        target = _resolve_path(str(rel), workspace_root)
-        ok = False
-        if target.exists():
-            try:
-                body = target.read_text(encoding="utf-8", errors="ignore")
-                ok = str(needle) in body
-            except Exception:
-                ok = False
-        checks[f"required_file_contains:{rel}"] = bool(ok)
-        if not ok:
-            reasons.append(f"required file missing expected text: {rel}")
-
-    for rel, pattern in (success_cfg.get("required_file_regex", {}) or {}).items():
-        target = _resolve_path(str(rel), workspace_root)
-        ok = False
-        if target.exists():
-            try:
-                body = target.read_text(encoding="utf-8", errors="ignore")
-                ok = bool(re.search(str(pattern), body, re.IGNORECASE | re.MULTILINE))
-            except Exception:
-                ok = False
-        checks[f"required_file_regex:{rel}"] = bool(ok)
-        if not ok:
-            reasons.append(f"required file regex not matched: {rel}")
-
-    check_command = str(success_cfg.get("check_command") or "").strip()
-    if check_command:
-        timeout_s = float(success_cfg.get("check_timeout_seconds") or 20.0)
-        try:
-            proc = subprocess.run(
-                check_command,
-                shell=True,
-                cwd=str(workspace_root),
-                capture_output=True,
-                text=True,
-                timeout=max(1.0, timeout_s),
-            )
-            ok = int(proc.returncode) == 0
-            checks["check_command"] = bool(ok)
-            checks["check_command_stdout"] = str(proc.stdout or "")[:1200]
-            checks["check_command_stderr"] = str(proc.stderr or "")[:1200]
-            if not ok:
-                reasons.append(f"check command failed: {check_command}")
-        except Exception as exc:
-            checks["check_command"] = False
-            checks["check_command_error"] = f"{type(exc).__name__}: {exc}"
-            reasons.append(f"check command error: {type(exc).__name__}")
-
-    return {
-        "success": len(reasons) == 0,
-        "reasons": reasons,
-        "checks": checks,
-    }
+def _resolve_config_path(config_arg: str) -> Path | None:
+    text = str(config_arg or "").strip()
+    if text:
+        return Path(text).resolve()
+    env_path = str(os.environ.get("THOMAS_CONFIG", "")).strip()
+    if env_path:
+        return None
+    repo_default = ROOT / "thomas.toml"
+    if repo_default.exists():
+        return repo_default.resolve()
+    return None
 
 
 def _build_tools(config: AppConfig) -> ToolRegistry:
@@ -361,6 +125,7 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
     register_git_tools(registry, sandbox)
     register_code_search_tools(registry, sandbox)
     register_diff_tools(registry, sandbox)
+    register_ssh_tools(registry)
     return registry
 
 
@@ -371,7 +136,7 @@ class TrackSpec:
     profile: str
     mode: str = "auto"
     token_economy: str = "optimal"
-    max_iterations: Optional[int] = None
+    max_iterations: int | None = None
 
 
 async def _run_raw_task(
@@ -381,12 +146,12 @@ async def _run_raw_task(
     prompt: str,
     watch: bool = False,
     watch_prefix: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     model_cfg = config.get_model(profile)
     llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
     started = time.monotonic()
     text = ""
-    usage: Dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    usage: dict[str, int] = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     error = ""
     try:
         _watch_line(watch, f"{watch_prefix} raw model request started")
@@ -398,7 +163,11 @@ async def _run_raw_task(
             tools=None,
         )
         text = str(response.get("text") or "")
-        usage = _normalize_usage(response.get("usage"))
+        usage = _ensure_usage_telemetry(
+            response.get("usage"),
+            prompt_text=str(prompt or ""),
+            response_text=text,
+        )
         _watch_line(watch, f"{watch_prefix} raw model request completed")
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
@@ -416,19 +185,304 @@ async def _run_raw_task(
     }
 
 
-async def _run_thomas_embedded_task(
+_CODING_HINT_RE = re.compile(
+    r"\b(code|coding|bug|fix|refactor|function|class|module|repo|commit|"
+    r"tests?|api|endpoint|traceback|stack trace|python|javascript|typescript)\b",
+    re.I,
+)
+_CODE_SHAPE_RE = re.compile(
+    r"(^|\n)\s*(def\s+\w+\s*\(|class\s+\w+\s*[\(:]|import\s+\w+|from\s+\w+\s+import\s+|"
+    r"function\s+\w+\s*\(|const\s+\w+\s*=|let\s+\w+\s*=|var\s+\w+\s*=|#include\s+<)",
+    re.I,
+)
+_LOW_CONFIDENCE_RE = re.compile(
+    r"\b("
+    r"not sure|unsure|uncertain|might be wrong|could be wrong|probably wrong|"
+    r"i think|maybe|guess|not confident|can't guarantee|cannot guarantee|"
+    r"as an ai|might fail|might not work"
+    r")\b",
+    re.I,
+)
+_ERROR_SIGNAL_RE = re.compile(
+    r"\b(traceback|exception|error:|failed|failure|cannot|can't)\b",
+    re.I,
+)
+
+
+def _pass_budget_for_mode(mode: str) -> int:
+    run_mode = str(mode or "").strip().lower()
+    if run_mode == "fast":
+        return 1
+    if run_mode == "thinking":
+        return 3
+    return 2
+
+
+def _should_use_coding_pipeline(*, job_type: str, prompt: str) -> bool:
+    kind = str(job_type or "").strip().lower()
+    if kind in {"coding", "benchmark", "code", "debug", "debug_audit"}:
+        return True
+    return bool(_CODING_HINT_RE.search(str(prompt or "")))
+
+
+def _pipeline_topology(token_economy: str) -> str:
+    economy = str(token_economy or "").strip().lower()
+    if economy == "cheap":
+        return "coder_only"
+    if economy == "max":
+        return "coder_reviewer_parallel_conditional_fixer"
+    return "coder_reviewer_conditional_fixer"
+
+
+def _extract_primary_code_text(text: str) -> str:
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    fence_match = re.search(r"```(?:[a-zA-Z0-9_+-]+)?\s*\n(?P<body>[\s\S]*?)```", raw)
+    if fence_match:
+        body = str(fence_match.group("body") or "").strip()
+        if body:
+            return body
+    return raw
+
+
+def _looks_like_code(text: str) -> bool:
+    candidate = _extract_primary_code_text(text)
+    if not candidate:
+        return False
+    if bool(_CODE_SHAPE_RE.search(candidate)):
+        return True
+    lines = [str(line).strip() for line in candidate.splitlines() if str(line).strip()]
+    if not lines:
+        return False
+    starts = (
+        "def ",
+        "class ",
+        "import ",
+        "from ",
+        "return ",
+        "for ",
+        "while ",
+        "if ",
+        "elif ",
+        "else:",
+        "try:",
+        "except ",
+        "with ",
+        "const ",
+        "let ",
+        "var ",
+        "function ",
+        "public ",
+        "private ",
+        "protected ",
+        "#include ",
+    )
+    if any(line.startswith(starts) for line in lines[:20]):
+        return True
+    punctuation = sum(candidate.count(ch) for ch in "{}();[]=<>:")
+    if punctuation >= 6 and len(lines) >= 2:
+        return True
+    return False
+
+
+def _review_decision_for_candidate(
+    *,
+    candidate_text: str,
+    prompt: str,
+    mode: str,
+    token_economy: str,
+) -> dict[str, Any]:
+    economy = str(token_economy or "").strip().lower()
+    run_mode = str(mode or "").strip().lower()
+    raw = str(candidate_text or "")
+    normalized = raw.strip()
+    if economy == "cheap":
+        return {"required": False, "reason": "cheap_topology"}
+    if run_mode == "fast":
+        return {"required": False, "reason": "fast_mode"}
+    if not normalized:
+        return {"required": True, "reason": "empty_candidate"}
+    if raw.count("```") % 2 == 1:
+        return {"required": True, "reason": "unbalanced_code_fence"}
+    if bool(_LOW_CONFIDENCE_RE.search(normalized)):
+        return {"required": True, "reason": "low_confidence_language"}
+    if bool(_ERROR_SIGNAL_RE.search(normalized)):
+        return {"required": True, "reason": "error_signal_in_candidate"}
+    if not _looks_like_code(normalized) and bool(_CODING_HINT_RE.search(str(prompt or ""))):
+        return {"required": True, "reason": "candidate_not_code_like"}
+    return {"required": False, "reason": "coder_output_looks_healthy"}
+
+
+def _merge_usage_rows(rows: list[dict[str, int]]) -> dict[str, int]:
+    prompt_tokens = 0
+    completion_tokens = 0
+    total_tokens = 0
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        try:
+            prompt_tokens += max(0, int(row.get("prompt_tokens", 0) or 0))
+        except (ValueError, TypeError):
+            pass
+        try:
+            completion_tokens += max(0, int(row.get("completion_tokens", 0) or 0))
+        except (ValueError, TypeError):
+            pass
+        try:
+            total_tokens += max(0, int(row.get("total_tokens", 0) or 0))
+        except (ValueError, TypeError):
+            pass
+    if total_tokens <= 0:
+        total_tokens = max(0, int(prompt_tokens + completion_tokens))
+    return {
+        "prompt_tokens": int(prompt_tokens),
+        "completion_tokens": int(completion_tokens),
+        "total_tokens": int(total_tokens),
+    }
+
+
+def _extract_json_object(text: str) -> dict[str, Any] | None:
+    raw = str(text or "").strip()
+    if not raw:
+        return None
+    try:
+        parsed = json.loads(raw)
+        if isinstance(parsed, dict):
+            return parsed
+    except json.JSONDecodeError:
+        pass
+    start = raw.find("{")
+    end = raw.rfind("}")
+    if start < 0 or end <= start:
+        return None
+    snippet = raw[start : end + 1]
+    try:
+        parsed = json.loads(snippet)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
+def _parse_reviewer_verdict(text: str) -> dict[str, Any]:
+    obj = _extract_json_object(text)
+    issues: list[str] = []
+    summary = ""
+    passed = True
+    if isinstance(obj, dict):
+        summary = str(obj.get("summary") or obj.get("rationale") or "").strip()
+        raw_issues = obj.get("issues")
+        if isinstance(raw_issues, list):
+            issues = [str(x).strip() for x in raw_issues if str(x).strip()]
+        elif isinstance(raw_issues, str) and raw_issues.strip():
+            issues = [raw_issues.strip()]
+        if "pass" in obj:
+            try:
+                passed = bool(obj.get("pass"))
+            except (ValueError, TypeError):
+                passed = len(issues) == 0
+        elif "passed" in obj:
+            try:
+                passed = bool(obj.get("passed"))
+            except (ValueError, TypeError):
+                passed = len(issues) == 0
+        elif "status" in obj:
+            status = str(obj.get("status") or "").strip().lower()
+            if status in {"pass", "ok", "good", "approved"}:
+                passed = True
+            elif status in {"fail", "failed", "bad", "reject"}:
+                passed = False
+    if not summary:
+        summary = str(text or "").strip()[:240]
+    if not issues:
+        low = str(text or "").lower()
+        if any(k in low for k in ("incorrect", "bug", "edge case", "fails", "failure", "wrong")):
+            passed = False
+            issues = ["reviewer flagged potential correctness issues"]
+    if not issues and not passed:
+        issues = ["reviewer did not approve the candidate code"]
+    if issues and passed:
+        passed = False
+    return {"pass": bool(passed), "issues": issues, "summary": summary}
+
+
+def _extract_revised_code(text: str) -> str:
+    obj = _extract_json_object(text)
+    if isinstance(obj, dict):
+        for key in ("revised_code", "code", "output", "draft"):
+            value = str(obj.get(key) or "").strip()
+            if value:
+                return value
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+    fence_match = re.search(r"```(?:[a-zA-Z0-9_+-]+)?\s*\n(?P<body>[\s\S]*?)```", raw)
+    if fence_match:
+        return str(fence_match.group("body") or "").strip()
+    return raw
+
+
+async def _chat_json_lane(
+    config: AppConfig,
+    *,
+    profile: str,
+    system_prompt: str,
+    user_prompt: str,
+    watch: bool = False,
+    watch_prefix: str = "",
+) -> dict[str, Any]:
+    model_cfg = config.get_model(profile)
+    llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
+    started = time.monotonic()
+    text = ""
+    error = ""
+    usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
+    try:
+        _watch_line(watch, f"{watch_prefix} lane request started")
+        resp = await llm.chat(
+            [
+                {"role": "system", "content": str(system_prompt or "")},
+                {"role": "user", "content": str(user_prompt or "")},
+            ],
+            tools=None,
+        )
+        text = str(resp.get("text") or "")
+        usage = _ensure_usage_telemetry(
+            resp.get("usage"),
+            prompt_text=f"{system_prompt}\n\n{user_prompt}",
+            response_text=text,
+        )
+        _watch_line(watch, f"{watch_prefix} lane request completed")
+    except Exception as exc:
+        error = f"{type(exc).__name__}: {exc}"
+        _watch_line(watch, f"{watch_prefix} lane error: {error}")
+    finally:
+        await llm.close()
+    return {
+        "ok": not bool(error),
+        "text": text,
+        "error": error,
+        "usage": usage,
+        "elapsed_seconds": round(max(0.0, time.monotonic() - started), 3),
+    }
+
+
+async def _run_single_agent_lane(
     config: AppConfig,
     *,
     profile: str,
     prompt: str,
     mode: str,
     token_economy: str,
-    max_iterations: Optional[int],
-    watch: bool = False,
-    watch_prefix: str = "",
-) -> Dict[str, Any]:
-    if mode == "swarm":
-        raise ValueError("Embedded runner does not support mode=swarm. Use --thomas-runner api.")
+    max_iterations: int | None,
+    tools_policy: str,
+    job_type: str,
+    watch: bool,
+    watch_prefix: str,
+    text_delta_hook: Callable[[str], Any] | None = None,
+) -> dict[str, Any]:
     model_cfg = config.get_model(profile)
     llm = LLMClient(model_cfg, fallback_configs=[], failover_enabled=False)
     tools = _build_tools(config)
@@ -440,19 +494,19 @@ async def _run_thomas_embedded_task(
         memory=None,
         thread_id=f"bench-{int(time.time() * 1000)}",
     )
-
     started = time.monotonic()
-    text_parts: List[str] = []
+    text_parts: list[str] = []
     final_text = ""
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     tool_calls = 0
+    token_report: dict[str, Any] = {}
     error = ""
     try:
-        run_kwargs: Dict[str, Any] = {
+        run_kwargs: dict[str, Any] = {
             "mode": str(mode),
-            "tools_policy": "auto",
+            "tools_policy": str(tools_policy or "auto"),
             "token_economy": str(token_economy),
-            "job_type": "coding",
+            "job_type": str(job_type or "coding"),
         }
         if max_iterations is not None:
             run_kwargs["max_iterations"] = int(max_iterations)
@@ -463,6 +517,10 @@ async def _run_thomas_embedded_task(
                 chunk = str(event.data.get("text") or "")
                 text_parts.append(chunk)
                 _watch_text(watch, chunk)
+                if text_delta_hook is not None and chunk:
+                    maybe = text_delta_hook(chunk)
+                    if inspect.isawaitable(maybe):
+                        await maybe  # type: ignore[arg-type]
             elif et == "tool_call_start":
                 _watch_line(
                     watch,
@@ -480,23 +538,300 @@ async def _run_thomas_embedded_task(
                 final_text = str(event.data.get("text") or "")
                 usage = _normalize_usage(event.data.get("usage"))
                 tool_calls = int(event.data.get("tool_calls") or 0)
-                _watch_line(watch, f"\n{watch_prefix} done: iterations={event.data.get('iterations')} tools={tool_calls}")
+                token_report = dict(event.data.get("token_report") or {})
+                _watch_line(
+                    watch,
+                    f"\n{watch_prefix} done: iterations={event.data.get('iterations')} tools={tool_calls}",
+                )
     except Exception as exc:
         error = f"{type(exc).__name__}: {exc}"
         _watch_line(watch, f"\n{watch_prefix} runner_exception: {error}")
     finally:
         await llm.close()
 
-    elapsed = max(0.0, time.monotonic() - started)
     if not final_text:
-        final_text = "".join(text_parts).strip()
+        final_text = "".join(text_parts).strip("\n")
+    usage = _ensure_usage_telemetry(
+        usage,
+        prompt_text=str(prompt or ""),
+        response_text=final_text,
+        token_report=token_report,
+    )
     return {
         "ok": not bool(error),
         "text": final_text,
         "error": error,
         "usage": usage,
         "tool_calls": int(tool_calls),
-        "elapsed_seconds": round(elapsed, 3),
+        "token_report": token_report,
+        "elapsed_seconds": round(max(0.0, time.monotonic() - started), 3),
+    }
+
+
+async def _run_thomas_embedded_task(
+    config: AppConfig,
+    *,
+    profile: str,
+    prompt: str,
+    mode: str,
+    token_economy: str,
+    max_iterations: int | None,
+    tools_policy: str = "auto",
+    job_type: str = "coding",
+    watch: bool = False,
+    watch_prefix: str = "",
+) -> dict[str, Any]:
+    if mode == "swarm":
+        raise ValueError("Embedded runner does not support mode=swarm. Use --thomas-runner api.")
+    started = time.monotonic()
+    topology = _pipeline_topology(token_economy)
+    pass_budget = _pass_budget_for_mode(mode)
+    coding_pipeline_enabled = _should_use_coding_pipeline(
+        job_type=str(job_type or ""),
+        prompt=str(prompt or ""),
+    )
+    if not coding_pipeline_enabled:
+        coder_only = await _run_single_agent_lane(
+            config,
+            profile=profile,
+            prompt=prompt,
+            mode=mode,
+            token_economy=token_economy,
+            max_iterations=max_iterations,
+            tools_policy=tools_policy,
+            job_type=job_type,
+            watch=watch,
+            watch_prefix=watch_prefix,
+        )
+        token_report = dict(coder_only.get("token_report") or {})
+        token_report["pipeline"] = {
+            "enabled": False,
+            "reason": "non_coding_task",
+            "topology": "single_agent",
+        }
+        coder_only["token_report"] = token_report
+        coder_only["elapsed_seconds"] = round(max(0.0, time.monotonic() - started), 3)
+        return coder_only
+
+    lane_rows: list[dict[str, Any]] = []
+    review_rows: list[dict[str, Any]] = []
+    lane_errors: list[str] = []
+    stream_meta: dict[str, Any] = {
+        "enabled": bool(topology == "coder_reviewer_parallel_conditional_fixer"),
+        "chunks": 0,
+        "chars": 0,
+        "lines": 0,
+    }
+    streamed_text_parts: list[str] = []
+    stream_queue: asyncio.Queue[str | None] = asyncio.Queue()
+
+    async def _stream_consumer() -> None:
+        while True:
+            item = await stream_queue.get()
+            if item is None:
+                break
+            chunk = str(item or "")
+            if not chunk:
+                continue
+            streamed_text_parts.append(chunk)
+            stream_meta["chunks"] = int(stream_meta.get("chunks", 0) or 0) + 1
+            stream_meta["chars"] = int(stream_meta.get("chars", 0) or 0) + len(chunk)
+            stream_meta["lines"] = int(stream_meta.get("lines", 0) or 0) + chunk.count("\n")
+
+    consumer_task: asyncio.Task | None = None
+    text_hook: Callable[[str], Awaitable[None]] | None = None
+    if topology == "coder_reviewer_parallel_conditional_fixer":
+        consumer_task = asyncio.create_task(_stream_consumer())
+
+        async def _enqueue_chunk(chunk: str) -> None:
+            await stream_queue.put(str(chunk or ""))
+
+        text_hook = _enqueue_chunk
+
+    coder = await _run_single_agent_lane(
+        config,
+        profile=profile,
+        prompt=prompt,
+        mode=mode,
+        token_economy=token_economy,
+        max_iterations=max_iterations,
+        tools_policy=tools_policy,
+        job_type=job_type,
+        watch=watch,
+        watch_prefix=watch_prefix,
+        text_delta_hook=text_hook,
+    )
+    lane_rows.append(
+        {
+            "lane": "coder",
+            "ok": bool(coder.get("ok")),
+            "elapsed_seconds": float(coder.get("elapsed_seconds") or 0.0),
+            "tool_calls": int(coder.get("tool_calls") or 0),
+        }
+    )
+    if str(coder.get("error") or "").strip():
+        lane_errors.append(str(coder.get("error") or "").strip())
+
+    if consumer_task is not None:
+        await stream_queue.put(None)
+        await consumer_task
+
+    current_text = str(coder.get("text") or "")
+    if streamed_text_parts:
+        streamed_text = "".join(streamed_text_parts).strip("\n")
+        if streamed_text:
+            current_text = streamed_text
+    usage_rows = [dict(coder.get("usage") or {})]
+    tool_calls = int(coder.get("tool_calls") or 0)
+    token_report: dict[str, Any] = dict(coder.get("token_report") or {})
+    review_decision: dict[str, Any] = {
+        "required": False,
+        "reason": "topology_coder_only" if topology == "coder_only" else "review_not_requested",
+    }
+    if not bool(coder.get("ok")) or not str(current_text or "").strip():
+        review_decision = {"required": False, "reason": "coder_failure_or_empty"}
+        token_report["pipeline"] = {
+            "enabled": True,
+            "topology": topology,
+            "pass_budget": int(pass_budget),
+            "review_triggered": False,
+            "review_trigger_reason": str(review_decision.get("reason") or ""),
+            "review_rounds": review_rows,
+            "lane_rows": lane_rows,
+            "lane_errors": lane_errors,
+            "stream": stream_meta,
+            "early_exit": "coder_failure_or_empty",
+        }
+        usage = _ensure_usage_telemetry(
+            _merge_usage_rows(usage_rows),
+            prompt_text=str(prompt or ""),
+            response_text=str(current_text or ""),
+            token_report=token_report,
+        )
+        return {
+            "ok": bool(coder.get("ok")) and bool(str(current_text or "").strip()),
+            "text": str(current_text or ""),
+            "error": str(coder.get("error") or ""),
+            "usage": usage,
+            "tool_calls": int(tool_calls),
+            "token_report": token_report,
+            "elapsed_seconds": round(max(0.0, time.monotonic() - started), 3),
+        }
+
+    if topology != "coder_only":
+        review_decision = _review_decision_for_candidate(
+            candidate_text=str(current_text or ""),
+            prompt=str(prompt or ""),
+            mode=str(mode or ""),
+            token_economy=str(token_economy or ""),
+        )
+    if topology != "coder_only" and bool(review_decision.get("required")):
+        for review_round in range(1, int(pass_budget) + 1):
+            review_prompt = (
+                "Review this candidate code for correctness relative to the task.\n"
+                "Return JSON with keys: pass (bool), issues (array of short strings), summary (string).\n"
+                "Be strict about edge cases and wrong complexity.\n\n"
+                f"Task:\n{prompt}\n\nCandidate code:\n{current_text}\n"
+            )
+            reviewer_lane = await _chat_json_lane(
+                config,
+                profile=profile,
+                system_prompt=(
+                    "You are a strict code reviewer. Output only compact JSON: "
+                    '{"pass": <bool>, "issues": [..], "summary": "..."}.'
+                ),
+                user_prompt=review_prompt,
+                watch=watch,
+                watch_prefix=f"{watch_prefix} reviewer[{review_round}]",
+            )
+            usage_rows.append(dict(reviewer_lane.get("usage") or {}))
+            verdict = _parse_reviewer_verdict(str(reviewer_lane.get("text") or ""))
+            reviewer_ok = bool(reviewer_lane.get("ok"))
+            passed = bool(verdict.get("pass")) if reviewer_ok else True
+            issues = list(verdict.get("issues") or [])
+            summary = str(verdict.get("summary") or "")
+            if str(reviewer_lane.get("error") or "").strip():
+                lane_errors.append(str(reviewer_lane.get("error") or "").strip())
+            review_row = {
+                "round": int(review_round),
+                "passed": bool(passed),
+                "issues": issues,
+                "summary": summary,
+                "reviewer_ok": reviewer_ok,
+                "reviewer_elapsed_seconds": float(reviewer_lane.get("elapsed_seconds") or 0.0),
+            }
+            review_rows.append(review_row)
+            lane_rows.append(
+                {
+                    "lane": f"reviewer_{review_round}",
+                    "ok": reviewer_ok,
+                    "elapsed_seconds": float(reviewer_lane.get("elapsed_seconds") or 0.0),
+                    "tool_calls": 0,
+                }
+            )
+            if passed or review_round >= int(pass_budget):
+                break
+
+            fix_prompt = (
+                "Revise the candidate code to resolve the reviewer issues.\n"
+                "Return JSON with keys: revised_code (string), change_summary (string).\n\n"
+                f"Task:\n{prompt}\n\nCurrent code:\n{current_text}\n\nIssues:\n{issues}\n"
+            )
+            fixer_lane = await _chat_json_lane(
+                config,
+                profile=profile,
+                system_prompt=(
+                    "You are a coding fixer. Output only compact JSON: "
+                    '{"revised_code": "...", "change_summary": "..."}.'
+                ),
+                user_prompt=fix_prompt,
+                watch=watch,
+                watch_prefix=f"{watch_prefix} fixer[{review_round}]",
+            )
+            usage_rows.append(dict(fixer_lane.get("usage") or {}))
+            lane_rows.append(
+                {
+                    "lane": f"fixer_{review_round}",
+                    "ok": bool(fixer_lane.get("ok")),
+                    "elapsed_seconds": float(fixer_lane.get("elapsed_seconds") or 0.0),
+                    "tool_calls": 0,
+                }
+            )
+            if str(fixer_lane.get("error") or "").strip():
+                lane_errors.append(str(fixer_lane.get("error") or "").strip())
+            revised_code = _extract_revised_code(str(fixer_lane.get("text") or ""))
+            if revised_code.strip():
+                current_text = revised_code
+                review_row["fix_applied"] = True
+            else:
+                review_row["fix_applied"] = False
+
+    token_report["pipeline"] = {
+        "enabled": True,
+        "topology": topology,
+        "pass_budget": int(pass_budget),
+        "review_triggered": bool(review_decision.get("required")),
+        "review_trigger_reason": str(review_decision.get("reason") or ""),
+        "review_rounds": review_rows,
+        "lane_rows": lane_rows,
+        "lane_errors": lane_errors,
+        "stream": stream_meta,
+        "final_text_chars": len(str(current_text or "")),
+    }
+    usage = _ensure_usage_telemetry(
+        _merge_usage_rows(usage_rows),
+        prompt_text=str(prompt or ""),
+        response_text=str(current_text or ""),
+        token_report=token_report,
+    )
+    return {
+        "ok": bool(str(current_text or "").strip()),
+        "text": str(current_text or ""),
+        "error": "; ".join([e for e in lane_errors if e]).strip(),
+        "usage": usage,
+        "tool_calls": int(tool_calls),
+        "token_report": token_report,
+        "elapsed_seconds": round(max(0.0, time.monotonic() - started), 3),
     }
 
 
@@ -508,23 +843,33 @@ async def _run_thomas_api_task(
     prompt: str,
     mode: str,
     token_economy: str,
-    max_iterations: Optional[int],
+    max_iterations: int | None,
+    tools_policy: str = "auto",
+    job_type: str = "coding",
     watch: bool = False,
     watch_prefix: str = "",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     base = str(api_base or "").rstrip("/")
     if not base:
         raise ValueError("thomas api base URL is empty")
-    headers: Dict[str, str] = {}
+    headers: dict[str, str] = {}
     token = str(api_token or "").strip()
     if token:
         headers["Authorization"] = f"Bearer {token}"
 
     started = time.monotonic()
-    text_parts: List[str] = []
+    chat_started = started
+    reported_elapsed_ms: float | None = None
+    reported_first_token_ms: float | None = None
+    first_stream_event_elapsed_seconds: float | None = None
+    first_text_delta_elapsed_seconds: float | None = None
+    stream_event_count = 0
+    text_event_count = 0
+    text_parts: list[str] = []
     final_text = ""
     usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
     tool_calls = 0
+    token_report: dict[str, Any] = {}
     error = ""
 
     timeout = httpx.Timeout(connect=10.0, read=1200.0, write=30.0, pool=30.0)
@@ -534,13 +879,16 @@ async def _run_thomas_api_task(
         sid = str((session_resp.json() or {}).get("session_id") or "").strip()
         if not sid:
             raise ValueError("thomas api did not return session_id")
+        chat_started = time.monotonic()
 
-        payload: Dict[str, Any] = {
+        payload: dict[str, Any] = {
             "session_id": sid,
             "profile": profile,
             "mode": mode,
             "text": str(prompt or ""),
             "token_economy": token_economy,
+            "tools_policy": str(tools_policy or "auto"),
+            "job_type": str(job_type or "coding"),
         }
         if max_iterations is not None:
             payload["max_iterations"] = int(max_iterations)
@@ -555,12 +903,18 @@ async def _run_thomas_api_task(
                     continue
                 try:
                     evt = json.loads(line)
-                except Exception:
+                except json.JSONDecodeError:
                     continue
+                stream_event_count += 1
+                if first_stream_event_elapsed_seconds is None:
+                    first_stream_event_elapsed_seconds = max(0.0, time.monotonic() - chat_started)
                 et = str(evt.get("type") or "")
                 if et == "text":
                     chunk = str(evt.get("text") or "")
                     text_parts.append(chunk)
+                    text_event_count += 1
+                    if chunk and first_text_delta_elapsed_seconds is None:
+                        first_text_delta_elapsed_seconds = max(0.0, time.monotonic() - chat_started)
                     _watch_text(watch, chunk)
                 elif et == "tool_start":
                     _watch_line(watch, f"\n{watch_prefix} tool_start: {evt.get('name', '')}")
@@ -581,85 +935,78 @@ async def _run_thomas_api_task(
                     final_text = str(evt.get("response") or "")
                     usage = _normalize_usage(evt.get("run_usage") or evt.get("usage"))
                     tool_calls = int(evt.get("tool_calls") or 0)
+                    token_report = dict(evt.get("token_report") or {})
+                    elapsed_raw = _safe_float(evt.get("elapsed_ms"))
+                    if elapsed_raw is not None and elapsed_raw >= 0:
+                        reported_elapsed_ms = float(elapsed_raw)
+                    first_token_raw = _extract_reported_first_token_ms(evt, token_report=token_report)
+                    if first_token_raw is not None:
+                        reported_first_token_ms = float(first_token_raw)
                     _watch_line(watch, f"\n{watch_prefix} done tools={tool_calls}")
                 elif et == "swarm_done":
                     final_text = str(evt.get("final") or "")
                     usage = _normalize_usage(evt.get("run_usage") or evt.get("usage"))
                     tool_calls = int(evt.get("tool_calls") or 0)
+                    token_report = dict(evt.get("token_report") or {})
+                    elapsed_raw = _safe_float(evt.get("elapsed_ms"))
+                    if elapsed_raw is not None and elapsed_raw >= 0:
+                        reported_elapsed_ms = float(elapsed_raw)
+                    first_token_raw = _extract_reported_first_token_ms(evt, token_report=token_report)
+                    if first_token_raw is not None:
+                        reported_first_token_ms = float(first_token_raw)
                     _watch_line(watch, f"\n{watch_prefix} swarm_done tools={tool_calls}")
 
-    elapsed = max(0.0, time.monotonic() - started)
+    elapsed = _select_elapsed_seconds(
+        reported_elapsed_ms=reported_elapsed_ms,
+        fallback_elapsed_seconds=max(0.0, time.monotonic() - chat_started),
+    )
     if not final_text:
-        final_text = "".join(text_parts).strip()
+        # Preserve leading indentation in generated code blocks.
+        final_text = "".join(text_parts).strip("\n")
+    usage = _ensure_usage_telemetry(
+        usage,
+        prompt_text=str(prompt or ""),
+        response_text=final_text,
+        token_report=token_report,
+    )
+    first_token_fallback = (
+        first_text_delta_elapsed_seconds
+        if first_text_delta_elapsed_seconds is not None
+        else first_stream_event_elapsed_seconds
+    )
+    first_token_seconds = _select_optional_elapsed_seconds(
+        reported_elapsed_ms=reported_first_token_ms,
+        fallback_elapsed_seconds=first_token_fallback,
+    )
     return {
         "ok": not bool(error),
         "text": final_text,
         "error": error,
         "usage": usage,
         "tool_calls": int(tool_calls),
-        "elapsed_seconds": round(elapsed, 3),
-    }
-
-
-def _harness_pack(task_pack: Mapping[str, Any]) -> Dict[str, Any]:
-    return {
-        "id": str(task_pack.get("id") or "agentic-pack"),
-        "name": str(task_pack.get("name") or "Agentic Benchmark Pack"),
-        "version": int(task_pack.get("version") or 1),
-        "description": str(task_pack.get("description") or ""),
-        "protocol": list(task_pack.get("protocol") or []),
-        "weights": dict(task_pack.get("weights") or {}),
-        "quality_scale": dict(task_pack.get("quality_scale") or {"min": 1, "max": 5}),
-        "tasks": [
-            {
-                "id": str(t.get("id") or ""),
-                "title": str(t.get("title") or ""),
-                "prompt": str(t.get("prompt") or ""),
-                "success_criteria": str(t.get("success_criteria") or ""),
-                "time_budget_seconds": t.get("time_budget_seconds"),
-            }
-            for t in (task_pack.get("tasks") or [])
-        ],
-    }
-
-
-def compute_before_after_delta(
-    summary: Mapping[str, Any],
-    *,
-    baseline_name: str,
-    thomas_name: str,
-) -> Dict[str, Any]:
-    competitors = dict(summary.get("competitors") or {})
-    baseline = dict(competitors.get(baseline_name) or {})
-    after = dict(competitors.get(thomas_name) or {})
-    if not baseline or not after:
-        return {}
-    return {
-        "baseline": baseline_name,
-        "after": thomas_name,
-        "metrics": {
-            "weighted_score_delta": round(
-                float(after.get("weighted_score", 0.0)) - float(baseline.get("weighted_score", 0.0)), 3
-            ),
-            "success_rate_delta": round(
-                float(after.get("success_rate", 0.0)) - float(baseline.get("success_rate", 0.0)), 6
-            ),
-            "avg_elapsed_seconds_delta": round(
-                float(after.get("avg_elapsed_seconds", 0.0))
-                - float(baseline.get("avg_elapsed_seconds", 0.0)),
-                3,
-            ),
-            "evidence_coverage_delta": round(
-                float(after.get("evidence_coverage", 0.0))
-                - float(baseline.get("evidence_coverage", 0.0)),
-                6,
-            ),
-        },
+        "token_report": token_report,
+        "elapsed_seconds": float(elapsed),
+        "setup_elapsed_seconds": round(max(0.0, chat_started - started), 3),
+        "reported_elapsed_ms": (round(float(reported_elapsed_ms), 3) if reported_elapsed_ms is not None else None),
+        "first_token_seconds": first_token_seconds,
+        "first_text_delta_seconds": (
+            round(float(first_text_delta_elapsed_seconds), 3) if first_text_delta_elapsed_seconds is not None else None
+        ),
+        "first_stream_event_seconds": (
+            round(float(first_stream_event_elapsed_seconds), 3)
+            if first_stream_event_elapsed_seconds is not None
+            else None
+        ),
+        "reported_first_token_ms": (
+            round(float(reported_first_token_ms), 3) if reported_first_token_ms is not None else None
+        ),
+        "stream_event_count": int(stream_event_count),
+        "text_event_count": int(text_event_count),
     }
 
 
 async def run_agentic_benchmark(args: argparse.Namespace) -> Path:
-    config_path = Path(args.config).resolve() if str(args.config or "").strip() else None
+    config_path = _resolve_config_path(str(args.config or ""))
     config = load_config(config_path)
 
     task_pack = load_agentic_task_pack(Path(args.task_pack).resolve())
@@ -673,7 +1020,7 @@ async def run_agentic_benchmark(args: argparse.Namespace) -> Path:
 
     baseline_name = str(args.baseline_name).strip() or "baseline_raw"
     thomas_name = str(args.thomas_name).strip() or "thomas_os"
-    tracks: List[TrackSpec] = []
+    tracks: list[TrackSpec] = []
     if not bool(args.skip_baseline):
         tracks.append(TrackSpec(name=baseline_name, kind="raw", profile=args.profile))
     if not bool(args.skip_thomas):
@@ -707,9 +1054,9 @@ async def run_agentic_benchmark(args: argparse.Namespace) -> Path:
             if track.kind == "thomas" and track.mode == "swarm":
                 raise ValueError("mode=swarm requires --thomas-runner api")
 
-    records: List[Dict[str, Any]] = []
-    detailed_rows: List[Dict[str, Any]] = []
-    transcript_blobs: Dict[str, str] = {}
+    records: list[dict[str, Any]] = []
+    detailed_rows: list[dict[str, Any]] = []
+    transcript_blobs: dict[str, str] = {}
     watch = bool(getattr(args, "watch", False))
 
     for task in list(task_pack.get("tasks") or []):
@@ -782,6 +1129,12 @@ async def run_agentic_benchmark(args: argparse.Namespace) -> Path:
                     f"- mode: {track.mode if track.kind == 'thomas' else 'raw'}",
                     f"- token_economy: {track.token_economy if track.kind == 'thomas' else 'n/a'}",
                     f"- elapsed_seconds: {run.get('elapsed_seconds')}",
+                    f"- first_token_seconds: {run.get('first_token_seconds')}",
+                    f"- first_text_delta_seconds: {run.get('first_text_delta_seconds')}",
+                    f"- first_stream_event_seconds: {run.get('first_stream_event_seconds')}",
+                    f"- setup_elapsed_seconds: {run.get('setup_elapsed_seconds')}",
+                    f"- stream_event_count: {run.get('stream_event_count')}",
+                    f"- text_event_count: {run.get('text_event_count')}",
                     f"- success: {str(success).lower()}",
                     f"- tool_calls: {run.get('tool_calls')}",
                     f"- usage: {json.dumps(run.get('usage') or {}, ensure_ascii=False)}",
@@ -887,16 +1240,15 @@ async def run_agentic_benchmark(args: argparse.Namespace) -> Path:
             "baseline_enabled": not bool(args.skip_baseline),
             "thomas_enabled": not bool(args.skip_thomas),
             "artifact_root": str(artifact_root_rel.as_posix()),
+            "config_path": str(config_path) if config_path else "",
         },
     )
     _write_json(run_dir / "before_after.delta.json", before_after)
     return run_dir
 
 
-def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Run local-first agentic benchmark: raw model vs Thomas OS."
-    )
+def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Run local-first agentic benchmark: raw model vs Thomas OS.")
     parser.add_argument("--task-pack", default=str(DEFAULT_TASK_PACK), help="Path to benchmark task pack JSON.")
     parser.add_argument("--runs-dir", default=str(DEFAULT_RUNS_DIR), help="Output directory for benchmark runs.")
     parser.add_argument("--run-id", default="", help="Optional run id (default: UTC timestamp).")
@@ -908,17 +1260,23 @@ def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
     parser.add_argument("--skip-baseline", action="store_true", help="Skip raw baseline track.")
     parser.add_argument("--skip-thomas", action="store_true", help="Skip Thomas track.")
     parser.add_argument("--thomas-runner", choices=("embedded", "api"), default="embedded")
-    parser.add_argument("--thomas-api-base", default="http://127.0.0.1:8899", help="Thomas API base URL when --thomas-runner=api.")
+    parser.add_argument(
+        "--thomas-api-base", default="http://127.0.0.1:8899", help="Thomas API base URL when --thomas-runner=api."
+    )
     parser.add_argument("--thomas-api-token", default="", help="Thomas API bearer token for remote mode.")
     parser.add_argument("--thomas-mode", choices=("fast", "auto", "thinking", "swarm"), default="auto")
     parser.add_argument("--thomas-token-economy", choices=("cheap", "optimal", "max"), default="optimal")
-    parser.add_argument("--thomas-max-mode", action="store_true", help="Enable high-budget Thomas mode (max token economy; swarm via API runner).")
+    parser.add_argument(
+        "--thomas-max-mode",
+        action="store_true",
+        help="Enable high-budget Thomas mode (max token economy; swarm via API runner).",
+    )
     parser.add_argument("--max-iterations", type=int, default=None, help="Optional max iterations for Thomas track.")
     parser.add_argument("--watch", action="store_true", help="Stream live model/tool output while benchmark runs.")
     return parser.parse_args(argv)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv)
     if not str(args.thomas_api_token or "").strip():
         env_token = str(__import__("os").environ.get("THOMAS_API_TOKEN", "")).strip()

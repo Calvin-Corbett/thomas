@@ -18,8 +18,9 @@ only about process/session lifecycle.
 from __future__ import annotations
 
 import importlib
+from collections.abc import Iterable, Mapping
 from dataclasses import asdict, dataclass, field
-from typing import Any, Iterable, Literal, Mapping, Protocol, runtime_checkable
+from typing import Any, Literal, Protocol, runtime_checkable
 
 BrowserLifecycleAction = Literal["start", "stop", "restart"]
 
@@ -192,7 +193,7 @@ def get_default_browser_controller() -> BrowserController:
 def _try_import(module_name: str):
     try:
         return importlib.import_module(module_name)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
 
@@ -230,7 +231,7 @@ def _adapt_from_module(module: Any) -> BrowserController | None:
         except TypeError:
             # Constructor signature mismatch; skip deterministically.
             continue
-        except Exception:
+        except (RuntimeError, TypeError):
             # Tooling can raise on missing config/deps; treat as "not usable".
             continue
         if obj is None:

@@ -15,11 +15,12 @@ Design goals:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import importlib
 import json
 import pkgutil
-from typing import Any, Literal, Mapping, Optional, Sequence, TypedDict, cast
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass, field
+from typing import Any, Literal, TypedDict, cast
 
 try:  # Python 3.11+
     from typing import NotRequired
@@ -39,7 +40,7 @@ SCHEMA_VERSION = "1.0"
 class RegistryErrorInfo:
     code: str
     message: str
-    details: Optional[Mapping[str, Any]] = None
+    details: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {"code": self.code, "message": self.message}
@@ -53,7 +54,7 @@ class PluginRegistryError(Exception):
 
     code: str = "PLUGIN_REGISTRY_ERROR"
 
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message)
         self._message = message
         self.details = dict(details) if details else None
@@ -99,7 +100,7 @@ class BuildPluginRegistryRequestDict(TypedDict, total=False):
 class BuildPluginRegistryRequest:
     """Validated request contract."""
 
-    plugin_modules: Optional[Sequence[str]] = None
+    plugin_modules: Sequence[str] | None = None
     include_tools: bool = True
     include_failed: bool = True
     on_error: Literal["collect", "raise"] = "collect"
@@ -128,7 +129,7 @@ class PluginDescriptor:
     version: str = ""
     description: str = ""
     tools: Sequence[ToolDescriptor] = field(default_factory=tuple)
-    load_error: Optional[RegistryErrorInfo] = None
+    load_error: RegistryErrorInfo | None = None
 
     def to_dict(self) -> dict[str, Any]:
         out: dict[str, Any] = {
@@ -166,7 +167,7 @@ class PluginRegistryModel:
 _ALLOWED_REQUEST_KEYS = {"plugin_modules", "include_tools", "include_failed", "on_error"}
 
 
-def parse_build_request(data: Optional[Mapping[str, Any]]) -> BuildPluginRegistryRequest:
+def parse_build_request(data: Mapping[str, Any] | None) -> BuildPluginRegistryRequest:
     """Validate and coerce an untrusted request dict into a BuildPluginRegistryRequest."""
 
     if data is None:
@@ -186,7 +187,7 @@ def parse_build_request(data: Optional[Mapping[str, Any]]) -> BuildPluginRegistr
         )
 
     plugin_modules_raw = data.get("plugin_modules")
-    plugin_modules: Optional[list[str]]
+    plugin_modules: list[str] | None
     if plugin_modules_raw is None:
         plugin_modules = None
     else:
@@ -234,7 +235,7 @@ def parse_build_request(data: Optional[Mapping[str, Any]]) -> BuildPluginRegistr
 
 
 def build_plugin_registry_core_model(
-    request: Optional[BuildPluginRegistryRequest | Mapping[str, Any]] = None,
+    request: BuildPluginRegistryRequest | Mapping[str, Any] | None = None,
 ) -> PluginRegistryModel:
     """Build the plugin registry core model."""
 
@@ -277,7 +278,7 @@ def build_plugin_registry_core_model(
 def _discover_plugin_modules() -> list[str]:
     try:
         pkg = importlib.import_module("thomas.plugins")
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         raise ConfigError(
             "Thomas plugin package 'thomas.plugins' could not be imported.",
             details={"package": "thomas.plugins"},
@@ -310,10 +311,10 @@ def _load_plugin_descriptor(
     include_tools: bool,
     include_failed: bool,
     on_error: Literal["collect", "raise"],
-) -> Optional[PluginDescriptor]:
+) -> PluginDescriptor | None:
     try:
         mod = importlib.import_module(module_name)
-    except Exception as exc:
+    except (ImportError, ModuleNotFoundError, AttributeError) as exc:
         err = RegistryErrorInfo(
             code="PLUGIN_IMPORT_FAILED",
             message=f"Failed to import plugin module '{module_name}'.",
@@ -337,7 +338,7 @@ def _load_plugin_descriptor(
         )
     except PluginRegistryError:
         raise
-    except Exception as exc:
+    except (AttributeError, KeyError, ValueError, TypeError) as exc:
         err = RegistryErrorInfo(
             code="PLUGIN_METADATA_FAILED",
             message=f"Failed to extract plugin metadata from '{module_name}'.",
@@ -360,9 +361,7 @@ def _extract_metadata_from_module(mod: Any, *, include_tools: bool) -> tuple[str
     name = _coerce_str(_get_field(plugin_obj, mod, "name")) or getattr(mod, "__name__", "")
     version = _coerce_str(_get_field(plugin_obj, mod, "version")) or ""
     description = (
-        _coerce_str(_get_field(plugin_obj, mod, "description"))
-        or _coerce_str(getattr(mod, "__doc__", None))
-        or ""
+        _coerce_str(_get_field(plugin_obj, mod, "description")) or _coerce_str(getattr(mod, "__doc__", None)) or ""
     )
 
     tools: list[ToolDescriptor] = []
@@ -391,14 +390,14 @@ def _get_field(plugin_obj: Any, mod: Any, field: str) -> Any:
     return getattr(plugin_obj, field, None)
 
 
-def _coerce_str(value: Any) -> Optional[str]:
+def _coerce_str(value: Any) -> str | None:
     if value is None:
         return None
     if isinstance(value, str):
         return value
     try:
         return str(value)
-    except Exception:
+    except (TypeError, AttributeError):
         return None
 
 
@@ -438,7 +437,9 @@ def _coerce_tool(value: Any, fallback_name: str = "") -> ToolDescriptor:
         description = _coerce_str(value.get("description")) or ""
         input_schema = _coerce_schema(value.get("input_schema"))
         output_schema = _coerce_schema(value.get("output_schema"))
-        return ToolDescriptor(name=name, description=description, input_schema=input_schema, output_schema=output_schema)
+        return ToolDescriptor(
+            name=name, description=description, input_schema=input_schema, output_schema=output_schema
+        )
 
     # Object-like form
     name = _coerce_str(getattr(value, "name", None)) or fallback_name or value.__class__.__name__
@@ -456,7 +457,7 @@ def _coerce_schema(value: Any) -> Mapping[str, Any]:
     if isinstance(value, str):
         try:
             loaded = json.loads(value)
-        except Exception:
+        except (json.JSONDecodeError, ValueError):
             return {}
         if isinstance(loaded, Mapping):
             return cast(Mapping[str, Any], loaded)
@@ -475,7 +476,7 @@ class RegistryToolResponseDict(TypedDict):
     error: NotRequired[Mapping[str, Any]]
 
 
-def plugins_registry_model(payload: Optional[Mapping[str, Any]] = None) -> RegistryToolResponseDict:
+def plugins_registry_model(payload: Mapping[str, Any] | None = None) -> RegistryToolResponseDict:
     """Tool entrypoint: return a machine-readable plugin registry model."""
 
     try:

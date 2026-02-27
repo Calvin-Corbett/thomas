@@ -80,6 +80,24 @@ if ($UninstallStartup) {
     exit 0
 }
 
+# ── Kill ALL existing Thomas instances before starting ──────────────
+# Always start fresh so we run the current version, not a stale one.
+Write-Host "[thomas] Stopping any existing Thomas instances..."
+try {
+    $pyProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" -ErrorAction SilentlyContinue
+    foreach ($proc in $pyProcs) {
+        $procCmd = [string]$proc.CommandLine
+        if ($procCmd -and ($procCmd -match '(?i)-m\s+thomas(\.server|\.tray_agent)\b' -or $procCmd -match '(?i)\bthomas(\.exe)?\s+serve\b')) {
+            $procId = [int]$proc.ProcessId
+            if ($procId -gt 0 -and $procId -ne $PID) {
+                Write-Host ("[thomas] Stopping existing Thomas process (pid {0})" -f $procId)
+                try { Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue } catch { }
+            }
+        }
+    }
+} catch { }
+Start-Sleep -Milliseconds 500
+
 # Check if pystray is installed
 $PystrayCheck = & $VenvPy -c "import pystray; print('ok')" 2>$null
 if ($PystrayCheck -ne "ok") {

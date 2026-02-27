@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Mapping, Tuple
-
+from collections.abc import Mapping
+from typing import Any
 
 _TEXT_KEYS: tuple[str, ...] = (
     "workflow_text",
@@ -35,7 +35,7 @@ def _extract_source_text(payload: Mapping[str, Any]) -> str:
     return ""
 
 
-def _split_steps(text: str) -> List[str]:
+def _split_steps(text: str) -> list[str]:
     raw = _text(text)
     if not raw:
         return []
@@ -47,7 +47,7 @@ def _split_steps(text: str) -> List[str]:
         line = line.replace(";", "|").replace("->", "|")
         lines = [part.strip(" -\t") for part in line.split("|") if part.strip()]
 
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for line in lines:
         cleaned = re.sub(r"^\d+[\).\s-]+", "", line).strip()
@@ -83,7 +83,7 @@ def _infer_worker_count(text: str) -> int:
         try:
             count = int(match.group(1))
             return max(1, min(8, count))
-        except Exception:
+        except (ValueError, TypeError):
             pass
     if "two" in source:
         return 2
@@ -94,7 +94,7 @@ def _infer_worker_count(text: str) -> int:
     return 3
 
 
-def _routes_from_text(text: str) -> List[Dict[str, str]]:
+def _routes_from_text(text: str) -> list[dict[str, str]]:
     source = _text(text)
     compact = " ".join(source.split())
     m = re.search(
@@ -108,7 +108,7 @@ def _routes_from_text(text: str) -> List[Dict[str, str]]:
     when_text = _text(m.group("when"))
     then_text = _text(m.group("then"))
     else_text = _text(m.group("else"))
-    routes: List[Dict[str, str]] = []
+    routes: list[dict[str, str]] = []
     if when_text and then_text:
         routes.append(
             {
@@ -130,7 +130,7 @@ def _routes_from_text(text: str) -> List[Dict[str, str]]:
     return routes
 
 
-def _compile_chain(payload: Dict[str, Any], source_text: str, changes: List[str]) -> None:
+def _compile_chain(payload: dict[str, Any], source_text: str, changes: list[str]) -> None:
     if _has_list_payload(payload.get("steps")) or _text(payload.get("step")):
         return
     steps = _split_steps(source_text)
@@ -141,28 +141,27 @@ def _compile_chain(payload: Dict[str, Any], source_text: str, changes: List[str]
         changes.append("steps")
 
 
-def _compile_parallel(payload: Dict[str, Any], source_text: str, changes: List[str]) -> None:
+def _compile_parallel(payload: dict[str, Any], source_text: str, changes: list[str]) -> None:
     if _has_list_payload(payload.get("workers")):
         return
     tasks = _split_steps(source_text)
     if not tasks and source_text:
         tasks = [source_text]
     workers = [
-        {"name": f"worker-{idx + 1}", "prompt": prompt, "capability": "chat"}
-        for idx, prompt in enumerate(tasks[:8])
+        {"name": f"worker-{idx + 1}", "prompt": prompt, "capability": "chat"} for idx, prompt in enumerate(tasks[:8])
     ]
     if workers:
         payload["workers"] = workers
         changes.append("workers")
 
 
-def _compile_orchestrator(payload: Dict[str, Any], source_text: str, changes: List[str]) -> None:
+def _compile_orchestrator(payload: dict[str, Any], source_text: str, changes: list[str]) -> None:
     if payload.get("worker_count") is None:
         payload["worker_count"] = _infer_worker_count(source_text)
         changes.append("worker_count")
 
 
-def _compile_routing(payload: Dict[str, Any], source_text: str, changes: List[str]) -> None:
+def _compile_routing(payload: dict[str, Any], source_text: str, changes: list[str]) -> None:
     if _has_list_payload(payload.get("routes")):
         return
     routes = _routes_from_text(source_text)
@@ -176,7 +175,7 @@ def _compile_routing(payload: Dict[str, Any], source_text: str, changes: List[st
     _compile_chain(payload, source_text, changes)
 
 
-def _compile_evaluator(payload: Dict[str, Any], source_text: str, changes: List[str]) -> None:
+def _compile_evaluator(payload: dict[str, Any], source_text: str, changes: list[str]) -> None:
     if not _text(payload.get("rubric")):
         payload["rubric"] = "Correctness, completeness, clarity, and actionable next steps."
         changes.append("rubric")
@@ -185,7 +184,7 @@ def _compile_evaluator(payload: Dict[str, Any], source_text: str, changes: List[
         changes.append("max_rounds")
 
 
-def compile_nl_workflow_payload(payload: Mapping[str, Any]) -> Tuple[Dict[str, Any], Dict[str, Any] | None]:
+def compile_nl_workflow_payload(payload: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any] | None]:
     """Compile natural-language workflow payloads into structured workflow contracts.
 
     Returns:
@@ -193,9 +192,9 @@ def compile_nl_workflow_payload(payload: Mapping[str, Any]) -> Tuple[Dict[str, A
     - compile metadata (or None when no compilation/enrichment happened)
     """
 
-    out: Dict[str, Any] = dict(payload) if isinstance(payload, Mapping) else {}
+    out: dict[str, Any] = dict(payload) if isinstance(payload, Mapping) else {}
     source_text = _extract_source_text(out)
-    changes: List[str] = []
+    changes: list[str] = []
 
     workflow = _text(out.get("workflow") or out.get("pattern")).lower()
     if not workflow:
@@ -230,4 +229,3 @@ def compile_nl_workflow_payload(payload: Mapping[str, Any]) -> Tuple[Dict[str, A
         "source_text_preview": source_text[:240],
     }
     return out, compile_meta
-

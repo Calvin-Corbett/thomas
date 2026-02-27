@@ -18,10 +18,10 @@ Design notes:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import importlib
-from typing import Any, Callable, Mapping, Sequence
-
+from collections.abc import Callable, Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 # -----------------------------
 # Public contracts
@@ -137,7 +137,14 @@ def run_plugin_info_command(
             "Missing Thomas configuration required to inspect plugins.",
             details=str(exc),
         ) from exc
-    except Exception as exc:  # pragma: no cover - defensive
+    except (
+        RuntimeError,
+        OSError,
+        AttributeError,
+        KeyError,
+        ValueError,
+        TypeError,
+    ) as exc:  # pragma: no cover - defensive
         raise PluginInfoCommandError(
             ERR_EXTERNAL_FAILURE,
             "Failed to build plugin status report.",
@@ -169,7 +176,7 @@ def run_plugin_info_command(
             # Config isn't strictly required to display core plugin info; treat
             # it as missing install metadata rather than a hard failure.
             install_record = None
-        except Exception:
+        except (OSError, KeyError, ValueError):
             install_record = None
 
     return PluginInfoCommandOutput(plugin=plugin_dict, install=install_record)
@@ -310,7 +317,7 @@ def _build_plugin_status_report() -> Any:
                         return fn()
             except FileNotFoundError:
                 raise
-            except Exception as exc:
+            except (RuntimeError, OSError, AttributeError, KeyError, ValueError, TypeError) as exc:
                 raise PluginInfoCommandError(
                     ERR_EXTERNAL_FAILURE,
                     "Failed to build plugin status report.",
@@ -328,7 +335,7 @@ def _build_plugin_status_report() -> Any:
         raise
     except FileNotFoundError:
         raise
-    except Exception as exc:
+    except (RuntimeError, OSError, AttributeError, KeyError, ValueError, TypeError) as exc:
         raise PluginInfoCommandError(
             ERR_EXTERNAL_FAILURE,
             "Failed to build plugin status report.",
@@ -365,7 +372,7 @@ def _load_config() -> Any:
             "Thomas config file not found.",
             details=str(exc),
         ) from exc
-    except Exception as exc:
+    except (RuntimeError, OSError, KeyError, ValueError, TypeError) as exc:
         raise PluginInfoCommandError(
             ERR_EXTERNAL_FAILURE,
             "Failed to load Thomas config.",
@@ -377,7 +384,7 @@ def _resolve_callable(candidates: Sequence[tuple[str, Sequence[str]]]) -> Callab
     for module_name, attr_names in candidates:
         try:
             module = importlib.import_module(module_name)
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             continue
         for attr in attr_names:
             fn = getattr(module, attr, None)
@@ -524,7 +531,7 @@ def _to_jsonable(value: Any) -> Any:
 
         if is_dataclass(value):
             return _to_jsonable(asdict(value))
-    except Exception:
+    except (TypeError, AttributeError):
         pass
 
     # generic object
@@ -532,7 +539,7 @@ def _to_jsonable(value: Any) -> Any:
         data = {k: _to_jsonable(v) for k, v in vars(value).items() if not k.startswith("_")}
         if data:
             return data
-    except Exception:
+    except (TypeError, AttributeError):
         pass
 
     return str(value)

@@ -1,17 +1,16 @@
-﻿"""Threat model cadence checks for security maturity."""
+"""Threat model cadence checks for security maturity."""
 
 from __future__ import annotations
 
 import re
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 _RE_LAST_REVIEWED = re.compile(r"last\s+reviewed\s*:\s*(\d{4}-\d{2}-\d{2})", re.IGNORECASE)
 
 
-
-def _parse_date(raw: str) -> Optional[datetime]:
+def _parse_date(raw: str) -> datetime | None:
     text = str(raw or "").strip()
     if not text:
         return None
@@ -19,11 +18,10 @@ def _parse_date(raw: str) -> Optional[datetime]:
         dt = datetime.strptime(text, "%Y-%m-%d")
     except Exception:
         return None
-    return dt.replace(tzinfo=UTC)
+    return dt.replace(tzinfo=timezone.utc)
 
 
-
-def evaluate_threat_model_cadence(path: Path, *, max_age_days: int = 14) -> Dict[str, Any]:
+def evaluate_threat_model_cadence(path: Path, *, max_age_days: int = 14) -> dict[str, Any]:
     max_days = max(1, int(max_age_days))
     errors = []
     warnings = []
@@ -45,8 +43,8 @@ def evaluate_threat_model_cadence(path: Path, *, max_age_days: int = 14) -> Dict
         }
 
     stat = path.stat()
-    modified = datetime.fromtimestamp(stat.st_mtime, tz=UTC)
-    age_days = (datetime.now(UTC) - modified).total_seconds() / 86400.0
+    modified = datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc)
+    age_days = (datetime.now(timezone.utc) - modified).total_seconds() / 86400.0
     if age_days > float(max_days):
         errors.append(
             {
@@ -71,7 +69,7 @@ def evaluate_threat_model_cadence(path: Path, *, max_age_days: int = 14) -> Dict
                 }
             )
         else:
-            reviewed_age = (datetime.now(UTC) - reviewed_dt).total_seconds() / 86400.0
+            reviewed_age = (datetime.now(timezone.utc) - reviewed_dt).total_seconds() / 86400.0
             if reviewed_age > float(max_days):
                 errors.append(
                     {

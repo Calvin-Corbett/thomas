@@ -3,8 +3,8 @@ from __future__ import annotations
 import ctypes
 import ctypes.wintypes as wt
 import threading
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Callable, Optional
 
 # RegisterHotKey docs: https://learn.microsoft.com/windows/win32/api/winuser/nf-winuser-registerhotkey
 WM_HOTKEY = 0x0312
@@ -37,7 +37,7 @@ class HotkeyListener:
     def __init__(self, hotkey: Hotkey, on_fire: Callable[[], None]):
         self.hotkey = hotkey
         self.on_fire = on_fire
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._stop = threading.Event()
         self._hk_id = 1
 
@@ -50,7 +50,7 @@ class HotkeyListener:
         # Post a dummy message to break GetMessage loop
         try:
             user32.PostThreadMessageW(ctypes.windll.kernel32.GetCurrentThreadId(), 0x0012, 0, 0)  # type: ignore[attr-defined]
-        except Exception:
+        except (subprocess.CalledProcessError, OSError):
             pass
 
     def _run(self) -> None:
@@ -66,7 +66,7 @@ class HotkeyListener:
             if msg.message == WM_HOTKEY and msg.wParam == self._hk_id:
                 try:
                     self.on_fire()
-                except Exception:
+                except (subprocess.CalledProcessError, OSError):
                     pass
             user32.TranslateMessage(ctypes.byref(msg))
             user32.DispatchMessageW(ctypes.byref(msg))

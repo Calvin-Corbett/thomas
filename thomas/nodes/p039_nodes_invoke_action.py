@@ -17,9 +17,10 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional, TypedDict
+from typing import Any, TypedDict
 from urllib.parse import urlparse
 
 import requests
@@ -38,11 +39,11 @@ class NodeInvokeActionError(RuntimeError):
     code = "node_invoke_action_error"
     http_status = 500
 
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
 
-    def to_error_payload(self) -> "ErrorPayload":
+    def to_error_payload(self) -> ErrorPayload:
         return {
             "code": self.code,
             "message": str(self),
@@ -78,7 +79,7 @@ class InvalidRemoteResponse(NodeInvokeActionError):
 class ErrorPayload(TypedDict, total=False):
     code: str
     message: str
-    details: Optional[Mapping[str, Any]]
+    details: Mapping[str, Any] | None
 
 
 class InvokeActionResponsePayload(TypedDict, total=False):
@@ -96,9 +97,9 @@ class InvokeActionRequest:
 
     node: str
     action: str
-    payload: Optional[Mapping[str, Any]] = None
+    payload: Mapping[str, Any] | None = None
     timeout_s: float = 30.0
-    request_id: Optional[str] = None
+    request_id: str | None = None
 
 
 @dataclass(frozen=True)
@@ -109,25 +110,25 @@ class InvokeActionResponse:
     node: str
     action: str
     status_code: int
-    result: Optional[Any] = None
+    result: Any | None = None
 
 
 def _looks_like_url(value: str) -> bool:
     try:
         parsed = urlparse(value)
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         return False
     return parsed.scheme in {"http", "https"} and bool(parsed.netloc)
 
 
-def _coerce_registry_mapping(raw: Any) -> Dict[str, str]:
+def _coerce_registry_mapping(raw: Any) -> dict[str, str]:
     """Coerce various JSON shapes into a {node_id: base_url} mapping."""
 
     if raw is None:
         return {}
 
     if isinstance(raw, dict):
-        out: Dict[str, str] = {}
+        out: dict[str, str] = {}
         for k, v in raw.items():
             if isinstance(v, str):
                 out[str(k)] = v
@@ -138,7 +139,7 @@ def _coerce_registry_mapping(raw: Any) -> Dict[str, str]:
     raise ValueError("node registry must be a JSON object")
 
 
-def load_node_registry() -> Dict[str, str]:
+def load_node_registry() -> dict[str, str]:
     """Load the node registry mapping.
 
     Precedence (highest first):
@@ -153,13 +154,13 @@ def load_node_registry() -> Dict[str, str]:
     if env_inline:
         try:
             return _coerce_registry_mapping(json.loads(env_inline))
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError, KeyError) as exc:
             raise MissingNodeConfig(
                 "Invalid THOMAS_NODE_REGISTRY JSON",
                 details={"source": "env", "error": exc.__class__.__name__},
             ) from exc
 
-    candidates: List[Path] = []
+    candidates: list[Path] = []
     env_file = os.environ.get("THOMAS_NODE_REGISTRY_FILE")
     if env_file:
         candidates.append(Path(env_file))
@@ -173,7 +174,7 @@ def load_node_registry() -> Dict[str, str]:
             return _coerce_registry_mapping(json.loads(raw))
         except FileNotFoundError:
             continue
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError, KeyError) as exc:
             raise MissingNodeConfig(
                 "Invalid node registry file",
                 details={
@@ -186,7 +187,7 @@ def load_node_registry() -> Dict[str, str]:
     return {}
 
 
-def resolve_node_base_url(node: str, *, registry: Optional[Mapping[str, str]] = None) -> str:
+def resolve_node_base_url(node: str, *, registry: Mapping[str, str] | None = None) -> str:
     """Resolve a node identifier to a base URL."""
 
     node = (node or "").strip()
@@ -196,7 +197,7 @@ def resolve_node_base_url(node: str, *, registry: Optional[Mapping[str, str]] = 
     if _looks_like_url(node):
         return node.rstrip("/")
 
-    reg: Dict[str, str] = dict(registry or load_node_registry())
+    reg: dict[str, str] = dict(registry or load_node_registry())
     base = reg.get(node)
     if not base:
         raise MissingNodeConfig("Unknown node; no endpoint configured", details={"node": node})
@@ -224,7 +225,7 @@ def build_invoke_url(base_url: str) -> str:
     return base_url + path
 
 
-def _auth_headers() -> Dict[str, str]:
+def _auth_headers() -> dict[str, str]:
     """Optional auth header injection.
 
     If THOMAS_NODE_AUTH_TOKEN is set, send an auth header.
@@ -249,8 +250,8 @@ def _auth_headers() -> Dict[str, str]:
 def invoke_action(
     req: InvokeActionRequest,
     *,
-    registry: Optional[Mapping[str, str]] = None,
-    session: Optional[requests.Session] = None,
+    registry: Mapping[str, str] | None = None,
+    session: requests.Session | None = None,
 ) -> InvokeActionResponse:
     """Invoke an action on a node and return the parsed response.
 
@@ -272,7 +273,7 @@ def invoke_action(
 
     try:
         timeout_s = float(req.timeout_s)
-    except Exception as exc:
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
         raise InvalidInvokeActionInput("timeout_s must be a number") from exc
     if timeout_s <= 0:
         raise InvalidInvokeActionInput("timeout_s must be > 0")
@@ -287,13 +288,13 @@ def invoke_action(
     base_url = resolve_node_base_url(node, registry=registry)
     url = build_invoke_url(base_url)
 
-    body: Dict[str, Any] = {"action": action, "payload": payload_obj}
+    body: dict[str, Any] = {"action": action, "payload": payload_obj}
     if req.request_id:
         body["request_id"] = req.request_id
 
     http = session or requests
 
-    headers: Dict[str, str] = {"Accept": "application/json"}
+    headers: dict[str, str] = {"Accept": "application/json"}
     headers.update(_auth_headers())
 
     try:
@@ -315,13 +316,13 @@ def invoke_action(
     def _safe_text() -> str:
         try:
             return str(getattr(resp, "text", ""))
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             return ""
 
     def _safe_json() -> Any:
         try:
             return resp.json()
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             return _safe_text() or None
 
     if status < 200 or status >= 300:
@@ -371,8 +372,8 @@ def response_to_payload(resp: InvokeActionResponse) -> InvokeActionResponsePaylo
 def error_to_payload(
     exc: NodeInvokeActionError,
     *,
-    node: Optional[str] = None,
-    action: Optional[str] = None,
+    node: str | None = None,
+    action: str | None = None,
 ) -> InvokeActionResponsePayload:
     return {
         "ok": False,
@@ -386,8 +387,8 @@ def error_to_payload(
 def invoke_action_payload(
     req: InvokeActionRequest,
     *,
-    registry: Optional[Mapping[str, str]] = None,
-    session: Optional[requests.Session] = None,
+    registry: Mapping[str, str] | None = None,
+    session: requests.Session | None = None,
 ) -> InvokeActionResponsePayload:
     """Invoke an action, returning a machine-friendly payload instead of raising."""
 
@@ -402,7 +403,7 @@ def invoke_action_payload(
 
 try:  # pragma: no cover
     from aiohttp import web  # type: ignore
-except Exception:  # pragma: no cover
+except (json.JSONDecodeError, ValueError, KeyError):  # pragma: no cover
     web = None  # type: ignore
 
 
@@ -410,7 +411,7 @@ if web is not None:  # pragma: no cover
     routes = web.RouteTableDef()
 
     @routes.post("/nodes/invoke-action")
-    async def handle_nodes_invoke_action(request: "web.Request") -> "web.StreamResponse":
+    async def handle_nodes_invoke_action(request: web.Request) -> web.StreamResponse:
         """HTTP route: POST /nodes/invoke-action
 
         Expected JSON body:
@@ -423,7 +424,7 @@ if web is not None:  # pragma: no cover
 
         try:
             body = await request.json()
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             err = InvalidInvokeActionInput("body must be valid JSON")
             return web.json_response(error_to_payload(err), status=err.http_status)
 
@@ -431,7 +432,7 @@ if web is not None:  # pragma: no cover
         action = str(body.get("action", "") or "")
         payload_any = body.get("payload", None)
 
-        payload: Optional[Mapping[str, Any]]
+        payload: Mapping[str, Any] | None
         if payload_any is None:
             payload = None
         elif isinstance(payload_any, Mapping):
@@ -442,7 +443,7 @@ if web is not None:  # pragma: no cover
 
         try:
             timeout_s = float(body.get("timeout_s", 30.0))
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             err = InvalidInvokeActionInput("timeout_s must be a number")
             return web.json_response(error_to_payload(err, node=node, action=action), status=err.http_status)
 
@@ -466,7 +467,7 @@ if web is not None:  # pragma: no cover
             else:
                 loop = asyncio.get_event_loop()
                 payload_out = await loop.run_in_executor(None, invoke_action_payload, req_obj)
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError, KeyError) as exc:
             err = TransportFailure(
                 "Failed to invoke node action",
                 details={"node": node, "action": action, "error": exc.__class__.__name__},

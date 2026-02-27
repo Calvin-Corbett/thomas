@@ -12,13 +12,12 @@ multiple backend method shapes.
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
 import os
 import re
-from typing import Any, Optional
+from dataclasses import asdict, dataclass
+from typing import Any
 from urllib.parse import parse_qs, urlparse
-
 
 # ---------------------------------------------------------------------------
 # Contracts
@@ -38,9 +37,9 @@ class MessageUnpinInput:
     expected to be the message timestamp ("ts"), e.g. "1712345678.000100".
     """
 
-    channel_id: Optional[str] = None
-    message_id: Optional[str] = None
-    message_url: Optional[str] = None
+    channel_id: str | None = None
+    message_id: str | None = None
+    message_url: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,7 +144,9 @@ def execute(
         message_id=normalized.message_id,  # type: ignore[arg-type]
     )
     # normalized guarantees channel_id/message_id are not None.
-    return MessageUnpinOutput(unpinned=True, channel_id=normalized.channel_id or "", message_id=normalized.message_id or "")
+    return MessageUnpinOutput(
+        unpinned=True, channel_id=normalized.channel_id or "", message_id=normalized.message_id or ""
+    )
 
 
 def to_machine_dict(result: MessageUnpinOutput) -> dict[str, Any]:
@@ -232,7 +233,7 @@ def _parse_message_url(message_url: str) -> dict[str, str]:
 
     try:
         url = urlparse(message_url)
-    except Exception as exc:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:  # pragma: no cover
         raise MessageUnpinInputError("message_url is not a valid URL") from exc
 
     # Slack
@@ -288,7 +289,7 @@ def _resolve_messages_client(ctx: Any | None) -> Any:
     ):
         try:
             mod = __import__(module_name, fromlist=["*"])
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
         for fn_name in factory_names:
             fn = getattr(mod, fn_name, None)
@@ -297,7 +298,7 @@ def _resolve_messages_client(ctx: Any | None) -> Any:
                     return fn()  # type: ignore[misc]
                 except TypeError:
                     continue
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     continue
 
     # 4) Optional environment-based Slack client convenience.
@@ -307,7 +308,7 @@ def _resolve_messages_client(ctx: Any | None) -> Any:
             from slack_sdk import WebClient  # type: ignore
 
             return WebClient(token=token)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             pass
 
     raise MessageUnpinConfigError(
@@ -336,11 +337,11 @@ def _call_unpin_backend(client: Any, *, channel_id: str, message_id: str) -> Non
                     return
                 except TypeError:
                     pass
-                except Exception as exc:
+                except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
                     raise MessageUnpinExternalError(
                         f"Failed to unpin message via {method_name}: {exc.__class__.__name__}"
                     ) from exc
-            except Exception as exc:
+            except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
                 raise MessageUnpinExternalError(
                     f"Failed to unpin message via {method_name}: {exc.__class__.__name__}"
                 ) from exc
@@ -351,7 +352,7 @@ def _call_unpin_backend(client: Any, *, channel_id: str, message_id: str) -> Non
         try:
             pins_remove(channel=channel_id, timestamp=message_id)
             return
-        except Exception as exc:
+        except (ImportError, AttributeError, RuntimeError) as exc:
             raise MessageUnpinExternalError(
                 f"Failed to unpin message via Slack pins.remove: {exc.__class__.__name__}"
             ) from exc
@@ -364,7 +365,7 @@ def _call_unpin_backend(client: Any, *, channel_id: str, message_id: str) -> Non
             try:
                 remove(channel=channel_id, timestamp=message_id)
                 return
-            except Exception as exc:
+            except (ImportError, AttributeError, RuntimeError) as exc:
                 raise MessageUnpinExternalError(
                     f"Failed to unpin message via Slack pins.remove: {exc.__class__.__name__}"
                 ) from exc
@@ -375,7 +376,7 @@ def _call_unpin_backend(client: Any, *, channel_id: str, message_id: str) -> Non
         try:
             api_call("pins.remove", json={"channel": channel_id, "timestamp": message_id})
             return
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError, KeyError) as exc:
             raise MessageUnpinExternalError(
                 f"Failed to unpin message via Slack pins.remove: {exc.__class__.__name__}"
             ) from exc

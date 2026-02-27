@@ -24,7 +24,7 @@ import os
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -46,16 +46,16 @@ class TurnRecord:
         channel: str,
         user_msg: str,
         assistant_msg: str,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
-        ts: Optional[str] = None,
+        tool_calls: list[dict[str, Any]] | None = None,
+        ts: str | None = None,
     ) -> None:
         self.channel = channel
-        self.user_msg = user_msg[:2000]          # cap to avoid bloat
+        self.user_msg = user_msg[:2000]  # cap to avoid bloat
         self.assistant_msg = assistant_msg[:4000]
-        self.tool_calls: List[Dict[str, Any]] = tool_calls or []
+        self.tool_calls: list[dict[str, Any]] = tool_calls or []
         self.ts = ts or datetime.now(timezone.utc).isoformat()
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "channel": self.channel,
             "user_msg": self.user_msg,
@@ -65,7 +65,7 @@ class TurnRecord:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "TurnRecord":
+    def from_dict(cls, d: dict[str, Any]) -> TurnRecord:
         return cls(
             channel=d.get("channel", "unknown"),
             user_msg=d.get("user_msg", ""),
@@ -96,14 +96,14 @@ class PersistenceEngine:
     }
     """
 
-    MAX_TURNS = 500          # cap stored turns to avoid unbounded growth
+    MAX_TURNS = 500  # cap stored turns to avoid unbounded growth
     SCHEMA_VERSION = 1
-    DAILY_REPORT_HOUR = 3    # write daily report at 3 AM local time
+    DAILY_REPORT_HOUR = 3  # write daily report at 3 AM local time
 
     def __init__(
         self,
-        state_file: Optional[Path] = None,
-        report_dir: Optional[Path] = None,
+        state_file: Path | None = None,
+        report_dir: Path | None = None,
         auto_save: bool = True,
     ) -> None:
         self.state_file = Path(state_file or _DEFAULT_STATE_FILE)
@@ -111,14 +111,14 @@ class PersistenceEngine:
         self.auto_save = auto_save
 
         self._lock = threading.Lock()
-        self._last_report_date: Optional[str] = None
+        self._last_report_date: str | None = None
 
         # Mutable state
-        self.goals: List[Dict[str, Any]] = []
-        self.facts: Dict[str, Any] = {}
-        self.tool_registry: Dict[str, Any] = {}
-        self.auth_sessions: Dict[str, Any] = {}
-        self.turn_history: List[TurnRecord] = []
+        self.goals: list[dict[str, Any]] = []
+        self.facts: dict[str, Any] = {}
+        self.tool_registry: dict[str, Any] = {}
+        self.auth_sessions: dict[str, Any] = {}
+        self.turn_history: list[TurnRecord] = []
 
     # ------------------------------------------------------------------
     # Public API
@@ -150,17 +150,27 @@ class PersistenceEngine:
         try:
             with self._lock:
                 payload = self._serialise()
+                # Pre-validate serialization before touching the filesystem
+                try:
+                    serialized = json.dumps(payload, indent=2, ensure_ascii=False, default=str)
+                except (TypeError, ValueError) as ser_err:
+                    log.error("PersistenceEngine: serialization failed: %s", ser_err)
+                    return False
                 self.state_file.parent.mkdir(parents=True, exist_ok=True)
                 tmp_path = self.state_file.with_suffix(self.state_file.suffix + ".tmp")
-                tmp_path.write_text(
-                    json.dumps(payload, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
+                tmp_path.write_text(serialized, encoding="utf-8")
                 os.replace(tmp_path, self.state_file)
             log.debug("PersistenceEngine: state saved (%d turns).", len(self.turn_history))
             return True
         except Exception as e:
             log.error("PersistenceEngine: save failed: %s", e)
+            # Clean up temp file if it was left behind
+            try:
+                tmp_path = self.state_file.with_suffix(self.state_file.suffix + ".tmp")
+                if tmp_path.exists():
+                    tmp_path.unlink(missing_ok=True)
+            except OSError:
+                pass
             return False
 
     def record_turn(
@@ -168,7 +178,7 @@ class PersistenceEngine:
         channel: str,
         user_msg: str,
         assistant_msg: str,
-        tool_calls: Optional[List[Dict[str, Any]]] = None,
+        tool_calls: list[dict[str, Any]] | None = None,
     ) -> None:
         """Record a completed conversation turn and auto-save."""
         turn = TurnRecord(channel, user_msg, assistant_msg, tool_calls)
@@ -176,7 +186,7 @@ class PersistenceEngine:
             self.turn_history.append(turn)
             # Trim history to cap
             if len(self.turn_history) > self.MAX_TURNS:
-                self.turn_history = self.turn_history[-self.MAX_TURNS:]
+                self.turn_history = self.turn_history[-self.MAX_TURNS :]
         if self.auto_save:
             self.save()
         self._maybe_write_daily_report()
@@ -189,12 +199,14 @@ class PersistenceEngine:
                     g["text"] = text
                     g["status"] = status
                     return
-            self.goals.append({
-                "id": goal_id,
-                "text": text,
-                "status": status,
-                "created": datetime.now(timezone.utc).isoformat(),
-            })
+            self.goals.append(
+                {
+                    "id": goal_id,
+                    "text": text,
+                    "status": status,
+                    "created": datetime.now(timezone.utc).isoformat(),
+                }
+            )
         if self.auto_save:
             self.save()
 
@@ -218,14 +230,14 @@ class PersistenceEngine:
         with self._lock:
             return self.facts.get(key, default)
 
-    def register_tool(self, name: str, schema: Dict[str, Any]) -> None:
+    def register_tool(self, name: str, schema: dict[str, Any]) -> None:
         """Register a tool schema into the persistent registry."""
         with self._lock:
             self.tool_registry[name] = schema
         if self.auto_save:
             self.save()
 
-    def recent_turns(self, channel: Optional[str] = None, n: int = 20) -> List[TurnRecord]:
+    def recent_turns(self, channel: str | None = None, n: int = 20) -> list[TurnRecord]:
         """Return the most recent N turns, optionally filtered by channel."""
         with self._lock:
             turns = self.turn_history
@@ -233,7 +245,7 @@ class PersistenceEngine:
                 turns = [t for t in turns if t.channel == channel]
             return turns[-n:]
 
-    def open_goals(self) -> List[Dict[str, Any]]:
+    def open_goals(self) -> list[dict[str, Any]]:
         with self._lock:
             return [g for g in self.goals if g.get("status") == "open"]
 
@@ -294,7 +306,7 @@ class PersistenceEngine:
     # Serialisation helpers
     # ------------------------------------------------------------------
 
-    def _serialise(self) -> Dict[str, Any]:
+    def _serialise(self) -> dict[str, Any]:
         return {
             "version": self.SCHEMA_VERSION,
             "last_saved": datetime.now(timezone.utc).isoformat(),
@@ -305,22 +317,20 @@ class PersistenceEngine:
             "turn_history": [t.to_dict() for t in self.turn_history],
         }
 
-    def _apply(self, raw: Dict[str, Any]) -> None:
+    def _apply(self, raw: dict[str, Any]) -> None:
         """Deserialise state from raw dict (called under lock)."""
         self.goals = raw.get("goals", [])
         self.facts = raw.get("facts", {})
         self.tool_registry = raw.get("tool_registry", {})
         self.auth_sessions = raw.get("auth_sessions", {})
-        self.turn_history = [
-            TurnRecord.from_dict(t) for t in raw.get("turn_history", [])
-        ]
+        self.turn_history = [TurnRecord.from_dict(t) for t in raw.get("turn_history", [])]
 
 
 # ---------------------------------------------------------------------------
 # Process-level singleton
 # ---------------------------------------------------------------------------
 
-_engine: Optional[PersistenceEngine] = None
+_engine: PersistenceEngine | None = None
 _engine_lock = threading.Lock()
 
 

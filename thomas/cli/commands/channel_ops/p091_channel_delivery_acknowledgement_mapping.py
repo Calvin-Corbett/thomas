@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from thomas.channels.p091_channel_delivery_acknowledgement_mapping import (
     ChannelDeliveryAckMappingError,
@@ -11,10 +11,9 @@ from thomas.channels.p091_channel_delivery_acknowledgement_mapping import (
     response_json_schema,
 )
 
-
 # Thomas-native command names.
 # Include aliases because different callers prefer different spellings.
-COMMAND_ALIASES: List[str] = [
+COMMAND_ALIASES: list[str] = [
     "delivery-acknowledgement-mapping",
     "delivery-acknowledgment-mapping",
     "delivery-ack-mapping",
@@ -22,7 +21,7 @@ COMMAND_ALIASES: List[str] = [
 ]
 
 
-def _emit(obj: Dict[str, Any], *, as_json: bool) -> None:
+def _emit(obj: dict[str, Any], *, as_json: bool) -> None:
     # For now, keep both human and machine output as JSON for determinism.
     # The `--json` flag exists for parity + explicitness.
     if as_json:
@@ -35,8 +34,8 @@ def _emit(obj: Dict[str, Any], *, as_json: bool) -> None:
 
 def run_delivery_ack_mapping(
     *,
-    channels: Optional[List[str]] = None,
-    config_path: Optional[str] = None,
+    channels: list[str] | None = None,
+    config_path: str | None = None,
     json_output: bool = False,
     json_schema: bool = False,
 ) -> int:
@@ -77,13 +76,13 @@ def register(target: Any, *args: Any, **kwargs: Any) -> None:
         if isinstance(target, typer.Typer):
 
             def _typer_cmd(
-                channels: Optional[List[str]] = typer.Option(
+                channels: list[str] | None = typer.Option(
                     None,
                     "--channel",
                     "-c",
                     help="Channel(s) to include. Repeatable.",
                 ),
-                config: Optional[str] = typer.Option(
+                config: str | None = typer.Option(
                     None,
                     "--config",
                     help="Path to a Thomas config JSON file.",
@@ -110,7 +109,7 @@ def register(target: Any, *args: Any, **kwargs: Any) -> None:
             for name in COMMAND_ALIASES:
                 target.command(name=name)(_typer_cmd)
             return
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         # Fall through.
         pass
 
@@ -123,7 +122,7 @@ def register(target: Any, *args: Any, **kwargs: Any) -> None:
             for name in COMMAND_ALIASES:
                 target.add_command(cmd, name=name)
             return
-    except Exception:
+    except ImportError:
         pass
 
     # argparse
@@ -162,8 +161,8 @@ def _build_click_command():
         help="Emit JSON schema for the response.",
     )
     def _cmd(
-        channels: List[str],
-        config_path: Optional[str],
+        channels: list[str],
+        config_path: str | None,
         json_output: bool,
         json_schema: bool,
     ) -> None:

@@ -2,9 +2,14 @@ import asyncio
 import unittest
 
 from thomas.agent.loop import AgentLoop
-from thomas.agent.routing import IntentRouter
-from thomas.agent.response_tone import live_test_default_hint, prompt_requests_directness_constraints
 from thomas.agent.prompt_templates import build_route_system_prompt
+from thomas.agent.response_tone import (
+    best_practice_gate_hint,
+    live_test_default_hint,
+    prompt_requests_best_practice_gate,
+    prompt_requests_directness_constraints,
+)
+from thomas.agent.routing import IntentRouter
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.events import EventType
 from thomas.core.llm import StreamEvent
@@ -51,6 +56,20 @@ class DummyLLMTextSequence:
         yield StreamEvent(type="done", data={})
 
 
+class CaptureLLM:
+    def __init__(self, text: str = "ok") -> None:
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+        self._text = str(text)
+        self.last_messages = []
+        self.last_tools = []
+
+    async def stream_chat(self, messages, tools):  # noqa: ANN001
+        self.last_messages = list(messages or [])
+        self.last_tools = list(tools or [])
+        yield StreamEvent(type="token", data={"text": self._text})
+        yield StreamEvent(type="done", data={})
+
+
 class DummyTool(Tool):
     name = "dummy.echo"
     category = "test"
@@ -70,9 +89,10 @@ class TestAgentLoopConversation(unittest.TestCase):
             model_name="local",
             model_id="qwen",
         )
+        self.assertIn('route="low_intent"', prompt)
         self.assertIn("natural and practical assistant", prompt)
         self.assertIn("Do not output pseudo tool-call text", prompt)
-        self.assertIn("Default to short responses", prompt)
+        self.assertIn("<runtime_context>", prompt)
 
     def test_build_route_system_prompt_uses_full_template_for_coding(self) -> None:
         prompt = build_route_system_prompt(
@@ -82,11 +102,17 @@ class TestAgentLoopConversation(unittest.TestCase):
             model_name="local",
             model_id="qwen",
         )
+        self.assertIn('route="execution"', prompt)
         self.assertIn("practical execution assistant", prompt)
-        self.assertIn("Sound like a capable human teammate", prompt)
+        self.assertIn("<execution_contract>", prompt)
 
     def test_prompt_requests_directness_constraints_detects_one_sentence(self) -> None:
         self.assertTrue(prompt_requests_directness_constraints("that's not what i asked. try again in one sentence."))
+
+    def test_prompt_requests_best_practice_gate_detects_non_coder_request(self) -> None:
+        self.assertTrue(
+            prompt_requests_best_practice_gate("idk how to code. always use the best practice robust method.")
+        )
 
     def test_conversation_list_is_preserved_when_empty(self) -> None:
         cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
@@ -456,7 +482,9 @@ class TestAgentLoopConversation(unittest.TestCase):
             "2. **Basic Arithmetic**: 2 + 2 = 4.\n"
             "Therefore, the answer is 4.",
             prompt_text="Think out loud and explain your thought process before answering: what is 2+2?",
-            route=IntentRouter().decide("Think out loud and explain your thought process before answering: what is 2+2?"),
+            route=IntentRouter().decide(
+                "Think out loud and explain your thought process before answering: what is 2+2?"
+            ),
             route_input_source="prompt_only",
             pending_tool_calls=0,
         )
@@ -471,7 +499,7 @@ class TestAgentLoopConversation(unittest.TestCase):
         agent = AgentLoop(cfg, DummyLLM(), tools, conversation=[])
         out, changed = agent._sanitize_assistant_text(
             "List Configuration Files:\n\njson\nCopy\n"
-            "{\"name\": \"fs_list_dir\", \"arguments\": {\"path\": \"**/*.json\"}}\n\n"
+            '{"name": "fs_list_dir", "arguments": {"path": "**/*.json"}}\n\n'
             "After running these commands, review the results.",
             prompt_text="my settings keep resetting every restart. where should i look first?",
             route=IntentRouter().decide("my settings keep resetting every restart. where should i look first?"),
@@ -479,7 +507,7 @@ class TestAgentLoopConversation(unittest.TestCase):
             pending_tool_calls=0,
         )
         self.assertTrue(changed)
-        self.assertNotIn("\"name\": \"fs_list_dir\"", out)
+        self.assertNotIn('"name": "fs_list_dir"', out)
         self.assertNotIn("\njson\n", out.lower())
         self.assertIn("After running these commands", out)
 
@@ -503,7 +531,7 @@ class TestAgentLoopConversation(unittest.TestCase):
         agent = AgentLoop(cfg, DummyLLM(), tools, conversation=[])
         out, changed = agent._sanitize_assistant_text(
             "You can start by running:\n\nsh\nCopy\nshell.exec(\"find . -name '*.json'\")\n\n"
-            "Then inspect files with:\n\nsh\nCopy\nfs.read_file(\"path/to/file.json\")\n\n"
+            'Then inspect files with:\n\nsh\nCopy\nfs.read_file("path/to/file.json")\n\n'
             "Review the file values after that.",
             prompt_text="my settings keep resetting every restart. where should i look first?",
             route=IntentRouter().decide("my settings keep resetting every restart. where should i look first?"),
@@ -521,7 +549,7 @@ class TestAgentLoopConversation(unittest.TestCase):
         agent = AgentLoop(cfg, DummyLLM(), tools, conversation=[])
         out, changed = agent._sanitize_assistant_text(
             "Run this first:\n\nsh\nCopy\n"
-            "fs.list_dir path=\"F:\\\\DevHub\\\\Thomas\" pattern=\"*.json,*.yaml\"\n\n"
+            'fs.list_dir path="F:\\\\DevHub\\\\Thomas" pattern="*.json,*.yaml"\n\n'
             "Then read files after listing.",
             prompt_text="my settings keep resetting every restart. where should i look first?",
             route=IntentRouter().decide("my settings keep resetting every restart. where should i look first?"),
@@ -682,3 +710,59 @@ class TestAgentLoopConversation(unittest.TestCase):
         tools = ToolRegistry()
         hint = live_test_default_hint("Run a shadow headless browser test for this UI.")
         self.assertEqual(hint, "")
+
+    def test_best_practice_gate_hint_generated_for_non_coder_request(self) -> None:
+        hint = best_practice_gate_hint("I don't know how to code. Please always give the robust best practice method.")
+        self.assertIn("<input_continuity_hint>", hint)
+        self.assertIn("robust best-practice guidance", hint)
+
+    def test_best_practice_gate_hint_injected_into_system_prompt_and_report(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        llm = CaptureLLM("use this approach")
+        agent = AgentLoop(cfg, llm, tools, conversation=[])
+
+        async def run_once():
+            events = []
+            async for ev in agent.run("idk how to code, make this always use the robust best practice method"):
+                events.append(ev)
+            return events
+
+        events = asyncio.run(run_once())
+        system_msg = next((m for m in llm.last_messages if m.get("role") == "system"), {})
+        self.assertIn("robust best-practice guidance by default", str(system_msg.get("content") or ""))
+        done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+        self.assertIsNotNone(done)
+        assert done is not None
+        continuity = (done.data.get("token_report") or {}).get("continuity") or {}
+        self.assertTrue(bool(continuity.get("best_practice_gate_active")))
+
+    def test_best_practice_gate_forced_by_non_coder_profile(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        llm = CaptureLLM("hello")
+        agent = AgentLoop(
+            cfg,
+            llm,
+            tools,
+            conversation=[],
+            non_coder_profile=True,
+            profile_type="non_coder",
+        )
+
+        async def run_once():
+            events = []
+            async for ev in agent.run("hey there"):
+                events.append(ev)
+            return events
+
+        events = asyncio.run(run_once())
+        system_msg = next((m for m in llm.last_messages if m.get("role") == "system"), {})
+        self.assertIn("robust best-practice guidance by default", str(system_msg.get("content") or ""))
+        done = next((e for e in events if e.type == EventType.AGENT_DONE), None)
+        self.assertIsNotNone(done)
+        assert done is not None
+        continuity = (done.data.get("token_report") or {}).get("continuity") or {}
+        self.assertTrue(bool(continuity.get("best_practice_gate_active")))
+        self.assertEqual(str(continuity.get("best_practice_gate_source") or ""), "profile_non_coder")
+        self.assertEqual(str(continuity.get("profile_type") or ""), "non_coder")

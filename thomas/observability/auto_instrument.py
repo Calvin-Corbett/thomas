@@ -1,20 +1,24 @@
 # thomas/observability/auto_instrument.py
 from __future__ import annotations
 
-import asyncio
 import inspect
 import types
+from collections.abc import Awaitable, Callable
 from functools import wraps
-from typing import Any, Callable, Awaitable
+from typing import Any
 
 from thomas.observability.event_recorder import record_event
 
 _INSTALLED = False
 
+
 def _wrap_async_fn(name: str, fn: Callable[..., Awaitable[Any]]):
     @wraps(fn)
     async def wrapped(*args, **kwargs):
-        record_event("auto_instrument.call", {"target": name, "kind": "async", "args_n": len(args), "kwargs_keys": list(kwargs.keys())})
+        record_event(
+            "auto_instrument.call",
+            {"target": name, "kind": "async", "args_n": len(args), "kwargs_keys": list(kwargs.keys())},
+        )
         try:
             out = await fn(*args, **kwargs)
             record_event("auto_instrument.result", {"target": name, "kind": "async"})
@@ -22,12 +26,17 @@ def _wrap_async_fn(name: str, fn: Callable[..., Awaitable[Any]]):
         except Exception as e:
             record_event("auto_instrument.error", {"target": name, "kind": "async", "error": str(e)})
             raise
+
     return wrapped
+
 
 def _wrap_sync_fn(name: str, fn: Callable[..., Any]):
     @wraps(fn)
     def wrapped(*args, **kwargs):
-        record_event("auto_instrument.call", {"target": name, "kind": "sync", "args_n": len(args), "kwargs_keys": list(kwargs.keys())})
+        record_event(
+            "auto_instrument.call",
+            {"target": name, "kind": "sync", "args_n": len(args), "kwargs_keys": list(kwargs.keys())},
+        )
         try:
             out = fn(*args, **kwargs)
             record_event("auto_instrument.result", {"target": name, "kind": "sync"})
@@ -35,7 +44,9 @@ def _wrap_sync_fn(name: str, fn: Callable[..., Any]):
         except Exception as e:
             record_event("auto_instrument.error", {"target": name, "kind": "sync", "error": str(e)})
             raise
+
     return wrapped
+
 
 def _wrap_async_gen(name: str, agen_fn: Callable[..., Any]):
     @wraps(agen_fn)
@@ -53,7 +64,9 @@ def _wrap_async_gen(name: str, agen_fn: Callable[..., Any]):
         except Exception as e:
             record_event("auto_instrument.error", {"target": name, "kind": "async_gen", "error": str(e), "chunks": i})
             raise
+
     return wrapped
+
 
 def _wrap_sync_gen(name: str, gen_fn: Callable[..., Any]):
     @wraps(gen_fn)
@@ -70,7 +83,9 @@ def _wrap_sync_gen(name: str, gen_fn: Callable[..., Any]):
         except Exception as e:
             record_event("auto_instrument.error", {"target": name, "kind": "sync_gen", "error": str(e), "chunks": i})
             raise
+
     return wrapped
+
 
 def _maybe_wrap_callable(mod: types.ModuleType, attr_name: str):
     obj = getattr(mod, attr_name, None)
@@ -91,11 +106,12 @@ def _maybe_wrap_callable(mod: types.ModuleType, attr_name: str):
             w = _wrap_sync_gen(qual, obj)
         else:
             w = _wrap_sync_fn(qual, obj)
-        setattr(w, "__thomas_instrumented__", True)
+        w.__thomas_instrumented__ = True
         setattr(mod, attr_name, w)
         return True
-    except Exception:
+    except AttributeError:
         return False
+
 
 def ensure_installed() -> None:
     global _INSTALLED
@@ -117,7 +133,7 @@ def ensure_installed() -> None:
     for mod_name in candidates:
         try:
             mod = __import__(mod_name, fromlist=["*"])
-        except Exception:
+        except ImportError:
             continue
 
         for attr in dir(mod):
@@ -125,7 +141,9 @@ def ensure_installed() -> None:
             if low in {"__", "main"}:
                 continue
             # Heuristics: likely model/tool entrypoints
-            if any(k in low for k in ("tool", "call", "execute", "run", "stream", "chat", "complete", "generate", "infer")):
+            if any(
+                k in low for k in ("tool", "call", "execute", "run", "stream", "chat", "complete", "generate", "infer")
+            ):
                 if _maybe_wrap_callable(mod, attr):
                     wrapped += 1
 

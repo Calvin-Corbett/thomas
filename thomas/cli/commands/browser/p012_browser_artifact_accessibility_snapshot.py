@@ -11,10 +11,12 @@ structured).
 
 from __future__ import annotations
 
+import argparse
 import importlib
 import json
+from collections.abc import Callable, Sequence
 from pathlib import Path
-from typing import Any, Callable, Optional, Sequence
+from typing import Any
 
 from thomas.browser.p012_browser_artifact_accessibility_snapshot import (
     AccessibilitySnapshotRequest,
@@ -24,7 +26,7 @@ from thomas.browser.p012_browser_artifact_accessibility_snapshot import (
 
 try:
     import typer  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
 
@@ -53,7 +55,7 @@ def _emit(payload: dict, *, json_mode: bool) -> None:
 
 def run_accessibility_snapshot(
     *,
-    artifact_dir: Optional[Path],
+    artifact_dir: Path | None,
     name: str,
     interesting_only: bool,
     json_mode: bool,
@@ -166,7 +168,7 @@ def _try_resolve_from_module(mod: Any, callables: Sequence[str], vars_: Sequence
         except BrowserArtifactError:
             # Preserve deterministic errors from the underlying Thomas layer.
             raise
-        except Exception:
+        except AttributeError:
             continue
         if value is not None:
             return value
@@ -195,7 +197,7 @@ def register_typer(browser_app: Any) -> None:
 
     @browser_app.command("artifact-accessibility-snapshot")
     def artifact_accessibility_snapshot(
-        artifact_dir: Optional[Path] = typer.Option(
+        artifact_dir: Path | None = typer.Option(
             None,
             "--artifact-dir",
             "-o",
@@ -278,7 +280,7 @@ def _auto_register_with_browser_command_group() -> None:
         if pkg_app is not None and hasattr(pkg_app, "command"):
             register_typer(pkg_app)
             return
-    except Exception:
+    except ImportError:
         pass
 
     # 2) Submodule (thomas.cli.commands.browser.app: app = Typer())
@@ -288,8 +290,41 @@ def _auto_register_with_browser_command_group() -> None:
         if mod_app is not None and hasattr(mod_app, "command"):
             register_typer(mod_app)
             return
-    except Exception:
+    except ImportError:
         pass
 
 
 _auto_register_with_browser_command_group()
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser artifact-accessibility-snapshot",
+        description="Capture an accessibility snapshot artifact.",
+    )
+    parser.add_argument("--artifact-dir", default=None)
+    parser.add_argument("--name", default="accessibility-snapshot")
+    parser.add_argument(
+        "--interesting-only",
+        dest="interesting_only",
+        action="store_true",
+        default=True,
+    )
+    parser.add_argument(
+        "--all-nodes",
+        dest="interesting_only",
+        action="store_false",
+    )
+    parser.add_argument("--json", dest="json_mode", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    return run_accessibility_snapshot(
+        artifact_dir=Path(args.artifact_dir) if args.artifact_dir else None,
+        name=str(args.name),
+        interesting_only=bool(args.interesting_only),
+        json_mode=bool(args.json_mode),
+    )

@@ -17,12 +17,12 @@ Public entrypoints:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import os
-from typing import Any, Dict, Literal, Mapping, Optional, Sequence, TypedDict, Union, cast
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict, Union, cast
 
 import requests
-
 
 ModerationAction = Literal["kick", "ban"]
 
@@ -36,14 +36,14 @@ class MemberModerationError(Exception):
     """Base deterministic error with a stable machine-readable code."""
 
     code: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
-    def __init__(self, *, code: str, message: str, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, *, code: str, message: str, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = dict(details or {})
 
-    def to_failure_dict(self) -> "MemberModerationFailure":
+    def to_failure_dict(self) -> MemberModerationFailure:
         return {
             "ok": False,
             "error": {"code": self.code, "message": str(self), "details": self.details},
@@ -51,17 +51,17 @@ class MemberModerationError(Exception):
 
 
 class InvalidInputError(MemberModerationError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(code="invalid_input", message=message, details=details)
 
 
 class MissingConfigError(MemberModerationError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(code="missing_config", message=message, details=details)
 
 
 class ExternalServiceError(MemberModerationError):
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(code="external_failure", message=message, details=details)
 
 
@@ -76,9 +76,9 @@ class MemberModerationRequestDict(TypedDict, total=False):
     member_id: str
     reason: str
     webhook_url: str
-    timeout_s: Union[int, float]
+    timeout_s: int | float
     request_id: str
-    metadata: Dict[str, Any]
+    metadata: dict[str, Any]
 
 
 class MemberModerationSuccess(TypedDict):
@@ -87,14 +87,14 @@ class MemberModerationSuccess(TypedDict):
     channel_id: str
     member_id: str
     message: str
-    provider_response: Optional[Mapping[str, Any]]
-    request_id: Optional[str]
+    provider_response: Mapping[str, Any] | None
+    request_id: str | None
 
 
 class MemberModerationFailure(TypedDict):
     ok: Literal[False]
-    error: Dict[str, Any]
-    request_id: Optional[str]
+    error: dict[str, Any]
+    request_id: str | None
 
 
 MemberModerationResponse = Union[MemberModerationSuccess, MemberModerationFailure]
@@ -105,9 +105,9 @@ class MemberModerationRequest:
     action: ModerationAction
     channel_id: str
     member_id: str
-    reason: Optional[str] = None
-    request_id: Optional[str] = None
-    metadata: Optional[Mapping[str, Any]] = None
+    reason: str | None = None
+    request_id: str | None = None
+    metadata: Mapping[str, Any] | None = None
 
 
 @dataclass(frozen=True)
@@ -116,8 +116,8 @@ class MemberModerationResult:
     channel_id: str
     member_id: str
     message: str
-    provider_response: Optional[Mapping[str, Any]] = None
-    request_id: Optional[str] = None
+    provider_response: Mapping[str, Any] | None = None
+    request_id: str | None = None
 
     def to_success_dict(self) -> MemberModerationSuccess:
         return {
@@ -136,7 +136,7 @@ class MemberModerationResult:
 # -----------------------------
 
 
-_ACTION_ALIASES: Dict[str, ModerationAction] = {
+_ACTION_ALIASES: dict[str, ModerationAction] = {
     "kick": "kick",
     "kicked": "kick",
     "remove": "kick",
@@ -190,7 +190,7 @@ def _unwrap_payload(payload: Mapping[str, Any]) -> Mapping[str, Any]:
     return payload
 
 
-def _first_str(payload: Mapping[str, Any], keys: Sequence[str]) -> Optional[str]:
+def _first_str(payload: Mapping[str, Any], keys: Sequence[str]) -> str | None:
     for k in keys:
         v = payload.get(k)
         if isinstance(v, str) and v.strip():
@@ -251,7 +251,7 @@ def parse_request(payload: Mapping[str, Any]) -> MemberModerationRequest:
         member_id=member_id,
         reason=reason_str,
         request_id=request_id_str,
-        metadata=cast(Optional[Mapping[str, Any]], metadata),
+        metadata=cast(Mapping[str, Any] | None, metadata),
     )
 
 
@@ -280,11 +280,11 @@ def _get_from_config(config: Any, key: str) -> Any:
 
 
 def _resolve_webhook_url(
-    explicit_url: Optional[str],
+    explicit_url: str | None,
     *,
-    payload: Optional[Mapping[str, Any]] = None,
-    config: Optional[Any] = None,
-    env: Optional[Mapping[str, str]] = None,
+    payload: Mapping[str, Any] | None = None,
+    config: Any | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> str:
     if isinstance(explicit_url, str) and explicit_url.strip():
         return explicit_url.strip()
@@ -338,8 +338,8 @@ def execute(
     *,
     webhook_url: str,
     timeout_s: float = 10.0,
-    session: Optional[requests.Session] = None,
-    extra_headers: Optional[Mapping[str, str]] = None,
+    session: requests.Session | None = None,
+    extra_headers: Mapping[str, str] | None = None,
 ) -> MemberModerationResult:
     """Kick or ban a member by calling the configured webhook."""
 
@@ -348,7 +348,7 @@ def execute(
     if not isinstance(timeout_s, (int, float)) or float(timeout_s) <= 0:
         raise InvalidInputError("timeout_s must be a positive number", details={"got": timeout_s})
 
-    outbound_payload: Dict[str, Any] = {
+    outbound_payload: dict[str, Any] = {
         "action": request.action,
         "channel_id": request.channel_id,
         "member_id": request.member_id,
@@ -360,7 +360,7 @@ def execute(
     if request.metadata:
         outbound_payload["metadata"] = dict(request.metadata)
 
-    headers: Dict[str, str] = {"Accept": "application/json"}
+    headers: dict[str, str] = {"Accept": "application/json"}
     if request.request_id:
         headers["X-Thomas-Request-Id"] = request.request_id
     if extra_headers:
@@ -381,21 +381,21 @@ def execute(
     if resp.status_code < 200 or resp.status_code >= 300:
         try:
             body_preview = _truncate(resp.text or "")
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             body_preview = "<unreadable>"
         raise ExternalServiceError(
             "Member moderation webhook returned a non-success status",
             details={"status_code": resp.status_code, "body": body_preview},
         )
 
-    provider_response: Optional[Mapping[str, Any]] = None
+    provider_response: Mapping[str, Any] | None = None
     try:
         provider_response = cast(Mapping[str, Any], resp.json())
     except ValueError:
         text = ""
         try:
             text = resp.text or ""
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             text = ""
         provider_response = {"raw": _truncate(text)} if text else None
 
@@ -417,16 +417,16 @@ def execute(
 
 def run(
     payload: Mapping[str, Any],
-    config: Optional[Any] = None,
-    webhook_url: Optional[str] = None,
-    session: Optional[requests.Session] = None,
+    config: Any | None = None,
+    webhook_url: str | None = None,
+    session: requests.Session | None = None,
 ) -> MemberModerationResponse:
     """Automation-friendly wrapper.
 
     Returns only JSON-serialisable data. Never raises on expected failures.
     """
 
-    request_id: Optional[str] = None
+    request_id: str | None = None
     try:
         request = parse_request(payload)
         request_id = request.request_id
@@ -436,7 +436,7 @@ def run(
         timeout_raw = _unwrap_payload(payload).get("timeout_s", 10.0)
         try:
             timeout_s = float(timeout_raw)  # type: ignore[arg-type]
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             raise InvalidInputError("timeout_s must be a number", details={"got": timeout_raw})
 
         extra_headers = _get_from_config(config, "messages_member_moderation_extra_headers")
@@ -448,20 +448,20 @@ def run(
             webhook_url=resolved_webhook_url,
             timeout_s=timeout_s,
             session=session,
-            extra_headers=cast(Optional[Mapping[str, str]], extra_headers),
+            extra_headers=cast(Mapping[str, str] | None, extra_headers),
         )
         return result.to_success_dict()
     except MemberModerationError as exc:
         out = exc.to_failure_dict()
         out["request_id"] = request_id
         return cast(MemberModerationFailure, out)
-    except Exception as exc:  # pragma: no cover
+    except (ConnectionError, TimeoutError, RuntimeError) as exc:  # pragma: no cover
         out = ExternalServiceError("Unhandled failure", details={"exception": repr(exc)}).to_failure_dict()
         out["request_id"] = request_id
         return cast(MemberModerationFailure, out)
 
 
-def handle_webhook(payload: Mapping[str, Any], config: Optional[Any] = None) -> MemberModerationResponse:
+def handle_webhook(payload: Mapping[str, Any], config: Any | None = None) -> MemberModerationResponse:
     """Convenience for server webhook routers: same contract as `run()`."""
     return run(payload, config=config)
 

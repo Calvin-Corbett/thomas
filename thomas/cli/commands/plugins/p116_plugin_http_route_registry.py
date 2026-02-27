@@ -18,7 +18,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -28,7 +28,6 @@ from thomas.plugins.p116_plugin_http_route_registry import (
     get_default_registry,
     load_routes_from_config,
 )
-
 
 app = typer.Typer(
     add_completion=False,
@@ -47,7 +46,7 @@ def _emit_error(err: PluginRouteRegistryError, *, json_mode: bool) -> None:
     typer.echo(f"ERROR[{err.code}]: {err}", err=True)
 
 
-def _build_registry_view(config: Optional[Path]) -> PluginHttpRouteRegistry:
+def _build_registry_view(config: Path | None) -> PluginHttpRouteRegistry:
     """Build an isolated registry view for the CLI run.
 
     We copy the current process-global registry into a fresh registry so CLI operations
@@ -74,12 +73,12 @@ def main(
         "--schema",
         help="Emit JSON Schema for the --json output shape.",
     ),
-    plugin_id: Optional[str] = typer.Option(
+    plugin_id: str | None = typer.Option(
         None,
         "--plugin-id",
         help="Only show routes belonging to this plugin id.",
     ),
-    config: Optional[Path] = typer.Option(
+    config: Path | None = typer.Option(
         None,
         "--config",
         dir_okay=False,
@@ -162,7 +161,7 @@ def register(parent: Any, *, name: str = COMMAND_NAME) -> None:
         if isinstance(parent, typer.Typer):
             parent.add_typer(app, name=name)
             return
-    except Exception:
+    except (ConnectionError, TimeoutError):
         # If Typer changes its types, fall through to Click.
         pass
 

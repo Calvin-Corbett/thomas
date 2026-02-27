@@ -5,11 +5,15 @@ import json
 import mimetypes
 import os
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
 from .ocr_fallback import extract_text_from_images
 
@@ -19,7 +23,7 @@ _IMAGE_TOKEN_RE = re.compile(r"(?:thomas-upload://)([0-9a-fA-F]{32,128})")
 _DEFAULT_VISION_HINTS = ("gpt-4o", "gpt-4.1", "gpt-4-vision", "o1", "o3", "o4", "claude-")
 
 
-def extract_image_ids(text: str) -> List[str]:
+def extract_image_ids(text: str) -> list[str]:
     """Extract image IDs embedded in message text as `thomas-upload://<id>`."""
     if not text:
         return []
@@ -32,7 +36,7 @@ def _load_model_caps() -> dict:
         return {}
     try:
         return json.loads(raw)
-    except Exception:
+    except json.JSONDecodeError:
         return {}
 
 
@@ -51,7 +55,7 @@ def model_supports_vision(active_model: str) -> bool:
     if isinstance(caps, dict) and active_model in caps:
         try:
             return bool(caps[active_model].get("vision", False))
-        except Exception:
+        except json.JSONDecodeError:
             pass
 
     hints = os.getenv("THOMAS_VISION_MODEL_HINTS", "").strip()
@@ -94,7 +98,7 @@ def _guess_mime(path: Path) -> str:
     return "application/octet-stream"
 
 
-def _read_image_b64(image_path: Path) -> Tuple[str, str]:
+def _read_image_b64(image_path: Path) -> tuple[str, str]:
     data = image_path.read_bytes()
     media_type = _guess_mime(image_path)
     return media_type, base64.b64encode(data).decode("ascii")
@@ -110,7 +114,7 @@ def _openai_image_detail() -> str:
     return d if d in ("auto", "low", "high") else "auto"
 
 
-def build_openai_payload(prompt: str, image_paths: Sequence[Path], model: str, *, max_tokens: int) -> Dict[str, Any]:
+def build_openai_payload(prompt: str, image_paths: Sequence[Path], model: str, *, max_tokens: int) -> dict[str, Any]:
     """Build OpenAI payload using either Responses API or Chat Completions.
 
     - Chat Completions: content parts include {"type":"image_url","image_url":{"url":...,"detail":...}}
@@ -122,7 +126,7 @@ def build_openai_payload(prompt: str, image_paths: Sequence[Path], model: str, *
     style = _openai_style()
 
     if style == "chat_completions":
-        content: List[Dict[str, Any]] = [{"type": "text", "text": prompt or ""}]
+        content: list[dict[str, Any]] = [{"type": "text", "text": prompt or ""}]
         for p in image_paths:
             media_type, b64 = _read_image_b64(p)
             content.append(
@@ -137,7 +141,7 @@ def build_openai_payload(prompt: str, image_paths: Sequence[Path], model: str, *
         return {"model": model, "messages": [{"role": "user", "content": content}], "max_tokens": max_tokens}
 
     # Responses API (default)
-    content2: List[Dict[str, Any]] = [{"type": "input_text", "text": prompt or ""}]
+    content2: list[dict[str, Any]] = [{"type": "input_text", "text": prompt or ""}]
     for p in image_paths:
         media_type, b64 = _read_image_b64(p)
         part = {"type": "input_image", "image_url": f"data:{media_type};base64,{b64}"}
@@ -152,9 +156,9 @@ def build_openai_payload(prompt: str, image_paths: Sequence[Path], model: str, *
     }
 
 
-def build_anthropic_payload(prompt: str, image_paths: Sequence[Path], model: str, *, max_tokens: int) -> Dict[str, Any]:
+def build_anthropic_payload(prompt: str, image_paths: Sequence[Path], model: str, *, max_tokens: int) -> dict[str, Any]:
     """Anthropic Messages API payload with base64 image blocks."""
-    blocks: List[Dict[str, Any]] = []
+    blocks: list[dict[str, Any]] = []
     for p in image_paths:
         media_type, b64 = _read_image_b64(p)
         blocks.append(
@@ -172,9 +176,7 @@ def build_anthropic_payload(prompt: str, image_paths: Sequence[Path], model: str
 
 
 def _inject_ocr_text(prompt: str, ocr_texts: Sequence[str]) -> str:
-    joined = "\n\n".join(
-        f"[image {i+1}]\n{t.strip()}" for i, t in enumerate(ocr_texts) if t and t.strip()
-    )
+    joined = "\n\n".join(f"[image {i+1}]\n{t.strip()}" for i, t in enumerate(ocr_texts) if t and t.strip())
     if not joined:
         joined = "(No OCR text could be extracted from the attached image(s).)"
     base = (prompt or "").rstrip()
@@ -183,7 +185,7 @@ def _inject_ocr_text(prompt: str, ocr_texts: Sequence[str]) -> str:
     return base + "OCR_EXTRACT_FROM_IMAGES:\n" + joined + "\n"
 
 
-def _text_only_payload(provider: str, model: str, prompt: str, max_tokens: int) -> Dict[str, Any]:
+def _text_only_payload(provider: str, model: str, prompt: str, max_tokens: int) -> dict[str, Any]:
     if provider == "openai":
         # Match selected OpenAI style
         if _openai_style() == "chat_completions":
@@ -203,9 +205,9 @@ def _text_only_payload(provider: str, model: str, prompt: str, max_tokens: int) 
 class ProviderRequest:
     provider: str  # "openai" | "anthropic"
     model: str
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     used_ocr_fallback: bool = False
-    ocr_text: Optional[str] = None
+    ocr_text: str | None = None
 
 
 async def build_provider_request(
@@ -259,7 +261,7 @@ async def call_provider(req: ProviderRequest, *, timeout_s: float = 60.0) -> str
     raise ValueError(f"Unsupported provider: {req.provider}")
 
 
-async def _call_openai(path: str, payload: Dict[str, Any], *, timeout_s: float, parse: str) -> str:
+async def _call_openai(path: str, payload: dict[str, Any], *, timeout_s: float, parse: str) -> str:
     api_key = os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is not set")
@@ -287,7 +289,7 @@ async def _call_openai(path: str, payload: Dict[str, Any], *, timeout_s: float, 
     return "".join(parts).strip()
 
 
-async def _call_anthropic(payload: Dict[str, Any], *, timeout_s: float) -> str:
+async def _call_anthropic(payload: dict[str, Any], *, timeout_s: float) -> str:
     api_key = os.getenv("ANTHROPIC_API_KEY")
     if not api_key:
         raise RuntimeError("ANTHROPIC_API_KEY is not set")

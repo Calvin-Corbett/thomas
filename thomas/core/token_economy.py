@@ -1,14 +1,43 @@
-"""Shared token-economy policy for server, CLI, and agent runtime."""
+"""Shared token-economy policy for server, CLI, and agent runtime.
+
+Token economy controls the **number of passes** (iterations) Thomas performs.
+Reasoning depth is automatic — determined by the provider/model, not by Thomas.
+
+Levels:
+  cheap   — minimal passes (1 pass, single-shot answer)
+  optimal — standard passes (default, balanced iteration count)
+  max     — extended passes (more iterations for thorough work)
+"""
 
 from __future__ import annotations
 
 from dataclasses import replace
-from typing import Any, Optional
+from typing import Any
 
 from thomas.core.config import AppConfig
 
 TOKEN_ECONOMY_LEVELS = ("cheap", "optimal", "max")
 RUN_MODES = ("auto", "fast", "thinking", "swarm", "batch")
+
+# Number of passes (iterations) per economy level.
+# These multiply against the base max_agent_iterations from config.
+_PASS_MULTIPLIERS = {
+    "cheap": 0.3,  # ~1-3 passes — single-shot, minimal iteration
+    "optimal": 1.0,  # default number of passes from config
+    "max": 2.5,  # extended passes for thorough multi-step work
+}
+
+_MIN_PASSES = {
+    "cheap": 1,
+    "optimal": 3,
+    "max": 8,
+}
+
+_MAX_PASSES = {
+    "cheap": 3,
+    "optimal": 15,
+    "max": 32,
+}
 
 
 def normalize_token_economy_level(raw: Any) -> str:
@@ -25,7 +54,7 @@ def normalize_mode(raw: Any, *, default: str = "auto") -> str:
     return str(default or "auto").strip().lower() or "auto"
 
 
-def build_token_economy_meta(requested_level: Any, applied_level: Optional[str] = None) -> dict[str, str]:
+def build_token_economy_meta(requested_level: Any, applied_level: str | None = None) -> dict[str, str]:
     requested = str(requested_level or "").strip().lower()
     applied = normalize_token_economy_level(applied_level if applied_level is not None else requested)
     return {
@@ -34,49 +63,64 @@ def build_token_economy_meta(requested_level: Any, applied_level: Optional[str] 
     }
 
 
+def compute_max_passes(level: Any, base_iterations: int) -> int:
+    """Compute the max iterations (passes) for a given economy level.
+
+    Args:
+        level: Token economy level (cheap/optimal/max).
+        base_iterations: The base max_agent_iterations from config.
+
+    Returns:
+        Clamped number of passes.
+    """
+    applied = normalize_token_economy_level(level)
+    multiplier = _PASS_MULTIPLIERS[applied]
+    raw = int(base_iterations * multiplier)
+    return max(_MIN_PASSES[applied], min(_MAX_PASSES[applied], raw))
+
+
 def apply_token_economy_policy(
     *,
     cfg: AppConfig,
     requested_level: Any,
     requested_mode: Any,
-) -> tuple[str, str, AppConfig, Optional[int]]:
+) -> tuple[str, str, AppConfig, int | None]:
     """Return (applied_level, mode, run_cfg, max_iterations_override).
 
-    Token economy controls budget and quality strictness without overriding the
-    user's chosen mode.
+    Token economy controls the number of passes.  Reasoning depth is
+    automatic — left to the provider/model.
     """
     level = normalize_token_economy_level(requested_level)
     mode = normalize_mode(requested_mode, default="auto")
 
-    quality_cfg = cfg.quality
-    max_iterations_override: Optional[int] = None
+    # Compute pass count from economy level.
+    max_iterations_override = compute_max_passes(level, cfg.max_agent_iterations)
 
+    # Quality config adjustments are minimal — just disable retries on cheap.
+    quality_cfg = cfg.quality
     if level == "cheap":
         quality_cfg = replace(
             quality_cfg,
             max_auto_retries=0,
-            require_verification_for_coding=True,
-            require_tests_for_code_edits=False,
         )
     elif level == "max":
         quality_cfg = replace(
             quality_cfg,
-            enabled=True,
-            enforce=True,
             max_auto_retries=max(
                 2,
                 min(3, int(getattr(quality_cfg, "max_auto_retries", 1) or 0)),
             ),
-            require_verification_for_coding=True,
-            require_tests_for_code_edits=True,
         )
 
     run_cfg = cfg if quality_cfg is cfg.quality else replace(cfg, quality=quality_cfg)
     return level, mode, run_cfg, max_iterations_override
 
 
-def loop_context_budgets(level: Any, mode: Any) -> tuple[int, Optional[int], int]:
-    """Return (mode_budget, hard_budget, emergency_budget)."""
+def loop_context_budgets(level: Any, mode: Any) -> tuple[int, int | None, int]:
+    """Return (mode_budget, hard_budget, emergency_budget).
+
+    Budgets scale with pass count — more passes need more token room.
+    """
     applied = normalize_token_economy_level(level)
     run_mode = normalize_mode(mode, default="auto")
 
@@ -89,11 +133,10 @@ def loop_context_budgets(level: Any, mode: Any) -> tuple[int, Optional[int], int
     mode_budget = max(40_000, int(base_mode_budget * multiplier))
 
     if applied == "cheap":
-        hard_budget: Optional[int] = 250_000
+        hard_budget: int | None = 250_000
     elif applied == "optimal":
         hard_budget = 650_000
     else:
-        # Max mode keeps emergency brakes but removes the regular hard cap.
         hard_budget = None
 
     emergency_budget = 1_800_000
@@ -114,11 +157,8 @@ def loop_tool_spec_budgets(level: Any, mode: Any) -> tuple[int, int]:
     return tool_count_cap, tool_spec_token_cap
 
 
-def loop_iteration_prompt_caps(level: Any, mode: Any) -> tuple[int, Optional[int]]:
-    """Return (warn_cap, hard_cap) for prompt tokens spent in a single iteration.
-
-    In `max` economy, hard cap is disabled on purpose to allow expensive runs.
-    """
+def loop_iteration_prompt_caps(level: Any, mode: Any) -> tuple[int, int | None]:
+    """Return (warn_cap, hard_cap) for prompt tokens spent in a single iteration."""
     applied = normalize_token_economy_level(level)
     run_mode = normalize_mode(mode, default="auto")
 
@@ -128,7 +168,7 @@ def loop_iteration_prompt_caps(level: Any, mode: Any) -> tuple[int, Optional[int
 
     warn_cap = max(4_000, int(base_warn * multiplier))
     if applied == "max":
-        hard_cap: Optional[int] = None
+        hard_cap: int | None = None
     else:
         hard_cap = max(warn_cap + 2_000, int(base_hard * multiplier))
     return warn_cap, hard_cap

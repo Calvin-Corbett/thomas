@@ -16,38 +16,39 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
-from typing import List
 
 # Note: These imports assume the modules exist or will be created
 # Adjust paths as needed based on final module structure
 try:
-    from thomas.loaders.types import Document
     from thomas.loaders.base import BaseLoader
-    from thomas.loaders.text_loader import TextLoader
-    from thomas.loaders.csv_loader import CSVLoader
-    from thomas.loaders.json_loader import JSONLoader
-    from thomas.loaders.html_loader import HTMLLoader
     from thomas.loaders.chunker import CharacterChunker, RecursiveChunker, TokenChunker
+    from thomas.loaders.csv_loader import CSVLoader
     from thomas.loaders.directory_loader import DirectoryLoader
+    from thomas.loaders.html_loader import HTMLLoader
+    from thomas.loaders.json_loader import JSONLoader
+    from thomas.loaders.text_loader import TextLoader
+    from thomas.loaders.types import Document
 except ImportError:
     # Fallback: define minimal mock classes for testing structure
     class Document:
         """Basic document type."""
+
         def __init__(self, content: str, metadata: dict = None):
             self.content = content
             self.metadata = metadata or {}
 
     class BaseLoader:
         """Base loader stub."""
-        def load(self) -> List[Document]:
+
+        def load(self) -> list[Document]:
             raise NotImplementedError
 
     class TextLoader(BaseLoader):
         def __init__(self, file_path: str):
             self.file_path = file_path
 
-        def load(self) -> List[Document]:
-            with open(self.file_path, 'r') as f:
+        def load(self) -> list[Document]:
+            with open(self.file_path, encoding="utf-8") as f:
                 content = f.read()
             return [Document(content, {"source": self.file_path})]
 
@@ -55,10 +56,11 @@ except ImportError:
         def __init__(self, file_path: str):
             self.file_path = file_path
 
-        def load(self) -> List[Document]:
+        def load(self) -> list[Document]:
             import csv
+
             docs = []
-            with open(self.file_path, 'r') as f:
+            with open(self.file_path, encoding="utf-8", newline="") as f:
                 reader = csv.DictReader(f)
                 for row in reader:
                     docs.append(Document(str(row), {"source": self.file_path}))
@@ -68,8 +70,8 @@ except ImportError:
         def __init__(self, file_path: str):
             self.file_path = file_path
 
-        def load(self) -> List[Document]:
-            with open(self.file_path, 'r') as f:
+        def load(self) -> list[Document]:
+            with open(self.file_path, encoding="utf-8") as f:
                 data = json.load(f)
             return [Document(json.dumps(data, indent=2), {"source": self.file_path})]
 
@@ -77,8 +79,8 @@ except ImportError:
         def __init__(self, file_path: str):
             self.file_path = file_path
 
-        def load(self) -> List[Document]:
-            with open(self.file_path, 'r') as f:
+        def load(self) -> list[Document]:
+            with open(self.file_path, encoding="utf-8") as f:
                 content = f.read()
             return [Document(content, {"source": self.file_path})]
 
@@ -87,7 +89,7 @@ except ImportError:
             self.chunk_size = chunk_size
             self.overlap = overlap
 
-        def chunk(self, doc: Document) -> List[Document]:
+        def chunk(self, doc: Document) -> list[Document]:
             text = doc.content
             chunks = []
             start = 0
@@ -99,12 +101,12 @@ except ImportError:
             return chunks
 
     class RecursiveChunker(BaseLoader):
-        def __init__(self, chunk_size: int = 1000, overlap: int = 0, separators: List[str] = None):
+        def __init__(self, chunk_size: int = 1000, overlap: int = 0, separators: list[str] = None):
             self.chunk_size = chunk_size
             self.overlap = overlap
             self.separators = separators or ["\n\n", "\n", " ", ""]
 
-        def chunk(self, doc: Document) -> List[Document]:
+        def chunk(self, doc: Document) -> list[Document]:
             return [doc]
 
     class TokenChunker:
@@ -112,7 +114,7 @@ except ImportError:
             self.chunk_size = chunk_size
             self.overlap = overlap
 
-        def chunk(self, doc: Document) -> List[Document]:
+        def chunk(self, doc: Document) -> list[Document]:
             return [doc]
 
     class DirectoryLoader(BaseLoader):
@@ -120,10 +122,10 @@ except ImportError:
             self.path = Path(path)
             self.glob_pattern = glob_pattern
 
-        def load(self) -> List[Document]:
+        def load(self) -> list[Document]:
             docs = []
             for file_path in self.path.glob(self.glob_pattern):
-                with open(file_path, 'r') as f:
+                with open(file_path, encoding="utf-8") as f:
                     content = f.read()
                 docs.append(Document(content, {"source": str(file_path)}))
             return docs
@@ -169,6 +171,7 @@ class TestTextLoader(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_load_simple_text_file(self):
@@ -196,7 +199,7 @@ class TestTextLoader(unittest.TestCase):
     def test_load_file_with_unicode(self):
         """Test loading file with unicode characters."""
         content = "Unicode test: こんにちは 世界 émojis 🎉"
-        self.test_file.write_text(content, encoding='utf-8')
+        self.test_file.write_text(content, encoding="utf-8")
 
         loader = TextLoader(str(self.test_file))
         docs = loader.load()
@@ -222,6 +225,7 @@ class TestCSVLoader(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_load_simple_csv(self):
@@ -276,6 +280,7 @@ class TestJSONLoader(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_load_simple_json(self):
@@ -307,7 +312,7 @@ class TestJSONLoader(unittest.TestCase):
         data = {
             "users": [
                 {"name": "Alice", "contacts": {"email": "alice@example.com"}},
-                {"name": "Bob", "contacts": {"email": "bob@example.com"}}
+                {"name": "Bob", "contacts": {"email": "bob@example.com"}},
             ]
         }
         self.json_file.write_text(json.dumps(data))
@@ -338,6 +343,7 @@ class TestHTMLLoader(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_load_simple_html(self):
@@ -508,6 +514,7 @@ class TestDirectoryLoader(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_load_single_file_from_directory(self):

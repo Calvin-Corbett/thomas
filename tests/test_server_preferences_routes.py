@@ -1,7 +1,6 @@
 import os
 import sqlite3
 import tempfile
-import unittest
 
 from aiohttp.test_utils import AioHTTPTestCase
 
@@ -107,6 +106,18 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
         self.assertIsNotNone(enc)
         self.assertNotIn("sk-test", str(enc))
         self.assertEqual(len(key_hash), 64)
+
+    async def test_profile_type_patch_roundtrip(self):
+        resp = await self.client.patch("/api/preferences", json={"profile": {"profile_type": "non_coder"}})
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        self.assertEqual(str((data.get("profile") or {}).get("profile_type") or ""), "non_coder")
+
+    async def test_profile_review_depth_patch_roundtrip(self):
+        resp = await self.client.patch("/api/preferences", json={"profile": {"review_depth": "simplified"}})
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        self.assertEqual(str((data.get("profile") or {}).get("review_depth") or ""), "simple")
 
 
 class TestServerPreferencesRoutesRemote(AioHTTPTestCase):

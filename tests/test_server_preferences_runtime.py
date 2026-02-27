@@ -2,7 +2,7 @@ import json
 import os
 import tempfile
 import unittest
-from typing import Any, Dict
+from typing import Any
 from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
@@ -23,7 +23,7 @@ def _parse_ndjson(blob: str):
 
 
 class _FakeAgentLoopRuntime:
-    captured: Dict[str, Any] = {}
+    captured: dict[str, Any] = {}
 
     def __init__(self, run_cfg, llm, tools, **kwargs):  # noqa: ANN001
         _FakeAgentLoopRuntime.captured = {
@@ -34,8 +34,7 @@ class _FakeAgentLoopRuntime:
             "llm_base_retry_delay": float(getattr(llm, "_base_retry_delay", 0.0) or 0.0),
             "llm_request_overrides": dict(getattr(llm, "_request_overrides", {}) or {}),
             "llm_fallback_profiles": [
-                str(getattr(cfg, "name", "") or "")
-                for cfg in list(getattr(llm, "_fallback_configs", []) or [])
+                str(getattr(cfg, "name", "") or "") for cfg in list(getattr(llm, "_fallback_configs", []) or [])
             ],
             "tool_names": [str(t.name) for t in tools.list_tools()],
             "quality_enforce": bool(getattr(getattr(run_cfg, "quality", None), "enforce", False)),
@@ -65,7 +64,9 @@ class _FakeAgentLoopRuntime:
                 "route": {"path": "general", "confidence": 1.0},
                 "mode": str(mode),
                 "tools_policy": "auto",
-                "autonomy_level": int((_FakeAgentLoopRuntime.captured.get("ctor_kwargs") or {}).get("autonomy_level", 3)),
+                "autonomy_level": int(
+                    (_FakeAgentLoopRuntime.captured.get("ctor_kwargs") or {}).get("autonomy_level", 3)
+                ),
                 "autonomy_name": "Custom",
             },
         )
@@ -81,8 +82,8 @@ class _FakeAgentLoopRuntime:
 
 class _FakeAgentLoopPolicyProbe:
     probe_name: str = "shell.exec"
-    probe_args: Dict[str, Any] = {"command": "echo hi", "cwd": "."}
-    captured: Dict[str, Any] = {}
+    probe_args: dict[str, Any] = {"command": "echo hi", "cwd": "."}
+    captured: dict[str, Any] = {}
 
     def __init__(self, run_cfg, llm, tools, **kwargs):  # noqa: ANN001
         _ = run_cfg
@@ -221,7 +222,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         patch_resp = await self.client.patch("/api/preferences", json=prefs_patch)
         self.assertEqual(patch_resp.status, 200)
 
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopRuntime):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -270,6 +271,58 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         self.assertIn("[Pinned context]", str(captured.get("prompt") or ""))
         self.assertIn("Always return concise summaries.", str(captured.get("prompt") or ""))
 
+    async def test_non_coder_profile_type_propagates_to_agent_loop(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"profile": {"profile_type": "non_coder"}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "create a robust deployment checklist for production",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertEqual(len([e for e in events if e.get("type") == "done"]), 1)
+        captured = dict(_FakeAgentLoopRuntime.captured or {})
+        ctor_kwargs = captured.get("ctor_kwargs") or {}
+        self.assertTrue(bool(ctor_kwargs.get("non_coder_profile")))
+        self.assertEqual(str(ctor_kwargs.get("profile_type") or ""), "non_coder")
+        self.assertEqual(str(ctor_kwargs.get("review_depth") or ""), "simple")
+
+    async def test_profile_review_depth_propagates_to_agent_loop(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"profile": {"review_depth": "technical"}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "run a code review",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertEqual(len([e for e in events if e.get("type") == "done"]), 1)
+        captured = dict(_FakeAgentLoopRuntime.captured or {})
+        ctor_kwargs = captured.get("ctor_kwargs") or {}
+        self.assertEqual(str(ctor_kwargs.get("review_depth") or ""), "technical")
+
     async def test_local_only_mode_blocks_remote_profiles(self):
         sid = await self._new_session_id()
         patch_resp = await self.client.patch(
@@ -288,6 +341,47 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         )
         self.assertEqual(blocked.status, 403)
         self.assertIn("local_only_mode", await blocked.text())
+
+    async def test_companion_channel_applies_phone_agent_defaults(self):
+        sid = await self._new_session_id()
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "open my task dashboard",
+                    "channel": "companion",
+                    "source": "infinite_companion_phone",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        captured = dict(_FakeAgentLoopRuntime.captured or {})
+        ctor_kwargs = dict(captured.get("ctor_kwargs") or {})
+        self.assertEqual(int(ctor_kwargs.get("autonomy_level") or 0), 2)
+        system_prompt = str(ctor_kwargs.get("system_prompt") or "")
+        self.assertIn("Thomas Infinite Companion", system_prompt)
+        self.assertIn("ship companion apps safely", system_prompt)
+
+    async def test_companion_channel_respects_explicit_overrides(self):
+        sid = await self._new_session_id()
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "run this as full autonomy",
+                    "channel": "companion",
+                    "autonomy_level": 4,
+                    "system_prompt": "Custom override.",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        captured = dict(_FakeAgentLoopRuntime.captured or {})
+        ctor_kwargs = dict(captured.get("ctor_kwargs") or {})
+        self.assertEqual(int(ctor_kwargs.get("autonomy_level") or 0), 4)
+        self.assertEqual(str(ctor_kwargs.get("system_prompt") or ""), "Custom override.")
 
     async def test_runtime_and_failover_preferences_override_defaults(self):
         sid = await self._new_session_id()
@@ -315,7 +409,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         )
         self.assertEqual(patch_resp.status, 200)
 
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopRuntime):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -341,6 +435,43 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         self.assertTrue(bool(captured.get("quality_require_tests_for_code_edits", False)))
         self.assertFalse(bool(captured.get("quality_require_monolith_guard_for_coding", True)))
 
+    async def test_non_coder_profile_forces_quality_runtime_flags(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={
+                "profile": {"profile_type": "non_coder"},
+                "advanced": {
+                    "runtime": {
+                        "quality_enforce": False,
+                        "quality_require_verification_for_coding": False,
+                        "quality_require_tests_for_code_edits": False,
+                        "quality_require_monolith_guard_for_coding": False,
+                    }
+                },
+            },
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "fully fix the issue and verify it end-to-end",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertEqual(len([e for e in events if e.get("type") == "done"]), 1)
+
+        captured = dict(_FakeAgentLoopRuntime.captured or {})
+        self.assertTrue(bool(captured.get("quality_enforce", False)))
+        self.assertTrue(bool(captured.get("quality_require_verification_for_coding", False)))
+        self.assertTrue(bool(captured.get("quality_require_tests_for_code_edits", False)))
+        self.assertTrue(bool(captured.get("quality_require_monolith_guard_for_coding", False)))
+
     async def test_session_budget_throttle_blocks_when_exhausted(self):
         sid = await self._new_session_id()
         patch_resp = await self.client.patch(
@@ -350,7 +481,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         self.assertEqual(patch_resp.status, 200)
         self._session_state(sid).session_token_spend = 1000
 
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopRuntime):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
             blocked = await self.client.post(
                 "/api/chat",
                 json={
@@ -372,7 +503,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
 
         _FakeAgentLoopPolicyProbe.probe_name = "shell.exec"
         _FakeAgentLoopPolicyProbe.probe_args = {"command": "echo hi", "cwd": "."}
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopPolicyProbe):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -398,7 +529,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
 
         _FakeAgentLoopPolicyProbe.probe_name = "shell.exec"
         _FakeAgentLoopPolicyProbe.probe_args = {"command": "curl https://example.com", "cwd": "."}
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopPolicyProbe):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -422,7 +553,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
 
         _FakeAgentLoopPolicyProbe.probe_name = "fs.read_file"
         _FakeAgentLoopPolicyProbe.probe_args = {"path": "..\\outside.txt"}
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopPolicyProbe):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -444,7 +575,7 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         )
         self.assertEqual(patch_resp.status, 200)
 
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopRuntime):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
             resp = await self.client.post(
                 "/api/chat",
                 json={

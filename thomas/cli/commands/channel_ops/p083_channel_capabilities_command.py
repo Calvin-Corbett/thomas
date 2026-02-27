@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import sys
-from typing import Any, Optional
+from typing import Any
 
 from thomas.channels.p083_channel_capabilities_command import (
     ChannelCapabilitiesCommandError,
@@ -32,15 +32,13 @@ add_parser = register
 register_command = register
 
 
-def run(args: Any, config: Optional[Any] = None) -> int:
+def run(args: Any, config: Any | None = None) -> int:
     channel_ref = getattr(args, "channel", None) or getattr(args, "name", None)
     json_mode = bool(getattr(args, "json", False))
 
     if config is None:
         config = (
-            getattr(args, "config", None)
-            or getattr(args, "thomas_config", None)
-            or getattr(args, "app_config", None)
+            getattr(args, "config", None) or getattr(args, "thomas_config", None) or getattr(args, "app_config", None)
         )
 
     try:
@@ -61,18 +59,18 @@ def run(args: Any, config: Optional[Any] = None) -> int:
 def _maybe_add_json_flag(parser: Any) -> None:
     try:
         parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON")
-    except Exception:
+    except json.JSONDecodeError:
         return
 
 
 def _attach_handler(parser: Any) -> None:
     try:
         parser.set_defaults(func=run)
-    except Exception:
+    except json.JSONDecodeError:
         pass
     try:
         parser.set_defaults(handler=run)
-    except Exception:
+    except (ValueError, TypeError):
         pass
 
 

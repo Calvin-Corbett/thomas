@@ -3,16 +3,16 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Optional
 
 import typer
 
 from thomas.browser.p017_browser_data_storage_snapshot import (
-    BrowserDataStorageSnapshotError,
-    BrowserDataStorageSnapshotRequest,
     TOOL_INPUT_SCHEMA,
     TOOL_OUTPUT_SCHEMA,
+    BrowserDataStorageSnapshotError,
+    BrowserDataStorageSnapshotRequest,
     browser_data_storage_snapshot,
 )
 
@@ -27,17 +27,17 @@ def _register(app: typer.Typer) -> None:
 
     @app.command(COMMAND_NAME, help="Create a ZIP snapshot of the browser's persisted data storage directory.")
     def data_storage_snapshot(
-        data_dir: Optional[Path] = typer.Option(
+        data_dir: Path | None = typer.Option(
             None,
             "--data-dir",
             help="Path to the browser data directory to snapshot. If omitted, Thomas will try to resolve it from config/env.",
         ),
-        profile: Optional[str] = typer.Option(
+        profile: str | None = typer.Option(
             None,
             "--profile",
             help="Optional browser profile name. Used when resolving the data dir from config/env.",
         ),
-        output: Optional[Path] = typer.Option(
+        output: Path | None = typer.Option(
             None,
             "--output",
             "-o",
@@ -90,9 +90,9 @@ def _register(app: typer.Typer) -> None:
 
 def _run(
     *,
-    data_dir: Optional[Path],
-    profile: Optional[str],
-    output: Optional[Path],
+    data_dir: Path | None,
+    profile: str | None,
+    output: Path | None,
     overwrite: bool,
     compress_level: int,
     strict: bool,
@@ -206,12 +206,34 @@ def _run_from_argparse(args: argparse.Namespace) -> int:
 # Best-effort auto-registration for codebases that expose a package-level `app`.
 try:  # pragma: no cover - import-time behavior depends on the wider Thomas CLI structure
     from . import app as _browser_app  # type: ignore
-except Exception:
+except ImportError:
     _browser_app = None  # type: ignore
 
 if _browser_app is not None:
     try:
         _register(_browser_app)  # type: ignore[arg-type]
-    except Exception:
+    except ImportError:
         # Never fail import due to CLI registration; discovery can call `register` explicitly.
         pass
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser data-storage-snapshot",
+        description="Create a ZIP snapshot of browser data storage.",
+    )
+    parser.add_argument("--data-dir", dest="data_dir", default=None)
+    parser.add_argument("--profile", dest="profile", default=None)
+    parser.add_argument("--output", "-o", dest="output", default=None)
+    parser.add_argument("--overwrite", dest="overwrite", action="store_true", default=False)
+    parser.add_argument("--compress-level", dest="compress_level", default=6, type=int)
+    parser.add_argument("--no-strict", dest="strict", action="store_false", default=True)
+    parser.add_argument("--no-hash", dest="include_hash", action="store_false", default=True)
+    parser.add_argument("--json", dest="json_output", action="store_true", default=False)
+    parser.add_argument("--schema", dest="schema", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+    return _run_from_argparse(args)

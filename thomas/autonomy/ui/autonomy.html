@@ -3,150 +3,300 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Thomas Autonomy</title>
+  <title>Thomas Autonomy Engine</title>
   <link rel="stylesheet" href="/autonomy.css" />
+  <style>
+    /* Responsive Design - Tablet */
+    @media (max-width: 1024px) {
+      .container {
+        padding: 16px;
+        gap: 20px;
+      }
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Responsive Design - Mobile */
+    @media (max-width: 768px) {
+      body {
+        font-size: 14px;
+      }
+      .topbar {
+        flex-direction: column;
+        align-items: stretch;
+        padding: 12px;
+      }
+      .brand {
+        gap: 8px;
+        margin-bottom: 12px;
+      }
+      .controls {
+        flex-direction: column;
+        gap: 10px;
+      }
+      .token-input {
+        flex-direction: column;
+      }
+      .container {
+        padding: 12px;
+        gap: 16px;
+      }
+      .panel {
+        padding: 16px;
+      }
+      .form-row {
+        grid-template-columns: 1fr;
+      }
+      .toolbar {
+        flex-direction: column;
+        gap: 8px;
+      }
+      .toolbar > input,
+      .toolbar > select,
+      .toolbar > button {
+        width: 100%;
+      }
+      .jobs-grid {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Responsive Design - Small Mobile */
+    @media (max-width: 480px) {
+      body {
+        font-size: 13px;
+      }
+      .topbar {
+        padding: 10px;
+      }
+      .brand {
+        gap: 6px;
+      }
+      .title {
+        font-size: 16px;
+      }
+      .subtitle {
+        font-size: 12px;
+      }
+      .panel {
+        padding: 12px;
+      }
+      .panel-header h2 {
+        font-size: 18px;
+      }
+      .form-group {
+        margin-bottom: 12px;
+      }
+      button {
+        padding: 8px 12px;
+        font-size: 12px;
+      }
+      .container {
+        padding: 8px;
+        gap: 12px;
+      }
+    }
+  </style>
 </head>
 <body>
   <header class="topbar">
     <div class="brand">
-      <div class="logo">🧠</div>
+      <svg class="logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="1"></circle>
+        <path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m5.08 5.08l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m5.08-5.08l4.24-4.24"></path>
+      </svg>
       <div>
         <div class="title">Thomas Autonomy Engine</div>
-        <div class="subtitle">Jobs, approvals, scheduling, audit trails</div>
+        <div class="subtitle">Intelligent job execution, approvals & audit</div>
       </div>
     </div>
     <div class="controls">
-      <label class="token">
-        API token
-        <input id="token" type="password" placeholder="optional" />
+      <label class="token-input">
+        <span>API Token</span>
+        <input id="token" type="password" placeholder="optional" aria-label="API token" />
       </label>
-      <button id="refresh">Refresh</button>
+      <button id="refresh" class="btn-secondary" title="Refresh all data">
+        <span class="icon">↻</span>
+        Refresh
+      </button>
     </div>
   </header>
 
-  <main class="grid">
-    <section class="card">
-      <h2>Create job</h2>
-
-      <div class="form">
-        <label>
-          Name
-          <input id="jobName" type="text" placeholder="optional" />
-        </label>
-
-        <label>
-          Session id (optional)
-          <input id="sessionId" type="text" placeholder="ties job output to a chat session" />
-        </label>
-
-        <label>
-          Kind
-          <select id="kind">
-            <option value="reminder">reminder</option>
-            <option value="daily_briefing">daily_briefing</option>
-            <option value="autonomy_task">autonomy_task</option>
-          </select>
-        </label>
-
-        <label id="reminderTextWrap">
-          Reminder text
-          <input id="reminderText" type="text" placeholder="pay insurance, call doctor, etc" />
-        </label>
-
-        <label id="briefPromptWrap" style="display:none">
-          Briefing prompt (optional)
-          <input id="briefPrompt" type="text" placeholder="what do you want in the briefing" />
-        </label>
-
-        <label id="goalWrap" style="display:none">
-          Autonomy goal
-          <textarea id="goal" rows="3" placeholder="Plan and schedule what I need to do for ..."></textarea>
-        </label>
-
-        <label id="contextWrap" style="display:none">
-          Context (optional)
-          <textarea id="context" rows="3" placeholder="Any constraints or details the planner should know"></textarea>
-        </label>
-
-        <label id="payloadWrap" style="display:none">
-          Payload JSON (optional)
-          <textarea id="payloadJson" rows="4" placeholder='{"key":"value"}'></textarea>
-        </label>
-
-        <label>
-          Risk class
-          <select id="riskClass">
-            <option value="low">low</option>
-            <option value="medium">medium</option>
-            <option value="high">high</option>
-            <option value="critical">critical</option>
-          </select>
-        </label>
-
-        <label>
-          Run at (ISO, optional)
-          <input id="runAt" type="text" placeholder="2026-02-10T14:00:00-06:00" />
-        </label>
-
-        <label>
-          Schedule JSON (optional)
-          <textarea id="schedule" rows="4" placeholder='{"type":"daily","at":"08:00","tz":"America/Chicago"}'></textarea>
-        </label>
-
-        <label class="row" style="align-items:center">
-          <input id="requiresApproval" type="checkbox" />
-          Require human approval
-        </label>
-
-        <button id="create">Create</button>
-        <div class="hint">
-          Notes: medium+ jobs require approval by default policy. Open policy file to customize.
+  <main class="container">
+    <!-- Create Job Section -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Create Job</h2>
+        <p class="panel-subtitle">Configure and schedule a new autonomy task</p>
+      </div>
+      <form class="form" id="jobForm">
+        <div class="form-group">
+          <label for="jobName">Job Name</label>
+          <input id="jobName" type="text" placeholder="Optional human-readable name" aria-label="Job name" />
+          <span class="help-text">Leave blank for auto-generated name</span>
         </div>
+
+        <div class="form-group">
+          <label for="sessionId">Session ID</label>
+          <input id="sessionId" type="text" placeholder="e.g., sess_abc123..." aria-label="Session ID" />
+          <span class="help-text">Ties job output to a specific chat session</span>
+        </div>
+
+        <div class="form-group">
+          <label for="kind">Job Type</label>
+          <select id="kind" aria-label="Job type" onchange="handleKindChange()">
+            <option value="reminder">Reminder</option>
+            <option value="daily_briefing">Daily Briefing</option>
+            <option value="autonomy_task">Autonomy Task</option>
+          </select>
+          <span class="help-text">Choose the type of job to create</span>
+        </div>
+
+        <div id="reminderTextWrap" class="form-group">
+          <label for="reminderText">Reminder Text</label>
+          <input id="reminderText" type="text" placeholder="e.g., pay insurance, call doctor" aria-label="Reminder text" />
+        </div>
+
+        <div id="briefPromptWrap" class="form-group" style="display:none">
+          <label for="briefPrompt">Briefing Prompt</label>
+          <input id="briefPrompt" type="text" placeholder="What topics to include in the briefing" aria-label="Briefing prompt" />
+          <span class="help-text">Leave blank for default briefing</span>
+        </div>
+
+        <div id="goalWrap" class="form-group" style="display:none">
+          <label for="goal">Autonomy Goal</label>
+          <textarea id="goal" rows="3" placeholder="Plan and schedule what I need to do..." aria-label="Autonomy goal"></textarea>
+          <span class="help-text">Describe what you want the autonomy engine to accomplish</span>
+        </div>
+
+        <div id="contextWrap" class="form-group" style="display:none">
+          <label for="context">Context & Constraints</label>
+          <textarea id="context" rows="3" placeholder="Any limitations or details the planner should know" aria-label="Context"></textarea>
+        </div>
+
+        <div id="payloadWrap" class="form-group" style="display:none">
+          <label for="payloadJson">Custom Payload (JSON)</label>
+          <textarea id="payloadJson" rows="3" placeholder='{"key":"value"}' aria-label="Payload JSON"></textarea>
+          <span class="help-text">Optional JSON data passed to the job</span>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="riskClass">Risk Class</label>
+            <select id="riskClass" aria-label="Risk class">
+              <option value="low">Low</option>
+              <option value="medium">Medium</option>
+              <option value="high">High</option>
+              <option value="critical">Critical</option>
+            </select>
+            <span class="help-text">Medium+ requires approval by default</span>
+          </div>
+
+          <div class="form-group">
+            <label for="runAt">Run At (ISO)</label>
+            <input id="runAt" type="text" placeholder="2026-02-26T14:00:00-06:00" aria-label="Run at timestamp" />
+            <span class="help-text">Leave blank to run immediately</span>
+          </div>
+        </div>
+
+        <div id="scheduleWrap" class="form-group" style="display:none">
+          <label for="schedule">Schedule (JSON)</label>
+          <textarea id="schedule" rows="3" placeholder='{"type":"daily","at":"08:00","tz":"America/Chicago"}' aria-label="Schedule"></textarea>
+          <span class="help-text">Set up recurring execution</span>
+        </div>
+
+        <div class="form-group checkbox-group">
+          <label for="requiresApproval" class="checkbox-label">
+            <input id="requiresApproval" type="checkbox" aria-label="Require human approval" />
+            <span>Require human approval before execution</span>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" id="create" class="btn-primary">Create Job</button>
+          <div class="form-hint">
+            <strong>Note:</strong> Medium+ risk jobs require approval by default. Check policy configuration to customize.
+          </div>
+        </div>
+      </form>
+    </section>
+
+    <!-- Pending Approvals Section -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Pending Approvals</h2>
+        <span class="badge-count" id="approvalCount" style="display:none">0</span>
+      </div>
+      <div id="approvals" class="list empty-state" data-empty="No pending approvals">
+        <div class="empty-message">No jobs awaiting approval</div>
       </div>
     </section>
 
-    <section class="card">
-      <h2>Pending approvals</h2>
-      <div id="approvals" class="list"></div>
-    </section>
-
-    <section class="card">
-      <h2>Jobs</h2>
-      <div class="row">
-        <select id="statusFilter">
-          <option value="">all</option>
-          <option value="queued">queued</option>
-          <option value="running">running</option>
-          <option value="awaiting_approval">awaiting_approval</option>
-          <option value="succeeded">succeeded</option>
-          <option value="failed">failed</option>
-          <option value="dead">dead</option>
-          <option value="cancelled">cancelled</option>
+    <!-- Jobs Section -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Jobs</h2>
+        <p class="panel-subtitle">All execution jobs</p>
+      </div>
+      <div class="toolbar">
+        <select id="statusFilter" class="select-filter" aria-label="Filter jobs by status" onchange="filterJobs()">
+          <option value="">All statuses</option>
+          <option value="queued">Queued</option>
+          <option value="running">Running</option>
+          <option value="awaiting_approval">Awaiting Approval</option>
+          <option value="succeeded">Succeeded</option>
+          <option value="failed">Failed</option>
+          <option value="dead">Dead</option>
+          <option value="cancelled">Cancelled</option>
         </select>
-        <button id="wakeup">Wake engine</button>
+        <button id="wakeup" class="btn-secondary" title="Wake up the job engine">Wake Engine</button>
       </div>
-      <div id="jobs" class="list"></div>
-    </section>
-
-    <section class="card">
-      <h2>Audit</h2>
-      <div class="row">
-        <input id="auditJobId" type="text" placeholder="job id (optional)" />
-        <button id="auditLoad">Load</button>
+      <div id="jobs" class="jobs-grid empty-state" data-empty="No jobs found">
+        <div class="empty-message">No jobs to display</div>
       </div>
-      <pre id="audit" class="pre"></pre>
     </section>
 
-    <section class="card">
-      <h2>Messages</h2>
-      <div id="messages" class="list"></div>
+    <!-- Audit Trail Section -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Audit Trail</h2>
+        <p class="panel-subtitle">View execution history and logs</p>
+      </div>
+      <div class="toolbar">
+        <input id="auditJobId" type="text" placeholder="Job ID (optional)" class="search-input" aria-label="Filter audit by job ID" />
+        <button id="auditLoad" class="btn-secondary">Load Audit</button>
+      </div>
+      <div class="audit-container">
+        <pre id="audit" class="pre" aria-label="Audit trail output"></pre>
+      </div>
     </section>
 
-    <section class="card">
-      <h2>Briefings</h2>
-      <div id="briefings" class="list"></div>
+    <!-- Messages Section -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Messages</h2>
+        <span class="badge-count" id="messageCount" style="display:none">0</span>
+      </div>
+      <div id="messages" class="list empty-state" data-empty="No messages">
+        <div class="empty-message">No messages to display</div>
+      </div>
+    </section>
+
+    <!-- Briefings Section -->
+    <section class="panel">
+      <div class="panel-header">
+        <h2>Briefings</h2>
+        <span class="badge-count" id="briefingCount" style="display:none">0</span>
+      </div>
+      <div id="briefings" class="list empty-state" data-empty="No briefings">
+        <div class="empty-message">No briefings to display</div>
+      </div>
     </section>
   </main>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <script src="/autonomy.js"></script>
 </body>

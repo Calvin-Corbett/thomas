@@ -4,13 +4,13 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "thomas-ai"
-version = "0.11.80"
+version = "0.14.0"
 description = "Autonomous AI execution platform for local and remote deployments"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.10"
 authors = [
-    {name = "corbe"},
+    {name = "Thomas Contributors"},
 ]
 keywords = ["ai", "agent", "assistant", "llm", "autonomous"]
 classifiers = [
@@ -26,22 +26,22 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Application Frameworks",
 ]
 dependencies = [
-    "httpx>=0.27",
-    "click>=8.1",
-    "numpy>=1.26",
-    "tomli>=2.0; python_version < '3.11'",
+    "httpx==0.27.2",
+    "click==8.3.1",
+    "numpy==2.2.6",
+    "tomli==2.0.1; python_version < '3.11'",
 ]
 
 [project.urls]
-Homepage = "https://github.com/corbe/thomas"
-Repository = "https://github.com/corbe/thomas"
-Issues = "https://github.com/corbe/thomas/issues"
+Homepage = "https://github.com/thomas-ai-assistant/thomas"
+Repository = "https://github.com/thomas-ai-assistant/thomas"
+Issues = "https://github.com/thomas-ai-assistant/thomas/issues"
 
 [project.optional-dependencies]
 repl = ["prompt_toolkit>=3.0", "rich>=13.0"]
 gpu = ["sentence-transformers>=3.0", "torch>=2.0"]
 train = ["numpy>=1.26", "scikit-learn>=1.4"]
-server = ["aiohttp>=3.9"]
+server = ["aiohttp==3.13.3"]
 mcp = ["mcp>=1.0"]
 telegram = ["python-telegram-bot>=21.0"]
 investigation = ["python-docx>=1.0", "pdfplumber>=0.10"]
@@ -60,6 +60,7 @@ all = ["thomas-ai[repl,gpu,train,server,mcp,telegram,test]"]
 [project.scripts]
 thomas = "thomas.cli.main:main"
 thomas-server = "thomas.server.__main__:main"
+bootdoctor = "thomas.bootdoctor.__main__:main"
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -89,3 +90,31 @@ norecursedirs = [
     "agent_memory",
     "*.egg-info",
 ]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+src = ["thomas"]
+
+[tool.ruff.lint]
+select = [
+    "E",      # pycodestyle errors
+    "W",      # pycodestyle warnings
+    "F",      # pyflakes
+    "I",      # isort
+    "B",      # flake8-bugbear
+    "UP",     # pyupgrade
+    "SIM",    # flake8-simplify
+]
+ignore = [
+    "E501",   # line too long (let formatter handle it)
+    "B905",   # zip strict (py310 compat)
+    "SIM108", # ternary operator (readability preference)
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["thomas"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"

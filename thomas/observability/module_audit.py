@@ -10,9 +10,10 @@ import hashlib
 import hmac
 import json
 import uuid
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, Mapping, Optional, Sequence, Set
+from typing import Any
 
 SCHEMA_VERSION = 1
 
@@ -51,7 +52,7 @@ def normalize_path(path: str) -> str:
     return p
 
 
-def module_for_path(path: str) -> Optional[str]:
+def module_for_path(path: str) -> str | None:
     """Map a changed file path to a major module name."""
     p = normalize_path(path)
     if not p.startswith("thomas/"):
@@ -65,8 +66,8 @@ def module_for_path(path: str) -> Optional[str]:
     return module
 
 
-def touched_modules(changed_files: Iterable[str]) -> Set[str]:
-    out: Set[str] = set()
+def touched_modules(changed_files: Iterable[str]) -> set[str]:
+    out: set[str] = set()
     for raw in changed_files:
         m = module_for_path(raw)
         if m:
@@ -78,7 +79,7 @@ def default_registry_path(repo_root: Path) -> Path:
     return repo_root / "docs" / "ops" / "module_audit_log.json"
 
 
-def empty_registry() -> Dict[str, Any]:
+def empty_registry() -> dict[str, Any]:
     return {
         "schema_version": SCHEMA_VERSION,
         "updated_at": utc_now_iso(),
@@ -87,7 +88,7 @@ def empty_registry() -> Dict[str, Any]:
     }
 
 
-def load_registry(path: Path) -> Dict[str, Any]:
+def load_registry(path: Path) -> dict[str, Any]:
     if not path.exists():
         return empty_registry()
     raw = json.loads(path.read_text(encoding="utf-8"))
@@ -102,12 +103,12 @@ def load_registry(path: Path) -> Dict[str, Any]:
     return out
 
 
-def save_registry(path: Path, registry: Dict[str, Any]) -> None:
+def save_registry(path: Path, registry: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(registry, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
-def _entry_payload_for_sig(entry: Dict[str, Any], prev_signature: str) -> bytes:
+def _entry_payload_for_sig(entry: dict[str, Any], prev_signature: str) -> bytes:
     payload = {
         "id": entry.get("id", ""),
         "module": entry.get("module", ""),
@@ -124,7 +125,7 @@ def _entry_payload_for_sig(entry: Dict[str, Any], prev_signature: str) -> bytes:
     return json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode("utf-8")
 
 
-def sign_entry(entry: Dict[str, Any], *, prev_signature: str, signing_key: Optional[str]) -> str:
+def sign_entry(entry: dict[str, Any], *, prev_signature: str, signing_key: str | None) -> str:
     payload = _entry_payload_for_sig(entry, prev_signature)
     if signing_key:
         return hmac.new(signing_key.encode("utf-8"), payload, hashlib.sha256).hexdigest()
@@ -142,8 +143,8 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def build_file_hashes(repo_root: Path, files_touched: Sequence[str]) -> Dict[str, str]:
-    hashes: Dict[str, str] = {}
+def build_file_hashes(repo_root: Path, files_touched: Sequence[str]) -> dict[str, str]:
+    hashes: dict[str, str] = {}
     for raw in files_touched:
         normalized = normalize_path(raw)
         if not normalized:
@@ -154,7 +155,7 @@ def build_file_hashes(repo_root: Path, files_touched: Sequence[str]) -> Dict[str
                 hashes[normalized] = sha256_file(abs_path)
             else:
                 hashes[normalized] = "deleted"
-        except Exception:
+        except (OSError, FileNotFoundError):
             hashes[normalized] = "unreadable"
     return hashes
 
@@ -167,11 +168,11 @@ def record_audit(
     status: str,
     summary: str,
     run_id: str = "",
-    files_touched: Optional[Iterable[str]] = None,
-    file_hashes: Optional[Mapping[str, str]] = None,
-    issues: Optional[Iterable[str]] = None,
-    signing_key: Optional[str] = None,
-) -> Dict[str, Any]:
+    files_touched: Iterable[str] | None = None,
+    file_hashes: Mapping[str, str] | None = None,
+    issues: Iterable[str] | None = None,
+    signing_key: str | None = None,
+) -> dict[str, Any]:
     mod = str(module or "").strip()
     if mod not in MAJOR_MODULES:
         raise ValueError(f"unknown major module: {mod}")
@@ -187,7 +188,7 @@ def record_audit(
     prev_sig = str(latest.get("signature") or "")
 
     touched = sorted({normalize_path(p) for p in (files_touched or []) if normalize_path(p)})
-    normalized_hashes: Dict[str, str] = {}
+    normalized_hashes: dict[str, str] = {}
     for raw_path, raw_hash in dict(file_hashes or {}).items():
         key = normalize_path(raw_path)
         value = str(raw_hash or "").strip().lower()
@@ -195,7 +196,7 @@ def record_audit(
             normalized_hashes[key] = value
     normalized_issues = [str(item).strip() for item in (issues or []) if str(item).strip()]
 
-    entry: Dict[str, Any] = {
+    entry: dict[str, Any] = {
         "id": uuid.uuid4().hex,
         "module": mod,
         "audited_at": utc_now_iso(),

@@ -26,9 +26,10 @@ import json
 import math
 import os
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast
 
 SCHEMA_VERSION = 1
 
@@ -42,7 +43,7 @@ class ChannelThrottleError(Exception):
         self.message = message
         self.details: dict[str, Any] = dict(details or {})
 
-    def to_dict(self) -> "ThrottleErrorJSON":
+    def to_dict(self) -> ThrottleErrorJSON:
         payload: ThrottleErrorJSON = {"code": self.code, "message": self.message}
         if self.details:
             payload["details"] = self.details
@@ -99,11 +100,11 @@ class TokenBucketState:
         return {"tokens": float(self.tokens), "updated_at": float(self.updated_at)}
 
     @staticmethod
-    def from_dict(data: Mapping[str, Any]) -> "TokenBucketState":
+    def from_dict(data: Mapping[str, Any]) -> TokenBucketState:
         try:
             tokens = float(data["tokens"])
             updated_at = float(data["updated_at"])
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError, KeyError) as exc:
             raise ChannelThrottleError(
                 "invalid_state",
                 "invalid token bucket state",
@@ -182,11 +183,9 @@ class ThrottleDecision:
 class ThrottleStateStore(Protocol):
     """Minimal persistence interface for throttling state."""
 
-    def load(self, bucket_key: str) -> TokenBucketState | None:
-        ...
+    def load(self, bucket_key: str) -> TokenBucketState | None: ...
 
-    def save(self, bucket_key: str, state: TokenBucketState) -> None:
-        ...
+    def save(self, bucket_key: str, state: TokenBucketState) -> None: ...
 
 
 class InMemoryThrottleStateStore:
@@ -213,7 +212,7 @@ class _FileLock:
         self._lock_path = lock_path
         self._fh = None
 
-    def __enter__(self) -> "_FileLock":
+    def __enter__(self) -> _FileLock:
         self._lock_path.parent.mkdir(parents=True, exist_ok=True)
         self._fh = open(self._lock_path, "a+", encoding="utf-8")
         try:
@@ -226,7 +225,7 @@ class _FileLock:
                 import fcntl  # type: ignore
 
                 fcntl.flock(self._fh.fileno(), fcntl.LOCK_EX)
-        except Exception as exc:
+        except (ImportError, AttributeError, RuntimeError) as exc:
             raise ChannelThrottleError(
                 "state_lock_failed",
                 "failed to lock throttle state file",
@@ -250,7 +249,7 @@ class _FileLock:
         finally:
             try:
                 self._fh.close()
-            except Exception:
+            except (ImportError, AttributeError, RuntimeError):
                 pass
             self._fh = None
 
@@ -327,7 +326,7 @@ class JsonFileThrottleStateStore:
             try:
                 if tmp_path.exists():
                     tmp_path.unlink()
-            except Exception:
+            except (OSError, ConnectionError):
                 pass
 
     def load(self, bucket_key: str) -> TokenBucketState | None:
@@ -429,7 +428,7 @@ def parse_throttle_policy_config(raw: Mapping[str, Any]) -> ThrottlePolicyConfig
         raise ChannelThrottleError("missing_config", "missing 'burst' for throttle policy")
     try:
         burst = int(burst_raw)
-    except Exception:
+    except (ConnectionError, TimeoutError, RuntimeError):
         raise ChannelThrottleError("invalid_config", "burst must be an integer") from None
 
     rate: float | None = None
@@ -473,7 +472,9 @@ def load_throttle_policy_config_file(path: str | os.PathLike[str], channel: str)
     try:
         text = p.read_text(encoding="utf-8")
     except FileNotFoundError:
-        raise ChannelThrottleError("missing_config", "throttle policy config file not found", {"path": str(p)}) from None
+        raise ChannelThrottleError(
+            "missing_config", "throttle policy config file not found", {"path": str(p)}
+        ) from None
     except OSError as exc:
         raise ChannelThrottleError(
             "config_read_failed",

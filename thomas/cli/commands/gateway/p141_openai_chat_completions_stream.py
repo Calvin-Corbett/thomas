@@ -19,8 +19,9 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, List
+from typing import Any
 
 from aiohttp import ClientConnectorError, ClientSession, ClientTimeout
 
@@ -55,7 +56,7 @@ async def _iter_sse_data_lines(resp: Any) -> AsyncIterator[str]:
             yield line[len("data:") :].strip()
 
 
-def _extract_delta_text(chunk: Dict[str, Any]) -> str:
+def _extract_delta_text(chunk: dict[str, Any]) -> str:
     choices = chunk.get("choices")
     if not isinstance(choices, list) or not choices:
         return ""
@@ -72,7 +73,7 @@ def _extract_delta_text(chunk: Dict[str, Any]) -> str:
 async def _run_async(args: ChatCompletionsStreamArgs) -> int:
     url = _endpoint_url(args.server)
 
-    payload: Dict[str, Any] = {
+    payload: dict[str, Any] = {
         "model": args.model,
         "messages": [{"role": "user", "content": args.message}],
         "stream": True,
@@ -87,7 +88,7 @@ async def _run_async(args: ChatCompletionsStreamArgs) -> int:
                     # Gateway errors are JSON.
                     try:
                         err = await resp.json(content_type=None)
-                    except Exception:
+                    except json.JSONDecodeError:
                         err = {"status": resp.status, "body": await resp.text()}
 
                     if args.json_output:
@@ -96,7 +97,7 @@ async def _run_async(args: ChatCompletionsStreamArgs) -> int:
                         print(f"ERROR ({resp.status}): {err}")
                     return 1
 
-                collected: List[str] = []
+                collected: list[str] = []
                 async for data_str in _iter_sse_data_lines(resp):
                     if data_str == "[DONE]":
                         break

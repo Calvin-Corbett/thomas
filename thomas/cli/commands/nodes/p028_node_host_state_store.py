@@ -4,8 +4,9 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Mapping, Sequence
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any
 
 from thomas.nodes.p028_node_host_state_store import (
     NodeHostStateStore,
@@ -18,7 +19,6 @@ from thomas.nodes.p028_node_host_state_store import (
     resolve_host_state_store_dir,
     scan_host_states_json,
 )
-
 
 COMMAND_NAME = "host-state-store"
 COMMAND_ALIASES = ("host_state_store",)
@@ -65,7 +65,7 @@ def _read_stdin() -> str:
         ) from exc
 
 
-def _load_state_from_args(state_json: Optional[str], state_file: Optional[str]) -> dict[str, Any]:
+def _load_state_from_args(state_json: str | None, state_file: str | None) -> dict[str, Any]:
     if state_json and state_file:
         raise NodeHostStateStoreInvalidInputError(
             "invalid_state_input",
@@ -127,7 +127,7 @@ def _emit(obj: Any, *, json_mode: bool) -> None:
         sys.stdout.write(json.dumps(obj, indent=2, sort_keys=True, ensure_ascii=False) + "\n")
 
 
-def _store_from_args(store_dir: Optional[str], *, env: Optional[Mapping[str, str]] = None) -> NodeHostStateStore:
+def _store_from_args(store_dir: str | None, *, env: Mapping[str, str] | None = None) -> NodeHostStateStore:
     resolved = resolve_host_state_store_dir(
         Path(store_dir) if store_dir else None,
         env=env,
@@ -136,7 +136,7 @@ def _store_from_args(store_dir: Optional[str], *, env: Optional[Mapping[str, str
     return NodeHostStateStore(resolved, create=True)
 
 
-def _cmd_set(args: argparse.Namespace, *, env: Optional[Mapping[str, str]] = None) -> int:
+def _cmd_set(args: argparse.Namespace, *, env: Mapping[str, str] | None = None) -> int:
     store = _store_from_args(args.store_dir, env=env)
     state = _load_state_from_args(args.state, args.state_file)
 
@@ -152,7 +152,7 @@ def _cmd_set(args: argparse.Namespace, *, env: Optional[Mapping[str, str]] = Non
     return 0
 
 
-def _cmd_get(args: argparse.Namespace, *, env: Optional[Mapping[str, str]] = None) -> int:
+def _cmd_get(args: argparse.Namespace, *, env: Mapping[str, str] | None = None) -> int:
     store = _store_from_args(args.store_dir, env=env)
     payload = get_host_state_json(store, args.host_id)
     if args.json:
@@ -166,14 +166,14 @@ def _cmd_get(args: argparse.Namespace, *, env: Optional[Mapping[str, str]] = Non
     return 0
 
 
-def _cmd_delete(args: argparse.Namespace, *, env: Optional[Mapping[str, str]] = None) -> int:
+def _cmd_delete(args: argparse.Namespace, *, env: Mapping[str, str] | None = None) -> int:
     store = _store_from_args(args.store_dir, env=env)
     payload = delete_host_state_json(store, args.host_id)
     _emit(payload, json_mode=args.json)
     return 0 if payload["deleted"] else 1
 
 
-def _cmd_list(args: argparse.Namespace, *, env: Optional[Mapping[str, str]] = None) -> int:
+def _cmd_list(args: argparse.Namespace, *, env: Mapping[str, str] | None = None) -> int:
     store = _store_from_args(args.store_dir, env=env)
     payload = scan_host_states_json(store)
 
@@ -220,8 +220,12 @@ def build_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPar
     p_set = actions.add_parser("set", help="Create or replace a host state record.")
     p_set.add_argument("host_id", help="Host identifier (safe ASCII slug).")
     p_set.add_argument("--state", help="State as a JSON string (or '-' for stdin).", default=None)
-    p_set.add_argument("--state-file", help="Path to a JSON file containing the state (or '-' for stdin).", default=None)
-    p_set.add_argument("--updated-at", help="Override updated_at ISO-8601 timestamp (must include timezone).", default=None)
+    p_set.add_argument(
+        "--state-file", help="Path to a JSON file containing the state (or '-' for stdin).", default=None
+    )
+    p_set.add_argument(
+        "--updated-at", help="Override updated_at ISO-8601 timestamp (must include timezone).", default=None
+    )
     p_set.add_argument("--merge", action="store_true", help="Merge state into an existing record (shallow).")
     p_set.set_defaults(_handler=_cmd_set)
 
@@ -245,7 +249,7 @@ add_parser = build_parser
 add_subparser = build_parser
 
 
-def cli_main(argv: Optional[Sequence[str]] = None, *, env: Optional[Mapping[str, str]] = None) -> int:
+def cli_main(argv: Sequence[str] | None = None, *, env: Mapping[str, str] | None = None) -> int:
     """
     Standalone entrypoint primarily intended for tests and automation.
 
@@ -273,7 +277,7 @@ def cli_main(argv: Optional[Sequence[str]] = None, *, env: Optional[Mapping[str,
 # Optional Typer integration (if Thomas uses Typer/Click).
 try:  # pragma: no cover
     import typer
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer_app = None
 else:  # pragma: no cover
     typer_app = typer.Typer(
@@ -286,7 +290,7 @@ else:  # pragma: no cover
     @typer_app.callback()
     def _cb(
         ctx: typer.Context,
-        store_dir: Optional[Path] = typer.Option(None, "--store-dir", help="Directory backing the store."),
+        store_dir: Path | None = typer.Option(None, "--store-dir", help="Directory backing the store."),
         json_mode: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
     ) -> None:
         ctx.ensure_object(dict)
@@ -297,9 +301,9 @@ else:  # pragma: no cover
     def _typer_set(
         ctx: typer.Context,
         host_id: str = typer.Argument(...),
-        state: Optional[str] = typer.Option(None, "--state"),
-        state_file: Optional[Path] = typer.Option(None, "--state-file"),
-        updated_at: Optional[str] = typer.Option(None, "--updated-at"),
+        state: str | None = typer.Option(None, "--state"),
+        state_file: Path | None = typer.Option(None, "--state-file"),
+        updated_at: str | None = typer.Option(None, "--updated-at"),
         merge: bool = typer.Option(False, "--merge"),
     ) -> None:
         args = argparse.Namespace(

@@ -46,8 +46,9 @@ import json
 import os
 import pathlib
 import time
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Sequence
+from typing import Any
 from urllib.parse import urlparse
 
 try:
@@ -104,7 +105,7 @@ class NodeDescriptor:
     meta: Mapping[str, Any] | None = None
 
     @staticmethod
-    def from_mapping(raw: Mapping[str, Any]) -> "NodeDescriptor":
+    def from_mapping(raw: Mapping[str, Any]) -> NodeDescriptor:
         if not isinstance(raw, Mapping):
             raise NodesInvalidInputError("Each node entry must be a mapping", details={"node": repr(raw)})
 
@@ -376,13 +377,13 @@ def _load_config_file(path: str) -> Mapping[str, Any]:
             raise NodesConfigError("TOML parsing unavailable", details={"path": str(p)})
         try:
             return _as_mapping(tomllib.loads(raw_bytes.decode("utf-8")))
-        except Exception as e:  # noqa: BLE001
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
             raise NodesConfigError("Invalid TOML config", details={"path": str(p)}) from e
 
     # Unknown extension: try JSON then TOML.
     try:
         return _as_mapping(json.loads(raw_bytes.decode("utf-8")))
-    except Exception:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError):  # noqa: BLE001
         pass
 
     if tomllib is None:  # pragma: no cover
@@ -390,7 +391,7 @@ def _load_config_file(path: str) -> Mapping[str, Any]:
 
     try:
         return _as_mapping(tomllib.loads(raw_bytes.decode("utf-8")))
-    except Exception as e:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
         raise NodesConfigError("Unknown config format", details={"path": str(p)}) from e
 
 
@@ -423,6 +424,7 @@ def _normalize_address(address: str) -> str:
         raise NodesInvalidInputError("Invalid node address (bad port)", details={"address": address}) from e
 
     return addr
+
 
 def _split_host_port(address: str) -> tuple[str, int]:
     parsed = urlparse(address)
@@ -480,7 +482,7 @@ async def _probe_one(node: NodeDescriptor, *, timeout_s: float) -> NodeStatus:
             online=False,
             error="connect_error",
         )
-    except Exception:  # noqa: BLE001
+    except (RuntimeError, asyncio.QueueFull, ValueError):  # noqa: BLE001
         return NodeStatus(
             node_id=node.node_id,
             label=node.label,

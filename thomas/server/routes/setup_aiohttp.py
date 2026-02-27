@@ -9,14 +9,34 @@ import logging
 import shutil
 import subprocess
 import sys
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, List, Optional
+from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 from aiohttp import web
 
 from thomas.core.config import AppConfig
+from thomas.models.local_recommendations import (
+    build_local_runtime_plan,
+    detect_local_hardware_profile,
+    local_background_task_catalog,
+)
+from thomas.preferences.store import (
+    AdvancedPatch,
+    AdvancedRuntimePatch,
+    PreferencesPatch,
+    PreferencesStore,
+    get_db_path,
+)
 from thomas.server.app_keys import APP_CONFIG, APP_SECRETS
+from thomas.server.routes.setup_local_sync import (
+    build_local_sync_payload,
+    fetch_ollama_model_ids,
+)
 from thomas.server.secrets import SecretStore
 
 RequireAccessFn = Callable[[web.Request], None]
@@ -26,6 +46,7 @@ log = logging.getLogger(__name__)
 
 
 # ── small pure helpers (duplicated from app.py to avoid import cycle) ──
+
 
 def _join_url(base: str, path: str) -> str:
     b = (base or "").rstrip("/")
@@ -66,6 +87,27 @@ def _ollama_base_url(app: web.Application, profile: str = "local") -> str:
     return base
 
 
+def _as_bool(value: Any, default: bool) -> bool:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    text = str(value).strip().lower()
+    if text in {"1", "true", "yes", "on"}:
+        return True
+    if text in {"0", "false", "no", "off"}:
+        return False
+    return default
+
+
+def _clamp_int(value: Any, default: int, *, min_value: int, max_value: int) -> int:
+    try:
+        parsed = int(value)
+    except Exception:
+        parsed = int(default)
+    return max(int(min_value), min(int(max_value), int(parsed)))
+
+
 def register_setup_routes(
     app: web.Application,
     *,
@@ -79,7 +121,7 @@ def register_setup_routes(
         cfg: AppConfig = request.app[APP_CONFIG]
         secrets_store: SecretStore = request.app[APP_SECRETS]
 
-        def _first_command(names: List[str]) -> str:
+        def _first_command(names: list[str]) -> str:
             for name in names:
                 found = shutil.which(name)
                 if found:
@@ -114,7 +156,7 @@ def register_setup_routes(
             except Exception as e:
                 ollama_error = f"{type(e).__name__}: {e}"
 
-        profile_rows: List[Dict[str, Any]] = []
+        profile_rows: list[dict[str, Any]] = []
         cloud_key_count = 0
         for name, m in cfg.models.items():
             has_key = m.provider == "codex" or bool(secrets_store.get(name) or m.api_key)
@@ -129,21 +171,30 @@ def register_setup_routes(
                 }
             )
 
+        hardware = detect_local_hardware_profile()
+        local_plan = build_local_runtime_plan(
+            hardware=hardware,
+            local_profile_exists=bool(local_profile_exists),
+            ollama_installed=bool(ollama_cmd),
+            ollama_running=bool(ollama_running),
+        )
+
         if codex_cmd:
             recommended_path = "codex"
             reason = "Codex CLI is installed on this machine."
-        elif local_profile_exists and ollama_running:
-            recommended_path = "local"
-            reason = "Ollama is already running locally."
-        elif cloud_key_count > 0:
-            recommended_path = "cloud"
-            reason = "At least one cloud API key is already configured."
-        elif local_profile_exists and ollama_cmd:
-            recommended_path = "local"
-            reason = "Local profile is available and Ollama is installed."
         else:
-            recommended_path = "cloud"
-            reason = "Cloud setup is the fastest path when local tools are not installed."
+            local_recommendation = str(local_plan.get("recommended_connection_path") or "cloud").strip().lower()
+            if local_recommendation == "local" and local_profile_exists and (ollama_running or ollama_cmd):
+                recommended_path = "local"
+                reason = str(local_plan.get("reason") or "Local execution is recommended for this device.")
+            elif cloud_key_count > 0:
+                recommended_path = "cloud"
+                reason = "At least one cloud API key is already configured."
+            else:
+                recommended_path = "cloud"
+                reason = str(
+                    local_plan.get("reason") or "Cloud setup is the fastest path when local tools are not installed."
+                )
 
         return web.json_response(
             {
@@ -183,6 +234,8 @@ def register_setup_routes(
                     "rows": profile_rows,
                     "cloud_key_count": int(cloud_key_count),
                 },
+                "hardware": hardware,
+                "local_plan": local_plan,
                 "quick_start": {
                     "recommended_path": recommended_path,
                     "reason": reason,
@@ -198,7 +251,7 @@ def register_setup_routes(
         if request.method.upper() != "POST":
             raise web.HTTPMethodNotAllowed(method=request.method, allowed_methods=["POST"])
 
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
         if request.can_read_body:
             try:
                 payload_raw = await read_json(request)
@@ -209,18 +262,6 @@ def register_setup_routes(
             except web.HTTPBadRequest:
                 payload = {}
 
-        def _as_bool(value: Any, default: bool) -> bool:
-            if value is None:
-                return default
-            if isinstance(value, bool):
-                return value
-            text = str(value).strip().lower()
-            if text in {"1", "true", "yes", "on"}:
-                return True
-            if text in {"0", "false", "no", "off"}:
-                return False
-            return default
-
         auto_install = _as_bool(payload.get("auto_install_tools"), True)
         skip_install = _as_bool(payload.get("skip_install"), False)
         skip_doctor = _as_bool(payload.get("skip_doctor"), False)
@@ -230,7 +271,7 @@ def register_setup_routes(
         if not repair_script.exists():
             raise web.HTTPNotFound(text=f"repair script not found: {repair_script}")
 
-        cmd: List[str] = [
+        cmd: list[str] = [
             "powershell",
             "-NoProfile",
             "-ExecutionPolicy",
@@ -246,7 +287,7 @@ def register_setup_routes(
         if not auto_install:
             cmd.append("-NoAutoInstallTools")
 
-        def _run_repair() -> Dict[str, Any]:
+        def _run_repair() -> dict[str, Any]:
             try:
                 completed = subprocess.run(
                     cmd,
@@ -272,8 +313,16 @@ def register_setup_routes(
                 return {
                     "ok": False,
                     "exit_code": 124,
-                    "stdout": str((e.stdout or b"").decode("utf-8", errors="replace") if isinstance(e.stdout, bytes) else (e.stdout or "")),
-                    "stderr": str((e.stderr or b"").decode("utf-8", errors="replace") if isinstance(e.stderr, bytes) else (e.stderr or "")),
+                    "stdout": str(
+                        (e.stdout or b"").decode("utf-8", errors="replace")
+                        if isinstance(e.stdout, bytes)
+                        else (e.stdout or "")
+                    ),
+                    "stderr": str(
+                        (e.stderr or b"").decode("utf-8", errors="replace")
+                        if isinstance(e.stderr, bytes)
+                        else (e.stderr or "")
+                    ),
                     "report_path": "",
                     "error": "repair timed out",
                 }
@@ -335,7 +384,7 @@ def register_setup_routes(
                 "summary": {"error_count": 1, "warning_count": 0},
             }
 
-        next_actions: List[str] = []
+        next_actions: list[str] = []
         seen_actions: set[str] = set()
         for finding in list(config_report.get("errors") or []) + list(config_report.get("warnings") or []):
             remediation = str(finding.get("remediation") or "").strip()
@@ -365,6 +414,198 @@ def register_setup_routes(
             }
         )
 
+    async def api_local_recommendations(request: web.Request) -> web.Response:
+        """Return hardware-aware local model/runtime recommendations."""
+        require_api_access(request)
+        cfg: AppConfig = request.app[APP_CONFIG]
+
+        profile = str(request.query.get("profile") or "local").strip() or "local"
+        local_profile_exists = profile in cfg.models
+
+        ollama_base = "http://127.0.0.1:11434"
+        ollama_error = ""
+        if local_profile_exists:
+            try:
+                ollama_base = _ollama_base_url(request.app, profile)
+            except Exception as exc:
+                ollama_error = f"{type(exc).__name__}: {exc}"
+
+        ollama_cmd = shutil.which("ollama") or shutil.which("ollama.exe") or shutil.which("ollama.cmd") or ""
+        installed_models: list[str] = []
+        tags_error = ""
+        if not ollama_error:
+            installed_models, tags_error = await fetch_ollama_model_ids(ollama_base)
+
+        hardware = detect_local_hardware_profile()
+        local_plan = build_local_runtime_plan(
+            hardware=hardware,
+            local_profile_exists=bool(local_profile_exists),
+            ollama_installed=bool(ollama_cmd),
+            ollama_running=bool(not tags_error and not ollama_error),
+        )
+        recommended_models = [
+            str(row.get("id") or "").strip()
+            for row in list(local_plan.get("recommended_models") or [])
+            if isinstance(row, dict)
+        ]
+        recommended_models = [model_id for model_id in recommended_models if model_id]
+        installed_set = set(installed_models)
+        missing_recommended_models = [model_id for model_id in recommended_models if model_id not in installed_set]
+
+        return web.json_response(
+            {
+                "ok": True,
+                "profile": profile,
+                "hardware": hardware,
+                "local_plan": local_plan,
+                "readiness": {
+                    "recommended_models": recommended_models,
+                    "missing_recommended_models": missing_recommended_models,
+                    "healthy": len(missing_recommended_models) == 0,
+                },
+                "ollama": {
+                    "base_url": ollama_base,
+                    "installed": bool(ollama_cmd),
+                    "running": bool(not tags_error and not ollama_error),
+                    "error": str(ollama_error or tags_error or ""),
+                    "installed_models": installed_models,
+                },
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_local_sync(request: web.Request) -> web.Response:
+        """Pull/verify a local model set and report per-model verification status."""
+        require_api_access(request)
+        payload: dict[str, Any] = {}
+        if request.can_read_body:
+            try:
+                incoming = await read_json(request)
+                if isinstance(incoming, dict):
+                    payload = incoming
+            except Exception:
+                payload = {}
+
+        cfg: AppConfig = request.app[APP_CONFIG]
+        profile = str(payload.get("profile") or "local").strip() or "local"
+        base = _ollama_base_url(request.app, profile)
+        result = await build_local_sync_payload(
+            payload=payload,
+            cfg=cfg,
+            profile=profile,
+            base_url=base,
+        )
+        healthy = bool(result.get("ok", False))
+        return web.json_response(
+            result,
+            status=(200 if healthy else 207),
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_local_background_status(request: web.Request) -> web.Response:
+        """Return local background-agent status, health, and recent cycle reports."""
+        require_api_access(request)
+        limit = _clamp_int(request.query.get("limit"), 20, min_value=1, max_value=200)
+        from thomas.core.local_agent_engine import get_local_agent_engine
+
+        engine = get_local_agent_engine()
+        prefs = PreferencesStore(get_db_path()).get(user_id="default")
+        runtime = getattr(getattr(prefs, "advanced", None), "runtime", None)
+        return web.json_response(
+            {
+                "ok": True,
+                "status": engine.status_snapshot(),
+                "health": engine.health_snapshot(history_limit=limit),
+                "recent_reports": engine.recent_reports(limit=limit),
+                "settings": {
+                    "local_background_agents_enabled": bool(getattr(runtime, "local_background_agents_enabled", False)),
+                    "local_background_min_gpu_headroom_pct": int(
+                        getattr(runtime, "local_background_min_gpu_headroom_pct", 35) or 35
+                    ),
+                },
+                "task_catalog": local_background_task_catalog(),
+            },
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
+    async def api_local_background_control(request: web.Request) -> web.Response:
+        """Update local background runtime settings and optionally run a cycle."""
+        require_api_access(request)
+        payload: dict[str, Any] = {}
+        if request.can_read_body:
+            try:
+                incoming = await read_json(request)
+                if isinstance(incoming, dict):
+                    payload = incoming
+            except Exception:
+                payload = {}
+
+        runtime_patch: dict[str, Any] = {}
+        if "enabled" in payload:
+            runtime_patch["local_background_agents_enabled"] = bool(payload.get("enabled"))
+        if "min_gpu_headroom_pct" in payload:
+            runtime_patch["local_background_min_gpu_headroom_pct"] = _clamp_int(
+                payload.get("min_gpu_headroom_pct"),
+                35,
+                min_value=5,
+                max_value=95,
+            )
+
+        updated_settings: dict[str, Any] = {}
+        if runtime_patch:
+            updated = PreferencesStore(get_db_path()).patch(
+                PreferencesPatch(
+                    advanced=AdvancedPatch(
+                        runtime=AdvancedRuntimePatch(**runtime_patch),
+                    )
+                ),
+                user_id="default",
+            )
+            updated_settings = {
+                "local_background_agents_enabled": bool(updated.advanced.runtime.local_background_agents_enabled),
+                "local_background_min_gpu_headroom_pct": int(
+                    updated.advanced.runtime.local_background_min_gpu_headroom_pct
+                ),
+            }
+
+        run_once = _as_bool(payload.get("run_once"), False)
+        force = _as_bool(payload.get("force"), False)
+        reason = str(payload.get("reason") or "manual").strip() or "manual"
+        report_limit = _clamp_int(payload.get("history_limit"), 20, min_value=1, max_value=200)
+        cycle_result: dict[str, Any] | None = None
+        from thomas.core.local_agent_engine import get_local_agent_engine
+
+        engine = get_local_agent_engine()
+        if run_once:
+            cycle_result = await asyncio.to_thread(
+                engine.run_cycle_once,
+                reason=reason,
+                force=force,
+            )
+
+        status_code = 200
+        if isinstance(cycle_result, dict) and not bool(cycle_result.get("ok", True)):
+            reason_code = str(cycle_result.get("reason") or "").strip().lower()
+            if reason_code in {"busy", "not_idle"}:
+                status_code = 409
+            elif reason_code in {"engine_disabled"}:
+                status_code = 503
+            else:
+                status_code = 400
+
+        return web.json_response(
+            {
+                "ok": not isinstance(cycle_result, dict) or bool(cycle_result.get("ok", False)),
+                "updated_settings": updated_settings,
+                "cycle_result": cycle_result,
+                "status": engine.status_snapshot(),
+                "health": engine.health_snapshot(history_limit=report_limit),
+                "recent_reports": engine.recent_reports(limit=report_limit),
+            },
+            status=status_code,
+            dumps=lambda x: json.dumps(x, ensure_ascii=False),
+        )
+
     async def api_local_pull(request: web.Request) -> web.StreamResponse:
         """Pull a local model via Ollama's HTTP API.
 
@@ -389,7 +630,7 @@ def register_setup_routes(
         )
         await resp.prepare(request)
 
-        async def send(obj: Dict[str, Any]) -> None:
+        async def send(obj: dict[str, Any]) -> None:
             line = json.dumps(obj, ensure_ascii=False)
             await resp.write(line.encode("utf-8") + b"\n")
 
@@ -438,4 +679,8 @@ def register_setup_routes(
     app.router.add_get("/api/setup/bootstrap", api_setup_bootstrap)
     app.router.add_post("/api/setup/repair", api_setup_repair)
     app.router.add_get("/api/setup/diagnostics", api_setup_diagnostics)
+    app.router.add_get("/api/local/recommendations", api_local_recommendations)
+    app.router.add_post("/api/local/sync", api_local_sync)
+    app.router.add_get("/api/local/background", api_local_background_status)
+    app.router.add_post("/api/local/background", api_local_background_control)
     app.router.add_post("/api/local/pull", api_local_pull)

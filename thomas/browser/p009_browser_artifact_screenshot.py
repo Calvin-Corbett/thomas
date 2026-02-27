@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class BrowserArtifactScreenshotErrorCode(str, Enum):
@@ -22,13 +22,13 @@ class BrowserArtifactScreenshotRequest:
     """
 
     artifact: str
-    output: Optional[str] = None
+    output: str | None = None
     full_page: bool = True
     viewport_width: int = 1280
     viewport_height: int = 720
     wait_ms: int = 250
     timeout_ms: int = 30_000
-    artifact_root: Optional[str] = None
+    artifact_root: str | None = None
 
 
 @dataclass(frozen=True)
@@ -37,7 +37,7 @@ class BrowserArtifactScreenshotResult:
     screenshot_path: str
     renderer: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "artifact_path": self.artifact_path,
             "screenshot_path": self.screenshot_path,
@@ -53,14 +53,14 @@ class BrowserArtifactScreenshotError(RuntimeError):
         code: BrowserArtifactScreenshotErrorCode,
         message: str,
         *,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
         self.details = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "code": self.code.value,
             "message": self.message,
@@ -68,7 +68,7 @@ class BrowserArtifactScreenshotError(RuntimeError):
         }
 
 
-def _guess_artifact_root_from_thomas() -> Optional[Path]:
+def _guess_artifact_root_from_thomas() -> Path | None:
     """Best-effort lookup of an artifact root from the existing Thomas browser tool.
 
     This keeps the feature usable even when the caller passes an artifact id instead
@@ -76,7 +76,7 @@ def _guess_artifact_root_from_thomas() -> Optional[Path]:
     """
     try:
         from thomas.tools import browser as browser_tool  # type: ignore
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
     candidates: list[Any] = []
@@ -105,13 +105,13 @@ def _guess_artifact_root_from_thomas() -> Optional[Path]:
     for cand in candidates:
         try:
             val = cand() if callable(cand) else cand
-        except Exception:
+        except (RuntimeError, TypeError, AttributeError):
             continue
         if not val:
             continue
         try:
             p = Path(val)
-        except Exception:
+        except (ValueError, TypeError, OSError):
             continue
         if p.exists() and p.is_dir():
             return p
@@ -122,7 +122,7 @@ def _is_within_root(candidate: Path, root: Path) -> bool:
     try:
         candidate.resolve().relative_to(root.resolve())
         return True
-    except Exception:
+    except (ValueError, OSError):
         return False
 
 
@@ -156,7 +156,7 @@ def _resolve_artifact_path(req: BrowserArtifactScreenshotRequest) -> Path:
         roots.append(thomas_root)
 
     for root in roots:
-        candidate = (root / req.artifact)
+        candidate = root / req.artifact
         if not _is_within_root(candidate, root):
             continue
         candidate = candidate.resolve()
@@ -182,7 +182,7 @@ def _default_output_path(artifact_path: Path) -> Path:
     return artifact_path.with_name(f"{artifact_path.stem}.screenshot.png")
 
 
-def _ensure_output_path(req_out: Optional[str], artifact_path: Path) -> Path:
+def _ensure_output_path(req_out: str | None, artifact_path: Path) -> Path:
     output_path = Path(req_out) if req_out else _default_output_path(artifact_path)
 
     if output_path.exists() and output_path.is_dir():
@@ -204,7 +204,7 @@ def _ensure_output_path(req_out: Optional[str], artifact_path: Path) -> Path:
             )
     except BrowserArtifactScreenshotError:
         raise
-    except Exception:
+    except (ValueError, OSError):
         # If resolve fails due to non-existent paths or permissions, we'll let downstream creation handle it.
         pass
 

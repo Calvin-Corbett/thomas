@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from typing import Any, Optional
+from typing import Any
 
 from .contracts import ModuleContract
 from .kernel import CompanionKernel
@@ -23,7 +23,7 @@ class ModuleState:
     updated_at: str
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "ModuleState":
+    def from_dict(cls, data: dict[str, Any]) -> ModuleState:
         return cls(
             module_id=str(data.get("module_id") or ""),
             version=str(data.get("version") or ""),
@@ -63,7 +63,7 @@ class ModuleRegistry:
         path = self.kernel.paths.registry_file
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except json.JSONDecodeError:
             payload = {"schema_version": 1, "modules": {}}
         if not isinstance(payload, dict):
             payload = {"schema_version": 1, "modules": {}}
@@ -91,7 +91,7 @@ class ModuleRegistry:
         out.sort(key=lambda m: m.module_id)
         return out
 
-    def get(self, module_id: str) -> Optional[ModuleState]:
+    def get(self, module_id: str) -> ModuleState | None:
         payload = self._load()
         item = (payload.get("modules") or {}).get(module_id)
         if not isinstance(item, dict):
@@ -123,7 +123,7 @@ class ModuleRegistry:
         self._save(payload)
         return self.get(module.module_id) or ModuleState.from_dict({"module_id": module.module_id})
 
-    def set_enabled(self, module_id: str, enabled: bool, *, timestamp: str) -> Optional[ModuleState]:
+    def set_enabled(self, module_id: str, enabled: bool, *, timestamp: str) -> ModuleState | None:
         payload = self._load()
         modules = payload.get("modules")
         if not isinstance(modules, dict):

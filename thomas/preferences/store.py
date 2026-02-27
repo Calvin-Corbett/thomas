@@ -26,6 +26,7 @@ Thread-scoped memory override
 - GET /api/preferences supports ?thread_id=... to compute effective thread memory status.
 - PATCH /api/preferences supports memory.thread_enabled when thread_id is provided.
 """
+
 from __future__ import annotations
 
 import base64
@@ -36,7 +37,7 @@ import sqlite3
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Literal, Optional, Tuple
+from typing import Any, Literal
 
 from cryptography.fernet import Fernet, InvalidToken
 from pydantic import BaseModel, Field, field_validator
@@ -51,8 +52,105 @@ ContradictionPolicy = Literal["latest_wins", "ask", "strict"]
 ContextPruneStrategy = Literal["recency", "balanced", "aggressive"]
 UIDensity = Literal["comfortable", "compact", "dense"]
 EventLogVerbosity = Literal["minimal", "standard", "verbose"]
+ProfileType = Literal["adaptive", "coder", "non_coder"]
+ReviewDepth = Literal["adaptive", "simple", "technical"]
 
 PROVIDERS = ("openai", "anthropic", "google", "elevenlabs", "azure_openai", "custom")
+_PROFILE_TYPE_ALIASES = {
+    "": "adaptive",
+    "auto": "adaptive",
+    "automatic": "adaptive",
+    "adaptive": "adaptive",
+    "default": "adaptive",
+    "balanced": "adaptive",
+    "general": "adaptive",
+    "non_coder": "non_coder",
+    "non-coder": "non_coder",
+    "noncoder": "non_coder",
+    "non technical": "non_coder",
+    "non_technical": "non_coder",
+    "beginner": "non_coder",
+    "new": "non_coder",
+    "coder": "coder",
+    "developer": "coder",
+    "technical": "coder",
+    "expert": "coder",
+}
+_REVIEW_DEPTH_ALIASES = {
+    "": "adaptive",
+    "adaptive": "adaptive",
+    "auto": "adaptive",
+    "default": "adaptive",
+    "balanced": "adaptive",
+    "simple": "simple",
+    "simplified": "simple",
+    "plain": "simple",
+    "non_technical": "simple",
+    "non-technical": "simple",
+    "non technical": "simple",
+    "easy": "simple",
+    "technical": "technical",
+    "detailed": "technical",
+    "deep": "technical",
+}
+_NON_CODER_RUNTIME_LOCKS: dict[str, bool] = {
+    "quality_enforce": True,
+    "quality_require_verification_for_coding": True,
+    "quality_require_tests_for_code_edits": True,
+    "quality_require_monolith_guard_for_coding": True,
+}
+
+
+def normalize_profile_type(value: Any, *, default: ProfileType = "adaptive") -> ProfileType:
+    raw = str(value or "").strip().lower().replace("-", "_")
+    if not raw:
+        return default
+    normalized = _PROFILE_TYPE_ALIASES.get(raw)
+    if normalized:
+        return normalized  # type: ignore[return-value]
+    # Handle mixed separators like "non coder".
+    normalized = _PROFILE_TYPE_ALIASES.get(raw.replace("_", " "))
+    if normalized:
+        return normalized  # type: ignore[return-value]
+    return default
+
+
+def normalize_review_depth(value: Any, *, default: ReviewDepth = "adaptive") -> ReviewDepth:
+    raw = str(value or "").strip().lower().replace("-", "_")
+    if not raw:
+        return default
+    normalized = _REVIEW_DEPTH_ALIASES.get(raw)
+    if normalized:
+        return normalized  # type: ignore[return-value]
+    normalized = _REVIEW_DEPTH_ALIASES.get(raw.replace("_", " "))
+    if normalized:
+        return normalized  # type: ignore[return-value]
+    return default
+
+
+def profile_prefers_non_coder_mode(
+    profile: Any = None,
+    *,
+    onboarding_answers: dict[str, Any] | None = None,
+) -> bool:
+    """Resolve whether robust non-coder defaults should be active."""
+    explicit = normalize_profile_type(getattr(profile, "profile_type", None), default="adaptive")
+    if explicit == "non_coder":
+        return True
+    if explicit == "coder":
+        return False
+
+    answers = onboarding_answers if isinstance(onboarding_answers, dict) else {}
+    answers_profile = normalize_profile_type(answers.get("profile_type"), default="adaptive")
+    if answers_profile == "non_coder":
+        return True
+    if answers_profile == "coder":
+        return False
+
+    experience = str(answers.get("experience") or "").strip().lower()
+    if experience in {"new", "beginner", "non_coder", "non-coder", "noncoder"}:
+        return True
+    return False
 
 
 def utc_now_iso() -> str:
@@ -103,7 +201,7 @@ class VoicePrefs(BaseModel):
 
 class MemoryPrefs(BaseModel):
     enabled_global: bool = True
-    thread_enabled: Optional[bool] = None  # computed only when thread_id is provided
+    thread_enabled: bool | None = None  # computed only when thread_id is provided
 
 
 class NotificationPrefs(BaseModel):
@@ -120,12 +218,12 @@ class AutonomyPrefs(BaseModel):
 class OnboardingPrefs(BaseModel):
     setup_completed: bool = False
     version: int = Field(default=0, ge=0, le=1000)
-    completed_at: Optional[str] = None
-    dismissed_at: Optional[str] = None
+    completed_at: str | None = None
+    dismissed_at: str | None = None
     current_step: str = ""
-    connection_method: Optional[str] = None
-    dependency_plan: Dict[str, Any] = Field(default_factory=dict)
-    answers: Dict[str, Any] = Field(default_factory=dict)
+    connection_method: str | None = None
+    dependency_plan: dict[str, Any] = Field(default_factory=dict)
+    answers: dict[str, Any] = Field(default_factory=dict)
 
     @field_validator("current_step")
     @classmethod
@@ -134,7 +232,7 @@ class OnboardingPrefs(BaseModel):
 
     @field_validator("connection_method")
     @classmethod
-    def _trim_connection_method(cls, v: Optional[str]) -> Optional[str]:
+    def _trim_connection_method(cls, v: str | None) -> str | None:
         if v is None:
             return None
         s = str(v).strip()
@@ -142,27 +240,39 @@ class OnboardingPrefs(BaseModel):
 
 
 class APIKeysMasked(BaseModel):
-    openai: Optional[str] = None
-    anthropic: Optional[str] = None
-    google: Optional[str] = None
-    elevenlabs: Optional[str] = None
-    azure_openai: Optional[str] = None
-    custom: Optional[str] = None
+    openai: str | None = None
+    anthropic: str | None = None
+    google: str | None = None
+    elevenlabs: str | None = None
+    azure_openai: str | None = None
+    custom: str | None = None
 
 
 class ProfilePrefs(BaseModel):
     display_name: str = ""
     avatar_url: str = ""
+    profile_type: ProfileType = "adaptive"
+    review_depth: ReviewDepth = "adaptive"
 
     @field_validator("display_name", "avatar_url")
     @classmethod
     def _trim_fields(cls, v: str) -> str:
         return str(v or "").strip()
 
+    @field_validator("profile_type", mode="before")
+    @classmethod
+    def _normalize_profile_type(cls, v: Any) -> str:
+        return normalize_profile_type(v)
+
+    @field_validator("review_depth", mode="before")
+    @classmethod
+    def _normalize_review_depth(cls, v: Any) -> str:
+        return normalize_review_depth(v)
+
 
 class AdvancedModelPrefs(BaseModel):
-    active_profile: str = ""    # persisted selected provider/profile
-    model_id: str = ""          # persisted model override
+    active_profile: str = ""  # persisted selected provider/profile
+    model_id: str = ""  # persisted model override
     temperature: float = Field(default=0.7, ge=0.0, le=2.0)
     top_p: float = Field(default=1.0, ge=0.0, le=1.0)
     frequency_penalty: float = Field(default=0.0, ge=-2.0, le=2.0)
@@ -171,7 +281,7 @@ class AdvancedModelPrefs(BaseModel):
     reasoning_effort: ReasoningEffort = "medium"
     reasoning_token_budget: int = Field(default=4096, ge=128, le=65536)
     json_mode: bool = False
-    deterministic_seed: Optional[int] = Field(default=None, ge=0, le=2147483647)
+    deterministic_seed: int | None = Field(default=None, ge=0, le=2147483647)
     stop_sequences: str = ""
 
     @field_validator("stop_sequences")
@@ -246,6 +356,8 @@ class AdvancedRuntimePrefs(BaseModel):
     default_mode: RunMode = "auto"
     default_token_economy: TokenEconomyLevel = "optimal"
     max_agent_iterations: int = Field(default=0, ge=0, le=200)
+    local_background_agents_enabled: bool = False
+    local_background_min_gpu_headroom_pct: int = Field(default=35, ge=5, le=95)
     quality_enforce: bool = True
     quality_require_verification_for_coding: bool = True
     quality_require_tests_for_code_edits: bool = False
@@ -306,188 +418,385 @@ class PreferencesResponse(BaseModel):
     onboarding: OnboardingPrefs = Field(default_factory=OnboardingPrefs)
     api_keys: APIKeysMasked = Field(default_factory=APIKeysMasked)
     profile: ProfilePrefs = Field(default_factory=ProfilePrefs)
+    thomads: dict[str, Any] = Field(default_factory=dict)
     updated_at: str = Field(default_factory=utc_now_iso)
 
 
 class AppearancePatch(BaseModel):
-    theme: Optional[Theme] = None
-    font_size: Optional[int] = Field(default=None, ge=12, le=28)
-    bubble_style: Optional[BubbleStyle] = None
+    theme: Theme | None = None
+    font_size: int | None = Field(default=None, ge=12, le=28)
+    bubble_style: BubbleStyle | None = None
+
+    @field_validator("theme", mode="before")
+    @classmethod
+    def _normalize_theme(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        theme_str = str(v or "").strip().lower()
+        if not theme_str:
+            return None
+        # Valid themes: "auto", "light", "dark"
+        valid_themes = {"auto", "light", "dark"}
+        if theme_str in valid_themes:
+            return theme_str
+        # Normalize common aliases
+        aliases = {
+            "auto": "auto",
+            "automatic": "auto",
+            "default": "auto",
+            "system": "auto",
+            "light": "light",
+            "day": "light",
+            "bright": "light",
+            "dark": "dark",
+            "night": "dark",
+            "black": "dark",
+        }
+        return aliases.get(theme_str, "auto")
+
+    @field_validator("bubble_style", mode="before")
+    @classmethod
+    def _normalize_bubble_style(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        style_str = str(v or "").strip().lower()
+        if not style_str:
+            return None
+        # Valid styles: "rounded", "square", "compact"
+        valid_styles = {"rounded", "square", "compact"}
+        if style_str in valid_styles:
+            return style_str
+        # Normalize common aliases
+        aliases = {
+            "rounded": "rounded",
+            "smooth": "rounded",
+            "circle": "rounded",
+            "square": "square",
+            "sharp": "square",
+            "hard": "square",
+            "compact": "compact",
+            "tight": "compact",
+            "minimal": "compact",
+        }
+        return aliases.get(style_str, "rounded")
 
 
 class VoicePatch(BaseModel):
-    tts_voice: Optional[str] = None
-    speed: Optional[float] = Field(default=None, ge=0.5, le=2.0)
-    wake_word_enabled: Optional[bool] = None
-    mic_device_id: Optional[str] = None
+    tts_voice: str | None = None
+    speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    wake_word_enabled: bool | None = None
+    mic_device_id: str | None = None
 
 
 class MemoryPatch(BaseModel):
-    enabled_global: Optional[bool] = None
+    enabled_global: bool | None = None
     # If explicitly provided (even null), requires thread_id query param.
     # True/False sets override; null clears override.
-    thread_enabled: Optional[bool] = None
+    thread_enabled: bool | None = None
 
 
 class NotificationPatch(BaseModel):
-    web_push: Optional[bool] = None
-    telegram: Optional[bool] = None
-    desktop: Optional[bool] = None
+    web_push: bool | None = None
+    telegram: bool | None = None
+    desktop: bool | None = None
 
 
 class AutonomyPatch(BaseModel):
-    default_level: Optional[AutonomyLevel] = None
-    concurrency_limit: Optional[int] = Field(default=None, ge=1, le=64)
+    default_level: AutonomyLevel | None = None
+    concurrency_limit: int | None = Field(default=None, ge=1, le=64)
+
+    @field_validator("default_level", mode="before")
+    @classmethod
+    def _normalize_autonomy_level(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        level_str = str(v or "").strip().upper()
+        if not level_str:
+            return None
+        # Valid levels: "L1", "L2", "L3", "L4"
+        valid_levels = {"L1", "L2", "L3", "L4"}
+        if level_str in valid_levels:
+            return level_str
+        # Try to parse numeric versions
+        if level_str.startswith("L"):
+            level_num = level_str[1:]
+        else:
+            level_num = level_str
+        try:
+            num = int(level_num)
+            num = max(1, min(4, num))  # clamp to 1-4
+            return f"L{num}"
+        except (ValueError, TypeError):
+            # Default to L3 (balanced)
+            return "L3"
 
 
 class OnboardingPatch(BaseModel):
-    setup_completed: Optional[bool] = None
-    version: Optional[int] = Field(default=None, ge=0, le=1000)
-    completed_at: Optional[str] = None
-    dismissed_at: Optional[str] = None
-    current_step: Optional[str] = None
-    connection_method: Optional[str] = None
-    dependency_plan: Optional[Dict[str, Any]] = None
-    answers: Optional[Dict[str, Any]] = None
+    setup_completed: bool | None = None
+    version: int | None = Field(default=None, ge=0, le=1000)
+    completed_at: str | None = None
+    dismissed_at: str | None = None
+    current_step: str | None = None
+    connection_method: str | None = None
+    dependency_plan: dict[str, Any] | None = None
+    answers: dict[str, Any] | None = None
 
 
 class APIKeysPatch(BaseModel):
     # Provide full keys here (encrypted at rest).
     # Empty string "" or null deletes the key.
-    openai: Optional[str] = None
-    anthropic: Optional[str] = None
-    google: Optional[str] = None
-    elevenlabs: Optional[str] = None
-    azure_openai: Optional[str] = None
-    custom: Optional[str] = None
+    openai: str | None = None
+    anthropic: str | None = None
+    google: str | None = None
+    elevenlabs: str | None = None
+    azure_openai: str | None = None
+    custom: str | None = None
 
 
 class ProfilePatch(BaseModel):
-    display_name: Optional[str] = None
-    avatar_url: Optional[str] = None
+    display_name: str | None = None
+    avatar_url: str | None = None
+    profile_type: str | None = None
+    review_depth: str | None = None
 
 
 class AdvancedModelPatch(BaseModel):
-    active_profile: Optional[str] = None
-    model_id: Optional[str] = None
-    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
-    top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    frequency_penalty: Optional[float] = Field(default=None, ge=-2.0, le=2.0)
-    presence_penalty: Optional[float] = Field(default=None, ge=-2.0, le=2.0)
-    max_output_tokens: Optional[int] = Field(default=None, ge=128, le=32768)
-    reasoning_effort: Optional[ReasoningEffort] = None
-    reasoning_token_budget: Optional[int] = Field(default=None, ge=128, le=65536)
-    json_mode: Optional[bool] = None
-    deterministic_seed: Optional[int] = Field(default=None, ge=0, le=2147483647)
-    stop_sequences: Optional[str] = None
+    active_profile: str | None = None
+    model_id: str | None = None
+    temperature: float | None = Field(default=None, ge=0.0, le=2.0)
+    top_p: float | None = Field(default=None, ge=0.0, le=1.0)
+    frequency_penalty: float | None = Field(default=None, ge=-2.0, le=2.0)
+    presence_penalty: float | None = Field(default=None, ge=-2.0, le=2.0)
+    max_output_tokens: int | None = Field(default=None, ge=128, le=32768)
+    reasoning_effort: ReasoningEffort | None = None
+    reasoning_token_budget: int | None = Field(default=None, ge=128, le=65536)
+    json_mode: bool | None = None
+    deterministic_seed: int | None = Field(default=None, ge=0, le=2147483647)
+    stop_sequences: str | None = None
 
 
 class AdvancedToolsPatch(BaseModel):
-    auto_tool_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    require_command_approval: Optional[bool] = None
-    allow_shell: Optional[bool] = None
-    allow_file_write: Optional[bool] = None
-    allow_network: Optional[bool] = None
-    allow_browser: Optional[bool] = None
-    allow_channels: Optional[bool] = None
-    allow_git: Optional[bool] = None
-    tool_timeout_s: Optional[int] = Field(default=None, ge=5, le=1800)
-    max_parallel_tools: Optional[int] = Field(default=None, ge=1, le=32)
-    allowed_paths: Optional[str] = None
-    blocked_commands: Optional[str] = None
+    auto_tool_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    require_command_approval: bool | None = None
+    allow_shell: bool | None = None
+    allow_file_write: bool | None = None
+    allow_network: bool | None = None
+    allow_browser: bool | None = None
+    allow_channels: bool | None = None
+    allow_git: bool | None = None
+    tool_timeout_s: int | None = Field(default=None, ge=5, le=1800)
+    max_parallel_tools: int | None = Field(default=None, ge=1, le=32)
+    allowed_paths: str | None = None
+    blocked_commands: str | None = None
 
 
 class AdvancedMemoryPatch(BaseModel):
-    include_global_memory: Optional[bool] = None
-    include_profile_memory: Optional[bool] = None
-    include_thread_memory: Optional[bool] = None
-    pins_only: Optional[bool] = None
-    max_pack_tokens: Optional[int] = Field(default=None, ge=200, le=64000)
-    decay_half_life_hours: Optional[float] = Field(default=None, ge=1.0, le=87600.0)
-    retrieval_top_k: Optional[int] = Field(default=None, ge=1, le=64)
-    auto_summarize_threshold: Optional[int] = Field(default=None, ge=10, le=2000)
-    memory_decay_days: Optional[int] = Field(default=None, ge=1, le=3650)
-    auto_compact_enabled: Optional[bool] = None
-    auto_compact_episode_threshold: Optional[int] = Field(default=None, ge=10, le=1000000)
-    auto_compact_min_interval_hours: Optional[float] = Field(default=None, ge=0.1, le=8760.0)
-    auto_optimize_enabled: Optional[bool] = None
-    auto_optimize_waste_threshold: Optional[float] = Field(default=None, ge=0.0, le=1.0)
-    auto_optimize_min_interval_hours: Optional[float] = Field(default=None, ge=0.1, le=8760.0)
-    contradiction_policy: Optional[ContradictionPolicy] = None
-    context_prune_strategy: Optional[ContextPruneStrategy] = None
-    pinned_context: Optional[str] = None
+    include_global_memory: bool | None = None
+    include_profile_memory: bool | None = None
+    include_thread_memory: bool | None = None
+    pins_only: bool | None = None
+    max_pack_tokens: int | None = Field(default=None, ge=200, le=64000)
+    decay_half_life_hours: float | None = Field(default=None, ge=1.0, le=87600.0)
+    retrieval_top_k: int | None = Field(default=None, ge=1, le=64)
+    auto_summarize_threshold: int | None = Field(default=None, ge=10, le=2000)
+    memory_decay_days: int | None = Field(default=None, ge=1, le=3650)
+    auto_compact_enabled: bool | None = None
+    auto_compact_episode_threshold: int | None = Field(default=None, ge=10, le=1000000)
+    auto_compact_min_interval_hours: float | None = Field(default=None, ge=0.1, le=8760.0)
+    auto_optimize_enabled: bool | None = None
+    auto_optimize_waste_threshold: float | None = Field(default=None, ge=0.0, le=1.0)
+    auto_optimize_min_interval_hours: float | None = Field(default=None, ge=0.1, le=8760.0)
+    contradiction_policy: ContradictionPolicy | None = None
+    context_prune_strategy: ContextPruneStrategy | None = None
+    pinned_context: str | None = None
 
 
 class AdvancedCostPatch(BaseModel):
-    session_token_budget: Optional[int] = Field(default=None, ge=1000, le=5000000)
-    daily_token_budget: Optional[int] = Field(default=None, ge=10000, le=50000000)
-    throttle_on_budget: Optional[bool] = None
-    low_cost_mode: Optional[bool] = None
-    max_retries: Optional[int] = Field(default=None, ge=0, le=20)
-    retry_backoff_ms: Optional[int] = Field(default=None, ge=0, le=120000)
-    provider_failover_chain: Optional[str] = None
-    model_failover_chain: Optional[str] = None
+    session_token_budget: int | None = Field(default=None, ge=1000, le=5000000)
+    daily_token_budget: int | None = Field(default=None, ge=10000, le=50000000)
+    throttle_on_budget: bool | None = None
+    low_cost_mode: bool | None = None
+    max_retries: int | None = Field(default=None, ge=0, le=20)
+    retry_backoff_ms: int | None = Field(default=None, ge=0, le=120000)
+    provider_failover_chain: str | None = None
+    model_failover_chain: str | None = None
 
 
 class AdvancedRuntimePatch(BaseModel):
-    default_mode: Optional[RunMode] = None
-    default_token_economy: Optional[TokenEconomyLevel] = None
-    max_agent_iterations: Optional[int] = Field(default=None, ge=0, le=200)
-    quality_enforce: Optional[bool] = None
-    quality_require_verification_for_coding: Optional[bool] = None
-    quality_require_tests_for_code_edits: Optional[bool] = None
-    quality_require_monolith_guard_for_coding: Optional[bool] = None
+    default_mode: RunMode | None = None
+    default_token_economy: TokenEconomyLevel | None = None
+    max_agent_iterations: int | None = Field(default=None, ge=0, le=200)
+    local_background_agents_enabled: bool | None = None
+    local_background_min_gpu_headroom_pct: int | None = Field(default=None, ge=5, le=95)
+    quality_enforce: bool | None = None
+    quality_require_verification_for_coding: bool | None = None
+    quality_require_tests_for_code_edits: bool | None = None
+    quality_require_monolith_guard_for_coding: bool | None = None
+
+    @field_validator("default_mode", mode="before")
+    @classmethod
+    def _normalize_default_mode(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        mode_str = str(v or "").strip().lower()
+        if not mode_str:
+            return None
+        # Valid modes: "auto", "fast", "thinking", "swarm", "batch"
+        valid_modes = {"auto", "fast", "thinking", "swarm", "batch"}
+        if mode_str in valid_modes:
+            return mode_str
+        # Normalize common aliases
+        aliases = {
+            "auto": "auto",
+            "automatic": "auto",
+            "fast": "fast",
+            "quick": "fast",
+            "thinking": "thinking",
+            "reason": "thinking",
+            "swarm": "swarm",
+            "multi": "swarm",
+            "batch": "batch",
+            "bulk": "batch",
+        }
+        return aliases.get(mode_str, "auto")
+
+    @field_validator("default_token_economy", mode="before")
+    @classmethod
+    def _normalize_token_economy(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        econ_str = str(v or "").strip().lower()
+        if not econ_str:
+            return None
+        # Valid economies: "cheap", "optimal", "max"
+        valid_economies = {"cheap", "optimal", "max"}
+        if econ_str in valid_economies:
+            return econ_str
+        # Normalize common aliases
+        aliases = {
+            "cheap": "cheap",
+            "low": "cheap",
+            "low_cost": "cheap",
+            "budget": "cheap",
+            "economy": "cheap",
+            "optimal": "optimal",
+            "balanced": "optimal",
+            "default": "optimal",
+            "normal": "optimal",
+            "max": "max",
+            "maximum": "max",
+            "high": "max",
+            "best": "max",
+            "quality": "max",
+        }
+        return aliases.get(econ_str, "optimal")
 
 
 class AdvancedFailoverPatch(BaseModel):
-    enabled: Optional[bool] = None
-    chat_auto_failover: Optional[bool] = None
-    fallback_on_auth_error: Optional[bool] = None
-    cooldown_seconds: Optional[int] = Field(default=None, ge=0, le=86400)
+    enabled: bool | None = None
+    chat_auto_failover: bool | None = None
+    fallback_on_auth_error: bool | None = None
+    cooldown_seconds: int | None = Field(default=None, ge=0, le=86400)
 
 
 class AdvancedPrivacyPatch(BaseModel):
-    telemetry_enabled: Optional[bool] = None
-    redact_secrets_in_logs: Optional[bool] = None
-    pii_guard_strict: Optional[bool] = None
-    local_only_mode: Optional[bool] = None
-    audit_log_enabled: Optional[bool] = None
-    retention_days: Optional[int] = Field(default=None, ge=1, le=3650)
-    export_on_exit: Optional[bool] = None
+    telemetry_enabled: bool | None = None
+    redact_secrets_in_logs: bool | None = None
+    pii_guard_strict: bool | None = None
+    local_only_mode: bool | None = None
+    audit_log_enabled: bool | None = None
+    retention_days: int | None = Field(default=None, ge=1, le=3650)
+    export_on_exit: bool | None = None
 
 
 class AdvancedInterfacePatch(BaseModel):
-    ui_density: Optional[UIDensity] = None
-    show_timestamps: Optional[bool] = None
-    show_token_meter: Optional[bool] = None
-    animations_enabled: Optional[bool] = None
-    code_theme: Optional[str] = None
-    debug_panel_enabled: Optional[bool] = None
-    event_log_verbosity: Optional[EventLogVerbosity] = None
-    labs_flags: Optional[str] = None
+    ui_density: UIDensity | None = None
+    show_timestamps: bool | None = None
+    show_token_meter: bool | None = None
+    animations_enabled: bool | None = None
+    code_theme: str | None = None
+    debug_panel_enabled: bool | None = None
+    event_log_verbosity: EventLogVerbosity | None = None
+    labs_flags: str | None = None
+
+    @field_validator("ui_density", mode="before")
+    @classmethod
+    def _normalize_ui_density(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        density_str = str(v or "").strip().lower()
+        if not density_str:
+            return None
+        # Valid densities: "comfortable", "compact", "dense"
+        valid_densities = {"comfortable", "compact", "dense"}
+        if density_str in valid_densities:
+            return density_str
+        # Normalize common aliases
+        aliases = {
+            "comfortable": "comfortable",
+            "default": "comfortable",
+            "normal": "comfortable",
+            "normal_spacing": "comfortable",
+            "compact": "compact",
+            "tight": "compact",
+            "condensed": "compact",
+            "dense": "dense",
+            "max": "dense",
+            "maximum": "dense",
+        }
+        return aliases.get(density_str, "comfortable")
+
+    @field_validator("event_log_verbosity", mode="before")
+    @classmethod
+    def _normalize_event_log_verbosity(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        verbosity_str = str(v or "").strip().lower()
+        if not verbosity_str:
+            return None
+        # Valid verbosities: "minimal", "standard", "verbose"
+        valid_verbosities = {"minimal", "standard", "verbose"}
+        if verbosity_str in valid_verbosities:
+            return verbosity_str
+        # Normalize common aliases
+        aliases = {
+            "minimal": "minimal",
+            "quiet": "minimal",
+            "silent": "minimal",
+            "none": "minimal",
+            "standard": "standard",
+            "default": "standard",
+            "normal": "standard",
+            "verbose": "verbose",
+            "debug": "verbose",
+            "detailed": "verbose",
+            "full": "verbose",
+        }
+        return aliases.get(verbosity_str, "standard")
 
 
 class AdvancedPatch(BaseModel):
-    model: Optional[AdvancedModelPatch] = None
-    tools: Optional[AdvancedToolsPatch] = None
-    memory: Optional[AdvancedMemoryPatch] = None
-    cost: Optional[AdvancedCostPatch] = None
-    runtime: Optional[AdvancedRuntimePatch] = None
-    failover: Optional[AdvancedFailoverPatch] = None
-    privacy: Optional[AdvancedPrivacyPatch] = None
-    interface: Optional[AdvancedInterfacePatch] = None
+    model: AdvancedModelPatch | None = None
+    tools: AdvancedToolsPatch | None = None
+    memory: AdvancedMemoryPatch | None = None
+    cost: AdvancedCostPatch | None = None
+    runtime: AdvancedRuntimePatch | None = None
+    failover: AdvancedFailoverPatch | None = None
+    privacy: AdvancedPrivacyPatch | None = None
+    interface: AdvancedInterfacePatch | None = None
 
 
 class PreferencesPatch(BaseModel):
-    appearance: Optional[AppearancePatch] = None
-    voice: Optional[VoicePatch] = None
-    memory: Optional[MemoryPatch] = None
-    notifications: Optional[NotificationPatch] = None
-    autonomy: Optional[AutonomyPatch] = None
-    advanced: Optional[AdvancedPatch] = None
-    onboarding: Optional[OnboardingPatch] = None
-    api_keys: Optional[APIKeysPatch] = None
-    profile: Optional[ProfilePatch] = None
+    appearance: AppearancePatch | None = None
+    voice: VoicePatch | None = None
+    memory: MemoryPatch | None = None
+    notifications: NotificationPatch | None = None
+    autonomy: AutonomyPatch | None = None
+    advanced: AdvancedPatch | None = None
+    onboarding: OnboardingPatch | None = None
+    api_keys: APIKeysPatch | None = None
+    profile: ProfilePatch | None = None
+    thomads: dict[str, Any] | None = None
 
 
 class PreferencesStore:
@@ -496,7 +805,7 @@ class PreferencesStore:
     Provide X-User-Id header to API to segment settings by user_id.
     """
 
-    def __init__(self, db_path: Optional[str] = None) -> None:
+    def __init__(self, db_path: str | None = None) -> None:
         self.db_path = db_path or get_db_path()
         self._lock = threading.RLock()
         self._ensure_schema()
@@ -504,11 +813,32 @@ class PreferencesStore:
     def _connect(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
         conn.row_factory = sqlite3.Row
-        conn.execute("PRAGMA journal_mode=WAL;")
+        try:
+            conn.execute("PRAGMA journal_mode=WAL;")
+        except sqlite3.OperationalError:
+            # Stale WAL/SHM files from unclean shutdown — try recovering
+            import os
+
+            conn.close()
+            for suffix in ("-wal", "-shm"):
+                wal_path = self.db_path + suffix
+                if os.path.exists(wal_path):
+                    try:
+                        os.remove(wal_path)
+                    except OSError:
+                        pass
+            conn = sqlite3.connect(self.db_path, timeout=30, check_same_thread=False)
+            conn.row_factory = sqlite3.Row
+            try:
+                conn.execute("PRAGMA journal_mode=WAL;")
+            except sqlite3.OperationalError:
+                # Fall back to DELETE journal mode if WAL still won't work
+                conn.execute("PRAGMA journal_mode=DELETE;")
         conn.execute("PRAGMA foreign_keys=ON;")
+        conn.execute("PRAGMA busy_timeout=5000;")
         return conn
 
-    def _table_columns(self, conn: sqlite3.Connection, table: str) -> Dict[str, str]:
+    def _table_columns(self, conn: sqlite3.Connection, table: str) -> dict[str, str]:
         rows = conn.execute(f"PRAGMA table_info({table});").fetchall()
         return {r["name"]: r["type"] for r in rows}
 
@@ -602,7 +932,7 @@ class PreferencesStore:
             raise ValueError("Unable to decrypt stored key (encryption key mismatch).") from e
         return b.decode("utf-8")
 
-    def _default_prefs_dict(self) -> Dict[str, Any]:
+    def _default_prefs_dict(self) -> dict[str, Any]:
         return {
             "appearance": AppearancePrefs().model_dump(),
             "voice": VoicePrefs().model_dump(),
@@ -612,9 +942,36 @@ class PreferencesStore:
             "advanced": AdvancedPrefs().model_dump(),
             "onboarding": OnboardingPrefs().model_dump(),
             "profile": ProfilePrefs().model_dump(),
+            "thomads": {},
         }
 
-    def _get_or_create_base_prefs(self, conn: sqlite3.Connection, user_id: str) -> Dict[str, Any]:
+    @staticmethod
+    def _enforce_non_coder_runtime_locks(base: dict[str, Any]) -> bool:
+        """Force strict quality runtime flags when profile_type=non_coder."""
+        profile = base.get("profile") if isinstance(base, dict) else None
+        profile_type = normalize_profile_type(
+            (profile or {}).get("profile_type") if isinstance(profile, dict) else None,
+            default="adaptive",
+        )
+        if profile_type != "non_coder":
+            return False
+
+        advanced = base.get("advanced") if isinstance(base, dict) else None
+        adv_obj = dict(advanced) if isinstance(advanced, dict) else {}
+        runtime = adv_obj.get("runtime")
+        runtime_obj = dict(runtime) if isinstance(runtime, dict) else {}
+        changed = False
+        for key, expected in _NON_CODER_RUNTIME_LOCKS.items():
+            if bool(runtime_obj.get(key)) is not bool(expected):
+                runtime_obj[key] = bool(expected)
+                changed = True
+        if not changed:
+            return False
+        adv_obj["runtime"] = runtime_obj
+        base["advanced"] = adv_obj
+        return True
+
+    def _get_or_create_base_prefs(self, conn: sqlite3.Connection, user_id: str) -> dict[str, Any]:
         row = conn.execute("SELECT data_json FROM preferences WHERE user_id = ?", (user_id,)).fetchone()
         if row:
             try:
@@ -623,7 +980,7 @@ class PreferencesStore:
                 return self._default_prefs_dict()
         return self._default_prefs_dict()
 
-    def _save_base_prefs(self, conn: sqlite3.Connection, user_id: str, prefs: Dict[str, Any]) -> str:
+    def _save_base_prefs(self, conn: sqlite3.Connection, user_id: str, prefs: dict[str, Any]) -> str:
         updated_at = utc_now_iso()
         conn.execute(
             "INSERT OR REPLACE INTO preferences (user_id, data_json, updated_at) VALUES (?, ?, ?)",
@@ -631,7 +988,7 @@ class PreferencesStore:
         )
         return updated_at
 
-    def _get_thread_memory_override(self, conn: sqlite3.Connection, user_id: str, thread_id: str) -> Optional[bool]:
+    def _get_thread_memory_override(self, conn: sqlite3.Connection, user_id: str, thread_id: str) -> bool | None:
         row = conn.execute(
             "SELECT memory_enabled FROM thread_preferences WHERE user_id = ? AND thread_id = ?",
             (user_id, thread_id),
@@ -641,7 +998,9 @@ class PreferencesStore:
         v = row["memory_enabled"]
         return None if v is None else bool(int(v))
 
-    def _set_thread_memory_override(self, conn: sqlite3.Connection, user_id: str, thread_id: str, enabled: Optional[bool]) -> None:
+    def _set_thread_memory_override(
+        self, conn: sqlite3.Connection, user_id: str, thread_id: str, enabled: bool | None
+    ) -> None:
         if enabled is None:
             conn.execute(
                 "DELETE FROM thread_preferences WHERE user_id = ? AND thread_id = ?",
@@ -656,8 +1015,8 @@ class PreferencesStore:
             (user_id, thread_id, 1 if enabled else 0, utc_now_iso()),
         )
 
-    def _get_masked_keys(self, conn: sqlite3.Connection, user_id: str) -> Dict[str, Optional[str]]:
-        masked: Dict[str, Optional[str]] = {p: None for p in PROVIDERS}
+    def _get_masked_keys(self, conn: sqlite3.Connection, user_id: str) -> dict[str, str | None]:
+        masked: dict[str, str | None] = {p: None for p in PROVIDERS}
         rows = conn.execute(
             "SELECT provider, mask_tail, enc_value FROM preference_keys WHERE user_id = ?",
             (user_id,),
@@ -682,7 +1041,7 @@ class PreferencesStore:
                 masked[provider] = "••••••(unreadable)"
         return masked
 
-    def _set_api_key_in_tx(self, conn: sqlite3.Connection, user_id: str, provider: str, value: Optional[str]) -> None:
+    def _set_api_key_in_tx(self, conn: sqlite3.Connection, user_id: str, provider: str, value: str | None) -> None:
         provider = provider.strip().lower()
         if provider not in PROVIDERS:
             raise ValueError(f"Unknown provider '{provider}'.")
@@ -704,12 +1063,12 @@ class PreferencesStore:
             (user_id, provider, enc, mask_tail, key_hash, utc_now_iso()),
         )
 
-    def set_api_key(self, user_id: str, provider: str, value: Optional[str]) -> None:
+    def set_api_key(self, user_id: str, provider: str, value: str | None) -> None:
         with self._lock, self._connect() as conn:
             with conn:
                 self._set_api_key_in_tx(conn, user_id, provider, value)
 
-    def get_api_key_plain(self, user_id: str, provider: str) -> Optional[str]:
+    def get_api_key_plain(self, user_id: str, provider: str) -> str | None:
         provider = provider.strip().lower()
         with self._lock, self._connect() as conn:
             row = conn.execute(
@@ -720,9 +1079,10 @@ class PreferencesStore:
                 return None
             return self._decrypt(conn, row["enc_value"])
 
-    def get(self, user_id: str = "default", thread_id: Optional[str] = None) -> PreferencesResponse:
+    def get(self, user_id: str = "default", thread_id: str | None = None) -> PreferencesResponse:
         with self._lock, self._connect() as conn:
             base = self._get_or_create_base_prefs(conn, user_id)
+            self._enforce_non_coder_runtime_locks(base)
             masked = self._get_masked_keys(conn, user_id)
 
             row = conn.execute("SELECT updated_at FROM preferences WHERE user_id = ?", (user_id,)).fetchone()
@@ -730,7 +1090,7 @@ class PreferencesStore:
 
             mem = base.get("memory", {}) or {}
             enabled_global = bool(mem.get("enabled_global", True))
-            thread_enabled: Optional[bool] = None
+            thread_enabled: bool | None = None
             if thread_id:
                 ov = self._get_thread_memory_override(conn, user_id, thread_id)
                 thread_enabled = enabled_global if ov is None else ov
@@ -745,10 +1105,13 @@ class PreferencesStore:
                 onboarding=OnboardingPrefs(**(base.get("onboarding") or {})),
                 api_keys=APIKeysMasked(**masked),
                 profile=ProfilePrefs(**(base.get("profile") or {})),
+                thomads=base.get("thomads") if isinstance(base.get("thomads"), dict) else {},
                 updated_at=updated_at,
             )
 
-    def patch(self, patch: PreferencesPatch, user_id: str = "default", thread_id: Optional[str] = None) -> PreferencesResponse:
+    def patch(
+        self, patch: PreferencesPatch, user_id: str = "default", thread_id: str | None = None
+    ) -> PreferencesResponse:
         """
         PATCH semantics:
         - only fields present are considered
@@ -913,14 +1276,35 @@ class PreferencesStore:
                         else:
                             self._set_api_key_in_tx(conn, user_id, provider, value)
 
+                if patch.thomads is not None or "thomads" in patch.model_fields_set:
+                    if patch.thomads is None:
+                        base["thomads"] = {}
+                    else:
+                        incoming = patch.thomads or {}
+                        current = dict(base.get("thomads") or {})
+                        if not isinstance(incoming, dict):
+                            raise ValueError("thomads must be a JSON object")
+                        for key, value in incoming.items():
+                            current[str(key)] = value
+                        base["thomads"] = current
+
                 if patch.profile is not None:
                     current = ProfilePrefs(**(base.get("profile") or {})).model_dump()
                     incoming = patch.profile.model_dump(exclude_unset=True)
-                    for k, v in incoming.items():
+                    fields_set = patch.profile.model_fields_set
+                    for k in fields_set:
+                        if k == "profile_type":
+                            current[k] = normalize_profile_type(incoming.get(k, None))
+                            continue
+                        if k == "review_depth":
+                            current[k] = normalize_review_depth(incoming.get(k, None))
+                            continue
+                        v = incoming.get(k, None)
                         if v is not None:
                             current[k] = str(v).strip()
                     base["profile"] = ProfilePrefs(**current).model_dump()
 
+                self._enforce_non_coder_runtime_locks(base)
                 self._save_base_prefs(conn, user_id, base)
 
         return self.get(user_id=user_id, thread_id=thread_id)

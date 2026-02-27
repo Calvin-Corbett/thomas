@@ -15,9 +15,10 @@ Design goals:
 from __future__ import annotations
 
 import os
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from typing import Any, Mapping, MutableMapping, NotRequired, Protocol, TypedDict
+from typing import Any, NotRequired, Protocol, TypedDict
 from urllib.parse import quote
 
 DEFAULT_API_BASE_URL = "https://discord.com/api/v10"
@@ -83,8 +84,7 @@ class HttpRequester(Protocol):
         json: Mapping[str, Any] | None = None,
         headers: Mapping[str, str] | None = None,
         timeout: float | None = None,
-    ) -> _HttpResponse:
-        ...
+    ) -> _HttpResponse: ...
 
 
 class MessageMemberTimeoutPayload(TypedDict):
@@ -172,7 +172,7 @@ def _require_int(payload: Mapping[str, Any], key: str) -> int:
         # tolerate numeric strings from upstream automation payloads
         try:
             return int(value.strip(), 10)
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             pass
     raise InvalidInputError(f"Field '{key}' must be an integer.", details={"field": key})
 
@@ -259,7 +259,7 @@ def _extract_error_details(resp: _HttpResponse) -> dict[str, Any]:
     details["response"] = _safe_trim(raw_text, 400)
     try:
         data = resp.json()
-    except Exception:
+    except (json.JSONDecodeError, ValueError, KeyError):
         data = None
     if isinstance(data, dict):
         # Only surface a small stable subset to keep outputs deterministic.
@@ -308,7 +308,7 @@ def timeout_member(
         resp = requester("PATCH", url, json=body, headers=headers, timeout=float(cfg.timeout_seconds))
     except MessageMemberTimeoutError:
         raise
-    except Exception as exc:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:  # pragma: no cover
         raise ExternalServiceError(
             "External request failed.",
             details={"exception": type(exc).__name__},
@@ -401,7 +401,9 @@ def config_from_mapping(config: Mapping[str, Any] | None) -> MessageMemberTimeou
     try:
         timeout_seconds = float(timeout_val) if timeout_val is not None else 10.0
     except (TypeError, ValueError):
-        raise InvalidInputError("Field 'timeout_seconds' must be a positive number.", details={"field": "timeout_seconds"})
+        raise InvalidInputError(
+            "Field 'timeout_seconds' must be a positive number.", details={"field": "timeout_seconds"}
+        )
 
     return MessageMemberTimeoutConfig(
         bot_token=str(token) if token is not None else "",

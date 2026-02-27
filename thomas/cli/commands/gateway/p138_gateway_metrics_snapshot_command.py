@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import asyncio
 import argparse
+import asyncio
 import json
 import os
 import sys
@@ -9,8 +9,9 @@ import threading
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, TypedDict, cast
+from typing import Any, TypedDict, cast
 
 DEFAULT_ROUTE = "/v1/gateway/metrics/snapshot"
 
@@ -40,7 +41,7 @@ class GatewayMetricsSnapshotResponse(TypedDict, total=False):
 @dataclass(frozen=True)
 class GatewayMetricsSnapshotParams:
     reset: bool
-    window_seconds: Optional[int]
+    window_seconds: int | None
 
 
 def build_request_payload(params: GatewayMetricsSnapshotParams) -> GatewayMetricsSnapshotRequest:
@@ -58,7 +59,7 @@ def _resolve_server_base_url(ctx: Any = None) -> str:
             if isinstance(value, str) and value.strip():
                 return value.strip().rstrip("/")
     if ctx is not None and isinstance(getattr(ctx, "config", None), Mapping):
-        cfg = cast(Mapping[str, Any], getattr(ctx, "config"))
+        cfg = cast(Mapping[str, Any], ctx.config)
         for key in ("server_url", "base_url", "thomas_url", "thomas_server_url"):
             value = cfg.get(key)
             if isinstance(value, str) and value.strip():
@@ -96,7 +97,7 @@ def _fallback_inprocess_snapshot(
     payload: Mapping[str, Any],
     *,
     timeout_seconds: int,
-) -> Optional[GatewayMetricsSnapshotResponse]:
+) -> GatewayMetricsSnapshotResponse | None:
     # When invoked from inside a running event loop (for example tests), loopback
     # HTTP to an in-process aiohttp app can deadlock. Use the registered app hook
     # when available for loopback ephemeral ports.
@@ -107,7 +108,7 @@ def _fallback_inprocess_snapshot(
 
     try:
         from thomas.server.routes.gateway import p138_gateway_metrics_snapshot_command as route_mod
-    except Exception:
+    except ImportError:
         return None
 
     getter = getattr(route_mod, "get_inprocess_snapshotter", None)
@@ -180,7 +181,7 @@ def _post_json(url: str, payload: Mapping[str, Any], *, timeout_seconds: int = 1
                 resp = cast(GatewayMetricsSnapshotResponse, parsed)
             else:
                 resp = {"ok": False, "error": {"code": "http_error", "message": "HTTP error."}}
-        except Exception:
+        except json.JSONDecodeError:
             resp = {"ok": False, "error": {"code": "http_error", "message": "HTTP error."}}
         if resp.get("ok") is None:
             resp["ok"] = False
@@ -195,7 +196,7 @@ def _post_json(url: str, payload: Mapping[str, Any], *, timeout_seconds: int = 1
 def execute_gateway_metrics_snapshot(
     params: GatewayMetricsSnapshotParams,
     *,
-    server_base_url: Optional[str] = None,
+    server_base_url: str | None = None,
     client: Any = None,
 ) -> GatewayMetricsSnapshotResponse:
     """

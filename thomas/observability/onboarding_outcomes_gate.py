@@ -2,10 +2,9 @@
 
 from __future__ import annotations
 
-from typing import Any, Dict, List
+from typing import Any
 
 from thomas.observability.onboarding_outcomes import get_outcomes_report
-
 
 REQUIRED_TOP_LEVEL_KEYS = (
     "ok",
@@ -35,32 +34,32 @@ REQUIRED_SUMMARY_KEYS = (
 def _int(value: Any, default: int = 0) -> int:
     try:
         return int(value)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 
 def _float(value: Any, default: float = 0.0) -> float:
     try:
         return float(value)
-    except Exception:
+    except (ValueError, TypeError):
         return default
 
 
 def evaluate_onboarding_outcomes_gate(
-    report: Dict[str, Any],
+    report: dict[str, Any],
     *,
     min_events_for_quality_thresholds: int = 20,
     min_completion_rate: float = 0.9,
     min_recovery_success_rate: float = 0.8,
     max_median_time_to_ready_seconds: float = 480.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Evaluate onboarding report contract + KPI thresholds.
 
     Contract checks always apply.
     KPI thresholds apply only when enough telemetry events are present.
     """
-    errors: List[str] = []
-    warnings: List[str] = []
+    errors: list[str] = []
+    warnings: list[str] = []
 
     payload = dict(report or {})
 
@@ -141,7 +140,7 @@ def get_gate_status(
     min_completion_rate: float = 0.9,
     min_recovery_success_rate: float = 0.8,
     max_median_time_to_ready_seconds: float = 480.0,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Backward-compatible helper used by HTTP endpoints."""
     report = get_outcomes_report(since_days=max(1, int(since_days)))
     gate = evaluate_onboarding_outcomes_gate(

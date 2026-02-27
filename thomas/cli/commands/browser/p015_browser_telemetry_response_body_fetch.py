@@ -14,7 +14,9 @@ loader, but also exposes an explicit ``register(app)`` hook.
 
 from __future__ import annotations
 
+import argparse
 import json
+from collections.abc import Sequence
 from typing import Any
 
 import typer
@@ -113,8 +115,38 @@ def register(browser_app: Any) -> None:
 # Best-effort auto-registration (works when the browser command group exposes a Typer app).
 try:  # pragma: no cover
     from thomas.cli.commands import browser as browser_pkg  # type: ignore
+
     _maybe_app = getattr(browser_pkg, "app", None)
     if isinstance(_maybe_app, typer.Typer):
         _register_on_typer_app(_maybe_app)
-except Exception:
+except ImportError:
     pass
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser telemetry-response-body-fetch",
+        description="Fetch response body bytes for a telemetry request id.",
+    )
+    parser.add_argument("request_id")
+    parser.add_argument("--max-bytes", type=int, default=None)
+    parser.add_argument("--timeout", dest="timeout_s", type=float, default=None)
+    parser.add_argument("--json", dest="json_mode", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    try:
+        telemetry_response_body_fetch_command(
+            request_id=str(args.request_id),
+            max_bytes=args.max_bytes,
+            timeout_s=args.timeout_s,
+            json_mode=bool(args.json_mode),
+        )
+        return 0
+    except typer.Exit as exc:
+        return int(exc.exit_code or 0)
+    except SystemExit as exc:
+        return int(exc.code or 0)

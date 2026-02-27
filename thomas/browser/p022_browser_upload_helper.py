@@ -12,15 +12,15 @@ The helper provides:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import hashlib
 import importlib
 import inspect
 import os
-from pathlib import Path
 import secrets
-from typing import Any, Mapping, Optional, TypedDict
-
+from collections.abc import Mapping
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Any, TypedDict
 
 _DEFAULT_UPLOAD_DIR_ENV_KEYS: tuple[str, ...] = (
     "THOMAS_BROWSER_UPLOAD_DIR",
@@ -55,7 +55,7 @@ class BrowserUploadHelperError(Exception):
     code: str
     details: dict[str, Any]
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.details = dict(details or {})
@@ -167,7 +167,7 @@ def _try_resolve_from_thomas_modules() -> Path | None:
     for mod_name in ("thomas.cli.live_browser", "thomas.tools.browser"):
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, ModuleNotFoundError):
             continue
 
         for attr in _THOMAS_MODULE_UPLOAD_DIR_ATTRS:
@@ -196,7 +196,7 @@ def _try_resolve_from_thomas_modules() -> Path | None:
 
             try:
                 candidate = _maybe_path(fn())
-            except Exception:
+            except (RuntimeError, TypeError):
                 continue
             if candidate is not None:
                 return candidate.expanduser()
@@ -268,7 +268,9 @@ def _sha256_of_file(path: Path, *, chunk_size: int) -> str:
     return hasher.hexdigest()
 
 
-def stage_file_for_browser(request: BrowserUploadRequest, *, env: Mapping[str, str] | None = None) -> BrowserUploadResult:
+def stage_file_for_browser(
+    request: BrowserUploadRequest, *, env: Mapping[str, str] | None = None
+) -> BrowserUploadResult:
     """Stage a local file into a browser-accessible directory.
 
     Args:
@@ -363,7 +365,7 @@ def stage_file_for_browser(request: BrowserUploadRequest, *, env: Mapping[str, s
     # If the destination resolves to the same file as the source, treat as a no-op.
     try:
         same_file = src.resolve() == staged_path.resolve()
-    except Exception:
+    except (ValueError, OSError):
         same_file = False
     if same_file:
         sha = _sha256_of_file(src, chunk_size=request.chunk_size) if request.compute_sha256 else None
@@ -422,7 +424,7 @@ def stage_file_for_browser(request: BrowserUploadRequest, *, env: Mapping[str, s
             st = src.stat()
             os.chmod(staged_path, st.st_mode & 0o777)
             os.utime(staged_path, (st.st_atime, st.st_mtime))
-        except Exception:
+        except OSError:
             pass
     except BrowserUploadHelperError:
         try:

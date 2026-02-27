@@ -19,14 +19,16 @@ The contract itself lives in ``thomas.browser.p025_browser_json_output_contract`
 
 from __future__ import annotations
 
+import argparse
 import base64
 import contextlib
-from dataclasses import asdict, dataclass, is_dataclass
 import io
 import json
 import logging
 import sys
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from dataclasses import asdict, dataclass, is_dataclass
+from typing import Any
 
 
 def _try_import_click():
@@ -34,7 +36,7 @@ def _try_import_click():
         import click  # type: ignore
 
         return click
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         return None
 
 
@@ -54,7 +56,7 @@ def _json_default(value: Any) -> Any:  # noqa: ANN401
         if callable(fn):
             try:
                 return fn()
-            except Exception:
+            except (ValueError, TypeError):
                 break
 
     return repr(value)
@@ -71,7 +73,7 @@ def _is_json_mode(ctx: Any) -> bool:  # noqa: ANN401
                 flags = thomas.get("json_output")
                 if isinstance(flags, JsonOutputFlags) and flags.json:
                     return True
-    except Exception:
+    except AttributeError:
         return False
     return False
 
@@ -84,7 +86,7 @@ def _ctx_set_flag(ctx: Any, *, json_flag: bool) -> None:  # noqa: ANN401
         ctx.obj["json"] = bool(json_flag)
         ctx.obj.setdefault("thomas", {})
         ctx.obj["thomas"]["json_output"] = JsonOutputFlags(json=json_flag)
-    except Exception:
+    except (ValueError, TypeError):
         return
 
 
@@ -165,7 +167,7 @@ def _iter_click_command_tree(root: Any):  # noqa: ANN401
             yield from _iter_click_command_tree(child)
 
 
-def _decode_text_or_base64(raw: bytes) -> tuple[str, Optional[str]]:
+def _decode_text_or_base64(raw: bytes) -> tuple[str, str | None]:
     if not raw:
         return "", None
     try:
@@ -230,7 +232,7 @@ def _capture_logging_to(stream: _CaptureStream):
                 original.append((h, getattr(h, "stream", None)))
                 try:
                     h.stream = stream  # type: ignore[attr-defined]
-                except Exception:
+                except (ValueError, TypeError):
                     continue
 
     try:
@@ -241,14 +243,14 @@ def _capture_logging_to(stream: _CaptureStream):
             for name in list(getattr(mgr, "loggerDict", {}).keys()):
                 try:
                     _patch_logger(logging.getLogger(name))
-                except Exception:
+                except (ValueError, TypeError):
                     continue
         yield
     finally:
         for h, old in original:
             try:
                 h.stream = old  # type: ignore[attr-defined]
-            except Exception:
+            except (ValueError, TypeError):
                 continue
 
 
@@ -272,11 +274,13 @@ def _wrap_callback_for_json_output(click: Any, command: Any) -> bool:  # noqa: A
         stdout_buf = _CaptureStream()
         stderr_buf = _CaptureStream()
 
-        exit_code: Optional[int] = None
+        exit_code: int | None = None
         envelope: dict[str, Any]
 
-        with contextlib.redirect_stdout(stdout_buf), contextlib.redirect_stderr(stderr_buf), _capture_logging_to(
-            stderr_buf
+        with (
+            contextlib.redirect_stdout(stdout_buf),
+            contextlib.redirect_stderr(stderr_buf),
+            _capture_logging_to(stderr_buf),
         ):
             try:
                 result = callback(*args, **kwargs)
@@ -307,7 +311,7 @@ def _wrap_callback_for_json_output(click: Any, command: Any) -> bool:  # noqa: A
                     err_details.setdefault("stdout", _decode_text_or_base64(stdout_buf.raw())[0])
                     err_details.setdefault("stderr", _decode_text_or_base64(stderr_buf.raw())[0])
                     envelope["error"]["details"] = err_details
-                except Exception:
+                except json.JSONDecodeError:
                     pass
 
         rendered = json.dumps(envelope, ensure_ascii=False, separators=(",", ":"), default=_json_default)
@@ -317,7 +321,7 @@ def _wrap_callback_for_json_output(click: Any, command: Any) -> bool:  # noqa: A
         return None
 
     command.callback = _wrapped
-    setattr(command, "_thomas_json_wrapped", True)
+    command._thomas_json_wrapped = True
     return True
 
 
@@ -377,7 +381,7 @@ def _wrap_command_main_for_json_errors(click: Any, command: Any) -> bool:  # noq
         return exit_code
 
     command.main = _wrapped_main
-    setattr(command, "_thomas_json_main_wrapped", True)
+    command._thomas_json_main_wrapped = True
     return True
 
 
@@ -421,12 +425,70 @@ def _attempt_auto_patch() -> None:
             root = getattr(mod, attr, None)
             if root is None:
                 continue
-            if isinstance(root, click.core.BaseCommand):
+            if isinstance(root, click.Command):
                 register(root)
                 return
-        except Exception:
+        except ImportError:
             continue
 
 
 # Import-time auto patching is intentionally best-effort and should never crash.
 _attempt_auto_patch()
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser json-output-contract",
+        description="Inspect and apply browser JSON output contract patching.",
+    )
+    parser.add_argument("--json", dest="json_mode", action="store_true", default=False)
+    parser.add_argument("--json-schema", dest="json_schema", action="store_true", default=False)
+    parser.add_argument("--apply", dest="apply_patch", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    if bool(args.json_schema):
+        try:
+            from thomas.browser.p025_browser_json_output_contract import browser_json_schema
+
+            payload = browser_json_schema()
+        except Exception as exc:  # pragma: no cover
+            payload = {
+                "ok": False,
+                "error": {
+                    "category": "internal_error",
+                    "code": "browser_json_schema_unavailable",
+                    "message": f"{type(exc).__name__}: {exc}",
+                },
+            }
+            if args.json_mode:
+                sys.stdout.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+            else:
+                sys.stderr.write(f"{payload['error']['code']}: {payload['error']['message']}\n")
+            return 1
+
+        sys.stdout.write(
+            json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2 if not args.json_mode else None)
+        )
+        sys.stdout.write("\n")
+        return 0
+
+    patched = False
+    if bool(args.apply_patch):
+        _attempt_auto_patch()
+        patched = True
+
+    payload = {
+        "ok": True,
+        "command": "browser json-output-contract",
+        "patched": patched,
+        "note": "JSON output contract hooks are active via CLI registration or import-time patching.",
+    }
+    if args.json_mode:
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False, sort_keys=True) + "\n")
+    else:
+        sys.stdout.write(payload["note"] + "\n")
+    return 0

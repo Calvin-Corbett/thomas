@@ -1,20 +1,20 @@
 from __future__ import annotations
 
 import ast
+import importlib.metadata
+import importlib.util
 import json
 import os
 import sys
 import tokenize
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
-
-import importlib.metadata
-import importlib.util
+from typing import Any
 
 try:
     import tomllib  # Python 3.11+
-except Exception:  # pragma: no cover
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
     tomllib = None  # type: ignore[assignment]
 
 
@@ -398,7 +398,7 @@ def _auto_find_config(start: Path) -> Path | None:
 def _read_config_file(path: Path) -> Mapping[str, Any]:
     try:
         raw = path.read_bytes()
-    except Exception as e:  # pragma: no cover
+    except OSError as e:  # pragma: no cover
         raise PluginDiscoveryScannerError(
             "invalid_config",
             "Unable to read config file.",
@@ -415,7 +415,7 @@ def _read_config_file(path: Path) -> Mapping[str, Any]:
             return tomllib.loads(raw.decode("utf-8"))
     except PluginDiscoveryScannerError:
         raise
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError) as e:
         raise PluginDiscoveryScannerError(
             "invalid_config",
             "Failed to parse config file.",
@@ -485,7 +485,9 @@ def _scan_filesystem(*, base_dir: Path, recursive: bool, import_plugins: bool) -
         return plugins
 
     for candidate in _iter_plugin_candidates(base_dir, recursive=recursive):
-        plugins.append(_inspect_filesystem_candidate(base_dir=base_dir, candidate=candidate, import_plugins=import_plugins))
+        plugins.append(
+            _inspect_filesystem_candidate(base_dir=base_dir, candidate=candidate, import_plugins=import_plugins)
+        )
 
     return plugins
 
@@ -497,9 +499,7 @@ def _iter_plugin_candidates(base_dir: Path, *, recursive: bool) -> Iterable[Path
 
             # Skip hidden/dunder/pycache dirs
             dirnames[:] = [
-                d
-                for d in dirnames
-                if not d.startswith(".") and not d.startswith("__") and d != "__pycache__"
+                d for d in dirnames if not d.startswith(".") and not d.startswith("__") and d != "__pycache__"
             ]
 
             # Yield package directories as candidates (excluding the base dir itself)
@@ -567,7 +567,7 @@ def _inspect_filesystem_candidate(*, base_dir: Path, candidate: Path, import_plu
             importable=None,
             issues=issues,
         )
-    except Exception as e:
+    except (OSError, UnicodeDecodeError) as e:
         issues.append(ScanIssue(code="read_error", message=str(e)))
         return DiscoveredPlugin(
             name=name,
@@ -654,7 +654,13 @@ def _inspect_filesystem_candidate(*, base_dir: Path, candidate: Path, import_plu
             if isinstance(doc, str) and doc.strip():
                 description = doc.strip().splitlines()[0].strip()
 
-    except Exception as e:
+    except (
+        ImportError,
+        ModuleNotFoundError,
+        RuntimeError,
+        AttributeError,
+        OSError,
+    ) as e:  # REVIEWED: broad catch — import check
         importable = False
         issues.append(ScanIssue(code="import_error", message=str(e)))
     finally:
@@ -690,7 +696,7 @@ def _read_python_text(path: Path) -> str:
 def _module_name_for(*, base_dir: Path, candidate: Path, is_package: bool) -> str | None:
     try:
         rel = candidate.relative_to(base_dir)
-    except Exception:
+    except ValueError:
         return None
 
     parts = list(rel.parts)
@@ -714,7 +720,7 @@ def _extract_ast_metadata(path: Path) -> dict[str, str]:
     try:
         source_text = _read_python_text(path)
         tree = ast.parse(source_text, filename=str(path))
-    except Exception:
+    except (SyntaxError, OSError, UnicodeDecodeError):  # REVIEWED: broad catch — fallback to empty
         return {}
 
     out: dict[str, str] = {}
@@ -773,7 +779,7 @@ def _scan_entry_points(*, group: str, import_plugins: bool) -> list[DiscoveredPl
     try:
         eps = importlib.metadata.entry_points()
         selected = _select_entry_points(eps, group=group)
-    except Exception as e:
+    except (ImportError, RuntimeError, AttributeError) as e:  # REVIEWED: broad catch — entry point discovery
         # Deterministic, but non-fatal: surface as a single pseudo entry in results.
         return [
             DiscoveredPlugin(
@@ -804,7 +810,7 @@ def _scan_entry_points(*, group: str, import_plugins: bool) -> list[DiscoveredPl
                 md = getattr(dist, "metadata", None)
                 if md is not None:
                     dist_desc = md.get("Summary") or md.get("Name")
-        except Exception:
+        except (AttributeError, KeyError, TypeError):  # REVIEWED: broad catch — optional metadata extraction
             pass
 
         importable: bool | None = None
@@ -815,7 +821,12 @@ def _scan_entry_points(*, group: str, import_plugins: bool) -> list[DiscoveredPl
             try:
                 ep.load()
                 importable = True
-            except Exception as e:
+            except (
+                ImportError,
+                ModuleNotFoundError,
+                RuntimeError,
+                AttributeError,
+            ) as e:  # REVIEWED: broad catch — entry point loading
                 importable = False
                 issues.append(ScanIssue(code="import_error", message=str(e)))
 
@@ -853,7 +864,7 @@ def _select_entry_points(entry_points_obj: Any, *, group: str) -> list[Any]:
         for ep in entry_points_obj:
             if getattr(ep, "group", None) == group:
                 selected.append(ep)
-    except Exception:
+    except (TypeError, AttributeError):  # REVIEWED: broad catch — iteration fallback
         return []
     return selected
 

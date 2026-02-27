@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import base64
 import mimetypes
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Tuple
+from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
 from thomas.core.config import ModelConfig
-
 
 _RETRYABLE = {408, 409, 425, 429, 500, 502, 503, 504}
 
@@ -33,8 +36,8 @@ def _join_url(base_url: str, path: str) -> str:
     return base + p
 
 
-def _norm_paths(raw: Any, *, default_paths: Iterable[str]) -> List[str]:
-    out: List[str] = []
+def _norm_paths(raw: Any, *, default_paths: Iterable[str]) -> list[str]:
+    out: list[str] = []
     if isinstance(raw, str):
         raw = [x.strip() for x in raw.split(",") if x.strip()]
     if isinstance(raw, list):
@@ -57,8 +60,8 @@ def _norm_paths(raw: Any, *, default_paths: Iterable[str]) -> List[str]:
     return out
 
 
-def _auth_headers(cfg: ModelConfig) -> Dict[str, str]:
-    headers: Dict[str, str] = {"Content-Type": "application/json"}
+def _auth_headers(cfg: ModelConfig) -> dict[str, str]:
+    headers: dict[str, str] = {"Content-Type": "application/json"}
     if cfg.extra_headers:
         headers.update(cfg.extra_headers)
     if cfg.api_key:
@@ -72,7 +75,7 @@ def _auth_headers(cfg: ModelConfig) -> Dict[str, str]:
     return headers
 
 
-def _extract_text(payload: Dict[str, Any]) -> str:
+def _extract_text(payload: dict[str, Any]) -> str:
     candidates = [
         payload.get("text"),
         payload.get("transcript"),
@@ -88,7 +91,7 @@ def _extract_text(payload: Dict[str, Any]) -> str:
     return ""
 
 
-def _extract_video_meta(payload: Dict[str, Any]) -> Tuple[str, str, str]:
+def _extract_video_meta(payload: dict[str, Any]) -> tuple[str, str, str]:
     status = ""
     video_id = ""
     video_url = ""
@@ -130,7 +133,7 @@ class OpenAICompatMediaClient:
 
     def __init__(self, cfg: ModelConfig):
         self.cfg = cfg
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     async def _get_client(self) -> httpx.AsyncClient:
         if self._client is None or self._client.is_closed:
@@ -155,8 +158,8 @@ class OpenAICompatMediaClient:
         *,
         method: str,
         path: str,
-        json_body: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        json_body: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
         files: Any = None,
     ) -> httpx.Response:
         client = await self._get_client()
@@ -183,7 +186,7 @@ class OpenAICompatMediaClient:
         body = ""
         try:
             body = resp.text or ""
-        except Exception:
+        except (OSError, FileNotFoundError):
             body = ""
         msg = f"HTTP {resp.status_code}: {body[:500]}"
         if int(resp.status_code) in _RETRYABLE:
@@ -195,19 +198,19 @@ class OpenAICompatMediaClient:
         *,
         method: str,
         path: str,
-        json_body: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        json_body: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
         files: Any = None,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         resp = await self._request(method=method, path=path, json_body=json_body, data=data, files=files)
         self._ensure_success(resp)
         try:
             payload = resp.json()
-        except Exception:
+        except (ValueError, TypeError):
             text = ""
             try:
                 text = resp.text or ""
-            except Exception:
+            except Exception:  # REVIEWED: async context
                 text = ""
             if text.strip():
                 return {"text": text}
@@ -222,18 +225,18 @@ class OpenAICompatMediaClient:
         self,
         *,
         prompt: str,
-        model: Optional[str] = None,
-        endpoint_paths: Optional[Any] = None,
-        image_url: Optional[str] = None,
-        duration_seconds: Optional[int] = None,
-        size: Optional[str] = None,
-        extra: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        model: str | None = None,
+        endpoint_paths: Any | None = None,
+        image_url: str | None = None,
+        duration_seconds: int | None = None,
+        size: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         paths = _norm_paths(endpoint_paths, default_paths=["/videos/generations", "/videos"])
         if not paths:
             raise MediaAgentError("video generation endpoint path is missing")
 
-        body: Dict[str, Any] = {
+        body: dict[str, Any] = {
             "model": str(model or self.cfg.model or "").strip(),
             "prompt": str(prompt or "").strip(),
         }
@@ -250,7 +253,7 @@ class OpenAICompatMediaClient:
         if isinstance(extra, dict):
             body.update(extra)
 
-        last_err: Optional[Exception] = None
+        last_err: Exception | None = None
         for path in paths:
             try:
                 payload = await self._request_json(method="POST", path=path, json_body=body)
@@ -270,18 +273,18 @@ class OpenAICompatMediaClient:
         self,
         *,
         audio_path: str,
-        model: Optional[str] = None,
+        model: str | None = None,
         endpoint_path: str = "/audio/transcriptions",
-        language: Optional[str] = None,
-        prompt: Optional[str] = None,
-        response_format: Optional[str] = None,
-        extra: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+        language: str | None = None,
+        prompt: str | None = None,
+        response_format: str | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
         ap = Path(str(audio_path or "").strip()).expanduser()
         if not ap.exists() or not ap.is_file():
             raise MediaAgentError(f"audio file not found: {ap}")
 
-        fields: Dict[str, str] = {
+        fields: dict[str, str] = {
             "model": str(model or self.cfg.model or "").strip(),
         }
         if not fields["model"]:
@@ -317,14 +320,14 @@ class OpenAICompatMediaClient:
         *,
         text: str,
         voice: str = "alloy",
-        model: Optional[str] = None,
+        model: str | None = None,
         endpoint_path: str = "/audio/speech",
         audio_format: str = "mp3",
-        speed: Optional[float] = None,
-        output_path: Optional[Path] = None,
-        extra: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        body: Dict[str, Any] = {
+        speed: float | None = None,
+        output_path: Path | None = None,
+        extra: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        body: dict[str, Any] = {
             "model": str(model or self.cfg.model or "").strip(),
             "input": str(text or "").strip(),
             "voice": str(voice or "alloy").strip() or "alloy",
@@ -345,12 +348,12 @@ class OpenAICompatMediaClient:
 
         content_type = str(resp.headers.get("content-type") or "").strip().lower()
         raw_bytes = bytes(resp.content or b"")
-        payload: Dict[str, Any] = {}
+        payload: dict[str, Any] = {}
 
         if "json" in content_type:
             try:
                 j = resp.json()
-            except Exception:
+            except (ValueError, TypeError):
                 j = {}
             if isinstance(j, dict):
                 payload.update(j)
@@ -359,7 +362,7 @@ class OpenAICompatMediaClient:
                 if isinstance(b64, str) and b64:
                     try:
                         raw_bytes = base64.b64decode(b64)
-                    except Exception:
+                    except (ValueError, TypeError):
                         raw_bytes = b""
             elif isinstance(j, list):
                 payload["data"] = j
@@ -389,4 +392,3 @@ __all__ = [
     "_extract_text",
     "_extract_video_meta",
 ]
-

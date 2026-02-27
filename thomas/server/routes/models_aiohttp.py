@@ -3,19 +3,107 @@
 from __future__ import annotations
 
 import json
-from typing import Any, Callable, Dict
+import re
+from collections.abc import Callable
+from typing import Any
 
 from aiohttp import web
 
 from thomas import __version__ as THOMAS_VERSION
-from thomas.core.config import AppConfig
+from thomas.core.config import AppConfig, load_config
 from thomas.models.discovery import discover_models_async, handshake_models_async
 from thomas.models.protocol import validate_model_profile_async
-from thomas.server.app_keys import APP_CONFIG, APP_SECRETS
+from thomas.server.app_keys import APP_CONFIG, APP_RUNTIME_GUARD_STATE, APP_SECRETS
 from thomas.server.secrets import SecretStore
 
 RequireAccessFn = Callable[[web.Request], None]
 ModelCfgFn = Callable[[str], Any]
+
+
+def _appkey_identity(key: Any) -> str:
+    rep = repr(key)
+    match = re.match(r"^<AppKey\(([^,]+),\s*type=.*\)>$", rep)
+    if match:
+        name = str(match.group(1) or "")
+        marker = "thomas.server.app_keys."
+        idx = name.find(marker)
+        if idx >= 0:
+            return name[idx:]
+        return name
+    return str(key)
+
+
+def _resolve_app_value(
+    app: web.Application,
+    key: Any,
+    *,
+    expected_type: Any = None,
+    default: Any = None,
+    required: bool = False,
+) -> Any:
+    value = app.get(key)
+    if expected_type is None:
+        if value is not None:
+            return value
+    elif isinstance(value, expected_type):
+        return value
+
+    target_identity = _appkey_identity(key)
+    for existing_key, existing_value in app.items():
+        if _appkey_identity(existing_key) != target_identity:
+            continue
+        if expected_type is not None and not isinstance(existing_value, expected_type):
+            continue
+        app[key] = existing_value
+        return existing_value
+
+    if required:
+        raise KeyError(key)
+    return default
+
+
+def _resolve_runtime_config(app: web.Application) -> AppConfig:
+    cfg = _resolve_app_value(app, APP_CONFIG, expected_type=AppConfig)
+    if isinstance(cfg, AppConfig):
+        return cfg
+    for value in app.values():
+        if isinstance(value, AppConfig):
+            app[APP_CONFIG] = value
+            return value
+    cfg = load_config()
+    app[APP_CONFIG] = cfg
+    return cfg
+
+
+def _runtime_guard_payload(app: web.Application) -> dict[str, Any]:
+    state = _resolve_app_value(app, APP_RUNTIME_GUARD_STATE, expected_type=dict, default={})
+    if not isinstance(state, dict) or not state:
+        return {
+            "enabled": False,
+            "is_latest_code": True,
+            "state": "unknown",
+            "checked_at_utc": "",
+            "reasons": [],
+            "alert_message": "",
+            "pid": None,
+            "lock_pid": None,
+            "lock_port": None,
+        }
+
+    status = state.get("status") if isinstance(state.get("status"), dict) else {}
+    current = state.get("current") if isinstance(state.get("current"), dict) else {}
+    lock = current.get("lock") if isinstance(current.get("lock"), dict) else {}
+    return {
+        "enabled": bool(state.get("enabled", True)),
+        "is_latest_code": bool(status.get("is_latest_code", True)),
+        "state": str(status.get("state") or "unknown"),
+        "checked_at_utc": str(status.get("checked_at_utc") or ""),
+        "reasons": list(status.get("reasons") or []),
+        "alert_message": str(status.get("alert_message") or ""),
+        "pid": current.get("pid"),
+        "lock_pid": lock.get("pid"),
+        "lock_port": lock.get("port"),
+    }
 
 
 def register_models_routes(
@@ -26,20 +114,20 @@ def register_models_routes(
 ) -> None:
     async def api_models(request: web.Request) -> web.Response:
         require_api_access(request)
-        cfg: AppConfig = request.app[APP_CONFIG]
-        secrets: SecretStore = request.app[APP_SECRETS]
+        cfg: AppConfig = _resolve_runtime_config(request.app)
+        secrets: SecretStore = _resolve_app_value(request.app, APP_SECRETS, required=True)
         profiles = []
         for name, m in cfg.models.items():
             has_key = m.provider == "codex" or bool(secrets.get(name) or m.api_key)
-            profile_info: Dict[str, Any] = {
-                    "name": name,
-                    "provider": m.provider,
-                    "base_url": "codex://app-server" if m.provider == "codex" else m.base_url,
-                    "model": m.model,
-                    "context_window": m.context_window,
-                    "max_tokens": m.max_tokens,
-                    "has_api_key": has_key,
-                }
+            profile_info: dict[str, Any] = {
+                "name": name,
+                "provider": m.provider,
+                "base_url": "codex://app-server" if m.provider == "codex" else m.base_url,
+                "model": m.model,
+                "context_window": m.context_window,
+                "max_tokens": m.max_tokens,
+                "has_api_key": has_key,
+            }
             if m.reasoning_effort:
                 profile_info["reasoning_effort"] = m.reasoning_effort
             profiles.append(profile_info)
@@ -51,8 +139,9 @@ def register_models_routes(
     async def api_models_capabilities(request: web.Request) -> web.Response:
         """GET /api/models/capabilities - return capability map for all configured profiles."""
         require_api_access(request)
-        cfg: AppConfig = request.app[APP_CONFIG]
+        cfg: AppConfig = _resolve_runtime_config(request.app)
         from thomas.models.capabilities import profile_capability_map
+
         result: dict = {}
         for name, m in cfg.models.items():
             result[name] = profile_capability_map(m)
@@ -63,7 +152,7 @@ def register_models_routes(
 
     async def api_profile_models(request: web.Request) -> web.Response:
         require_api_access(request)
-        cfg: AppConfig = request.app[APP_CONFIG]
+        cfg: AppConfig = _resolve_runtime_config(request.app)
         profile = request.match_info["profile"]
         if profile not in cfg.models:
             raise web.HTTPNotFound(text="unknown profile")
@@ -76,7 +165,7 @@ def register_models_routes(
     async def api_profile_handshake(request: web.Request) -> web.Response:
         """Probe whether a profile is usable (auth/offline/unsupported), and optionally return model ids."""
         require_api_access(request)
-        cfg: AppConfig = request.app[APP_CONFIG]
+        cfg: AppConfig = _resolve_runtime_config(request.app)
         profile = request.match_info["profile"]
         if profile not in cfg.models:
             raise web.HTTPNotFound(text="unknown profile")
@@ -88,7 +177,7 @@ def register_models_routes(
     async def api_profile_validate(request: web.Request) -> web.Response:
         """Validate profile readiness (handshake + optional tool smoke)."""
         require_api_access(request)
-        cfg: AppConfig = request.app[APP_CONFIG]
+        cfg: AppConfig = _resolve_runtime_config(request.app)
         profile = request.match_info["profile"]
         if profile not in cfg.models:
             raise web.HTTPNotFound(text="unknown profile")
@@ -127,10 +216,15 @@ def register_models_routes(
         return web.json_response(payload, dumps=lambda x: json.dumps(x, ensure_ascii=False))
 
     async def api_version(request: web.Request) -> web.Response:
-        cfg: AppConfig = request.app[APP_CONFIG]
+        cfg: AppConfig = _resolve_runtime_config(request.app)
         if not bool(getattr(getattr(cfg, "server", None), "allow_unauthenticated_version", True)):
             require_api_access(request)
-        return web.json_response({"version": THOMAS_VERSION})
+        return web.json_response(
+            {
+                "version": THOMAS_VERSION,
+                "runtime_guard": _runtime_guard_payload(request.app),
+            }
+        )
 
     app.router.add_get("/api/models", api_models)
     app.router.add_get("/api/models/capabilities", api_models_capabilities)

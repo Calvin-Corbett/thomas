@@ -1,13 +1,14 @@
 from __future__ import annotations
 
-import inspect
 import importlib
+import inspect
 import json
 import os
 import typing
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Mapping
+from typing import Any
 
 
 class HookTypesContractErrorCode(str, Enum):
@@ -46,7 +47,7 @@ class HookTypesContractRequest:
     include_private: bool = False
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "HookTypesContractRequest":
+    def from_mapping(cls, data: Mapping[str, Any]) -> HookTypesContractRequest:
         allowed = {"plugin_base", "include_inherited", "include_private"}
         unknown = sorted(k for k in data.keys() if k not in allowed)
         if unknown:
@@ -226,11 +227,11 @@ def load_request_from_file(path: str) -> HookTypesContractRequest:
             with open(path, "rb") as f:
                 raw = tomllib.load(f)
         else:
-            with open(path, "r", encoding="utf-8") as f:
+            with open(path, encoding="utf-8") as f:
                 raw = json.load(f)
     except HookTypesContractError:
         raise
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError, KeyError) as e:
         raise HookTypesContractError(
             HookTypesContractErrorCode.INVALID_INPUT,
             f"Failed to parse config file: {path}",
@@ -266,7 +267,7 @@ def build_hook_types_contract(
     for hook_name, fn in hooks:
         try:
             hook_contracts.append(_signature_to_contract(hook_name, fn))
-        except Exception as e:
+        except (TypeError, ValueError, AttributeError) as e:
             warnings.append(f"Failed to fully introspect hook '{hook_name}': {type(e).__name__}")
             hook_contracts.append(_signature_to_contract(hook_name, fn, best_effort=True))
 
@@ -306,7 +307,7 @@ def _resolve_plugin_base(explicit_path: str | None) -> tuple[str, type]:
     module_name = "thomas.autonomy.plugin"
     try:
         mod = importlib.import_module(module_name)
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError) as e:
         raise HookTypesContractError(
             HookTypesContractErrorCode.MISSING_CONFIG,
             f"Unable to import Thomas plugin interface module '{module_name}'.",
@@ -373,7 +374,7 @@ def _import_object(dotted_path: str) -> Any:
 
     try:
         mod = importlib.import_module(module_name)
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError) as e:
         raise HookTypesContractError(
             HookTypesContractErrorCode.EXTERNAL_FAILURE,
             f"Failed to import module '{module_name}'.",
@@ -545,7 +546,7 @@ def _signature_to_contract(name: str, fn: Any, *, best_effort: bool = False) -> 
 def _get_type_hints_safe(fn: Any) -> dict[str, Any]:
     try:
         return typing.get_type_hints(fn)  # type: ignore[arg-type]
-    except Exception:
+    except (TypeError, AttributeError, NameError):
         return getattr(fn, "__annotations__", {}) or {}
 
 

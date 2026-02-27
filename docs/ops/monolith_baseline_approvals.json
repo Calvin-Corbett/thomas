@@ -20,6 +20,24 @@
       "reason": "Temporary cap increase while command families are extracted from monolithic CLI entrypoint."
     },
     {
+      "id": "2026-02-25-thomas-agent-loop-max-lines",
+      "path": "thomas/agent/loop.py",
+      "change": "max_lines_increase",
+      "new_value": 2714,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-25",
+      "reason": "Temporary cap sync while agent-loop responsibilities are decomposed into focused modules."
+    },
+    {
+      "id": "2026-02-25-thomas-cli-main-max-lines",
+      "path": "thomas/cli/main.py",
+      "change": "max_lines_increase",
+      "new_value": 1881,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-25",
+      "reason": "Temporary cap increase while command-family extraction continues from the CLI entrypoint."
+    },
+    {
       "id": "2026-02-22-thomas-web-index-max-lines",
       "path": "thomas/server/web/index.html",
       "change": "max_lines_increase",
@@ -45,6 +63,24 @@
       "approved_by": "core-platform",
       "approved_on": "2026-02-22",
       "reason": "Temporary cap sync while app.js is split into modular UI/runtime bundles; growth cap was tightened."
+    },
+    {
+      "id": "2026-02-25-thomas-chat-aiohttp-new-baseline",
+      "path": "thomas/server/routes/chat_aiohttp.py",
+      "change": "new_baselined_file",
+      "new_value": 917,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-25",
+      "reason": "Temporary baseline entry while chat route responsibilities are extracted into smaller handlers."
+    },
+    {
+      "id": "2026-02-25-thomas-preferences-store-new-baseline",
+      "path": "thomas/preferences/store.py",
+      "change": "new_baselined_file",
+      "new_value": 869,
+      "approved_by": "core-platform",
+      "approved_on": "2026-02-25",
+      "reason": "Temporary baseline entry while preferences runtime/store responsibilities are decomposed."
     }
   ]
 }

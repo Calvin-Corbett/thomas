@@ -1,5 +1,5 @@
 """
-Swarm Mode — multi-agent task graph orchestrator (stdlib-only).
+Swarm Mode â€” multi-agent task graph orchestrator (stdlib-only).
 
 What this is
 - A small but *serious* multi-agent orchestrator designed to be integrated into Thomas.
@@ -35,6 +35,7 @@ This module avoids importing the rest of the Thomas codebase. The server layer s
 - subagents: dict[str, Subagent] (must include "planner" and "reviewer")
 - tool_call callback OR tool registry + mutates_fs signal
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -43,9 +44,9 @@ import enum
 import json
 import re
 import time
+from collections.abc import AsyncIterator, Iterable
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Dict, Iterable, List, Optional, Protocol, Tuple
-
+from typing import Any, Protocol
 
 # -----------------------------
 # Small utilities
@@ -68,7 +69,7 @@ def _ensure_type(name: str, val: Any, typ: type) -> None:
         raise ValueError(f"{name} must be {typ.__name__}")
 
 
-def _ensure_keys_exact(obj: Dict[str, Any], *, allowed: Iterable[str], required: Iterable[str], where: str) -> None:
+def _ensure_keys_exact(obj: dict[str, Any], *, allowed: Iterable[str], required: Iterable[str], where: str) -> None:
     allowed_set = set(allowed)
     required_set = set(required)
     keys = set(obj.keys())
@@ -80,7 +81,7 @@ def _ensure_keys_exact(obj: Dict[str, Any], *, allowed: Iterable[str], required:
         raise ValueError(f"{where}: unexpected keys: {extra}")
 
 
-def _extract_first_json_object(s: str) -> Dict[str, Any]:
+def _extract_first_json_object(s: str) -> dict[str, Any]:
     """
     Extract the first JSON object from an LLM response. This supports the reality that
     some models will wrap JSON in prose even when instructed not to.
@@ -138,7 +139,7 @@ def _extract_first_json_object(s: str) -> Dict[str, Any]:
     raise ValueError("unterminated JSON object in planner output")
 
 
-def _guess_mutates_fs(tool_name: str, args: Dict[str, Any]) -> bool:
+def _guess_mutates_fs(tool_name: str, args: dict[str, Any]) -> bool:
     """
     Best-effort safety heuristic. Real Thomas integration should supply the correct
     mutates_fs signal from the tool registry.
@@ -148,9 +149,26 @@ def _guess_mutates_fs(tool_name: str, args: Dict[str, Any]) -> bool:
     """
     name = (tool_name or "").lower()
     mutating_keywords = (
-        "write", "save", "edit", "patch", "apply", "delete", "remove", "rename",
-        "mkdir", "rmdir", "move", "copy", "download", "upload", "git", "pip", "install",
-        "shell", "cmd", "powershell",
+        "write",
+        "save",
+        "edit",
+        "patch",
+        "apply",
+        "delete",
+        "remove",
+        "rename",
+        "mkdir",
+        "rmdir",
+        "move",
+        "copy",
+        "download",
+        "upload",
+        "git",
+        "pip",
+        "install",
+        "shell",
+        "cmd",
+        "powershell",
     )
     if any(k in name for k in mutating_keywords):
         return True
@@ -167,6 +185,7 @@ def _guess_mutates_fs(tool_name: str, args: Dict[str, Any]) -> bool:
 # Data model
 # -----------------------------
 
+
 class TaskStatus(str, enum.Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -181,14 +200,15 @@ class Artifact:
     """
     Optional structured outputs produced by tasks.
     """
+
     kind: str  # e.g. "patch", "command", "note", "file"
     title: str
     content: str = ""
     path: str = ""
-    meta: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    meta: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "Artifact":
+    def from_dict(d: dict[str, Any]) -> Artifact:
         _ensure_type("artifact", d, dict)
         kind = d.get("kind", "")
         title = d.get("title", "")
@@ -215,13 +235,13 @@ class TaskSpec:
     id: str
     title: str
     agent: str  # e.g. planner/coder/tester/reviewer
-    deps: Tuple[str, ...] = ()
+    deps: tuple[str, ...] = ()
     prompt: str = ""
-    acceptance: Tuple[str, ...] = ()
-    meta: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    acceptance: tuple[str, ...] = ()
+    meta: dict[str, Any] = dataclasses.field(default_factory=dict)
 
     @staticmethod
-    def from_dict(d: Dict[str, Any]) -> "TaskSpec":
+    def from_dict(d: dict[str, Any]) -> TaskSpec:
         if not isinstance(d, dict):
             raise ValueError("task must be an object")
 
@@ -284,7 +304,7 @@ class TaskGraph:
     version: int
     goal: str
     summary: str
-    tasks: Dict[str, TaskSpec]
+    tasks: dict[str, TaskSpec]
 
     def validate(self) -> None:
         if self.version != 1:
@@ -319,7 +339,7 @@ class TaskGraph:
             dfs(tid)
 
     @staticmethod
-    def from_planner_json(planner_text: str, *, max_tasks: int = 64) -> "TaskGraph":
+    def from_planner_json(planner_text: str, *, max_tasks: int = 64) -> TaskGraph:
         obj = _extract_first_json_object(planner_text)
 
         _ensure_keys_exact(
@@ -348,7 +368,7 @@ class TaskGraph:
         if len(tasks_raw) > max_tasks:
             raise ValueError(f"task_graph.tasks too large (max {max_tasks})")
 
-        tasks: Dict[str, TaskSpec] = {}
+        tasks: dict[str, TaskSpec] = {}
         for td in tasks_raw:
             t = TaskSpec.from_dict(td)
             if t.id in tasks:
@@ -359,14 +379,13 @@ class TaskGraph:
         g.validate()
         return g
 
-    def to_summary_dict(self) -> Dict[str, Any]:
+    def to_summary_dict(self) -> dict[str, Any]:
         return {
             "version": self.version,
             "goal": self.goal,
             "summary": self.summary,
             "tasks": [
-                {"id": t.id, "title": t.title, "agent": t.agent, "deps": list(t.deps)}
-                for t in self.tasks.values()
+                {"id": t.id, "title": t.title, "agent": t.agent, "deps": list(t.deps)} for t in self.tasks.values()
             ],
         }
 
@@ -376,13 +395,12 @@ class TaskResult:
     ok: bool
     output: str = ""
     error: str = ""
-    artifacts: List[Artifact] = dataclasses.field(default_factory=list)
-    meta: Dict[str, Any] = dataclasses.field(default_factory=dict)
+    artifacts: list[Artifact] = dataclasses.field(default_factory=list)
+    meta: dict[str, Any] = dataclasses.field(default_factory=dict)
 
 
 class ToolCallFunc(Protocol):
-    async def __call__(self, name: str, args: Dict[str, Any]) -> Dict[str, Any]:
-        ...
+    async def __call__(self, name: str, args: dict[str, Any]) -> dict[str, Any]: ...
 
 
 class Subagent(Protocol):
@@ -393,19 +411,18 @@ class Subagent(Protocol):
         *,
         task: TaskSpec,
         graph: TaskGraph,
-        prior_results: Dict[str, TaskResult],
+        prior_results: dict[str, TaskResult],
         emit_text,
         call_tool,
         cancel_event: asyncio.Event,
-    ) -> TaskResult:
-        ...
+    ) -> TaskResult: ...
 
 
 @dataclasses.dataclass(frozen=True)
 class SwarmConfig:
     max_parallel_tasks: int = 6
     # optional per-agent limits; omitted agent_id -> unlimited (bounded by max_parallel_tasks)
-    max_parallel_per_agent: Dict[str, int] = dataclasses.field(default_factory=dict)
+    max_parallel_per_agent: dict[str, int] = dataclasses.field(default_factory=dict)
     # planner/reviewer prompts can be overridden by server
     strict_planner: bool = True
     max_tasks: int = 64
@@ -415,11 +432,12 @@ class SwarmRunRegistry:
     """
     Global registry so /cancel endpoint can find and stop a run.
     """
+
     _lock = asyncio.Lock()
-    _runs: Dict[str, "SwarmOrchestrator"] = {}
+    _runs: dict[str, SwarmOrchestrator] = {}
 
     @classmethod
-    async def register(cls, orch: "SwarmOrchestrator") -> None:
+    async def register(cls, orch: SwarmOrchestrator) -> None:
         async with cls._lock:
             cls._runs[orch.run_id] = orch
 
@@ -442,14 +460,15 @@ class SwarmRunRegistry:
 # Orchestrator
 # -----------------------------
 
+
 class SwarmOrchestrator:
     def __init__(
         self,
         *,
         run_id: str,
-        config: Optional[SwarmConfig] = None,
-        tool_call: Optional[ToolCallFunc] = None,
-        tool_mutates_fs: Optional[callable] = None,
+        config: SwarmConfig | None = None,
+        tool_call: ToolCallFunc | None = None,
+        tool_mutates_fs: callable | None = None,
     ) -> None:
         if not isinstance(run_id, str) or not run_id:
             raise ValueError("run_id must be a non-empty string")
@@ -465,17 +484,16 @@ class SwarmOrchestrator:
         # locks + limits
         self._fs_lock = asyncio.Lock()
         self._task_sem = asyncio.Semaphore(max(1, int(self.config.max_parallel_tasks)))
-        self._agent_sems: Dict[str, asyncio.Semaphore] = {
-            a: asyncio.Semaphore(max(1, int(n)))
-            for a, n in (self.config.max_parallel_per_agent or {}).items()
+        self._agent_sems: dict[str, asyncio.Semaphore] = {
+            a: asyncio.Semaphore(max(1, int(n))) for a, n in (self.config.max_parallel_per_agent or {}).items()
         }
 
         # runtime state
-        self.graph: Optional[TaskGraph] = None
-        self.task_status: Dict[str, TaskStatus] = {}
-        self.task_results: Dict[str, TaskResult] = {}
-        self._blocked_by: Dict[str, str] = {}  # task_id -> failed dep id
-        self._events: asyncio.Queue[Optional[Dict[str, Any]]] = asyncio.Queue()
+        self.graph: TaskGraph | None = None
+        self.task_status: dict[str, TaskStatus] = {}
+        self.task_results: dict[str, TaskResult] = {}
+        self._blocked_by: dict[str, str] = {}  # task_id -> failed dep id
+        self._events: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._done_evt = asyncio.Event()
 
     def cancel(self) -> None:
@@ -485,10 +503,10 @@ class SwarmOrchestrator:
         self,
         *,
         user_request: str,
-        subagents: Dict[str, Subagent],
-        planner_prompt: Optional[str] = None,
-        reviewer_prompt: Optional[str] = None,
-    ) -> AsyncIterator[Dict[str, Any]]:
+        subagents: dict[str, Subagent],
+        planner_prompt: str | None = None,
+        reviewer_prompt: str | None = None,
+    ) -> AsyncIterator[dict[str, Any]]:
         """
         Streams events. This is a producer/consumer:
         - background task runs the swarm
@@ -518,7 +536,7 @@ class SwarmOrchestrator:
                 pass
             await SwarmRunRegistry.unregister(self.run_id)
 
-    async def _emit(self, etype: str, agent_id: str, task_id: str, data: Dict[str, Any]) -> None:
+    async def _emit(self, etype: str, agent_id: str, task_id: str, data: dict[str, Any]) -> None:
         self._seq += 1
         evt = {
             "type": etype,
@@ -536,9 +554,9 @@ class SwarmOrchestrator:
         self,
         *,
         user_request: str,
-        subagents: Dict[str, Subagent],
-        planner_prompt: Optional[str],
-        reviewer_prompt: Optional[str],
+        subagents: dict[str, Subagent],
+        planner_prompt: str | None,
+        reviewer_prompt: str | None,
     ) -> None:
         ok = True
         error = ""
@@ -559,8 +577,13 @@ class SwarmOrchestrator:
                 acceptance=("Output a valid JSON TaskGraph version=1",),
                 meta={"internal": True},
             )
-            await self._emit("task_update", "orchestrator", plan_task.id, {"status": TaskStatus.RUNNING.value, "title": plan_task.title, "agent": "planner", "deps": []})
-            plan_chunks: List[str] = []
+            await self._emit(
+                "task_update",
+                "orchestrator",
+                plan_task.id,
+                {"status": TaskStatus.RUNNING.value, "title": plan_task.title, "agent": "planner", "deps": []},
+            )
+            plan_chunks: list[str] = []
 
             async def emit_plan_text(chunk: str) -> None:
                 plan_chunks.append(chunk)
@@ -572,7 +595,9 @@ class SwarmOrchestrator:
                 graph=TaskGraph(version=1, goal="(planning)", summary="", tasks={}),
                 prior_results={},
                 emit_text=emit_plan_text,
-                call_tool=lambda name, args, mutates_fs=None: self._call_tool(agent_id="planner", task_id=plan_task.id, name=name, args=args, mutates_fs=mutates_fs),
+                call_tool=lambda name, args, mutates_fs=None: self._call_tool(
+                    agent_id="planner", task_id=plan_task.id, name=name, args=args, mutates_fs=mutates_fs
+                ),
                 cancel_event=self._cancel,
             )
             plan_text = (planner_res.output or "").strip() or "".join(plan_chunks).strip()
@@ -595,8 +620,13 @@ class SwarmOrchestrator:
                 acceptance=("Produce final response.",),
                 meta={"internal": True},
             )
-            await self._emit("task_update", "orchestrator", review_task.id, {"status": TaskStatus.RUNNING.value, "title": review_task.title, "agent": "reviewer", "deps": []})
-            review_chunks: List[str] = []
+            await self._emit(
+                "task_update",
+                "orchestrator",
+                review_task.id,
+                {"status": TaskStatus.RUNNING.value, "title": review_task.title, "agent": "reviewer", "deps": []},
+            )
+            review_chunks: list[str] = []
 
             async def emit_review_text(chunk: str) -> None:
                 review_chunks.append(chunk)
@@ -608,51 +638,75 @@ class SwarmOrchestrator:
                 graph=self.graph,
                 prior_results=self.task_results.copy(),
                 emit_text=emit_review_text,
-                call_tool=lambda name, args, mutates_fs=None: self._call_tool(agent_id="reviewer", task_id=review_task.id, name=name, args=args, mutates_fs=mutates_fs),
+                call_tool=lambda name, args, mutates_fs=None: self._call_tool(
+                    agent_id="reviewer", task_id=review_task.id, name=name, args=args, mutates_fs=mutates_fs
+                ),
                 cancel_event=self._cancel,
             )
             final_text = (review_res.output or "").strip() or "".join(review_chunks).strip()
-            await self._emit("task_update", "orchestrator", review_task.id, {"status": TaskStatus.DONE.value, "ok": True})
-            await self._emit("swarm_done", "orchestrator", "__swarm__", {
-                "ok": True,
-                "final": final_text,
-                "summary": self._summarize_run(),
-                "duration_ms": _monotonic_ms() - started_ms,
-            })
+            await self._emit(
+                "task_update", "orchestrator", review_task.id, {"status": TaskStatus.DONE.value, "ok": True}
+            )
+            await self._emit(
+                "swarm_done",
+                "orchestrator",
+                "__swarm__",
+                {
+                    "ok": True,
+                    "final": final_text,
+                    "summary": self._summarize_run(),
+                    "duration_ms": _monotonic_ms() - started_ms,
+                },
+            )
         except asyncio.CancelledError:
             ok = False
             error = "cancelled"
-            await self._emit("swarm_done", "orchestrator", "__swarm__", {
-                "ok": False,
-                "error": error,
-                "summary": self._summarize_run(),
-                "duration_ms": _monotonic_ms() - started_ms,
-            })
+            await self._emit(
+                "swarm_done",
+                "orchestrator",
+                "__swarm__",
+                {
+                    "ok": False,
+                    "error": error,
+                    "summary": self._summarize_run(),
+                    "duration_ms": _monotonic_ms() - started_ms,
+                },
+            )
         except Exception as e:
             ok = False
             error = f"{type(e).__name__}: {e}"
-            await self._emit("swarm_done", "orchestrator", "__swarm__", {
-                "ok": False,
-                "error": error,
-                "summary": self._summarize_run(),
-                "duration_ms": _monotonic_ms() - started_ms,
-            })
+            await self._emit(
+                "swarm_done",
+                "orchestrator",
+                "__swarm__",
+                {
+                    "ok": False,
+                    "error": error,
+                    "summary": self._summarize_run(),
+                    "duration_ms": _monotonic_ms() - started_ms,
+                },
+            )
         finally:
             await self._events.put(None)
             self._done_evt.set()
 
-    async def _execute_graph(self, *, subagents: Dict[str, Subagent]) -> None:
+    async def _execute_graph(self, *, subagents: dict[str, Subagent]) -> None:
         assert self.graph is not None
 
         # init statuses
         for tid, t in self.graph.tasks.items():
             self.task_status[tid] = TaskStatus.QUEUED
-            await self._emit("task_update", "orchestrator", tid, {
-                "status": TaskStatus.QUEUED.value,
-                "title": t.title,
-                "agent": t.agent,
-                "deps": list(t.deps),
-            })
+            await self._emit(
+                "task_update",
+                "orchestrator",
+                tid,
+                {
+                    "status": TaskStatus.QUEUED.value,
+                    "title": t.title,
+                    "agent": t.agent,
+                    "deps": list(t.deps),
+                },
+            )
 
         pending = set(self.graph.tasks.keys())
         inflight: set[str] = set()
@@ -660,7 +714,7 @@ class SwarmOrchestrator:
         state_changed = asyncio.Event()
         state_changed.set()  # initial scheduling pass
 
-        def deps_state(tid: str) -> Tuple[bool, Optional[str]]:
+        def deps_state(tid: str) -> tuple[bool, str | None]:
             """
             Returns (ready, blocker_dep_id)
             - ready True if all deps are DONE
@@ -693,7 +747,9 @@ class SwarmOrchestrator:
                     pending.remove(tid)
                     self.task_status[tid] = TaskStatus.BLOCKED
                     self._blocked_by[tid] = blocker
-                    await self._emit("task_update", "orchestrator", tid, {"status": TaskStatus.BLOCKED.value, "blocked_by": blocker})
+                    await self._emit(
+                        "task_update", "orchestrator", tid, {"status": TaskStatus.BLOCKED.value, "blocked_by": blocker}
+                    )
                     progressed = True
 
                 # 2) enqueue ready tasks
@@ -745,7 +801,8 @@ class SwarmOrchestrator:
             for tid in list(pending):
                 self.task_status[tid] = TaskStatus.CANCELLED
                 await self._emit("task_update", "orchestrator", tid, {"status": TaskStatus.CANCELLED.value})
-    async def _run_one_task(self, *, task_id: str, subagents: Dict[str, Subagent]) -> None:
+
+    async def _run_one_task(self, *, task_id: str, subagents: dict[str, Subagent]) -> None:
         assert self.graph is not None
         t = self.graph.tasks[task_id]
 
@@ -757,7 +814,12 @@ class SwarmOrchestrator:
         agent = subagents.get(t.agent)
         if agent is None:
             self.task_status[task_id] = TaskStatus.FAILED
-            await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.FAILED.value, "error": f"missing subagent '{t.agent}'"})
+            await self._emit(
+                "task_update",
+                "orchestrator",
+                task_id,
+                {"status": TaskStatus.FAILED.value, "error": f"missing subagent '{t.agent}'"},
+            )
             self.task_results[task_id] = TaskResult(ok=False, error=f"missing subagent '{t.agent}'")
             return
 
@@ -771,13 +833,13 @@ class SwarmOrchestrator:
         self.task_status[task_id] = TaskStatus.RUNNING
         await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.RUNNING.value})
 
-        chunks: List[str] = []
+        chunks: list[str] = []
 
         async def emit_text(chunk: str) -> None:
             chunks.append(chunk)
             await self._emit("agent_text", t.agent, task_id, {"text": chunk})
 
-        async def call_tool(name: str, args: Dict[str, Any], mutates_fs: Optional[bool] = None) -> Dict[str, Any]:
+        async def call_tool(name: str, args: dict[str, Any], mutates_fs: bool | None = None) -> dict[str, Any]:
             return await self._call_tool(agent_id=t.agent, task_id=task_id, name=name, args=args, mutates_fs=mutates_fs)
 
         try:
@@ -796,8 +858,8 @@ class SwarmOrchestrator:
                 res.output = "".join(chunks)
 
             # normalize artifacts
-            norm_artifacts: List[Artifact] = []
-            for a in (res.artifacts or []):
+            norm_artifacts: list[Artifact] = []
+            for a in res.artifacts or []:
                 if isinstance(a, Artifact):
                     norm_artifacts.append(a)
                 elif isinstance(a, dict):
@@ -809,10 +871,25 @@ class SwarmOrchestrator:
             self.task_results[task_id] = res
             if res.ok:
                 self.task_status[task_id] = TaskStatus.DONE
-                await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.DONE.value, "ok": True, "duration_ms": _monotonic_ms() - started})
+                await self._emit(
+                    "task_update",
+                    "orchestrator",
+                    task_id,
+                    {"status": TaskStatus.DONE.value, "ok": True, "duration_ms": _monotonic_ms() - started},
+                )
             else:
                 self.task_status[task_id] = TaskStatus.FAILED
-                await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.FAILED.value, "ok": False, "error": res.error or "task failed", "duration_ms": _monotonic_ms() - started})
+                await self._emit(
+                    "task_update",
+                    "orchestrator",
+                    task_id,
+                    {
+                        "status": TaskStatus.FAILED.value,
+                        "ok": False,
+                        "error": res.error or "task failed",
+                        "duration_ms": _monotonic_ms() - started,
+                    },
+                )
         except asyncio.CancelledError:
             self.task_status[task_id] = TaskStatus.CANCELLED
             await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.CANCELLED.value})
@@ -820,13 +897,20 @@ class SwarmOrchestrator:
             self.task_status[task_id] = TaskStatus.FAILED
             err = f"{type(e).__name__}: {e}"
             self.task_results[task_id] = TaskResult(ok=False, error=err, output="".join(chunks))
-            await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.FAILED.value, "error": err, "duration_ms": _monotonic_ms() - started})
+            await self._emit(
+                "task_update",
+                "orchestrator",
+                task_id,
+                {"status": TaskStatus.FAILED.value, "error": err, "duration_ms": _monotonic_ms() - started},
+            )
         finally:
             if agent_sem:
                 agent_sem.release()
             self._task_sem.release()
 
-    async def _call_tool(self, *, agent_id: str, task_id: str, name: str, args: Dict[str, Any], mutates_fs: Optional[bool]) -> Dict[str, Any]:
+    async def _call_tool(
+        self, *, agent_id: str, task_id: str, name: str, args: dict[str, Any], mutates_fs: bool | None
+    ) -> dict[str, Any]:
         tool_call_id = f"{agent_id}:{task_id}:{self._seq + 1}"
         # decide mutates_fs
         if mutates_fs is None:
@@ -839,9 +923,14 @@ class SwarmOrchestrator:
                 mutates_fs = _guess_mutates_fs(name, args)
 
         start = _monotonic_ms()
-        await self._emit("agent_tool_start", agent_id, task_id, {"tool_call_id": tool_call_id, "tool": name, "args": args, "mutates_fs": bool(mutates_fs)})
+        await self._emit(
+            "agent_tool_start",
+            agent_id,
+            task_id,
+            {"tool_call_id": tool_call_id, "tool": name, "args": args, "mutates_fs": bool(mutates_fs)},
+        )
 
-        async def do_call() -> Dict[str, Any]:
+        async def do_call() -> dict[str, Any]:
             if self._tool_call is None:
                 raise RuntimeError("SwarmOrchestrator requires tool_call callback for tool execution")
             return await self._tool_call(name, args)
@@ -858,18 +947,39 @@ class SwarmOrchestrator:
                 result = await do_call()
 
             took = _monotonic_ms() - start
-            await self._emit("agent_tool_result", agent_id, task_id, {"tool_call_id": tool_call_id, "tool": name, "ok": True, "result": result, "took_ms": took})
+            await self._emit(
+                "agent_tool_result",
+                agent_id,
+                task_id,
+                {"tool_call_id": tool_call_id, "tool": name, "ok": True, "result": result, "took_ms": took},
+            )
             return result
         except asyncio.CancelledError:
             took = _monotonic_ms() - start
-            await self._emit("agent_tool_result", agent_id, task_id, {"tool_call_id": tool_call_id, "tool": name, "ok": False, "error": "cancelled", "took_ms": took})
+            await self._emit(
+                "agent_tool_result",
+                agent_id,
+                task_id,
+                {"tool_call_id": tool_call_id, "tool": name, "ok": False, "error": "cancelled", "took_ms": took},
+            )
             raise
         except Exception as e:
             took = _monotonic_ms() - start
-            await self._emit("agent_tool_result", agent_id, task_id, {"tool_call_id": tool_call_id, "tool": name, "ok": False, "error": f"{type(e).__name__}: {e}", "took_ms": took})
+            await self._emit(
+                "agent_tool_result",
+                agent_id,
+                task_id,
+                {
+                    "tool_call_id": tool_call_id,
+                    "tool": name,
+                    "ok": False,
+                    "error": f"{type(e).__name__}: {e}",
+                    "took_ms": took,
+                },
+            )
             raise
 
-    def _summarize_run(self) -> Dict[str, Any]:
+    def _summarize_run(self) -> dict[str, Any]:
         statuses = {k: v.value if isinstance(v, TaskStatus) else str(v) for k, v in self.task_status.items()}
         failed = [tid for tid, st in statuses.items() if st == TaskStatus.FAILED.value]
         blocked = [tid for tid, st in statuses.items() if st == TaskStatus.BLOCKED.value]
@@ -877,7 +987,7 @@ class SwarmOrchestrator:
         done = [tid for tid, st in statuses.items() if st == TaskStatus.DONE.value]
         artifacts = []
         for tid, res in self.task_results.items():
-            for a in (res.artifacts or []):
+            for a in res.artifacts or []:
                 artifacts.append({"task_id": tid, "kind": a.kind, "title": a.title, "path": a.path})
         return {
             "status": statuses,
@@ -905,7 +1015,7 @@ class SwarmOrchestrator:
             "    {\n"
             '      "id": "T1",\n'
             '      "title": "short title",\n'
-            '      "agent": "coder|tester|reviewer|planner|...",\n'
+            '      "agent": "planner|coder|researcher|news|social|tester|reviewer|...",\n'
             '      "deps": ["T0", "T2"],\n'
             '      "prompt": "the instruction for that agent",\n'
             '      "acceptance": ["a", "b"],\n'
@@ -914,10 +1024,10 @@ class SwarmOrchestrator:
             "  ]\n"
             "}\n\n"
             "PLANNING GUIDELINES:\n"
-            "- Prefer 4–12 tasks. Keep tasks small and testable.\n"
+            "- Prefer 4-12 tasks. Keep tasks small and testable.\n"
             "- Make deps minimal. Parallelize when safe.\n"
             "- Add at least one tester task that runs/validates.\n"
-            "- Use agent names that exist (planner/coder/tester/reviewer).\n"
+            "- Use agent names that exist (planner/coder/researcher/news/social/tester/reviewer).\n"
             "- If uncertain, include a short 'research' task before 'edit'.\n\n"
             f"USER REQUEST:\n{user_request}\n"
         )
@@ -928,6 +1038,8 @@ class SwarmOrchestrator:
             "You are the Reviewer subagent in Swarm Mode.\n"
             "Synthesize a final response from the task results.\n\n"
             "Rules:\n"
+            "- The final answer is user-facing natural language.\n"
+            "- Do NOT output raw JSON, task graphs, or schema objects.\n"
             "- Be honest about failures/blocked tasks.\n"
             "- Provide a demo script (commands + expected outputs).\n"
             "- List files changed/created if known.\n"

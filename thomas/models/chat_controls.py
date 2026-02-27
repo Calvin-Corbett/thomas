@@ -7,13 +7,13 @@ updating the setting spec registry below.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-from typing import Any, Dict, List, Mapping, Optional, Sequence
+from collections.abc import Mapping, Sequence
+from dataclasses import dataclass
+from typing import Any
 
 from thomas.core.autonomy import autonomy_level_name, clamp_autonomy_level
 from thomas.models.switching import ModelSwitchResolution
-
 
 _DIRECTIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"^\s*(set|change|switch|use|turn|enable|disable|show|hide|open|close)\b", re.IGNORECASE),
@@ -48,8 +48,8 @@ _DISABLE_MARKERS: tuple[str, ...] = (
 
 @dataclass(frozen=True)
 class UiControlResolution:
-    patch: Dict[str, Any]
-    operations: List[Dict[str, Any]]
+    patch: dict[str, Any]
+    operations: list[dict[str, Any]]
     confirmation: str
 
 
@@ -111,7 +111,7 @@ _BOOLEAN_SETTING_SPECS: tuple[tuple[str, tuple[str, ...], str], ...] = (
 _THEME_ALIASES: tuple[str, ...] = ("theme", "appearance mode", "ui theme")
 _THEME_VALUES: tuple[str, ...] = ("light", "dark", "system")
 
-_AUTONOMY_HINTS: Dict[int, tuple[str, ...]] = {
+_AUTONOMY_HINTS: dict[int, tuple[str, ...]] = {
     1: ("level 1", "l1", "manual review", "manual mode", "review-first"),
     2: ("level 2", "l2", "guarded assist", "guarded mode", "approved tasks"),
     3: ("level 3", "l3", "tool-bounded auto", "bounded auto", "normal auto"),
@@ -180,7 +180,7 @@ def _is_autonomy_shorthand_command(low: str) -> bool:
     return low in _AUTONOMY_SHORTHAND_COMMANDS
 
 
-def _parse_bool_intent(low: str) -> Optional[bool]:
+def _parse_bool_intent(low: str) -> bool | None:
     has_on = any(marker in low for marker in _ENABLE_MARKERS)
     has_off = any(marker in low for marker in _DISABLE_MARKERS)
     if has_on and not has_off:
@@ -199,7 +199,7 @@ def _parse_bool_intent(low: str) -> Optional[bool]:
     return None
 
 
-def _parse_mode(text: str, *, directive: bool) -> Optional[str]:
+def _parse_mode(text: str, *, directive: bool) -> str | None:
     low = _norm(text)
     if "autonomy" in low and "mode" not in low:
         return None
@@ -229,7 +229,7 @@ def _parse_mode(text: str, *, directive: bool) -> Optional[str]:
     return None
 
 
-def _parse_theme(text: str, *, directive: bool) -> Optional[str]:
+def _parse_theme(text: str, *, directive: bool) -> str | None:
     low = _norm(text)
     if not directive and not _contains_alias(low, _THEME_ALIASES):
         return None
@@ -241,7 +241,7 @@ def _parse_theme(text: str, *, directive: bool) -> Optional[str]:
     return None
 
 
-def _parse_autonomy_level(text: str, *, directive: bool) -> Optional[int]:
+def _parse_autonomy_level(text: str, *, directive: bool) -> int | None:
     low = _norm(text)
     explicit_control = _has_explicit_control_intent(text)
     if _is_question_like(text) and not explicit_control:
@@ -264,16 +264,13 @@ def _parse_autonomy_level(text: str, *, directive: bool) -> Optional[int]:
             "normal auto",
         )
     )
-    likely = (
-        shorthand
-        or (
-            explicit_control
-            and (
-                has_autonomy_keyword
-                or has_explicit_phrase
-                or bool(re.search(r"\blevel\s*[1-4]\b", low))
-                or bool(re.search(r"\bl[1-4]\b", low))
-            )
+    likely = shorthand or (
+        explicit_control
+        and (
+            has_autonomy_keyword
+            or has_explicit_phrase
+            or bool(re.search(r"\blevel\s*[1-4]\b", low))
+            or bool(re.search(r"\bl[1-4]\b", low))
         )
     )
     if not likely:
@@ -300,7 +297,7 @@ def _parse_autonomy_level(text: str, *, directive: bool) -> Optional[int]:
 
 
 def _build_confirmation(operations: Sequence[Mapping[str, Any]]) -> str:
-    bits: List[str] = []
+    bits: list[str] = []
     for op in operations:
         summary = str(op.get("summary") or "").strip()
         if summary:
@@ -312,19 +309,86 @@ def _build_confirmation(operations: Sequence[Mapping[str, Any]]) -> str:
     return "Updated " + "; ".join(bits) + "."
 
 
+def _is_conversational_not_control(text: str) -> bool:
+    """Detect messages that are clearly conversational, not control directives.
+
+    This prevents the control resolver from hijacking normal questions
+    that happen to contain words like 'can you', 'please', or 'I want'.
+    """
+    low = _norm(text)
+    if not low:
+        return False
+    word_count = len(low.split())
+
+    # Long messages (>8 words) that end with '?' are almost always questions
+    if "?" in text and word_count > 6:
+        # Unless they explicitly mention a control target
+        control_targets = (
+            "mode",
+            "theme",
+            "autonomy",
+            "tool details",
+            "inspector",
+            "voice",
+            "tts",
+            "text to speech",
+            "auto send",
+        )
+        if not any(ct in low for ct in control_targets):
+            return True
+
+    # Common conversational patterns that shouldn't trigger control
+    _conv_pats = (
+        re.compile(
+            r"^\s*(?:can|could|would)\s+you\s+(?:help|tell|explain|show|write|make|create|find|do|fix|check|build|look)\b",
+            re.I,
+        ),
+        re.compile(
+            r"^\s*(?:please|pls)\s+(?:help|tell|explain|show|write|make|create|find|do|fix|check|build|look)\b", re.I
+        ),
+        re.compile(
+            r"^\s*i\s+(?:want|need|prefer)\s+(?:you\s+)?to\s+(?:help|tell|explain|show|write|make|create|find|do|fix|check|build|look)\b",
+            re.I,
+        ),
+        re.compile(r"^\s*(?:what|how|why|where|when|who)\b", re.I),
+    )
+    for pat in _conv_pats:
+        if pat.search(text):
+            control_targets = (
+                "mode",
+                "theme",
+                "autonomy",
+                "tool details",
+                "inspector",
+                "voice",
+                "tts",
+                "text to speech",
+                "auto send",
+            )
+            if not any(ct in low for ct in control_targets):
+                return True
+
+    return False
+
+
 def resolve_ui_control_request(
     text: str,
     *,
-    model_switch: Optional[ModelSwitchResolution] = None,
-) -> Optional[UiControlResolution]:
+    model_switch: ModelSwitchResolution | None = None,
+) -> UiControlResolution | None:
     low = _norm(text)
+
+    # Guard: don't hijack normal conversational messages
+    if _is_conversational_not_control(text) and model_switch is None:
+        return None
+
     directive = _is_directive(text)
     explicit_control = _has_explicit_control_intent(text)
     shorthand_autonomy = _is_autonomy_shorthand_command(low)
     settings_directive = (directive and explicit_control) or shorthand_autonomy
 
-    patch: Dict[str, Any] = {}
-    operations: List[Dict[str, Any]] = []
+    patch: dict[str, Any] = {}
+    operations: list[dict[str, Any]] = []
 
     if model_switch is not None:
         profile = str(model_switch.profile or "").strip()
@@ -362,7 +426,7 @@ def resolve_ui_control_request(
                 }
             )
 
-        settings_patch: Dict[str, Any] = {}
+        settings_patch: dict[str, Any] = {}
         for setting_key, aliases, label in _BOOLEAN_SETTING_SPECS:
             if not _contains_alias(low, aliases):
                 continue

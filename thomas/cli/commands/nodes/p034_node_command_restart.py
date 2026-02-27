@@ -25,7 +25,6 @@ from thomas.nodes.p034_node_command_restart import (
     restart_node_host_service,
 )
 
-
 PROMPT_ID = "P034"
 HELP = "Restart the local node host service"
 
@@ -184,7 +183,7 @@ def _resolve_state_dir_from_args(args: argparse.Namespace) -> Path | None:
                     continue
                 if val:
                     return Path(val)
-    except Exception:
+    except ImportError:
         pass
 
     # Simple fallback convention.

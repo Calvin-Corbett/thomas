@@ -6,20 +6,31 @@ All workspace API routes are under /api/workspaces.
 
 Public integration: call setup(app, config) from create_app().
 """
+
 from __future__ import annotations
 
 import json
 import logging
-from typing import Callable, Optional
+from collections.abc import Callable
 
 from aiohttp import web
 
 from .db import (
-    connect, ensure_schema, get_db_path,
-    list_workspaces_for_user, create_workspace, get_workspace,
-    get_membership, first_membership_for_user, list_members,
-    upsert_membership, deactivate_member,
-    create_invite, get_invite_by_token, accept_invite, list_invites,
+    accept_invite,
+    connect,
+    create_invite,
+    create_workspace,
+    deactivate_member,
+    ensure_schema,
+    first_membership_for_user,
+    get_db_path,
+    get_invite_by_token,
+    get_membership,
+    get_workspace,
+    list_invites,
+    list_members,
+    list_workspaces_for_user,
+    upsert_membership,
 )
 from .rbac import WorkspaceRole, can_manage_members
 
@@ -31,6 +42,7 @@ APP_WORKSPACE_REQUIRE_API_ACCESS = web.AppKey("workspace_require_api_access", ob
 RequireAccessFn = Callable[[web.Request], None]
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _json(data) -> web.Response:
     return web.Response(
@@ -73,7 +85,7 @@ def _enforce_api_access(request: web.Request) -> None:
         require_api_access(request)
 
 
-def _pick_workspace_id(request: web.Request) -> Optional[str]:
+def _pick_workspace_id(request: web.Request) -> str | None:
     ws = request.headers.get("X-Workspace-Id") or request.headers.get("X-Workspace-ID")
     if ws:
         return ws.strip()
@@ -106,6 +118,7 @@ def _require_workspace_ctx(con, request: web.Request):
 
 
 # ── Route handlers ────────────────────────────────────────────────────────────
+
 
 async def h_list_workspaces(request: web.Request) -> web.Response:
     _enforce_api_access(request)
@@ -216,8 +229,9 @@ async def h_accept_invite(request: web.Request) -> web.Response:
         _err(410, "Invite revoked")
     if inv["accepted_at"]:
         _err(409, "Invite already used")
-    from datetime import datetime
-    if datetime.fromisoformat(inv["expires_at"]) < datetime.utcnow():
+    from datetime import datetime, timezone
+
+    if datetime.fromisoformat(inv["expires_at"]) < datetime.now(timezone.utc).replace(tzinfo=None):
         _err(410, "Invite expired")
     membership = accept_invite(con, inv["invite_id"], user_id)
     return _json(_row(membership))
@@ -270,7 +284,8 @@ async def h_revoke_member(request: web.Request) -> web.Response:
 
 # ── Setup ─────────────────────────────────────────────────────────────────────
 
-def setup(app: web.Application, config, *, require_api_access: Optional[RequireAccessFn] = None) -> None:
+
+def setup(app: web.Application, config, *, require_api_access: RequireAccessFn | None = None) -> None:
     """Register workspace routes and open the DB connection."""
     db_path = get_db_path(config)
     con = connect(db_path)

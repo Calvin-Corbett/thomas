@@ -61,10 +61,16 @@ jobs:
         run: |
           python scripts/onboarding_outcomes_report.py --days 7 --json > artifacts/nightly_reliability/onboarding_outcomes_report.json
           python scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning > artifacts/nightly_reliability/onboarding_outcomes_gate.json
-          python scripts/check_workboard_claims.py --json > artifacts/nightly_reliability/workboard_claims_gate.json
+          python scripts/check_workboard_claims.py --require-identity-metadata --json > artifacts/nightly_reliability/workboard_claims_gate.json
+          python scripts/check_workboard_changed_files.py --base HEAD~1 --head HEAD --require-identity-metadata --json > artifacts/nightly_reliability/workboard_changed_files_gate.json
           python scripts/workboard_audit_backstop.py --json > artifacts/nightly_reliability/workboard_audit_backstop.json
           python scripts/workboard_claim_cleanup.py --max-age-hours 72 --json > artifacts/nightly_reliability/workboard_claim_cleanup.json
           python scripts/check_competitor_freshness_guard.py --max-age-days 7 --json > artifacts/nightly_reliability/competitor_freshness_guard.json
+          set +e
+          python scripts/competitors/check_weekly_delta_alert.py --json > artifacts/nightly_reliability/competitor_delta_alerting.json
+          competitor_delta_exit_code=$?
+          set -e
+          printf "%s\n" "${competitor_delta_exit_code}" > artifacts/nightly_reliability/competitor_delta_alerting.exit_code
           python scripts/workboard_issue.py --help > artifacts/nightly_reliability/workboard_issue_tool_help.txt
           python scripts/module_audit_status.py --max-age-hours 24 --json > artifacts/nightly_reliability/module_audit_status_24h.json
           python scripts/focus_scorecard.py --days 7 --json > artifacts/nightly_reliability/focus_scorecard.json
@@ -90,12 +96,22 @@ jobs:
               except Exception:
                   return {}
 
+          def load_exit_code(name: str) -> int | None:
+              path = root / name
+              try:
+                  return int(path.read_text(encoding="utf-8").strip())
+              except Exception:
+                  return None
+
           soak = load("soak_report.json")
           perf = load("perf_report.json")
           gate = load("onboarding_outcomes_gate.json")
           audit_backstop = load("workboard_audit_backstop.json")
+          changed_files_gate = load("workboard_changed_files_gate.json")
           claim_cleanup = load("workboard_claim_cleanup.json")
           competitor_freshness = load("competitor_freshness_guard.json")
+          competitor_delta = load("competitor_delta_alerting.json")
+          competitor_delta_exit_code = load_exit_code("competitor_delta_alerting.exit_code")
           module_audit = load("module_audit_status_24h.json")
           scorecard = load("focus_scorecard.json")
           security = load("security_audit.json")
@@ -104,6 +120,17 @@ jobs:
           perf_summary = dict(perf.get("summary") or {})
           gate_summary = dict((gate.get("gate") or {}).get("summary") or {})
           sec_summary = dict(security.get("summary") or {})
+          delta_metrics = dict(competitor_delta.get("metrics") or {})
+          beat_delta = dict(delta_metrics.get("beat_metric_count") or {}).get("delta")
+          threat_delta = dict(delta_metrics.get("threat_score") or {}).get("delta")
+
+          def fmt_delta(value: object) -> str:
+              if value is None:
+                  return "n/a"
+              try:
+                  return f"{float(value):+.3f}"
+              except Exception:
+                  return "n/a"
 
           lines = [
               "# Nightly Reliability Summary",
@@ -117,9 +144,18 @@ jobs:
               f"- onboarding recovery success rate: {float(gate_summary.get('recovery_success_rate', 0.0)):.4f}",
               f"- onboarding median ready seconds: {float(gate_summary.get('median_time_to_ready_seconds', 0.0)):.3f}",
               f"- workboard audit backstop ok: {bool(audit_backstop.get('ok', False))}",
+              f"- workboard changed-files gate ok: {bool(changed_files_gate.get('ok', False))}",
+              f"- workboard unclaimed changed files: {int(changed_files_gate.get('unclaimed_file_count', 0))}",
               f"- workboard stale claims: {int(claim_cleanup.get('stale_claim_count', 0))}",
               f"- competitor freshness ok: {bool(competitor_freshness.get('ok', False))}",
               f"- competitor latest run age days: {float(competitor_freshness.get('latest_run_age_days') or 0.0):.4f}",
+              f"- competitor weekly delta command exit code: {competitor_delta_exit_code if competitor_delta_exit_code is not None else 'n/a'}",
+              f"- competitor weekly delta status: {str(competitor_delta.get('status') or 'unknown')}",
+              f"- competitor weekly delta ok: {bool(competitor_delta.get('ok', False))}",
+              f"- competitor weekly delta alert count: {int(competitor_delta.get('alert_count', 0))}",
+              f"- competitor weekly beat_metric_count delta: {fmt_delta(beat_delta)}",
+              f"- competitor weekly threat_score delta: {fmt_delta(threat_delta)}",
+              f"- competitor weekly delta strict-fail signal: {bool(competitor_delta.get('would_fail_strict', False))}",
               f"- module audits stale (24h): {int(module_audit.get('stale_count', 0))}",
               f"- module audits total issues: {int(module_audit.get('total_issue_count', 0))}",
               f"- security audit ok: {bool(security.get('ok', False))}",

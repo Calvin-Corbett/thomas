@@ -15,11 +15,11 @@ This file intentionally has *no* hard dependency on the CLI framework (Typer/Cli
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 import json
 import re
-from typing import Any, Mapping, Optional, Protocol, Tuple
-
+from collections.abc import Mapping
+from dataclasses import dataclass, field
+from typing import Any, Protocol
 
 _SUPPORTED_INTEGRATIONS = {"telegram"}
 
@@ -33,7 +33,7 @@ class ChannelResolveError(Exception):
         message: str,
         *,
         exit_code: int = 1,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
@@ -50,12 +50,19 @@ class ChannelResolveError(Exception):
 
 
 class InvalidChannelReference(ChannelResolveError):
-    def __init__(self, message: str = "Invalid channel reference.", *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(
+        self, message: str = "Invalid channel reference.", *, details: Mapping[str, Any] | None = None
+    ) -> None:
         super().__init__("INVALID_INPUT", message, exit_code=2, details=details)
 
 
 class MissingChannelConfig(ChannelResolveError):
-    def __init__(self, message: str = "Missing configuration for channel resolution.", *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(
+        self,
+        message: str = "Missing configuration for channel resolution.",
+        *,
+        details: Mapping[str, Any] | None = None,
+    ) -> None:
         super().__init__("MISSING_CONFIG", message, exit_code=3, details=details)
 
 
@@ -65,7 +72,7 @@ class ExternalChannelResolutionFailed(ChannelResolveError):
         integration: str,
         message: str = "External channel resolution failed.",
         *,
-        details: Optional[Mapping[str, Any]] = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         d = dict(details or {})
         d.setdefault("integration", integration)
@@ -77,7 +84,7 @@ class ChannelResolveRequest:
     """Input contract for channel resolution."""
 
     reference: str
-    config: Optional[Mapping[str, Any]] = None
+    config: Mapping[str, Any] | None = None
     timeout_s: float = 10.0
 
 
@@ -90,9 +97,9 @@ class ChannelResolveResult:
     raw_reference: str
     normalized_reference: str
     resolved_via: str  # "input" | "config" | "external"
-    title: Optional[str] = None
-    username: Optional[str] = None
-    kind: Optional[str] = None
+    title: str | None = None
+    username: str | None = None
+    kind: str | None = None
     metadata: Mapping[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
@@ -122,7 +129,7 @@ _TELEGRAM_LINK_RE = re.compile(r"^(?:https?://)?t\.me/(?P<name>[A-Za-z0-9_]{4,})
 def resolve_channel(
     request: ChannelResolveRequest,
     *,
-    telegram_resolver: Optional[Any] = None,
+    telegram_resolver: Any | None = None,
 ) -> ChannelResolveResult:
     """
     Resolve a user-supplied reference to a canonical channel identity.
@@ -232,7 +239,7 @@ def result_json_schema() -> dict[str, Any]:
     }
 
 
-def _expand_alias(reference: str, config: Optional[Mapping[str, Any]]) -> Tuple[str, str]:
+def _expand_alias(reference: str, config: Mapping[str, Any] | None) -> tuple[str, str]:
     """
     Expand a reference via configuration if it matches a named alias.
 
@@ -286,7 +293,7 @@ def _expand_alias(reference: str, config: Optional[Mapping[str, Any]]) -> Tuple[
     return reference, "input"
 
 
-def _parse_integration_and_identifier(reference: str) -> Tuple[Optional[str], str]:
+def _parse_integration_and_identifier(reference: str) -> tuple[str | None, str]:
     """
     Parse "integration:identifier" forms.
 
@@ -314,7 +321,7 @@ def _parse_integration_and_identifier(reference: str) -> Tuple[Optional[str], st
     return None, ref
 
 
-def _infer_integration_from_identifier(identifier: str) -> Optional[str]:
+def _infer_integration_from_identifier(identifier: str) -> str | None:
     ident = identifier.strip()
 
     if ident.startswith("@"):
@@ -330,7 +337,7 @@ def _infer_integration_from_identifier(identifier: str) -> Optional[str]:
     return None
 
 
-def _normalize_telegram_identifier(identifier: str) -> Tuple[str, Optional[str]]:
+def _normalize_telegram_identifier(identifier: str) -> tuple[str, str | None]:
     """
     Normalize the identifier portion for Telegram.
 
@@ -360,7 +367,7 @@ def _normalize_telegram_identifier(identifier: str) -> Tuple[str, Optional[str]]
     return ident, ident if ident.startswith("@") else None
 
 
-def _resolve_telegram(identifier: str, resolver: Optional[Any], *, timeout_s: float) -> Any:
+def _resolve_telegram(identifier: str, resolver: Any | None, *, timeout_s: float) -> Any:
     if resolver is None:
         raise MissingChannelConfig(
             "Telegram integration is not configured.",
@@ -372,10 +379,10 @@ def _resolve_telegram(identifier: str, resolver: Optional[Any], *, timeout_s: fl
     # - object with .resolve(reference, timeout_s=...)
     # - callable(reference)
     try:
-        if hasattr(resolver, "get_chat") and callable(getattr(resolver, "get_chat")):
+        if hasattr(resolver, "get_chat") and callable(resolver.get_chat):
             return resolver.get_chat(identifier)
 
-        if hasattr(resolver, "resolve") and callable(getattr(resolver, "resolve")):
+        if hasattr(resolver, "resolve") and callable(resolver.resolve):
             try:
                 return resolver.resolve(identifier, timeout_s=timeout_s)
             except TypeError:
@@ -388,7 +395,7 @@ def _resolve_telegram(identifier: str, resolver: Optional[Any], *, timeout_s: fl
                 return resolver(identifier)
     except ChannelResolveError:
         raise
-    except Exception as exc:
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
         raise ExternalChannelResolutionFailed(
             "telegram",
             details={"reason": _safe_reason(exc), "reference": identifier},
@@ -400,7 +407,7 @@ def _resolve_telegram(identifier: str, resolver: Optional[Any], *, timeout_s: fl
     )
 
 
-def _get_any(obj: Any, keys: Tuple[str, ...]) -> Any:
+def _get_any(obj: Any, keys: tuple[str, ...]) -> Any:
     if obj is None:
         return None
 

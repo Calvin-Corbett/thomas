@@ -28,9 +28,9 @@ from __future__ import annotations
 
 import asyncio
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Any, Dict, List, Literal, Mapping, Optional, Sequence, Tuple, Union, cast
-
+from typing import Any, Literal, Union, cast
 
 # ----------------------------
 # Public types / contracts
@@ -89,21 +89,21 @@ class WaitForSelector:
     kind: Literal["selector"]
     selector: str
     state: SelectorState = "visible"
-    timeout_ms: Optional[int] = None
+    timeout_ms: int | None = None
 
 
 @dataclass(frozen=True)
 class WaitForLoadState:
     kind: Literal["load_state"]
     state: LoadState = "load"
-    timeout_ms: Optional[int] = None
+    timeout_ms: int | None = None
 
 
 @dataclass(frozen=True)
 class WaitForURL:
     kind: Literal["url"]
     url: str
-    timeout_ms: Optional[int] = None
+    timeout_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -118,10 +118,10 @@ WaitCondition = Union[WaitForSelector, WaitForLoadState, WaitForURL, WaitTimeout
 @dataclass(frozen=True)
 class BrowserAction:
     kind: ActionKind
-    selector: Optional[str] = None
-    url: Optional[str] = None
-    text: Optional[str] = None
-    key: Optional[str] = None
+    selector: str | None = None
+    url: str | None = None
+    text: str | None = None
+    key: str | None = None
 
 
 @dataclass(frozen=True)
@@ -133,8 +133,8 @@ class ActionWithWaits:
     """
 
     action: BrowserAction
-    waits: Tuple[WaitCondition, ...] = ()
-    default_timeout_ms: Optional[int] = None
+    waits: tuple[WaitCondition, ...] = ()
+    default_timeout_ms: int | None = None
 
 
 @dataclass(frozen=True)
@@ -142,14 +142,14 @@ class PlannedCall:
     """A planned page method call (useful for dry-run / automation)."""
 
     method: str
-    args: Tuple[Any, ...] = ()
-    kwargs: Dict[str, Any] = field(default_factory=dict)
+    args: tuple[Any, ...] = ()
+    kwargs: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
 class ActionWaitPlan:
     action_call: PlannedCall
-    wait_calls: Tuple[PlannedCall, ...]
+    wait_calls: tuple[PlannedCall, ...]
 
 
 # ----------------------------
@@ -182,7 +182,7 @@ def _coerce_int(value: Any, *, field: str) -> int:
     raise InvalidWaitConditionsError(f"{field} must be an integer (ms)")
 
 
-def _coerce_timeout_ms_optional(value: Any, *, field: str) -> Optional[int]:
+def _coerce_timeout_ms_optional(value: Any, *, field: str) -> int | None:
     if value is None:
         return None
     v = _coerce_int(value, field=field)
@@ -206,7 +206,7 @@ def _require_str(value: Any, *, field: str) -> str:
     raise InvalidWaitConditionsError(f"{field} must be a non-empty string")
 
 
-def parse_wait_conditions(raw: Any) -> Tuple[WaitCondition, ...]:
+def parse_wait_conditions(raw: Any) -> tuple[WaitCondition, ...]:
     """
     Parse wait conditions from a Python structure (already-decoded JSON).
 
@@ -223,7 +223,7 @@ def parse_wait_conditions(raw: Any) -> Tuple[WaitCondition, ...]:
     if not isinstance(raw, list):
         raise InvalidWaitConditionsError("waits must be a list")
 
-    waits: List[WaitCondition] = []
+    waits: list[WaitCondition] = []
     for idx, item in enumerate(raw):
         if not isinstance(item, Mapping):
             raise InvalidWaitConditionsError(f"waits[{idx}] must be an object")
@@ -231,17 +231,13 @@ def parse_wait_conditions(raw: Any) -> Tuple[WaitCondition, ...]:
 
         kind = item.get("kind")
         if kind not in ("selector", "load_state", "url", "timeout"):
-            raise InvalidWaitConditionsError(
-                f"waits[{idx}].kind must be one of selector|load_state|url|timeout"
-            )
+            raise InvalidWaitConditionsError(f"waits[{idx}].kind must be one of selector|load_state|url|timeout")
 
         if kind == "selector":
             selector = _require_str(item.get("selector"), field=f"waits[{idx}].selector")
             state_raw = item.get("state", "visible")
             if state_raw not in ("attached", "detached", "visible", "hidden"):
-                raise InvalidWaitConditionsError(
-                    f"waits[{idx}].state must be one of attached|detached|visible|hidden"
-                )
+                raise InvalidWaitConditionsError(f"waits[{idx}].state must be one of attached|detached|visible|hidden")
             timeout_val = _coerce_timeout_ms_optional(item.get("timeout_ms"), field=f"waits[{idx}].timeout_ms")
             waits.append(
                 WaitForSelector(
@@ -256,9 +252,7 @@ def parse_wait_conditions(raw: Any) -> Tuple[WaitCondition, ...]:
         if kind == "load_state":
             state_raw = item.get("state", "load")
             if state_raw not in ("load", "domcontentloaded", "networkidle"):
-                raise InvalidWaitConditionsError(
-                    f"waits[{idx}].state must be one of load|domcontentloaded|networkidle"
-                )
+                raise InvalidWaitConditionsError(f"waits[{idx}].state must be one of load|domcontentloaded|networkidle")
             timeout_val = _coerce_timeout_ms_optional(item.get("timeout_ms"), field=f"waits[{idx}].timeout_ms")
             waits.append(WaitForLoadState(kind="load_state", state=cast(LoadState, state_raw), timeout_ms=timeout_val))
             continue
@@ -343,16 +337,17 @@ def parse_action_with_waits(raw: Any) -> ActionWithWaits:
 # Planning
 # ----------------------------
 
+
 def plan_wait_calls(
     waits: Sequence[WaitCondition],
     *,
-    default_timeout_ms: Optional[int] = None,
-) -> Tuple[PlannedCall, ...]:
-    calls: List[PlannedCall] = []
+    default_timeout_ms: int | None = None,
+) -> tuple[PlannedCall, ...]:
+    calls: list[PlannedCall] = []
     for w in waits:
         if isinstance(w, WaitForSelector):
             timeout = w.timeout_ms if w.timeout_ms is not None else default_timeout_ms
-            kwargs: Dict[str, Any] = {"state": w.state}
+            kwargs: dict[str, Any] = {"state": w.state}
             if timeout is not None:
                 kwargs["timeout"] = timeout
             calls.append(PlannedCall(method="wait_for_selector", args=(w.selector,), kwargs=kwargs))
@@ -409,13 +404,14 @@ def plan_action_with_waits(spec: ActionWithWaits) -> ActionWaitPlan:
 # Execution
 # ----------------------------
 
+
 async def _maybe_await(value: Any) -> Any:
     if asyncio.iscoroutine(value) or asyncio.isfuture(value):
         return await value
     return value
 
 
-async def _call_page_method(page: Any, call: PlannedCall, *, phase: str, index: Optional[int] = None) -> None:
+async def _call_page_method(page: Any, call: PlannedCall, *, phase: str, index: int | None = None) -> None:
     method = getattr(page, call.method, None)
     if method is None:
         raise BrowserWaitFailureError(f"page does not support {call.method}")
@@ -425,7 +421,7 @@ async def _call_page_method(page: Any, call: PlannedCall, *, phase: str, index: 
         await _maybe_await(result)
     except WaitConditionsError:
         raise
-    except Exception:
+    except (RuntimeError, TimeoutError, OSError, asyncio.TimeoutError, ConnectionError):
         # Keep deterministic; do not surface driver-specific exception strings.
         if index is None:
             raise BrowserWaitFailureError(f"browser failed during {phase}:{call.method}")
@@ -466,6 +462,7 @@ def execute_action_with_waits(page: Any, spec: ActionWithWaits) -> None:
 # JSON helpers
 # ----------------------------
 
+
 def spec_from_json(text: str) -> ActionWithWaits:
     try:
         raw = json.loads(text)
@@ -474,18 +471,18 @@ def spec_from_json(text: str) -> ActionWithWaits:
     return parse_action_with_waits(raw)
 
 
-def plan_to_dict(plan: ActionWaitPlan) -> Dict[str, Any]:
-    def call_to_dict(c: PlannedCall) -> Dict[str, Any]:
+def plan_to_dict(plan: ActionWaitPlan) -> dict[str, Any]:
+    def call_to_dict(c: PlannedCall) -> dict[str, Any]:
         return {"method": c.method, "args": list(c.args), "kwargs": dict(c.kwargs or {})}
 
     return {"action": call_to_dict(plan.action_call), "waits": [call_to_dict(c) for c in plan.wait_calls]}
 
 
-def error_to_dict(err: WaitConditionsError) -> Dict[str, Any]:
+def error_to_dict(err: WaitConditionsError) -> dict[str, Any]:
     return asdict(err.to_error_info())
 
 
-def action_with_waits_json_schema() -> Dict[str, Any]:
+def action_with_waits_json_schema() -> dict[str, Any]:
     """
     JSON Schema describing the expected input spec.
 
@@ -528,7 +525,7 @@ def action_with_waits_json_schema() -> Dict[str, Any]:
     }
 
 
-def action_with_waits_result_json_schema() -> Dict[str, Any]:
+def action_with_waits_result_json_schema() -> dict[str, Any]:
     """JSON Schema describing the --json output for the CLI command."""
     return {
         "type": "object",

@@ -21,14 +21,13 @@ This helper does *not* store tokens and does not log tokens. It only validates.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Any, Mapping, Optional
-
 import json
 import os
 import urllib.error
 import urllib.request
-
+from collections.abc import Mapping
+from dataclasses import dataclass
+from typing import Any
 
 # =========================
 # Contracts
@@ -40,8 +39,8 @@ class ChannelAuthValidationRequest:
     """Input contract for a channel auth validation run."""
 
     channel: str
-    token: Optional[str] = None
-    config: Optional[Mapping[str, Any]] = None
+    token: str | None = None
+    config: Mapping[str, Any] | None = None
     timeout_s: float = 10.0
 
 
@@ -50,8 +49,8 @@ class ChannelIdentity:
     """A minimal, channel-agnostic identity payload."""
 
     id: str
-    username: Optional[str] = None
-    display_name: Optional[str] = None
+    username: str | None = None
+    display_name: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,8 +59,8 @@ class ChannelAuthValidationResult:
 
     channel: str
     valid: bool
-    identity: Optional[ChannelIdentity] = None
-    details: Optional[Mapping[str, Any]] = None
+    identity: ChannelIdentity | None = None
+    details: Mapping[str, Any] | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -92,8 +91,8 @@ class ChannelAuthValidationError(Exception):
         self,
         message: str,
         *,
-        channel: Optional[str] = None,
-        details: Optional[Mapping[str, Any]] = None,
+        channel: str | None = None,
+        details: Mapping[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.channel = channel
@@ -180,7 +179,7 @@ def validate_channel_auth(request: ChannelAuthValidationRequest) -> ChannelAuthV
 # =========================
 
 
-def _token_source(*, channel: str, token_override: Optional[str], config: Optional[Mapping[str, Any]]) -> str:
+def _token_source(*, channel: str, token_override: str | None, config: Mapping[str, Any] | None) -> str:
     if token_override and token_override.strip():
         return "override"
     if _token_from_config(channel, config):
@@ -190,7 +189,7 @@ def _token_source(*, channel: str, token_override: Optional[str], config: Option
     return "unknown"
 
 
-def _resolve_token(*, channel: str, token_override: Optional[str], config: Optional[Mapping[str, Any]]) -> str:
+def _resolve_token(*, channel: str, token_override: str | None, config: Mapping[str, Any] | None) -> str:
     tok = (token_override or "").strip()
     if tok:
         return tok
@@ -210,19 +209,19 @@ def _resolve_token(*, channel: str, token_override: Optional[str], config: Optio
     )
 
 
-def _token_from_config(channel: str, config: Optional[Mapping[str, Any]]) -> Optional[str]:
+def _token_from_config(channel: str, config: Mapping[str, Any] | None) -> str | None:
     """Try multiple common config shapes without binding to a specific config system."""
 
     if not config or not isinstance(config, Mapping):
         return None
 
-    def get_str(m: Mapping[str, Any], k: str) -> Optional[str]:
+    def get_str(m: Mapping[str, Any], k: str) -> str | None:
         v = m.get(k)
         if v is None:
             return None
         return v if isinstance(v, str) else str(v)
 
-    candidates: list[Optional[str]] = []
+    candidates: list[str | None] = []
 
     # flat keys
     candidates.extend([get_str(config, "token"), get_str(config, "bot_token"), get_str(config, "api_token")])
@@ -275,7 +274,7 @@ def _expected_env_vars(channel: str) -> list[str]:
     return out
 
 
-def _token_from_env(channel: str) -> Optional[str]:
+def _token_from_env(channel: str) -> str | None:
     for key in _expected_env_vars(channel):
         v = os.getenv(key)
         if v and v.strip():
@@ -298,14 +297,14 @@ def _validate_telegram(*, token: str, timeout_s: float) -> ChannelIdentity:
     return _validate_telegram_via_http(token=token, timeout_s=timeout_s)
 
 
-def _try_validate_telegram_via_integration(*, token: str, timeout_s: float) -> Optional[ChannelIdentity]:
+def _try_validate_telegram_via_integration(*, token: str, timeout_s: float) -> ChannelIdentity | None:
     """Best-effort shim over thomas.integrations.telegram."""
 
     try:
         import importlib
 
         mod = importlib.import_module("thomas.integrations.telegram")
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return None
 
     for fn_name in ("get_me", "getMe", "whoami", "bot_info", "validate_token", "validate_bot_token"):
@@ -318,7 +317,7 @@ def _try_validate_telegram_via_integration(*, token: str, timeout_s: float) -> O
                 res = fn(token, timeout_s=timeout_s)  # type: ignore[misc]
             except TypeError:
                 res = fn(token)  # type: ignore[misc]
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             raise ExternalChannelAuthValidationError(
                 "telegram auth validation failed",
                 channel="telegram",
@@ -352,7 +351,7 @@ def _validate_telegram_via_http(*, token: str, timeout_s: float) -> ChannelIdent
         payload = _http_get_json(url=url, timeout_s=timeout_s)
     except ExternalChannelAuthValidationError:
         raise
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ExternalChannelAuthValidationError(
             "telegram auth validation failed",
             channel="telegram",
@@ -392,7 +391,7 @@ def _http_get_json(*, url: str, timeout_s: float) -> Any:
         body = None
         try:
             body = e.read()
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             body = None
         raise ExternalChannelAuthValidationError(
             "HTTP request returned error status",
@@ -403,7 +402,7 @@ def _http_get_json(*, url: str, timeout_s: float) -> Any:
                 "body": _safe_body_snippet(body),
             },
         ) from e
-    except Exception as e:
+    except (ImportError, AttributeError, RuntimeError) as e:
         raise ExternalChannelAuthValidationError(
             "HTTP request failed",
             channel="telegram",
@@ -412,7 +411,7 @@ def _http_get_json(*, url: str, timeout_s: float) -> Any:
 
     try:
         return json.loads(data.decode("utf-8"))
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ExternalChannelAuthValidationError(
             "HTTP response was not valid JSON",
             channel="telegram",
@@ -420,13 +419,13 @@ def _http_get_json(*, url: str, timeout_s: float) -> Any:
         ) from e
 
 
-def _safe_body_snippet(body: Any, *, max_len: int = 200) -> Optional[str]:
+def _safe_body_snippet(body: Any, *, max_len: int = 200) -> str | None:
     if body is None:
         return None
     if isinstance(body, (bytes, bytearray)):
         try:
             s = body.decode("utf-8", errors="replace")
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             s = repr(body)
     else:
         s = str(body)
@@ -434,7 +433,7 @@ def _safe_body_snippet(body: Any, *, max_len: int = 200) -> Optional[str]:
     return s[:max_len] if s else None
 
 
-def _parse_telegram_identity(payload: Any) -> Optional[ChannelIdentity]:
+def _parse_telegram_identity(payload: Any) -> ChannelIdentity | None:
     """Normalize plausible Telegram getMe payload shapes into ChannelIdentity."""
 
     if payload is None:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import ctypes
 import ctypes.wintypes as wt
 import threading
-from typing import Callable, Optional
+from collections.abc import Callable
 
 WM_CLIPBOARDUPDATE = 0x031D
 WM_DESTROY = 0x0002
@@ -17,8 +17,8 @@ class ClipboardListener:
 
     def __init__(self, on_update: Callable[[], None]):
         self.on_update = on_update
-        self._thread: Optional[threading.Thread] = None
-        self._hwnd: Optional[int] = None
+        self._thread: threading.Thread | None = None
+        self._hwnd: int | None = None
         self._stop = threading.Event()
 
     def start(self) -> None:
@@ -37,7 +37,7 @@ class ClipboardListener:
             if msg == WM_CLIPBOARDUPDATE:
                 try:
                     self.on_update()
-                except Exception:
+                except (subprocess.CalledProcessError, OSError):
                     pass
                 return 0
             if msg == WM_DESTROY:

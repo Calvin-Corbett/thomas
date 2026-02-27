@@ -22,10 +22,10 @@ import importlib.util
 import pkgutil
 import platform
 import sys
+from collections.abc import Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
-
+from typing import Any
 
 # -------------------------
 # Deterministic error model
@@ -35,12 +35,12 @@ from typing import Any, Dict, List, Mapping, Optional, Sequence, Tuple
 class PluginDiagnosticsCollectorError(RuntimeError):
     """A deterministic error with a stable code and JSON-serializable details."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = str(code)
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "message": str(self), "details": self.details}
 
 
@@ -59,7 +59,7 @@ ERROR_PLUGIN_IMPORT_FAILED = "plugin_import_failed"
 class PluginDiagnosticsInput:
     """Input contract for collecting plugin diagnostics."""
 
-    plugin_names: Optional[List[str]] = None
+    plugin_names: list[str] | None = None
     include_tools: bool = True
     strict: bool = False
 
@@ -68,7 +68,7 @@ class PluginDiagnosticsInput:
 class DiagnosticIssue:
     code: str
     message: str
-    details: Dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass(frozen=True)
@@ -76,9 +76,9 @@ class PluginDiagnostic:
     name: str
     module: str
     status: str  # "loaded" | "error"
-    tool_names: List[str] = field(default_factory=list)
-    error_type: Optional[str] = None
-    error_message: Optional[str] = None
+    tool_names: list[str] = field(default_factory=list)
+    error_type: str | None = None
+    error_message: str | None = None
 
 
 @dataclass(frozen=True)
@@ -87,12 +87,12 @@ class PluginDiagnosticsReport:
     generated_at_utc: str
     python: str
     platform: str
-    plugins: List[PluginDiagnostic]
-    issues: List[DiagnosticIssue] = field(default_factory=list)
+    plugins: list[PluginDiagnostic]
+    issues: list[DiagnosticIssue] = field(default_factory=list)
 
 
 # JSON schema-ish structures for automation.
-INPUT_SCHEMA: Dict[str, Any] = {
+INPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
@@ -102,7 +102,7 @@ INPUT_SCHEMA: Dict[str, Any] = {
     },
 }
 
-OUTPUT_SCHEMA: Dict[str, Any] = {
+OUTPUT_SCHEMA: dict[str, Any] = {
     "type": "object",
     "additionalProperties": False,
     "properties": {
@@ -126,10 +126,10 @@ def _utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
-def _normalize_plugin_names(names: Optional[Sequence[str]]) -> Optional[List[str]]:
+def _normalize_plugin_names(names: Sequence[str] | None) -> list[str] | None:
     if names is None:
         return None
-    cleaned: List[str] = []
+    cleaned: list[str] = []
     for raw in names:
         if raw is None:
             raise PluginDiagnosticsCollectorError(
@@ -146,7 +146,7 @@ def _normalize_plugin_names(names: Optional[Sequence[str]]) -> Optional[List[str
     return sorted(set(cleaned))
 
 
-def _discover_plugins() -> List[_PluginModuleRef]:
+def _discover_plugins() -> list[_PluginModuleRef]:
     """Discover plugin modules under thomas.plugins without importing them."""
     spec = importlib.util.find_spec("thomas.plugins")
     if spec is None or spec.submodule_search_locations is None:
@@ -155,7 +155,7 @@ def _discover_plugins() -> List[_PluginModuleRef]:
             "Plugins package 'thomas.plugins' was not found",
         )
 
-    refs: List[_PluginModuleRef] = []
+    refs: list[_PluginModuleRef] = []
     for mod in pkgutil.iter_modules(list(spec.submodule_search_locations), prefix="thomas.plugins."):
         base = mod.name.rsplit(".", 1)[-1]
         if base.startswith("_"):
@@ -166,10 +166,10 @@ def _discover_plugins() -> List[_PluginModuleRef]:
     return refs
 
 
-def _extract_tool_records(registry_obj: Any) -> List[Tuple[str, Optional[Any]]]:
+def _extract_tool_records(registry_obj: Any) -> list[tuple[str, Any | None]]:
     """Best-effort extraction of (tool_name, tool_callable) from a registry object."""
     # Mapping-like registry
-    mapping: Optional[Mapping[Any, Any]] = None
+    mapping: Mapping[Any, Any] | None = None
     if isinstance(registry_obj, Mapping):
         mapping = registry_obj
     else:
@@ -189,13 +189,13 @@ def _extract_tool_records(registry_obj: Any) -> List[Tuple[str, Optional[Any]]]:
                 res = fn()
             except TypeError:
                 continue
-            except Exception:
+            except (RuntimeError, OSError, AttributeError, KeyError, ValueError):
                 continue
             if isinstance(res, Mapping):
                 mapping = res
                 break
             if isinstance(res, list):
-                tmp: Dict[str, Any] = {}
+                tmp: dict[str, Any] = {}
                 for idx, item in enumerate(res):
                     name = getattr(item, "name", None) or getattr(item, "tool_name", None) or str(idx)
                     tmp[str(name)] = item
@@ -205,10 +205,10 @@ def _extract_tool_records(registry_obj: Any) -> List[Tuple[str, Optional[Any]]]:
     if mapping is None:
         return []
 
-    records: List[Tuple[str, Optional[Any]]] = []
+    records: list[tuple[str, Any | None]] = []
     for raw_name, raw_val in mapping.items():
         tool_name = str(raw_name)
-        tool_callable: Optional[Any] = None
+        tool_callable: Any | None = None
 
         if callable(raw_val):
             tool_callable = raw_val
@@ -230,11 +230,11 @@ def _extract_tool_records(registry_obj: Any) -> List[Tuple[str, Optional[Any]]]:
     return records
 
 
-def _load_tool_registry_snapshot() -> Dict[str, List[str]]:
+def _load_tool_registry_snapshot() -> dict[str, list[str]]:
     """Return mapping: origin_module -> list of tool names."""
     try:
         registry_mod = importlib.import_module("thomas.tools.registry")
-    except Exception as e:
+    except (ImportError, ModuleNotFoundError) as e:
         raise PluginDiagnosticsCollectorError(
             ERROR_MISSING_TOOL_REGISTRY,
             "Tool registry module 'thomas.tools.registry' could not be imported",
@@ -256,7 +256,7 @@ def _load_tool_registry_snapshot() -> Dict[str, List[str]]:
             try:
                 registry_obj = fn()
                 break
-            except Exception:
+            except (RuntimeError, OSError, AttributeError, KeyError, ValueError, TypeError):
                 continue
 
     if registry_obj is None:
@@ -265,7 +265,7 @@ def _load_tool_registry_snapshot() -> Dict[str, List[str]]:
             "Tool registry object was not found in 'thomas.tools.registry'",
         )
 
-    module_to_tools: Dict[str, List[str]] = {}
+    module_to_tools: dict[str, list[str]] = {}
     for tool_name, tool_callable in _extract_tool_records(registry_obj):
         origin = getattr(tool_callable, "__module__", None) if tool_callable is not None else None
         origin_mod = str(origin) if origin else "<unknown>"
@@ -276,8 +276,8 @@ def _load_tool_registry_snapshot() -> Dict[str, List[str]]:
     return module_to_tools
 
 
-def _tools_for_plugin(plugin_module: str, module_to_tools: Mapping[str, List[str]]) -> List[str]:
-    tools: List[str] = []
+def _tools_for_plugin(plugin_module: str, module_to_tools: Mapping[str, list[str]]) -> list[str]:
+    tools: list[str] = []
     for origin_mod, tool_names in module_to_tools.items():
         if origin_mod == plugin_module or origin_mod.startswith(plugin_module + "."):
             tools.extend(tool_names)
@@ -291,7 +291,7 @@ def collect_plugin_diagnostics(request: PluginDiagnosticsInput) -> PluginDiagnos
 
     if plugin_names:
         requested = set(plugin_names)
-        filtered: List[_PluginModuleRef] = [
+        filtered: list[_PluginModuleRef] = [
             ref for ref in plugin_refs if ref.base in requested or ref.full in requested
         ]
         if not filtered:
@@ -302,8 +302,8 @@ def collect_plugin_diagnostics(request: PluginDiagnosticsInput) -> PluginDiagnos
             )
         plugin_refs = sorted(filtered, key=lambda r: r.base)
 
-    issues: List[DiagnosticIssue] = []
-    module_to_tools: Dict[str, List[str]] = {}
+    issues: list[DiagnosticIssue] = []
+    module_to_tools: dict[str, list[str]] = {}
     if request.include_tools:
         try:
             module_to_tools = _load_tool_registry_snapshot()
@@ -313,16 +313,16 @@ def collect_plugin_diagnostics(request: PluginDiagnosticsInput) -> PluginDiagnos
             issues.append(DiagnosticIssue(code=e.code, message=str(e), details=e.details))
             module_to_tools = {}
 
-    plugins: List[PluginDiagnostic] = []
+    plugins: list[PluginDiagnostic] = []
     ok = True
 
     for ref in plugin_refs:
         status = "loaded"
-        err_type: Optional[str] = None
-        err_msg: Optional[str] = None
+        err_type: str | None = None
+        err_msg: str | None = None
         try:
             importlib.import_module(ref.full)
-        except Exception as e:
+        except (ImportError, ModuleNotFoundError, AttributeError, SyntaxError, RuntimeError) as e:
             status = "error"
             err_type = type(e).__name__
             err_msg = str(e)
@@ -370,17 +370,15 @@ def collect_plugin_diagnostics(request: PluginDiagnosticsInput) -> PluginDiagnos
     )
 
 
-def report_to_dict(report: PluginDiagnosticsReport) -> Dict[str, Any]:
+def report_to_dict(report: PluginDiagnosticsReport) -> dict[str, Any]:
     """Convert the report to a JSON-serializable dict with deterministic ordering."""
     data = asdict(report)
     data["plugins"] = sorted(data.get("plugins", []), key=lambda p: p.get("name", ""))
-    data["issues"] = sorted(
-        data.get("issues", []), key=lambda i: (i.get("code", ""), i.get("message", ""))
-    )
+    data["issues"] = sorted(data.get("issues", []), key=lambda i: (i.get("code", ""), i.get("message", "")))
     return data
 
 
-def tool(input_data: Optional[Mapping[str, Any]] = None, context: Any = None) -> Dict[str, Any]:
+def tool(input_data: Mapping[str, Any] | None = None, context: Any = None) -> dict[str, Any]:
     """Tool-friendly wrapper. Accepts a mapping and returns a mapping."""
     payload = dict(input_data or {})
     req = PluginDiagnosticsInput(
@@ -401,7 +399,7 @@ def _resolve_plugin_base() -> type:
     """Resolve a plugin base type from thomas.autonomy.plugin, if available."""
     try:
         plugin_mod = importlib.import_module("thomas.autonomy.plugin")
-    except Exception:
+    except (ImportError, ModuleNotFoundError, AttributeError):
         return object
 
     for name in ("AutonomyPlugin", "Plugin", "BasePlugin", "ThomasPlugin"):
@@ -421,7 +419,7 @@ class PluginDiagnosticsCollector(_PluginBase):
     input_schema = INPUT_SCHEMA
     output_schema = OUTPUT_SCHEMA
 
-    def run(self, input_data: Optional[Mapping[str, Any]] = None, context: Any = None) -> Dict[str, Any]:
+    def run(self, input_data: Mapping[str, Any] | None = None, context: Any = None) -> dict[str, Any]:
         return tool(input_data, context=context)
 
     __call__ = run

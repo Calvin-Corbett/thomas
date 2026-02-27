@@ -8,14 +8,17 @@ import os
 import re
 import time
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 from aiohttp import web
 
 from thomas.core.config import AppConfig
 from thomas.core.llm import LLMClient
-from thomas.server.app_keys import APP_CONFIG
+from thomas.server.app_keys import APP_CHAT_AUTOPILOT_LAST_BY_GOAL, APP_CONFIG
 
 log = logging.getLogger(__name__)
 
@@ -61,7 +64,7 @@ def _chat_autopilot_goal_key(goal_raw: Any) -> str:
     return re.sub(r"\s+", " ", str(goal_raw or "").strip().lower())[:220]
 
 
-def _chat_autopilot_parse_epoch(raw: Any) -> Optional[float]:
+def _chat_autopilot_parse_epoch(raw: Any) -> float | None:
     if raw is None:
         return None
     if isinstance(raw, datetime):
@@ -123,7 +126,7 @@ def _chat_autopilot_recent_goal_exists(
     return False
 
 
-def _chat_autopilot_prune_goal_cache(cache: Dict[str, float], *, now_s: float) -> None:
+def _chat_autopilot_prune_goal_cache(cache: dict[str, float], *, now_s: float) -> None:
     stale_cutoff = now_s - 86400.0
     stale_keys = [k for k, ts in cache.items() if float(ts or 0.0) < stale_cutoff]
     for key in stale_keys:
@@ -141,7 +144,7 @@ async def maybe_auto_start_autopilot_from_chat(
     text: str,
     session_id: str,
     profile: str,
-    model_id: Optional[str],
+    model_id: str | None,
     autonomy_level: int,
 ) -> None:
     if not _env_flag("THOMAS_CHAT_AUTOPILOT_AUTO_START", True):
@@ -156,8 +159,8 @@ async def maybe_auto_start_autopilot_from_chat(
 
     now_s = float(time.time())
     cooldown_s = int(_CHAT_AUTOPILOT_MIN_COOLDOWN_S)
-    cache_raw = request.app.get("_chat_autopilot_last_by_goal")
-    cache: Dict[str, float] = cache_raw if isinstance(cache_raw, dict) else {}
+    cache_raw = request.app.get(APP_CHAT_AUTOPILOT_LAST_BY_GOAL)
+    cache: dict[str, float] = cache_raw if isinstance(cache_raw, dict) else {}
 
     try:
         last_s = float(cache.get(goal_key) or 0.0)
@@ -177,7 +180,7 @@ async def maybe_auto_start_autopilot_from_chat(
         _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
         return
 
-    body: Dict[str, Any] = {
+    body: dict[str, Any] = {
         "goal": goal,
         "cadence": "continuous",
         "every_seconds": 900,
@@ -194,7 +197,7 @@ async def maybe_auto_start_autopilot_from_chat(
     if str(model_id or "").strip():
         body["model_id"] = str(model_id).strip()
 
-    base_candidates: List[str] = []
+    base_candidates: list[str] = []
     transport = request.transport
     if transport is not None:
         sock = transport.get_extra_info("sockname")
@@ -209,7 +212,7 @@ async def maybe_auto_start_autopilot_from_chat(
         if origin:
             base_candidates.append(origin.rstrip("/"))
 
-    endpoints: List[str] = []
+    endpoints: list[str] = []
     seen: set[str] = set()
     for base in base_candidates:
         normalized = str(base or "").strip().rstrip("/")
@@ -242,7 +245,7 @@ async def maybe_auto_start_autopilot_from_chat(
             log.debug("chat autopilot auto-start request failed (%s): %s", endpoint, exc)
 
 
-def _normalize_usage_payload(payload: Any) -> Dict[str, int]:
+def _normalize_usage_payload(payload: Any) -> dict[str, int]:
     """Normalize usage object/dict to {prompt_tokens, completion_tokens, total_tokens}."""
     if isinstance(payload, dict):
         prompt_raw = payload.get("prompt_tokens", 0)
@@ -273,7 +276,7 @@ def _normalize_usage_payload(payload: Any) -> Dict[str, int]:
     }
 
 
-def _swarm_tool_mutates_fs(name: str, _args: Dict[str, Any]) -> bool:
+def _swarm_tool_mutates_fs(name: str, _args: dict[str, Any]) -> bool:
     n = (name or "").lower()
     return any(
         k in n
@@ -306,7 +309,7 @@ class _LLMSwarmSubagent:
         model_cfg: Any,
         system_hint: str,
         *,
-        fallback_cfgs: Optional[List[Any]] = None,
+        fallback_cfgs: list[Any] | None = None,
         failover_enabled: bool = False,
         failover_cooldown_s: int = 300,
         failover_on_auth_error: bool = False,
@@ -338,9 +341,9 @@ class _LLMSwarmSubagent:
             failover_cooldown_s=self._failover_cooldown_s,
             failover_on_auth_error=self._failover_on_auth_error,
         )
-        chunks: List[str] = []
+        chunks: list[str] = []
         try:
-            prior_bits: List[str] = []
+            prior_bits: list[str] = []
             for tid, tr in (prior_results or {}).items():
                 txt = (getattr(tr, "output", "") or "").strip()
                 if not txt:
@@ -348,11 +351,7 @@ class _LLMSwarmSubagent:
                 prior_bits.append(f"[{tid}] {txt[:500]}")
             prior_blob = "\n".join(prior_bits[:10]).strip()
 
-            user_prompt = (
-                f"Task ID: {task.id}\n"
-                f"Task title: {task.title}\n"
-                f"Task prompt:\n{task.prompt}\n\n"
-            )
+            user_prompt = f"Task ID: {task.id}\n" f"Task title: {task.title}\n" f"Task prompt:\n{task.prompt}\n\n"
             if getattr(task, "acceptance", None):
                 user_prompt += "Acceptance:\n" + "\n".join(f"- {x}" for x in task.acceptance) + "\n\n"
             if prior_blob:

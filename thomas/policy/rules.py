@@ -1,18 +1,21 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional, Sequence, Tuple
+from typing import Any
 
 from .types import PolicyContext, PolicyDecision
+
 
 def _norm(p: str) -> str:
     return p.replace("\\", "/").rstrip("/")
 
-def _extract_paths(args: Dict[str, Any]) -> List[str]:
+
+def _extract_paths(args: dict[str, Any]) -> list[str]:
     """Heuristic extraction of path-like values from tool args."""
-    out: List[str] = []
+    out: list[str] = []
     keys = ("path", "paths", "src", "dst", "dest", "file", "filename", "directory", "dir", "target", "cwd", "root")
     for k, v in args.items():
         if k in keys:
@@ -22,6 +25,7 @@ def _extract_paths(args: Dict[str, Any]) -> List[str]:
                 out.extend([x for x in v if isinstance(x, str)])
     # shell commands sometimes include paths; ignore here (handled separately)
     return out
+
 
 def _resolve_path(p: str, cwd: str) -> Path:
     try:
@@ -33,6 +37,7 @@ def _resolve_path(p: str, cwd: str) -> Path:
     except Exception:
         return Path(cwd).resolve(strict=False) / p
 
+
 def _is_under(child: Path, root: Path) -> bool:
     try:
         child = child.resolve(strict=False)
@@ -42,9 +47,10 @@ def _is_under(child: Path, root: Path) -> bool:
     except Exception:
         return False
 
-def _default_deny_roots(runtime_root: str) -> List[Path]:
+
+def _default_deny_roots(runtime_root: str) -> list[Path]:
     home = Path.home()
-    roots: List[Path] = [
+    roots: list[Path] = [
         home / ".ssh",
         home / ".aws",
         home / ".gnupg",
@@ -61,37 +67,77 @@ def _default_deny_roots(runtime_root: str) -> List[Path]:
         roots.append(rr / ".thomas")
     return roots
 
-def _default_deny_paths(runtime_root: str) -> List[Path]:
-    out: List[Path] = []
+
+def _default_deny_paths(runtime_root: str) -> list[Path]:
+    out: list[Path] = []
     if runtime_root:
         rr = Path(runtime_root) / ".thomas"
-        out.extend([
-            rr / "secrets.json",
-            rr / "secrets.toml",
-            rr / "secrets.db",
-            rr / "audit.sqlite3",
-            rr / "runs.sqlite3",
-        ])
+        out.extend(
+            [
+                rr / "secrets.json",
+                rr / "secrets.toml",
+                rr / "secrets.db",
+                rr / "audit.sqlite3",
+                rr / "runs.sqlite3",
+            ]
+        )
     return out
+
 
 @dataclass(frozen=True)
 class Rule:
+    """Base class for policy rules.
+
+    Each rule evaluates a PolicyContext and returns an optional PolicyDecision.
+    If the rule matches, it returns a decision (allow, deny, or require_approval).
+    If the rule doesn't match, it returns None to indicate no decision.
+    """
+
     id: str
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
-        raise NotImplementedError
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        """Apply rule to a policy context.
+
+        Evaluates the rule against the provided context. Returns a decision
+        if the rule matches, or None if it doesn't apply.
+
+        Args:
+            ctx: PolicyContext containing tool name, args, cwd, etc.
+
+        Returns:
+            PolicyDecision (allow, deny, require_approval) or None if rule doesn't match
+
+        Raises:
+            Various exceptions depending on rule implementation
+        """
+        # Default: no decision (rule doesn't match)
+        # Subclasses override to implement specific policy logic
+        return None
+
 
 # Maps preference-toggle group names to tool categories + exact tool names.
 # Values ending with "." are prefix matches; others are exact matches.
-_GROUP_TOOL_PATTERNS: Dict[str, Tuple[str, ...]] = {
+_GROUP_TOOL_PATTERNS: dict[str, tuple[str, ...]] = {
     "shell": ("shell.", "shell", "bash.exec", "powershell.exec", "cmd.exec", "sandbox.run", "sandbox.test_snippet"),
-    "file_write": ("file.write", "file.append", "file.delete", "file.mkdir", "file.rmdir", "file.move", "file.rename", "file.copy", "file.save", "file.create"),
+    "file_write": (
+        "file.write",
+        "file.append",
+        "file.delete",
+        "file.mkdir",
+        "file.rmdir",
+        "file.move",
+        "file.rename",
+        "file.copy",
+        "file.save",
+        "file.create",
+    ),
     "network": ("http.", "web_search", "web_fetch", "web."),
     "browser": ("browser.",),
     "channels": ("telegram.", "discord.", "slack.", "email.", "channel."),
     "git": ("git.", "git_exec"),
 }
 # Fallback: map group names to tool categories for catch-all matching.
-_GROUP_CATEGORY_MAP: Dict[str, Tuple[str, ...]] = {
+_GROUP_CATEGORY_MAP: dict[str, tuple[str, ...]] = {
     "shell": ("shell",),
     "file_write": ("filesystem",),
     "network": ("web",),
@@ -108,10 +154,11 @@ class DenyToolGroupRule(Rule):
     Matches by tool name pattern first, then falls back to tool category if a
     tool_categories map is provided.
     """
-    deny_groups: Tuple[str, ...]
-    tool_categories: Dict[str, str] = field(default_factory=dict)  # tool_name -> category
 
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+    deny_groups: tuple[str, ...]
+    tool_categories: dict[str, str] = field(default_factory=dict)  # tool_name -> category
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         tn = ctx.tool_name
         for group in self.deny_groups:
             # Check explicit tool name patterns.
@@ -120,53 +167,69 @@ class DenyToolGroupRule(Rule):
                 if pat.endswith(".") and tn.startswith(pat):
                     return PolicyDecision.deny(
                         f"Tool '{tn}' blocked by group:{group} deny policy.",
-                        rule_id=self.id, group=group,
+                        rule_id=self.id,
+                        group=group,
                     )
                 if tn == pat:
                     return PolicyDecision.deny(
                         f"Tool '{tn}' blocked by group:{group} deny policy.",
-                        rule_id=self.id, group=group,
+                        rule_id=self.id,
+                        group=group,
                     )
             # Fallback: check tool category.
             cats = _GROUP_CATEGORY_MAP.get(group, ())
             if cats and self.tool_categories.get(tn, "") in cats:
                 return PolicyDecision.deny(
                     f"Tool '{tn}' (category '{self.tool_categories[tn]}') blocked by group:{group} deny policy.",
-                    rule_id=self.id, group=group,
+                    rule_id=self.id,
+                    group=group,
                 )
         return None
 
 
 @dataclass(frozen=True)
 class DenyToolRule(Rule):
-    deny_tools: Tuple[str, ...]
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+    deny_tools: tuple[str, ...]
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         if ctx.tool_name in self.deny_tools:
             return PolicyDecision.deny(f"Tool '{ctx.tool_name}' is denied by policy.", rule_id=self.id)
         return None
 
+
 @dataclass(frozen=True)
 class AllowToolRule(Rule):
-    allow_tools: Tuple[str, ...]
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+    allow_tools: tuple[str, ...]
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         if ctx.tool_name in self.allow_tools:
             return PolicyDecision.allow(f"Tool '{ctx.tool_name}' is allowed by policy.", rule_id=self.id)
         return None
 
+
 @dataclass(frozen=True)
 class DenySecretReadRule(Rule):
     """Deny reads of secret-ish locations."""
-    deny_roots: Tuple[str, ...] = ()
-    deny_paths: Tuple[str, ...] = ()
 
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+    deny_roots: tuple[str, ...] = ()
+    deny_paths: tuple[str, ...] = ()
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         candidates = _extract_paths(ctx.args)
         if not candidates:
             return None
 
         runtime_root = ctx.runtime_root or ""
-        roots = [_resolve_path(p, ctx.cwd) for p in self.deny_roots] if self.deny_roots else _default_deny_roots(runtime_root)
-        paths = [_resolve_path(p, ctx.cwd) for p in self.deny_paths] if self.deny_paths else _default_deny_paths(runtime_root)
+        roots = (
+            [_resolve_path(p, ctx.cwd) for p in self.deny_roots]
+            if self.deny_roots
+            else _default_deny_roots(runtime_root)
+        )
+        paths = (
+            [_resolve_path(p, ctx.cwd) for p in self.deny_paths]
+            if self.deny_paths
+            else _default_deny_paths(runtime_root)
+        )
 
         for raw in candidates:
             rp = _resolve_path(raw, ctx.cwd)
@@ -178,13 +241,30 @@ class DenySecretReadRule(Rule):
                     return PolicyDecision.deny(f"Blocked access under protected root: {root}", rule_id=self.id)
         return None
 
+
 @dataclass(frozen=True)
 class RequireApprovalWriteOutsideSandboxRule(Rule):
     """Require approval for writes outside sandbox_root."""
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         tool = ctx.tool_name.lower()
         # heuristic: tools that write or mutate filesystem
-        mutating = any(s in tool for s in ("write", "append", "delete", "remove", "mkdir", "rmdir", "move", "rename", "copy", "save", "create"))
+        mutating = any(
+            s in tool
+            for s in (
+                "write",
+                "append",
+                "delete",
+                "remove",
+                "mkdir",
+                "rmdir",
+                "move",
+                "rename",
+                "copy",
+                "save",
+                "create",
+            )
+        )
         if not mutating:
             return None
         sandbox = Path(ctx.sandbox_root).resolve(strict=False)
@@ -200,9 +280,10 @@ class RequireApprovalWriteOutsideSandboxRule(Rule):
                 )
         return None
 
+
 @dataclass(frozen=True)
 class RequireApprovalGitPushRule(Rule):
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         tn = ctx.tool_name.lower()
         if tn in ("git.push", "git", "git_exec"):
             return PolicyDecision.require_approval("git push requires approval.", rule_id=self.id)
@@ -216,12 +297,14 @@ class RequireApprovalGitPushRule(Rule):
             return PolicyDecision.require_approval("git push via shell requires approval.", rule_id=self.id)
         return None
 
+
 @dataclass(frozen=True)
 class RequireApprovalShellExecRule(Rule):
-    def apply(self, ctx: PolicyContext) -> Optional[PolicyDecision]:
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
         if ctx.tool_name.lower() in ("shell.exec", "shell", "bash.exec", "powershell.exec", "cmd.exec"):
             return PolicyDecision.require_approval("Shell execution requires approval.", rule_id=self.id)
         return None
+
 
 def default_rules(
     *,
@@ -230,26 +313,30 @@ def default_rules(
     deny_roots: Sequence[str] = (),
     deny_paths: Sequence[str] = (),
     deny_groups: Sequence[str] = (),
-    tool_categories: Optional[Dict[str, str]] = None,
-) -> List[Rule]:
+    tool_categories: dict[str, str] | None = None,
+) -> list[Rule]:
     """Built-in rule library (order matters)."""
-    rules: List[Rule] = []
+    rules: list[Rule] = []
     if allow_tools:
         rules.append(AllowToolRule(id="allow_tools", allow_tools=tuple(allow_tools)))
     # Group deny evaluated BEFORE individual deny so toggles take precedence.
     if deny_groups:
-        rules.append(DenyToolGroupRule(
-            id="deny_tool_groups",
-            deny_groups=tuple(deny_groups),
-            tool_categories=dict(tool_categories or {}),
-        ))
+        rules.append(
+            DenyToolGroupRule(
+                id="deny_tool_groups",
+                deny_groups=tuple(deny_groups),
+                tool_categories=dict(tool_categories or {}),
+            )
+        )
     if deny_tools:
         rules.append(DenyToolRule(id="deny_tools", deny_tools=tuple(deny_tools)))
 
-    rules.extend([
-        DenySecretReadRule(id="deny_secret_reads", deny_roots=tuple(deny_roots), deny_paths=tuple(deny_paths)),
-        RequireApprovalShellExecRule(id="approve_shell_exec"),
-        RequireApprovalGitPushRule(id="approve_git_push"),
-        RequireApprovalWriteOutsideSandboxRule(id="approve_write_outside_sandbox"),
-    ])
+    rules.extend(
+        [
+            DenySecretReadRule(id="deny_secret_reads", deny_roots=tuple(deny_roots), deny_paths=tuple(deny_paths)),
+            RequireApprovalShellExecRule(id="approve_shell_exec"),
+            RequireApprovalGitPushRule(id="approve_git_push"),
+            RequireApprovalWriteOutsideSandboxRule(id="approve_write_outside_sandbox"),
+        ]
+    )
     return rules

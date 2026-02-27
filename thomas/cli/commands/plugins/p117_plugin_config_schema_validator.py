@@ -12,8 +12,9 @@ Core validation logic lives in :mod:`thomas.plugins.p117_plugin_config_schema_va
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any
 
 import typer
 
@@ -41,20 +42,22 @@ def _ensure_mapping(obj: Any, *, kind: str) -> Mapping[str, Any]:
     if not isinstance(obj, Mapping):
         raise PluginConfigSchemaValidatorError(
             code="SCHEMA_INVALID" if kind == "schema" else "CONFIG_INVALID",
-            message=("Inline schema must be a JSON object." if kind == "schema" else "Inline config must be a JSON object."),
+            message=(
+                "Inline schema must be a JSON object." if kind == "schema" else "Inline config must be a JSON object."
+            ),
             details={"type": type(obj).__name__},
         )
     return obj
 
 
 def _cmd_validate_config(
-    plugin: Optional[str] = typer.Option(
+    plugin: str | None = typer.Option(
         None,
         "--plugin",
         "-p",
         help="Plugin identifier used for schema discovery (module path or plugin name).",
     ),
-    config_path: Optional[Path] = typer.Option(
+    config_path: Path | None = typer.Option(
         None,
         "--config",
         "-c",
@@ -63,12 +66,12 @@ def _cmd_validate_config(
         readable=True,
         help="Path to the plugin configuration file (json/yaml/toml).",
     ),
-    config_json: Optional[str] = typer.Option(
+    config_json: str | None = typer.Option(
         None,
         "--config-json",
         help="Inline config as a JSON string (useful for CI).",
     ),
-    schema_path: Optional[Path] = typer.Option(
+    schema_path: Path | None = typer.Option(
         None,
         "--schema",
         exists=False,
@@ -76,7 +79,7 @@ def _cmd_validate_config(
         readable=True,
         help="Path to the JSON schema file (json/yaml/toml).",
     ),
-    schema_json: Optional[str] = typer.Option(
+    schema_json: str | None = typer.Option(
         None,
         "--schema-json",
         help="Inline schema as a JSON string (useful for CI).",
@@ -174,5 +177,5 @@ try:  # pragma: no cover
 
     if _shared_plugins_app is not app:
         _shared_plugins_app.command("validate-config")(_cmd_validate_config)
-except Exception:
+except ImportError:
     pass

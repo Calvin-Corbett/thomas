@@ -13,14 +13,15 @@ Design goals:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass
 import json
 import os
-from pathlib import Path
 import re
 import shutil
 import tempfile
-from typing import Any, Mapping, MutableMapping, Optional
+from collections.abc import Mapping, MutableMapping
+from dataclasses import asdict, dataclass
+from pathlib import Path
+from typing import Any
 
 try:
     import tomllib  # py311+
@@ -35,7 +36,7 @@ TOOL_DESCRIPTION = "Install a Thomas plugin from a local directory path."
 class PluginInstallFromLocalPathError(RuntimeError):
     """Deterministic error for local-path plugin installation."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         self.code = str(code)
         self.details: dict[str, Any] = dict(details or {})
         super().__init__(str(message))
@@ -50,9 +51,9 @@ class PluginInstallFromLocalPathRequest:
 
     source_path: Path
     # Optional explicit name override. If omitted, name is derived from on-disk metadata.
-    plugin_name: Optional[str] = None
+    plugin_name: str | None = None
     # Where to install plugins. If omitted, uses THOMAS_PLUGINS_DIR, or THOMAS_HOME/plugins, or ~/.thomas/plugins.
-    install_root: Optional[Path] = None
+    install_root: Path | None = None
     # Overwrite if the plugin already exists at destination.
     overwrite: bool = False
 
@@ -106,10 +107,10 @@ def _validate_plugin_name(name: str) -> str:
     return n
 
 
-def _derive_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
+def _derive_name_from_pyproject(pyproject_path: Path) -> str | None:
     try:
         data = tomllib.loads(pyproject_path.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (OSError, ValueError, KeyError) as e:
         raise PluginInstallFromLocalPathError(
             "bad_plugin_config",
             "Failed to parse pyproject.toml.",
@@ -135,13 +136,13 @@ def _derive_name_from_pyproject(pyproject_path: Path) -> Optional[str]:
     return None
 
 
-def _derive_name_from_setup_cfg(setup_cfg_path: Path) -> Optional[str]:
+def _derive_name_from_setup_cfg(setup_cfg_path: Path) -> str | None:
     import configparser
 
     cfg = configparser.ConfigParser()
     try:
         cfg.read(setup_cfg_path, encoding="utf-8")
-    except Exception as e:
+    except (OSError, ValueError) as e:
         raise PluginInstallFromLocalPathError(
             "bad_plugin_config",
             "Failed to parse setup.cfg.",
@@ -155,10 +156,10 @@ def _derive_name_from_setup_cfg(setup_cfg_path: Path) -> Optional[str]:
     return None
 
 
-def _derive_name_from_json_manifest(path: Path) -> Optional[str]:
+def _derive_name_from_json_manifest(path: Path) -> str | None:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError, UnicodeDecodeError) as e:
         raise PluginInstallFromLocalPathError(
             "bad_plugin_config",
             "Failed to parse plugin JSON manifest.",
@@ -173,10 +174,10 @@ def _derive_name_from_json_manifest(path: Path) -> Optional[str]:
     return None
 
 
-def _derive_name_from_toml_manifest(path: Path) -> Optional[str]:
+def _derive_name_from_toml_manifest(path: Path) -> str | None:
     try:
         data = tomllib.loads(path.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (OSError, ValueError, UnicodeDecodeError) as e:
         raise PluginInstallFromLocalPathError(
             "bad_plugin_config",
             "Failed to parse plugin TOML manifest.",
@@ -247,7 +248,7 @@ def _load_manifest(manifest_path: Path) -> dict[str, Any]:
         return {"version": 1, "plugins": {}}
     try:
         data = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError, UnicodeDecodeError) as e:
         raise PluginInstallFromLocalPathError(
             "bad_manifest",
             "Failed to read installed plugins manifest.",
@@ -267,11 +268,11 @@ def _write_manifest_atomic(manifest_path: Path, manifest: Mapping[str, Any]) -> 
     try:
         tmp_path.write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n", encoding="utf-8")
         os.replace(tmp_path, manifest_path)
-    except Exception as e:
+    except (OSError, json.JSONDecodeError, ValueError) as e:
         try:
             if tmp_path.exists():
                 tmp_path.unlink()
-        except Exception:
+        except OSError:  # REVIEWED: broad catch — cleanup only, no error handling
             pass
         raise PluginInstallFromLocalPathError(
             "write_failed",
@@ -327,7 +328,7 @@ def install_plugin_from_local_path(req: PluginInstallFromLocalPathRequest) -> Pl
                 if backup_path.exists():
                     shutil.rmtree(backup_path)
                 os.replace(installed_path, backup_path)
-            except Exception as e:
+            except (OSError, shutil.Error) as e:
                 raise PluginInstallFromLocalPathError(
                     "remove_failed",
                     "Failed to move existing plugin installation out of the way.",
@@ -341,15 +342,15 @@ def install_plugin_from_local_path(req: PluginInstallFromLocalPathRequest) -> Pl
 
         try:
             os.replace(staged_path, installed_path)
-        except Exception:
+        except (OSError, shutil.Error):  # REVIEWED: broad catch — fallback to shutil.move
             try:
                 shutil.move(str(staged_path), str(installed_path))
-            except Exception as e:
+            except (OSError, shutil.Error) as e:
                 # Attempt rollback if we had a backup.
                 if backup_path.exists() and not installed_path.exists():
                     try:
                         os.replace(backup_path, installed_path)
-                    except Exception:
+                    except (OSError, shutil.Error):  # REVIEWED: broad catch — cleanup/rollback
                         pass
                 raise PluginInstallFromLocalPathError(
                     "move_failed",
@@ -363,7 +364,7 @@ def install_plugin_from_local_path(req: PluginInstallFromLocalPathRequest) -> Pl
                 ) from e
     except PluginInstallFromLocalPathError:
         raise
-    except Exception as e:
+    except (OSError, shutil.Error) as e:
         raise PluginInstallFromLocalPathError(
             "copy_failed",
             "Failed to copy plugin into install directory.",
@@ -377,15 +378,13 @@ def install_plugin_from_local_path(req: PluginInstallFromLocalPathRequest) -> Pl
         try:
             if temp_parent.exists():
                 shutil.rmtree(temp_parent, ignore_errors=True)
-        except Exception:
+        except (OSError, shutil.Error):  # REVIEWED: broad catch — cleanup only
             pass
 
     # Update manifest (rollback on failure).
     manifest_path = install_root / "installed_plugins.json"
     manifest = _load_manifest(manifest_path)
-    plugins: MutableMapping[str, Any] = (
-        manifest.get("plugins") if isinstance(manifest.get("plugins"), dict) else {}
-    )
+    plugins: MutableMapping[str, Any] = manifest.get("plugins") if isinstance(manifest.get("plugins"), dict) else {}
     plugins[plugin_name] = {
         "source_path": str(source_path.resolve()),
         "installed_path": str(installed_path.resolve()),
@@ -405,7 +404,7 @@ def install_plugin_from_local_path(req: PluginInstallFromLocalPathRequest) -> Pl
             if backup_path.exists():
                 try:
                     os.replace(backup_path, installed_path)
-                except Exception:
+                except (OSError, shutil.Error):  # REVIEWED: broad catch — cleanup/rollback
                     pass
         raise
     finally:
@@ -413,7 +412,7 @@ def install_plugin_from_local_path(req: PluginInstallFromLocalPathRequest) -> Pl
         if backup_path.exists():
             try:
                 shutil.rmtree(backup_path, ignore_errors=True)
-            except Exception:
+            except (OSError, shutil.Error):  # REVIEWED: broad catch — cleanup only
                 pass
 
     return PluginInstallFromLocalPathResult(
@@ -456,7 +455,7 @@ def run(payload: Mapping[str, Any]) -> dict[str, Any]:
         return out
     except PluginInstallFromLocalPathError as e:
         return e.to_dict()
-    except Exception as e:
+    except (OSError, ValueError, KeyError, TypeError) as e:
         err = PluginInstallFromLocalPathError(
             "unexpected_error",
             "Unexpected error during plugin installation.",
@@ -521,7 +520,7 @@ def register(registry: Any) -> None:
             allowed = {k: v for k, v in kwargs.items() if k in sig.parameters}
             fn(**allowed)
             return True
-        except Exception:
+        except (TypeError, AttributeError):  # REVIEWED: broad catch — best-effort registration
             return False
 
     candidates = []

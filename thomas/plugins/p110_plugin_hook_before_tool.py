@@ -15,8 +15,9 @@ Core idea:
 from __future__ import annotations
 
 import json
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
-from typing import Any, Callable, Dict, Mapping, Optional, Tuple, Literal
+from typing import Any, Literal
 
 BeforeToolAction = Literal["allow", "block", "modify"]
 
@@ -31,7 +32,7 @@ class BeforeToolHookError(Exception):
 
     code: str = "before_tool_hook_error"
 
-    def __init__(self, message: str, *, code: Optional[str] = None) -> None:
+    def __init__(self, message: str, *, code: str | None = None) -> None:
         super().__init__(message)
         if code is not None:
             self.code = code
@@ -71,7 +72,7 @@ class ToolCall:
     """A minimal, serializable tool invocation request."""
 
     name: str
-    args: Dict[str, Any]
+    args: dict[str, Any]
 
     def __post_init__(self) -> None:
         if not isinstance(self.name, str) or not self.name.strip():
@@ -85,10 +86,10 @@ class BeforeToolDecision:
     """Decision returned by a before-tool hook."""
 
     action: BeforeToolAction
-    reason: Optional[str] = None
-    modified_args: Optional[Dict[str, Any]] = None
+    reason: str | None = None
+    modified_args: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"action": self.action, "reason": self.reason, "modified_args": self.modified_args}
 
 
@@ -100,7 +101,7 @@ class ErrorInfo:
     type: str
     message: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"code": self.code, "type": self.type, "message": self.message}
 
 
@@ -109,10 +110,10 @@ class ToolCallReport:
     """Report of a tool call before/after hook processing."""
 
     name: str
-    original_args: Dict[str, Any]
-    final_args: Optional[Dict[str, Any]]
+    original_args: dict[str, Any]
+    final_args: dict[str, Any] | None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {"name": self.name, "original_args": self.original_args, "final_args": self.final_args}
 
 
@@ -123,9 +124,9 @@ class BeforeToolDemoData:
     tool: ToolCallReport
     hook: BeforeToolDecision
     tool_executed: bool
-    tool_result: Optional[Any]
+    tool_result: Any | None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "tool": self.tool.to_dict(),
             "hook": self.hook.to_dict(),
@@ -139,10 +140,10 @@ class BeforeToolDemoOutput:
     """Top-level output envelope used by CLI and automation."""
 
     ok: bool
-    data: Optional[BeforeToolDemoData] = None
-    error: Optional[ErrorInfo] = None
+    data: BeforeToolDemoData | None = None
+    error: ErrorInfo | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "data": None if self.data is None else self.data.to_dict(),
@@ -168,12 +169,12 @@ class BeforeToolHookConfig:
 
     mode: BeforeToolAction = "modify"
     prefix: str = "[p110 before-tool] "
-    blocked_substrings: Tuple[str, ...] = ("rm -rf /", "DROP TABLE")
-    blocked_tool_names: Tuple[str, ...] = ()
+    blocked_substrings: tuple[str, ...] = ("rm -rf /", "DROP TABLE")
+    blocked_tool_names: tuple[str, ...] = ()
     simulate_external_failure: bool = False
 
     @classmethod
-    def from_mapping(cls, cfg: Optional[Mapping[str, Any]], *, strict: bool = False) -> "BeforeToolHookConfig":
+    def from_mapping(cls, cfg: Mapping[str, Any] | None, *, strict: bool = False) -> BeforeToolHookConfig:
         if cfg is None:
             if strict:
                 raise HookConfigError("missing plugin config", code="missing_config")
@@ -190,8 +191,12 @@ class BeforeToolHookConfig:
         if not isinstance(prefix, str):
             raise HookConfigError("prefix must be a string", code="invalid_prefix")
 
-        blocked_substrings = _coerce_str_tuple(cfg.get("blocked_substrings", cls.blocked_substrings), field="blocked_substrings")
-        blocked_tool_names = _coerce_str_tuple(cfg.get("blocked_tool_names", cls.blocked_tool_names), field="blocked_tool_names")
+        blocked_substrings = _coerce_str_tuple(
+            cfg.get("blocked_substrings", cls.blocked_substrings), field="blocked_substrings"
+        )
+        blocked_tool_names = _coerce_str_tuple(
+            cfg.get("blocked_tool_names", cls.blocked_tool_names), field="blocked_tool_names"
+        )
 
         simulate_external_failure = cfg.get("simulate_external_failure", False)
         if not isinstance(simulate_external_failure, bool):
@@ -206,7 +211,7 @@ class BeforeToolHookConfig:
         )
 
 
-def _coerce_str_tuple(value: Any, *, field: str) -> Tuple[str, ...]:
+def _coerce_str_tuple(value: Any, *, field: str) -> tuple[str, ...]:
     if value is None:
         return ()
     if isinstance(value, tuple) and all(isinstance(x, str) for x in value):
@@ -294,7 +299,7 @@ class P110BeforeToolHookPlugin:
                 try:
                     on(event_name, handler)
                     return
-                except Exception:
+                except (TypeError, AttributeError, RuntimeError):
                     continue
 
         raise HookRegistrationError(
@@ -324,7 +329,7 @@ def get_plugin() -> P110BeforeToolHookPlugin:
     return PLUGIN
 
 
-def create_plugin(cfg: Optional[Mapping[str, Any]] = None) -> P110BeforeToolHookPlugin:
+def create_plugin(cfg: Mapping[str, Any] | None = None) -> P110BeforeToolHookPlugin:
     """Factory for runtimes that instantiate plugins with config."""
     return P110BeforeToolHookPlugin(config=BeforeToolHookConfig.from_mapping(cfg))
 
@@ -362,7 +367,7 @@ def coerce_tool_call(event: Any) -> ToolCall:
     return ToolCall(name=name, args=dict(args))
 
 
-def apply_before_tool_hook(plugin: P110BeforeToolHookPlugin, call: ToolCall) -> Tuple[BeforeToolDecision, ToolCall]:
+def apply_before_tool_hook(plugin: P110BeforeToolHookPlugin, call: ToolCall) -> tuple[BeforeToolDecision, ToolCall]:
     """Apply the plugin's before-tool decision and return (decision, updated_call)."""
     decision = plugin.before_tool(call)
     if decision.action == "modify" and decision.modified_args is not None:
@@ -374,7 +379,7 @@ def run_tool_with_before_tool_hook(
     plugin: P110BeforeToolHookPlugin,
     tool_fn: Callable[..., Any],
     call: ToolCall,
-) -> Tuple[Any, BeforeToolDecision]:
+) -> tuple[Any, BeforeToolDecision]:
     """
     Execute a tool call with a before-tool hook applied.
 
@@ -391,7 +396,7 @@ def run_tool_with_before_tool_hook(
         return tool_fn(**updated_call.args), decision
     except BeforeToolHookError:
         raise
-    except Exception as exc:
+    except (RuntimeError, OSError, AttributeError, TypeError) as exc:
         raise ToolExecutionError(f"tool execution failed: {exc}", code="tool_execution_failed") from exc
 
 
@@ -431,7 +436,7 @@ def run_demo(
             data=data,
             error=ErrorInfo(code=getattr(exc, "code", "error"), type=type(exc).__name__, message=str(exc)),
         )
-    except Exception as exc:
+    except (RuntimeError, OSError, AttributeError, TypeError, KeyError) as exc:
         # Ensure tool execution failures are deterministic and machine-readable.
         err = ToolExecutionError(f"tool execution failed: {exc}", code="tool_execution_failed")
         data = BeforeToolDemoData(
@@ -447,14 +452,14 @@ def run_demo(
         )
 
 
-def _stable_args_blob(args: Dict[str, Any]) -> str:
+def _stable_args_blob(args: dict[str, Any]) -> str:
     try:
         return json.dumps(args, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-    except Exception:
+    except (TypeError, ValueError):
         return repr(args)
 
 
-def _mutate_event_args(event: Any, new_args: Dict[str, Any]) -> None:
+def _mutate_event_args(event: Any, new_args: dict[str, Any]) -> None:
     if isinstance(event, dict):
         for key in ("args", "arguments", "input"):
             if key in event and isinstance(event.get(key), dict):
@@ -467,7 +472,7 @@ def _mutate_event_args(event: Any, new_args: Dict[str, Any]) -> None:
             try:
                 setattr(event, attr, new_args)
                 return
-            except Exception:
+            except (AttributeError, TypeError):
                 continue
 
 

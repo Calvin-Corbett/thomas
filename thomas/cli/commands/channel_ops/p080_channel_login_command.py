@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import json
@@ -106,4 +106,3 @@ COMMAND: CliCommand = ChannelLoginCliCommand()
 
 def get_cli_command() -> CliCommand:
     return COMMAND
-

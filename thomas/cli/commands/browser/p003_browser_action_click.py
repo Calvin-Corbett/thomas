@@ -13,8 +13,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Sequence
 from dataclasses import asdict
-from typing import Any, Optional, Sequence
+from typing import Any
 
 from thomas.browser.p003_browser_action_click import (
     BrowserClickError,
@@ -107,7 +108,7 @@ def run_cli(args: argparse.Namespace) -> int:
     return _run_from_args(args)
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Standalone entry point (helpful for local debugging).
 
     Note: Most Thomas usage will not call this directly; the main CLI owns the
@@ -144,9 +145,9 @@ def _run_from_args(args: argparse.Namespace) -> int:
 
 
 def _parse_target_args(args: argparse.Namespace) -> ClickTarget:
-    node_id: Optional[int] = getattr(args, "node_id", None)
-    selector: Optional[str] = getattr(args, "selector", None)
-    raw: Optional[str] = getattr(args, "target", None)
+    node_id: int | None = getattr(args, "node_id", None)
+    selector: str | None = getattr(args, "selector", None)
+    raw: str | None = getattr(args, "target", None)
 
     # If explicit flags were provided, trust them.
     if node_id is not None or selector is not None:
@@ -194,14 +195,14 @@ def register_typer(app: Any) -> None:
     """Register the command onto an existing Typer app (if Typer is installed)."""
     try:
         import typer  # type: ignore
-    except Exception:
+    except ImportError:
         return
 
     @app.command(COMMAND_NAME)
     def click_cmd(
-        target: Optional[str] = typer.Argument(None, help="Node id or CSS selector"),
-        node_id: Optional[int] = typer.Option(None, "--node-id", help="Node id to click"),
-        selector: Optional[str] = typer.Option(None, "--selector", help="CSS selector to click"),
+        target: str | None = typer.Argument(None, help="Node id or CSS selector"),
+        node_id: int | None = typer.Option(None, "--node-id", help="Node id to click"),
+        selector: str | None = typer.Option(None, "--selector", help="CSS selector to click"),
         timeout_ms: int = typer.Option(30_000, "--timeout-ms", help="Timeout in milliseconds"),
         json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON output"),
     ) -> None:
@@ -222,5 +223,5 @@ try:  # pragma: no cover
     typer_app = typer.Typer(add_completion=False)
     register_typer(typer_app)
 
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer_app = None

@@ -20,17 +20,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Optional
+from typing import Any
 
 from thomas.messages.p055_message_edit_command import (
     ERR_INVALID_INPUT,
-    ERR_MISSING_CONFIG,
     MessageEditCommandError,
     MessageEditCommandInput,
     MessageEditCommandOutput,
     execute_message_edit,
 )
-
 
 PROMPT_ID = "P055"
 COMMAND_GROUP = "messages"
@@ -144,10 +142,7 @@ def handle(args: argparse.Namespace, compat: Any = None, *_: Any, **__: Any) -> 
 
 def _args_to_request(args: argparse.Namespace) -> MessageEditCommandInput:
     message_id = (
-        getattr(args, "message_id_flag", None)
-        or getattr(args, "message_id", None)
-        or getattr(args, "id", None)
-        or ""
+        getattr(args, "message_id_flag", None) or getattr(args, "message_id", None) or getattr(args, "id", None) or ""
     )
     message_id = str(message_id).strip()
 
@@ -192,7 +187,7 @@ def _resolve_editor(compat: Any) -> Any:
     # Best-effort discovery: we keep this conservative and failure-safe.
     try:
         from thomas.cli import parity_compat  # type: ignore
-    except Exception:
+    except ImportError:
         return None
 
     for fn_name in (
@@ -211,7 +206,7 @@ def _resolve_editor(compat: Any) -> Any:
                 maybe = fn()
             except TypeError:
                 continue
-            except Exception:
+            except ImportError:
                 return None
             if maybe is not None:
                 return maybe
@@ -257,7 +252,7 @@ def _emit_error(err: MessageEditCommandError, *, json_mode: bool) -> None:
     print(f"ERROR [{err.code}]: {err.message}", file=sys.stderr)
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     """Standalone entry point for debugging."""
 
     parser = argparse.ArgumentParser(prog="thomas messages edit")

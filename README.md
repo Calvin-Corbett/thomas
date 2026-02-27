@@ -1,4 +1,18 @@
-﻿## Start Here (Fresh Download)
+﻿## For AI Agents & Contributors
+
+Before starting work, read these files in order:
+
+1. **[AGENTS.md](AGENTS.md)** — Contributor protocol, guardrails, versioning workflow
+2. **[ISSUE_DASHBOARD.md](ISSUE_DASHBOARD.md)** — All tracked issues, debt, and work items in one place
+3. **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** — Common pitfalls and cross-session memory
+4. **[PROJECT_INDEX.md](PROJECT_INDEX.md)** — How Thomas boots, where code lives, config flow
+5. **[THOMAS_FIX_PLAN.md](THOMAS_FIX_PLAN.md)** — Prioritized plan for fixing all known issues
+
+Do NOT start building without checking the Inbox and existing code first. See [PROJECT_MANAGEMENT_RULES.md](PROJECT_MANAGEMENT_RULES.md).
+
+---
+
+## Start Here (Fresh Download)
 
 If this is your first time running Thomas on this machine, do this first:
 
@@ -15,17 +29,48 @@ Security policy: `SECURITY.md`.
 Gateway security runbook: `docs/ops/GATEWAY_SECURITY_RUNBOOK.md`.
 Retry guidance: `docs/ops/RETRY_POLICY.md`.
 Docker deploy: `docs/ops/DOCKER_DEPLOY.md`.
+Production release checklist: copy `.env.thomas.production.example` -> `.env.thomas.production` (or inline env), then:
+
+1. Set a strong `THOMAS_SERVER_API_TOKEN`.
+2. Set `THOMAS_MUTATING_CSRF_TOKEN` if you want request-level protection for all mutating `/api` and `/gateway` routes.
+3. Start with `THOMAS_ENV=production`.
+4. Verify `/api/health` returns before opening external traffic.
+5. Keep logs rotating via `THOMAS_LOG_FILE`, `THOMAS_LOG_MAX_BYTES`, and `THOMAS_LOG_BACKUP_COUNT`.
+6. Keep `THOMAS_ALLOW_REMOTE_PRODUCTION=1` only for explicitly approved remote deployments.
 
 # Feature 2 â€” Full-Repo RAG Index (Delight Edition)
+## Documentation Index (Authoritative)
+
+- Canonical active-doc index: `PROJECT_INDEX.md`
+- Root doc archive map: `docs/ops/ROOT_DOC_ARCHIVE_INDEX.md`
+- Active planning board: `plans/thomas/WORKBOARD.md`
+- Repo structure source of truth: `docs/REPO_STRUCTURE_PROTOCOL.md`
+
 ## Repo Orientation
 
 For agent coordination and planning:
 - `docs/REPO_STRUCTURE_PROTOCOL.md` is the repository organization source of truth.
 - `plans/thomas/WORKBOARD.md` is the active execution board.
+- `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md` defines the required task-manager, messaging, and session workflow.
 - `plans/thomas/README.md` links current Thomas plans.
 - Active plans should be created in `plans/`, not randomly in `docs/` or repo root.
 - Enforced checks: `scripts/check_plan_structure_gate.py` and `scripts/check_release_update_gate.py`.
 - Local auto-enforcement available via `.pre-commit-config.yaml`.
+
+Required ecosystem commands:
+- `python scripts/workboard_task_manager.py --sync-plans --apply`
+- `python scripts/workboard_task_manager.py --sync-sessions --apply`
+- `python scripts/workboard_task_manager.py --sync-specialists --apply`
+- `python scripts/workboard_task_manager.py --specialist-for-task --task-id "<task_id>"`
+- `python scripts/workboard_task_manager.py --monitor --apply --cycles 0 --interval-seconds 30 --task-manager-agent "task-manager-agent"`
+- `python scripts/workboard_message.py --send --from-agent "<agent>" --to-agent "<agent|task-manager-agent>" --summary "<text>" --task-id "<task_id>"`
+- `python scripts/workboard_worker.py --agent "Codex 2" --cycles 0 --poll-seconds 15 --catalog "plans/thomas/worker_command_catalog.json" --max-completions 0`
+- `python scripts/workboard_brainstorm.py --start --task-id "<task_id>" --summary "<brief>" --objective "<outcome>" --facilitator "task-manager-agent" --all-hands`
+- `python scripts/workboard_brainstorm.py --contribute --session-id "<session_id>" --agent "<agent>" --kind proposal --summary "<idea>"`
+- `python scripts/workboard_brainstorm.py --resolve-session --session-id "<session_id>" --summary "<decision>" --dispatch-item "task_id|scope|summary"`
+- `python scripts/workboard_swarm.py --create --task-id "<task_id>" --size 8 --agent-prefix "Codex" --agent-start 1 --spawn-command "codex"`
+- `python scripts/workboard_swarm.py --launch --swarm-id "<swarm_id>"`
+- `python scripts/workboard_swarm.py --status --swarm-id "<swarm_id>"`
 
 ## Companion App Scope (Read Before Building Companion)
 

@@ -17,7 +17,7 @@ import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 from urllib.parse import urlparse
 
 from thomas.library import ResearchLibrary
@@ -120,7 +120,7 @@ class CuratorRunResult:
     last_episode_id: int = 0
     last_library_ts_utc: int = 0
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ran": bool(self.ran),
             "reason": self.reason,
@@ -142,8 +142,8 @@ class MemoryCurator:
         self,
         fabric: MemoryFabricV2,
         *,
-        library: Optional[ResearchLibrary] = None,
-        config: Optional[CuratorConfig] = None,
+        library: ResearchLibrary | None = None,
+        config: CuratorConfig | None = None,
     ) -> None:
         self._fabric = fabric
         self._library = library
@@ -206,7 +206,7 @@ class MemoryCurator:
             return int(default)
         try:
             return int(row["value"])
-        except Exception:
+        except (ValueError, TypeError):
             return int(default)
 
     def _set_state_int(self, key: str, value: int) -> None:
@@ -254,7 +254,7 @@ class MemoryCurator:
     def _fact_exists(
         self,
         *,
-        thread_id: Optional[str],
+        thread_id: str | None,
         subject: str,
         predicate: str,
         obj: str,
@@ -276,7 +276,7 @@ class MemoryCurator:
             return ""
         try:
             host = str(urlparse(src).hostname or "").strip().lower()
-        except Exception:
+        except (ValueError, TypeError):
             host = ""
         if host.startswith("www."):
             host = host[4:]
@@ -301,7 +301,7 @@ class MemoryCurator:
         if host:
             if host in _SOURCE_TRUST_BONUS:
                 score += float(_SOURCE_TRUST_BONUS[host])
-            elif any(host.endswith(f".{key}") for key in _SOURCE_TRUST_BONUS.keys()):
+            elif any(host.endswith(f".{key}") for key in _SOURCE_TRUST_BONUS):
                 score += 0.04
 
             if host in _SOURCE_LOW_TRUST:
@@ -309,10 +309,10 @@ class MemoryCurator:
 
         return max(0.35, min(0.95, score))
 
-    def _recency_factor(self, updated_ts_utc: Optional[int]) -> float:
+    def _recency_factor(self, updated_ts_utc: int | None) -> float:
         try:
             ts = int(updated_ts_utc or 0)
-        except Exception:
+        except (ValueError, TypeError):
             ts = 0
         if ts <= 0:
             return 0.92
@@ -369,14 +369,14 @@ class MemoryCurator:
         source_ref: str,
         promotion_kind: str,
         fingerprint: str,
-        thread_id: Optional[str],
+        thread_id: str | None,
         confidence: float,
         risk_level: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ) -> bool:
         try:
             encoded = json.dumps(payload, ensure_ascii=False, sort_keys=True)
-        except Exception:
+        except (ValueError, TypeError):
             return False
         try:
             with self._fabric.db.transact() as conn:
@@ -412,7 +412,7 @@ class MemoryCurator:
         except sqlite3.IntegrityError:
             return False
 
-    def _is_payload_duplicate(self, payload: Dict[str, Any]) -> bool:
+    def _is_payload_duplicate(self, payload: dict[str, Any]) -> bool:
         kind = str(payload.get("kind") or "").strip().lower()
         if kind == "hint":
             key = str(payload.get("key") or "").strip()
@@ -437,7 +437,7 @@ class MemoryCurator:
 
         return True
 
-    def _apply_queued_payload(self, payload: Dict[str, Any]) -> bool:
+    def _apply_queued_payload(self, payload: dict[str, Any]) -> bool:
         kind = str(payload.get("kind") or "").strip().lower()
         if kind == "hint":
             key = _safe_key(str(payload.get("key") or ""), fallback="hint")
@@ -448,7 +448,7 @@ class MemoryCurator:
             thread = str(thread_id).strip() if thread_id is not None else None
             try:
                 episode_id = int(payload.get("source_episode_id") or 0)
-            except Exception:
+            except (ValueError, TypeError):
                 episode_id = 0
             self._fabric.upsert_profile_hints(
                 thread_id=thread,
@@ -476,7 +476,7 @@ class MemoryCurator:
                 return True
             try:
                 provenance_episode_id = int(payload.get("source_episode_id") or 0)
-            except Exception:
+            except (ValueError, TypeError):
                 provenance_episode_id = 0
             self._fabric.upsert_fact(
                 thread_id=thread,
@@ -492,7 +492,7 @@ class MemoryCurator:
 
         return False
 
-    def list_approval_queue(self, *, status: str = "pending", limit: int = 100) -> List[Dict[str, Any]]:
+    def list_approval_queue(self, *, status: str = "pending", limit: int = 100) -> list[dict[str, Any]]:
         lim = max(1, min(1000, int(limit)))
         st = str(status or "").strip().lower()
         if st:
@@ -515,13 +515,13 @@ class MemoryCurator:
                 (lim,),
             ).fetchall()
 
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for row in rows:
             rec = dict(row)
             payload_text = rec.get("payload_json")
             try:
                 rec["payload"] = json.loads(payload_text) if payload_text else {}
-            except Exception:
+            except (ValueError, json.JSONDecodeError):
                 rec["payload"] = {}
             rec.pop("payload_json", None)
             out.append(rec)
@@ -534,7 +534,7 @@ class MemoryCurator:
         approve: bool,
         actor: str = "system",
         reason: str = "",
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         aid = int(approval_id)
         row = self._fabric.db.execute(
             "SELECT * FROM curator_approval_queue WHERE id=?",
@@ -560,7 +560,7 @@ class MemoryCurator:
             payload_text = rec.get("payload_json")
             try:
                 payload = json.loads(payload_text) if payload_text else {}
-            except Exception:
+            except (ValueError, json.JSONDecodeError):
                 payload = {}
             if isinstance(payload, dict) and payload:
                 if not self._is_payload_duplicate(payload):
@@ -605,9 +605,9 @@ class MemoryCurator:
             "applied": bool(applied),
         }
 
-    def _extract_episode_facts(self, text: str) -> List[Tuple[str, str, str, float]]:
+    def _extract_episode_facts(self, text: str) -> list[tuple[str, str, str, float]]:
         src = str(text or "")
-        out: List[Tuple[str, str, str, float]] = []
+        out: list[tuple[str, str, str, float]] = []
 
         for m in _RE_MY_FACT.finditer(src):
             raw_pred = _norm_text(m.group("pred"), max_len=48)
@@ -634,8 +634,8 @@ class MemoryCurator:
                 continue
             out.append(("project", "tech_stack", raw_obj, 0.67))
 
-        deduped: List[Tuple[str, str, str, float]] = []
-        seen: set[Tuple[str, str, str]] = set()
+        deduped: list[tuple[str, str, str, float]] = []
+        seen: set[tuple[str, str, str]] = set()
         for subject, predicate, obj, conf in out:
             key = (subject.lower(), predicate.lower(), obj.lower())
             if key in seen:
@@ -649,7 +649,7 @@ class MemoryCurator:
         *,
         source: str,
         auto_captured: bool,
-        updated_ts_utc: Optional[int],
+        updated_ts_utc: int | None,
     ) -> float:
         conf = self._source_trust_score(source)
         if auto_captured:
@@ -657,7 +657,7 @@ class MemoryCurator:
         conf *= self._recency_factor(updated_ts_utc)
         return max(0.40, min(0.92, conf))
 
-    def _library_entry_excerpt(self, row: Dict[str, Any], *, max_chars: int = 280) -> str:
+    def _library_entry_excerpt(self, row: dict[str, Any], *, max_chars: int = 280) -> str:
         lib = self._library
         if lib is None:
             return ""
@@ -673,16 +673,16 @@ class MemoryCurator:
             return ""
         try:
             text = abs_path.read_text(encoding="utf-8", errors="replace")
-        except Exception:
+        except (OSError, UnicodeDecodeError):
             return ""
         return _norm_text(text, max_len=max_chars)
 
     def _curate_episode_row(
         self,
-        row: Dict[str, Any],
+        row: dict[str, Any],
         *,
         remaining_promotions: int,
-    ) -> Tuple[int, int, int, int, int]:
+    ) -> tuple[int, int, int, int, int]:
         if remaining_promotions <= 0:
             return 0, 0, 0, 0, 0
 
@@ -702,7 +702,8 @@ class MemoryCurator:
         duplicates = 0
 
         hints = [
-            h for h in extract_profile_hints(content)
+            h
+            for h in extract_profile_hints(content)
             if float(h.confidence) >= float(self._config.min_profile_confidence)
         ]
         for hint in hints:
@@ -833,10 +834,10 @@ class MemoryCurator:
 
     def _curate_library_row(
         self,
-        row: Dict[str, Any],
+        row: dict[str, Any],
         *,
         remaining_promotions: int,
-    ) -> Tuple[int, int, int, int]:
+    ) -> tuple[int, int, int, int]:
         if self._library is None or remaining_promotions <= 0:
             return 0, 0, 0, 0
 
@@ -852,7 +853,7 @@ class MemoryCurator:
         auto_captured = bool(row.get("auto_captured"))
         try:
             updated_ts_utc = int(row.get("updated_ts_utc", 0) or 0)
-        except Exception:
+        except (ValueError, TypeError):
             updated_ts_utc = 0
         excerpt = self._library_entry_excerpt(row, max_chars=260)
 
@@ -999,7 +1000,7 @@ class MemoryCurator:
 
         return 1, facts_promoted, queued, duplicates
 
-    def run(self, *, force: bool = False) -> Dict[str, Any]:
+    def run(self, *, force: bool = False) -> dict[str, Any]:
         with self._lock:
             if not self._config.enabled:
                 return CuratorRunResult(ran=False, reason="disabled").to_dict()
@@ -1039,7 +1040,7 @@ class MemoryCurator:
                 result.facts_promoted += facts
                 result.queued_for_approval += queued
                 result.duplicates_skipped += dup
-                remaining -= (hints + facts + queued)
+                remaining -= hints + facts + queued
                 if remaining <= 0:
                     result.reason = "promotion_budget_reached"
                     break
@@ -1070,7 +1071,7 @@ class MemoryCurator:
                     result.facts_promoted += facts
                     result.queued_for_approval += queued
                     result.duplicates_skipped += dup
-                    remaining -= (facts + queued)
+                    remaining -= facts + queued
                     if remaining <= 0:
                         result.reason = "promotion_budget_reached"
                         break
@@ -1087,15 +1088,13 @@ class MemoryCurator:
             if result.facts_promoted > 0 or result.hints_promoted > 0:
                 try:
                     self._fabric.compact(thread_id=None)
-                except Exception as e:
+                except (RuntimeError, OSError) as e:
                     log.debug("Curator global compact skipped: %s", e)
 
             return result.to_dict()
 
-    def stats(self) -> Dict[str, Any]:
-        promotions = int(
-            self._fabric.db.execute("SELECT COUNT(*) c FROM curator_promotions").fetchone()["c"]
-        )
+    def stats(self) -> dict[str, Any]:
+        promotions = int(self._fabric.db.execute("SELECT COUNT(*) c FROM curator_promotions").fetchone()["c"])
         queue_rows = self._fabric.db.execute(
             """
             SELECT status, COUNT(*) AS c
@@ -1103,7 +1102,7 @@ class MemoryCurator:
             GROUP BY status
             """
         ).fetchall()
-        queue_counts: Dict[str, int] = {}
+        queue_counts: dict[str, int] = {}
         for row in queue_rows:
             status = str(row["status"] or "").strip().lower() or "unknown"
             queue_counts[status] = int(row["c"] or 0)

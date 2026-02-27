@@ -16,9 +16,9 @@ from __future__ import annotations
 
 import importlib
 import json
+from collections.abc import Mapping
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, Mapping, Optional, Union, cast
-
+from typing import Any, Union, cast
 
 __all__ = [
     "ACTION_NAME",
@@ -62,8 +62,8 @@ class ClickTarget:
         selector: A CSS selector string.
     """
 
-    node_id: Optional[int] = None
-    selector: Optional[str] = None
+    node_id: int | None = None
+    selector: str | None = None
 
 
 @dataclass(frozen=True)
@@ -136,7 +136,7 @@ def error_info(exc: BrowserClickError) -> ClickErrorInfo:
 # ---------------------------------------------------------------------------
 
 
-def click(request: ClickRequest, *, browser: Optional[Any] = None) -> ClickResponse:
+def click(request: ClickRequest, *, browser: Any | None = None) -> ClickResponse:
     """Perform a click in the live browser.
 
     Args:
@@ -187,10 +187,10 @@ def click(request: ClickRequest, *, browser: Optional[Any] = None) -> ClickRespo
 # ---------------------------------------------------------------------------
 
 
-JSONValue = Union[None, bool, int, float, str, Dict[str, Any], list]
+JSONValue = Union[None, bool, int, float, str, dict[str, Any], list]
 
 
-def click_to_dict(request: ClickRequest, *, browser: Optional[Any] = None) -> Dict[str, Any]:
+def click_to_dict(request: ClickRequest, *, browser: Any | None = None) -> dict[str, Any]:
     """Like :func:`click`, but returns a plain dict instead of raising.
 
     Success payload matches :func:`dataclasses.asdict(ClickResponse)`.
@@ -203,12 +203,12 @@ def click_to_dict(request: ClickRequest, *, browser: Optional[Any] = None) -> Di
     """
     try:
         result = click(request, browser=browser)
-        return cast(Dict[str, Any], asdict(result))
+        return cast(dict[str, Any], asdict(result))
     except BrowserClickError as e:
         return {"ok": False, "clicked": False, "error": asdict(error_info(e))}
 
 
-def click_json(request: ClickRequest, *, browser: Optional[Any] = None) -> str:
+def click_json(request: ClickRequest, *, browser: Any | None = None) -> str:
     """Like :func:`click_to_dict`, but returns a JSON string."""
     return json.dumps(click_to_dict(request, browser=browser), sort_keys=True)
 
@@ -271,7 +271,7 @@ def parse_click_request(payload: Any) -> ClickRequest:
     return ClickRequest(target=target, timeout_ms=cast(int, timeout_ms))
 
 
-def run(payload: Any, *, browser: Optional[Any] = None) -> Dict[str, Any]:
+def run(payload: Any, *, browser: Any | None = None) -> dict[str, Any]:
     """Entry point for route-based automation.
 
     Args:
@@ -289,7 +289,7 @@ def run(payload: Any, *, browser: Optional[Any] = None) -> Dict[str, Any]:
     return click_to_dict(req, browser=browser)
 
 
-def input_schema() -> Dict[str, Any]:
+def input_schema() -> dict[str, Any]:
     """JSON schema for the click request payload accepted by :func:`run`."""
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -311,7 +311,7 @@ def input_schema() -> Dict[str, Any]:
     }
 
 
-def output_schema() -> Dict[str, Any]:
+def output_schema() -> dict[str, Any]:
     """JSON schema for the response payload returned by :func:`run`."""
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -338,7 +338,7 @@ def output_schema() -> Dict[str, Any]:
     }
 
 
-def json_schema() -> Dict[str, Any]:
+def json_schema() -> dict[str, Any]:
     """Combined schema document describing both request and response."""
     return {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -422,7 +422,7 @@ def _resolve_browser_client() -> Any:
                 except TypeError:
                     # requires args; skip
                     continue
-                except Exception:
+                except (RuntimeError, AttributeError, ImportError):
                     # getter exists but failed; skip and keep looking
                     continue
                 if client is not None:
@@ -439,10 +439,10 @@ def _resolve_browser_client() -> Any:
     )
 
 
-def _safe_import(module_name: str) -> Optional[Any]:
+def _safe_import(module_name: str) -> Any | None:
     try:
         return importlib.import_module(module_name)
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
 

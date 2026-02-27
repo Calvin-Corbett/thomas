@@ -16,7 +16,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any
 
 from thomas.nodes.p043_nodes_screen_capture_action import (
     NodesScreenCaptureError,
@@ -156,7 +157,7 @@ def handle_args(args: argparse.Namespace) -> int:
         return 2
 
 
-def cli_main(argv: Optional[Sequence[str]] = None) -> int:
+def cli_main(argv: Sequence[str] | None = None) -> int:
     """Standalone entrypoint (useful for unit tests)."""
     parser = argparse.ArgumentParser(prog=f"{COMMAND_GROUP} {COMMAND_NAME}")
     _add_common_args(parser)
@@ -175,13 +176,14 @@ def cli_main(argv: Optional[Sequence[str]] = None) -> int:
 # it primarily defines the ParityCommand type rather than importing all commands.
 # If it isn't available, discovery can still happen through other mechanisms.
 
+
 def _try_build_parity_command() -> Any:
     try:
         import inspect
         from dataclasses import fields, is_dataclass
 
         from thomas.cli.parity_commands import ParityCommand  # type: ignore
-    except Exception:
+    except ImportError:
         return None
 
     values: dict[str, Any] = {
@@ -221,10 +223,10 @@ def _try_build_parity_command() -> Any:
             for k, v in kwargs.items():
                 try:
                     object.__setattr__(inst, k, v)
-                except Exception:
+                except (ValueError, TypeError):
                     setattr(inst, k, v)
             return inst
-    except Exception:
+    except (ValueError, TypeError):
         return None
 
 

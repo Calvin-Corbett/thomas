@@ -11,19 +11,18 @@ import hashlib
 import json
 import os
 import re
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence
+from typing import Any
 
 from .skills_policy import (
-    RuntimeSkillTrustPolicy,
     classify_skill_risk,
     evaluate_skill_trust,
     has_skill_approval_phrase,
     is_globally_approved,
     load_runtime_skill_trust_policy,
 )
-
 
 _LOW_INTENT_ROUTES = {"casual_chat", "assistant_meta", "personal_context", "general"}
 _STOPWORDS = {
@@ -90,8 +89,8 @@ def _sha256_file(path: Path) -> str:
     return hasher.hexdigest().lower()
 
 
-def _ordered_unique(items: Iterable[str]) -> List[str]:
-    out: List[str] = []
+def _ordered_unique(items: Iterable[str]) -> list[str]:
+    out: list[str] = []
     seen: set[str] = set()
     for item in items:
         key = str(item or "").strip()
@@ -105,10 +104,10 @@ def _ordered_unique(items: Iterable[str]) -> List[str]:
     return out
 
 
-def _keyword_tokens(text: str) -> List[str]:
+def _keyword_tokens(text: str) -> list[str]:
     src = str(text or "").lower()
     raw = re.findall(r"[a-z0-9][a-z0-9._-]{1,60}", src)
-    out: List[str] = []
+    out: list[str] = []
     for token in raw:
         # Keep dense identifiers (for example "cloudflare-deploy"), but skip
         # low-signal short words.
@@ -145,7 +144,7 @@ def _read_skill_excerpt(skill_md: Path, *, max_chars: int) -> str:
     except Exception:
         return ""
 
-    lines: List[str] = []
+    lines: list[str] = []
     chars = 0
     in_code_block = False
     for row in raw.splitlines():
@@ -190,7 +189,7 @@ def _skills_state_path(config: Any) -> Path:
     return _memory_root_path(config) / ".thomas" / "cli" / "skills.json"
 
 
-def load_pinned_skill_names(config: Any) -> List[str]:
+def load_pinned_skill_names(config: Any) -> list[str]:
     path = _skills_state_path(config)
     if not path.exists():
         return []
@@ -203,7 +202,7 @@ def load_pinned_skill_names(config: Any) -> List[str]:
     rows = payload.get("pinned")
     if not isinstance(rows, list):
         return []
-    pinned: List[str] = []
+    pinned: list[str] = []
     for item in rows:
         norm = _normalize_skill_name(str(item or ""))
         if norm:
@@ -216,8 +215,8 @@ def discover_skill_roots(
     *,
     cwd: Path | None = None,
     include_roots: Sequence[str | Path] | None = None,
-) -> List[Path]:
-    roots: List[Path] = []
+) -> list[Path]:
+    roots: list[Path] = []
     root_cwd = Path(cwd) if cwd is not None else Path.cwd()
 
     codex_home = str(os.environ.get("CODEX_HOME") or "").strip()
@@ -240,7 +239,7 @@ def discover_skill_roots(
         if path_text:
             roots.append(Path(path_text).expanduser())
 
-    unique: List[Path] = []
+    unique: list[Path] = []
     seen: set[str] = set()
     for root in roots:
         try:
@@ -266,8 +265,8 @@ class RuntimeSkill:
     excerpt: str
     skill_sha256: str = ""
     risk_level: str = "low"
-    risk_tags: List[str] = field(default_factory=list)
-    keyword_tokens: List[str] = field(default_factory=list)
+    risk_tags: list[str] = field(default_factory=list)
+    keyword_tokens: list[str] = field(default_factory=list)
 
     @property
     def key(self) -> str:
@@ -277,19 +276,19 @@ class RuntimeSkill:
 @dataclass
 class RuntimeSkillSelection:
     enabled: bool
-    selected: List[RuntimeSkill] = field(default_factory=list)
-    selected_reasons: Dict[str, str] = field(default_factory=dict)
-    explicit_mentions: List[str] = field(default_factory=list)
-    pinned_matches: List[str] = field(default_factory=list)
-    approved_risky: List[str] = field(default_factory=list)
-    blocked: List[Dict[str, Any]] = field(default_factory=list)
-    roots: List[str] = field(default_factory=list)
+    selected: list[RuntimeSkill] = field(default_factory=list)
+    selected_reasons: dict[str, str] = field(default_factory=dict)
+    explicit_mentions: list[str] = field(default_factory=list)
+    pinned_matches: list[str] = field(default_factory=list)
+    approved_risky: list[str] = field(default_factory=list)
+    blocked: list[dict[str, Any]] = field(default_factory=list)
+    roots: list[str] = field(default_factory=list)
     discovered_count: int = 0
     trusted_count: int = 0
     untrusted_count: int = 0
-    trust_policy: Dict[str, Any] = field(default_factory=dict)
+    trust_policy: dict[str, Any] = field(default_factory=dict)
 
-    def to_event_payload(self) -> Dict[str, Any]:
+    def to_event_payload(self) -> dict[str, Any]:
         return {
             "enabled": bool(self.enabled),
             "discovered_count": int(self.discovered_count),
@@ -323,9 +322,9 @@ def discover_runtime_skills(
     cwd: Path | None = None,
     include_roots: Sequence[str | Path] | None = None,
     max_excerpt_chars: int = 1_100,
-) -> tuple[List[RuntimeSkill], List[str]]:
+) -> tuple[list[RuntimeSkill], list[str]]:
     roots = discover_skill_roots(config, cwd=cwd, include_roots=include_roots)
-    rows: List[RuntimeSkill] = []
+    rows: list[RuntimeSkill] = []
     seen: set[str] = set()
     for root in roots:
         try:
@@ -383,7 +382,7 @@ def discover_runtime_skills(
     return rows, [str(root) for root in roots]
 
 
-def _skill_name_aliases(name: str) -> List[str]:
+def _skill_name_aliases(name: str) -> list[str]:
     normalized = _normalize_skill_name(name)
     if not normalized:
         return []
@@ -397,9 +396,9 @@ def _skill_name_aliases(name: str) -> List[str]:
     return sorted({alias for alias in aliases if alias})
 
 
-def _extract_explicit_mentions(prompt_text: str) -> List[str]:
+def _extract_explicit_mentions(prompt_text: str) -> list[str]:
     text = str(prompt_text or "")
-    names: List[str] = []
+    names: list[str] = []
     for pattern in (
         r"\$([A-Za-z0-9][A-Za-z0-9._-]{1,80})",
         r"`([A-Za-z0-9][A-Za-z0-9._-]{1,80})`",
@@ -450,7 +449,7 @@ def resolve_runtime_skills(
     trust_policy = load_runtime_skill_trust_policy(config, cwd=cwd)
     selection.trust_policy = trust_policy.summary()
 
-    by_alias: Dict[str, List[RuntimeSkill]] = {}
+    by_alias: dict[str, list[RuntimeSkill]] = {}
     for skill in discovered:
         for alias in _skill_name_aliases(skill.name):
             by_alias.setdefault(alias, []).append(skill)
@@ -465,14 +464,14 @@ def resolve_runtime_skills(
     selection.explicit_mentions = explicit_mentions
 
     pinned = load_pinned_skill_names(config)
-    selected: List[RuntimeSkill] = []
+    selected: list[RuntimeSkill] = []
     selected_keys: set[str] = set()
-    reasons: Dict[str, str] = {}
-    blocked_rows: List[Dict[str, Any]] = []
+    reasons: dict[str, str] = {}
+    blocked_rows: list[dict[str, Any]] = []
     blocked_keys: set[str] = set()
-    approved_risky: List[str] = []
+    approved_risky: list[str] = []
 
-    trust_eval: Dict[str, tuple[bool, str]] = {}
+    trust_eval: dict[str, tuple[bool, str]] = {}
     trusted_count = 0
     untrusted_count = 0
     for skill in discovered:
@@ -524,9 +523,7 @@ def resolve_runtime_skills(
             return
         if str(skill.risk_level) == "high" and require_explicit_risky:
             explicit_ok = bool(
-                reason == "explicit"
-                or global_risk_approved
-                or has_skill_approval_phrase(prompt_text, skill.name)
+                reason == "explicit" or global_risk_approved or has_skill_approval_phrase(prompt_text, skill.name)
             )
             if not explicit_ok:
                 _block(
@@ -557,7 +554,7 @@ def resolve_runtime_skills(
     query_tokens = set(_keyword_tokens(f"{prompt_text}\n{relevance_text}\n{route_path.replace('_', ' ')}"))
 
     if query_tokens and (not low_intent or bool(selected)):
-        scored: List[tuple[int, RuntimeSkill]] = []
+        scored: list[tuple[int, RuntimeSkill]] = []
         for skill in discovered:
             if skill.key in selected_keys:
                 continue
@@ -571,7 +568,7 @@ def resolve_runtime_skills(
 
     # Prompt-size guardrail: keep compact by limiting cumulative skill payload.
     if selected:
-        limited: List[RuntimeSkill] = []
+        limited: list[RuntimeSkill] = []
         total_chars = 0
         for skill in selected:
             est = len(skill.name) + len(skill.description) + len(skill.excerpt) + 72
@@ -597,39 +594,47 @@ def format_runtime_skills_context(selection: RuntimeSkillSelection) -> str:
 
     trust_mode = str((selection.trust_policy or {}).get("mode") or "enforce")
     require_hash = bool((selection.trust_policy or {}).get("require_hash"))
-    lines: List[str] = [
-        "--- Runtime Skills ---",
+    lines: list[str] = [
+        '<runtime_skills version="openclaw-style-v1">',
+        "<selection_policy>",
         "Apply the selected skill instructions for this turn.",
-        "Selection priority: explicit mention > pinned > relevance.",
-        f"Trust policy: mode={trust_mode}, require_hash={str(require_hash).lower()}, "
-        f"trusted={int(selection.trusted_count)}/{int(selection.discovered_count)} discovered skills.",
+        "Priority: explicit mention > pinned > relevance.",
+        (
+            f"Trust policy: mode={trust_mode}, require_hash={str(require_hash).lower()}, "
+            f"trusted={int(selection.trusted_count)}/{int(selection.discovered_count)} discovered skills."
+        ),
+        "</selection_policy>",
+        "<selected_skills>",
     ]
     for idx, skill in enumerate(selection.selected, start=1):
         reason = str(selection.selected_reasons.get(skill.key, "") or "")
-        lines.append(f"{idx}. {skill.name} [{reason}]")
-        lines.append(f"   Skill file: {skill.skill_file}")
+        lines.append(f'<skill index="{idx}" name="{skill.name}" reason="{reason}">')
+        lines.append(f"Skill file: {skill.skill_file}")
         if skill.skill_sha256:
-            lines.append(f"   SHA256: {skill.skill_sha256}")
+            lines.append(f"SHA256: {skill.skill_sha256}")
         if str(skill.risk_level) == "high":
             tags = ", ".join(skill.risk_tags[:8]) if skill.risk_tags else "high-risk"
-            lines.append(f"   Risk: high ({tags})")
+            lines.append(f"Risk: high ({tags})")
         if skill.description:
-            lines.append(f"   Summary: {skill.description}")
+            lines.append(f"Summary: {skill.description}")
         if skill.excerpt:
-            lines.append("   Instructions:")
+            lines.append("Instructions:")
             for row in skill.excerpt.splitlines():
                 chunk = str(row or "").rstrip()
                 if not chunk:
                     continue
-                lines.append(f"   {chunk}")
+                lines.append(chunk)
+        lines.append("</skill>")
+    lines.append("</selected_skills>")
+    lines.append("<conflict_policy>")
     lines.append(
         "If skill instructions conflict, follow the user's direct request first, "
         "then explicit skill mentions, then pinned/relevance selections."
     )
     if selection.approved_risky:
         lines.append(
-            "Approved risky skills for this turn: "
-            + ", ".join(str(name) for name in selection.approved_risky)
+            "Approved risky skills for this turn: " + ", ".join(str(name) for name in selection.approved_risky)
         )
-    lines.append("--- End Runtime Skills ---")
+    lines.append("</conflict_policy>")
+    lines.append("</runtime_skills>")
     return "\n".join(lines)

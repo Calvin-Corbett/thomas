@@ -34,14 +34,15 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Iterable, Mapping
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping, Optional, Tuple
+from typing import Any
 
 try:
     import click  # type: ignore
 
     _HAS_CLICK = True
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     click = None
     _HAS_CLICK = False
 
@@ -50,7 +51,6 @@ from thomas.nodes.p041_nodes_push_payload import (
     NodesPushPayloadRequest,
     push_payload_to_nodes_sync,
 )
-
 
 COMMAND_GROUP = "nodes"
 COMMAND_NAME = "push-payload"
@@ -101,8 +101,8 @@ def _parse_payload_arg(payload_arg: str) -> Any:
     return _parse_json_value(payload_arg)
 
 
-def _parse_nodes(values: Iterable[str]) -> List[str]:
-    nodes: List[str] = []
+def _parse_nodes(values: Iterable[str]) -> list[str]:
+    nodes: list[str] = []
     for v in values:
         if not v:
             continue
@@ -114,8 +114,8 @@ def _parse_nodes(values: Iterable[str]) -> List[str]:
     return nodes
 
 
-def _parse_headers(values: Iterable[str]) -> Dict[str, str]:
-    headers: Dict[str, str] = {}
+def _parse_headers(values: Iterable[str]) -> dict[str, str]:
+    headers: dict[str, str] = {}
     for v in values:
         if not v:
             continue
@@ -138,7 +138,7 @@ def _parse_headers(values: Iterable[str]) -> Dict[str, str]:
     return headers
 
 
-def _parse_node_map(value: Optional[str]) -> Optional[Dict[str, str]]:
+def _parse_node_map(value: str | None) -> dict[str, str] | None:
     if not value:
         return None
     value = str(value).strip()
@@ -151,7 +151,7 @@ def _parse_node_map(value: Optional[str]) -> Optional[Dict[str, str]]:
     if not isinstance(data, dict):
         raise NodesPushPayloadError("invalid_input", "--node-map must be a JSON object")
 
-    out: Dict[str, str] = {}
+    out: dict[str, str] = {}
     for k, v in data.items():
         out[str(k)] = str(v)
     return out
@@ -176,9 +176,7 @@ def _print_human(resp_dict: Mapping[str, Any]) -> None:
         if r.get("ok"):
             sys.stdout.write(f"  ✓ {node} -> {url} ({status})\n")
         else:
-            sys.stdout.write(
-                f"  ✗ {node} -> {url} ({status}) {r.get('error_code')}: {r.get('error')}\n"
-            )
+            sys.stdout.write(f"  ✗ {node} -> {url} ({status}) {r.get('error_code')}: {r.get('error')}\n")
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -236,7 +234,7 @@ def _add_arguments(parser: argparse.ArgumentParser) -> None:
     )
 
 
-def run(argv: Optional[List[str]] = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     """Standalone entry point used by tests and registry wiring."""
 
     args = _build_parser().parse_args(argv)
@@ -300,13 +298,13 @@ register = add_parser
 
 
 def _click_impl(
-    nodes: Tuple[str, ...],
+    nodes: tuple[str, ...],
     payload: str,
     endpoint_path: str,
     timeout_s: float,
     concurrency: int,
-    header: Tuple[str, ...],
-    node_map: Optional[str],
+    header: tuple[str, ...],
+    node_map: str | None,
     json_out: bool,
 ) -> int:
     ns = argparse.Namespace(
@@ -334,13 +332,13 @@ if _HAS_CLICK:  # pragma: no cover
     @click.option("--node-map", default=None, help="JSON object mapping node ids to base URLs, or @file")
     @click.option("--json", "json_out", is_flag=True, help="Emit machine-readable JSON")
     def cli_command(
-        nodes: Tuple[str, ...],
+        nodes: tuple[str, ...],
         payload: str,
         endpoint_path: str,
         timeout_s: float,
         concurrency: int,
-        header: Tuple[str, ...],
-        node_map: Optional[str],
+        header: tuple[str, ...],
+        node_map: str | None,
         json_out: bool,
     ) -> None:
         rc = _click_impl(nodes, payload, endpoint_path, timeout_s, concurrency, header, node_map, json_out)
@@ -352,7 +350,7 @@ else:
 
 # Registry-friendly metadata. Different Thomas subsystems may look for different
 # keys; keep it plain and self-describing.
-COMMAND: Dict[str, Any] = {
+COMMAND: dict[str, Any] = {
     "prompt_id": PROMPT_ID,
     "group": COMMAND_GROUP,
     "name": COMMAND_NAME,
@@ -375,11 +373,11 @@ def get_command() -> Mapping[str, Any]:
     return COMMAND
 
 
-def get_commands() -> List[Mapping[str, Any]]:
+def get_commands() -> list[Mapping[str, Any]]:
     return COMMANDS
 
 
-def main(argv: Optional[List[str]] = None) -> None:
+def main(argv: list[str] | None = None) -> None:
     """Console-script friendly entrypoint."""
 
     raise SystemExit(run(argv))

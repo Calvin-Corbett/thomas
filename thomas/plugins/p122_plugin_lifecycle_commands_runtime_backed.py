@@ -4,14 +4,13 @@ import json
 import os
 import re
 import time
-import socket
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Literal, Mapping, Sequence, TypedDict
-
+from typing import Any, Literal, TypedDict
 
 """
 P122 - Plugin lifecycle commands (runtime-backed)
@@ -220,59 +219,93 @@ def run_plugin_lifecycle(request: PluginLifecycleRequest) -> PluginLifecycleResu
 
         if request.action == "start":
             plugin_state = _gateway_post_lifecycle(base_url, request.plugin, "start", timeout_s=request.timeout_s)
-            return PluginLifecycleResult(ok=True, action=request.action, plugin=request.plugin, runtime=runtime_meta, plugin_state=plugin_state)
+            return PluginLifecycleResult(
+                ok=True, action=request.action, plugin=request.plugin, runtime=runtime_meta, plugin_state=plugin_state
+            )
 
         if request.action == "stop":
             plugin_state = _gateway_post_lifecycle(base_url, request.plugin, "stop", timeout_s=request.timeout_s)
-            return PluginLifecycleResult(ok=True, action=request.action, plugin=request.plugin, runtime=runtime_meta, plugin_state=plugin_state)
+            return PluginLifecycleResult(
+                ok=True, action=request.action, plugin=request.plugin, runtime=runtime_meta, plugin_state=plugin_state
+            )
 
         if request.action == "restart":
             plugin_state = _gateway_post_lifecycle(base_url, request.plugin, "restart", timeout_s=request.timeout_s)
-            return PluginLifecycleResult(ok=True, action=request.action, plugin=request.plugin, runtime=runtime_meta, plugin_state=plugin_state)
+            return PluginLifecycleResult(
+                ok=True, action=request.action, plugin=request.plugin, runtime=runtime_meta, plugin_state=plugin_state
+            )
 
         raise InvalidPluginLifecycleRequest(f"Unsupported action: {request.action}")
 
     except PluginLifecycleError:
         raise
-    except Exception as exc:  # pragma: no cover
-        raise RuntimeOperationFailed("Unexpected failure while executing plugin lifecycle operation", {"exception": repr(exc)}) from exc
+    except (RuntimeError, OSError, AttributeError, KeyError, ValueError, TypeError) as exc:  # pragma: no cover
+        raise RuntimeOperationFailed(
+            "Unexpected failure while executing plugin lifecycle operation", {"exception": repr(exc)}
+        ) from exc
 
 
-def list_plugins(*, gateway_url: str | None = None, config_path: Path | None = None, timeout_s: float = DEFAULT_TIMEOUT_S) -> PluginLifecycleResult:
+def list_plugins(
+    *, gateway_url: str | None = None, config_path: Path | None = None, timeout_s: float = DEFAULT_TIMEOUT_S
+) -> PluginLifecycleResult:
     return run_plugin_lifecycle(
         PluginLifecycleRequest(action="list", gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s)
     )
 
 
 def plugin_status(
-    plugin: str, *, gateway_url: str | None = None, config_path: Path | None = None, timeout_s: float = DEFAULT_TIMEOUT_S
+    plugin: str,
+    *,
+    gateway_url: str | None = None,
+    config_path: Path | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> PluginLifecycleResult:
     return run_plugin_lifecycle(
-        PluginLifecycleRequest(action="status", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s)
+        PluginLifecycleRequest(
+            action="status", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s
+        )
     )
 
 
 def start_plugin(
-    plugin: str, *, gateway_url: str | None = None, config_path: Path | None = None, timeout_s: float = DEFAULT_TIMEOUT_S
+    plugin: str,
+    *,
+    gateway_url: str | None = None,
+    config_path: Path | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> PluginLifecycleResult:
     return run_plugin_lifecycle(
-        PluginLifecycleRequest(action="start", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s)
+        PluginLifecycleRequest(
+            action="start", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s
+        )
     )
 
 
 def stop_plugin(
-    plugin: str, *, gateway_url: str | None = None, config_path: Path | None = None, timeout_s: float = DEFAULT_TIMEOUT_S
+    plugin: str,
+    *,
+    gateway_url: str | None = None,
+    config_path: Path | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> PluginLifecycleResult:
     return run_plugin_lifecycle(
-        PluginLifecycleRequest(action="stop", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s)
+        PluginLifecycleRequest(
+            action="stop", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s
+        )
     )
 
 
 def restart_plugin(
-    plugin: str, *, gateway_url: str | None = None, config_path: Path | None = None, timeout_s: float = DEFAULT_TIMEOUT_S
+    plugin: str,
+    *,
+    gateway_url: str | None = None,
+    config_path: Path | None = None,
+    timeout_s: float = DEFAULT_TIMEOUT_S,
 ) -> PluginLifecycleResult:
     return run_plugin_lifecycle(
-        PluginLifecycleRequest(action="restart", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s)
+        PluginLifecycleRequest(
+            action="restart", plugin=plugin, gateway_url=gateway_url, config_path=config_path, timeout_s=timeout_s
+        )
     )
 
 
@@ -305,7 +338,10 @@ def resolve_gateway_url(*, explicit_gateway_url: str | None, config_path: Path |
             return cfg_url, f"config:{config_path}"
         raise MissingPluginRuntimeConfig(
             "Gateway URL not found in config",
-            details={"config_path": str(config_path), "expected_keys": ["gateway_url", "runtime_url", "api_url", "url"]},
+            details={
+                "config_path": str(config_path),
+                "expected_keys": ["gateway_url", "runtime_url", "api_url", "url"],
+            },
         )
 
     raise MissingPluginRuntimeConfig(
@@ -334,8 +370,10 @@ def _read_gateway_url_from_config(config_path: Path) -> str | None:
             )
     except PluginLifecycleError:
         raise
-    except Exception as exc:
-        raise MissingPluginRuntimeConfig("Failed to read config file", {"config_path": str(config_path), "exception": repr(exc)}) from exc
+    except (OSError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        raise MissingPluginRuntimeConfig(
+            "Failed to read config file", {"config_path": str(config_path), "exception": repr(exc)}
+        ) from exc
 
     if not isinstance(data, dict):
         return None
@@ -371,9 +409,13 @@ def _validate_request(request: PluginLifecycleRequest) -> None:
 
     if request.action != "list":
         if not request.plugin:
-            raise InvalidPluginLifecycleRequest("Plugin identifier is required for this action", {"action": request.action})
+            raise InvalidPluginLifecycleRequest(
+                "Plugin identifier is required for this action", {"action": request.action}
+            )
         if not _PLUGIN_ID_PATTERN.match(request.plugin):
-            raise InvalidPluginLifecycleRequest("Plugin identifier must not contain whitespace", {"plugin": request.plugin})
+            raise InvalidPluginLifecycleRequest(
+                "Plugin identifier must not contain whitespace", {"plugin": request.plugin}
+            )
 
     if request.timeout_s <= 0:
         raise InvalidPluginLifecycleRequest("timeout_s must be > 0", {"timeout_s": request.timeout_s})
@@ -479,7 +521,9 @@ def _gateway_get_status(base_url: str, plugin: str, *, timeout_s: float) -> Plug
         raise PluginNotFound(plugin) from exc
 
 
-def _gateway_post_lifecycle(base_url: str, plugin: str, action: Literal["start", "stop", "restart"], *, timeout_s: float) -> PluginState:
+def _gateway_post_lifecycle(
+    base_url: str, plugin: str, action: Literal["start", "stop", "restart"], *, timeout_s: float
+) -> PluginState:
     endpoints = [
         ("POST", f"/plugins/{urllib.parse.quote(plugin)}/{action}"),
         ("POST", f"/v1/plugins/{urllib.parse.quote(plugin)}/{action}"),
@@ -546,17 +590,19 @@ def _http_json(method: str, url: str, *, timeout_s: float, payload: Any | None =
         status = int(getattr(exc, "code", 500))
         try:
             raw = exc.read()
-        except Exception:
+        except OSError:
             raw = b""
-    except (urllib.error.URLError, TimeoutError, socket.timeout) as exc:
-        raise RuntimeUnavailable("Unable to reach plugin runtime gateway", {"url": url, "exception": repr(exc)}) from exc
+    except (urllib.error.URLError, TimeoutError) as exc:
+        raise RuntimeUnavailable(
+            "Unable to reach plugin runtime gateway", {"url": url, "exception": repr(exc)}
+        ) from exc
 
     if not raw:
         return status, None
 
     try:
         return status, json.loads(raw.decode("utf-8"))
-    except Exception:
+    except (json.JSONDecodeError, ValueError, UnicodeDecodeError):
         text = raw.decode("utf-8", errors="replace")
         return status, {"raw": text}
 
@@ -638,7 +684,19 @@ def _coerce_plugin_state(item: Any, *, fallback_name: str | None = None) -> Plug
 
     meta: dict[str, Any] = {}
     for k, v in item.items():
-        if k in {"name", "id", "plugin", "identifier", "status", "state", "lifecycle", "running", "version", "description", "summary"}:
+        if k in {
+            "name",
+            "id",
+            "plugin",
+            "identifier",
+            "status",
+            "state",
+            "lifecycle",
+            "running",
+            "version",
+            "description",
+            "summary",
+        }:
             continue
         if _is_jsonable(v):
             meta[k] = v
@@ -660,14 +718,14 @@ def _is_jsonable(val: Any) -> bool:
     try:
         json.dumps(val)
         return True
-    except Exception:
+    except (TypeError, ValueError):
         return False
 
 
 def _safe_preview(val: Any, *, limit: int = 500) -> str:
     try:
         text = json.dumps(val)
-    except Exception:
+    except (TypeError, ValueError):
         text = repr(val)
     if len(text) > limit:
         return text[:limit] + "…"

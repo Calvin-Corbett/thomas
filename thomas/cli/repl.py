@@ -9,21 +9,21 @@ Architecture:
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
-import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 try:
     from prompt_toolkit import PromptSession
+    from prompt_toolkit.completion import WordCompleter
+    from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings
-    from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.styles import Style
-    from prompt_toolkit.completion import WordCompleter
 except ImportError:
     raise ImportError("prompt_toolkit is required for the REPL. Install with: pip install prompt_toolkit>=3.0")
 
@@ -37,29 +37,43 @@ try:
 except ImportError:
     raise ImportError("rich is required for the REPL. Install with: pip install rich>=13.0")
 
+from thomas.agent.loop import AgentLoop
+from thomas.core.autonomy import autonomy_level_name, clamp_autonomy_level
 from thomas.core.config import AppConfig
-from thomas.core.autonomy import clamp_autonomy_level, autonomy_level_name
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
 from thomas.core.token_economy import normalize_token_economy_level
 from thomas.tools.registry import ToolRegistry
-from thomas.agent.loop import AgentLoop
 
 log = logging.getLogger(__name__)
 
 # Optional memory import - graceful if not available
 try:
     from thomas.memory.autonomy import AutonomyMemoryEngine
+
     _HAS_MEMORY = True
 except ImportError:
     _HAS_MEMORY = False
 
 
 _SLASH_COMMANDS = [
-    "/help", "/clear", "/save", "/load",
-    "/model", "/tools", "/memory", "/pin", "/unpin",
-    "/autonomy", "/status", "/permissions", "/cost", "/review", "/todo",
-    "/exit", "/quit",
+    "/help",
+    "/clear",
+    "/save",
+    "/load",
+    "/model",
+    "/tools",
+    "/memory",
+    "/pin",
+    "/unpin",
+    "/autonomy",
+    "/status",
+    "/permissions",
+    "/cost",
+    "/review",
+    "/todo",
+    "/exit",
+    "/quit",
 ]
 
 
@@ -69,12 +83,12 @@ class ThomasREPL:
     def __init__(self, config: AppConfig, tools: ToolRegistry):
         self.config = config
         self.tools = tools
-        self._conversation: List[Dict[str, Any]] = []
+        self._conversation: list[dict[str, Any]] = []
         self._current_model: str = config.default_model
         self._autonomy_level: int = 3
-        self._last_model_choices: List[str] = []
-        self._llm: Optional[LLMClient] = None
-        self._memory: Optional[Any] = None
+        self._last_model_choices: list[str] = []
+        self._llm: LLMClient | None = None
+        self._memory: Any | None = None
         self._console = Console(highlight=False)
         self._history_path = Path(config.memory.root) / "repl_history.txt"
         self._history_path.parent.mkdir(parents=True, exist_ok=True)
@@ -101,9 +115,11 @@ class ThomasREPL:
         # prompt_toolkit expects a compiled regex for `pattern` (not a string).
         completer = WordCompleter(_SLASH_COMMANDS, pattern=re.compile(r"^/\w*"))
 
-        style = Style.from_dict({
-            "prompt": "ansigreen bold",
-        })
+        style = Style.from_dict(
+            {
+                "prompt": "ansigreen bold",
+            }
+        )
 
         return PromptSession(
             history=history,
@@ -128,8 +144,7 @@ class ThomasREPL:
 
     def _get_prompt(self) -> HTML:
         return HTML(
-            f"<prompt>thomas</prompt> "
-            f"<ansigray>[{self._current_model} | L{self._autonomy_level}]</ansigray> > "
+            f"<prompt>thomas</prompt> " f"<ansigray>[{self._current_model} | L{self._autonomy_level}]</ansigray> > "
         )
 
     def _handle_nl_model(self, text: str) -> bool:
@@ -141,14 +156,12 @@ class ThomasREPL:
         t_lower = t.lower()
         if "model" in t_lower and any(k in t_lower for k in ("list", "show", "what models", "available")):
             available = list(self.config.models.keys())
-            self._console.print(
-                f"Current: [cyan]{self._current_model}[/cyan]  "
-                f"Available: {', '.join(available)}"
-            )
+            self._console.print(f"Current: [cyan]{self._current_model}[/cyan]  " f"Available: {', '.join(available)}")
             return True
 
         # e.g. "switch to model local", "use model local", "set model local", "switch to local"
         import re
+
         m = re.match(r"^(switch|use|set|change)\\s+(to\\s+)?(model\\s+)?(?P<name>[\\w\\-\\.:]+)\\s*$", t_lower)
         if not m:
             return False
@@ -166,6 +179,7 @@ class ThomasREPL:
                 # Reset client so it re-reads the new model config
                 try:
                     import asyncio
+
                     loop = asyncio.get_event_loop()
                     if loop.is_running():
                         loop.create_task(self._llm.close())
@@ -177,22 +191,21 @@ class ThomasREPL:
             self._console.print(f"[dim]Switched to [cyan]{name}[/cyan][/dim]")
             return True
 
-        self._console.print(
-            f"[red]Unknown model '{name}'. "
-            f"Available: {', '.join(self.config.models.keys())}[/red]"
-        )
+        self._console.print(f"[red]Unknown model '{name}'. " f"Available: {', '.join(self.config.models.keys())}[/red]")
         return True
 
     async def run(self) -> None:
         """Main REPL loop."""
         version = _get_version()
-        self._console.print(Panel(
-            f"[bold green]Thomas[/bold green] v{version} - "
-            f"model: [cyan]{self._current_model}[/cyan]\n"
-            f"Type [dim]/help[/dim] for commands, [dim]Alt+Enter[/dim] for multiline, "
-            f"[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit.",
-            border_style="dim",
-        ))
+        self._console.print(
+            Panel(
+                f"[bold green]Thomas[/bold green] v{version} - "
+                f"model: [cyan]{self._current_model}[/cyan]\n"
+                f"Type [dim]/help[/dim] for commands, [dim]Alt+Enter[/dim] for multiline, "
+                f"[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit.",
+                border_style="dim",
+            )
+        )
 
         while True:
             try:
@@ -241,30 +254,34 @@ class ThomasREPL:
             return True
 
         elif command == "/help":
-            self._console.print(Panel(
-                "\n".join([
-                    "[bold]/clear[/bold]           Clear conversation history",
-                    "[bold]/save [file][/bold]     Save conversation to JSON file",
-                    "[bold]/load [file][/bold]     Load conversation from JSON file",
-                    "[bold]/model [name][/bold]    Show or switch model profile",
-                    "[bold]/autonomy [1-4][/bold]  Show or set autonomy level",
-                    "[bold]/status[/bold]          Show current REPL/runtime status",
-                    "[bold]/permissions[/bold]     Show tool + server access posture",
-                    "[bold]/cost[/bold]            Show token/cost tracking for this process",
-                    "[bold]/review[/bold]          Quick review of recent conversation turns",
-                    "[bold]/todo[/bold]            Show open todo/goals from memory/state",
-                    "[bold]/tools[/bold]           List available tools",
-                    "[bold]/memory[/bold]          Show memory stats, pins, and token usage",
-                    "[bold]/pin key=val[/bold]     Pin context (always included in memory)",
-                    "[bold]/unpin key[/bold]       Remove a pinned context",
-                    "[bold]/help[/bold]            Show this help",
-                    "[bold]/exit[/bold]            Quit",
-                    "",
-                    "[dim]Alt+Enter for multiline input[/dim]",
-                ]),
-                title="Commands",
-                border_style="dim",
-            ))
+            self._console.print(
+                Panel(
+                    "\n".join(
+                        [
+                            "[bold]/clear[/bold]           Clear conversation history",
+                            "[bold]/save [file][/bold]     Save conversation to JSON file",
+                            "[bold]/load [file][/bold]     Load conversation from JSON file",
+                            "[bold]/model [name][/bold]    Show or switch model profile",
+                            "[bold]/autonomy [1-4][/bold]  Show or set autonomy level",
+                            "[bold]/status[/bold]          Show current REPL/runtime status",
+                            "[bold]/permissions[/bold]     Show tool + server access posture",
+                            "[bold]/cost[/bold]            Show token/cost tracking for this process",
+                            "[bold]/review[/bold]          Quick review of recent conversation turns",
+                            "[bold]/todo[/bold]            Show open todo/goals from memory/state",
+                            "[bold]/tools[/bold]           List available tools",
+                            "[bold]/memory[/bold]          Show memory stats, pins, and token usage",
+                            "[bold]/pin key=val[/bold]     Pin context (always included in memory)",
+                            "[bold]/unpin key[/bold]       Remove a pinned context",
+                            "[bold]/help[/bold]            Show this help",
+                            "[bold]/exit[/bold]            Quit",
+                            "",
+                            "[dim]Alt+Enter for multiline input[/dim]",
+                        ]
+                    ),
+                    title="Commands",
+                    border_style="dim",
+                )
+            )
 
         elif command == "/clear":
             self._conversation.clear()
@@ -312,17 +329,14 @@ class ThomasREPL:
                 self._console.print("[bold]Model Profiles[/bold]")
                 for name, m in self.config.models.items():
                     mark = "*" if name == self._current_model else " "
-                    self._console.print(
-                        f"  {mark} [cyan]{name}[/cyan]  "
-                        f"[dim]{m.provider}[/dim]  {m.model}"
-                    )
+                    self._console.print(f"  {mark} [cyan]{name}[/cyan]  " f"[dim]{m.provider}[/dim]  {m.model}")
 
                 # Best-effort discovery of model ids at the current endpoint.
                 discovered = []
                 try:
                     cfg = self.config.get_model(self._current_model)
                     discovered = await discover_models_async(cfg, timeout_s=1.5)
-                except Exception:
+                except (ValueError, TypeError):
                     cfg = None  # type: ignore[assignment]
 
                 if not discovered or cfg is None:
@@ -339,11 +353,11 @@ class ThomasREPL:
                 self._last_model_choices = ids
 
                 # Build above/below suggestions within each family (sorted by params_b when present).
-                fam_map: Dict[str, List[tuple[str, Optional[float]]]] = {}
+                fam_map: dict[str, list[tuple[str, float | None]]] = {}
                 for mid in ids:
                     fam_map.setdefault(model_family(mid), []).append((mid, parse_params_b(mid)))
 
-                neighbor: Dict[str, tuple[Optional[str], Optional[str]]] = {}
+                neighbor: dict[str, tuple[str | None, str | None]] = {}
                 for fam, items in fam_map.items():
                     items_sorted = sorted(items, key=lambda x: (x[1] is None, x[1] or 0.0, x[0]))
                     mids = [m for m, _ in items_sorted]
@@ -367,8 +381,7 @@ class ThomasREPL:
 
                 self._console.print("\n[dim]Switch profile: /model <profile>[/dim]")
                 self._console.print(
-                    "[dim]Switch model id: /model <number> (from list above) "
-                    "or /model id:<model_id>[/dim]"
+                    "[dim]Switch model id: /model <number> (from list above) " "or /model id:<model_id>[/dim]"
                 )
                 return False
 
@@ -390,9 +403,7 @@ class ThomasREPL:
                     if self._llm:
                         await self._llm.close()
                         self._llm = None
-                    self._console.print(
-                        f"[dim]Set model id for [cyan]{self._current_model}[/cyan] -> {chosen}[/dim]"
-                    )
+                    self._console.print(f"[dim]Set model id for [cyan]{self._current_model}[/cyan] -> {chosen}[/dim]")
                     return False
 
             # Switch model id explicitly: /model id:foo
@@ -405,9 +416,7 @@ class ThomasREPL:
                 if self._llm:
                     await self._llm.close()
                     self._llm = None
-                self._console.print(
-                    f"[dim]Set model id for [cyan]{self._current_model}[/cyan] -> {chosen}[/dim]"
-                )
+                self._console.print(f"[dim]Set model id for [cyan]{self._current_model}[/cyan] -> {chosen}[/dim]")
                 return False
 
             self._console.print(
@@ -418,9 +427,7 @@ class ThomasREPL:
         elif command == "/autonomy":
             if not arg:
                 level = int(self._autonomy_level)
-                self._console.print(
-                    f"[dim]Autonomy: L{level} ({autonomy_level_name(level)})[/dim]"
-                )
+                self._console.print(f"[dim]Autonomy: L{level} ({autonomy_level_name(level)})[/dim]")
                 return False
 
             m = re.search(r"[1-4]", str(arg))
@@ -430,9 +437,7 @@ class ThomasREPL:
 
             level = clamp_autonomy_level(m.group(0), default=self._autonomy_level)
             self._autonomy_level = int(level)
-            self._console.print(
-                f"[dim]Autonomy set to L{level} ({autonomy_level_name(level)})[/dim]"
-            )
+            self._console.print(f"[dim]Autonomy set to L{level} ({autonomy_level_name(level)})[/dim]")
 
         elif command == "/status":
             user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
@@ -442,8 +447,7 @@ class ThomasREPL:
                 tool_count += len(self.tools.list_tools(cat))
             self._console.print(f"[dim]Model: {self._current_model}[/dim]")
             self._console.print(
-                f"[dim]Autonomy: L{self._autonomy_level} "
-                f"({autonomy_level_name(self._autonomy_level)})[/dim]"
+                f"[dim]Autonomy: L{self._autonomy_level} " f"({autonomy_level_name(self._autonomy_level)})[/dim]"
             )
             self._console.print(
                 f"[dim]Conversation: {user_turns} user, {asst_turns} assistant, "
@@ -458,12 +462,9 @@ class ThomasREPL:
         elif command == "/permissions":
             self._console.print(f"[dim]server.access_mode = {self.config.server.access_mode}[/dim]")
             self._console.print(
-                f"[dim]server.api_token configured = "
-                f"{bool(str(self.config.server.api_token or '').strip())}[/dim]"
+                f"[dim]server.api_token configured = " f"{bool(str(self.config.server.api_token or '').strip())}[/dim]"
             )
-            self._console.print(
-                f"[dim]tools.allow_shell = {bool(self.config.tools.allow_shell)}[/dim]"
-            )
+            self._console.print(f"[dim]tools.allow_shell = {bool(self.config.tools.allow_shell)}[/dim]")
             self._console.print(f"[dim]tools.sandbox_root = {self.config.tools.sandbox_path}[/dim]")
             self._console.print(f"[dim]tools.max_file_size = {self.config.tools.max_file_size} bytes[/dim]")
 
@@ -518,7 +519,7 @@ class ThomasREPL:
             if self._memory and self._memory.started:
                 try:
                     pins = self._memory.list_pins()
-                except Exception:
+                except (ValueError, TypeError):
                     pins = []
                 for key, text, _score in pins:
                     key_s = str(key or "").strip()
@@ -541,7 +542,7 @@ class ThomasREPL:
                     continue
                 try:
                     payload = json.loads(candidate.read_text(encoding="utf-8"))
-                except Exception:
+                except json.JSONDecodeError:
                     continue
                 goals = payload.get("goals") if isinstance(payload, dict) else None
                 if not isinstance(goals, list):
@@ -605,7 +606,9 @@ class ThomasREPL:
             if not arg:
                 self._console.print("[yellow]Usage: /pin key=value[/yellow]")
             elif "=" not in arg:
-                self._console.print("[yellow]Usage: /pin key=value (e.g. /pin style=concise code with comments)[/yellow]")
+                self._console.print(
+                    "[yellow]Usage: /pin key=value (e.g. /pin style=concise code with comments)[/yellow]"
+                )
             elif self._memory and self._memory.started:
                 key, _, value = arg.partition("=")
                 self._memory.pin(key.strip(), value.strip())
@@ -646,15 +649,13 @@ class ThomasREPL:
 
         # State for managing the spinner + streaming output
         thinking = True
-        spinner_live: Optional[Live] = None
+        spinner_live: Live | None = None
         text_buffer: list[str] = []
         usage_hint = ""
         token_info = ""
 
         try:
-            token_economy = normalize_token_economy_level(
-                os.environ.get("THOMAS_TOKEN_ECONOMY", "optimal")
-            )
+            token_economy = normalize_token_economy_level(os.environ.get("THOMAS_TOKEN_ECONOMY", "optimal"))
             async for event in agent.run(prompt, token_economy=token_economy):
                 if event.type == EventType.AGENT_START:
                     route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
@@ -705,7 +706,7 @@ class ThomasREPL:
                     # Show a spinner for tool execution too
                     thinking = True
                     spinner_live = Live(
-                        Spinner("dots", text=Text(f" running...", style="dim")),
+                        Spinner("dots", text=Text(" running...", style="dim")),
                         console=self._console,
                         transient=True,
                     )
@@ -753,7 +754,7 @@ class ThomasREPL:
                             total_tokens = int(token_report.get("total_tokens", 0) or 0)
                             if total_tokens > 0:
                                 token_info = f"{prompt_tokens}+{completion_tokens}={total_tokens} tokens"
-                        except Exception:
+                        except (OSError, FileNotFoundError):
                             token_info = ""
                     iters = event.data["iterations"]
                     tc = event.data["tool_calls"]
@@ -777,6 +778,7 @@ class ThomasREPL:
 def _get_version() -> str:
     try:
         from thomas import __version__
+
         return __version__
     except (ImportError, AttributeError):
         return "?"

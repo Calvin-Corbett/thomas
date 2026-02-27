@@ -5,7 +5,7 @@ import json
 import logging
 import uuid
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel, Field, model_validator
@@ -24,13 +24,13 @@ class ClipboardIntakeRequest(BaseModel):
 
     source: str = Field(default="clipboard")
     content_type: str = Field(..., description="text/plain or image/png")
-    text: Optional[str] = None
-    image_b64: Optional[str] = Field(default=None, description="Base64 bytes. Prefer multipart for large images.")
-    ocr_text: Optional[str] = None
-    meta: Dict[str, Any] = Field(default_factory=dict)
+    text: str | None = None
+    image_b64: str | None = Field(default=None, description="Base64 bytes. Prefer multipart for large images.")
+    ocr_text: str | None = None
+    meta: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
-    def _validate(self) -> "ClipboardIntakeRequest":
+    def _validate(self) -> ClipboardIntakeRequest:
         if self.content_type.startswith("text") and not self.text:
             raise ValueError("text payload requires `text`")
         if self.content_type.startswith("image") and not self.image_b64:
@@ -42,7 +42,7 @@ class ClipboardIntakeResponse(BaseModel):
     ok: bool = True
     item_id: str
     deduped: bool = False
-    chat_id: Optional[str] = None
+    chat_id: str | None = None
     summary: str
     action_suggestion: str
 
@@ -52,7 +52,7 @@ class ActiveChatRequest(BaseModel):
 
 
 class ActiveChatResponse(BaseModel):
-    chat_id: Optional[str] = None
+    chat_id: str | None = None
 
 
 class ListItemsResponse(BaseModel):
@@ -64,17 +64,17 @@ class IntakeItem:
     item_id: str
     source: str
     content_type: str
-    text: Optional[str]
-    blob: Optional[bytes]
-    ocr_text: Optional[str]
-    meta: Dict[str, Any]
+    text: str | None
+    blob: bytes | None
+    ocr_text: str | None
+    meta: dict[str, Any]
     content_hash: str
 
 
 class DefaultIntakeProcessor:
     """Safe fallback processor: returns a useful summary + suggestion."""
 
-    def process(self, item: IntakeItem, chat_id: Optional[str]) -> Dict[str, str]:
+    def process(self, item: IntakeItem, chat_id: str | None) -> dict[str, str]:
         if item.content_type.startswith("text") and item.text:
             txt = item.text.strip().replace("\r\n", "\n")
             snip = txt if len(txt) <= 280 else (txt[:280] + "…")
@@ -118,7 +118,7 @@ def _get_store(request: Request) -> IntakeStore:
     return store
 
 
-def _get_active_chat_id(request: Request) -> Optional[str]:
+def _get_active_chat_id(request: Request) -> str | None:
     hdr = request.headers.get("x-thomas-chat-id")
     if hdr:
         return hdr.strip() or None
@@ -144,7 +144,7 @@ def _get_processor(request: Request) -> Any:
 def _decode_image_b64(b64: str) -> bytes:
     try:
         return base64.b64decode(b64, validate=True)
-    except Exception:
+    except (ValueError, TypeError):
         return base64.b64decode(b64)
 
 
@@ -164,7 +164,7 @@ def _as_item_dict(st: StoredIntake) -> dict:
     }
 
 
-async def _parse_request_any(request: Request) -> Tuple[ClipboardIntakeRequest, Optional[bytes]]:
+async def _parse_request_any(request: Request) -> tuple[ClipboardIntakeRequest, bytes | None]:
     ctype = (request.headers.get("content-type") or "").lower()
     if "application/json" in ctype:
         data = await request.json()
@@ -178,11 +178,11 @@ async def _parse_request_any(request: Request) -> Tuple[ClipboardIntakeRequest, 
         content_type = str(form.get("content_type") or "image/png")
         ocr_text = form.get("ocr_text")
         meta_json = form.get("meta_json")
-        meta: Dict[str, Any] = {}
+        meta: dict[str, Any] = {}
         if meta_json:
             try:
                 meta = json.loads(str(meta_json))
-            except Exception:
+            except json.JSONDecodeError:
                 meta = {"meta_json_parse_error": True, "raw_meta_json": str(meta_json)}
 
         file = form.get("file")
@@ -200,7 +200,9 @@ async def _parse_request_any(request: Request) -> Tuple[ClipboardIntakeRequest, 
         )
         return payload, blob
 
-    raise HTTPException(status_code=415, detail="Unsupported content-type. Use application/json or multipart/form-data.")
+    raise HTTPException(
+        status_code=415, detail="Unsupported content-type. Use application/json or multipart/form-data."
+    )
 
 
 @router.post("/active", response_model=ActiveChatResponse)
@@ -219,7 +221,7 @@ async def get_active_chat(request: Request) -> ActiveChatResponse:
 
 
 @router.get("/items", response_model=ListItemsResponse)
-async def list_items(request: Request, limit: int = 50, chat_id: Optional[str] = None) -> ListItemsResponse:
+async def list_items(request: Request, limit: int = 50, chat_id: str | None = None) -> ListItemsResponse:
     cfg = _cfg(request)
     require_token_if_configured(request, cfg)
     store = _get_store(request)
@@ -276,7 +278,9 @@ async def reprocess_item(request: Request, item_id: str) -> ClipboardIntakeRespo
         summary = f"Reprocess failed: {type(e).__name__}"
         action = "Check server logs."
 
-    return ClipboardIntakeResponse(ok=True, item_id=item_id, deduped=False, chat_id=chat_id, summary=summary, action_suggestion=action)
+    return ClipboardIntakeResponse(
+        ok=True, item_id=item_id, deduped=False, chat_id=chat_id, summary=summary, action_suggestion=action
+    )
 
 
 @router.post("/clipboard", response_model=ClipboardIntakeResponse)
@@ -345,4 +349,6 @@ async def intake_clipboard(request: Request) -> ClipboardIntakeResponse:
         summary = f"Intake stored but processing failed: {type(e).__name__}"
         action = "Check server logs. The intake is saved and can be reprocessed."
 
-    return ClipboardIntakeResponse(ok=True, item_id=item_id, deduped=False, chat_id=chat_id, summary=summary, action_suggestion=action)
+    return ClipboardIntakeResponse(
+        ok=True, item_id=item_id, deduped=False, chat_id=chat_id, summary=summary, action_suggestion=action
+    )

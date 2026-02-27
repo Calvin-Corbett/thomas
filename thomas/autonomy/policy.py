@@ -1,15 +1,15 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 from dataclasses import dataclass, field
-from typing import Any, Dict
+from typing import Any
 
 try:
     import tomllib as _toml_loader  # py3.11+
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     try:
         import tomli as _toml_loader  # type: ignore
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         _toml_loader = None  # type: ignore
 
 DEFAULT_POLICY = {
@@ -39,10 +39,10 @@ class PolicyDecision:
 
 @dataclass
 class AutonomyPolicy:
-    policy: Dict[str, Any] = field(default_factory=lambda: dict(DEFAULT_POLICY))
+    policy: dict[str, Any] = field(default_factory=lambda: dict(DEFAULT_POLICY))
 
     @staticmethod
-    def load(policy_path: str) -> "AutonomyPolicy":
+    def load(policy_path: str) -> AutonomyPolicy:
         if not policy_path or not os.path.exists(policy_path):
             return AutonomyPolicy()
         if _toml_loader is None:
@@ -92,7 +92,3 @@ class AutonomyPolicy:
 
     def api_require_token(self) -> bool:
         return bool((self.policy.get("api") or {}).get("require_token", False))
-
-
-
-

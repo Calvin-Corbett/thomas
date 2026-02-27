@@ -12,9 +12,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
-import httpx
+try:
+    import httpx
+except ImportError:
+    from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
 
 from thomas.core.config import ModelConfig
 
@@ -26,7 +29,7 @@ class DiscoveredModel:
     """A discovered model identifier and optional metadata."""
 
     id: str
-    raw: Dict[str, Any]
+    raw: dict[str, Any]
 
 
 @dataclass(frozen=True)
@@ -36,11 +39,11 @@ class ModelsHandshake:
     ok: bool
     status: str  # ok | auth_error | unsupported | offline | error
     url: str
-    http_status: Optional[int] = None
-    models: List[str] = None  # type: ignore[assignment]
-    error: Optional[str] = None
+    http_status: int | None = None
+    models: list[str] = None  # type: ignore[assignment]
+    error: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": bool(self.ok),
             "status": str(self.status),
@@ -59,9 +62,9 @@ def _join_url(base_url: str, path: str) -> str:
     return base + p
 
 
-def _auth_headers(cfg: ModelConfig) -> Dict[str, str]:
+def _auth_headers(cfg: ModelConfig) -> dict[str, str]:
     # Keep this consistent with LLMClient header behavior.
-    headers: Dict[str, str] = {"Content-Type": "application/json"}
+    headers: dict[str, str] = {"Content-Type": "application/json"}
     if cfg.extra_headers:
         headers.update(cfg.extra_headers)
 
@@ -76,9 +79,9 @@ def _auth_headers(cfg: ModelConfig) -> Dict[str, str]:
     return headers
 
 
-def _extract_model_ids(obj: Any, *, max_results: int = 200) -> List[str]:
+def _extract_model_ids(obj: Any, *, max_results: int = 200) -> list[str]:
     """Best-effort extraction of model ids from common response shapes."""
-    out: List[str] = []
+    out: list[str] = []
 
     # OpenAI-compatible: {"data": [{"id": "..."}]}
     if isinstance(obj, dict):
@@ -131,7 +134,9 @@ async def handshake_models_async(
             try:
                 j = resp.json()
             except Exception as e:
-                return ModelsHandshake(ok=False, status="error", url=url, http_status=status, error=f"Invalid JSON: {e}", models=[])
+                return ModelsHandshake(
+                    ok=False, status="error", url=url, http_status=status, error=f"Invalid JSON: {e}", models=[]
+                )
             ids = _extract_model_ids(j, max_results=max_results)
             return ModelsHandshake(ok=True, status="ok", url=url, http_status=status, models=ids)
 
@@ -165,7 +170,14 @@ async def handshake_models_async(
             except Exception as e:
                 log.debug("Ollama tags fallback failed for %s: %s", cfg.base_url, e)
 
-            return ModelsHandshake(ok=False, status="unsupported", url=url, http_status=status, error=f"HTTP {status} (no /models)", models=[])
+            return ModelsHandshake(
+                ok=False,
+                status="unsupported",
+                url=url,
+                http_status=status,
+                error=f"HTTP {status} (no /models)",
+                models=[],
+            )
 
         # Other errors.
         text = ""
@@ -214,7 +226,7 @@ async def _handshake_codex_async(
                 )
 
             models = await bridge.list_models()
-            ids: List[str] = [m.id for m in models if m.id][:max_results]
+            ids: list[str] = [m.id for m in models if m.id][:max_results]
             # De-dupe while preserving order.
             seen: set[str] = set()
             ids = [x for x in ids if not (x in seen or seen.add(x))]
@@ -255,7 +267,7 @@ async def discover_models_async(
     *,
     timeout_s: float = 2.0,
     max_results: int = 200,
-) -> List[DiscoveredModel]:
+) -> list[DiscoveredModel]:
     """Try to discover model ids for a model profile.
 
     Strategies:
@@ -280,7 +292,7 @@ async def discover_models_async(
                 if resp.status_code == 200:
                     j = resp.json()
                     data = j.get("data", [])
-                    out: List[DiscoveredModel] = []
+                    out: list[DiscoveredModel] = []
                     for item in data[:max_results]:
                         if isinstance(item, dict) and item.get("id"):
                             out.append(DiscoveredModel(id=str(item["id"]), raw=item))
@@ -310,12 +322,12 @@ async def discover_models_async(
     return []
 
 
-def discover_models(cfg: ModelConfig, *, timeout_s: float = 2.0) -> List[DiscoveredModel]:
+def discover_models(cfg: ModelConfig, *, timeout_s: float = 2.0) -> list[DiscoveredModel]:
     """Sync wrapper for discovery (for click commands)."""
     return asyncio.run(discover_models_async(cfg, timeout_s=timeout_s))
 
 
-def parse_params_b(model_id: str) -> Optional[float]:
+def parse_params_b(model_id: str) -> float | None:
     """Best-effort parse of parameter count from an id (e.g. '7b', '30B')."""
     import re
 

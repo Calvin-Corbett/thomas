@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import importlib
 import inspect
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from enum import Enum
 from types import ModuleType
-from typing import Any, Callable, Mapping
-
+from typing import Any
 
 # ---------------------------------------------------------------------------
 # Public contracts
@@ -154,7 +154,7 @@ def channel_login(request: ChannelLoginRequest) -> ChannelLoginResult:
         )
     except _ChannelLoginFailure as exc:
         return _failure(channel=channel, code=exc.code, message=exc.message, details=exc.details)
-    except Exception as exc:  # pragma: no cover
+    except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:  # pragma: no cover
         # Last-resort catch to avoid leaking stack traces in normal runs.
         return _failure(
             channel=channel,
@@ -164,7 +164,9 @@ def channel_login(request: ChannelLoginRequest) -> ChannelLoginResult:
         )
 
 
-def _failure(*, channel: str, code: ChannelLoginErrorCode, message: str, details: Mapping[str, Any]) -> ChannelLoginResult:
+def _failure(
+    *, channel: str, code: ChannelLoginErrorCode, message: str, details: Mapping[str, Any]
+) -> ChannelLoginResult:
     return ChannelLoginResult(
         ok=False,
         channel=channel,
@@ -205,7 +207,7 @@ def _invoke_integration_login(module: ModuleType, channel: str, request: Channel
         raise _LoginUnavailable(channel)
 
     instance = _instantiate_with_request(login_class, channel, request)
-    login_method = getattr(instance, "login")
+    login_method = instance.login
     return _call_login(login_method, channel, request)
 
 
@@ -268,7 +270,7 @@ def _call_login(callable_obj: Callable[..., Any], channel: str, request: Channel
         return callable_obj(**kwargs)
     except _ChannelLoginFailure:
         raise
-    except Exception as exc:
+    except (ConnectionError, TimeoutError, RuntimeError) as exc:
         raise _ChannelLoginFailure(
             code=ChannelLoginErrorCode.EXTERNAL_FAILURE,
             message=f"Channel '{channel}' login failed due to an external error.",

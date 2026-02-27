@@ -12,11 +12,13 @@ machine-readable errors (especially in `--json` mode).
 
 from __future__ import annotations
 
+import argparse
 import asyncio
 import inspect
 import json
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional
+from typing import Any
 
 import typer
 
@@ -26,11 +28,10 @@ from thomas.browser.p006_browser_action_scroll_and_scroll_into_view import (
     ViewportScrollRequest,
 )
 
-
 # Prefer registering onto the shared browser Typer app when it exists.
 try:  # pragma: no cover - depends on surrounding Thomas CLI package structure
     from . import app as _browser_app  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     _browser_app = typer.Typer(add_completion=False)
 
 app = _browser_app
@@ -103,7 +104,7 @@ def _resolve_browser_executor() -> Any:
                 return cls()
             except TypeError:
                 continue
-    except Exception:
+    except (ValueError, TypeError):
         pass
 
     # 2) Try the live_browser client (if Thomas uses one).
@@ -133,7 +134,7 @@ def _resolve_browser_executor() -> Any:
                 return cls()
             except TypeError:
                 continue
-    except Exception:
+    except (ValueError, TypeError):
         pass
 
     raise BrowserActionError(
@@ -251,7 +252,7 @@ def cli_scroll_into_view(
         "--query",
         help="Selector of the element to bring into view (CSS recommended)",
     ),
-    timeout_ms: Optional[int] = typer.Option(None, "--timeout-ms", "--timeout", help="Timeout in milliseconds"),
+    timeout_ms: int | None = typer.Option(None, "--timeout-ms", "--timeout", help="Timeout in milliseconds"),
     json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
 ) -> None:
     try:
@@ -275,3 +276,54 @@ def register(target_app: Any) -> None:
 
     target_app.command("scroll")(cli_scroll)
     target_app.command("scroll-into-view")(cli_scroll_into_view)
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    parser = argparse.ArgumentParser(
+        prog="browser action-scroll-and-scroll-into-view",
+        description="Run scroll or scroll-into-view actions.",
+    )
+    parser.add_argument("action_arg", nargs="?", choices=["scroll", "scroll-into-view"], default="scroll")
+    parser.add_argument("--action", dest="action_opt", choices=["scroll", "scroll-into-view"], default="")
+    parser.add_argument("--x", "--delta-x", dest="x", type=int, default=0)
+    parser.add_argument("--y", "--delta-y", dest="y", type=int, default=0)
+    parser.add_argument("--selector", default="")
+    parser.add_argument("--timeout-ms", "--timeout", dest="timeout_ms", type=int, default=None)
+    parser.add_argument("--json", dest="json_output", action="store_true", default=False)
+    try:
+        args = parser.parse_args(list(argv or []))
+    except SystemExit as exc:
+        return int(exc.code or 0)
+
+    action = str(args.action_opt or "").strip() or str(args.action_arg or "").strip() or "scroll"
+    json_output = bool(args.json_output)
+
+    if action == "scroll-into-view":
+        selector = str(args.selector or "").strip()
+        if not selector:
+            err = BrowserActionError("INVALID_INPUT", "--selector is required for scroll-into-view")
+            _echo_result(CliResult(ok=False, payload={"error": err.to_dict()}), as_json=json_output)
+            return 2
+        params: dict[str, Any] = {"selector": selector}
+        if args.timeout_ms is not None:
+            params["timeout_ms"] = int(args.timeout_ms)
+        try:
+            _run_cli_action("scroll_into_view", params, json_output=json_output)
+            return 0
+        except typer.Exit as exc:
+            return int(exc.exit_code or 0)
+        except SystemExit as exc:
+            return int(exc.code or 0)
+
+    try:
+        _run_cli_action(
+            "scroll",
+            {"delta_x": int(args.x), "delta_y": int(args.y)},
+            json_output=json_output,
+        )
+        return 0
+    except typer.Exit as exc:
+        return int(exc.exit_code or 0)
+    except SystemExit as exc:
+        return int(exc.code or 0)

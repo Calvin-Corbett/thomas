@@ -16,17 +16,16 @@ from __future__ import annotations
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 import typer
 
 from thomas.plugins.p109_plugin_hook_before_model import BeforeModelError, hook_json_schema, run_json
 
-
 app = typer.Typer(add_completion=False, help="Run the P109 before-model hook.")
 
 
-def _read_text_source(value: Optional[str]) -> Optional[str]:
+def _read_text_source(value: str | None) -> str | None:
     """Read JSON text from:
 
     - None => None
@@ -51,7 +50,7 @@ def _read_text_source(value: Optional[str]) -> Optional[str]:
     return s
 
 
-def _coerce_json_object(text: Optional[str], *, kind: str) -> Optional[Dict[str, Any]]:
+def _coerce_json_object(text: str | None, *, kind: str) -> dict[str, Any] | None:
     if text is None:
         return None
 
@@ -76,12 +75,12 @@ def _coerce_json_object(text: Optional[str], *, kind: str) -> Optional[Dict[str,
 
 @app.command("run")
 def run(
-    request: Optional[str] = typer.Option(
+    request: str | None = typer.Option(
         None,
         "--request",
         help="Request JSON (or @file / @- for stdin). Must include {messages:[...]}",
     ),
-    config: Optional[str] = typer.Option(
+    config: str | None = typer.Option(
         None,
         "--config",
         help="Hook config JSON (or @file / @-). Expects {inject_system: ...}",
@@ -115,14 +114,14 @@ def run(
                 raise typer.Exit(code=2)
         except typer.Exit:
             raise
-        except Exception:
+        except json.JSONDecodeError:
             raise typer.Exit(code=2)
         return
 
     # Human output
     try:
         payload = json.loads(out_text)
-    except Exception:
+    except json.JSONDecodeError:
         typer.echo(out_text)
         return
 
@@ -155,8 +154,9 @@ def register(parent_app: Any) -> None:
 
     try:
         parent_app.add_typer(app, name="p109-before-model")
-    except Exception:
+    except json.JSONDecodeError:
         return
+
 
 # Extra discovery aliases for differing CLI loaders.
 APP = app

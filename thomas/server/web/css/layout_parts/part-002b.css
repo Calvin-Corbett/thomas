@@ -1,0 +1,599 @@
+    .office-minimap {
+        width: 220px;
+    }
+
+    .office-debug-overlay {
+        width: min(320px, calc(100% - 20px));
+    }
+
+    .office-bottom-dock {
+        grid-template-columns: 1fr;
+    }
+
+    .office-chat-log {
+        max-height: 80px;
+    }
+
+    .mission-kpi-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .mission-ops-strip {
+        grid-template-columns: 1fr;
+    }
+
+    .mission-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mission-panel-jobs,
+    .mission-panel-priority {
+        grid-row: auto;
+    }
+
+    .mission-list-jobs,
+    .mission-list-priority,
+    .mission-list-approvals,
+    .mission-list-rooms,
+    .mission-list-timeline {
+        max-height: 300px;
+    }
+}
+
+@media (max-width: 760px) {
+    .office-workspace {
+        padding: 64px 6px 8px;
+        gap: 8px;
+    }
+
+    .office-toolbar {
+        padding: 7px;
+        gap: 7px;
+    }
+
+    .office-toolbar-title {
+        font-size: 11px;
+        letter-spacing: 0.06em;
+    }
+
+    .office-map-controls {
+        right: 8px;
+        bottom: 8px;
+        padding: 5px;
+    }
+
+    .office-minimap {
+        width: 176px;
+        left: 8px;
+        bottom: 8px;
+    }
+
+    .office-debug-overlay {
+        top: 8px;
+        right: 8px;
+        left: 8px;
+        width: auto;
+        padding: 7px 8px;
+    }
+
+    .office-debug-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    #officeMinimapCanvas {
+        height: 116px;
+    }
+
+    .office-minimap-head {
+        padding: 5px 6px;
+    }
+
+    .office-minimap-head .settings-mini-btn {
+        min-height: 22px;
+        height: 22px;
+        padding: 0 6px;
+        font-size: 9px;
+    }
+
+    .office-map-controls .btn-icon,
+    .office-map-controls .settings-mini-btn {
+        min-width: 33px;
+        height: 33px;
+    }
+
+    .office-scene-wrap {
+        border-radius: 16px;
+        min-height: 56vh;
+    }
+
+    .office-editor-modal {
+        padding: 8px;
+    }
+
+    .office-editor-card {
+        width: 100%;
+        padding: 10px;
+    }
+
+    .office-editor-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .office-scene {
+        min-height: 0;
+    }
+
+    .office-bottom-dock {
+        gap: 8px;
+    }
+
+    .office-chat-log {
+        min-height: 48px;
+        max-height: 66px;
+    }
+
+    .office-chat-row {
+        flex-direction: column;
+    }
+
+    .office-chat-row button {
+        width: 100%;
+    }
+
+    .mission-workspace {
+        padding: 66px 8px 8px;
+    }
+
+    .mission-header {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .mission-kpi-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .mission-field-row {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Office UI refresh: preserve map rendering while modernizing controls/panels. */
+.office-workspace {
+    grid-template-columns: minmax(0, 1fr) minmax(320px, 34%);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas:
+        "toolbar toolbar"
+        "stage dock";
+    gap: 12px;
+    padding: 72px 14px 14px;
+    background:
+        radial-gradient(circle at 14% 16%, rgba(255, 124, 69, 0.18), rgba(255, 124, 69, 0) 40%),
+        radial-gradient(circle at 84% 14%, rgba(78, 177, 255, 0.24), rgba(78, 177, 255, 0) 44%),
+        radial-gradient(circle at 56% 84%, rgba(98, 227, 186, 0.12), rgba(98, 227, 186, 0) 38%),
+        linear-gradient(180deg, rgba(7, 12, 20, 0.98), rgba(8, 14, 24, 0.98));
+    overflow: hidden;
+}
+
+.office-toolbar {
+    grid-area: toolbar;
+    justify-content: flex-end;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 16px;
+    border-color: rgba(165, 202, 245, 0.3);
+    background: linear-gradient(180deg, rgba(15, 25, 39, 0.9), rgba(13, 22, 35, 0.84));
+    box-shadow: inset 0 0 0 1px rgba(213, 233, 255, 0.08);
+    overflow: visible;
+}
+
+.office-toolbar-title {
+    display: none;
+}
+
+#officeEditorToggleBtn {
+    display: none;
+}
+
+.office-stage {
+    grid-area: stage;
+    min-height: 0;
+    overflow: hidden;
+}
+
+.office-bottom-dock {
+    grid-area: dock;
+    min-height: 0;
+    display: grid;
+    grid-template-columns: 1fr;
+    grid-template-rows: auto auto;
+    align-content: start;
+    gap: 12px;
+    overflow: visible;
+}
+
+.office-live-panel,
+.office-chatbar,
+.office-task-list,
+.office-chat-log {
+    min-height: 0;
+}
+
+.office-task-list,
+.office-chat-log {
+    max-height: none;
+}
+
+.office-panel,
+.office-chatbar {
+    border-radius: 16px;
+    border-color: rgba(164, 201, 246, 0.24);
+    background: rgba(10, 18, 31, 0.8);
+    box-shadow: inset 0 0 0 1px rgba(210, 231, 255, 0.07);
+    min-width: 0;
+    min-height: 180px;
+    overflow: hidden;
+}
+
+.office-live-panel h3 {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 7px;
+}
+
+.office-editor-dock-btn {
+    margin-top: 4px;
+    align-self: flex-start;
+    min-height: 28px;
+    padding: 4px 10px;
+}
+
+.office-chat-log {
+    min-height: 132px;
+}
+
+.office-scene-wrap {
+    min-width: 0;
+    min-height: 340px;
+    border-radius: 22px;
+    border-color: rgba(169, 204, 245, 0.38);
+    background:
+        radial-gradient(120% 90% at 50% 0%, rgba(250, 252, 255, 0.2), rgba(250, 252, 255, 0) 62%),
+        linear-gradient(180deg, #111f31, #0e1a2b);
+    box-shadow: inset 0 0 0 1px rgba(230, 240, 255, 0.08), 0 18px 34px rgba(0, 0, 0, 0.32);
+    overflow: hidden;
+}
+
+.office-scene-wrap::before {
+    background:
+        linear-gradient(180deg, rgba(9, 15, 25, 0.12), rgba(9, 15, 25, 0)),
+        radial-gradient(circle at 18% 8%, rgba(255, 151, 92, 0.16), rgba(255, 151, 92, 0) 36%);
+}
+
+.office-scene-wrap::after {
+    inset: -5000%;
+    background:
+        radial-gradient(circle at 26% 18%, rgba(255, 141, 87, 0.18), rgba(255, 141, 87, 0) 34%),
+        radial-gradient(circle at 76% 82%, rgba(94, 204, 255, 0.22), rgba(94, 204, 255, 0) 40%),
+        linear-gradient(180deg, rgba(150, 201, 255, 0.08), rgba(150, 201, 255, 0)),
+        linear-gradient(180deg, #13263a, #101f31);
+    background-size: 100% 100%;
+}
+
+/* Keep the modern canvas map visible, but hide legacy duplicate layers. */
+.office-floor-layer,
+.office-corridor-layer,
+.office-door-layer,
+.office-room-furniture,
+.office-furniture,
+.office-corridor,
+.office-door {
+    opacity: 0;
+}
+
+.office-tilemap-canvas,
+.office-room-layer,
+.office-room,
+.office-room-title,
+.office-room-meta {
+    opacity: 1;
+}
+
+.office-room.overlay .office-room-title {
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgba(108, 138, 181, 0.5);
+    background: rgba(246, 251, 255, 0.88);
+    color: #1d3352;
+    box-shadow: 0 4px 10px rgba(21, 37, 60, 0.12);
+}
+
+.office-room.overlay .office-room-meta {
+    border-width: 1px;
+    border-style: solid;
+    border-color: rgba(108, 138, 181, 0.36);
+    background: rgba(243, 249, 255, 0.84);
+    color: rgba(28, 47, 75, 0.9);
+}
+
+.office-room.overlay.theme-engineering .office-room-title,
+.office-room.overlay.theme-ops .office-room-title {
+    border-color: rgba(70, 117, 182, 0.58);
+    background: rgba(228, 240, 255, 0.92);
+}
+
+.office-room.overlay.theme-content .office-room-title,
+.office-room.overlay.theme-design .office-room-title,
+.office-room.overlay.theme-planning .office-room-title {
+    border-color: rgba(124, 99, 184, 0.56);
+    background: rgba(239, 231, 255, 0.92);
+}
+
+.office-room.overlay.theme-research .office-room-title,
+.office-room.overlay.theme-support .office-room-title {
+    border-color: rgba(79, 143, 120, 0.56);
+    background: rgba(228, 247, 236, 0.92);
+}
+
+.office-room.overlay.theme-break .office-room-title {
+    border-color: rgba(140, 108, 73, 0.58);
+    background: rgba(246, 235, 219, 0.94);
+    color: #54371d;
+}
+
+.office-room.overlay.theme-lobby .office-room-title {
+    border-color: rgba(74, 127, 186, 0.56);
+    background: rgba(226, 239, 255, 0.94);
+}
+
+.office-room.overlay.theme-coffee .office-room-title {
+    border-color: rgba(165, 104, 53, 0.52);
+    background:
+        linear-gradient(180deg, rgba(255, 245, 230, 0.95), rgba(247, 224, 196, 0.9));
+    color: #5d3a1b;
+    box-shadow: 0 4px 10px rgba(92, 56, 24, 0.18);
+}
+
+.office-room.overlay.theme-coffee .office-room-meta {
+    border-color: rgba(170, 109, 57, 0.4);
+    background: rgba(255, 240, 220, 0.92);
+    color: rgba(101, 63, 31, 0.92);
+}
+
+.office-room.overlay.theme-coffee .office-room-meta.has-work {
+    border-color: rgba(192, 119, 52, 0.58);
+    background: rgba(255, 227, 191, 0.94);
+    color: rgba(86, 48, 17, 0.94);
+}
+
+.office-room.overlay.theme-coffee::before {
+    display: block;
+    content: "";
+    position: absolute;
+    inset: 7% 6% 10%;
+    border-radius: 12px;
+    background:
+        radial-gradient(circle at 20% 22%, rgba(255, 238, 209, 0.34), rgba(255, 238, 209, 0) 42%),
+        radial-gradient(circle at 78% 72%, rgba(255, 220, 176, 0.26), rgba(255, 220, 176, 0) 40%);
+    pointer-events: none;
+}
+
+.office-room.overlay.theme-coffee::after {
+    display: block;
+    content: "";
+    position: absolute;
+    right: 13%;
+    top: 14%;
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    background:
+        radial-gradient(circle at 38% 40%, rgba(255, 241, 220, 0.96), rgba(255, 241, 220, 0) 58%),
+        radial-gradient(circle at 62% 66%, rgba(231, 171, 107, 0.42), rgba(231, 171, 107, 0) 60%);
+    box-shadow:
+        -9px 7px 0 0 rgba(223, 156, 88, 0.32),
+        8px 6px 0 0 rgba(255, 221, 178, 0.3);
+    pointer-events: none;
+}
+
+.office-map-controls {
+    top: 14px;
+    right: 14px;
+    bottom: auto;
+    border-radius: 12px;
+    border-color: rgba(99, 144, 197, 0.44);
+    background: rgba(12, 22, 36, 0.9);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.28);
+}
+
+.office-map-controls .btn-icon,
+.office-map-controls .settings-mini-btn {
+    border-color: rgba(128, 176, 233, 0.46);
+    background: rgba(18, 35, 55, 0.82);
+    color: #e6f2ff;
+}
+
+.office-minimap {
+    right: 14px;
+    left: auto;
+    bottom: 14px;
+    width: 220px;
+    min-width: 0;
+    min-height: 0;
+    border-radius: 14px;
+    border-color: rgba(104, 148, 201, 0.44);
+    background: rgba(10, 18, 31, 0.9);
+    overflow: hidden;
+}
+
+.office-minimap-head {
+    border-bottom-color: rgba(130, 173, 225, 0.34);
+    background: rgba(14, 28, 44, 0.88);
+}
+
+#officeMinimapCanvas {
+    height: 132px;
+}
+
+.office-agent-label {
+    border-color: rgba(196, 219, 246, 0.42);
+    background: rgba(9, 17, 28, 0.88);
+}
+
+.office-agent-bubble {
+    border-color: rgba(190, 217, 247, 0.36);
+    background: rgba(13, 23, 36, 0.96);
+}
+
+.office-resizable {
+    position: relative;
+}
+
+.office-resizable.is-resizing {
+    user-select: none;
+}
+
+.office-resize-handle {
+    position: absolute;
+    z-index: 35;
+    border: 0;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    touch-action: none;
+}
+
+.office-resize-handle:hover {
+    background: rgba(141, 196, 255, 0.14);
+}
+
+.office-resize-handle-n,
+.office-resize-handle-s {
+    left: 14px;
+    right: 14px;
+    height: 8px;
+    cursor: ns-resize;
+}
+
+.office-resize-handle-n {
+    top: -4px;
+}
+
+.office-resize-handle-s {
+    bottom: -4px;
+}
+
+.office-resize-handle-e,
+.office-resize-handle-w {
+    top: 14px;
+    bottom: 14px;
+    width: 8px;
+    cursor: ew-resize;
+}
+
+.office-resize-handle-e {
+    right: -4px;
+}
+
+.office-resize-handle-w {
+    left: -4px;
+}
+
+.office-resize-handle-ne,
+.office-resize-handle-nw,
+.office-resize-handle-se,
+.office-resize-handle-sw {
+    width: 12px;
+    height: 12px;
+}
+
+.office-resize-handle-ne {
+    top: -4px;
+    right: -4px;
+    cursor: nesw-resize;
+}
+
+.office-resize-handle-nw {
+    top: -4px;
+    left: -4px;
+    cursor: nwse-resize;
+}
+
+.office-resize-handle-se {
+    right: -4px;
+    bottom: -4px;
+    cursor: nwse-resize;
+}
+
+.office-resize-handle-sw {
+    left: -4px;
+    bottom: -4px;
+    cursor: nesw-resize;
+}
+
+@media (max-width: 1080px) {
+    .office-workspace {
+        grid-template-columns: 1fr;
+        grid-template-areas:
+            "toolbar"
+            "stage"
+            "dock";
+    }
+
+    .office-stage {
+        min-height: 52vh;
+    }
+
+    .office-bottom-dock {
+        grid-template-rows: auto auto;
+    }
+
+    .office-chat-log {
+        min-height: 96px;
+    }
+}
+
+@media (max-width: 760px) {
+    .office-workspace {
+        padding: 64px 8px 8px;
+        gap: 8px;
+    }
+
+    .office-toolbar {
+        border-radius: 12px;
+        min-width: 0;
+        min-height: 0;
+    }
+
+    .office-scene-wrap {
+        border-radius: 16px;
+        min-height: 48vh;
+        min-width: 0;
+    }
+
+    .office-map-controls {
+        top: auto;
+        right: 8px;
+        bottom: 8px;
+        padding: 5px;
+    }
+
+    .office-minimap {
+        left: 8px;
+        right: auto;
+        width: 168px;
+        bottom: 8px;
+    }
+
+    #officeMinimapCanvas {
+        height: 114px;
+    }
+
+    .office-chat-log {
+        min-height: 76px;
+    }
+
+    .office-resize-handle {
+        display: none;
+    }

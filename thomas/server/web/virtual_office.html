@@ -1,0 +1,2040 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thomas AI Virtual Office</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+            gap: 0;
+        }
+
+        #sidebar {
+            width: 280px;
+            background: #141b2d;
+            border-right: 2px solid #00d4ff;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 16px;
+            gap: 20px;
+        }
+
+        #sidebar h2 {
+            color: #00d4ff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #00d4ff;
+            padding-bottom: 8px;
+        }
+
+        .room-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .room-item {
+            padding: 8px 12px;
+            background: #1a2332;
+            border: 1px solid #2a3a52;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            color: #b0b0b0;
+        }
+
+        .room-item:hover {
+            background: #1f2a3f;
+            border-color: #00d4ff;
+            color: #00d4ff;
+        }
+
+        .room-item.active {
+            background: #00d4ff;
+            border-color: #00d4ff;
+            color: #0a0e1a;
+            font-weight: bold;
+        }
+
+        .agent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .agent-item {
+            padding: 8px 12px;
+            background: #1a2332;
+            border: 1px solid #2a3a52;
+            border-radius: 2px;
+            font-size: 11px;
+            color: #90c890;
+        }
+
+        #minimapContainer {
+            width: 100%;
+            height: 160px;
+            background: #0f1520;
+            border: 1px solid #2a3a52;
+            border-radius: 2px;
+            margin-top: 10px;
+        }
+
+        #minimap {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #mainArea {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0a0e1a;
+        }
+
+        #canvasWrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #0a0e1a 0%, #141b2d 100%);
+        }
+
+        #gameCanvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: grab;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        #gameCanvas:active {
+            cursor: grabbing;
+        }
+
+        #controls {
+            padding: 12px 16px;
+            background: #141b2d;
+            border-top: 2px solid #00d4ff;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .control-label {
+            color: #00d4ff;
+            font-weight: bold;
+            min-width: 80px;
+        }
+
+        .zoom-display {
+            color: #90c890;
+            font-weight: bold;
+            min-width: 50px;
+        }
+
+        #statusBar {
+            padding: 10px 16px;
+            background: #0a0e1a;
+            border-top: 1px solid #2a3a52;
+            font-size: 11px;
+            color: #606060;
+            display: flex;
+            gap: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            gap: 6px;
+        }
+
+        .status-label {
+            color: #00d4ff;
+        }
+
+        .status-value {
+            color: #90c890;
+        }
+
+        #sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #sidebar::-webkit-scrollbar-track {
+            background: #0f1520;
+        }
+
+        #sidebar::-webkit-scrollbar-thumb {
+            background: #00d4ff;
+            border-radius: 4px;
+        }
+
+        #sidebar::-webkit-scrollbar-thumb:hover {
+            background: #00ffff;
+        }
+
+        #customization-panel {
+            position: fixed;
+            left: -350px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 330px;
+            max-height: 500px;
+            background-color: #1a1a2e;
+            border: 2px solid #0ff;
+            color: #0ff;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            z-index: 999;
+            transition: left 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+            overflow-y: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="sidebar">
+            <div>
+                <h2>Rooms</h2>
+                <div class="room-list" id="roomList"></div>
+            </div>
+
+            <div>
+                <h2>Agents Online</h2>
+                <div class="agent-list" id="agentList"></div>
+            </div>
+
+            <div>
+                <h2>Minimap</h2>
+                <div id="minimapContainer">
+                    <canvas id="minimap"></canvas>
+                </div>
+            </div>
+
+            <button id="customizer-toggle" style="padding: 10px; background: #4A90E2; color: white; border: 1px solid #00d4ff; cursor: pointer; font-weight: bold; margin-top: auto;">CUSTOMIZE ROBOT (C)</button>
+        </div>
+
+        <div id="mainArea">
+            <div id="canvasWrapper">
+                <canvas id="gameCanvas"></canvas>
+            </div>
+            <div id="controls">
+                <div class="control-group">
+                    <span class="control-label">ZOOM:</span>
+                    <span class="zoom-display" id="zoomDisplay">100%</span>
+                </div>
+                <div class="control-group">
+                    <span class="control-label">Pan with CLICK + DRAG</span>
+                </div>
+                <div class="control-group">
+                    <span class="control-label">Zoom with SCROLL</span>
+                </div>
+            </div>
+            <div id="statusBar">
+                <div class="status-item">
+                    <span class="status-label">OFFICE SIZE:</span>
+                    <span class="status-value" id="statusSize">0x0 tiles</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">ROOMS:</span>
+                    <span class="status-value" id="statusRooms">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">AGENTS:</span>
+                    <span class="status-value" id="statusAgents">0</span>
+                </div>
+                <div class="status-item">
+                    <span class="status-label">FPS:</span>
+                    <span class="status-value" id="statusFps">0</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ============================================================================
+        // CONSTANTS & CONFIGURATION
+        // ============================================================================
+        const TILE_SIZE = 32;
+        const WORLD_WIDTH = 100;
+        const WORLD_HEIGHT = 80;
+        const AGENT_SIZE = 28;
+
+        const PALETTE = {
+            bg: '#0a0e1a',
+            darkBg: '#050809',
+            surface: '#141b2d',
+            accent: '#00d4ff',
+            accentBright: '#00ffff',
+            gold: '#ffd700',
+            goldDim: '#ccaa00',
+            wall: '#2a3a52',
+            floor: '#1a2532',
+            corridor: '#1a2a42',
+            green: '#90c890',
+            greenBright: '#b0e0b0',
+            red: '#ff6b6b',
+            redDim: '#cc5555',
+            blue: '#5b9bff',
+            blueDim: '#4477dd',
+            purple: '#c77dff',
+            orange: '#ffb347',
+        };
+
+        // ============================================================================
+        // AGENT/ROBOT CLASS
+        // ============================================================================
+
+        class AgentRobot {
+            constructor(id, name, role, customization = {}) {
+                this.id = id;
+                this.name = name;
+                this.role = role;
+
+                this.status = 'idle';
+                this.currentRoom = 'lobby';
+                this.targetRoom = null;
+                this.path = [];
+                this.pathIndex = 0;
+
+                this.position = { x: 300, y: 300 };
+                this.targetPosition = { x: 300, y: 300 };
+                this.velocity = { x: 0, y: 0 };
+
+                this.deskPosition = { x: 0, y: 0 };
+                this.deskTile = { x: 0, y: 0 };
+
+                this.customization = {
+                    bodyColor: customization.bodyColor || '#4A90E2',
+                    accentColor: customization.accentColor || '#2E5C8A',
+                    eyeColor: customization.eyeColor || '#FFFFFF',
+                    hatType: customization.hatType || 'none',
+                    accessory: customization.accessory || 'none',
+                    antennaStyle: customization.antennaStyle || 'straight'
+                };
+
+                this.highScores = {};
+                this.trophies = [];
+
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.direction = 'down';
+                this.spriteCanvas = null;
+                this.spriteCache = {};
+
+                this.generateSprite();
+            }
+
+            generateSprite() {
+                const size = 32;
+                this.spriteCache = {};
+
+                ['down', 'up', 'left', 'right'].forEach(direction => {
+                    const canvas = document.createElement('canvas');
+                    canvas.width = size;
+                    canvas.height = size;
+                    const ctx = canvas.getContext('2d');
+                    ctx.clearRect(0, 0, size, size);
+                    this.drawRobotBody(ctx, size, direction, 0);
+                    this.spriteCache[direction] = canvas;
+                });
+            }
+
+            drawRobotBody(ctx, size, direction, animFrame) {
+                const c = this.customization;
+                const bodyColor = c.bodyColor;
+                const accentColor = c.accentColor;
+                const eyeColor = c.eyeColor;
+
+                const centerX = size / 2;
+                const centerY = size / 2;
+
+                const bodyWidth = 14;
+                const bodyHeight = 18;
+                const bodyX = centerX - bodyWidth / 2;
+                const bodyY = centerY - 2;
+
+                ctx.fillStyle = bodyColor;
+                ctx.beginPath();
+                ctx.roundRect(bodyX, bodyY, bodyWidth, bodyHeight, 3);
+                ctx.fill();
+
+                ctx.fillStyle = accentColor;
+                ctx.fillRect(bodyX + 2, bodyY + 6, bodyWidth - 4, 2);
+
+                const armY = bodyY + 5;
+                const armLength = 6;
+                const armHeight = 3;
+
+                ctx.fillStyle = bodyColor;
+                let leftArmAngle = 0;
+                let rightArmAngle = 0;
+
+                if (this.status === 'traveling') {
+                    leftArmAngle = Math.sin(animFrame * Math.PI / 2) * 0.3;
+                    rightArmAngle = Math.sin((animFrame + 2) * Math.PI / 2) * 0.3;
+                } else if (this.status === 'working') {
+                    leftArmAngle = Math.sin(animFrame * Math.PI) * 0.4;
+                    rightArmAngle = Math.sin((animFrame + 1) * Math.PI) * 0.4;
+                }
+
+                ctx.save();
+                ctx.translate(bodyX - 1, armY);
+                ctx.rotate(leftArmAngle);
+                ctx.fillRect(-armLength, 0, armLength, armHeight);
+                ctx.restore();
+
+                ctx.save();
+                ctx.translate(bodyX + bodyWidth + 1, armY);
+                ctx.rotate(rightArmAngle);
+                ctx.fillRect(0, 0, armLength, armHeight);
+                ctx.restore();
+
+                const legY = bodyY + bodyHeight - 1;
+                const legWidth = 3;
+                const legHeight = 6;
+
+                let leftLegOffset = 0;
+                let rightLegOffset = 0;
+                if (this.status === 'traveling') {
+                    leftLegOffset = Math.sin(animFrame * Math.PI / 2) * 2;
+                    rightLegOffset = Math.sin((animFrame + 2) * Math.PI / 2) * 2;
+                }
+
+                ctx.fillStyle = accentColor;
+                ctx.fillRect(bodyX + 2, legY + leftLegOffset, legWidth, legHeight);
+                ctx.fillRect(bodyX + bodyWidth - legWidth - 2, legY + rightLegOffset, legWidth, legHeight);
+
+                const headRadius = 6;
+                const headX = centerX;
+                const headY = bodyY - 6;
+
+                ctx.fillStyle = bodyColor;
+                ctx.beginPath();
+                ctx.arc(headX, headY, headRadius, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = eyeColor;
+                ctx.fillRect(headX - 4, headY - 2, 2, 2);
+                ctx.fillRect(headX + 2, headY - 2, 2, 2);
+
+                ctx.fillStyle = '#000000';
+                let pupilOffsetX = 0;
+                let pupilOffsetY = 0;
+                if (direction === 'left') pupilOffsetX = -0.5;
+                if (direction === 'right') pupilOffsetX = 0.5;
+                if (direction === 'up') pupilOffsetY = -0.5;
+                if (direction === 'down') pupilOffsetY = 0.5;
+
+                ctx.fillRect(headX - 3.5 + pupilOffsetX, headY - 1.5 + pupilOffsetY, 1, 1);
+                ctx.fillRect(headX + 2.5 + pupilOffsetX, headY - 1.5 + pupilOffsetY, 1, 1);
+
+                ctx.strokeStyle = '#000000';
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                ctx.arc(headX, headY + 2, 2, 0, Math.PI);
+                ctx.stroke();
+
+                if (c.antennaStyle !== 'none') {
+                    ctx.strokeStyle = accentColor;
+                    ctx.lineWidth = 1;
+
+                    if (c.antennaStyle === 'straight') {
+                        ctx.beginPath();
+                        ctx.moveTo(headX, headY - headRadius);
+                        ctx.lineTo(headX, headY - headRadius - 8);
+                        ctx.stroke();
+                        ctx.fillStyle = accentColor;
+                        ctx.beginPath();
+                        ctx.arc(headX, headY - headRadius - 8, 1.5, 0, Math.PI * 2);
+                        ctx.fill();
+                    } else if (c.antennaStyle === 'curved') {
+                        ctx.beginPath();
+                        ctx.moveTo(headX, headY - headRadius);
+                        ctx.quadraticCurveTo(headX - 3, headY - headRadius - 6, headX - 2, headY - headRadius - 8);
+                        ctx.stroke();
+                        ctx.fillStyle = accentColor;
+                        ctx.beginPath();
+                        ctx.arc(headX - 2, headY - headRadius - 8, 1, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+
+                if (c.hatType === 'hardhat') {
+                    const hatY = headY - headRadius - 1;
+                    ctx.fillStyle = '#FF9800';
+                    ctx.beginPath();
+                    ctx.ellipse(headX, hatY - 3, 8, 3, 0, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.strokeStyle = '#000000';
+                    ctx.lineWidth = 0.5;
+                    ctx.stroke();
+                    ctx.fillStyle = '#E65100';
+                    ctx.fillRect(headX - 8.5, hatY - 1, 17, 1.5);
+                } else if (c.hatType === 'crown') {
+                    const hatY = headY - headRadius - 1;
+                    ctx.fillStyle = '#FFD700';
+                    ctx.beginPath();
+                    ctx.moveTo(headX - 6, hatY);
+                    ctx.lineTo(headX - 4, hatY - 5);
+                    ctx.lineTo(headX - 1, hatY - 2);
+                    ctx.lineTo(headX, hatY - 6);
+                    ctx.lineTo(headX + 1, hatY - 2);
+                    ctx.lineTo(headX + 4, hatY - 5);
+                    ctx.lineTo(headX + 6, hatY);
+                    ctx.closePath();
+                    ctx.fill();
+                }
+
+                const statusColors = {
+                    idle: '#4CAF50',
+                    working: '#2196F3',
+                    gaming: '#FFC107',
+                    traveling: '#FF9800'
+                };
+                ctx.fillStyle = statusColors[this.status] || '#4CAF50';
+                ctx.beginPath();
+                ctx.arc(centerX, size - 2, 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+
+            updateAnimation(deltaTime) {
+                if (this.status === 'traveling') {
+                    this.animTimer += deltaTime;
+                    if (this.animTimer >= 200) {
+                        this.animFrame = (this.animFrame + 1) % 4;
+                        this.animTimer = 0;
+                    }
+                } else if (this.status === 'working') {
+                    this.animTimer += deltaTime;
+                    if (this.animTimer >= 150) {
+                        this.animFrame = (this.animFrame + 1) % 4;
+                        this.animTimer = 0;
+                    }
+                } else if (this.status === 'idle') {
+                    this.animTimer += deltaTime;
+                    this.animFrame = (this.animTimer / 1000) % 1;
+                }
+            }
+
+            setTargetRoom(roomId, tileMap) {
+                this.targetRoom = roomId;
+                this.status = 'traveling';
+
+                const currentTile = {
+                    x: Math.floor(this.position.x / TILE_SIZE),
+                    y: Math.floor(this.position.y / TILE_SIZE)
+                };
+
+                const room = tileMap.rooms.find(r => r.id === roomId);
+                const targetTile = {
+                    x: room.x + Math.floor(room.w / 2),
+                    y: room.y + Math.floor(room.h / 2)
+                };
+
+                this.path = this.findPath(currentTile, targetTile, tileMap);
+                this.pathIndex = 0;
+            }
+
+            findPath(start, goal, tileMap) {
+                const openSet = [start];
+                const cameFrom = new Map();
+                const gScore = new Map();
+                const fScore = new Map();
+
+                const key = (p) => `${p.x},${p.y}`;
+                const heuristic = (p) => Math.abs(p.x - goal.x) + Math.abs(p.y - goal.y);
+
+                gScore.set(key(start), 0);
+                fScore.set(key(start), heuristic(start));
+
+                while (openSet.length > 0) {
+                    let current = openSet[0];
+                    let currentIdx = 0;
+                    for (let i = 1; i < openSet.length; i++) {
+                        if (fScore.get(key(openSet[i])) < fScore.get(key(current))) {
+                            current = openSet[i];
+                            currentIdx = i;
+                        }
+                    }
+
+                    if (current.x === goal.x && current.y === goal.y) {
+                        const path = [current];
+                        while (cameFrom.has(key(current))) {
+                            current = cameFrom.get(key(current));
+                            path.unshift(current);
+                        }
+                        return path;
+                    }
+
+                    openSet.splice(currentIdx, 1);
+
+                    const neighbors = [
+                        { x: current.x + 1, y: current.y },
+                        { x: current.x - 1, y: current.y },
+                        { x: current.x, y: current.y + 1 },
+                        { x: current.x, y: current.y - 1 }
+                    ];
+
+                    for (const neighbor of neighbors) {
+                        if (!this.isWalkable(neighbor, tileMap)) continue;
+
+                        const tentativeGScore = gScore.get(key(current)) + 1;
+
+                        if (!gScore.has(key(neighbor)) || tentativeGScore < gScore.get(key(neighbor))) {
+                            cameFrom.set(key(neighbor), current);
+                            gScore.set(key(neighbor), tentativeGScore);
+                            fScore.set(key(neighbor), tentativeGScore + heuristic(neighbor));
+
+                            if (!openSet.some(p => p.x === neighbor.x && p.y === neighbor.y)) {
+                                openSet.push(neighbor);
+                            }
+                        }
+                    }
+                }
+
+                return [];
+            }
+
+            isWalkable(tile, tileMap) {
+                const tileType = tileMap.getTile(tile.x, tile.y);
+                return tileType !== 'wall';
+            }
+
+            updateMovement(deltaTime, tileMap) {
+                if (this.status !== 'traveling' || this.path.length === 0) return;
+
+                const nextTile = this.path[this.pathIndex];
+                this.targetPosition = {
+                    x: nextTile.x * TILE_SIZE + TILE_SIZE / 2,
+                    y: nextTile.y * TILE_SIZE + TILE_SIZE / 2
+                };
+
+                const speed = 2 * TILE_SIZE / 1000;
+                const dx = this.targetPosition.x - this.position.x;
+                const dy = this.targetPosition.y - this.position.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                if (distance < speed * deltaTime) {
+                    this.position = { ...this.targetPosition };
+                    this.pathIndex++;
+
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        this.direction = dx > 0 ? 'right' : 'left';
+                    } else {
+                        this.direction = dy > 0 ? 'down' : 'up';
+                    }
+
+                    if (this.pathIndex >= this.path.length) {
+                        this.status = 'idle';
+                        this.path = [];
+                    }
+                } else {
+                    const moveDistance = speed * deltaTime;
+                    const ratio = moveDistance / distance;
+                    this.position.x += dx * ratio;
+                    this.position.y += dy * ratio;
+
+                    if (Math.abs(dx) > Math.abs(dy)) {
+                        this.direction = dx > 0 ? 'right' : 'left';
+                    } else {
+                        this.direction = dy > 0 ? 'down' : 'up';
+                    }
+                }
+            }
+
+            setStatus(status) {
+                this.status = status;
+            }
+
+            recordScore(gameId, gameName, score) {
+                if (!this.highScores[gameId]) {
+                    this.highScores[gameId] = 0;
+                }
+
+                const previousHigh = this.highScores[gameId];
+                this.highScores[gameId] = Math.max(this.highScores[gameId], score);
+
+                if (score > previousHigh) {
+                    this.trophies.push({
+                        game: gameName,
+                        gameId: gameId,
+                        score: score,
+                        date: new Date().toLocaleDateString()
+                    });
+                }
+            }
+
+            customizeRobot(customization) {
+                this.customization = { ...this.customization, ...customization };
+                this.generateSprite();
+            }
+        }
+
+        // ============================================================================
+        // HIGH SCORE MANAGER
+        // ============================================================================
+
+        class HighScoreManager {
+            constructor() {
+                this.scores = {};
+                this.gameInfo = {};
+            }
+
+            registerGame(gameId, name, color = '#FF6B6B') {
+                this.gameInfo[gameId] = { name, color };
+                if (!this.scores[gameId]) {
+                    this.scores[gameId] = {};
+                }
+            }
+
+            recordScore(gameId, agentId, score) {
+                if (!this.scores[gameId]) {
+                    this.scores[gameId] = {};
+                }
+                this.scores[gameId][agentId] = score;
+            }
+
+            getTopScores(gameId, limit = 5) {
+                const gameScores = this.scores[gameId] || {};
+                return Object.entries(gameScores)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, limit)
+                    .map(([agentId, score]) => ({ agentId, score }));
+            }
+        }
+
+        // ============================================================================
+        // SPRITE ATLAS GENERATOR
+        // ============================================================================
+        class SpriteAtlas {
+            constructor() {
+                this.canvas = document.createElement('canvas');
+                this.canvas.width = 1024;
+                this.canvas.height = 1024;
+                this.ctx = this.canvas.getContext('2d');
+                this.tiles = {};
+                this.tileIndex = 0;
+                this.tilesPerRow = 32;
+                this.generateAllTiles();
+            }
+
+            getTilePos(index) {
+                const row = Math.floor(index / this.tilesPerRow);
+                const col = index % this.tilesPerRow;
+                return [col * TILE_SIZE, row * TILE_SIZE];
+            }
+
+            drawPixel(x, y, color) {
+                this.ctx.fillStyle = color;
+                this.ctx.fillRect(x, y, 1, 1);
+            }
+
+            drawRect(x, y, w, h, color) {
+                this.ctx.fillStyle = color;
+                this.ctx.fillRect(x, y, w, h);
+            }
+
+            drawLine(x1, y1, x2, y2, color, width = 1) {
+                this.ctx.strokeStyle = color;
+                this.ctx.lineWidth = width;
+                this.ctx.beginPath();
+                this.ctx.moveTo(x1, y1);
+                this.ctx.lineTo(x2, y2);
+                this.ctx.stroke();
+            }
+
+            registerTile(name) {
+                const [x, y] = this.getTilePos(this.tileIndex);
+                this.tiles[name] = { x, y, index: this.tileIndex };
+                this.tileIndex++;
+                return { x, y };
+            }
+
+            drawFloor() {
+                const [x, y] = this.registerTile('floor');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        if ((i + j) % 2 === 0) {
+                            this.drawRect(x + i * 8, y + j * 8, 8, 8, '#1f2a3a');
+                        }
+                    }
+                }
+                this.drawLine(x, y, x + TILE_SIZE, y, '#252f42', 1);
+            }
+
+            drawCorridor() {
+                const [x, y] = this.registerTile('corridor');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.corridor);
+                for (let i = 0; i < 8; i++) {
+                    this.drawLine(x + i * 4, y + i * 4, x + i * 4 + 4, y + i * 4 - 4, '#2a3a52', 1);
+                }
+                this.drawLine(x, y, x + TILE_SIZE, y, '#3a4a62', 1);
+            }
+
+            drawWall() {
+                const [x, y] = this.registerTile('wall');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.wall);
+                this.drawRect(x + 2, y + 2, 12, 12, '#3a4a62');
+                this.drawRect(x + 18, y + 2, 12, 12, '#3a4a62');
+                this.drawRect(x + 2, y + 18, 12, 12, '#3a4a62');
+                this.drawRect(x + 18, y + 18, 12, 12, '#3a4a62');
+                this.drawLine(x, y, x + TILE_SIZE, y, '#4a5a72', 1);
+                this.drawLine(x, y, x, y + TILE_SIZE, '#4a5a72', 1);
+            }
+
+            drawDoor() {
+                const [x, y] = this.registerTile('door');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 4, y + 4, 24, 24, '#cc8844');
+                this.drawRect(x + 6, y + 6, 20, 20, '#aa6633');
+                this.drawLine(x + 14, y + 6, x + 14, y + 26, '#dd9955', 2);
+                this.drawRect(x + 20, y + 14, 3, 3, PALETTE.gold);
+            }
+
+            drawDeskWithMonitors() {
+                const [x, y] = this.registerTile('desk');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 4, y + 8, 24, 18, '#664433');
+                this.drawRect(x + 4, y + 4, 9, 9, '#333333');
+                this.drawRect(x + 5, y + 5, 7, 7, PALETTE.blue);
+                this.drawRect(x + 19, y + 4, 9, 9, '#333333');
+                this.drawRect(x + 20, y + 5, 7, 7, '#ff5555');
+                this.drawRect(x + 8, y + 22, 16, 4, '#444444');
+                this.drawLine(x + 6, y + 26, x + 6, y + 30, '#553322', 1);
+                this.drawLine(x + 26, y + 26, x + 26, y + 30, '#553322', 1);
+            }
+
+            drawChair() {
+                const [x, y] = this.registerTile('chair');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 10, y + 14, 12, 12, '#444444');
+                this.drawRect(x + 11, y + 4, 10, 10, '#555555');
+                this.drawLine(x + 8, y + 16, x + 8, y + 22, '#555555', 2);
+                this.drawLine(x + 24, y + 16, x + 24, y + 22, '#555555', 2);
+                this.drawRect(x + 12, y + 26, 8, 3, '#333333');
+            }
+
+            drawPlant() {
+                const [x, y] = this.registerTile('plant');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 10, y + 18, 12, 12, '#884422');
+                this.drawLine(x + 9, y + 18, x + 23, y + 18, '#aa5533', 1);
+                this.drawRect(x + 11, y + 19, 10, 4, '#663311');
+                const leafColor = PALETTE.green;
+                this.drawRect(x + 8, y + 12, 3, 6, leafColor);
+                this.drawRect(x + 6, y + 8, 5, 8, leafColor);
+                this.drawRect(x + 5, y + 5, 3, 5, leafColor);
+                this.drawRect(x + 21, y + 12, 3, 6, leafColor);
+                this.drawRect(x + 21, y + 8, 5, 8, leafColor);
+                this.drawRect(x + 24, y + 5, 3, 5, leafColor);
+                this.drawRect(x + 14, y + 4, 4, 10, leafColor);
+            }
+
+            drawServerRack() {
+                const [x, y] = this.registerTile('server_rack');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 4, y + 2, 24, 28, '#222222');
+                this.drawLine(x + 4, y + 2, x + 28, y + 2, '#444444', 1);
+                this.drawLine(x + 4, y + 30, x + 28, y + 30, '#444444', 1);
+                for (let i = 0; i < 5; i++) {
+                    this.drawRect(x + 6, y + 4 + i * 5, 20, 4, '#1a1a1a');
+                    this.drawRect(x + 8, y + 5 + i * 5, 2, 2, '#ff6666');
+                    this.drawRect(x + 12, y + 5 + i * 5, 2, 2, PALETTE.blue);
+                    this.drawRect(x + 16, y + 5 + i * 5, 2, 2, PALETTE.blue);
+                    this.drawRect(x + 20, y + 5 + i * 5, 2, 2, '#ff6666');
+                }
+            }
+
+            drawConferenceTable() {
+                const [x, y] = this.registerTile('conf_table');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 2, y + 6, 28, 20, '#8b4513');
+                this.drawLine(x + 2, y + 6, x + 30, y + 6, '#a0522d', 1);
+                this.drawLine(x + 2, y + 26, x + 30, y + 26, '#654321', 1);
+                this.drawLine(x + 3, y + 7, x + 29, y + 7, '#d2691e', 1);
+                this.drawLine(x + 8, y + 26, x + 8, y + 30, '#654321', 2);
+                this.drawLine(x + 24, y + 26, x + 24, y + 30, '#654321', 2);
+            }
+
+            drawCoffeMachine() {
+                const [x, y] = this.registerTile('coffee_machine');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 6, y + 4, 20, 24, '#333333');
+                this.drawRect(x + 8, y + 6, 16, 8, '#000000');
+                this.drawRect(x + 9, y + 7, 14, 6, '#1a1a2e');
+                this.drawRect(x + 10, y + 16, 12, 8, '#1a1a1a');
+                this.drawRect(x + 12, y + 18, 2, 4, PALETTE.orange);
+                this.drawRect(x + 14, y + 26, 4, 2, PALETTE.red);
+            }
+
+            drawArcadeMachine() {
+                const [x, y] = this.registerTile('arcade_machine');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 4, y + 2, 24, 26, '#222222');
+                this.drawRect(x + 6, y + 4, 20, 14, '#1a1a1a');
+                this.drawRect(x + 7, y + 5, 18, 12, '#0a3a0a');
+                for (let i = 0; i < 6; i++) {
+                    this.drawLine(x + 7, y + 6 + i * 2, x + 25, y + 6 + i * 2, '#0a5a0a', 1);
+                }
+                this.drawRect(x + 6, y + 20, 20, 6, '#1a1a1a');
+                this.drawRect(x + 8, y + 21, 3, 3, '#444444');
+                this.drawRect(x + 15, y + 21, 2, 2, PALETTE.red);
+                this.drawRect(x + 19, y + 21, 2, 2, PALETTE.blue);
+                this.drawRect(x + 23, y + 21, 2, 2, PALETTE.gold);
+            }
+
+            drawBookshelf() {
+                const [x, y] = this.registerTile('bookshelf');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 2, y + 4, 28, 24, '#704020');
+                for (let i = 0; i < 4; i++) {
+                    this.drawLine(x + 3, y + 8 + i * 6, x + 29, y + 8 + i * 6, '#8b4513', 1);
+                }
+                const colors = [PALETTE.red, PALETTE.blue, PALETTE.gold, PALETTE.purple, '#aa0088', PALETTE.green];
+                let colorIdx = 0;
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        const bx = x + 4 + j * 6;
+                        const by = y + 6 + i * 5;
+                        this.drawRect(bx, by, 4, 3, colors[colorIdx % colors.length]);
+                        colorIdx++;
+                    }
+                }
+            }
+
+            drawVendingMachine() {
+                const [x, y] = this.registerTile('vending_machine');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 6, y + 2, 20, 26, '#cc0000');
+                this.drawRect(x + 8, y + 4, 16, 16, '#000000');
+                this.drawRect(x + 9, y + 5, 14, 14, '#0a0a0a');
+                this.drawRect(x + 10, y + 6, 3, 3, PALETTE.orange);
+                this.drawRect(x + 14, y + 6, 3, 3, PALETTE.blue);
+                this.drawRect(x + 18, y + 6, 3, 3, PALETTE.red);
+                this.drawRect(x + 10, y + 11, 3, 3, PALETTE.purple);
+                this.drawRect(x + 14, y + 11, 3, 3, PALETTE.gold);
+                this.drawRect(x + 18, y + 11, 3, 3, PALETTE.green);
+                this.drawRect(x + 8, y + 22, 6, 4, '#333333');
+                this.drawRect(x + 20, y + 22, 4, 4, PALETTE.gold);
+            }
+
+            drawTrophyCase() {
+                const [x, y] = this.registerTile('trophy_case');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 4, y + 2, 24, 26, '#1a1a1a');
+                this.drawLine(x + 4, y + 2, x + 28, y + 2, '#444444', 1);
+                this.drawRect(x + 6, y + 4, 20, 20, '#0a0a0a');
+                this.drawLine(x + 7, y + 5, x + 27, y + 5, '#1a1a1a', 1);
+                this.drawRect(x + 10, y + 12, 4, 8, PALETTE.gold);
+                this.drawRect(x + 9, y + 10, 6, 2, PALETTE.gold);
+                this.drawRect(x + 16, y + 11, 4, 9, '#c0c0c0');
+                this.drawRect(x + 15, y + 9, 6, 2, '#c0c0c0');
+                this.drawRect(x + 22, y + 13, 3, 7, '#cd7f32');
+                this.drawRect(x + 21, y + 11, 5, 2, '#cd7f32');
+            }
+
+            drawExecutiveDesk() {
+                const [x, y] = this.registerTile('exec_desk');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 2, y + 8, 28, 18, '#5a3a1a');
+                this.drawLine(x + 2, y + 8, x + 30, y + 8, '#8b5a2b', 1);
+                this.drawLine(x + 2, y + 26, x + 30, y + 26, '#3a1a0a', 1);
+                this.drawRect(x + 8, y + 4, 12, 8, '#1a1a1a');
+                this.drawRect(x + 9, y + 5, 10, 6, '#2a5a8a');
+                this.drawRect(x + 22, y + 6, 4, 6, PALETTE.gold);
+                this.drawRect(x + 4, y + 6, 2, 6, PALETTE.blue);
+            }
+
+            drawReceptionDesk() {
+                const [x, y] = this.registerTile('reception_desk');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 2, y + 10, 28, 14, '#aa8833');
+                this.drawLine(x + 2, y + 10, x + 30, y + 10, '#ccaa55', 1);
+                this.drawRect(x + 2, y + 24, 28, 6, '#885533');
+                this.drawRect(x + 10, y + 4, 12, 6, '#333333');
+                this.drawRect(x + 11, y + 5, 10, 4, '#0a0a0a');
+                this.drawRect(x + 4, y + 12, 4, 6, '#666666');
+                this.drawRect(x + 22, y + 12, 4, 6, '#666666');
+            }
+
+            drawSofa() {
+                const [x, y] = this.registerTile('sofa');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 2, y + 8, 28, 16, '#664455');
+                this.drawLine(x + 3, y + 8, x + 29, y + 8, '#8a5a7a', 1);
+                this.drawRect(x + 4, y + 12, 6, 8, '#775566');
+                this.drawRect(x + 12, y + 12, 8, 8, '#775566');
+                this.drawRect(x + 22, y + 12, 6, 8, '#775566');
+                this.drawRect(x + 6, y + 24, 2, 6, '#443322');
+                this.drawRect(x + 24, y + 24, 2, 6, '#443322');
+            }
+
+            drawPresentationScreen() {
+                const [x, y] = this.registerTile('presentation_screen');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 12, y + 20, 8, 8, '#333333');
+                this.drawRect(x + 4, y + 2, 24, 20, '#1a1a1a');
+                this.drawRect(x + 6, y + 4, 20, 16, '#000000');
+                this.drawLine(x + 7, y + 5, x + 25, y + 5, '#1a3a5a', 1);
+                this.drawLine(x + 7, y + 8, x + 25, y + 8, '#1a3a5a', 1);
+                this.drawLine(x + 7, y + 11, x + 25, y + 11, '#1a3a5a', 1);
+                this.drawLine(x + 7, y + 14, x + 25, y + 14, '#1a3a5a', 1);
+            }
+
+            drawMonitoringBoard() {
+                const [x, y] = this.registerTile('monitoring_board');
+                this.drawRect(x, y, TILE_SIZE, TILE_SIZE, PALETTE.floor);
+                this.drawRect(x + 2, y + 2, 28, 28, '#1a1a1a');
+                this.drawLine(x + 2, y + 2, x + 30, y + 2, '#444444', 1);
+                for (let i = 0; i < 4; i++) {
+                    for (let j = 0; j < 4; j++) {
+                        const lx = x + 6 + i * 6;
+                        const ly = y + 8 + j * 6;
+                        const status = (i + j) % 3;
+                        const color = status === 0 ? PALETTE.red : status === 1 ? PALETTE.gold : PALETTE.green;
+                        this.drawRect(lx, ly, 3, 3, '#0a0a0a');
+                        this.drawRect(lx + 1, ly + 1, 2, 2, color);
+                    }
+                }
+            }
+
+            generateAllTiles() {
+                this.drawFloor();
+                this.drawCorridor();
+                this.drawWall();
+                this.drawDoor();
+                this.drawDeskWithMonitors();
+                this.drawChair();
+                this.drawPlant();
+                this.drawServerRack();
+                this.drawConferenceTable();
+                this.drawCoffeMachine();
+                this.drawArcadeMachine();
+                this.drawBookshelf();
+                this.drawVendingMachine();
+                this.drawTrophyCase();
+                this.drawExecutiveDesk();
+                this.drawReceptionDesk();
+                this.drawSofa();
+                this.drawPresentationScreen();
+                this.drawMonitoringBoard();
+            }
+        }
+
+        // ============================================================================
+        // TILEMAP & ROOM SYSTEM
+        // ============================================================================
+        class Room {
+            constructor(id, label, x, y, w, h, theme = 'office') {
+                this.id = id;
+                this.label = label;
+                this.x = x;
+                this.y = y;
+                this.w = w;
+                this.h = h;
+                this.theme = theme;
+                this.furniture = [];
+                this.doorPosition = null;
+            }
+
+            addFurniture(type, tx, ty) {
+                this.furniture.push({ type, tx, ty });
+            }
+
+            setDoorPosition(tx, ty) {
+                this.doorPosition = { tx, ty };
+            }
+
+            isInside(tx, ty) {
+                return tx >= this.x && tx < this.x + this.w &&
+                       ty >= this.y && ty < this.y + this.h;
+            }
+
+            getInteriorTiles() {
+                const interior = [];
+                for (let y = this.y; y < this.y + this.h; y++) {
+                    for (let x = this.x; x < this.x + this.w; x++) {
+                        interior.push({ x, y });
+                    }
+                }
+                return interior;
+            }
+        }
+
+        class TileMap {
+            constructor(width, height) {
+                this.width = width;
+                this.height = height;
+                this.tiles = Array(height).fill(null).map(() => Array(width).fill('floor'));
+                this.rooms = [];
+                this.corridors = [];
+            }
+
+            getTile(x, y) {
+                if (x < 0 || x >= this.width || y < 0 || y >= this.height) return 'wall';
+                return this.tiles[y][x];
+            }
+
+            setTile(x, y, type) {
+                if (x >= 0 && x < this.width && y >= 0 && y < this.height) {
+                    this.tiles[y][x] = type;
+                }
+            }
+
+            addRoom(room) {
+                this.rooms.push(room);
+                const interior = room.getInteriorTiles();
+                interior.forEach(tile => this.setTile(tile.x, tile.y, 'floor'));
+            }
+
+            addCorridor(x1, y1, x2, y2) {
+                const corridor = [];
+                const minX = Math.min(x1, x2);
+                const maxX = Math.max(x1, x2);
+                for (let x = minX; x <= maxX; x++) {
+                    this.setTile(x, y1, 'corridor');
+                    corridor.push({ x, y: y1 });
+                }
+                const minY = Math.min(y1, y2);
+                const maxY = Math.max(y1, y2);
+                for (let y = minY; y <= maxY; y++) {
+                    this.setTile(x2, y, 'corridor');
+                    corridor.push({ x: x2, y });
+                }
+                this.corridors.push(corridor);
+            }
+
+            surroundRoomWithWalls(room) {
+                for (let x = room.x - 1; x <= room.x + room.w; x++) {
+                    if (this.getTile(x, room.y - 1) !== 'corridor') this.setTile(x, room.y - 1, 'wall');
+                    if (this.getTile(x, room.y + room.h) !== 'corridor') this.setTile(x, room.y + room.h, 'wall');
+                }
+                for (let y = room.y - 1; y <= room.y + room.h; y++) {
+                    if (this.getTile(room.x - 1, y) !== 'corridor') this.setTile(room.x - 1, y, 'wall');
+                    if (this.getTile(room.x + room.w, y) !== 'corridor') this.setTile(room.x + room.w, y, 'wall');
+                }
+                if (room.doorPosition) {
+                    this.setTile(room.doorPosition.tx, room.doorPosition.ty, 'door');
+                }
+            }
+        }
+
+        // ============================================================================
+        // CAMERA (PAN & ZOOM)
+        // ============================================================================
+        class Camera {
+            constructor(width, height) {
+                this.vx = 0;
+                this.vy = 0;
+                this.zoom = 1.0;
+                this.viewWidth = width;
+                this.viewHeight = height;
+                this.minZoom = 0.5;
+                this.maxZoom = 3.0;
+            }
+
+            panBy(dx, dy) {
+                this.vx += dx;
+                this.vy += dy;
+                this.clampView();
+            }
+
+            zoomAt(amount, mouseX, mouseY) {
+                const oldZoom = this.zoom;
+                const worldX = (mouseX + this.vx) / oldZoom;
+                const worldY = (mouseY + this.vy) / oldZoom;
+
+                const zoomFactor = 1.1;
+                this.zoom *= amount > 0 ? zoomFactor : 1 / zoomFactor;
+                this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, this.zoom));
+
+                this.vx = worldX * this.zoom - mouseX;
+                this.vy = worldY * this.zoom - mouseY;
+                this.clampView();
+            }
+
+            clampView() {
+                const maxX = WORLD_WIDTH * TILE_SIZE * this.zoom - this.viewWidth;
+                const maxY = WORLD_HEIGHT * TILE_SIZE * this.zoom - this.viewHeight;
+                this.vx = Math.max(0, Math.min(this.vx, maxX));
+                this.vy = Math.max(0, Math.min(this.vy, maxY));
+            }
+
+            getScreenPos(worldX, worldY) {
+                return {
+                    x: worldX * this.zoom - this.vx,
+                    y: worldY * this.zoom - this.vy
+                };
+            }
+
+            getWorldPos(screenX, screenY) {
+                return {
+                    x: (screenX + this.vx) / this.zoom,
+                    y: (screenY + this.vy) / this.zoom
+                };
+            }
+        }
+
+        // ============================================================================
+        // RENDERER
+        // ============================================================================
+        class OfficeRenderer {
+            constructor(canvas) {
+                this.canvas = canvas;
+                this.ctx = canvas.getContext('2d');
+                this.spriteAtlas = new SpriteAtlas();
+                this.tileMap = null;
+                this.camera = null;
+                this.frameCount = 0;
+                this.lastFrameTime = Date.now();
+                this.fps = 0;
+            }
+
+            initialize(tileMap, camera) {
+                this.tileMap = tileMap;
+                this.camera = camera;
+                this.resizeCanvas();
+            }
+
+            resizeCanvas() {
+                const rect = this.canvas.parentElement.getBoundingClientRect();
+                this.canvas.width = rect.width;
+                this.canvas.height = rect.height;
+                this.camera.viewWidth = this.canvas.width;
+                this.camera.viewHeight = this.canvas.height;
+                this.camera.clampView();
+            }
+
+            drawSprite(spriteKey, screenX, screenY, width = TILE_SIZE, height = TILE_SIZE) {
+                const sprite = this.spriteAtlas.tiles[spriteKey];
+                if (!sprite) return;
+                this.ctx.drawImage(
+                    this.spriteAtlas.canvas,
+                    sprite.x, sprite.y, TILE_SIZE, TILE_SIZE,
+                    screenX, screenY, width, height
+                );
+            }
+
+            drawTiles() {
+                for (let ty = 0; ty < this.tileMap.height; ty++) {
+                    for (let tx = 0; tx < this.tileMap.width; tx++) {
+                        const tile = this.tileMap.getTile(tx, ty);
+                        const worldX = tx * TILE_SIZE;
+                        const worldY = ty * TILE_SIZE;
+                        const screen = this.camera.getScreenPos(worldX, worldY);
+
+                        if (screen.x + TILE_SIZE < 0 || screen.x > this.canvas.width ||
+                            screen.y + TILE_SIZE < 0 || screen.y > this.canvas.height) {
+                            continue;
+                        }
+
+                        let spriteKey = 'floor';
+                        if (tile === 'corridor') spriteKey = 'corridor';
+                        if (tile === 'wall') spriteKey = 'wall';
+                        if (tile === 'door') spriteKey = 'door';
+                        if (tile === 'floor') spriteKey = 'floor';
+
+                        const scaledSize = TILE_SIZE * this.camera.zoom;
+                        this.drawSprite(spriteKey, screen.x, screen.y, scaledSize, scaledSize);
+                    }
+                }
+            }
+
+            drawFurniture() {
+                for (const room of this.tileMap.rooms) {
+                    for (const item of room.furniture) {
+                        const worldX = item.tx * TILE_SIZE;
+                        const worldY = item.ty * TILE_SIZE;
+                        const screen = this.camera.getScreenPos(worldX, worldY);
+
+                        if (screen.x + TILE_SIZE < 0 || screen.x > this.canvas.width ||
+                            screen.y + TILE_SIZE < 0 || screen.y > this.canvas.height) {
+                            continue;
+                        }
+
+                        const scaledSize = TILE_SIZE * this.camera.zoom;
+                        this.drawSprite(item.type, screen.x, screen.y, scaledSize, scaledSize);
+                    }
+                }
+            }
+
+            drawAgents(agents) {
+                const sortedAgents = [...agents].sort((a, b) => a.position.y - b.position.y);
+
+                sortedAgents.forEach(agent => {
+                    const screen = this.camera.getScreenPos(agent.position.x, agent.position.y);
+
+                    if (screen.x < -50 || screen.x > this.canvas.width + 50 ||
+                        screen.y < -50 || screen.y > this.canvas.height + 50) {
+                        return;
+                    }
+
+                    if (agent.spriteCache[agent.direction]) {
+                        const sprite = agent.spriteCache[agent.direction];
+                        const scaledSize = AGENT_SIZE * this.camera.zoom;
+                        this.ctx.drawImage(
+                            sprite,
+                            screen.x - scaledSize / 2,
+                            screen.y - scaledSize / 2,
+                            scaledSize,
+                            scaledSize
+                        );
+                    }
+
+                    this.ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    this.ctx.fillRect(screen.x - 25, screen.y - 35, 50, 12);
+                    this.ctx.fillStyle = '#FFF';
+                    this.ctx.font = '10px Arial';
+                    this.ctx.textAlign = 'center';
+                    this.ctx.fillText(agent.name, screen.x, screen.y - 27);
+                });
+            }
+
+            drawUI() {
+                this.ctx.fillStyle = 'rgba(10, 14, 26, 0.3)';
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+            }
+
+            render(agents = []) {
+                this.ctx.fillStyle = PALETTE.darkBg;
+                this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                this.drawTiles();
+                this.drawFurniture();
+                this.drawAgents(agents);
+                this.drawUI();
+
+                this.frameCount++;
+                const now = Date.now();
+                if (now - this.lastFrameTime >= 1000) {
+                    this.fps = this.frameCount;
+                    this.frameCount = 0;
+                    this.lastFrameTime = now;
+                }
+            }
+        }
+
+        // ============================================================================
+        // OFFICE BUILDER
+        // ============================================================================
+        function buildDefaultOffice() {
+            const tileMap = new TileMap(WORLD_WIDTH, WORLD_HEIGHT);
+
+            const rooms = {
+                lobby: new Room('lobby', 'Lobby', 30, 20, 16, 14, 'modern'),
+                engineering: new Room('engineering', 'Engineering Bay', 48, 8, 20, 16, 'tech'),
+                research: new Room('research', 'Research Lab', 48, 30, 20, 14, 'academic'),
+                creative: new Room('creative', 'Creative Studio', 8, 30, 16, 14, 'artistic'),
+                ops: new Room('ops', 'Ops Center', 8, 8, 16, 16, 'industrial'),
+                break: new Room('break', 'Break Room', 30, 50, 14, 12, 'casual'),
+                conference: new Room('conference', 'Conference Room', 68, 20, 18, 14, 'professional'),
+                game: new Room('game', 'Game Room', 68, 50, 16, 12, 'casual'),
+                executive: new Room('executive', 'Executive Suite', 8, 50, 16, 12, 'premium'),
+                agentA: new Room('agent_a', 'Agent A Office', 52, 50, 8, 8, 'personal'),
+                agentB: new Room('agent_b', 'Agent B Office', 62, 50, 8, 8, 'personal'),
+                agentC: new Room('agent_c', 'Agent C Office', 72, 50, 8, 8, 'personal'),
+                agentD: new Room('agent_d', 'Agent D Office', 82, 50, 8, 8, 'personal'),
+            };
+
+            for (const room of Object.values(rooms)) {
+                tileMap.addRoom(room);
+            }
+
+            rooms.lobby.setDoorPosition(30, 27);
+            rooms.engineering.setDoorPosition(48, 14);
+            rooms.research.setDoorPosition(48, 37);
+            rooms.creative.setDoorPosition(24, 37);
+            rooms.ops.setDoorPosition(24, 14);
+            rooms.break.setDoorPosition(37, 62);
+            rooms.conference.setDoorPosition(68, 27);
+            rooms.game.setDoorPosition(75, 62);
+            rooms.executive.setDoorPosition(24, 62);
+            rooms.agentA.setDoorPosition(52, 58);
+            rooms.agentB.setDoorPosition(62, 58);
+            rooms.agentC.setDoorPosition(72, 58);
+            rooms.agentD.setDoorPosition(82, 58);
+
+            tileMap.addCorridor(30, 27, 50, 27);
+            tileMap.addCorridor(50, 27, 68, 27);
+            tileMap.addCorridor(37, 27, 37, 50);
+            tileMap.addCorridor(50, 14, 50, 27);
+            tileMap.addCorridor(50, 37, 50, 27);
+            tileMap.addCorridor(24, 37, 37, 37);
+            tileMap.addCorridor(37, 37, 37, 27);
+            tileMap.addCorridor(24, 14, 30, 14);
+            tileMap.addCorridor(30, 14, 30, 20);
+            tileMap.addCorridor(37, 50, 37, 62);
+            tileMap.addCorridor(37, 62, 45, 62);
+            tileMap.addCorridor(68, 27, 68, 50);
+            tileMap.addCorridor(68, 50, 75, 50);
+            tileMap.addCorridor(75, 50, 75, 62);
+            tileMap.addCorridor(24, 62, 24, 50);
+            tileMap.addCorridor(45, 62, 52, 62);
+            tileMap.addCorridor(52, 58, 52, 62);
+            tileMap.addCorridor(62, 58, 62, 62);
+            tileMap.addCorridor(72, 58, 72, 62);
+            tileMap.addCorridor(82, 58, 82, 62);
+
+            for (const room of Object.values(rooms)) {
+                tileMap.surroundRoomWithWalls(room);
+            }
+
+            populateLobbly(rooms.lobby);
+            populateEngineering(rooms.engineering);
+            populateResearch(rooms.research);
+            populateCreative(rooms.creative);
+            populateOps(rooms.ops);
+            populateBreakRoom(rooms.break);
+            populateConference(rooms.conference);
+            populateGameRoom(rooms.game);
+            populateExecutive(rooms.executive);
+            populateAgentOffices(rooms.agentA, rooms.agentB, rooms.agentC, rooms.agentD);
+
+            return tileMap;
+        }
+
+        function populateLobbly(room) {
+            room.addFurniture('reception_desk', room.x + 4, room.y + 3);
+            room.addFurniture('sofa', room.x + 2, room.y + 8);
+            room.addFurniture('plant', room.x + 12, room.y + 9);
+            room.addFurniture('plant', room.x + 13, room.y + 4);
+            room.addFurniture('presentation_screen', room.x + 8, room.y + 4);
+        }
+
+        function populateEngineering(room) {
+            for (let i = 0; i < 4; i++) {
+                const col = i % 2;
+                const row = Math.floor(i / 2);
+                room.addFurniture('desk', room.x + 2 + col * 10, room.y + 2 + row * 7);
+                room.addFurniture('chair', room.x + 3 + col * 10, room.y + 10 + row * 7);
+            }
+            room.addFurniture('server_rack', room.x + 16, room.y + 8);
+        }
+
+        function populateResearch(room) {
+            room.addFurniture('conf_table', room.x + 4, room.y + 3);
+            room.addFurniture('bookshelf', room.x + 2, room.y + 8);
+            room.addFurniture('monitoring_board', room.x + 14, room.y + 8);
+            room.addFurniture('plant', room.x + 12, room.y + 4);
+        }
+
+        function populateCreative(room) {
+            room.addFurniture('desk', room.x + 2, room.y + 3);
+            room.addFurniture('chair', room.x + 3, room.y + 10);
+            room.addFurniture('desk', room.x + 10, room.y + 3);
+            room.addFurniture('chair', room.x + 11, room.y + 10);
+            room.addFurniture('bookshelf', room.x + 2, room.y + 8);
+        }
+
+        function populateOps(room) {
+            room.addFurniture('monitoring_board', room.x + 2, room.y + 2);
+            room.addFurniture('server_rack', room.x + 10, room.y + 2);
+            room.addFurniture('monitoring_board', room.x + 2, room.y + 8);
+            room.addFurniture('server_rack', room.x + 10, room.y + 8);
+        }
+
+        function populateBreakRoom(room) {
+            room.addFurniture('coffee_machine', room.x + 2, room.y + 2);
+            room.addFurniture('vending_machine', room.x + 8, room.y + 2);
+            room.addFurniture('sofa', room.x + 2, room.y + 7);
+            room.addFurniture('arcade_machine', room.x + 10, room.y + 7);
+        }
+
+        function populateConference(room) {
+            room.addFurniture('conf_table', room.x + 3, room.y + 2);
+            room.addFurniture('presentation_screen', room.x + 14, room.y + 3);
+        }
+
+        function populateGameRoom(room) {
+            room.addFurniture('arcade_machine', room.x + 1, room.y + 2);
+            room.addFurniture('arcade_machine', room.x + 9, room.y + 2);
+            room.addFurniture('arcade_machine', room.x + 4, room.y + 8);
+            room.addFurniture('trophy_case', room.x + 4, room.y + 4);
+        }
+
+        function populateExecutive(room) {
+            room.addFurniture('exec_desk', room.x + 2, room.y + 3);
+            room.addFurniture('chair', room.x + 3, room.y + 10);
+            room.addFurniture('bookshelf', room.x + 10, room.y + 3);
+            room.addFurniture('trophy_case', room.x + 10, room.y + 8);
+        }
+
+        function populateAgentOffices(a, b, c, d) {
+            const offices = [a, b, c, d];
+            offices.forEach(office => {
+                office.addFurniture('desk', office.x + 1, office.y + 1);
+                office.addFurniture('chair', office.x + 2, office.y + 4);
+                office.addFurniture('trophy_case', office.x + 5, office.y + 2);
+            });
+        }
+
+        // ============================================================================
+        // ROBOT CUSTOMIZATION PANEL
+        // ============================================================================
+
+        class RobotCustomizationPanel {
+            constructor(agents, onCustomize) {
+                this.agents = agents;
+                this.onCustomize = onCustomize;
+                this.selectedAgent = agents.length > 0 ? agents[0] : null;
+                this.isOpen = false;
+
+                this.container = document.getElementById('customization-panel') || document.createElement('div');
+                if (!document.getElementById('customization-panel')) {
+                    this.container.id = 'customization-panel';
+                    document.body.appendChild(this.container);
+                }
+
+                this.createPanel();
+            }
+
+            createPanel() {
+                this.container.innerHTML = `
+                    <div style="margin-bottom: 15px;">
+                        <button id="close-customizer" style="position: absolute; top: 5px; right: 5px; background-color: #0ff; color: #1a1a2e; border: none; padding: 5px 10px; cursor: pointer; font-weight: bold;">X</button>
+                        <h3 style="margin: 0 0 10px 0; color: #0ff; font-size: 14px;">ROBOT CUSTOMIZER</h3>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label>SELECT AGENT:</label>
+                        <select id="agent-selector" style="width: 100%; padding: 5px; background-color: #2a2a4e; color: #0ff; border: 1px solid #0ff;">
+                            ${this.agents.map(a => `<option value="${a.id}">${a.name} (${a.role})</option>`).join('')}
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label>BODY COLOR:</label>
+                        <input type="color" id="body-color" style="width: 100%; height: 30px; cursor: pointer;">
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label>ACCENT COLOR:</label>
+                        <input type="color" id="accent-color" style="width: 100%; height: 30px; cursor: pointer;">
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label>HAT TYPE:</label>
+                        <select id="hat-type" style="width: 100%; padding: 5px; background-color: #2a2a4e; color: #0ff; border: 1px solid #0ff;">
+                            <option value="none">None</option>
+                            <option value="hardhat">Hard Hat</option>
+                            <option value="crown">Crown</option>
+                            <option value="beanie">Beanie</option>
+                            <option value="tophat">Top Hat</option>
+                            <option value="party">Party Hat</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label>ANTENNA STYLE:</label>
+                        <select id="antenna-style" style="width: 100%; padding: 5px; background-color: #2a2a4e; color: #0ff; border: 1px solid #0ff;">
+                            <option value="none">None</option>
+                            <option value="straight">Straight</option>
+                            <option value="curved">Curved</option>
+                            <option value="forked">Forked</option>
+                            <option value="ball">Ball</option>
+                        </select>
+                    </div>
+
+                    <div style="margin-bottom: 12px;">
+                        <label>ACCESSORY:</label>
+                        <select id="accessory" style="width: 100%; padding: 5px; background-color: #2a2a4e; color: #0ff; border: 1px solid #0ff;">
+                            <option value="none">None</option>
+                            <option value="glasses">Glasses</option>
+                            <option value="bowtie">Bow Tie</option>
+                            <option value="badge">Badge</option>
+                            <option value="headphones">Headphones</option>
+                            <option value="cape">Cape</option>
+                        </select>
+                    </div>
+
+                    <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+                        <button id="randomize-btn" style="flex: 1; padding: 8px; background-color: #4A90E2; color: white; border: 1px solid #0ff; cursor: pointer; font-weight: bold;">RANDOMIZE</button>
+                        <button id="save-btn" style="flex: 1; padding: 8px; background-color: #2ecc71; color: white; border: 1px solid #0ff; cursor: pointer; font-weight: bold;">SAVE</button>
+                    </div>
+
+                    <div id="preview-container" style="border: 1px solid #0ff; padding: 10px; text-align: center; min-height: 120px;">
+                        <canvas id="preview-canvas" width="100" height="100" style="image-rendering: pixelated; background-color: #2a2a4e;"></canvas>
+                    </div>
+                `;
+
+                document.getElementById('close-customizer').addEventListener('click', () => this.close());
+
+                document.getElementById('agent-selector').addEventListener('change', (e) => {
+                    this.selectedAgent = this.agents.find(a => a.id === e.target.value);
+                    this.updateInputs();
+                    this.updatePreview();
+                });
+
+                const colorInputs = ['body-color', 'accent-color'];
+                colorInputs.forEach(id => {
+                    document.getElementById(id).addEventListener('change', () => this.updatePreview());
+                });
+
+                const dropdowns = ['hat-type', 'antenna-style', 'accessory'];
+                dropdowns.forEach(id => {
+                    document.getElementById(id).addEventListener('change', () => this.updatePreview());
+                });
+
+                document.getElementById('randomize-btn').addEventListener('click', () => this.randomize());
+                document.getElementById('save-btn').addEventListener('click', () => this.save());
+
+                this.updateInputs();
+                this.updatePreview();
+            }
+
+            updateInputs() {
+                if (!this.selectedAgent) return;
+                const c = this.selectedAgent.customization;
+                document.getElementById('body-color').value = this.rgbToHex(c.bodyColor);
+                document.getElementById('accent-color').value = this.rgbToHex(c.accentColor);
+                document.getElementById('hat-type').value = c.hatType;
+                document.getElementById('antenna-style').value = c.antennaStyle;
+                document.getElementById('accessory').value = c.accessory;
+            }
+
+            updatePreview() {
+                const canvas = document.getElementById('preview-canvas');
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+
+                ctx.fillStyle = '#2a2a4e';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                const customization = {
+                    bodyColor: document.getElementById('body-color').value,
+                    accentColor: document.getElementById('accent-color').value,
+                    eyeColor: '#FFFFFF',
+                    hatType: document.getElementById('hat-type').value,
+                    antennaStyle: document.getElementById('antenna-style').value,
+                    accessory: document.getElementById('accessory').value
+                };
+
+                ctx.save();
+                ctx.scale(2, 2);
+
+                const tempAgent = new AgentRobot('preview', 'Preview', 'Preview', customization);
+                tempAgent.drawRobotBody(ctx, 16, 'down', 0);
+
+                ctx.restore();
+            }
+
+            randomize() {
+                const colors = ['#FF6B6B', '#4A90E2', '#50C878', '#FFD700', '#FF9500', '#9B59B6', '#FF69B4', '#00CED1'];
+                const hats = ['none', 'hardhat', 'crown', 'beanie', 'tophat', 'party'];
+                const antennas = ['none', 'straight', 'curved', 'forked', 'ball'];
+                const accessories = ['none', 'glasses', 'bowtie', 'badge', 'headphones', 'cape'];
+
+                document.getElementById('body-color').value = colors[Math.floor(Math.random() * colors.length)];
+                document.getElementById('accent-color').value = colors[Math.floor(Math.random() * colors.length)];
+                document.getElementById('hat-type').value = hats[Math.floor(Math.random() * hats.length)];
+                document.getElementById('antenna-style').value = antennas[Math.floor(Math.random() * antennas.length)];
+                document.getElementById('accessory').value = accessories[Math.floor(Math.random() * accessories.length)];
+
+                this.updatePreview();
+            }
+
+            save() {
+                if (!this.selectedAgent) return;
+
+                const customization = {
+                    bodyColor: document.getElementById('body-color').value,
+                    accentColor: document.getElementById('accent-color').value,
+                    eyeColor: '#FFFFFF',
+                    hatType: document.getElementById('hat-type').value,
+                    antennaStyle: document.getElementById('antenna-style').value,
+                    accessory: document.getElementById('accessory').value
+                };
+
+                this.selectedAgent.customizeRobot(customization);
+                this.onCustomize && this.onCustomize(this.selectedAgent);
+                alert('Robot customization saved!');
+            }
+
+            rgbToHex(color) {
+                if (color.startsWith('#')) return color;
+                const colorMap = {
+                    '#4A90E2': '#4A90E2',
+                    '#2E5C8A': '#2E5C8A'
+                };
+                return colorMap[color] || '#4A90E2';
+            }
+
+            toggle() {
+                this.isOpen ? this.close() : this.open();
+            }
+
+            open() {
+                this.isOpen = true;
+                this.container.style.left = '0';
+            }
+
+            close() {
+                this.isOpen = false;
+                this.container.style.left = '-350px';
+            }
+        }
+
+        // ============================================================================
+        // MAIN APPLICATION
+        // ============================================================================
+        class VirtualOfficeApp {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.roomListEl = document.getElementById('roomList');
+                this.agentListEl = document.getElementById('agentList');
+                this.minimapCanvas = document.getElementById('minimap');
+                this.statusSize = document.getElementById('statusSize');
+                this.statusRooms = document.getElementById('statusRooms');
+                this.statusAgents = document.getElementById('statusAgents');
+                this.statusFps = document.getElementById('statusFps');
+                this.zoomDisplay = document.getElementById('zoomDisplay');
+
+                this.tileMap = buildDefaultOffice();
+                this.camera = new Camera(this.canvas.parentElement.clientWidth,
+                                       this.canvas.parentElement.clientHeight);
+                this.renderer = new OfficeRenderer(this.canvas);
+                this.renderer.initialize(this.tileMap, this.camera);
+
+                this.isDragging = false;
+                this.dragStart = { x: 0, y: 0 };
+
+                this.agents = [];
+                this.highScores = new HighScoreManager();
+                this.customizer = null;
+
+                this.lastUpdateTime = Date.now();
+
+                this.setupEventListeners();
+                this.initializeAgents();
+                this.registerGames();
+                this.renderRoomList();
+                this.renderAgentList();
+                this.startGameLoop();
+            }
+
+            initializeAgents() {
+                const demoAgents = [
+                    {
+                        id: 'agent_1',
+                        name: 'Atlas',
+                        role: 'Engineering Lead',
+                        customization: {
+                            bodyColor: '#4A90E2',
+                            accentColor: '#2E5C8A',
+                            eyeColor: '#FFFFFF',
+                            hatType: 'hardhat',
+                            accessory: 'glasses',
+                            antennaStyle: 'straight'
+                        }
+                    },
+                    {
+                        id: 'agent_2',
+                        name: 'Nova',
+                        role: 'Research Specialist',
+                        customization: {
+                            bodyColor: '#9B59B6',
+                            accentColor: '#6C3A7D',
+                            eyeColor: '#FFD700',
+                            hatType: 'none',
+                            accessory: 'none',
+                            antennaStyle: 'ball'
+                        }
+                    },
+                    {
+                        id: 'agent_3',
+                        name: 'Spark',
+                        role: 'Creative Director',
+                        customization: {
+                            bodyColor: '#FF9500',
+                            accentColor: '#CC7700',
+                            eyeColor: '#FFFFFF',
+                            hatType: 'beanie',
+                            accessory: 'none',
+                            antennaStyle: 'curved'
+                        }
+                    },
+                    {
+                        id: 'agent_4',
+                        name: 'Cipher',
+                        role: 'Ops Engineer',
+                        customization: {
+                            bodyColor: '#50C878',
+                            accentColor: '#2E7D4E',
+                            eyeColor: '#000000',
+                            hatType: 'none',
+                            accessory: 'headphones',
+                            antennaStyle: 'none'
+                        }
+                    },
+                    {
+                        id: 'agent_5',
+                        name: 'Echo',
+                        role: 'Support Lead',
+                        customization: {
+                            bodyColor: '#00CED1',
+                            accentColor: '#008B8B',
+                            eyeColor: '#FFFFFF',
+                            hatType: 'crown',
+                            accessory: 'badge',
+                            antennaStyle: 'forked'
+                        }
+                    },
+                    {
+                        id: 'agent_6',
+                        name: 'Pixel',
+                        role: 'Game Master',
+                        customization: {
+                            bodyColor: '#FF6B6B',
+                            accentColor: '#CC3333',
+                            eyeColor: '#FFFF00',
+                            hatType: 'party',
+                            accessory: 'none',
+                            antennaStyle: 'straight'
+                        }
+                    }
+                ];
+
+                this.agents = demoAgents.map(config => new AgentRobot(config.id, config.name, config.role, config.customization));
+
+                this.agents.forEach((agent, idx) => {
+                    agent.position = { x: 300 + idx * 50, y: 300 + idx * 30 };
+                    agent.targetPosition = { ...agent.position };
+                });
+
+                this.customizer = new RobotCustomizationPanel(this.agents, (agent) => {
+                    console.log('Customized agent:', agent.name);
+                });
+            }
+
+            registerGames() {
+                this.highScores.registerGame('cloud_jump', 'Cloud Jump', '#87CEEB');
+                this.highScores.registerGame('jetpack_joyride', 'Jetpack Joyride', '#FF6B35');
+                this.highScores.registerGame('dino_run', 'Dino Run', '#4CAF50');
+            }
+
+            setupEventListeners() {
+                window.addEventListener('resize', () => this.renderer.resizeCanvas());
+
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.isDragging = true;
+                    this.dragStart = { x: e.clientX, y: e.clientY };
+                    this.canvas.style.cursor = 'grabbing';
+                });
+
+                document.addEventListener('mousemove', (e) => {
+                    if (this.isDragging) {
+                        const dx = this.dragStart.x - e.clientX;
+                        const dy = this.dragStart.y - e.clientY;
+                        this.camera.panBy(dx, dy);
+                        this.dragStart = { x: e.clientX, y: e.clientY };
+                    }
+                });
+
+                document.addEventListener('mouseup', () => {
+                    this.isDragging = false;
+                    this.canvas.style.cursor = 'grab';
+                });
+
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const rect = this.canvas.getBoundingClientRect();
+                    const x = e.clientX - rect.left;
+                    const y = e.clientY - rect.top;
+                    this.camera.zoomAt(e.deltaY > 0 ? -1 : 1, x, y);
+                });
+
+                this.roomListEl.addEventListener('click', (e) => {
+                    if (e.target.classList.contains('room-item')) {
+                        const roomId = e.target.dataset.roomId;
+                        this.focusRoom(roomId);
+                    }
+                });
+
+                document.getElementById('customizer-toggle').addEventListener('click', () => {
+                    this.customizer.toggle();
+                });
+
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === 'c' || e.key === 'C') {
+                        this.customizer && this.customizer.toggle();
+                    }
+                });
+            }
+
+            renderRoomList() {
+                this.roomListEl.innerHTML = '';
+                for (const room of this.tileMap.rooms) {
+                    const item = document.createElement('div');
+                    item.className = 'room-item';
+                    item.dataset.roomId = room.id;
+                    item.textContent = room.label;
+                    this.roomListEl.appendChild(item);
+                }
+            }
+
+            renderAgentList() {
+                this.agentListEl.innerHTML = '';
+                for (const agent of this.agents) {
+                    const item = document.createElement('div');
+                    item.className = 'agent-item';
+                    item.textContent = `${agent.name} (${agent.status})`;
+                    this.agentListEl.appendChild(item);
+                }
+            }
+
+            focusRoom(roomId) {
+                const room = this.tileMap.rooms.find(r => r.id === roomId);
+                if (room) {
+                    const centerX = (room.x + room.w / 2) * TILE_SIZE;
+                    const centerY = (room.y + room.h / 2) * TILE_SIZE;
+                    this.camera.vx = centerX * this.camera.zoom - this.canvas.width / 2;
+                    this.camera.vy = centerY * this.camera.zoom - this.canvas.height / 2;
+                    this.camera.clampView();
+
+                    for (const item of this.roomListEl.querySelectorAll('.room-item')) {
+                        item.classList.remove('active');
+                        if (item.dataset.roomId === roomId) {
+                            item.classList.add('active');
+                        }
+                    }
+                }
+            }
+
+            renderMinimap() {
+                const minimapScale = 2;
+                const mapWidth = WORLD_WIDTH;
+                const mapHeight = WORLD_HEIGHT;
+                const minimapCanvas = this.minimapCanvas;
+                const minimapCtx = minimapCanvas.getContext('2d');
+
+                minimapCanvas.width = mapWidth * minimapScale;
+                minimapCanvas.height = mapHeight * minimapScale;
+
+                minimapCtx.fillStyle = PALETTE.darkBg;
+                minimapCtx.fillRect(0, 0, minimapCanvas.width, minimapCanvas.height);
+
+                for (const room of this.tileMap.rooms) {
+                    minimapCtx.fillStyle = PALETTE.accent;
+                    minimapCtx.fillRect(room.x * minimapScale, room.y * minimapScale,
+                                       room.w * minimapScale, room.h * minimapScale);
+                    minimapCtx.strokeStyle = PALETTE.accentBright;
+                    minimapCtx.lineWidth = 1;
+                    minimapCtx.strokeRect(room.x * minimapScale, room.y * minimapScale,
+                                         room.w * minimapScale, room.h * minimapScale);
+                }
+
+                for (const agent of this.agents) {
+                    const agentX = (agent.position.x / TILE_SIZE) * minimapScale;
+                    const agentY = (agent.position.y / TILE_SIZE) * minimapScale;
+                    minimapCtx.fillStyle = agent.customization.bodyColor;
+                    minimapCtx.beginPath();
+                    minimapCtx.arc(agentX, agentY, 2, 0, Math.PI * 2);
+                    minimapCtx.fill();
+                }
+
+                const viewportX = this.camera.vx / this.camera.zoom / TILE_SIZE;
+                const viewportY = this.camera.vy / this.camera.zoom / TILE_SIZE;
+                const viewportW = this.canvas.width / this.camera.zoom / TILE_SIZE;
+                const viewportH = this.canvas.height / this.camera.zoom / TILE_SIZE;
+
+                minimapCtx.strokeStyle = PALETTE.gold;
+                minimapCtx.lineWidth = 2;
+                minimapCtx.strokeRect(viewportX * minimapScale, viewportY * minimapScale,
+                                     viewportW * minimapScale, viewportH * minimapScale);
+            }
+
+            updateStatus() {
+                this.statusSize.textContent = `${WORLD_WIDTH}x${WORLD_HEIGHT} tiles`;
+                this.statusRooms.textContent = this.tileMap.rooms.length;
+                this.statusAgents.textContent = this.agents.length;
+                this.statusFps.textContent = this.renderer.fps;
+                this.zoomDisplay.textContent = Math.round(this.camera.zoom * 100) + '%';
+            }
+
+            updateAgents() {
+                const now = Date.now();
+                const deltaTime = now - this.lastUpdateTime;
+                this.lastUpdateTime = now;
+
+                this.agents.forEach(agent => {
+                    agent.updateAnimation(deltaTime);
+                    agent.updateMovement(deltaTime, this.tileMap);
+                });
+
+                if (Math.random() < 0.02) {
+                    const agent = this.agents[Math.floor(Math.random() * this.agents.length)];
+                    if (agent.status === 'idle') {
+                        const room = this.tileMap.rooms[Math.floor(Math.random() * this.tileMap.rooms.length)];
+                        agent.setTargetRoom(room.id, this.tileMap);
+                    }
+                }
+
+                if (Math.random() < 0.01) {
+                    const agent = this.agents.find(a => a.status === 'idle');
+                    if (agent) {
+                        const games = ['cloud_jump', 'jetpack_joyride', 'dino_run'];
+                        const gameId = games[Math.floor(Math.random() * games.length)];
+                        const score = Math.floor(Math.random() * 10000) + 1000;
+
+                        this.highScores.recordScore(gameId, agent.id, score);
+                        agent.recordScore(gameId, this.highScores.gameInfo[gameId].name, score);
+                    }
+                }
+            }
+
+            startGameLoop() {
+                const loop = () => {
+                    this.updateAgents();
+                    this.renderer.render(this.agents);
+                    this.renderMinimap();
+                    this.renderAgentList();
+                    this.updateStatus();
+                    requestAnimationFrame(loop);
+                };
+                loop();
+            }
+        }
+
+        // ============================================================================
+        // STARTUP
+        // ============================================================================
+        window.addEventListener('DOMContentLoaded', () => {
+            new VirtualOfficeApp();
+        });
+    </script>
+</body>
+</html>

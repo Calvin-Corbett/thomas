@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 from thomas.plugins.certification import certify_extension_catalog
 from thomas.security.dependency_policy import evaluate_dependency_policy
@@ -15,7 +15,7 @@ from thomas.system.release_contracts import build_release_contract_report
 
 
 def _now_iso() -> str:
-    return datetime.now(UTC).isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def run_security_audit(
@@ -24,10 +24,10 @@ def run_security_audit(
     max_threat_model_age_days: int = 30,
     min_extension_pass_rate: float = 0.95,
     include_incident_drill: bool = False,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     root = repo_root.resolve()
 
-    checks: Dict[str, Any] = {}
+    checks: dict[str, Any] = {}
 
     pyproject_path = root / "pyproject.toml"
     if pyproject_path.exists():
@@ -53,9 +53,7 @@ def run_security_audit(
 
     checks["mutating_route_policy"] = evaluate_mutating_route_policy_exceptions(root)
 
-    checks["release_contracts"] = build_release_contract_report(
-        root / "docs" / "release" / "contract_registry.json"
-    )
+    checks["release_contracts"] = build_release_contract_report(root / "docs" / "release" / "contract_registry.json")
 
     checks["extension_certification"] = certify_extension_catalog(
         root / "extensions",

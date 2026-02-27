@@ -14,7 +14,7 @@ Automation:
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any
 
 import typer
 
@@ -23,6 +23,7 @@ from thomas.browser.p020_browser_lifecycle_start_stop_restart import (
     BrowserLifecycleRequest,
     run_browser_lifecycle,
 )
+from thomas.cli.commands.browser._runtime_entrypoint import run_typer_app
 
 app = typer.Typer(help="Manage the browser lifecycle (start/stop/restart).")
 
@@ -83,20 +84,16 @@ def _emit(payload: Any, *, as_json: bool) -> None:
     typer.echo(str(payload))
 
 
-def _run(action: str, *, json_output: bool, timeout_seconds: Optional[float]) -> None:
+def _run(action: str, *, json_output: bool, timeout_seconds: float | None) -> None:
     try:
-        result = run_browser_lifecycle(
-            BrowserLifecycleRequest(action=action, timeout_seconds=timeout_seconds)
-        )
+        result = run_browser_lifecycle(BrowserLifecycleRequest(action=action, timeout_seconds=timeout_seconds))
         _emit(
             result.to_dict() if json_output else {"ok": True, "state": result.state},
             as_json=json_output,
         )
     except BrowserLifecycleError as err:
         _emit(
-            err.to_dict()
-            if json_output
-            else {"ok": False, "error": {"code": err.code, "message": err.message}},
+            err.to_dict() if json_output else {"ok": False, "error": {"code": err.code, "message": err.message}},
             as_json=json_output,
         )
         raise typer.Exit(code=1) from None
@@ -109,7 +106,7 @@ def start_cmd(
         "--json",
         help="Emit machine-readable JSON output.",
     ),
-    timeout_seconds: Optional[float] = typer.Option(
+    timeout_seconds: float | None = typer.Option(
         None,
         "--timeout",
         min=0.0,
@@ -128,7 +125,7 @@ def stop_cmd(
         "--json",
         help="Emit machine-readable JSON output.",
     ),
-    timeout_seconds: Optional[float] = typer.Option(
+    timeout_seconds: float | None = typer.Option(
         None,
         "--timeout",
         min=0.0,
@@ -147,7 +144,7 @@ def restart_cmd(
         "--json",
         help="Emit machine-readable JSON output.",
     ),
-    timeout_seconds: Optional[float] = typer.Option(
+    timeout_seconds: float | None = typer.Option(
         None,
         "--timeout",
         min=0.0,
@@ -168,7 +165,18 @@ try:  # pragma: no cover
         if _parent is not None and isinstance(_parent, typer.Typer):
             register(_parent)
             break
-except Exception:
+except ImportError:
     # If the surrounding CLI isn't available (or uses a different pattern),
     # the module still works as a standalone Typer app.
     pass
+
+
+def main(argv: list[str] | None = None) -> int:
+    """Pack-proxy runtime entrypoint."""
+    return run_typer_app(
+        app,
+        argv,
+        command="browser lifecycle-start-stop-restart",
+        require_args=True,
+        missing_args_message="Specify a lifecycle action: start, stop, or restart.",
+    )

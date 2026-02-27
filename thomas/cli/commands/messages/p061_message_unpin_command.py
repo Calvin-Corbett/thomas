@@ -13,7 +13,7 @@ The command supports ``--json`` for machine-readable automation output.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 try:
     import typer
@@ -21,15 +21,14 @@ except Exception as exc:  # pragma: no cover
     raise RuntimeError("Typer is required for the Thomas CLI") from exc
 
 from thomas.messages.p061_message_unpin_command import (
+    MessageUnpinConfigError,
     MessageUnpinError,
     MessageUnpinInput,
     MessageUnpinInputError,
-    MessageUnpinConfigError,
     execute,
     format_error_json,
     format_success_json,
 )
-
 
 app = typer.Typer(add_completion=False, help="Unpin a message from a channel.", invoke_without_command=True)
 
@@ -47,13 +46,13 @@ def _resolve_client_for_cli() -> Any | None:
 
 
 def _run_unpin(
-    channel_id: Optional[str] = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel",
         "--channel-id",
         help="Channel identifier (e.g. Slack channel ID, Discord channel ID)",
     ),
-    message_id: Optional[str] = typer.Option(
+    message_id: str | None = typer.Option(
         None,
         "--message",
         "--message-id",
@@ -62,7 +61,7 @@ def _run_unpin(
         "--timestamp",
         help="Message identifier (message ID or Slack timestamp)",
     ),
-    message_url: Optional[str] = typer.Option(
+    message_url: str | None = typer.Option(
         None,
         "--url",
         "--message-url",
@@ -98,13 +97,13 @@ def _run_unpin(
 @app.callback(invoke_without_command=True)
 def main(
     ctx: typer.Context,
-    channel_id: Optional[str] = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel",
         "--channel-id",
         help="Channel identifier (e.g. Slack channel ID, Discord channel ID)",
     ),
-    message_id: Optional[str] = typer.Option(
+    message_id: str | None = typer.Option(
         None,
         "--message",
         "--message-id",
@@ -113,7 +112,7 @@ def main(
         "--timestamp",
         help="Message identifier (message ID or Slack timestamp)",
     ),
-    message_url: Optional[str] = typer.Option(
+    message_url: str | None = typer.Option(
         None,
         "--url",
         "--message-url",
@@ -132,13 +131,13 @@ def main(
 
 @app.command("unpin")
 def unpin_command(
-    channel_id: Optional[str] = typer.Option(
+    channel_id: str | None = typer.Option(
         None,
         "--channel",
         "--channel-id",
         help="Channel identifier (e.g. Slack channel ID, Discord channel ID)",
     ),
-    message_id: Optional[str] = typer.Option(
+    message_id: str | None = typer.Option(
         None,
         "--message",
         "--message-id",
@@ -147,7 +146,7 @@ def unpin_command(
         "--timestamp",
         help="Message identifier (message ID or Slack timestamp)",
     ),
-    message_url: Optional[str] = typer.Option(
+    message_url: str | None = typer.Option(
         None,
         "--url",
         "--message-url",
@@ -163,7 +162,7 @@ def unpin_command(
     _run_unpin(channel_id=channel_id, message_id=message_id, message_url=message_url, json_mode=json_mode)
 
 
-def register(parent_app: "typer.Typer") -> None:
+def register(parent_app: typer.Typer) -> None:
     """Attach this command to an existing Typer app.
 
     Different Thomas CLI loaders wire subcommands in different ways. We support
@@ -174,13 +173,13 @@ def register(parent_app: "typer.Typer") -> None:
     try:
         parent_app.command("unpin")(unpin_command)
         return
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         pass
 
     try:
         parent_app.add_typer(app, name="message")
         return
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         pass
 
     parent_app.add_typer(app, name="message-unpin")
@@ -189,8 +188,9 @@ def register(parent_app: "typer.Typer") -> None:
 # Many loaders expect a Click command object.
 try:
     from typer.main import get_command as _get_command  # type: ignore
+
     click_command = _get_command(app)
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     click_command = typer.main.get_command(app)
 
 
@@ -202,7 +202,7 @@ def get_command() -> Any:
     return click_command
 
 
-def get_app() -> "typer.Typer":
+def get_app() -> typer.Typer:
     return app
 
 

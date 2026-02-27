@@ -12,14 +12,14 @@ Design goals:
 
 from __future__ import annotations
 
-from dataclasses import asdict, dataclass, field
 import importlib
 import inspect
 import json
 import os
 import time
-from typing import Any, Callable, Mapping
-
+from collections.abc import Callable, Mapping
+from dataclasses import asdict, dataclass, field
+from typing import Any
 
 # ------------------------------- Public contracts ----------------------------
 
@@ -171,7 +171,7 @@ def run_channel_provider_contract_tests(
 
     try:
         timeout_seconds = float(request.timeout_seconds)
-    except Exception:
+    except (ConnectionError, TimeoutError, RuntimeError):
         timeout_seconds = -1.0
 
     if timeout_seconds <= 0:
@@ -259,7 +259,7 @@ def _telegram_contract_checks(
                 message=f"Imported {module_name}",
             )
         )
-    except Exception as exc:
+    except (ImportError, AttributeError, RuntimeError) as exc:
         errors.append(
             ContractTestError(
                 code=ERROR_PROVIDER_IMPORT_FAILED,
@@ -416,7 +416,7 @@ def _telegram_api_surface_check(telegram_mod: Any) -> tuple[bool, str, Mapping[s
             continue
         try:
             attr = getattr(telegram_mod, attr_name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
         if callable(attr):
             sendish.append(attr_name)
@@ -460,7 +460,7 @@ def _telegram_external_health_check(
                     "Integration health check passed." if ok else "Integration health check failed.",
                     {"function": func_name},
                 )
-            except Exception as exc:
+            except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
                 return (
                     False,
                     "Integration health check errored.",
@@ -484,7 +484,7 @@ def _telegram_external_health_check(
         body_bytes = None
         try:
             body_bytes = exc.read()
-        except Exception:
+        except (ConnectionError, TimeoutError, RuntimeError):
             body_bytes = None
         return (
             False,
@@ -497,7 +497,7 @@ def _telegram_external_health_check(
                 else None,
             },
         )
-    except Exception as exc:
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:
         return (
             False,
             "Telegram getMe request failed.",
@@ -506,7 +506,7 @@ def _telegram_external_health_check(
 
     try:
         data = json.loads(raw.decode("utf-8"))
-    except Exception as exc:
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:
         return (
             False,
             "Telegram getMe returned invalid JSON.",

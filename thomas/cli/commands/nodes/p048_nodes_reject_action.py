@@ -14,19 +14,19 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
 import click
 
 try:
     import typer  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
 from thomas.nodes.p048_nodes_reject_action import NodesRejectActionError, NodesRejectActionInput, reject_node_action
 
 
-def _execute(node_id: str, action_id: str, reason: Optional[str], state_dir: Optional[str]) -> Dict[str, Any]:
+def _execute(node_id: str, action_id: str, reason: str | None, state_dir: str | None) -> dict[str, Any]:
     payload = NodesRejectActionInput(node_id=node_id, action_id=action_id, reason=reason)
     return reject_node_action(payload, state_dir=state_dir).to_dict()
 
@@ -45,8 +45,8 @@ def _execute(node_id: str, action_id: str, reason: Optional[str], state_dir: Opt
 def click_command(
     node_id: str,
     action_id: str,
-    reason: Optional[str],
-    state_dir: Optional[str],
+    reason: str | None,
+    state_dir: str | None,
     json_output: bool,
 ) -> None:
     """Reject a pending action for a node."""
@@ -71,7 +71,7 @@ CLI_COMMANDS = [click_command]
 COMMANDS = CLI_COMMANDS
 
 
-PARITY_COMMAND: Dict[str, Any] = {
+PARITY_COMMAND: dict[str, Any] = {
     "group": "nodes",
     "name": "reject-action",
     "command": click_command,
@@ -93,8 +93,8 @@ if typer is not None:  # pragma: no cover
     def typer_command(
         node_id: str = typer.Option(..., "--node-id", help="Node identifier."),
         action_id: str = typer.Option(..., "--action-id", help="Action identifier to reject."),
-        reason: Optional[str] = typer.Option(None, "--reason", help="Optional reason for rejection."),
-        state_dir: Optional[str] = typer.Option(None, "--state-dir", help="Thomas state directory."),
+        reason: str | None = typer.Option(None, "--reason", help="Optional reason for rejection."),
+        state_dir: str | None = typer.Option(None, "--state-dir", help="Thomas state directory."),
         json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON."),
     ) -> None:
         try:

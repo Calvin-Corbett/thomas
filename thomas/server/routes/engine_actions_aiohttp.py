@@ -1,8 +1,9 @@
-﻿"""Manual controls for background engine actions."""
+"""Manual controls for background engine actions."""
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -33,6 +34,10 @@ def _normalize_engine_name(raw: Any) -> str:
         "sync": "workspace_sync_engine",
         "workspace_sync": "workspace_sync_engine",
         "workspace_sync_engine": "workspace_sync_engine",
+        "local": "local_agent_engine",
+        "local_agent": "local_agent_engine",
+        "local_agents": "local_agent_engine",
+        "local_agent_engine": "local_agent_engine",
     }
     return aliases.get(name, name)
 
@@ -51,6 +56,7 @@ def register_engine_actions_routes(
             "self_upgrade_engine",
             "ui_workflow_engine",
             "workspace_sync_engine",
+            "local_agent_engine",
         }
 
     async def api_engine_actions(request: web.Request) -> web.Response:
@@ -105,6 +111,10 @@ def register_engine_actions_routes(
                 from thomas.core.workspace_sync_engine import get_workspace_sync_engine
 
                 runner = get_workspace_sync_engine()
+            elif engine == "local_agent_engine":
+                from thomas.core.local_agent_engine import get_local_agent_engine
+
+                runner = get_local_agent_engine()
             else:
                 return web.json_response(
                     {"ok": False, "engine": engine, "error": f"unsupported engine: {engine}"},

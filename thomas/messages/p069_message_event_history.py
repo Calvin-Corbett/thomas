@@ -16,13 +16,13 @@ Storage:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from datetime import datetime, timezone
 import json
 import os
+from collections.abc import Callable, Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
-
+from typing import Any
 
 SCHEMA_ID = "thomas.messages.event.v1"
 
@@ -42,17 +42,17 @@ class MessageEvent:
 
     message_id: str
     event_type: str
-    occurred_at: Optional[str]
+    occurred_at: str | None
     raw: Mapping[str, Any]
-    source_path: Optional[str] = None
+    source_path: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
 class MessageEventHistoryRequest:
     message_id: str
     limit: int = 200
-    store_path: Optional[str] = None  # explicit file path override
-    state_dir: Optional[str] = None  # explicit directory override
+    store_path: str | None = None  # explicit file path override
+    state_dir: str | None = None  # explicit directory override
 
 
 @dataclass(frozen=True, slots=True)
@@ -75,7 +75,7 @@ class MessageEventHistoryError(Exception):
 
     code: str = "messages.event_history.error"
 
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.details = dict(details or {})
 
@@ -116,7 +116,7 @@ def _isoformat(dt: datetime) -> str:
     return dt.replace(microsecond=0).isoformat().replace("+00:00", "Z")
 
 
-def _coerce_dt(value: Any) -> Optional[datetime]:
+def _coerce_dt(value: Any) -> datetime | None:
     if value is None:
         return None
     if isinstance(value, datetime):
@@ -129,17 +129,17 @@ def _coerce_dt(value: Any) -> Optional[datetime]:
             s2 = s.replace("Z", "+00:00") if s.endswith("Z") else s
             dt = datetime.fromisoformat(s2)
             return dt.astimezone(timezone.utc) if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
-        except Exception:
+        except (RuntimeError, ValueError, KeyError, AttributeError, TypeError):
             return None
     if isinstance(value, (int, float)):
         try:
             return datetime.fromtimestamp(float(value), tz=timezone.utc)
-        except Exception:
+        except (RuntimeError, ValueError, KeyError, AttributeError, TypeError):
             return None
     return None
 
 
-def _parse_timestamp(value: Any) -> Optional[str]:
+def _parse_timestamp(value: Any) -> str | None:
     dt = _coerce_dt(value)
     if dt is not None:
         return _isoformat(dt)
@@ -173,7 +173,7 @@ def _candidate_store_paths(state_dir: Path) -> list[Path]:
     ]
 
 
-def _resolve_source_paths(*, store_path: Optional[str], state_dir: Optional[str]) -> list[Path]:
+def _resolve_source_paths(*, store_path: str | None, state_dir: str | None) -> list[Path]:
     # Explicit file path override wins.
     if store_path:
         return [Path(store_path).expanduser()]
@@ -209,14 +209,14 @@ def _resolve_source_paths(*, store_path: Optional[str], state_dir: Optional[str]
     )
 
 
-def _extract_first(d: Mapping[str, Any], keys: Iterable[str]) -> Optional[Any]:
+def _extract_first(d: Mapping[str, Any], keys: Iterable[str]) -> Any | None:
     for k in keys:
         if k in d and d[k] is not None:
             return d[k]
     return None
 
 
-def _extract_message_id(payload: Mapping[str, Any]) -> Optional[str]:
+def _extract_message_id(payload: Mapping[str, Any]) -> str | None:
     # Flattened keys first
     value = _extract_first(
         payload,
@@ -269,7 +269,7 @@ def _extract_event_type(payload: Mapping[str, Any]) -> str:
     return str(value)
 
 
-def _extract_occurred_at(payload: Mapping[str, Any]) -> Optional[str]:
+def _extract_occurred_at(payload: Mapping[str, Any]) -> str | None:
     value = _extract_first(
         payload,
         [
@@ -304,7 +304,9 @@ def _validate_limit(limit: int) -> int:
     return min(limit, 2000)
 
 
-def _normalized_record(message_id: str, event_type: str, occurred_at: str, raw_event: Mapping[str, Any]) -> dict[str, Any]:
+def _normalized_record(
+    message_id: str, event_type: str, occurred_at: str, raw_event: Mapping[str, Any]
+) -> dict[str, Any]:
     return {
         "schema": SCHEMA_ID,
         "message_id": message_id,
@@ -322,8 +324,8 @@ def _normalized_record(message_id: str, event_type: str, occurred_at: str, raw_e
 def append_message_event(
     raw_event: Mapping[str, Any],
     *,
-    store_path: Optional[str] = None,
-    state_dir: Optional[str] = None,
+    store_path: str | None = None,
+    state_dir: str | None = None,
     clock: Callable[[], datetime] = _utc_now,
 ) -> MessageEvent:
     """Normalize and append a message event to the store.
@@ -365,13 +367,15 @@ def append_message_event(
             f.write("\n")
     except MessageEventHistoryError:
         raise
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise MessageEventHistoryExternalFailure(
             "Failed to persist message event.",
             details={"error": repr(e)},
         ) from e
 
-    return MessageEvent(message_id=message_id, event_type=event_type, occurred_at=occurred_at, raw=raw_event, source_path=str(target))
+    return MessageEvent(
+        message_id=message_id, event_type=event_type, occurred_at=occurred_at, raw=raw_event, source_path=str(target)
+    )
 
 
 def get_message_event_history(request: MessageEventHistoryRequest) -> MessageEventHistoryResponse:
@@ -382,7 +386,7 @@ def get_message_event_history(request: MessageEventHistoryRequest) -> MessageEve
     sources = _resolve_source_paths(store_path=request.store_path, state_dir=request.state_dir)
 
     # We only store events matching message_id, so we don't explode memory even with large stores.
-    collected: list[tuple[int, str, Optional[datetime], MessageEvent]] = []
+    collected: list[tuple[int, str, datetime | None, MessageEvent]] = []
     global_line_idx = 0
 
     for path in sources:
@@ -395,7 +399,7 @@ def get_message_event_history(request: MessageEventHistoryRequest) -> MessageEve
                         continue
                     try:
                         payload = json.loads(s)
-                    except Exception:
+                    except (json.JSONDecodeError, ValueError, KeyError):
                         # Skip unparsable lines (deterministic).
                         continue
                     if not isinstance(payload, Mapping):
@@ -403,11 +407,15 @@ def get_message_event_history(request: MessageEventHistoryRequest) -> MessageEve
 
                     # Support both normalized records and raw provider payloads in logs.
                     raw_payload = payload.get("raw") if isinstance(payload.get("raw"), Mapping) else None
-                    payload_mid = _extract_message_id(payload) or (_extract_message_id(raw_payload) if raw_payload else None)
+                    payload_mid = _extract_message_id(payload) or (
+                        _extract_message_id(raw_payload) if raw_payload else None
+                    )
                     if payload_mid != message_id:
                         continue
 
-                    if payload.get("schema") == SCHEMA_ID or ("message_id" in payload and "event_type" in payload and "raw" in payload):
+                    if payload.get("schema") == SCHEMA_ID or (
+                        "message_id" in payload and "event_type" in payload and "raw" in payload
+                    ):
                         ev_type = str(payload.get("event_type") or "unknown")
                         occurred_str = _parse_timestamp(payload.get("occurred_at")) or _extract_occurred_at(payload)
                         raw = raw_payload if raw_payload is not None else payload
@@ -430,7 +438,7 @@ def get_message_event_history(request: MessageEventHistoryRequest) -> MessageEve
             continue
         except MessageEventHistoryError:
             raise
-        except Exception as e:
+        except (OSError, ConnectionError) as e:
             raise MessageEventHistoryExternalFailure(
                 "Failed to read message events.",
                 details={"path": str(path), "error": repr(e)},
@@ -440,7 +448,7 @@ def get_message_event_history(request: MessageEventHistoryRequest) -> MessageEve
     # - Prefer parsed datetime when available
     # - Fall back to occurred_at string
     # - Tie-breaker: read order (global_line_idx)
-    def _sort_key(item: tuple[int, str, Optional[datetime], MessageEvent]) -> tuple[int, float, str, int]:
+    def _sort_key(item: tuple[int, str, datetime | None, MessageEvent]) -> tuple[int, float, str, int]:
         idx, occurred_str, occurred_dt, _ = item
         if occurred_dt is not None:
             return (0, occurred_dt.timestamp(), occurred_str, idx)
@@ -486,4 +494,3 @@ fetch_message_event_history = get_message_event_history
 read_message_event_history = get_message_event_history
 list_message_event_history = get_message_event_history
 list_message_events = get_message_event_history
-

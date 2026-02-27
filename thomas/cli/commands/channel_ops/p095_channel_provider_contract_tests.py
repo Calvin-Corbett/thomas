@@ -102,7 +102,7 @@ def _format_human(report: dict[str, Any]) -> str:
 def _build_click_command():
     try:
         import click
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         return None
 
     @click.command(
@@ -157,9 +157,7 @@ def _build_click_command():
                 "provider": (provider or ""),
                 "ok": False,
                 "checks": [],
-                "errors": [
-                    {"code": "invalid_request", "message": str(exc), "details": {"field": "config"}}
-                ],
+                "errors": [{"code": "invalid_request", "message": str(exc), "details": {"field": "config"}}],
             }
             if json_mode:
                 click.echo(json.dumps(payload, sort_keys=True))
@@ -232,9 +230,7 @@ def _handle_argparse(args: argparse.Namespace) -> int:
             "provider": (getattr(args, "provider", "") or ""),
             "ok": False,
             "checks": [],
-            "errors": [
-                {"code": "invalid_request", "message": str(exc), "details": {"field": "config"}}
-            ],
+            "errors": [{"code": "invalid_request", "message": str(exc), "details": {"field": "config"}}],
         }
         if getattr(args, "json_mode", False):
             sys.stdout.write(json.dumps(payload, sort_keys=True) + "\n")
@@ -279,7 +275,7 @@ def register(parent: Any) -> None:
         try:
             parent.add_command(COMMAND)  # type: ignore[attr-defined]
             return
-        except Exception:
+        except (OSError, FileNotFoundError):
             pass
 
     # argparse-style registration

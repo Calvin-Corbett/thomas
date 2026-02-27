@@ -4,9 +4,10 @@ import contextlib
 import json
 import os
 import time
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Sequence
+from typing import Any
 
 # -----------------------------
 # Public contracts
@@ -204,7 +205,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
                 continue
             try:
                 candidate = fn()
-            except Exception:
+            except (RuntimeError, TypeError, AttributeError):
                 continue
 
             if isinstance(candidate, str) and candidate.strip():
@@ -225,7 +226,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
         try:
             text = cfg_path.read_text(encoding="utf-8")
             data = json.loads(text)
-        except Exception:
+        except (OSError, json.JSONDecodeError, ValueError):
             continue
         if isinstance(data, Mapping):
             for k in ("cdp_url", "cdpUrl", "ws_endpoint", "wsEndpoint", "endpoint", "ws_url", "url"):
@@ -235,10 +236,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
 
     raise BrowserTelemetryConfigError(
         code="browser_endpoint_missing",
-        message=(
-            "No live browser endpoint configured. "
-            "Provide --cdp-url or set THOMAS_BROWSER_CDP_URL."
-        ),
+        message=("No live browser endpoint configured. " "Provide --cdp-url or set THOMAS_BROWSER_CDP_URL."),
         details={"env_candidates": list(_ENV_CANDIDATES)},
     )
 
@@ -246,7 +244,7 @@ def _discover_cdp_url(explicit: str | None) -> str:
 def _safe_import(module_name: str):
     try:
         return __import__(module_name, fromlist=["*"])
-    except Exception:
+    except (ImportError, ModuleNotFoundError):
         return None
 
 
@@ -290,7 +288,7 @@ def _connect_over_cdp(cdp_url: str):
                     res = call()
                 except TypeError:
                     continue
-                except Exception:
+                except (RuntimeError, AttributeError, ConnectionError):
                     continue
 
                 if hasattr(res, "__enter__") and hasattr(res, "__exit__"):
@@ -416,9 +414,7 @@ def capture_network_requests(
             now_ms = int(time.time() * 1000)
             method = _safe_str(_call_or_attr(req_obj, "method")) or "GET"
             url = _safe_str(_call_or_attr(req_obj, "url")) or ""
-            resource_type = _safe_str(
-                _call_or_attr(req_obj, "resource_type") or _call_or_attr(req_obj, "resourceType")
-            )
+            resource_type = _safe_str(_call_or_attr(req_obj, "resource_type") or _call_or_attr(req_obj, "resourceType"))
 
             entry: dict[str, Any] = {
                 "id": str(next_seq),
@@ -456,7 +452,7 @@ def capture_network_requests(
             status = _call_or_attr(resp_obj, "status")
             try:
                 entry["response_status"] = int(status) if status is not None else None
-            except Exception:
+            except (ValueError, TypeError):
                 entry["response_status"] = None
 
             if request.include_response_headers:
@@ -493,7 +489,7 @@ def capture_network_requests(
             if on_event is not None:
                 try:
                     on_event(captured[-1])
-                except Exception:
+                except (RuntimeError, TypeError):
                     pass
 
         def _emit_uncorrelated_response(resp_obj: Any) -> None:
@@ -507,14 +503,12 @@ def capture_network_requests(
             now_ms = int(time.time() * 1000)
             method = _safe_str(_call_or_attr(req_obj, "method")) or "GET"
             url = _safe_str(_call_or_attr(req_obj, "url")) or ""
-            resource_type = _safe_str(
-                _call_or_attr(req_obj, "resource_type") or _call_or_attr(req_obj, "resourceType")
-            )
+            resource_type = _safe_str(_call_or_attr(req_obj, "resource_type") or _call_or_attr(req_obj, "resourceType"))
 
             status = _call_or_attr(resp_obj, "status")
             try:
                 status_i = int(status) if status is not None else None
-            except Exception:
+            except (ValueError, TypeError):
                 status_i = None
 
             resp_headers = None
@@ -575,7 +569,7 @@ def _pump_playwright(anchor_page: Any, poll_ms: int) -> bool:
     try:
         anchor_page.wait_for_timeout(poll_ms)
         return True
-    except Exception:
+    except (RuntimeError, AttributeError, TimeoutError):
         return False
 
 
@@ -661,7 +655,7 @@ def _call_or_attr(obj: Any, name: str) -> Any:
     if callable(val):
         try:
             return val()
-        except Exception:
+        except (RuntimeError, TypeError):
             return None
     return val
 
@@ -672,7 +666,7 @@ def _safe_str(value: Any) -> str | None:
             return None
         s = str(value)
         return s if s.strip() else None
-    except Exception:
+    except (TypeError, ValueError):
         return None
 
 

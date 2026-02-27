@@ -6,8 +6,9 @@ import os
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import asdict
-from typing import Any, Iterable, Optional
+from typing import Any
 
 from thomas.nodes.p032_node_command_run import (
     NODES_RUN_ROUTE,
@@ -30,7 +31,7 @@ def _add_argument_if_missing(parser: argparse.ArgumentParser, *option_strings: s
     parser.add_argument(*option_strings, **kwargs)
 
 
-def _parse_env_kv(items: Optional[Iterable[str]]) -> Optional[dict[str, str]]:
+def _parse_env_kv(items: Iterable[str] | None) -> dict[str, str] | None:
     if not items:
         return None
     env: dict[str, str] = {}
@@ -50,7 +51,7 @@ def _join_url(base: str, path: str) -> str:
     return f"{base}{path}"
 
 
-def _resolve_gateway(url: Optional[str], token: Optional[str]) -> tuple[str, Optional[str]]:
+def _resolve_gateway(url: str | None, token: str | None) -> tuple[str, str | None]:
     """Resolve gateway URL/token.
 
     Precedence:
@@ -68,7 +69,7 @@ def _resolve_gateway(url: Optional[str], token: Optional[str]) -> tuple[str, Opt
     return resolved_url, resolved_token
 
 
-def _http_post_json(url: str, token: Optional[str], payload: dict[str, Any], timeout_s: float) -> dict[str, Any]:
+def _http_post_json(url: str, token: str | None, payload: dict[str, Any], timeout_s: float) -> dict[str, Any]:
     body = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(url, data=body, method="POST")
     req.add_header("Content-Type", "application/json")
@@ -114,17 +115,17 @@ def _http_post_json(url: str, token: Optional[str], payload: dict[str, Any], tim
 
 def build_request(
     *,
-    node: Optional[str],
+    node: str | None,
     argv: list[str] | None,
-    raw: Optional[str],
-    cwd: Optional[str],
-    env_items: Optional[list[str]],
-    command_timeout_ms: Optional[int],
-    invoke_timeout_ms: Optional[int],
+    raw: str | None,
+    cwd: str | None,
+    env_items: list[str] | None,
+    command_timeout_ms: int | None,
+    invoke_timeout_ms: int | None,
     needs_screen_recording: bool,
-    agent: Optional[str],
-    ask: Optional[str],
-    security: Optional[str],
+    agent: str | None,
+    ask: str | None,
+    security: str | None,
 ) -> NodeCommandRunRequest:
     env = _parse_env_kv(env_items)
 
@@ -149,8 +150,8 @@ def build_request(
 
 def run_nodes_run(
     *,
-    url: Optional[str],
-    token: Optional[str],
+    url: str | None,
+    token: str | None,
     timeout_s: float,
     json_output: bool,
     req: NodeCommandRunRequest,
@@ -193,7 +194,7 @@ def run_nodes_run(
                 sys.stderr.write("\n")
         try:
             return int(result.get("exit_code") or 0)
-        except Exception:
+        except json.JSONDecodeError:
             return 0
 
     # Failure
@@ -204,7 +205,7 @@ def run_nodes_run(
     return 1
 
 
-def register_command(subparsers: Any, parent_parser: Optional[argparse.ArgumentParser] = None) -> argparse.ArgumentParser:
+def register_command(subparsers: Any, parent_parser: argparse.ArgumentParser | None = None) -> argparse.ArgumentParser:
     """Register `nodes run` on an argparse subparser action.
 
     The function is tolerant to existing "common options" supplied by parent parsers.
@@ -219,19 +220,33 @@ def register_command(subparsers: Any, parent_parser: Optional[argparse.ArgumentP
     _add_argument_if_missing(parser, "--node", dest="node", help="Node selector (id|name|ip)")
     _add_argument_if_missing(parser, "--cwd", dest="cwd", help="Working directory")
     _add_argument_if_missing(parser, "--env", dest="env", action="append", help="Env override KEY=VAL (repeatable)")
-    _add_argument_if_missing(parser, "--command-timeout", dest="command_timeout_ms", type=int, help="Command timeout in ms")
-    _add_argument_if_missing(parser, "--invoke-timeout", dest="invoke_timeout_ms", type=int, help="Node invoke timeout in ms")
-    _add_argument_if_missing(parser, "--needs-screen-recording", dest="needs_screen_recording", action="store_true", help="Require screen recording permission")
+    _add_argument_if_missing(
+        parser, "--command-timeout", dest="command_timeout_ms", type=int, help="Command timeout in ms"
+    )
+    _add_argument_if_missing(
+        parser, "--invoke-timeout", dest="invoke_timeout_ms", type=int, help="Node invoke timeout in ms"
+    )
+    _add_argument_if_missing(
+        parser,
+        "--needs-screen-recording",
+        dest="needs_screen_recording",
+        action="store_true",
+        help="Require screen recording permission",
+    )
     _add_argument_if_missing(parser, "--raw", dest="raw", help="Run a shell string")
     _add_argument_if_missing(parser, "--agent", dest="agent", help="Agent id for scoped policy")
     _add_argument_if_missing(parser, "--ask", dest="ask", choices=["off", "on-miss", "always"], help="Policy override")
-    _add_argument_if_missing(parser, "--security", dest="security", choices=["deny", "allowlist", "full"], help="Security override")
+    _add_argument_if_missing(
+        parser, "--security", dest="security", choices=["deny", "allowlist", "full"], help="Security override"
+    )
 
     # Common options may already exist on a parent parser.
     _add_argument_if_missing(parser, "--url", dest="url", help="Gateway base URL")
     _add_argument_if_missing(parser, "--token", dest="token", help="Gateway auth token")
     _add_argument_if_missing(parser, "--timeout", dest="timeout", type=float, default=30.0, help="HTTP timeout seconds")
-    _add_argument_if_missing(parser, "--json", dest="json_output", action="store_true", help="Machine-readable JSON output")
+    _add_argument_if_missing(
+        parser, "--json", dest="json_output", action="store_true", help="Machine-readable JSON output"
+    )
 
     parser.add_argument("command", nargs=argparse.REMAINDER, help="Command argv (e.g. ls -la)")
     parser.set_defaults(_thomas_handler=_handle_argparse)
@@ -277,22 +292,22 @@ def _handle_argparse(args: Any) -> int:
 
 try:  # pragma: no cover
     import typer
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
 
 def _typer_nodes_run(
     command: list[str],
-    node: Optional[str],
-    raw: Optional[str],
-    cwd: Optional[str],
+    node: str | None,
+    raw: str | None,
+    cwd: str | None,
     env: list[str],
-    command_timeout_ms: Optional[int],
-    invoke_timeout_ms: Optional[int],
+    command_timeout_ms: int | None,
+    invoke_timeout_ms: int | None,
     needs_screen_recording: bool,
-    agent: Optional[str],
-    ask: Optional[str],
-    security: Optional[str],
+    agent: str | None,
+    ask: str | None,
+    security: str | None,
 ) -> int:
     """Implementation for typer callback (kept separate for reuse)."""
     argv = command if command else None
@@ -335,16 +350,16 @@ def register_typer(parent_app: Any) -> None:
     @parent_app.command("run")
     def typer_run(
         command: list[str] = typer.Argument([], help="Command argv (e.g. ls -la)"),
-        node: Optional[str] = typer.Option(None, "--node", help="Node selector (id|name|ip)"),
-        raw: Optional[str] = typer.Option(None, "--raw", help="Run a shell string"),
-        cwd: Optional[str] = typer.Option(None, "--cwd", help="Working directory"),
+        node: str | None = typer.Option(None, "--node", help="Node selector (id|name|ip)"),
+        raw: str | None = typer.Option(None, "--raw", help="Run a shell string"),
+        cwd: str | None = typer.Option(None, "--cwd", help="Working directory"),
         env: list[str] = typer.Option([], "--env", help="Env override KEY=VAL", show_default=False),
-        command_timeout_ms: Optional[int] = typer.Option(None, "--command-timeout", help="Command timeout in ms"),
-        invoke_timeout_ms: Optional[int] = typer.Option(None, "--invoke-timeout", help="Node invoke timeout in ms"),
+        command_timeout_ms: int | None = typer.Option(None, "--command-timeout", help="Command timeout in ms"),
+        invoke_timeout_ms: int | None = typer.Option(None, "--invoke-timeout", help="Node invoke timeout in ms"),
         needs_screen_recording: bool = typer.Option(False, "--needs-screen-recording", help="Require screen recording"),
-        agent: Optional[str] = typer.Option(None, "--agent", help="Agent id"),
-        ask: Optional[str] = typer.Option(None, "--ask", help="Policy override"),
-        security: Optional[str] = typer.Option(None, "--security", help="Security override"),
+        agent: str | None = typer.Option(None, "--agent", help="Agent id"),
+        ask: str | None = typer.Option(None, "--ask", help="Policy override"),
+        security: str | None = typer.Option(None, "--security", help="Security override"),
     ) -> None:
         code = _typer_nodes_run(
             command=command,
@@ -367,9 +382,10 @@ if typer is not None:  # pragma: no cover
     try:
         # Prefer an existing nodes group app if the package defines one.
         from . import app as _nodes_app  # type: ignore
+
         app = _nodes_app  # re-export
         register_typer(app)
-    except Exception:
+    except ImportError:
         app = typer.Typer(add_completion=False)
         register_typer(app)
 else:  # pragma: no cover

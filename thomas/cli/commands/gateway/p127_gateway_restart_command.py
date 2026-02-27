@@ -19,9 +19,9 @@ import asyncio
 import json
 import os
 import sys
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from typing import Any, Callable, Dict, Mapping, Optional, Sequence
-
+from typing import Any
 
 DEFAULT_ROUTE_PATH = "/gateway/restart"
 
@@ -31,7 +31,7 @@ class GatewayRestartInput:
     gateway: str = "default"
     force: bool = False
 
-    def to_json(self) -> Dict[str, Any]:
+    def to_json(self) -> dict[str, Any]:
         return {"gateway": self.gateway, "force": self.force}
 
 
@@ -42,10 +42,10 @@ class GatewayRestartOutput:
     status: str = ""
     method: str = ""
     message: str = ""
-    error: Optional[Dict[str, Any]] = None
+    error: dict[str, Any] | None = None
 
     @classmethod
-    def from_mapping(cls, data: Mapping[str, Any]) -> "GatewayRestartOutput":
+    def from_mapping(cls, data: Mapping[str, Any]) -> GatewayRestartOutput:
         ok = bool(data.get("ok", False))
         if ok:
             return cls(
@@ -85,7 +85,7 @@ def _resolve_server_url(args: argparse.Namespace) -> str:
     raise GatewayRestartCliError("missing_config", "Missing server URL. Provide --server-url or set THOMAS_SERVER_URL.")
 
 
-async def _default_requester(server_url: str, payload: Dict[str, Any]) -> Dict[str, Any]:
+async def _default_requester(server_url: str, payload: dict[str, Any]) -> dict[str, Any]:
     import aiohttp  # type: ignore
 
     url = f"{server_url}{DEFAULT_ROUTE_PATH}"
@@ -94,7 +94,7 @@ async def _default_requester(server_url: str, payload: Dict[str, Any]) -> Dict[s
         async with session.post(url, json=payload) as resp:
             try:
                 return await resp.json()
-            except Exception:  # noqa: BLE001
+            except ImportError:  # noqa: BLE001
                 text = await resp.text()
                 return {
                     "ok": False,
@@ -123,10 +123,10 @@ def _format_human(out: GatewayRestartOutput) -> str:
 
 
 def run(
-    argv: Optional[Sequence[str]] = None,
+    argv: Sequence[str] | None = None,
     *,
-    _requester: Optional[Callable[[str, Dict[str, Any]], Any]] = None,
-    _out: Optional[Any] = None,
+    _requester: Callable[[str, dict[str, Any]], Any] | None = None,
+    _out: Any | None = None,
 ) -> int:
     parser = argparse.ArgumentParser(prog="thomas gateway restart", add_help=True)
     build_arg_parser(parser)
@@ -164,7 +164,7 @@ def run(
         return 2
 
 
-def get_command_spec() -> Dict[str, Any]:
+def get_command_spec() -> dict[str, Any]:
     return {
         "group": "gateway",
         "name": "restart",

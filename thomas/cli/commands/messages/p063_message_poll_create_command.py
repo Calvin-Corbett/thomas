@@ -11,15 +11,18 @@ different hooks.
 from __future__ import annotations
 
 import json
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
+
 import click
 
 from thomas.messages.p063_message_poll_create_command import (
-    MessagePollCreateInput,
     MessagePollCreateCommandError,
+    MessagePollCreateInput,
+)
+from thomas.messages.p063_message_poll_create_command import (
     run as run_poll_create,
 )
-
 
 CLI_COMMAND_PATH = ("message", "poll", "create")
 
@@ -41,7 +44,7 @@ def _parse_metadata(metadata_json: str | None) -> dict[str, Any] | None:
         return None
     try:
         obj = json.loads(metadata_json)
-    except Exception:
+    except json.JSONDecodeError:
         raise click.ClickException("metadata must be valid JSON")
     if not isinstance(obj, dict):
         raise click.ClickException("metadata must be a JSON object")

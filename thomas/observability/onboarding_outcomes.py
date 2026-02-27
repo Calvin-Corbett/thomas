@@ -1,60 +1,60 @@
-﻿"""Onboarding outcome analytics built from recorded observability events."""
+"""Onboarding outcome analytics built from recorded observability events."""
 
 from __future__ import annotations
 
 import json
 from collections import Counter
+from collections.abc import Iterable
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from statistics import median
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
-from thomas.observability.run_db import connect, ensure_schema
-from thomas.observability.run_db import resolve_runs_db_path
+from thomas.observability.run_db import connect, ensure_schema, resolve_runs_db_path
 
 
 @dataclass(frozen=True)
 class OnboardingEvent:
     run_id: str
-    started_at: Optional[datetime]
-    t_ms: Optional[int]
+    started_at: datetime | None
+    t_ms: int | None
     event_type: str
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
 
 
-def _parse_iso_datetime(raw: Any) -> Optional[datetime]:
+def _parse_iso_datetime(raw: Any) -> datetime | None:
     text = str(raw or "").strip()
     if not text:
         return None
     try:
         dt = datetime.fromisoformat(text)
-    except Exception:
+    except ImportError:
         return None
     if dt.tzinfo is None:
-        return dt.replace(tzinfo=UTC)
-    return dt.astimezone(UTC)
+        return dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc)
 
 
-def _load_payload(raw: Any) -> Dict[str, Any]:
+def _load_payload(raw: Any) -> dict[str, Any]:
     text = str(raw or "").strip()
     if not text:
         return {}
     try:
         data = json.loads(text)
-    except Exception:
+    except json.JSONDecodeError:
         return {}
     if not isinstance(data, dict):
         return {}
     return data
 
 
-def _parse_int(raw: Any) -> Optional[int]:
+def _parse_int(raw: Any) -> int | None:
     if raw is None:
         return None
     try:
         value = int(raw)
-    except Exception:
+    except json.JSONDecodeError:
         return None
     return value if value >= 0 else None
 
@@ -66,7 +66,7 @@ def _normalize_onboarding_event_name(full_type: str) -> str:
     return full_type
 
 
-def _fetch_events(db_path: Path) -> List[OnboardingEvent]:
+def _fetch_events(db_path: Path) -> list[OnboardingEvent]:
     ensure_schema(db_path)
     con = connect(db_path)
     try:
@@ -82,7 +82,7 @@ def _fetch_events(db_path: Path) -> List[OnboardingEvent]:
     finally:
         con.close()
 
-    out: List[OnboardingEvent] = []
+    out: list[OnboardingEvent] = []
     for row in rows:
         out.append(
             OnboardingEvent(
@@ -140,7 +140,7 @@ def _stage_bucket(event_name: str) -> str:
     return "other"
 
 
-def _extract_failure_reason(event_name: str, payload: Dict[str, Any]) -> str:
+def _extract_failure_reason(event_name: str, payload: dict[str, Any]) -> str:
     raw_payload = dict(payload or {})
     nested_payload = raw_payload.get("payload")
     nested = nested_payload if isinstance(nested_payload, dict) else {}
@@ -160,7 +160,7 @@ def _extract_failure_reason(event_name: str, payload: Dict[str, Any]) -> str:
     return fallback[:220]
 
 
-def _extract_journey_id(payload: Dict[str, Any], run_id: str) -> str:
+def _extract_journey_id(payload: dict[str, Any], run_id: str) -> str:
     root = dict(payload or {})
     nested_raw = root.get("payload")
     nested = nested_raw if isinstance(nested_raw, dict) else {}
@@ -177,10 +177,10 @@ def _extract_journey_id(payload: Dict[str, Any], run_id: str) -> str:
     return rid[:120] if rid else "unknown"
 
 
-def _filter_by_window(events: Iterable[OnboardingEvent], *, since_days: int) -> List[OnboardingEvent]:
+def _filter_by_window(events: Iterable[OnboardingEvent], *, since_days: int) -> list[OnboardingEvent]:
     days = max(1, int(since_days))
-    cutoff = datetime.now(UTC) - timedelta(days=days)
-    out: List[OnboardingEvent] = []
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    out: list[OnboardingEvent] = []
     for event in events:
         started = event.started_at
         if started is not None and started < cutoff:
@@ -189,7 +189,7 @@ def _filter_by_window(events: Iterable[OnboardingEvent], *, since_days: int) -> 
     return out
 
 
-def build_onboarding_outcome_report(db_path: Path, *, since_days: int = 7) -> Dict[str, Any]:
+def build_onboarding_outcome_report(db_path: Path, *, since_days: int = 7) -> dict[str, Any]:
     events = _filter_by_window(_fetch_events(db_path), since_days=since_days)
 
     event_counts: Counter[str] = Counter()
@@ -198,7 +198,7 @@ def build_onboarding_outcome_report(db_path: Path, *, since_days: int = 7) -> Di
     failure_reasons: Counter[str] = Counter()
     users: set[str] = set()
     runs: set[str] = set()
-    journey_timing: Dict[str, Dict[str, int]] = {}
+    journey_timing: dict[str, dict[str, int]] = {}
 
     for event in events:
         name = str(event.event_type or "").strip()
@@ -242,7 +242,7 @@ def build_onboarding_outcome_report(db_path: Path, *, since_days: int = 7) -> Di
     recovery_succeeded = int(stage_counts.get("recovery_succeeded", 0))
     recovery_attempts = int(recovery_failed + recovery_succeeded)
     recovery_success_rate = float(recovery_succeeded / recovery_attempts) if recovery_attempts > 0 else 0.0
-    duration_samples_ms: List[int] = []
+    duration_samples_ms: list[int] = []
     for timing in journey_timing.values():
         opened_ms = _parse_int(timing.get("opened_ms"))
         completed_ms = _parse_int(timing.get("completed_ms"))
@@ -253,19 +253,11 @@ def build_onboarding_outcome_report(db_path: Path, *, since_days: int = 7) -> Di
             continue
         duration_samples_ms.append(delta)
     median_time_to_ready_seconds = (
-        float(round(float(median(duration_samples_ms)) / 1000.0, 3))
-        if duration_samples_ms
-        else 0.0
+        float(round(float(median(duration_samples_ms)) / 1000.0, 3)) if duration_samples_ms else 0.0
     )
 
-    top_failures = [
-        {"event": name, "count": int(count)}
-        for name, count in failure_events.most_common(10)
-    ]
-    top_failure_reasons = [
-        {"reason": reason, "count": int(count)}
-        for reason, count in failure_reasons.most_common(10)
-    ]
+    top_failures = [{"event": name, "count": int(count)} for name, count in failure_events.most_common(10)]
+    top_failure_reasons = [{"reason": reason, "count": int(count)} for reason, count in failure_reasons.most_common(10)]
 
     return {
         "ok": True,
@@ -290,7 +282,7 @@ def build_onboarding_outcome_report(db_path: Path, *, since_days: int = 7) -> Di
     }
 
 
-def get_outcomes_report(*, since_days: int = 7) -> Dict[str, Any]:
+def get_outcomes_report(*, since_days: int = 7) -> dict[str, Any]:
     """Backward-compatible default report loader used by HTTP endpoints."""
     db_path = resolve_runs_db_path()
     return build_onboarding_outcome_report(db_path, since_days=max(1, int(since_days)))

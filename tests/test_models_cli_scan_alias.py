@@ -83,7 +83,7 @@ def test_models_commands_surface_discovery_failures_without_traceback(
     result = runner.invoke(cli, ["-c", str(cfg), "models", subcommand, "--timeout", "1"])
 
     assert result.exit_code == 1
-    assert "Error: model discovery failed: backend unavailable" in result.output
+    assert "Error: model discovery failed (RuntimeError): backend unavailable" in result.output
     assert "Traceback" not in result.output
     assert "Context' object is not iterable" not in result.output
 
@@ -104,4 +104,87 @@ def test_models_scan_and_discover_emit_same_output_for_same_results(tmp_path: Pa
 
     assert scan.exit_code == 0, scan.output
     assert discover.exit_code == 0, discover.output
+    assert scan.output == discover.output
+
+
+@pytest.mark.parametrize("subcommand", ["scan", "discover"])
+def test_models_commands_reject_non_positive_timeout(tmp_path: Path, subcommand: str) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(cli, ["-c", str(cfg), "models", subcommand, "--timeout", "0"])
+
+    assert result.exit_code == 2
+    assert "Invalid value for --timeout" in result.output
+    assert "must be greater than 0" in result.output
+    assert "Traceback" not in result.output
+
+
+def test_models_discover_unknown_profile_is_user_facing(tmp_path: Path) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        ["-c", str(cfg), "models", "discover", "--model", "missing", "--timeout", "1"],
+    )
+
+    assert result.exit_code == 2
+    assert "Invalid value for --model" in result.output
+    assert "unknown model profile 'missing'" in result.output
+    assert "Traceback" not in result.output
+    assert "Context' object is not iterable" not in result.output
+
+
+def test_models_scan_rejects_model_option_without_traceback(tmp_path: Path) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+
+    result = runner.invoke(
+        cli,
+        ["-c", str(cfg), "models", "scan", "--model", "missing", "--timeout", "1"],
+    )
+
+    assert result.exit_code == 2
+    assert "No such option: --model" in result.output
+    assert "Traceback" not in result.output
+
+
+@pytest.mark.parametrize("subcommand", ["scan", "discover"])
+def test_models_commands_surface_click_exceptions_without_traceback(
+    tmp_path: Path, monkeypatch, subcommand: str
+) -> None:
+    cfg = _write_min_config(tmp_path)
+
+    import thomas.models.discovery as discovery_mod
+
+    def _boom(*_args, **_kwargs):
+        raise click.ClickException("boom")
+
+    monkeypatch.setattr(discovery_mod, "discover_models", _boom)
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-c", str(cfg), "models", subcommand, "--timeout", "1"])
+
+    assert result.exit_code == 1
+    assert "Error: boom" in result.output
+    assert "Traceback" not in result.output
+    assert "Context' object is not iterable" not in result.output
+
+
+def test_models_scan_and_discover_empty_discovery_parity(tmp_path: Path, monkeypatch) -> None:
+    cfg = _write_min_config(tmp_path)
+
+    import thomas.models.discovery as discovery_mod
+
+    def _fake_discovery(*_args, **_kwargs):
+        return []
+
+    monkeypatch.setattr(discovery_mod, "discover_models", _fake_discovery)
+
+    runner = CliRunner()
+    scan = runner.invoke(cli, ["-c", str(cfg), "models", "scan", "--timeout", "1"])
+    discover = runner.invoke(cli, ["-c", str(cfg), "models", "discover", "--timeout", "1"])
+
+    assert scan.exit_code == discover.exit_code
     assert scan.output == discover.output

@@ -17,13 +17,14 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-from dataclasses import asdict
 import importlib
 import inspect
 import json
-from pathlib import Path
 import threading
-from typing import Any, Optional, Sequence
+from collections.abc import Sequence
+from dataclasses import asdict
+from pathlib import Path
+from typing import Any
 
 import typer
 
@@ -65,7 +66,7 @@ def _resolve_active_tools_browser_page(module: Any) -> Any:
             try:
                 if bool(is_closed()):
                     continue
-            except Exception:
+            except (ValueError, TypeError):
                 continue
 
         return page
@@ -138,7 +139,7 @@ def _resolve_active_browser() -> Any:
     for mod_name, attr in candidates:
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except ImportError:
             continue
 
         if mod_name == "thomas.tools.browser":
@@ -159,7 +160,7 @@ def _resolve_active_browser() -> Any:
                 continue
             except BrowserDomSnapshotError:
                 raise
-            except Exception:
+            except (ValueError, TypeError):
                 continue
 
             if browser is not None:
@@ -171,7 +172,7 @@ def _resolve_active_browser() -> Any:
                 resolved_obj = _await_if_needed(obj)
             except BrowserDomSnapshotError:
                 raise
-            except Exception:
+            except (ValueError, TypeError):
                 continue
             if resolved_obj is not None:
                 return resolved_obj
@@ -226,9 +227,9 @@ def _validate_cli_request(request: BrowserArtifactDomSnapshotInput) -> None:
 
 def _run_command(
     *,
-    artifacts_dir: Optional[str],
-    output_path: Optional[str],
-    base_name: Optional[str],
+    artifacts_dir: str | None,
+    output_path: str | None,
+    base_name: str | None,
     prefer_cdp: bool,
     timeout_ms: int,
     json_mode: bool,
@@ -256,7 +257,7 @@ def _run_command(
         }
         _emit(json_mode=json_mode, payload=payload)
         return 2
-    except Exception:
+    except (ValueError, TypeError):
         payload = {
             "ok": False,
             "error_code": "THOMAS_BROWSER_DOM_SNAPSHOT_EXTERNAL_FAILURE",
@@ -269,17 +270,17 @@ def _run_command(
 
 @app.callback()
 def app_main(
-    artifacts_dir: Optional[Path] = typer.Option(
+    artifacts_dir: Path | None = typer.Option(
         None,
         "--artifacts-dir",
         help="Directory to write the artifact file into (overrides config/env).",
     ),
-    output_path: Optional[Path] = typer.Option(
+    output_path: Path | None = typer.Option(
         None,
         "--output",
         help="Explicit output file path (takes precedence over --artifacts-dir).",
     ),
-    base_name: Optional[str] = typer.Option(
+    base_name: str | None = typer.Option(
         None,
         "--base-name",
         help="Filename base used when generating an artifact name.",
@@ -328,7 +329,7 @@ def register(target: Any) -> None:
         try:
             target.add_typer(app, name=COMMAND_NAME)  # type: ignore[attr-defined]
             return
-        except Exception:
+        except AttributeError:
             # Fall through to argparse registration.
             pass
 
@@ -382,7 +383,7 @@ def run_from_argparse(args: Any) -> int:
     )
 
 
-def main(argv: Optional[Sequence[str]] = None) -> int:
+def main(argv: Sequence[str] | None = None) -> int:
     """Standalone main used by pack bridge and direct execution."""
 
     parser = _build_argparse_parser()

@@ -7,19 +7,23 @@ but not wired through the others.
 from __future__ import annotations
 
 import argparse
-import ast
+import json
 import re
-import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence, Set
-
 
 ROOT = Path(__file__).resolve().parent.parent
-SERVER_APP = ROOT / "thomas" / "server" / "app.py"
+SERVER_EVENT_SOURCES: Sequence[Path] = (
+    ROOT / "thomas" / "server" / "routes" / "chat_aiohttp.py",
+    ROOT / "thomas" / "server" / "routes" / "chat_stream_events.py",
+    ROOT / "thomas" / "server" / "routes" / "chat_modes.py",
+)
 WEB_CHAT = ROOT / "thomas" / "server" / "web" / "js" / "chat.js"
+WEB_APP = ROOT / "thomas" / "server" / "web" / "js" / "app.js"
+WEB_APP_PARTS_DIR = ROOT / "thomas" / "server" / "web" / "js" / "app_parts"
 CLI_MAIN = ROOT / "thomas" / "cli" / "main.py"
 
-REQUIRED_WIRE_EVENTS: Set[str] = {
+REQUIRED_WIRE_EVENTS: set[str] = {
     "route",
     "text",
     "iteration",
@@ -31,7 +35,7 @@ REQUIRED_WIRE_EVENTS: Set[str] = {
     "done",
 }
 
-REQUIRED_CLI_EVENTS: Set[str] = {
+REQUIRED_CLI_EVENTS: set[str] = {
     "AGENT_START",
     "TEXT_DELTA",
     "AGENT_ITERATION",
@@ -42,9 +46,44 @@ REQUIRED_CLI_EVENTS: Set[str] = {
     "AGENT_DONE",
 }
 
+SERVER_STREAM_CONTEXT_PATTERN = re.compile(
+    r"\b(?:send|json\.dumps|resp\.write|_record_swarm_event)\s*\(",
+    re.IGNORECASE,
+)
+SERVER_STREAM_TYPE_LITERAL_PATTERN = re.compile(
+    r"['\"]type['\"]\s*:\s*['\"]([a-z0-9_]+)['\"]",
+    re.IGNORECASE,
+)
+
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _read_server_sources() -> str:
+    sources = [path for path in SERVER_EVENT_SOURCES if path.exists()]
+    if not sources:
+        expected = ", ".join(str(path) for path in SERVER_EVENT_SOURCES)
+        raise FileNotFoundError(f"No server event source found. Expected one of: {expected}")
+    return "\n".join(_read(path) for path in sources)
+
+
+def _read_web_sources() -> str:
+    """Read web chat sources from either legacy chat.js or split app_parts."""
+    sources: list[Path] = []
+    if WEB_CHAT.exists():
+        sources.append(WEB_CHAT)
+    if WEB_APP.exists():
+        sources.append(WEB_APP)
+    if WEB_APP_PARTS_DIR.exists():
+        sources.extend(sorted(WEB_APP_PARTS_DIR.glob("*.js")))
+
+    if not sources:
+        raise FileNotFoundError(
+            "No web chat source found. Expected one of: " f"{WEB_CHAT}, {WEB_APP}, {WEB_APP_PARTS_DIR}/*.js"
+        )
+
+    return "\n".join(_read(path) for path in sources)
 
 
 def _slice_between(text: str, start: str, end: str) -> str:
@@ -57,61 +96,84 @@ def _slice_between(text: str, start: str, end: str) -> str:
     return text[i:j]
 
 
-def _extract_server_wire_events(server_text: str) -> Set[str]:
-    # Extract from calls like: await send({"type": "text", ...}) within api_chat.
-    events: Set[str] = set()
-    try:
-        tree = ast.parse(server_text)
-    except SyntaxError:
-        return events
-
-    api_chat_node = None
-    for node in ast.walk(tree):
-        if isinstance(node, ast.AsyncFunctionDef) and node.name == "api_chat":
-            api_chat_node = node
-            break
-    if api_chat_node is None:
-        return events
-
-    for node in ast.walk(api_chat_node):
-        if not isinstance(node, ast.Call):
-            continue
-        func_name = ""
-        if isinstance(node.func, ast.Name):
-            func_name = node.func.id
-        elif isinstance(node.func, ast.Attribute):
-            func_name = node.func.attr
-        if func_name != "send" or not node.args:
-            continue
-        first = node.args[0]
-        if not isinstance(first, ast.Dict):
-            continue
-        for k, v in zip(first.keys, first.values):
-            if isinstance(k, ast.Constant) and k.value == "type":
-                if isinstance(v, ast.Constant) and isinstance(v.value, str):
-                    events.add(v.value)
+def _extract_server_wire_events(server_text: str) -> set[str]:
+    # Extract from stream emitters across route/helper files.
+    events: set[str] = set()
+    for context_match in SERVER_STREAM_CONTEXT_PATTERN.finditer(server_text):
+        call_source = _extract_call_source(server_text, context_match.start())
+        for event_type in SERVER_STREAM_TYPE_LITERAL_PATTERN.findall(call_source):
+            events.add(event_type)
     return events
 
 
-def _extract_web_wire_handlers(web_text: str) -> Set[str]:
-    found = re.findall(r"event\.type\s*===\s*['\"]([a-z_]+)['\"]", web_text)
+def _extract_call_source(text: str, context_start: int, max_chars: int = 8000) -> str:
+    open_paren = text.find("(", context_start)
+    if open_paren < 0:
+        return ""
+
+    in_single = False
+    in_double = False
+    escaped = False
+    depth = 0
+    end = min(len(text), open_paren + max_chars)
+
+    for idx in range(open_paren, end):
+        ch = text[idx]
+
+        if in_single:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == "'":
+                in_single = False
+            continue
+
+        if in_double:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_double = False
+            continue
+
+        if ch == "'":
+            in_single = True
+            continue
+        if ch == '"':
+            in_double = True
+            continue
+        if ch == "(":
+            depth += 1
+            continue
+        if ch == ")":
+            depth -= 1
+            if depth == 0:
+                return text[open_paren : idx + 1]
+
+    return text[open_paren:end]
+
+
+def _extract_web_wire_handlers(web_text: str) -> set[str]:
+    found = re.findall(r"(?:event|evt)\.type\s*===?\s*['\"]([a-z_]+)['\"]", web_text)
     return set(found)
 
 
-def _extract_cli_event_handlers(cli_text: str) -> Set[str]:
+def _extract_cli_event_handlers(cli_text: str) -> set[str]:
     # Focus on direct EventType checks in _run_chat.
     block = _slice_between(cli_text, "async def _run_chat(", "@click.group")
-    if not block:
-        return set()
-    found = re.findall(r"event\.type\s*==\s*EventType\.([A-Z_]+)", block)
+    # Fallback to whole source when the expected function window moves.
+    haystack = block or cli_text
+    found = re.findall(r"(?:event|evt)\.type\s*==\s*EventType\.([A-Z_]+)", haystack)
     return set(found)
 
 
-def _missing(required: Iterable[str], actual: Iterable[str]) -> Set[str]:
+def _missing(required: Iterable[str], actual: Iterable[str]) -> set[str]:
     return set(required) - set(actual)
 
 
-def _print_missing(title: str, missing: Set[str]) -> None:
+def _print_missing(title: str, missing: set[str]) -> None:
     print(title)
     for item in sorted(missing):
         print(f"  - {item}")
@@ -119,10 +181,11 @@ def _print_missing(title: str, missing: Set[str]) -> None:
 
 def run() -> int:
     parser = argparse.ArgumentParser(description="Check Thomas surface event-contract parity.")
-    _ = parser.parse_args()
+    parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON output.")
+    args = parser.parse_args()
 
-    server_text = _read(SERVER_APP)
-    web_text = _read(WEB_CHAT)
+    server_text = _read_server_sources()
+    web_text = _read_web_sources()
     cli_text = _read(CLI_MAIN)
 
     server_events = _extract_server_wire_events(server_text)
@@ -134,28 +197,40 @@ def run() -> int:
     missing_cli_required = _missing(REQUIRED_CLI_EVENTS, cli_events)
     server_not_handled_by_web = _missing(server_events, web_events)
 
-    failed = False
+    report = {
+        "ok": not (
+            missing_server_required or missing_web_required or missing_cli_required or server_not_handled_by_web
+        ),
+        "gate": "surface_parity",
+        "missing_server_required": sorted(missing_server_required),
+        "missing_web_required": sorted(missing_web_required),
+        "missing_cli_required": sorted(missing_cli_required),
+        "server_not_handled_by_web": sorted(server_not_handled_by_web),
+        "server_event_count": len(server_events),
+        "web_event_count": len(web_events),
+        "cli_event_count": len(cli_events),
+    }
+
+    if args.json:
+        print(json.dumps(report, indent=2))
+        return 0 if report["ok"] else 1
+
     if missing_server_required:
         _print_missing("Missing required wire events in server stream mapping:", missing_server_required)
-        failed = True
     if missing_web_required:
         _print_missing("Missing required wire event handlers in web chat:", missing_web_required)
-        failed = True
     if missing_cli_required:
         _print_missing("Missing required core EventType handlers in CLI:", missing_cli_required)
-        failed = True
     if server_not_handled_by_web:
         _print_missing("Server emits events not handled by web chat:", server_not_handled_by_web)
-        failed = True
 
-    if failed:
-        return 1
-
-    print("Surface parity check: OK")
-    print(f"  server wire events: {len(server_events)}")
-    print(f"  web handlers: {len(web_events)}")
-    print(f"  cli EventType handlers: {len(cli_events)}")
-    return 0
+    if report["ok"]:
+        print("Surface parity check: OK")
+        print(f"  server wire events: {len(server_events)}")
+        print(f"  web handlers: {len(web_events)}")
+        print(f"  cli EventType handlers: {len(cli_events)}")
+        return 0
+    return 1
 
 
 if __name__ == "__main__":

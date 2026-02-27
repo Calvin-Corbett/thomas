@@ -1,4 +1,4 @@
-﻿"""Automated repository checks for Thomas.
+"""Automated repository checks for Thomas.
 
 Run once to exercise syntax/lint, core gates, and test suite.
 """
@@ -6,12 +6,13 @@ Run once to exercise syntax/lint, core gates, and test suite.
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 import subprocess
 import sys
 import time
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
@@ -38,6 +39,8 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Monolith guard gate", (PY, "scripts/check_monolith_guard.py")),
     ("Repo hygiene gate", (PY, "scripts/check_repo_hygiene.py")),
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
+    ("Pre-commit skip policy gate", (PY, "scripts/check_precommit_skip_policy.py")),
+    ("Surface parity gate", (PY, "scripts/check_surface_parity.py")),
     ("Workboard claims gate", (PY, "scripts/check_workboard_claims.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
     ("Feature master sync gate", (PY, "scripts/sync_feature_master_list.py", "--check")),
@@ -45,9 +48,7 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
 )
 
-TEST_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Full test suite", (PY, "-m", "pytest", "-q", "tests")),
-)
+TEST_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (("Full test suite", (PY, "-m", "pytest", "-q", "tests")),)
 
 OPTIONAL_MODULES: tuple[tuple[str, str], ...] = (
     ("PIL", "Pillow"),
@@ -89,6 +90,26 @@ def _warn_missing_optional_modules() -> None:
         print("[auto] Some optional tests may skip until those packages are installed.")
 
 
+def _truthy_env(name: str) -> bool:
+    raw = str(os.getenv(name, "")).strip().lower()
+    return raw in {"1", "true", "yes", "on"}
+
+
+def _default_require_clean_worktree() -> bool:
+    # In CI, keep strict worktree enforcement; local multi-agent runs default to relaxed.
+    return _truthy_env("CI")
+
+
+def _resolved_gate_steps(require_clean_worktree: bool) -> tuple[tuple[str, tuple[str, ...]], ...]:
+    steps: list[tuple[str, tuple[str, ...]]] = []
+    for label, cmd in GATE_STEPS:
+        if label == "Repo hygiene gate" and not require_clean_worktree:
+            steps.append((label, (PY, "scripts/check_repo_hygiene.py", "--no-require-clean-worktree")))
+        else:
+            steps.append((label, cmd))
+    return tuple(steps)
+
+
 def run(argv: Iterable[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run automated Thomas repository checks.")
     parser.add_argument("--quick", action="store_true", help="Run syntax/lint only.")
@@ -119,6 +140,13 @@ def run(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--skip-gates", action="store_true", help="Skip gate scripts.")
     parser.add_argument("--skip-tests", action="store_true", help="Skip pytest suite.")
     parser.add_argument(
+        "--require-clean-worktree",
+        dest="require_clean_worktree",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help=("Override repo-hygiene dirty-worktree enforcement. " "Defaults to enabled in CI and disabled locally."),
+    )
+    parser.add_argument(
         "--continue-on-fail",
         action="store_true",
         help="Continue running remaining steps after a failure.",
@@ -139,7 +167,12 @@ def run(argv: Iterable[str] | None = None) -> int:
         steps.append(("Dev artifact cleanup (apply)", tuple(cleanup_cmd)))
     steps.extend(CORE_STEPS)
     if not args.quick and not args.skip_gates:
-        steps.extend(GATE_STEPS)
+        require_clean_worktree = (
+            _default_require_clean_worktree()
+            if args.require_clean_worktree is None
+            else bool(args.require_clean_worktree)
+        )
+        steps.extend(_resolved_gate_steps(require_clean_worktree))
     if not args.quick and not args.skip_tests:
         steps.extend(TEST_STEPS)
 

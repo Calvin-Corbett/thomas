@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timezone
-from typing import Optional
 
 from aiohttp import web
 
-from .api import register_autonomy_routes
 from .adapters import ChatAdapter, ChatAdapterConfig
+from .api import register_autonomy_routes
 from .engine import AutonomyEngine
 from .policy import AutonomyPolicy
 from .scheduler import EngineTiming, compute_next_run
@@ -20,7 +19,7 @@ def _default_db_path(config: object) -> str:
     for attr in ("memory", "config"):
         try:
             obj = getattr(config, attr)
-        except Exception:
+        except ImportError:
             obj = None
         if obj is not None:
             for a2 in ("root_path", "root", "path"):
@@ -28,7 +27,7 @@ def _default_db_path(config: object) -> str:
                     root = getattr(obj, a2)
                     if root:
                         break
-                except Exception:
+                except ImportError:
                     pass
     if not root:
         root = os.path.join("runtime", ".thomas")
@@ -40,12 +39,12 @@ def install_autonomy(
     config: object,
     *,
     enabled: bool = True,
-    db_path: Optional[str] = None,
-    policy_path: Optional[str] = None,
-    api_token: Optional[str] = None,
+    db_path: str | None = None,
+    policy_path: str | None = None,
+    api_token: str | None = None,
     timing: EngineTiming = EngineTiming(),
     chat_adapter=None,
-) -> Optional[AutonomyEngine]:
+) -> AutonomyEngine | None:
     """Install Autonomy Engine into an aiohttp app.
 
     The engine is stored in:

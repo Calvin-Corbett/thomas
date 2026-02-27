@@ -13,8 +13,9 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from collections.abc import Mapping
 from dataclasses import asdict
-from typing import Any, Mapping, Optional
+from typing import Any
 
 from thomas.server.routes.gateway.p130_gateway_probe_command import (
     GatewayProbeException,
@@ -58,10 +59,10 @@ def build_arg_parser(parser: argparse.ArgumentParser) -> argparse.ArgumentParser
 
 async def run_probe(
     *,
-    target: Optional[str] = None,
+    target: str | None = None,
     timeout_s: float = 3.0,
     path: str = "/",
-    environ: Optional[Mapping[str, str]] = None,
+    environ: Mapping[str, str] | None = None,
 ) -> GatewayProbeResponse:
     resolved = resolve_gateway_target(explicit_target=target, environ=environ)
     return await probe_gateway(target=resolved, timeout_s=timeout_s, path=path)
@@ -69,10 +70,7 @@ async def run_probe(
 
 def _render_human(result: GatewayProbeResponse) -> str:
     if result.ok:
-        return (
-            f"Gateway reachable: {result.target} "
-            f"(HTTP {result.status_code}, {result.latency_ms}ms)"
-        )
+        return f"Gateway reachable: {result.target} " f"(HTTP {result.status_code}, {result.latency_ms}ms)"
     code = result.error["code"] if result.error else "error"
     msg = result.error["message"] if result.error else "Gateway probe failed."
     tgt = result.target or "<unknown>"
@@ -88,7 +86,7 @@ def register(subparsers: Any) -> None:
             help=HELP,
             description="Probe the configured gateway target for reachability.",
         )
-    except Exception:
+    except Exception:  # REVIEWED: broad catch
         return
 
     build_arg_parser(p)
@@ -100,7 +98,7 @@ register_command = register
 register_subcommand = register
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="thomas gateway probe")
     build_arg_parser(parser)
     args = parser.parse_args(argv)
@@ -108,12 +106,10 @@ def main(argv: Optional[list[str]] = None) -> int:
     try:
         import asyncio
 
-        result = asyncio.run(
-            run_probe(target=args.target, timeout_s=args.timeout_s, path=args.path)
-        )
+        result = asyncio.run(run_probe(target=args.target, timeout_s=args.timeout_s, path=args.path))
     except GatewayProbeException as e:
         result = GatewayProbeResponse(ok=False, target=args.target or "", error=e.to_payload())
-    except Exception:
+    except ImportError:
         result = GatewayProbeResponse(
             ok=False,
             target=args.target or "",

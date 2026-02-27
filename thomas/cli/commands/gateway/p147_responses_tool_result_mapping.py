@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import argparse
 import json
-from typing import Any, Dict
+from typing import Any
 
 
 def build_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentParser:
@@ -57,8 +57,8 @@ def build_parser(subparsers: argparse._SubParsersAction) -> argparse.ArgumentPar
     return p
 
 
-def _build_payload(args: argparse.Namespace) -> Dict[str, Any]:
-    payload: Dict[str, Any] = {"tool_call_id": args.tool_call_id}
+def _build_payload(args: argparse.Namespace) -> dict[str, Any]:
+    payload: dict[str, Any] = {"tool_call_id": args.tool_call_id}
     if args.tool_name:
         payload["tool_name"] = args.tool_name
 
@@ -106,7 +106,7 @@ def run(args: argparse.Namespace) -> int:
 
     try:
         out = json.loads(body) if body else {}
-    except Exception:
+    except ImportError:
         out = {
             "ok": False,
             "error": {"code": "invalid_json_response", "message": "gateway returned non-json"},

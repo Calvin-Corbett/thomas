@@ -13,12 +13,11 @@ import os
 import sqlite3
 import threading
 import time
-from dataclasses import dataclass
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 try:
     from pydantic import BaseModel, Field
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     BaseModel = object  # type: ignore
     Field = lambda *a, **k: None  # type: ignore
 
@@ -35,9 +34,9 @@ class NotificationCreate(BaseModel):
     title: str = Field(..., description="Short title")
     body: str = Field(..., description="Human readable description")
     severity: str = Field("info", description="info|warn|error")
-    action_url: Optional[str] = Field(None, description="Optional deep link URL")
+    action_url: str | None = Field(None, description="Optional deep link URL")
 
-    def normalized(self) -> "NotificationCreate":
+    def normalized(self) -> NotificationCreate:
         sev = (self.severity or "info").lower()
         if sev not in SEVERITIES:
             sev = "info"
@@ -56,15 +55,15 @@ class Notification(BaseModel):
     severity: str
     read: bool
     timestamp: int  # epoch ms (UTC)
-    action_url: Optional[str] = None
+    action_url: str | None = None
 
 
 class PushSubscription(BaseModel):
     endpoint: str
     p256dh: str
     auth: str
-    expiration_time: Optional[int] = None
-    user_agent: Optional[str] = None
+    expiration_time: int | None = None
+    user_agent: str | None = None
     created_at: int
 
 
@@ -72,7 +71,7 @@ class PushSubscription(BaseModel):
 # Store
 # -----------------------------
 
-MIGRATION_STATEMENTS: Tuple[str, ...] = (
+MIGRATION_STATEMENTS: tuple[str, ...] = (
     """
     CREATE TABLE IF NOT EXISTS notifications (
         id TEXT PRIMARY KEY,
@@ -147,7 +146,7 @@ class NotificationStore:
     # Notifications
     # -----------------------------
 
-    def add(self, notif_id: str, payload: NotificationCreate, timestamp_ms: Optional[int] = None) -> Notification:
+    def add(self, notif_id: str, payload: NotificationCreate, timestamp_ms: int | None = None) -> Notification:
         payload = payload.normalized()
         ts = timestamp_ms or now_ms()
         with self._lock:
@@ -174,7 +173,7 @@ class NotificationStore:
             action_url=payload.action_url,
         )
 
-    def get(self, notif_id: str) -> Optional[Notification]:
+    def get(self, notif_id: str) -> Notification | None:
         with self._lock:
             conn = self._connect()
             try:
@@ -185,7 +184,7 @@ class NotificationStore:
             finally:
                 conn.close()
 
-    def mark_read(self, notif_id: str) -> Optional[Notification]:
+    def mark_read(self, notif_id: str) -> Notification | None:
         with self._lock:
             conn = self._connect()
             try:
@@ -217,7 +216,7 @@ class NotificationStore:
             finally:
                 conn.close()
 
-    def unread_count(self, type_: Optional[str] = None, severity: Optional[str] = None) -> int:
+    def unread_count(self, type_: str | None = None, severity: str | None = None) -> int:
         where, params = self._build_where(type_=type_, severity=severity, unread_only=True)
         sql = "SELECT COUNT(*) AS c FROM notifications" + where
         with self._lock:
@@ -232,18 +231,14 @@ class NotificationStore:
         self,
         limit: int = 50,
         offset: int = 0,
-        type_: Optional[str] = None,
-        severity: Optional[str] = None,
+        type_: str | None = None,
+        severity: str | None = None,
         unread_only: bool = False,
-    ) -> List[Notification]:
+    ) -> list[Notification]:
         limit = max(1, min(int(limit or 50), 200))
         offset = max(0, int(offset or 0))
         where, params = self._build_where(type_=type_, severity=severity, unread_only=unread_only)
-        sql = (
-            "SELECT * FROM notifications"
-            + where
-            + " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
-        )
+        sql = "SELECT * FROM notifications" + where + " ORDER BY timestamp DESC LIMIT ? OFFSET ?"
         params = list(params) + [limit, offset]
         with self._lock:
             conn = self._connect()
@@ -255,12 +250,12 @@ class NotificationStore:
 
     def _build_where(
         self,
-        type_: Optional[str],
-        severity: Optional[str],
+        type_: str | None,
+        severity: str | None,
         unread_only: bool,
-    ) -> Tuple[str, List[Any]]:
-        clauses: List[str] = []
-        params: List[Any] = []
+    ) -> tuple[str, list[Any]]:
+        clauses: list[str] = []
+        params: list[Any] = []
 
         if type_:
             clauses.append("type = ?")
@@ -298,8 +293,8 @@ class NotificationStore:
         endpoint: str,
         p256dh: str,
         auth: str,
-        expiration_time: Optional[int] = None,
-        user_agent: Optional[str] = None,
+        expiration_time: int | None = None,
+        user_agent: str | None = None,
     ) -> None:
         created = now_ms()
         with self._lock:
@@ -331,12 +326,12 @@ class NotificationStore:
             finally:
                 conn.close()
 
-    def list_subscriptions(self) -> List[PushSubscription]:
+    def list_subscriptions(self) -> list[PushSubscription]:
         with self._lock:
             conn = self._connect()
             try:
                 rows = conn.execute("SELECT * FROM push_subscriptions ORDER BY created_at DESC").fetchall()
-                out: List[PushSubscription] = []
+                out: list[PushSubscription] = []
                 for r in rows:
                     out.append(
                         PushSubscription(

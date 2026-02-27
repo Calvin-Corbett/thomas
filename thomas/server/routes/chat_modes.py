@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import json
 import logging
+import re
 import secrets
-import time
-from typing import Any, Awaitable, Callable, Dict, Optional
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -32,6 +32,31 @@ from thomas.server.routes.chat_helpers import (
 )
 
 log = logging.getLogger(__name__)
+_DEFAULT_HANDLE_BATCH_MODE_CHAT = handle_batch_mode_chat
+_USER_REQUEST_EXTRACT_RE = re.compile(r"user request:\s*(.+)$", re.IGNORECASE | re.DOTALL)
+
+
+def _extract_quick_reply_key(text: str) -> str:
+    """Normalize text for pattern matching (kept for logging/analytics only)."""
+    raw = str(text or "").strip()
+    if not raw:
+        return ""
+
+    def _normalize(value: str) -> str:
+        key = re.sub(r"\s+", " ", str(value or "").strip().lower())
+        key = key.strip("\"'`").strip()
+        key = re.sub(r"[.!?]+$", "", key).strip()
+        return key
+
+    direct = _normalize(raw)
+
+    match = _USER_REQUEST_EXTRACT_RE.search(raw)
+    if not match:
+        return direct
+    tail = str(match.group(1) or "").strip()
+    lines = [ln.strip() for ln in tail.splitlines() if ln.strip()]
+    candidate = lines[-1] if lines else tail
+    return _normalize(candidate)
 
 
 async def maybe_handle_quick_casual_reply(
@@ -41,57 +66,16 @@ async def maybe_handle_quick_casual_reply(
     session: Any,
     text: str,
     mode: str,
-    token_economy_meta: Dict[str, Any],
+    token_economy_meta: dict[str, Any],
     start_t: float,
     sid: str,
     deps: Any,
-) -> Optional[web.StreamResponse]:
-    quick_casual_reply: Optional[str] = None
-    lowered_text = str(text or "").strip().lower()
-    if lowered_text in {"hi", "hello", "hey"}:
-        quick_casual_reply = "Hello."
-    if quick_casual_reply is None:
-        return None
-
-    async with session_lock:
-        session.conversation.append({"role": "user", "content": text})
-        session.conversation.append({"role": "assistant", "content": quick_casual_reply})
-    resp = web.StreamResponse(
-        status=200,
-        headers={
-            "Content-Type": "application/x-ndjson; charset=utf-8",
-            "Cache-Control": "no-cache",
-        },
-    )
-    await resp.prepare(request)
-    await resp.write(json.dumps({"type": "text", "text": quick_casual_reply}).encode("utf-8") + b"\n")
-    await resp.write(
-        json.dumps(
-            {
-                "type": "done",
-                "iterations": 1,
-                "tool_calls": 0,
-                "usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-                "run_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-                "session_usage": {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0},
-                "token_report": {"mode": mode, "token_economy": token_economy_meta, "rules_of_road": {}},
-                "token_economy": token_economy_meta,
-                "rules_of_road": {},
-                "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
-            }
-        ).encode("utf-8")
-        + b"\n"
-    )
-    await resp.write_eof()
-    deps.task_ledger_update(
-        sid,
-        status="complete",
-        missing_inputs=[],
-        last_progress=quick_casual_reply,
-        source="chat.quick_reply",
-        force_event=True,
-    )
-    return resp
+) -> web.StreamResponse | None:
+    # Quick/canned replies disabled — all messages go through the LLM for
+    # natural, context-aware responses.  The old system intercepted greetings
+    # like "hi"/"yo"/"thanks" and returned hard-coded text without reaching
+    # the model, which felt robotic and inconsistent.
+    return None
 
 
 async def maybe_handle_batch_mode(
@@ -106,17 +90,38 @@ async def maybe_handle_batch_mode(
     cfg: Any,
     run_cfg: Any,
     model_cfg: Any,
-    requested_job_type: Optional[str],
-    token_economy_meta: Dict[str, Any],
+    requested_job_type: str | None,
+    token_economy_meta: dict[str, Any],
     run_store_enabled: bool,
     run_store_mod: Any,
     start_run_writer: Callable[[str, str], Any],
-    apply_usage_budget: Callable[[int], Awaitable[Optional[Dict[str, Any]]]],
+    apply_usage_budget: Callable[[int], Awaitable[dict[str, Any] | None]],
     sid: str,
     deps: Any,
-) -> Optional[web.StreamResponse]:
+) -> web.StreamResponse | None:
     if mode != "batch":
         return None
+
+    batch_handler = handle_batch_mode_chat
+    try:
+        from thomas.server import app as server_app
+
+        candidate = getattr(server_app, "handle_batch_mode_chat", _DEFAULT_HANDLE_BATCH_MODE_CHAT)
+        if callable(candidate):
+            batch_handler = candidate
+    except Exception:
+        batch_handler = handle_batch_mode_chat
+
+    batch_client_factory = getattr(deps, "batch_client_factory", None)
+    if batch_client_factory is None:
+        # Compatibility: tests and integrations often patch
+        # `thomas.server.app.OpenAICompatBatchClient`.
+        try:
+            from thomas.server import app as server_app
+
+            batch_client_factory = getattr(server_app, "OpenAICompatBatchClient", OpenAICompatBatchClient)
+        except Exception:
+            batch_client_factory = OpenAICompatBatchClient
 
     deps.task_ledger_update(
         sid,
@@ -127,7 +132,7 @@ async def maybe_handle_batch_mode(
         force_event=True,
     )
 
-    async def _on_batch_complete(run_done: Dict[str, Any]) -> None:
+    async def _on_batch_complete(run_done: dict[str, Any]) -> None:
         ok_val = bool(run_done.get("ok")) if run_done.get("ok") is not None else False
         if ok_val:
             deps.task_ledger_update(
@@ -150,7 +155,7 @@ async def maybe_handle_batch_mode(
         )
 
     async with session_lock:
-        response = await handle_batch_mode_chat(
+        response = await batch_handler(
             request,
             session=session,
             text=text,
@@ -167,7 +172,7 @@ async def maybe_handle_batch_mode(
                 start_run_writer=start_run_writer,
                 normalize_usage_payload=_normalize_usage_payload,
                 autonomy_level_name=autonomy_level_name,
-                batch_client_factory=OpenAICompatBatchClient,
+                batch_client_factory=batch_client_factory,
                 build_completion_request=build_completion_request,
                 parse_batch_state=parse_batch_state,
                 extract_batch_results=extract_batch_results,
@@ -188,7 +193,7 @@ async def maybe_handle_swarm_mode(
     request: web.Request,
     mode: str,
     session_lock: Any,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     text: str,
     sid: str,
     cfg: Any,
@@ -196,13 +201,13 @@ async def maybe_handle_swarm_mode(
     fallback_cfgs: list[Any],
     advanced_tools: Any,
     applied_token_economy: str,
-    token_economy_meta: Dict[str, Any],
+    token_economy_meta: dict[str, Any],
     run_store_enabled: bool,
     run_store_mod: Any,
     start_run_writer: Callable[[str, str], Any],
-    apply_usage_budget: Callable[[int], Awaitable[Optional[Dict[str, Any]]]],
+    apply_usage_budget: Callable[[int], Awaitable[dict[str, Any] | None]],
     deps: Any,
-) -> Optional[web.StreamResponse]:
+) -> web.StreamResponse | None:
     if mode != "swarm":
         return None
 
@@ -220,7 +225,7 @@ async def maybe_handle_swarm_mode(
         swarm_next_seq["value"] = value + 1
         return value
 
-    swarm_done: Dict[str, Any] = {
+    swarm_done: dict[str, Any] = {
         "ok": None,
         "error": None,
         "iterations": None,
@@ -230,7 +235,7 @@ async def maybe_handle_swarm_mode(
     try:
         from thomas.server.swarm_mode import handle_swarm_chat
 
-        async def _swarm_tool_call(name: str, args: Dict[str, Any]) -> Dict[str, Any]:
+        async def _swarm_tool_call(name: str, args: dict[str, Any]) -> dict[str, Any]:
             if advanced_tools is not None and str(name or "").strip().lower() == "shell.exec":
                 if bool(getattr(advanced_tools, "require_command_approval", False)):
                     return {
@@ -247,7 +252,7 @@ async def maybe_handle_swarm_mode(
                 "text": result.to_content(),
             }
 
-        async def _record_swarm_event(evt: Dict[str, Any]) -> None:
+        async def _record_swarm_event(evt: dict[str, Any]) -> dict[str, Any]:
             out = dict(evt or {})
             out.setdefault("run_id", run_id)
             if writer is not None:
@@ -308,6 +313,7 @@ async def maybe_handle_swarm_mode(
                         source="chat.swarm_done",
                         force_event=True,
                     )
+            return out
 
         subagents = {
             "planner": _LLMSwarmSubagent(
@@ -323,6 +329,33 @@ async def maybe_handle_swarm_mode(
                 "coder",
                 model_cfg,
                 "You are the coding executor. Produce concrete, implementation-focused output.",
+                fallback_cfgs=fallback_cfgs,
+                failover_enabled=cfg.failover.enabled,
+                failover_cooldown_s=cfg.failover.cooldown_seconds,
+                failover_on_auth_error=cfg.failover.fallback_on_auth_error,
+            ),
+            "researcher": _LLMSwarmSubagent(
+                "researcher",
+                model_cfg,
+                "You are the research specialist. Gather evidence, state uncertainty clearly, and cite concrete facts.",
+                fallback_cfgs=fallback_cfgs,
+                failover_enabled=cfg.failover.enabled,
+                failover_cooldown_s=cfg.failover.cooldown_seconds,
+                failover_on_auth_error=cfg.failover.fallback_on_auth_error,
+            ),
+            "news": _LLMSwarmSubagent(
+                "news",
+                model_cfg,
+                "You are the news specialist. Prioritize recency, include absolute dates, and flag unverified claims.",
+                fallback_cfgs=fallback_cfgs,
+                failover_enabled=cfg.failover.enabled,
+                failover_cooldown_s=cfg.failover.cooldown_seconds,
+                failover_on_auth_error=cfg.failover.fallback_on_auth_error,
+            ),
+            "social": _LLMSwarmSubagent(
+                "social",
+                model_cfg,
+                "You are the social media specialist. Produce channel-aware messaging and audience-specific campaign guidance.",
                 fallback_cfgs=fallback_cfgs,
                 failover_enabled=cfg.failover.enabled,
                 failover_cooldown_s=cfg.failover.cooldown_seconds,

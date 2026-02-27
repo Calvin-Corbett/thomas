@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
-from typing import Any, Mapping, Optional, Protocol, TypedDict, cast
+from typing import Any, Protocol, TypedDict, cast
 
 
 class MessageDeleteError(Exception):
@@ -15,7 +16,7 @@ class MessageDeleteError(Exception):
 
     __slots__ = ("code", "message", "details")
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = str(code)
         self.message = str(message)
@@ -31,8 +32,8 @@ class _MessageDeleter(Protocol):
     def delete_message(
         self,
         *,
-        channel: Optional[str],
-        account: Optional[str],
+        channel: str | None,
+        account: str | None,
         target: str,
         message_id: str,
     ) -> bool: ...
@@ -44,17 +45,15 @@ class MessageDeleteRequest:
 
     target: str
     message_id: str
-    channel: Optional[str] = None
-    account: Optional[str] = None
+    channel: str | None = None
+    account: str | None = None
     dry_run: bool = False
 
     def validate(self) -> None:
         if not isinstance(self.target, str) or not self.target.strip():
             raise MessageDeleteError("invalid_input", "target is required", details={"field": "target"})
         if not isinstance(self.message_id, str) or not self.message_id.strip():
-            raise MessageDeleteError(
-                "invalid_input", "message_id is required", details={"field": "message_id"}
-            )
+            raise MessageDeleteError("invalid_input", "message_id is required", details={"field": "message_id"})
         if self.channel is not None and not isinstance(self.channel, str):
             raise MessageDeleteError("invalid_input", "channel must be a string", details={"field": "channel"})
         if self.account is not None and not isinstance(self.account, str):
@@ -68,8 +67,8 @@ class MessageDeleteResponse:
     target: str
     message_id: str
     deleted: bool
-    channel: Optional[str] = None
-    account: Optional[str] = None
+    channel: str | None = None
+    account: str | None = None
     dry_run: bool = False
 
     def to_dict(self) -> dict[str, Any]:
@@ -86,8 +85,8 @@ class MessageDeleteResponse:
 
 class MessageDeleteRequestJson(TypedDict, total=False):
     # Accept both snake_case and camelCase inputs.
-    channel: Optional[str]
-    account: Optional[str]
+    channel: str | None
+    account: str | None
     target: str
     to: str
     messageId: str
@@ -97,8 +96,8 @@ class MessageDeleteRequestJson(TypedDict, total=False):
 
 
 class MessageDeleteResponseJson(TypedDict):
-    channel: Optional[str]
-    account: Optional[str]
+    channel: str | None
+    account: str | None
     to: str
     messageId: str
     deleted: bool
@@ -173,8 +172,8 @@ def parse_request(payload: Mapping[str, Any]) -> MessageDeleteRequest:
     dry_run = data.get("dryRun") if "dryRun" in data else data.get("dry_run")
 
     return MessageDeleteRequest(
-        channel=cast(Optional[str], data.get("channel")),
-        account=cast(Optional[str], data.get("account")),
+        channel=cast(str | None, data.get("channel")),
+        account=cast(str | None, data.get("account")),
         target=_coerce_str(target),
         message_id=_coerce_str(message_id),
         dry_run=_coerce_bool(dry_run),
@@ -219,7 +218,7 @@ def build_default_deleter() -> _MessageDeleter:
     for mod_name in module_candidates:
         try:
             mod = importlib.import_module(mod_name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
 
         for attr in attr_candidates:
@@ -231,7 +230,7 @@ def build_default_deleter() -> _MessageDeleter:
             if callable(obj):
                 try:
                     candidate = obj()
-                except Exception:
+                except (ImportError, AttributeError, RuntimeError):
                     continue
             else:
                 candidate = obj
@@ -269,7 +268,7 @@ def _adapt_external_error(exc: Exception) -> MessageDeleteError:
 def delete_message(
     request: MessageDeleteRequest,
     *,
-    deleter: Optional[_MessageDeleter] = None,
+    deleter: _MessageDeleter | None = None,
 ) -> MessageDeleteResponse:
     """Delete a message via the configured messaging backend."""
 
@@ -299,7 +298,7 @@ def delete_message(
         )
     except MessageDeleteError:
         raise
-    except Exception as exc:  # pragma: no cover
+    except (ConnectionError, TimeoutError, RuntimeError) as exc:  # pragma: no cover
         raise _adapt_external_error(exc) from exc
 
     return MessageDeleteResponse(
@@ -329,7 +328,7 @@ def handle_webhook(payload: Mapping[str, Any], **context: Any) -> MessageDeleteR
     )
     deleter = next((d for d in possible if d is not None and hasattr(d, "delete_message")), None)
 
-    response = delete_message(request, deleter=cast(Optional[_MessageDeleter], deleter))
+    response = delete_message(request, deleter=cast(_MessageDeleter | None, deleter))
     return cast(MessageDeleteResponseJson, response.to_dict())
 
 

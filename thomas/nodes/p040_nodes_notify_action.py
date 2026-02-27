@@ -19,9 +19,9 @@ from __future__ import annotations
 import asyncio
 import json
 import os
+from collections.abc import Mapping, MutableMapping
 from dataclasses import asdict, dataclass, field
-from typing import Any, Mapping, MutableMapping, Protocol, TypedDict, cast
-
+from typing import Any, Protocol, TypedDict, cast
 
 # ---------------------------------------------------------------------------
 # Contracts
@@ -156,10 +156,10 @@ class HttpNodesActionNotifier:
         self._aiohttp = None
         self._connector = None
 
-    async def __aenter__(self) -> "HttpNodesActionNotifier":
+    async def __aenter__(self) -> HttpNodesActionNotifier:
         try:
             import aiohttp  # type: ignore
-        except Exception as e:  # pragma: no cover
+        except (ImportError, AttributeError, RuntimeError) as e:  # pragma: no cover
             raise NodesNotifyActionExternalError(
                 "aiohttp is required for HTTP node notifications",
                 details={"reason": "dependency_missing", "dependency": "aiohttp"},
@@ -231,7 +231,7 @@ class HttpNodesActionNotifier:
                 error_code="timeout",
                 error_message=f"Timed out after {timeout_s:.3f}s",
             )
-        except Exception as e:
+        except (RuntimeError, asyncio.QueueFull, ValueError) as e:
             # aiohttp's exception hierarchy is fairly broad; keep this deterministic.
             return NodeNotifyResult(
                 node_id=node_id,
@@ -285,7 +285,7 @@ def parse_input(data: Mapping[str, Any]) -> NodesNotifyActionInput:
 
     try:
         timeout_s = float(timeout_raw)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesNotifyActionInvalidInputError(
             "timeout_s must be a number",
             details={"field": "timeout_s"},
@@ -330,8 +330,8 @@ def load_config() -> NodesNotifyActionConfig:
         )
         api_token = getattr(thomas_config, "NODES_API_TOKEN", None) or getattr(thomas_config, "nodes_api_token", None)
         if hasattr(thomas_config, "NODES_VERIFY_TLS"):
-            verify_tls = bool(getattr(thomas_config, "NODES_VERIFY_TLS"))
-    except Exception:
+            verify_tls = bool(thomas_config.NODES_VERIFY_TLS)
+    except (ImportError, AttributeError, RuntimeError):
         pass
 
     # 2) Fall back to env vars.
@@ -507,7 +507,7 @@ def payload_from_json(payload_json: str | None) -> dict[str, Any]:
         return {}
     try:
         parsed = json.loads(payload_json)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodesNotifyActionInvalidInputError(
             "payload must be valid JSON",
             details={"field": "payload"},
@@ -567,7 +567,7 @@ async def _safe_read_response(resp: Any) -> str | None:
     """Try to read a response body in a bounded way."""
     try:
         text = await resp.text()
-    except Exception:
+    except (KeyError, ValueError, AttributeError):
         return None
     text = (text or "").strip()
     if not text:

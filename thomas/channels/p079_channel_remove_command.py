@@ -10,14 +10,16 @@ Design goals:
 - Minimal assumptions about the surrounding Thomas codebase; callers may
   inject config loaders/writers for testability.
 """
+
 from __future__ import annotations
 
-from dataclasses import dataclass, asdict
-from enum import Enum
-from pathlib import Path
-from typing import Any, Callable, Mapping, MutableMapping, Optional, Tuple
 import json
 import os
+from collections.abc import Callable, Mapping, MutableMapping
+from dataclasses import asdict, dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Any
 
 
 class ChannelRemoveErrorCode(str, Enum):
@@ -33,16 +35,18 @@ class ChannelRemoveErrorCode(str, Enum):
 @dataclass(frozen=True)
 class ChannelRemoveRequest:
     """Input contract for channel removal."""
+
     channel: str
-    account: Optional[str] = None
+    account: str | None = None
     delete: bool = False
     # Optional explicit config path. If omitted, config discovery is used.
-    config_path: Optional[Path] = None
+    config_path: Path | None = None
 
 
 @dataclass(frozen=True)
 class ChannelRemoveResult:
     """Output contract for channel removal."""
+
     channel: str
     account: str
     action: str  # "disabled" or "deleted"
@@ -55,7 +59,8 @@ class ChannelRemoveResult:
 
 class ChannelRemoveError(RuntimeError):
     """Deterministic error with a stable code."""
-    def __init__(self, code: ChannelRemoveErrorCode, message: str, *, details: Optional[Mapping[str, Any]] = None):
+
+    def __init__(self, code: ChannelRemoveErrorCode, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.details = dict(details or {})
@@ -131,7 +136,7 @@ def discover_config_path() -> Path:
 def _load_yaml(text: str) -> Any:
     try:
         import yaml  # type: ignore
-    except Exception as e:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
         raise ChannelRemoveError(
             ChannelRemoveErrorCode.CONFIG_INVALID,
             "Config appears to be YAML but PyYAML is not available.",
@@ -139,7 +144,7 @@ def _load_yaml(text: str) -> Any:
         )
     try:
         return yaml.safe_load(text)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ChannelRemoveError(
             ChannelRemoveErrorCode.CONFIG_INVALID,
             "Failed to parse YAML config.",
@@ -150,7 +155,7 @@ def _load_yaml(text: str) -> Any:
 def _dump_yaml(data: Any) -> str:
     try:
         import yaml  # type: ignore
-    except Exception as e:  # pragma: no cover
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
         raise ChannelRemoveError(
             ChannelRemoveErrorCode.WRITE_FAILED,
             "Config target is YAML but PyYAML is not available.",
@@ -158,7 +163,7 @@ def _dump_yaml(data: Any) -> str:
         )
     try:
         return yaml.safe_dump(data, sort_keys=False)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ChannelRemoveError(
             ChannelRemoveErrorCode.WRITE_FAILED,
             "Failed to serialize YAML config.",
@@ -175,7 +180,7 @@ def load_config_file(path: Path) -> MutableMapping[str, Any]:
         )
     try:
         text = path.read_text(encoding="utf-8")
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ChannelRemoveError(
             ChannelRemoveErrorCode.CONFIG_INVALID,
             f"Failed to read config file: {path}",
@@ -190,7 +195,7 @@ def load_config_file(path: Path) -> MutableMapping[str, Any]:
     else:
         try:
             data = json.loads(text)
-        except Exception as e:
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
             raise ChannelRemoveError(
                 ChannelRemoveErrorCode.CONFIG_INVALID,
                 "Failed to parse JSON config.",
@@ -211,7 +216,7 @@ def load_config_file(path: Path) -> MutableMapping[str, Any]:
 def write_config_file(path: Path, cfg: Mapping[str, Any]) -> None:
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-    except Exception:
+    except (KeyError, ValueError, AttributeError):
         pass
 
     try:
@@ -222,7 +227,7 @@ def write_config_file(path: Path, cfg: Mapping[str, Any]) -> None:
         path.write_text(payload, encoding="utf-8")
     except ChannelRemoveError:
         raise
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise ChannelRemoveError(
             ChannelRemoveErrorCode.WRITE_FAILED,
             f"Failed to write config file: {path}",
@@ -243,14 +248,14 @@ def _normalize_channel(value: str) -> str:
     return v.lower()
 
 
-def _normalize_account(value: Optional[str]) -> str:
+def _normalize_account(value: str | None) -> str:
     v = (value or "").strip()
     if not v:
         return "default"
     return v
 
 
-def _locate_channels_section(cfg: MutableMapping[str, Any], channel: str) -> Tuple[MutableMapping[str, Any], str]:
+def _locate_channels_section(cfg: MutableMapping[str, Any], channel: str) -> tuple[MutableMapping[str, Any], str]:
     """
     Returns (container_dict, location_label) where container_dict holds channel keys.
 
@@ -284,8 +289,9 @@ def _cleanup_external_state_after_delete(channel: str, account: str) -> None:
 
     try:
         from importlib import import_module
+
         mod = import_module("thomas.integrations.telegram")
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return
 
     candidate_fns = [
@@ -313,7 +319,7 @@ def _cleanup_external_state_after_delete(channel: str, account: str) -> None:
                 "Failed cleaning up Telegram channel state.",
                 details={"function": name, "error": str(e)},
             )
-        except Exception as e:
+        except (ImportError, AttributeError, RuntimeError) as e:
             raise ChannelRemoveError(
                 ChannelRemoveErrorCode.EXTERNAL_FAILURE,
                 "Failed cleaning up Telegram channel state.",
@@ -325,9 +331,9 @@ def _cleanup_external_state_after_delete(channel: str, account: str) -> None:
 def remove_channel(
     request: ChannelRemoveRequest,
     *,
-    cfg: Optional[MutableMapping[str, Any]] = None,
-    load_cfg: Optional[Callable[[Path], MutableMapping[str, Any]]] = None,
-    write_cfg: Optional[Callable[[Path, Mapping[str, Any]], None]] = None,
+    cfg: MutableMapping[str, Any] | None = None,
+    load_cfg: Callable[[Path], MutableMapping[str, Any]] | None = None,
+    write_cfg: Callable[[Path, Mapping[str, Any]], None] | None = None,
 ) -> ChannelRemoveResult:
     """
     Disable (default) or delete (destructive) a channel from config.

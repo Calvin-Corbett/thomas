@@ -11,19 +11,14 @@ Key properties:
 
 from __future__ import annotations
 
+import inspect
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-import inspect
 from typing import (
     Any,
-    Awaitable,
-    Callable,
-    Dict,
     Literal,
-    Mapping,
-    Optional,
     Protocol,
-    Tuple,
     TypedDict,
     Union,
     cast,
@@ -41,10 +36,10 @@ class NodeInvoker(Protocol):
         self,
         node: str,
         command: str,
-        params: Optional[Mapping[str, Any]] = None,
+        params: Mapping[str, Any] | None = None,
         *,
-        timeout_ms: Optional[int] = None,
-        idempotency_key: Optional[str] = None,
+        timeout_ms: int | None = None,
+        idempotency_key: str | None = None,
     ) -> Any: ...
 
 
@@ -60,12 +55,12 @@ class NodesLocationActionRequest(TypedDict, total=False):
 class NodesLocationActionErrorPayload(TypedDict):
     code: str
     message: str
-    details: Dict[str, Any]
+    details: dict[str, Any]
 
 
 class NodesLocationActionResponseOk(TypedDict):
     ok: Literal[True]
-    result: Dict[str, Any]
+    result: dict[str, Any]
 
 
 class NodesLocationActionResponseErr(TypedDict):
@@ -84,10 +79,10 @@ class NodesLocationActionInput:
     accuracy: DesiredAccuracy = "balanced"
     max_age_ms: int = 15_000
     location_timeout_ms: int = 10_000
-    invoke_timeout_ms: Optional[int] = None
-    idempotency_key: Optional[str] = None
+    invoke_timeout_ms: int | None = None
+    idempotency_key: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -97,41 +92,41 @@ class NodesLocationActionOutput:
 
     lat: float
     lon: float
-    accuracy_meters: Optional[float] = None
-    altitude_meters: Optional[float] = None
-    speed_mps: Optional[float] = None
-    heading_deg: Optional[float] = None
+    accuracy_meters: float | None = None
+    altitude_meters: float | None = None
+    speed_mps: float | None = None
+    heading_deg: float | None = None
     timestamp: str = ""
-    is_precise: Optional[bool] = None
-    source: Optional[str] = None
+    is_precise: bool | None = None
+    source: str | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
     @staticmethod
-    def from_dict(raw: Mapping[str, Any]) -> "NodesLocationActionOutput":
+    def from_dict(raw: Mapping[str, Any]) -> NodesLocationActionOutput:
         """Rehydrate from a JSON/dict form (used by CLI tests)."""
         return NodesLocationActionOutput(
             lat=float(raw.get("lat")),
             lon=float(raw.get("lon")),
-            accuracy_meters=cast(Optional[float], raw.get("accuracy_meters")),
-            altitude_meters=cast(Optional[float], raw.get("altitude_meters")),
-            speed_mps=cast(Optional[float], raw.get("speed_mps")),
-            heading_deg=cast(Optional[float], raw.get("heading_deg")),
+            accuracy_meters=cast(float | None, raw.get("accuracy_meters")),
+            altitude_meters=cast(float | None, raw.get("altitude_meters")),
+            speed_mps=cast(float | None, raw.get("speed_mps")),
+            heading_deg=cast(float | None, raw.get("heading_deg")),
             timestamp=str(raw.get("timestamp") or ""),
-            is_precise=cast(Optional[bool], raw.get("is_precise")),
-            source=cast(Optional[str], raw.get("source")),
+            is_precise=cast(bool | None, raw.get("is_precise")),
+            source=cast(str | None, raw.get("source")),
         )
 
 
 class NodesLocationActionError(Exception):
     """Deterministic error with a stable code/message for automation."""
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message)
         self.code = str(code)
         self.message = str(message)
-        self.details: Dict[str, Any] = dict(details or {})
+        self.details: dict[str, Any] = dict(details or {})
 
     def __str__(self) -> str:  # pragma: no cover
         return f"{self.code}: {self.message}"
@@ -196,7 +191,7 @@ def _coerce_float(value: Any, *, field: str) -> float:
     raise NodesLocationActionError("invalid_response", f"{field} must be a number")
 
 
-def _coerce_optional_float(value: Any) -> Optional[float]:
+def _coerce_optional_float(value: Any) -> float | None:
     if value is None or isinstance(value, bool):
         return None
     if isinstance(value, (int, float)):
@@ -226,7 +221,7 @@ def _coerce_timestamp(value: Any) -> str:
     raise NodesLocationActionError("invalid_response", "timestamp is required")
 
 
-def _maybe_mapping(value: Any) -> Optional[Mapping[str, Any]]:
+def _maybe_mapping(value: Any) -> Mapping[str, Any] | None:
     return value if isinstance(value, Mapping) else None
 
 
@@ -249,7 +244,7 @@ def _call_with_accepted_kwargs(fn: Callable[..., Any], kwargs: Mapping[str, Any]
     except (TypeError, ValueError):
         return fn(**kwargs)
 
-    accepted: Dict[str, Any] = {}
+    accepted: dict[str, Any] = {}
     for name in sig.parameters.keys():
         if name in kwargs:
             accepted[name] = kwargs[name]
@@ -262,13 +257,13 @@ async def _invoke_node_command(
     node: str,
     command: str,
     params: Mapping[str, Any],
-    timeout_ms: Optional[int],
-    idempotency_key: Optional[str],
+    timeout_ms: int | None,
+    idempotency_key: str | None,
 ) -> Any:
     if invoker is None:
         raise NodesLocationActionError("missing_config", "No node invoker is configured")
 
-    method_candidates: Tuple[str, ...] = (
+    method_candidates: tuple[str, ...] = (
         "node_invoke",
         "invoke_node",
         "invoke",
@@ -300,7 +295,7 @@ async def _invoke_node_command(
             )
         except NodesLocationActionError:
             raise
-        except Exception as e:
+        except (KeyError, ValueError, AttributeError) as e:
             raise NodesLocationActionError(
                 "external_failure",
                 "Node invocation failed",
@@ -322,7 +317,7 @@ async def _invoke_node_command(
                     },
                 )
             )
-        except Exception as e:
+        except (KeyError, ValueError, AttributeError) as e:
             raise NodesLocationActionError(
                 "external_failure",
                 "Node invocation failed",
@@ -421,14 +416,14 @@ def _parse_location_payload(payload: Mapping[str, Any]) -> NodesLocationActionOu
     )
 
 
-def validate_input(raw: Union[Mapping[str, Any], NodesLocationActionInput]) -> NodesLocationActionInput:
+def validate_input(raw: Mapping[str, Any] | NodesLocationActionInput) -> NodesLocationActionInput:
     if isinstance(raw, NodesLocationActionInput):
         node = _require_non_empty_str(raw.node, field="node")
         accuracy = _normalize_accuracy(raw.accuracy)
         max_age_ms = _require_non_negative_int(raw.max_age_ms, field="max_age_ms")
         location_timeout_ms = _require_positive_int(raw.location_timeout_ms, field="location_timeout_ms")
 
-        invoke_timeout_ms: Optional[int] = raw.invoke_timeout_ms
+        invoke_timeout_ms: int | None = raw.invoke_timeout_ms
         if invoke_timeout_ms is not None:
             invoke_timeout_ms = _require_positive_int(invoke_timeout_ms, field="invoke_timeout_ms")
 
@@ -451,7 +446,7 @@ def validate_input(raw: Union[Mapping[str, Any], NodesLocationActionInput]) -> N
     location_timeout_ms = _require_positive_int(raw.get("location_timeout_ms", 10_000), field="location_timeout_ms")
 
     invoke_timeout_ms_raw = raw.get("invoke_timeout_ms")
-    invoke_timeout_ms: Optional[int]
+    invoke_timeout_ms: int | None
     if invoke_timeout_ms_raw is None:
         invoke_timeout_ms = None
     else:
@@ -471,14 +466,14 @@ def validate_input(raw: Union[Mapping[str, Any], NodesLocationActionInput]) -> N
 
 
 async def get_node_location(
-    action_input: Union[Mapping[str, Any], NodesLocationActionInput],
+    action_input: Mapping[str, Any] | NodesLocationActionInput,
     *,
     invoker: Any,
 ) -> NodesLocationActionOutput:
     """Fetch location from a specific node via a provided invoker/client."""
     validated = validate_input(action_input)
 
-    node_params: Dict[str, Any] = {
+    node_params: dict[str, Any] = {
         "timeoutMs": validated.location_timeout_ms,
         "maxAgeMs": validated.max_age_ms,
         "desiredAccuracy": validated.accuracy,
@@ -498,7 +493,7 @@ async def get_node_location(
 
 
 async def handle_nodes_location_request(
-    request: Union[Mapping[str, Any], NodesLocationActionInput],
+    request: Mapping[str, Any] | NodesLocationActionInput,
     *,
     invoker: Any,
 ) -> NodesLocationActionResponse:
@@ -516,7 +511,7 @@ ACTION_DESCRIPTION = "Fetch a node's current device location (lat/lon)."
 
 
 # Minimal JSON Schemas for server-side validation/documentation.
-REQUEST_JSON_SCHEMA: Dict[str, Any] = {
+REQUEST_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["node"],
     "properties": {
@@ -530,7 +525,7 @@ REQUEST_JSON_SCHEMA: Dict[str, Any] = {
     "additionalProperties": True,
 }
 
-RESPONSE_JSON_SCHEMA: Dict[str, Any] = {
+RESPONSE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["ok"],
     "properties": {

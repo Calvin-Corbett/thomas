@@ -12,9 +12,10 @@ import json
 import re
 import threading
 import time
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Optional
+from typing import Any
 
 from thomas.core.config import AppConfig
 
@@ -41,7 +42,7 @@ def _slugify(text: str, *, fallback: str = "entry") -> str:
     return s[:80] if s else fallback
 
 
-def _tokenize(text: str) -> List[str]:
+def _tokenize(text: str) -> list[str]:
     return [x.lower() for x in _WORD_RE.findall(text or "") if len(x) >= 2]
 
 
@@ -56,7 +57,7 @@ class LibraryEntry:
     category: str
     summary: str
     source: str
-    tags: List[str]
+    tags: list[str]
     path: str
     created_ts_utc: int
     updated_ts_utc: int
@@ -64,7 +65,7 @@ class LibraryEntry:
     query: str = ""
     auto_captured: bool = False
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.entry_id,
             "title": self.title,
@@ -105,7 +106,7 @@ class ResearchLibrary:
             if not self.toc_path.exists():
                 self.rebuild_toc()
 
-    def _load_index(self) -> List[Dict[str, Any]]:
+    def _load_index(self) -> list[dict[str, Any]]:
         if not self.index_path.exists():
             return []
         try:
@@ -115,7 +116,7 @@ class ResearchLibrary:
         entries = payload.get("entries")
         return entries if isinstance(entries, list) else []
 
-    def _save_index(self, entries: List[Dict[str, Any]]) -> None:
+    def _save_index(self, entries: list[dict[str, Any]]) -> None:
         payload = {"version": 1, "entries": entries}
         tmp = self.index_path.with_suffix(".json.tmp")
         tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
@@ -124,7 +125,7 @@ class ResearchLibrary:
     def rebuild_toc(self) -> None:
         with self._lock:
             rows = self._load_index()
-            by_cat: Dict[str, List[Dict[str, Any]]] = {}
+            by_cat: dict[str, list[dict[str, Any]]] = {}
             for row in rows:
                 cat = str(row.get("category", "uncategorized") or "uncategorized")
                 by_cat.setdefault(cat, []).append(row)
@@ -159,8 +160,8 @@ class ResearchLibrary:
             lines.append(f"_Total entries: {total}_")
             self.toc_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
-    def _normalize_tags(self, tags: Optional[Iterable[str]]) -> List[str]:
-        out: List[str] = []
+    def _normalize_tags(self, tags: Iterable[str] | None) -> list[str]:
+        out: list[str] = []
         for raw in tags or []:
             t = _slugify(str(raw), fallback="")
             if not t:
@@ -180,6 +181,23 @@ class ResearchLibrary:
         h.update(_compact_ws(content).lower().encode("utf-8"))
         return h.hexdigest()
 
+    def _allocate_entry_id(self, *, entries: list[dict[str, Any]], base_id: str, fingerprint: str) -> str:
+        existing_ids = {str(row.get("id", "")).strip() for row in entries if str(row.get("id", "")).strip()}
+        if base_id not in existing_ids:
+            return base_id
+
+        fp_suffix = str(fingerprint or "").strip()[:8] or "dup"
+        candidate = f"{base_id}-{fp_suffix}"
+        if candidate not in existing_ids:
+            return candidate
+
+        index = 2
+        while True:
+            indexed_candidate = f"{candidate}-{index}"
+            if indexed_candidate not in existing_ids:
+                return indexed_candidate
+            index += 1
+
     def add_entry(
         self,
         *,
@@ -188,11 +206,11 @@ class ResearchLibrary:
         content: str,
         summary: str = "",
         source: str = "",
-        tags: Optional[Iterable[str]] = None,
+        tags: Iterable[str] | None = None,
         query: str = "",
         auto_captured: bool = False,
         dedupe: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         with self._lock:
             now = int(time.time())
             safe_cat = _slugify(category or "uncategorized", fallback="uncategorized")
@@ -218,7 +236,11 @@ class ResearchLibrary:
                     if str(row.get("fingerprint", "")) == fp:
                         return dict(row)
 
-            entry_id = f"{now}-{safe_title}"
+            entry_id = self._allocate_entry_id(
+                entries=entries,
+                base_id=f"{now}-{safe_title}",
+                fingerprint=fp,
+            )
             rel_dir = Path("entries") / safe_cat
             abs_dir = self.root / rel_dir
             abs_dir.mkdir(parents=True, exist_ok=True)
@@ -264,10 +286,10 @@ class ResearchLibrary:
     def list_entries(
         self,
         *,
-        category: Optional[str] = None,
-        query: Optional[str] = None,
+        category: str | None = None,
+        query: str | None = None,
         limit: int = 20,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         rows = self._load_index()
         if category:
             want = _slugify(category, fallback="uncategorized")
@@ -276,7 +298,7 @@ class ResearchLibrary:
         if query and query.strip():
             q_toks = set(_tokenize(query))
 
-            def _score(row: Dict[str, Any]) -> float:
+            def _score(row: dict[str, Any]) -> float:
                 hay = " ".join(
                     [
                         str(row.get("title", "")),
@@ -299,7 +321,7 @@ class ResearchLibrary:
         lim = max(1, int(limit))
         return [dict(r) for r in rows[:lim]]
 
-    def get_entry(self, entry_id: str) -> Optional[Dict[str, Any]]:
+    def get_entry(self, entry_id: str) -> dict[str, Any] | None:
         rid = str(entry_id or "").strip()
         if not rid:
             return None
@@ -321,7 +343,7 @@ class ResearchLibrary:
         *,
         updated_after_ts_utc: int = 0,
         limit: int = 100,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Return entries updated after a checkpoint, oldest-first.
 
         This is intended for background curator pipelines that need deterministic,
@@ -330,11 +352,7 @@ class ResearchLibrary:
         cutoff = int(updated_after_ts_utc or 0)
         lim = max(1, int(limit))
         rows = self._load_index()
-        filtered = [
-            dict(r)
-            for r in rows
-            if int(r.get("updated_ts_utc", 0) or 0) > cutoff
-        ]
+        filtered = [dict(r) for r in rows if int(r.get("updated_ts_utc", 0) or 0) > cutoff]
         filtered.sort(key=lambda r: int(r.get("updated_ts_utc", 0) or 0))
         return filtered[:lim]
 
@@ -388,8 +406,8 @@ class ResearchLibrary:
         answer: str,
         source: str = "assistant",
         category: str = "research-notes",
-        tags: Optional[Iterable[str]] = None,
-    ) -> Dict[str, Any]:
+        tags: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
         title = _compact_ws(query)[:120] or "research-note"
         summary = _compact_ws(answer)[:260]
         return self.add_entry(

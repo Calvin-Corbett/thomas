@@ -6,14 +6,16 @@ import os
 import re
 import threading
 import time
+from collections.abc import Callable, Coroutine, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
-from typing import Any, Callable, Coroutine, Mapping, Optional, Sequence, TypedDict, TypeVar, cast
+from typing import Any, TypedDict, TypeVar, cast
 
 import aiohttp
 
 
 class NodeDescriptor(TypedDict, total=False):
     """Machine-readable representation of a node/device."""
+
     id: str
     name: str
     status: str
@@ -23,19 +25,21 @@ class NodeDescriptor(TypedDict, total=False):
 @dataclass(frozen=True)
 class NodesCliRequest:
     """Input contract for nodes CLI operations."""
-    base_url: Optional[str] = None
-    nodes_path: Optional[str] = None
+
+    base_url: str | None = None
+    nodes_path: str | None = None
     timeout_s: float = 10.0
 
 
 @dataclass(frozen=True)
 class NodesCliResult:
     """Output contract for nodes CLI operations."""
+
     ok: bool
     base_url: str
     nodes_path: str
     nodes: list[NodeDescriptor] = field(default_factory=list)
-    error: Optional[dict[str, Any]] = None
+    error: dict[str, Any] | None = None
     fetched_at_epoch_s: float = field(default_factory=lambda: time.time())
 
     def to_dict(self) -> dict[str, Any]:
@@ -52,7 +56,7 @@ class NodesCliIntegrationError(RuntimeError):
     - invalid_response: response could not be normalized to the expected shape
     """
 
-    def __init__(self, code: str, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, code: str, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.code = code
         self.message = message
@@ -66,7 +70,7 @@ def _strip_trailing_slash(base_url: str) -> str:
     return base_url[:-1] if base_url.endswith("/") else base_url
 
 
-def resolve_base_url(explicit: Optional[str]) -> str:
+def resolve_base_url(explicit: str | None) -> str:
     """Resolve the Thomas server base URL from explicit input or environment.
 
     Deterministic sources (highest priority first):
@@ -107,7 +111,7 @@ def _discover_route_strings(module_name: str) -> set[str]:
         import importlib
 
         mod = importlib.import_module(module_name)
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         return set()
 
     candidates: set[str] = set()
@@ -135,7 +139,7 @@ def _discover_route_strings(module_name: str) -> set[str]:
         for attr in ("path", "route", "url", "endpoint"):
             try:
                 val = getattr(obj, attr)
-            except Exception:
+            except (ImportError, AttributeError, RuntimeError):
                 continue
             visit(val, depth - 1)
 
@@ -144,7 +148,7 @@ def _discover_route_strings(module_name: str) -> set[str]:
             continue
         try:
             value = getattr(mod, name)
-        except Exception:
+        except (ImportError, AttributeError, RuntimeError):
             continue
         visit(value, depth=4)
 
@@ -161,7 +165,7 @@ _DEFAULT_PATH_PREFERENCES: Sequence[str] = (
 )
 
 
-def _pick_best_path(candidates: set[str]) -> Optional[str]:
+def _pick_best_path(candidates: set[str]) -> str | None:
     if not candidates:
         return None
     lowered = {c.lower(): c for c in candidates}
@@ -171,7 +175,7 @@ def _pick_best_path(candidates: set[str]) -> Optional[str]:
     return sorted(candidates, key=len)[0]
 
 
-def normalize_nodes_path(nodes_path: Optional[str]) -> str:
+def normalize_nodes_path(nodes_path: str | None) -> str:
     """Determine the nodes endpoint path.
 
     Priority:
@@ -200,8 +204,10 @@ def normalize_nodes_path(nodes_path: Optional[str]) -> str:
 def _validate_timeout_s(timeout_s: float) -> float:
     try:
         t = float(timeout_s)
-    except Exception as e:
-        raise NodesCliIntegrationError("invalid_input", "timeout must be a number.", details={"timeout": timeout_s}) from e
+    except (ImportError, AttributeError, RuntimeError) as e:
+        raise NodesCliIntegrationError(
+            "invalid_input", "timeout must be a number.", details={"timeout": timeout_s}
+        ) from e
     if not (t > 0.0):
         raise NodesCliIntegrationError("invalid_input", "timeout must be > 0.", details={"timeout": t})
     # Clamp to something sane; deterministic.
@@ -274,14 +280,14 @@ async def fetch_nodes(request: NodesCliRequest) -> NodesCliResult:
                 # Accept JSON even if content-type is wrong.
                 try:
                     payload = await resp.json(content_type=None)
-                    raw_text: Optional[str] = None
-                except Exception:
+                    raw_text: str | None = None
+                except (json.JSONDecodeError, ValueError, KeyError):
                     raw_text = await resp.text()
                     payload = None
                     if raw_text:
                         try:
                             payload = json.loads(raw_text)
-                        except Exception:
+                        except (json.JSONDecodeError, ValueError, KeyError):
                             payload = None
 
                 if status >= 400:
@@ -305,7 +311,7 @@ async def fetch_nodes(request: NodesCliRequest) -> NodesCliResult:
             "Failed to reach server while fetching nodes.",
             details={"url": url, "error": type(e).__name__, "message": str(e)},
         ) from e
-    except Exception as e:
+    except (ConnectionError, TimeoutError, RuntimeError) as e:
         raise NodesCliIntegrationError(
             "external_failure",
             "Unexpected failure while fetching nodes.",
@@ -394,6 +400,7 @@ def format_result_json(result: NodesCliResult) -> str:
 
 
 # --- Convenience aliases (common harness naming) ---
+
 
 def list_nodes_sync(request: NodesCliRequest) -> NodesCliResult:
     return fetch_nodes_sync(request)

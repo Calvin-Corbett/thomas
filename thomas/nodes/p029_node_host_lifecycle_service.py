@@ -33,10 +33,11 @@ import json
 import os
 import re
 import time
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 
 class NodeHostServiceErrorCode(str, Enum):
@@ -57,13 +58,13 @@ class NodeHostServiceError(RuntimeError):
         code: NodeHostServiceErrorCode,
         message: str,
         *,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ) -> None:
         super().__init__(message)
         self.code = code
-        self.details: Dict[str, Any] = details or {}
+        self.details: dict[str, Any] = details or {}
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "code": self.code.value,
             "message": str(self),
@@ -78,10 +79,10 @@ class NodeHostInstallRequest:
     gateway_host: str = "127.0.0.1"
     gateway_port: int = 18789
     tls: bool = False
-    tls_fingerprint_sha256: Optional[str] = None
+    tls_fingerprint_sha256: str | None = None
 
-    node_id: Optional[str] = None
-    display_name: Optional[str] = None
+    node_id: str | None = None
+    display_name: str | None = None
 
     runtime: str = "python"  # maps to an underlying runtime (implementation-defined)
     force: bool = False
@@ -94,23 +95,23 @@ class NodeHostStatus:
     installed: bool
     running: bool
 
-    gateway_host: Optional[str] = None
-    gateway_port: Optional[int] = None
-    tls: Optional[bool] = None
-    tls_fingerprint_sha256: Optional[str] = None
+    gateway_host: str | None = None
+    gateway_port: int | None = None
+    tls: bool | None = None
+    tls_fingerprint_sha256: str | None = None
 
-    node_id: Optional[str] = None
-    display_name: Optional[str] = None
+    node_id: str | None = None
+    display_name: str | None = None
 
-    runtime: Optional[str] = None
+    runtime: str | None = None
 
-    config_path: Optional[str] = None
-    state_path: Optional[str] = None
+    config_path: str | None = None
+    state_path: str | None = None
 
-    last_action: Optional[str] = None
-    updated_at: Optional[float] = None
+    last_action: str | None = None
+    updated_at: float | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
 
@@ -123,7 +124,7 @@ class NodeHostActionResult:
     status: NodeHostStatus
     message: str
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
             "action": self.action,
@@ -153,7 +154,7 @@ def _default_thomas_home() -> Path:
 
         home = get_thomas_home()
         return Path(home)
-    except Exception:
+    except (ImportError, AttributeError, RuntimeError):
         pass
 
     env_home = os.environ.get("THOMAS_HOME")
@@ -177,7 +178,7 @@ class NodeHostLifecycleService:
     def __init__(
         self,
         *,
-        config_dir: Optional[Path] = None,
+        config_dir: Path | None = None,
         clock: Callable[[], float] = time.time,
     ) -> None:
         self._config_dir = Path(config_dir) if config_dir else _default_thomas_home()
@@ -218,7 +219,7 @@ class NodeHostLifecycleService:
                 details={"config_path": str(self.config_path)},
             )
 
-        config_payload: Dict[str, Any] = {
+        config_payload: dict[str, Any] = {
             "schema": self._SCHEMA_VERSION,
             "gateway": {
                 "host": req.gateway_host,
@@ -236,7 +237,7 @@ class NodeHostLifecycleService:
             },
         }
 
-        state_payload: Dict[str, Any] = {
+        state_payload: dict[str, Any] = {
             "schema": self._SCHEMA_VERSION,
             "installed": True,
             "running": True,
@@ -418,9 +419,7 @@ class NodeHostLifecycleService:
                 details={"field": "node_id"},
             )
 
-        if req.display_name is not None and (
-            not isinstance(req.display_name, str) or not req.display_name.strip()
-        ):
+        if req.display_name is not None and (not isinstance(req.display_name, str) or not req.display_name.strip()):
             raise NodeHostServiceError(
                 NodeHostServiceErrorCode.INVALID_INPUT,
                 "display_name must be a non-empty string when provided",
@@ -451,7 +450,7 @@ class NodeHostLifecycleService:
                 details={"action": action, "state_path": str(self.state_path)},
             )
 
-    def _read_json(self, path: Path, *, kind: str) -> Dict[str, Any]:
+    def _read_json(self, path: Path, *, kind: str) -> dict[str, Any]:
         try:
             raw = path.read_text(encoding="utf-8")
         except OSError as e:
@@ -487,7 +486,7 @@ class NodeHostLifecycleService:
 
         return data
 
-    def _write_json_atomic(self, path: Path, payload: Dict[str, Any]) -> None:
+    def _write_json_atomic(self, path: Path, payload: dict[str, Any]) -> None:
         tmp = path.with_suffix(path.suffix + ".tmp")
         try:
             tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")

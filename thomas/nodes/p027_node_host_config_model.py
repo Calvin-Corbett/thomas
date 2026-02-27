@@ -12,14 +12,15 @@ It is intentionally conservative:
 
 from __future__ import annotations
 
+import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Mapping, Optional, TypedDict, Union
-import json
+from typing import Any, TypedDict
 
 try:
     import json5  # type: ignore
-except Exception:  # pragma: no cover - optional dependency
+except (json.JSONDecodeError, ValueError, KeyError):  # pragma: no cover - optional dependency
     json5 = None  # type: ignore
 
 
@@ -44,7 +45,7 @@ class NodeHostConfigModelError(Exception):
 
     code: str = "NODE_HOST_CONFIG_MODEL_ERROR"
 
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None) -> None:
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None) -> None:
         super().__init__(message)
         self.message = message
         self.details: JsonDict = dict(details) if details else {}
@@ -73,7 +74,7 @@ class NodeHostConfigModelRequest:
     """Input contract for building the node-host config model."""
 
     # Optional config file path. When `include_current=True`, this must be provided.
-    config_path: Optional[Union[str, Path]] = None
+    config_path: str | Path | None = None
 
     # When true, attempt to load the current config from `config_path` and include it.
     include_current: bool = False
@@ -86,9 +87,7 @@ class NodeHostConfigModelRequest:
 
     def resolved_config_path(self) -> Path:
         if self.config_path is None:
-            raise NodeHostConfigModelMissingConfigError(
-                "config_path is required when include_current=True"
-            )
+            raise NodeHostConfigModelMissingConfigError("config_path is required when include_current=True")
         return Path(self.config_path).expanduser()
 
 
@@ -97,9 +96,9 @@ class NodeHostConfigModelResponse:
     """Output contract for the node-host config model."""
 
     schema: JsonDict
-    example: Optional[JsonDict] = None
-    ui_hints: Optional[JsonDict] = None
-    current: Optional[JsonDict] = None
+    example: JsonDict | None = None
+    ui_hints: JsonDict | None = None
+    current: JsonDict | None = None
 
     def to_dict(self) -> NodeHostConfigModelOutputDict:
         payload: NodeHostConfigModelOutputDict = {"schema": self.schema}
@@ -171,7 +170,7 @@ def node_host_config_example() -> JsonDict:
 
 
 def node_host_config_model(
-    request: Optional[NodeHostConfigModelRequest] = None,
+    request: NodeHostConfigModelRequest | None = None,
 ) -> NodeHostConfigModelResponse:
     """Build the node-host config model."""
 
@@ -187,7 +186,7 @@ def node_host_config_model(
     example = node_host_config_example() if req.include_example else None
     ui_hints = node_host_config_ui_hints() if req.include_ui_hints else None
 
-    current: Optional[JsonDict] = None
+    current: JsonDict | None = None
     if req.include_current:
         current = _load_node_host_config(req.resolved_config_path())
 
@@ -200,7 +199,7 @@ def node_host_config_model(
 
 
 def get_node_host_config_model(
-    request: Optional[NodeHostConfigModelRequest] = None,
+    request: NodeHostConfigModelRequest | None = None,
 ) -> NodeHostConfigModelOutputDict:
     """Convenience wrapper returning a JSON-serializable dict."""
 
@@ -231,7 +230,7 @@ def _load_node_host_config(path: Path) -> JsonDict:
 
     try:
         data = _loads_jsonish(raw)
-    except Exception as e:
+    except (json.JSONDecodeError, ValueError, KeyError) as e:
         raise NodeHostConfigModelInvalidInputError(
             "config file is not valid JSON/JSON5",
             details={"path": str(path), "error": type(e).__name__},
@@ -271,7 +270,7 @@ def _loads_jsonish(raw: str) -> Any:
     if json5 is not None:
         try:
             return json5.loads(raw)
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             # Fall back to strict JSON for better error signaling on pure JSON.
             pass
     return json.loads(raw)
@@ -330,9 +329,7 @@ def _validate_node_host_config(cfg: JsonDict) -> None:
 
     allow_profiles = browser_proxy.get("allowProfiles")
     if allow_profiles is not None:
-        if not isinstance(allow_profiles, list) or not all(
-            isinstance(p, str) for p in allow_profiles
-        ):
+        if not isinstance(allow_profiles, list) or not all(isinstance(p, str) for p in allow_profiles):
             raise NodeHostConfigModelInvalidInputError(
                 "browserProxy.allowProfiles must be an array of strings",
                 details={"type": type(allow_profiles).__name__},

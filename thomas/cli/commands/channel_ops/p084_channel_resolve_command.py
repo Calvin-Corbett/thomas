@@ -19,7 +19,8 @@ import importlib
 import io
 import json
 import os
-from typing import Any, Mapping, Optional, TextIO
+from collections.abc import Mapping
+from typing import Any, TextIO
 
 from thomas.channels.p084_channel_resolve_command import (
     ChannelResolveError,
@@ -51,6 +52,7 @@ def register(target: Any) -> None:
 
 # Compatibility aliases (different command loaders use different names)
 
+
 def add_parser(target: Any) -> None:
     register(target)
 
@@ -64,14 +66,14 @@ def configure_parser(target: Any) -> None:
 
 
 def _run(
-    reference: Optional[str] = None,
+    reference: str | None = None,
     *,
     json_output: bool = False,
     json_schema: bool = False,
-    config: Optional[Mapping[str, Any]] = None,
-    telegram_resolver: Optional[Any] = None,
-    out: Optional[TextIO] = None,
-    err: Optional[TextIO] = None,
+    config: Mapping[str, Any] | None = None,
+    telegram_resolver: Any | None = None,
+    out: TextIO | None = None,
+    err: TextIO | None = None,
 ) -> int:
     """
     Framework-agnostic implementation of the command.
@@ -90,7 +92,9 @@ def _run(
         resolver = telegram_resolver if telegram_resolver is not None else _build_telegram_resolver_best_effort(cfg)
 
         # Let the core resolver own validation (deterministic error codes).
-        result = resolve_channel(ChannelResolveRequest(reference=reference or "", config=cfg), telegram_resolver=resolver)
+        result = resolve_channel(
+            ChannelResolveRequest(reference=reference or "", config=cfg), telegram_resolver=resolver
+        )
 
         if json_output:
             _emit_json(out_f, {"ok": True, "result": result.to_dict()})
@@ -105,7 +109,7 @@ def _run(
             err_f.write(f"Error ({exc.code}): {exc.message}\n")
         return int(exc.exit_code)
 
-    except Exception:  # pragma: no cover
+    except (OSError, FileNotFoundError):  # pragma: no cover
         # Last-ditch defense: never crash with a traceback in CLI use.
         if json_output or json_schema:
             _emit_json(out_f, {"ok": False, "error": {"code": "INTERNAL_ERROR", "message": "Internal error."}})
@@ -139,7 +143,7 @@ def _emit_json(out: TextIO, payload: Mapping[str, Any]) -> None:
     out.write("\n")
 
 
-def _load_config_best_effort() -> Optional[Mapping[str, Any]]:
+def _load_config_best_effort() -> Mapping[str, Any] | None:
     """
     Best-effort config loader that tries common Thomas patterns.
 
@@ -155,20 +159,20 @@ def _load_config_best_effort() -> Optional[Mapping[str, Any]]:
     for module_name, fn_name in candidates:
         try:
             mod = importlib.import_module(module_name)
-        except Exception:
+        except ImportError:
             continue
         fn = getattr(mod, fn_name, None)
         if callable(fn):
             try:
                 cfg = fn()
-            except Exception:
+            except ImportError:
                 continue
             if isinstance(cfg, Mapping):
                 return cfg
     return None
 
 
-def _build_telegram_resolver_best_effort(config: Optional[Mapping[str, Any]]) -> Optional[Any]:
+def _build_telegram_resolver_best_effort(config: Mapping[str, Any] | None) -> Any | None:
     """
     Best-effort Telegram resolver builder.
 
@@ -177,7 +181,7 @@ def _build_telegram_resolver_best_effort(config: Optional[Mapping[str, Any]]) ->
     """
     try:
         telegram_mod = importlib.import_module("thomas.integrations.telegram")
-    except Exception:
+    except ImportError:
         telegram_mod = None
 
     if telegram_mod is not None:
@@ -190,9 +194,9 @@ def _build_telegram_resolver_best_effort(config: Optional[Mapping[str, Any]]) ->
                 except TypeError:
                     try:
                         return fn()
-                    except Exception:
+                    except ImportError:
                         pass
-                except Exception:
+                except ImportError:
                     pass
 
         # Common patterns: classes.
@@ -207,7 +211,7 @@ def _build_telegram_resolver_best_effort(config: Optional[Mapping[str, Any]]) ->
                 if callable(cm):
                     try:
                         return cm(config) if config is not None else cm()
-                    except Exception:
+                    except (ValueError, TypeError):
                         pass
 
             # Try direct construction with a token if we can find one.
@@ -215,13 +219,13 @@ def _build_telegram_resolver_best_effort(config: Optional[Mapping[str, Any]]) ->
             if token:
                 try:
                     return cls(token)
-                except Exception:
+                except AttributeError:
                     pass
 
             # Try no-arg construction.
             try:
                 return cls()
-            except Exception:
+            except AttributeError:
                 pass
 
     # Fallback: minimal resolver via HTTP if token exists.
@@ -232,7 +236,7 @@ def _build_telegram_resolver_best_effort(config: Optional[Mapping[str, Any]]) ->
     return None
 
 
-def _extract_telegram_token(config: Optional[Mapping[str, Any]]) -> Optional[str]:
+def _extract_telegram_token(config: Mapping[str, Any] | None) -> str | None:
     """
     Try to locate a Telegram bot token.
 
@@ -305,12 +309,12 @@ class _TelegramHttpResolver:
 def _try_register_typer(target: Any) -> bool:
     try:
         import typer  # type: ignore
-    except Exception:
+    except ImportError:
         return False
 
     try:
         Typer = typer.Typer  # noqa: N806
-    except Exception:
+    except ImportError:
         return False
 
     if not isinstance(target, Typer):
@@ -331,7 +335,7 @@ def _try_register_typer(target: Any) -> bool:
 def _try_register_click(target: Any) -> bool:
     try:
         import click  # type: ignore
-    except Exception:
+    except ImportError:
         return False
 
     if not isinstance(target, click.core.Group):
@@ -359,9 +363,13 @@ def _register_argparse(target: Any) -> None:
         return
 
     parser = target.add_parser(_COMMAND_NAME, help="Resolve a channel reference to a canonical destination.")
-    parser.add_argument("reference", nargs="?", default="", help="Channel reference or alias (e.g. @name, t.me/name, telegram:@name).")
+    parser.add_argument(
+        "reference", nargs="?", default="", help="Channel reference or alias (e.g. @name, t.me/name, telegram:@name)."
+    )
     parser.add_argument("--json", dest="json_output", action="store_true", help="Emit machine-readable JSON.")
-    parser.add_argument("--json-schema", dest="json_schema", action="store_true", help="Emit JSON schema for the JSON output.")
+    parser.add_argument(
+        "--json-schema", dest="json_schema", action="store_true", help="Emit JSON schema for the JSON output."
+    )
     parser.set_defaults(func=_argparse_entrypoint)
 
 

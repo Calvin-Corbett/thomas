@@ -20,11 +20,11 @@ from __future__ import annotations
 
 import json
 import os
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence, TypedDict, cast
-
+from typing import Any, TypedDict, cast
 
 DEFAULT_APPROVALS_ENV_VAR = "THOMAS_NODES_APPROVALS_PATH"
 
@@ -55,14 +55,14 @@ class NodesApproveActionRequest:
 
     action_id: str
     node_ids: tuple[str, ...] = ()
-    approver: Optional[str] = None
-    comment: Optional[str] = None
+    approver: str | None = None
+    comment: str | None = None
 
     # Where to write the JSONL ledger. If omitted, resolved from env/config.
-    state_path: Optional[str] = None
+    state_path: str | None = None
 
     # Optional time injection for deterministic testing.
-    approved_at: Optional[datetime] = None
+    approved_at: datetime | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -71,8 +71,8 @@ class NodesApproveActionResult:
 
     action_id: str
     approved_nodes: tuple[str, ...]
-    approver: Optional[str]
-    comment: Optional[str]
+    approver: str | None
+    comment: str | None
     approved_at: str
     ledger_path: str
     record: dict[str, Any] = field(default_factory=dict)
@@ -96,7 +96,7 @@ class NodesApproveActionError(RuntimeError):
     exit_code: int = 1
     http_status: int = 500
 
-    def __init__(self, message: str, *, details: Optional[Mapping[str, Any]] = None):
+    def __init__(self, message: str, *, details: Mapping[str, Any] | None = None):
         super().__init__(message)
         self.message = message
         self.details = dict(details or {})
@@ -185,7 +185,7 @@ def approve_action_from_payload(payload: Any) -> NodesApproveActionResult:
         )
 
     # Support a couple of common key shapes for automation.
-    action_id = cast(Optional[str], payload.get("action_id") or payload.get("actionId"))
+    action_id = cast(str | None, payload.get("action_id") or payload.get("actionId"))
     node_ids_raw = (
         payload.get("node_ids")
         or payload.get("nodeIds")
@@ -193,10 +193,10 @@ def approve_action_from_payload(payload: Any) -> NodesApproveActionResult:
         or payload.get("node_id")
         or payload.get("nodeId")
     )
-    approver = cast(Optional[str], payload.get("approver"))
-    comment = cast(Optional[str], payload.get("comment"))
-    state_path = cast(Optional[str], payload.get("state_path") or payload.get("statePath"))
-    approved_at_raw = cast(Optional[str], payload.get("approved_at") or payload.get("approvedAt"))
+    approver = cast(str | None, payload.get("approver"))
+    comment = cast(str | None, payload.get("comment"))
+    state_path = cast(str | None, payload.get("state_path") or payload.get("statePath"))
+    approved_at_raw = cast(str | None, payload.get("approved_at") or payload.get("approvedAt"))
 
     node_ids: Sequence[str]
     if node_ids_raw is None:
@@ -211,7 +211,7 @@ def approve_action_from_payload(payload: Any) -> NodesApproveActionResult:
             details={"field": "node_ids", "got": type(node_ids_raw).__name__},
         )
 
-    approved_at: Optional[datetime] = None
+    approved_at: datetime | None = None
     if approved_at_raw is not None:
         approved_at = _parse_iso8601(approved_at_raw)
 
@@ -244,7 +244,7 @@ async def aiohttp_handler(request: Any) -> Any:  # pragma: no cover
         return _aiohttp_json_response({"ok": True, "result": result.to_dict()}, status=200)
     except NodesApproveActionError as e:
         return _aiohttp_json_response({"ok": False, "error": e.to_dict()}, status=e.http_status)
-    except Exception as e:  # noqa: BLE001
+    except (json.JSONDecodeError, ValueError, KeyError) as e:  # noqa: BLE001
         err = NodesApproveActionExternalError(
             "Unhandled failure while approving action",
             details={"exc_type": type(e).__name__},
@@ -259,15 +259,14 @@ def _aiohttp_json_response(payload: Mapping[str, Any], *, status: int) -> Any:  
 
 
 # Route metadata in multiple shapes to maximize compatibility with different auto-routers.
-AIOHTTP_ROUTES = (
-    ("POST", "/nodes/approve-action", aiohttp_handler),
-)
+AIOHTTP_ROUTES = (("POST", "/nodes/approve-action", aiohttp_handler),)
 ROUTES = AIOHTTP_ROUTES
 
 
 def get_aiohttp_route_defs() -> Any:  # pragma: no cover
     """Return aiohttp.web RouteDefs (if an auto-router prefers that form)."""
     from aiohttp import web
+
     return [web.post("/nodes/approve-action", aiohttp_handler)]
 
 
@@ -352,7 +351,7 @@ def _validate_node_ids(values: Sequence[Any]) -> tuple[str, ...]:
     return tuple(uniq)
 
 
-def _validate_optional_str(field_name: str, value: Any) -> Optional[str]:
+def _validate_optional_str(field_name: str, value: Any) -> str | None:
     if value is None:
         return None
     if not isinstance(value, str):
@@ -371,7 +370,7 @@ def _validate_optional_str(field_name: str, value: Any) -> Optional[str]:
     return s
 
 
-def _resolve_ledger_path(*, explicit: Optional[str]) -> str:
+def _resolve_ledger_path(*, explicit: str | None) -> str:
     if explicit is not None:
         if not isinstance(explicit, str) or not explicit.strip():
             raise NodesApproveActionInputError(

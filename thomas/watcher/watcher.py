@@ -1,4 +1,3 @@
-\
 from __future__ import annotations
 
 import os
@@ -8,7 +7,7 @@ import time
 from concurrent.futures import ThreadPoolExecutor, Future
 from dataclasses import dataclass, asdict
 from pathlib import Path
-from typing import Callable, Iterable, Optional, Set, Dict, Tuple, List
+from collections.abc import Callable, Iterable
 
 from watchdog.events import FileSystemEventHandler, FileCreatedEvent, FileMovedEvent, FileModifiedEvent
 from watchdog.observers import Observer
@@ -24,13 +23,13 @@ class WatcherStatus:
     running: bool
     enabled: bool
     recursive: bool
-    paths: List[str]
+    paths: list[str]
     queue_depth: int
     processed: int
     skipped: int
     failed: int
-    last_event_path: Optional[str]
-    last_error: Optional[str]
+    last_event_path: str | None
+    last_error: str | None
     config: dict
 
     def to_dict(self) -> dict:
@@ -42,12 +41,13 @@ class _ProcessedTTL:
     In-memory TTL de-dupe for event storms (create+modify+move, etc).
     Key: (abs_path, size, mtime_ns). Good enough for "same file spam" filtering.
     """
+
     def __init__(self, ttl_seconds: float) -> None:
         self.ttl = float(ttl_seconds)
         self._lock = threading.Lock()
-        self._d: Dict[Tuple[str, int, int], float] = {}
+        self._d: dict[tuple[str, int, int], float] = {}
 
-    def seen(self, key: Tuple[str, int, int]) -> bool:
+    def seen(self, key: tuple[str, int, int]) -> bool:
         now = time.time()
         with self._lock:
             if len(self._d) > 2048:
@@ -92,33 +92,34 @@ class WatcherService:
       - dispatcher thread submits ingestion jobs to a thread pool
       - completion callback updates counters + emits notification
     """
+
     def __init__(
         self,
-        notifier: Optional[NotifyFn] = None,
-        config_path: Optional[str] = None,
+        notifier: NotifyFn | None = None,
+        config_path: str | None = None,
     ) -> None:
         self._config_path = config_path
         self._notifier = notifier or (lambda msg: print(f"[watcher] {msg}", flush=True))
 
         self._lock = threading.RLock()
-        self._observer: Optional[Observer] = None
-        self._dispatcher: Optional[threading.Thread] = None
-        self._pool: Optional[ThreadPoolExecutor] = None
+        self._observer: Observer | None = None
+        self._dispatcher: threading.Thread | None = None
+        self._pool: ThreadPoolExecutor | None = None
         self._stop_evt = threading.Event()
 
-        self._q: "queue.Queue[str]" = queue.Queue(maxsize=4096)
+        self._q: queue.Queue[str] = queue.Queue(maxsize=4096)
 
         self._config: WatcherConfig = load_watcher_config(config_path=self._config_path)
-        self._paths: List[str] = self._normalize_paths(self._config.paths)
+        self._paths: list[str] = self._normalize_paths(self._config.paths)
         self._dedup = _ProcessedTTL(ttl_seconds=self._config.dedupe_ttl_seconds)
 
         self._processed = 0
         self._skipped = 0
         self._failed = 0
-        self._last_event_path: Optional[str] = None
-        self._last_error: Optional[str] = None
+        self._last_event_path: str | None = None
+        self._last_error: str | None = None
 
-        self._inflight: Set[str] = set()  # abs paths being processed (avoid duplicate submits)
+        self._inflight: set[str] = set()  # abs paths being processed (avoid duplicate submits)
 
     def status(self) -> WatcherStatus:
         with self._lock:
@@ -193,7 +194,7 @@ class WatcherService:
             if self._dispatcher is not None:
                 try:
                     self._q.put_nowait("")
-                except Exception:
+                except Exception:  # REVIEWED: broad catch
                     pass
                 self._dispatcher.join(timeout=5)
                 self._dispatcher = None
@@ -204,9 +205,9 @@ class WatcherService:
 
             self._inflight.clear()
 
-    def _normalize_paths(self, paths: Iterable[str]) -> List[str]:
-        uniq: List[str] = []
-        seen: Set[str] = set()
+    def _normalize_paths(self, paths: Iterable[str]) -> list[str]:
+        uniq: list[str] = []
+        seen: set[str] = set()
         for p in paths:
             if not p:
                 continue
@@ -221,7 +222,7 @@ class WatcherService:
             try:
                 self._observer.stop()
                 self._observer.join(timeout=5)
-            except Exception:
+            except (OSError, FileNotFoundError):
                 pass
             self._observer = None
         self._start_observer_locked()
@@ -280,7 +281,7 @@ class WatcherService:
             try:
                 _ = self._q.get_nowait()  # drop oldest
                 self._q.put_nowait(path)
-            except Exception:
+            except Exception:  # REVIEWED: broad catch
                 with self._lock:
                     self._last_error = "Watcher queue full (dropping events)"
 
@@ -388,11 +389,11 @@ class WatcherService:
 
 
 # Singleton helpers
-_singleton: Optional[WatcherService] = None
+_singleton: WatcherService | None = None
 _singleton_lock = threading.Lock()
 
 
-def get_watcher_service(notifier: Optional[NotifyFn] = None, config_path: Optional[str] = None) -> WatcherService:
+def get_watcher_service(notifier: NotifyFn | None = None, config_path: str | None = None) -> WatcherService:
     global _singleton
     with _singleton_lock:
         if _singleton is None:

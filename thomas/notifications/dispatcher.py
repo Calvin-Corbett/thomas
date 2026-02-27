@@ -10,26 +10,37 @@ Single entry point to:
 
 from __future__ import annotations
 
+import asyncio
 import json
 import os
-import time
 import uuid
-import asyncio
 from dataclasses import dataclass
-from typing import Any, AsyncIterator, Dict, Optional, Set
+from typing import Any
 
 from .store import Notification, NotificationCreate, NotificationStore
 
 try:
-    from pywebpush import webpush, WebPushException  # type: ignore
-except Exception:  # pragma: no cover
+    from pywebpush import WebPushException, webpush  # type: ignore
+except ImportError:  # pragma: no cover
     webpush = None
     WebPushException = Exception  # type: ignore
 
 try:
     from plyer import notification as plyer_notification  # type: ignore
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     plyer_notification = None
+
+
+def _model_to_dict(model: Any) -> dict[str, Any]:
+    model_dump = getattr(model, "model_dump", None)
+    if callable(model_dump):
+        return dict(model_dump())
+    legacy_dict = getattr(model, "dict", None)
+    if callable(legacy_dict):
+        return dict(legacy_dict())
+    if isinstance(model, dict):
+        return dict(model)
+    return {}
 
 
 def _env_flag(name: str, default: str = "0") -> bool:
@@ -50,7 +61,7 @@ class NotificationBroadcaster:
     """
 
     def __init__(self) -> None:
-        self._subscribers: Set[asyncio.Queue] = set()
+        self._subscribers: set[asyncio.Queue] = set()
         self._lock = asyncio.Lock()
 
     async def subscribe(self) -> asyncio.Queue:
@@ -63,7 +74,7 @@ class NotificationBroadcaster:
         async with self._lock:
             self._subscribers.discard(q)
 
-    async def publish(self, payload: Dict[str, Any]) -> None:
+    async def publish(self, payload: dict[str, Any]) -> None:
         async with self._lock:
             subs = list(self._subscribers)
         for q in subs:
@@ -74,7 +85,7 @@ class NotificationBroadcaster:
                 try:
                     _ = q.get_nowait()
                     q.put_nowait(payload)
-                except Exception:
+                except (ValueError, TypeError):
                     pass
 
 
@@ -82,8 +93,8 @@ class NotificationDispatcher:
     def __init__(
         self,
         store: NotificationStore,
-        broadcaster: Optional[NotificationBroadcaster] = None,
-        vapid: Optional[VapidConfig] = None,
+        broadcaster: NotificationBroadcaster | None = None,
+        vapid: VapidConfig | None = None,
         enable_desktop_toasts: bool = False,
     ) -> None:
         self.store = store
@@ -97,10 +108,10 @@ class NotificationDispatcher:
         title: str,
         body: str,
         severity: str = "info",
-        action_url: Optional[str] = None,
+        action_url: str | None = None,
         *,
-        notification_id: Optional[str] = None,
-        timestamp_ms: Optional[int] = None,
+        notification_id: str | None = None,
+        timestamp_ms: int | None = None,
         deliver_push: bool = True,
         deliver_desktop: bool = True,
     ) -> Notification:
@@ -116,8 +127,8 @@ class NotificationDispatcher:
         try:
             loop = asyncio.get_event_loop()
             if loop.is_running():
-                loop.create_task(self.broadcaster.publish({"event": "notification", "data": notif.dict()}))
-        except Exception:
+                loop.create_task(self.broadcaster.publish({"event": "notification", "data": _model_to_dict(notif)}))
+        except (ValueError, TypeError):
             pass
 
         # Optional deliveries
@@ -138,7 +149,7 @@ class NotificationDispatcher:
                 app_name="Thomas",
                 timeout=6,
             )
-        except Exception:
+        except (ValueError, TypeError):
             # Best-effort only
             return
 
@@ -182,9 +193,9 @@ class NotificationDispatcher:
                 if status in (404, 410):
                     try:
                         self.store.delete_subscription(s.endpoint)
-                    except Exception:
+                    except json.JSONDecodeError:
                         pass
-            except Exception:
+            except json.JSONDecodeError:
                 continue
 
 
@@ -192,7 +203,8 @@ class NotificationDispatcher:
 # App-level singletons (optional convenience)
 # -----------------------------
 
-def build_vapid_from_env() -> Optional[VapidConfig]:
+
+def build_vapid_from_env() -> VapidConfig | None:
     pub = (os.getenv("THOMAS_VAPID_PUBLIC_KEY") or "").strip()
     priv = (os.getenv("THOMAS_VAPID_PRIVATE_KEY") or "").strip()
     sub = (os.getenv("THOMAS_VAPID_SUBJECT") or "mailto:admin@example.com").strip()
@@ -201,7 +213,7 @@ def build_vapid_from_env() -> Optional[VapidConfig]:
     return None
 
 
-def get_dispatcher(app: Any) -> "NotificationDispatcher":
+def get_dispatcher(app: Any) -> NotificationDispatcher:
     """
     Retrieve the dispatcher stored on FastAPI app.state.
     """

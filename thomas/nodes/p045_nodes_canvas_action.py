@@ -3,10 +3,10 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+from collections.abc import Mapping, MutableMapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Mapping, MutableMapping, Optional, Protocol, TypedDict
-
+from typing import Any, Protocol, TypedDict
 
 # ----------------------------
 # Errors
@@ -91,7 +91,7 @@ class CanvasState:
         return {"viewport": self.viewport.to_dict(), "selected_node_ids": list(self.selected_node_ids)}
 
     @classmethod
-    def from_dict(cls, raw: Mapping[str, Any]) -> "CanvasState":
+    def from_dict(cls, raw: Mapping[str, Any]) -> CanvasState:
         viewport_raw = raw.get("viewport") or {}
         if not isinstance(viewport_raw, Mapping):
             raise CanvasActionConfigError("invalid_state", "Canvas viewport must be an object.")
@@ -100,7 +100,7 @@ class CanvasState:
             x = float(viewport_raw.get("x", 0.0))
             y = float(viewport_raw.get("y", 0.0))
             zoom = float(viewport_raw.get("zoom", 1.0))
-        except Exception as e:
+        except (ConnectionError, TimeoutError, RuntimeError) as e:
             raise CanvasActionConfigError("invalid_state", "Canvas viewport fields must be numbers.") from e
 
         selected = raw.get("selected_node_ids")
@@ -205,14 +205,14 @@ class FileCanvasStateStore:
             )
         try:
             text = self._path.read_text(encoding="utf-8")
-        except Exception as e:  # pragma: no cover
+        except (OSError, ConnectionError) as e:  # pragma: no cover
             raise CanvasActionExternalError(
                 "state_store_read_failed",
                 f"Failed to read canvas state store at '{self._path}'.",
             ) from e
         try:
             raw = json.loads(text or "{}")
-        except Exception as e:
+        except (json.JSONDecodeError, ValueError, KeyError) as e:
             raise CanvasActionConfigError(
                 "invalid_state_store",
                 f"Canvas state store at '{self._path}' is not valid JSON.",
@@ -243,7 +243,7 @@ class FileCanvasStateStore:
         # Ensure parent directory exists.
         try:
             self._path.parent.mkdir(parents=True, exist_ok=True)
-        except Exception as e:
+        except (KeyError, ValueError, AttributeError) as e:
             raise CanvasActionExternalError(
                 "state_store_write_failed",
                 f"Failed to create canvas state directory '{self._path.parent}'.",
@@ -252,7 +252,7 @@ class FileCanvasStateStore:
         # Atomic write to reduce risk of partial/corrupt files.
         try:
             payload = json.dumps(data, indent=2, sort_keys=True) + "\n"
-        except Exception as e:  # pragma: no cover
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
             raise CanvasActionExternalError(
                 "state_store_write_failed",
                 "Failed to serialize canvas state store.",
@@ -272,11 +272,11 @@ class FileCanvasStateStore:
                 tf.flush()
                 os.fsync(tf.fileno())
             os.replace(str(tmp_path), str(self._path))
-        except Exception as e:  # pragma: no cover
+        except (json.JSONDecodeError, ValueError, KeyError) as e:  # pragma: no cover
             try:
                 if "tmp_path" in locals() and Path(tmp_path).exists():
                     Path(tmp_path).unlink(missing_ok=True)
-            except Exception:
+            except (json.JSONDecodeError, ValueError, KeyError):
                 pass
             raise CanvasActionExternalError(
                 "state_store_write_failed",
@@ -372,7 +372,7 @@ def _apply_operation(state: CanvasState, operation: str, payload: Mapping[str, A
 def run_nodes_canvas_action(
     request: NodesCanvasActionRequest,
     *,
-    store: Optional[CanvasStateStore] = None,
+    store: CanvasStateStore | None = None,
 ) -> NodesCanvasActionResponse:
     """Apply an operation to a nodes canvas and persist state."""
 
@@ -421,7 +421,7 @@ def run_nodes_canvas_action(
 # ----------------------------
 
 
-REQUEST_JSON_SCHEMA: Dict[str, Any] = {
+REQUEST_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["canvas_id", "operation"],
     "properties": {
@@ -433,7 +433,7 @@ REQUEST_JSON_SCHEMA: Dict[str, Any] = {
     "additionalProperties": False,
 }
 
-RESPONSE_JSON_SCHEMA: Dict[str, Any] = {
+RESPONSE_JSON_SCHEMA: dict[str, Any] = {
     "type": "object",
     "required": ["ok", "canvas_id", "operation", "applied", "state"],
     "properties": {

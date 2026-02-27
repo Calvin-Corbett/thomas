@@ -25,16 +25,15 @@ import json
 import logging
 import os
 import socket
-import signal
 import subprocess
 import sys
 import threading
 import time
 import webbrowser
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import Any, Callable, Dict, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -51,6 +50,7 @@ SERVER_STARTUP_TIMEOUT_S = 30
 _STATE_DIR = Path.home() / ".thomas"
 _TRAY_STATE_FILE = _STATE_DIR / "tray_state.json"
 _LOG_FILE = _STATE_DIR / "tray_agent.log"
+_SERVER_LOG_FILE = _STATE_DIR / "server.log"
 
 
 def _ensure_state_dir() -> Path:
@@ -58,20 +58,29 @@ def _ensure_state_dir() -> Path:
     return _STATE_DIR
 
 
+def _read_log_int_env(name: str, default: int) -> int:
+    try:
+        return max(1, int(os.environ.get(name, str(default)).strip()))
+    except (OSError, FileNotFoundError):
+        return default
+
+
 # ---------------------------------------------------------------------------
 # Tray State
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class TrayState:
     """Persistent state for tray agent."""
+
     auto_start_enabled: bool = True
     super_user_mode: bool = False
     last_notification: str = ""
     server_port: int = 8899
     notifications_enabled: bool = True
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "auto_start_enabled": self.auto_start_enabled,
             "super_user_mode": self.super_user_mode,
@@ -81,7 +90,7 @@ class TrayState:
         }
 
     @classmethod
-    def from_dict(cls, d: Dict[str, Any]) -> "TrayState":
+    def from_dict(cls, d: dict[str, Any]) -> TrayState:
         return cls(
             auto_start_enabled=d.get("auto_start_enabled", True),
             super_user_mode=d.get("super_user_mode", False),
@@ -95,18 +104,19 @@ class TrayState:
         _TRAY_STATE_FILE.write_text(json.dumps(self.to_dict(), indent=2), encoding="utf-8")
 
     @classmethod
-    def load(cls) -> "TrayState":
+    def load(cls) -> TrayState:
         if not _TRAY_STATE_FILE.exists():
             return cls()
         try:
             return cls.from_dict(json.loads(_TRAY_STATE_FILE.read_text(encoding="utf-8")))
-        except Exception:
+        except json.JSONDecodeError:
             return cls()
 
 
 # ---------------------------------------------------------------------------
 # Windows Task Scheduler integration
 # ---------------------------------------------------------------------------
+
 
 def _get_task_name() -> str:
     return "ThomasTrayAgent"
@@ -127,6 +137,7 @@ def is_auto_start_enabled() -> bool:
     """Check if auto-start is configured in Windows Task Scheduler."""
     try:
         import subprocess
+
         result = subprocess.run(
             ["schtasks", "/Query", "/TN", _get_task_name()],
             capture_output=True,
@@ -134,7 +145,7 @@ def is_auto_start_enabled() -> bool:
             timeout=10,
         )
         return result.returncode == 0
-    except Exception:
+    except ImportError:
         return False
 
 
@@ -147,11 +158,16 @@ def enable_auto_start() -> bool:
 
         # Create task that runs at logon
         cmd = [
-            "schtasks", "/Create",
-            "/TN", _get_task_name(),
-            "/TR", f'"{exe}" "{script}"',
-            "/SC", "ON_LOGON",
-            "/RL", "HIGHEST",
+            "schtasks",
+            "/Create",
+            "/TN",
+            _get_task_name(),
+            "/TR",
+            f'"{exe}" "{script}"',
+            "/SC",
+            "ON_LOGON",
+            "/RL",
+            "HIGHEST",
             "/F",  # Force overwrite if exists
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
@@ -188,12 +204,13 @@ def disable_auto_start() -> bool:
 # Server Process Management
 # ---------------------------------------------------------------------------
 
+
 class ServerProcess:
     """Manages the Thomas server subprocess."""
 
     def __init__(self, port: int = 8899):
         self.port = port
-        self._process: Optional[subprocess.Popen] = None
+        self._process: subprocess.Popen | None = None
         self._lock = threading.Lock()
         self._stop_event = threading.Event()
 
@@ -210,14 +227,23 @@ class ServerProcess:
 
                 # Start server as hidden subprocess, logging to file
                 _ensure_state_dir()
-                server_log = _STATE_DIR / "server.log"
-                self._server_log_file = open(str(server_log), "a", encoding="utf-8")
+                server_env = os.environ.copy()
+                server_env["THOMAS_LOG_FILE"] = str(_SERVER_LOG_FILE)
+                server_env.setdefault(
+                    "THOMAS_LOG_MAX_BYTES",
+                    str(os.environ.get("THOMAS_SERVER_LOG_MAX_BYTES", "8388608")),
+                )
+                server_env.setdefault(
+                    "THOMAS_LOG_BACKUP_COUNT",
+                    str(os.environ.get("THOMAS_SERVER_LOG_BACKUP_COUNT", "5")),
+                )
                 self._process = subprocess.Popen(
                     [exe, "-m", "thomas.server", "--host", "127.0.0.1", "--port", str(self.port)],
                     cwd=cwd,
-                    stdout=self._server_log_file,
-                    stderr=self._server_log_file,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                     creationflags=subprocess.CREATE_NO_WINDOW if sys.platform == "win32" else 0,
+                    env=server_env,
                 )
                 pid = self._process.pid
                 deadline = time.time() + SERVER_STARTUP_TIMEOUT_S
@@ -239,10 +265,10 @@ class ServerProcess:
                     try:
                         self._process.terminate()
                         self._process.wait(timeout=2)
-                    except Exception:
+                    except Exception:  # REVIEWED: broad catch
                         try:
                             self._process.kill()
-                        except Exception:
+                        except Exception:  # REVIEWED: broad catch
                             pass
                     self._process = None
                 return False
@@ -257,20 +283,13 @@ class ServerProcess:
                 try:
                     self._process.terminate()
                     self._process.wait(timeout=5)
-                except Exception:
+                except Exception:  # REVIEWED: broad catch
                     try:
                         self._process.kill()
-                    except Exception:
+                    except Exception:  # REVIEWED: broad catch
                         pass
                 self._process = None
                 log.info("Server stopped")
-            log_fh = getattr(self, "_server_log_file", None)
-            if log_fh is not None:
-                try:
-                    log_fh.close()
-                except Exception:
-                    pass
-                self._server_log_file = None
 
     def is_running(self) -> bool:
         """Check if server is running."""
@@ -303,6 +322,7 @@ class ServerProcess:
 # Tray Icon (using pystray)
 # ---------------------------------------------------------------------------
 
+
 class ThomasTrayAgent:
     """
     System tray agent for Thomas.
@@ -329,6 +349,7 @@ class ThomasTrayAgent:
         # Try to import pystray
         try:
             import pystray  # type: ignore
+
             self._pystray = pystray
         except ImportError:
             self._pystray = None
@@ -342,14 +363,25 @@ class ThomasTrayAgent:
         """Run the tray agent (blocking)."""
         # Setup logging
         _ensure_state_dir()
+        log_file = _LOG_FILE
+        log_file.parent.mkdir(parents=True, exist_ok=True)
+        max_bytes = _read_log_int_env("THOMAS_TRAY_LOG_MAX_BYTES", 8_388_608)
+        backup_count = _read_log_int_env("THOMAS_TRAY_LOG_BACKUP_COUNT", 3)
+
         logging.basicConfig(
             level=logging.INFO,
             format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
-            handlers=[
-                logging.FileHandler(_LOG_FILE, encoding="utf-8"),
-                logging.StreamHandler(),
-            ],
         )
+        try:
+            file_handler = RotatingFileHandler(
+                log_file,
+                maxBytes=max_bytes,
+                backupCount=backup_count,
+                encoding="utf-8",
+            )
+            logging.getLogger().addHandler(file_handler)
+        except Exception as file_exc:
+            log.error("Failed to configure rotating tray log file: %s", file_exc)
 
         log.info("Thomas Tray Agent starting...")
 
@@ -408,7 +440,7 @@ class ThomasTrayAgent:
             # "T" letter
             try:
                 font = ImageFont.truetype("arial.ttf", 36)
-            except Exception:
+            except ImportError:
                 font = ImageFont.load_default()
             d.text((24, 14), "T", font=font, fill=(255, 255, 255, 255))
 
@@ -523,7 +555,7 @@ class ThomasTrayAgent:
 
         try:
             font = ImageFont.truetype("arial.ttf", 36)
-        except Exception:
+        except ImportError:
             font = ImageFont.load_default()
         d.text((24, 14), "T", font=font, fill=(255, 255, 255, 255))
 
@@ -539,25 +571,47 @@ class ThomasTrayAgent:
         while not self._stop_event.is_set():
             time.sleep(HEALTHCHECK_INTERVAL_S)
 
+            if self._stop_event.is_set():
+                return
+
             # Check if server process is alive and the port is serving.
             if not self.server.is_healthy():
-                # If our subprocess died but the port is still live, a newer
-                # instance took over (user clicked "run UI" again). Exit
-                # gracefully instead of fighting for the port.
-                if not self.server.is_running() and self.server._port_is_live():
-                    log.info("Port %d taken over by another instance; exiting.", self.port)
-                    self._stop_event.set()
-                    if self._icon:
-                        self._icon.stop()
-                    return
+                if not self.server.is_running():
+                    # Our subprocess is dead.  Before trying to restart, wait
+                    # a moment and check if something else took over the port
+                    # (e.g. user re-ran run-ui.ps1 with updated code).
+                    time.sleep(2)
+                    if self.server._port_is_live():
+                        log.info(
+                            "Port %d taken over by another instance; " "this tray agent is now stale — exiting.",
+                            self.port,
+                        )
+                        self._stop_event.set()
+                        if self._icon:
+                            self._icon.stop()
+                        return
 
-                log.warning("Server unhealthy or not running - attempting restart...")
-                time.sleep(RESTART_DELAY_S)
-                if not self._stop_event.is_set():
+                    # Port is free and our process died — attempt restart.
+                    log.warning("Server process died and port is free; restarting...")
+                    time.sleep(RESTART_DELAY_S)
+                    if self._stop_event.is_set():
+                        return
+                    # Re-check once more — the user may have started a new
+                    # instance during the restart delay.
+                    if self.server._port_is_live():
+                        log.info("Port %d now in use by another process; exiting.", self.port)
+                        self._stop_event.set()
+                        if self._icon:
+                            self._icon.stop()
+                        return
                     if self.server.restart():
                         self._notify("Thomas server restarted")
                     else:
                         self._notify("Thomas server restart failed (retrying)")
+                else:
+                    # Process alive but port not responding — could be
+                    # transient.  Log but don't restart yet.
+                    log.warning("Server process alive but port %d not responding.", self.port)
 
     def _notify(self, message: str) -> None:
         """Show a notification (consumer-friendly)."""
@@ -569,6 +623,7 @@ class ThomasTrayAgent:
         if sys.platform == "win32" and self.state.notifications_enabled:
             try:
                 from win10toast import ToastNotifier  # type: ignore
+
                 toaster = ToastNotifier()
                 toaster.show_toast("Thomas", message, duration=5, threaded=True)
             except ImportError:
@@ -591,4 +646,3 @@ def run_tray_agent(port: int = 8899, no_tray: bool = False) -> None:
 
 if __name__ == "__main__":
     run_tray_agent()
-

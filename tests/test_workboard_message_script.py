@@ -362,3 +362,29 @@ def test_state_transitions_and_resolve_actor_guard(tmp_path: Path, capsys) -> No
     assert rc_resolve == 0
     assert resolve_payload["ok"] is True
     assert resolve_payload["message"]["state"] == "resolved"
+
+
+def test_send_rejects_taskless_non_coordination_kind(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--send",
+            "--from-agent",
+            "Codex 1",
+            "--to-agent",
+            "task-manager-agent",
+            "--summary",
+            "worker online status without task id",
+            "--kind",
+            "status",
+            "--task-id",
+            "none",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False
+    assert "task_id is required for kind `status`" in payload["error"]

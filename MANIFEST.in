@@ -1,0 +1,39 @@
+# Include essential project files
+include LICENSE
+include README.md
+include pyproject.toml
+include install.sh
+include install.cmd
+
+# Include the thomas package and web assets
+recursive-include thomas *.py *.html *.css *.js *.json *.svg *.png *.ico *.txt
+
+# Exclude personal/dev data that should NEVER be distributed
+prune runtime
+prune .thomas
+prune .claude
+prune output
+prune tmp
+prune logs
+prune tasks
+prune archives
+prune _archive
+prune Inbox
+prune inbox
+prune .inbox_extract*
+prune .feature_backups
+prune feature_requests
+prune node_modules
+prune .venv
+prune .playwright-cli
+
+# Exclude test/dev artifacts
+prune *.egg-info
+exclude thomas_state.json
+exclude thomas_tool_registry.json
+exclude thomas_conversation.json
+exclude *.sqlite3
+exclude *.log
+exclude *.db
+exclude .DS_Store
+exclude Thumbs.db

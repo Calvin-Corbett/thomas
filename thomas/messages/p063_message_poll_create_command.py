@@ -14,13 +14,13 @@ from __future__ import annotations
 
 import json
 import os
-import uuid
 import urllib.error
 import urllib.request
+import uuid
+from collections.abc import Mapping
 from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from typing import Any, Mapping, Protocol
-
+from datetime import datetime, timedelta, timezone
+from typing import Any, Protocol
 
 ERROR_INVALID_INPUT = "invalid_input"
 ERROR_MISSING_CONFIG = "missing_config"
@@ -195,7 +195,7 @@ def _normalize_expires(expires_in_seconds: int | None) -> str | None:
             "expires_in_seconds is too large.",
             details={"max_seconds": max_seconds, "provided": expires_in_seconds},
         )
-    expires_at = datetime.now(UTC) + timedelta(seconds=expires_in_seconds)
+    expires_at = datetime.now(timezone.utc) + timedelta(seconds=expires_in_seconds)
     return expires_at.isoformat().replace("+00:00", "Z")
 
 
@@ -294,10 +294,10 @@ def _stdlib_post(url: str, *, json: dict[str, Any], timeout: float) -> _HttpResp
         body = ""
         try:
             body = e.read().decode("utf-8", errors="replace")
-        except Exception:
+        except (json.JSONDecodeError, ValueError, KeyError):
             body = ""
         return _R(int(e.code), body)
-    except Exception as exc:
+    except (json.JSONDecodeError, ValueError, KeyError) as exc:
         # Bubble up; caller wraps deterministically.
         raise exc
 
@@ -330,7 +330,7 @@ def run(
         target = _normalize_target(inp.target)
     except MessagePollCreateCommandError:
         raise
-    except Exception as exc:  # pragma: no cover
+    except (ConnectionError, TimeoutError, RuntimeError) as exc:  # pragma: no cover
         raise MessagePollCreateCommandError(ERROR_INTERNAL, "Failed to validate poll input.") from exc
 
     poll_id = uuid.uuid5(uuid.NAMESPACE_URL, idem_key).hex if idem_key else uuid.uuid4().hex
@@ -353,9 +353,7 @@ def run(
         if not webhook_url:
             raise MessagePollMissingConfigError(
                 "No webhook URL configured for delivery.",
-                details={
-                    "how_to_fix": "Pass --webhook-url or set THOMAS_WEBHOOK_URL (or THOMAS_MESSAGE_WEBHOOK_URL)."
-                },
+                details={"how_to_fix": "Pass --webhook-url or set THOMAS_WEBHOOK_URL (or THOMAS_MESSAGE_WEBHOOK_URL)."},
             )
 
         payload: dict[str, Any] = {
@@ -379,7 +377,7 @@ def run(
 
         try:
             resp = _post(webhook_url, json=payload, timeout=float(http_timeout_seconds))
-        except Exception as exc:
+        except (json.JSONDecodeError, ValueError, KeyError) as exc:
             raise MessagePollExternalFailureError(
                 "Failed to deliver poll via webhook.",
                 details={"exception": exc.__class__.__name__},

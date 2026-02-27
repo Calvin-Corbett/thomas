@@ -12,8 +12,7 @@ Exports:
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
-
+from typing import Any
 
 PROMPT_ID = "P064"
 DOMAIN = "messages"
@@ -35,8 +34,8 @@ def build_click_command() -> Any:
     def cmd(
         poll_id: str,
         option: str,
-        voter_id: Optional[str],
-        reason: Optional[str],
+        voter_id: str | None,
+        reason: str | None,
         json_output: bool,
     ) -> None:
         from thomas.messages.p064_message_poll_vote_and_close import PollVoteAndCloseRequest, safe_run
@@ -80,7 +79,7 @@ def register(app: Any) -> None:
         # Likely Typer. Implement using its decorator so help text etc. works.
         try:
             import typer  # type: ignore
-        except Exception:
+        except ImportError:
             # If Typer isn't installed, fall back to click registration when possible.
             if hasattr(app, "add_command"):
                 app.add_command(COMMAND)
@@ -90,8 +89,8 @@ def register(app: Any) -> None:
         def poll_vote_and_close(
             poll_id: str = typer.Option(..., "--poll-id", help="Poll identifier"),
             option: str = typer.Option(..., "--option", help="Option to vote for"),
-            voter_id: Optional[str] = typer.Option(None, "--voter-id", help="Voter identifier"),
-            reason: Optional[str] = typer.Option(None, "--reason", help="Reason (optional)"),
+            voter_id: str | None = typer.Option(None, "--voter-id", help="Voter identifier"),
+            reason: str | None = typer.Option(None, "--reason", help="Reason (optional)"),
             json_output: bool = typer.Option(False, "--json", help="Emit machine-readable JSON"),
         ) -> None:
             from thomas.messages.p064_message_poll_vote_and_close import PollVoteAndCloseRequest, safe_run
@@ -128,8 +127,7 @@ def register(app: Any) -> None:
 
     raise RuntimeError("Unsupported CLI app type for registration")
 
-
-# Compatibility hooks for different parity loaders.
+    # Compatibility hooks for different parity loaders.
     APP = None
     try:  # pragma: no cover
         import typer  # type: ignore
@@ -137,7 +135,7 @@ def register(app: Any) -> None:
         _a = typer.Typer(add_completion=False)
         register(_a)
         APP = _a
-    except Exception:  # pragma: no cover
+    except ImportError:  # pragma: no cover
         APP = None
 
     REGISTER = register
