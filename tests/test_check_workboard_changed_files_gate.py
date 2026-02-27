@@ -128,3 +128,55 @@ def test_changed_files_gate_can_require_identity_metadata(tmp_path: Path, capsys
     assert payload["ok"] is False
     assert payload["require_identity_metadata"] is True
     assert any("missing required field(s): name, role, parent" in item for item in payload.get("violations") or [])
+
+
+def test_changed_files_gate_fails_when_changed_file_count_exceeds_max(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=thomas/; task=bulk lane",
+        active_tasks_block="- task_id=bulk-lane; agent=Codex 3; scope=thomas/; summary=bulk lane; status=active",
+    )
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--file",
+            "thomas/a.py,thomas/b.py,thomas/c.py",
+            "--max-changed-files",
+            "2",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["changed_file_count"] == 3
+    assert payload["max_changed_files"] == 2
+    assert "exceeds max 2" in payload["error"]
+
+
+def test_changed_files_gate_allows_bulk_override_env(tmp_path: Path, capsys, monkeypatch) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=thomas/; task=bulk lane",
+        active_tasks_block="- task_id=bulk-lane; agent=Codex 3; scope=thomas/; summary=bulk lane; status=active",
+    )
+    monkeypatch.setenv("THOMAS_ALLOW_BULK_CHANGED_FILES", "1")
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--file",
+            "thomas/a.py,thomas/b.py,thomas/c.py",
+            "--max-changed-files",
+            "2",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["bulk_override"] is True
+    assert payload["changed_file_count"] == 3
