@@ -3,12 +3,18 @@
 Before starting work, read these files in order:
 
 1. **[AGENTS.md](AGENTS.md)** — Contributor protocol, guardrails, versioning workflow
-2. **[ISSUE_DASHBOARD.md](ISSUE_DASHBOARD.md)** — All tracked issues, debt, and work items in one place
+2. **[PROJECT_INDEX.md](PROJECT_INDEX.md)** — Source of truth for runtime boot paths and active docs
 3. **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** — Common pitfalls and cross-session memory
-4. **[PROJECT_INDEX.md](PROJECT_INDEX.md)** — How Thomas boots, where code lives, config flow
-5. **[THOMAS_FIX_PLAN.md](THOMAS_FIX_PLAN.md)** — Prioritized plan for fixing all known issues
+4. **[CHANGELOG.md](CHANGELOG.md)** — Current release notes and behavior changes
+5. **[docs/REPO_STRUCTURE_PROTOCOL.md](docs/REPO_STRUCTURE_PROTOCOL.md)** — Canonical repository layout and plan protocol
 
 Do NOT start building without checking the Inbox and existing code first. See [PROJECT_MANAGEMENT_RULES.md](PROJECT_MANAGEMENT_RULES.md).
+
+## Product-Release Warning (Important)
+
+This repo is an early product release and is still in active stabilization.
+Core behavior is intended to work, but the codebase is fast-built and still has UI polish risk.
+Expect transient layout or interaction artifacts (especially in dense composer / overlay screens) and plan for an incremental hardening pass.
 
 ---
 
@@ -44,7 +50,9 @@ Production release checklist: copy `.env.thomas.production.example` -> `.env.tho
 - Canonical active-doc index: `PROJECT_INDEX.md`
 - Root doc archive map: `docs/ops/ROOT_DOC_ARCHIVE_INDEX.md`
 - Active planning board: `plans/thomas/WORKBOARD.md`
+- Planning hub: `plans/thomas/README.md`
 - Repo structure source of truth: `docs/REPO_STRUCTURE_PROTOCOL.md`
+- Task ecosystem protocol: `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`
 
 ## Repo Orientation
 
@@ -53,7 +61,7 @@ For agent coordination and planning:
 - `plans/thomas/WORKBOARD.md` is the active execution board.
 - `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md` defines the required task-manager, messaging, and session workflow.
 - `plans/thomas/README.md` links current Thomas plans.
-- Active plans should be created in `plans/`, not randomly in `docs/` or repo root.
+- Active plans should be created in `plans/thomas/` (`tasks/`, `problems/`, and canonical plan files), not randomly in `docs/` or repo root.
 - Enforced checks: `scripts/check_plan_structure_gate.py` and `scripts/check_release_update_gate.py`.
 - Local auto-enforcement available via `.pre-commit-config.yaml`.
 
@@ -242,6 +250,26 @@ Clean junk artifacts and report worktree cleanliness:
 thomas repo-clean --apply --strict
 ```
 
+## GitHub User Release Bundle
+
+Use this command to build a deployable product release bundle for GitHub from the current checkout:
+
+```bash
+python scripts/package_release.py --version 0.14.30
+```
+
+For default safety the release excludes untracked files, plans, tasks, and runtime artifacts.
+Use `--include-untracked` only for intentional local-only snapshots.
+
+Output:
+- `dist/github-release/thomas-user-release-<version>/` (staged source)
+- `dist/github-release/thomas-user-release-<version>.zip` (default archive)
+
+The generated bundle:
+- Excludes plans/tasks/conversations/runtime/state artifacts and local secrets.
+- Includes a generated `THIRD_PARTY_NOTICES.md`.
+- Includes `LICENSE` and release metadata (`RELEASE_SUMMARY.md`, `RELEASE_MANIFEST.json`) so users can audit included files.
+
 Quick gate-ready status check:
 
 ```bash
@@ -264,5 +292,3 @@ Thomas now enforces per-job completion checks before finalizing tasks:
   up to `[quality].max_auto_retries`
 
 See `docs/RULES_OF_THE_ROAD_PROTOCOL.md`.
-
-

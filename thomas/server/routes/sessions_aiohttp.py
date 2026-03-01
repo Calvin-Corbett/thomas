@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import json
+import copy
 import logging
 import secrets as stdlib_secrets
-from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Awaitable, Callable, Dict, List
 
 from aiohttp import web
 
@@ -25,6 +24,19 @@ ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
 TaskLedgerUpdateFn = Callable[..., None]
 
 log = logging.getLogger(__name__)
+
+
+def _clone_conversation_fallback(value: Any) -> Any:
+    """Clone list/dict conversation data without relying on JSON serialization."""
+    if isinstance(value, dict):
+        return {k: _clone_conversation_fallback(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_clone_conversation_fallback(v) for v in value]
+    if isinstance(value, tuple):
+        return tuple(_clone_conversation_fallback(v) for v in value)
+    if isinstance(value, (str, int, float, bool, type(None))):
+        return value
+    return str(value)
 
 
 def register_sessions_routes(
@@ -61,7 +73,11 @@ def register_sessions_routes(
         base: ChatSession = request.app[APP_SESSIONS][src]
 
         sid = stdlib_secrets.token_urlsafe(18)
-        cloned = json.loads(json.dumps(base.conversation, ensure_ascii=False))
+        try:
+            cloned = copy.deepcopy(base.conversation)
+        except (TypeError, ValueError, copy.Error, RecursionError) as e:
+            log.warning("Session fork: deepcopy failed for %s, using safe fallback clone: %s", src, e)
+            cloned = _clone_conversation_fallback(base.conversation)
         request.app[APP_SESSIONS][sid] = ChatSession(
             id=sid,
             conversation=cloned,
@@ -103,15 +119,10 @@ def register_sessions_routes(
         cfg: AppConfig = request.app[APP_CONFIG]
         payload = await read_json(request)
 
-        profile_payload = str(payload.get("profile") or "").strip()
-        model_payload = str(payload.get("model") or "").strip()
-        strict_model_alias_requested = bool(model_payload)
-        profile = str(profile_payload or model_payload or cfg.default_model).strip()
+        explicit_model_alias_requested = "model" in payload and str(payload.get("model")).strip()
+        profile = str(payload.get("profile") or payload.get("model") or cfg.default_model).strip()
         if profile not in cfg.models:
-            # Backward-compat contract:
-            # - explicit `model` alias must be valid (400 on unknown)
-            # - explicit `profile` falls back to default model
-            if strict_model_alias_requested:
+            if explicit_model_alias_requested:
                 raise web.HTTPBadRequest(text=f"unknown profile: {profile}")
             # Graceful fallback: use default model or first available
             _fb = cfg.default_model
@@ -136,7 +147,7 @@ def register_sessions_routes(
         if len(raw_conv) > 250:
             raise web.HTTPBadRequest(text="conversation too long")
 
-        conversation: list[dict[str, Any]] = []
+        conversation: List[Dict[str, Any]] = []
         for m in raw_conv:
             if not isinstance(m, dict):
                 continue
@@ -145,6 +156,9 @@ def register_sessions_routes(
                 continue
             content = m.get("content")
             if not isinstance(content, str):
+                continue
+            content = content.strip()
+            if not content:
                 continue
             if len(content) > 120_000:
                 content = content[:120_000] + "\n... (truncated)"

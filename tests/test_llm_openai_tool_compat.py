@@ -1,7 +1,8 @@
 import asyncio
 
+import pytest
 from thomas.core.config import ModelConfig
-from thomas.core.llm import LLMClient
+from thomas.core.llm import LLMClient, StreamEvent
 
 
 class _FakeStreamResponse:
@@ -98,3 +99,31 @@ def test_openai_stream_accepts_dict_tool_arguments() -> None:
     assert len(ends) == 1
     assert ends[0].data["name"] == "fs.read_file"
     assert "README.md" in ends[0].data["arguments"]
+
+
+def test_stream_chat_accepts_coroutine_stream_openai(monkeypatch) -> None:
+    cfg = ModelConfig(
+        name="openai_compat",
+        provider="openai_compat",
+        base_url="https://localhost",
+        model="qwen",
+    )
+    llm = LLMClient(cfg)
+
+    async def _fake_stream_openai(_llm, _messages, _tools=None):
+        async def _stream():
+            yield StreamEvent(type="token", data={"text": "ok"})
+            yield StreamEvent(type="done", data={})
+
+        return _stream()
+
+    async def run() -> list:
+        events = []
+        async for event in llm.stream_chat([{"role": "user", "content": "hello"}], tools=None):
+            events.append(event)
+        return events
+
+    monkeypatch.setattr("thomas.core.llm_client.stream_openai", _fake_stream_openai)
+    events = asyncio.run(run())
+
+    assert [e.type for e in events] == ["token", "done"]

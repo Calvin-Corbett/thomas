@@ -426,6 +426,8 @@ class SwarmConfig:
     # planner/reviewer prompts can be overridden by server
     strict_planner: bool = True
     max_tasks: int = 64
+    # max retries per task on failure (3 attempts total: initial + 2 retries)
+    max_task_retries: int = 2
 
 
 class SwarmRunRegistry:
@@ -493,6 +495,7 @@ class SwarmOrchestrator:
         self.task_status: dict[str, TaskStatus] = {}
         self.task_results: dict[str, TaskResult] = {}
         self._blocked_by: dict[str, str] = {}  # task_id -> failed dep id
+        self._task_retry_count: dict[str, int] = {}  # task_id -> retry attempt count
         self._events: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self._done_evt = asyncio.Event()
 
@@ -718,12 +721,24 @@ class SwarmOrchestrator:
             """
             Returns (ready, blocker_dep_id)
             - ready True if all deps are DONE
-            - blocker_dep_id is set if any dep is FAILED/CANCELLED/BLOCKED
+            - blocker_dep_id is set if any dep is FAILED/CANCELLED/BLOCKED (but not if it's retrying)
+
+            When a dependency is FAILED, check if it's eligible for retry.
+            If it has fewer retries than max_task_retries, don't block immediately—
+            let the retry attempt complete first.
             """
             t = self.graph.tasks[tid]
             for dep in t.deps:
                 st = self.task_status.get(dep)
-                if st in (TaskStatus.FAILED, TaskStatus.CANCELLED, TaskStatus.BLOCKED):
+                if st == TaskStatus.FAILED:
+                    # Check if this failed task is still retrying
+                    retry_count = self._task_retry_count.get(dep, 0)
+                    if retry_count < self.config.max_task_retries:
+                        # Still retrying, don't block yet
+                        return False, None
+                    # Exhausted retries, block permanently
+                    return False, dep
+                if st in (TaskStatus.CANCELLED, TaskStatus.BLOCKED):
                     return False, dep
                 if st != TaskStatus.DONE:
                     return False, None
@@ -842,67 +857,131 @@ class SwarmOrchestrator:
         async def call_tool(name: str, args: dict[str, Any], mutates_fs: bool | None = None) -> dict[str, Any]:
             return await self._call_tool(agent_id=t.agent, task_id=task_id, name=name, args=args, mutates_fs=mutates_fs)
 
+        # Retry loop: max 2 retries (3 attempts total)
+        max_retries = self.config.max_task_retries
+        retry_count = 0
+
         try:
-            res = await agent.run_task(
-                task=t,
-                graph=self.graph,
-                prior_results=self.task_results.copy(),
-                emit_text=emit_text,
-                call_tool=call_tool,
-                cancel_event=self._cancel,
-            )
-            if not isinstance(res, TaskResult):
-                raise TypeError("Subagent.run_task must return TaskResult")
+            while True:
+                try:
+                    res = await agent.run_task(
+                        task=t,
+                        graph=self.graph,
+                        prior_results=self.task_results.copy(),
+                        emit_text=emit_text,
+                        call_tool=call_tool,
+                        cancel_event=self._cancel,
+                    )
+                    if not isinstance(res, TaskResult):
+                        raise TypeError("Subagent.run_task must return TaskResult")
 
-            if not res.output:
-                res.output = "".join(chunks)
+                    if not res.output:
+                        res.output = "".join(chunks)
 
-            # normalize artifacts
-            norm_artifacts: list[Artifact] = []
-            for a in res.artifacts or []:
-                if isinstance(a, Artifact):
-                    norm_artifacts.append(a)
-                elif isinstance(a, dict):
-                    norm_artifacts.append(Artifact.from_dict(a))
-                else:
-                    raise ValueError("TaskResult.artifacts must contain Artifact or dict items")
-            res.artifacts = norm_artifacts
+                    # normalize artifacts
+                    norm_artifacts: list[Artifact] = []
+                    for a in res.artifacts or []:
+                        if isinstance(a, Artifact):
+                            norm_artifacts.append(a)
+                        elif isinstance(a, dict):
+                            norm_artifacts.append(Artifact.from_dict(a))
+                        else:
+                            raise ValueError("TaskResult.artifacts must contain Artifact or dict items")
+                    res.artifacts = norm_artifacts
 
-            self.task_results[task_id] = res
-            if res.ok:
-                self.task_status[task_id] = TaskStatus.DONE
-                await self._emit(
-                    "task_update",
-                    "orchestrator",
-                    task_id,
-                    {"status": TaskStatus.DONE.value, "ok": True, "duration_ms": _monotonic_ms() - started},
-                )
-            else:
-                self.task_status[task_id] = TaskStatus.FAILED
-                await self._emit(
-                    "task_update",
-                    "orchestrator",
-                    task_id,
-                    {
-                        "status": TaskStatus.FAILED.value,
-                        "ok": False,
-                        "error": res.error or "task failed",
-                        "duration_ms": _monotonic_ms() - started,
-                    },
-                )
-        except asyncio.CancelledError:
-            self.task_status[task_id] = TaskStatus.CANCELLED
-            await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.CANCELLED.value})
-        except Exception as e:
-            self.task_status[task_id] = TaskStatus.FAILED
-            err = f"{type(e).__name__}: {e}"
-            self.task_results[task_id] = TaskResult(ok=False, error=err, output="".join(chunks))
-            await self._emit(
-                "task_update",
-                "orchestrator",
-                task_id,
-                {"status": TaskStatus.FAILED.value, "error": err, "duration_ms": _monotonic_ms() - started},
-            )
+                    self.task_results[task_id] = res
+                    if res.ok:
+                        self.task_status[task_id] = TaskStatus.DONE
+                        await self._emit(
+                            "task_update",
+                            "orchestrator",
+                            task_id,
+                            {"status": TaskStatus.DONE.value, "ok": True, "duration_ms": _monotonic_ms() - started},
+                        )
+                        break  # Success, exit retry loop
+                    else:
+                        # Task returned ok=False; treat as failure and retry
+                        if retry_count < max_retries:
+                            retry_count += 1
+                            self._task_retry_count[task_id] = retry_count
+                            await self._emit(
+                                "task_update",
+                                "orchestrator",
+                                task_id,
+                                {
+                                    "status": TaskStatus.RUNNING.value,
+                                    "retrying": True,
+                                    "retry_count": retry_count,
+                                    "max_retries": max_retries,
+                                },
+                            )
+                            await asyncio.sleep(1)
+                            chunks.clear()
+                            continue
+                        else:
+                            # Exhausted retries
+                            self.task_status[task_id] = TaskStatus.FAILED
+                            error_msg = res.error or "task failed"
+                            if retry_count > 0:
+                                error_msg = f"{error_msg} (failed after {retry_count} retries)"
+                            await self._emit(
+                                "task_update",
+                                "orchestrator",
+                                task_id,
+                                {
+                                    "status": TaskStatus.FAILED.value,
+                                    "ok": False,
+                                    "error": error_msg,
+                                    "retry_count": retry_count,
+                                    "max_retries": max_retries,
+                                    "duration_ms": _monotonic_ms() - started,
+                                },
+                            )
+                            break  # Exhausted retries
+                except asyncio.CancelledError:
+                    self.task_status[task_id] = TaskStatus.CANCELLED
+                    await self._emit("task_update", "orchestrator", task_id, {"status": TaskStatus.CANCELLED.value})
+                    break  # Don't retry on cancellation
+                except Exception as e:
+                    # Execution error; retry on Exception (not CancelledError)
+                    if retry_count < max_retries:
+                        retry_count += 1
+                        self._task_retry_count[task_id] = retry_count
+                        await self._emit(
+                            "task_update",
+                            "orchestrator",
+                            task_id,
+                            {
+                                "status": TaskStatus.RUNNING.value,
+                                "retrying": True,
+                                "retry_count": retry_count,
+                                "max_retries": max_retries,
+                                "last_error": f"{type(e).__name__}: {e}",
+                            },
+                        )
+                        await asyncio.sleep(1)
+                        chunks.clear()
+                        continue
+                    else:
+                        # Exhausted retries
+                        self.task_status[task_id] = TaskStatus.FAILED
+                        err = f"{type(e).__name__}: {e}"
+                        if retry_count > 0:
+                            err = f"{err} (failed after {retry_count} retries)"
+                        self.task_results[task_id] = TaskResult(ok=False, error=err, output="".join(chunks))
+                        await self._emit(
+                            "task_update",
+                            "orchestrator",
+                            task_id,
+                            {
+                                "status": TaskStatus.FAILED.value,
+                                "error": err,
+                                "retry_count": retry_count,
+                                "max_retries": max_retries,
+                                "duration_ms": _monotonic_ms() - started,
+                            },
+                        )
+                        break  # Exhausted retries
         finally:
             if agent_sem:
                 agent_sem.release()

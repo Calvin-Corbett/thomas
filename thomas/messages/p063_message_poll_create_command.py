@@ -377,7 +377,9 @@ def run(
 
         try:
             resp = _post(webhook_url, json=payload, timeout=float(http_timeout_seconds))
-        except (json.JSONDecodeError, ValueError, KeyError) as exc:
+        except MessagePollCreateCommandError:
+            raise
+        except Exception as exc:
             raise MessagePollExternalFailureError(
                 "Failed to deliver poll via webhook.",
                 details={"exception": exc.__class__.__name__},

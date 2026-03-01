@@ -1,19 +1,49 @@
 {
   "name": "Thomas Infinite Companion",
   "short_name": "Infinite",
-  "description": "Phone companion chat for controlling Thomas.",
+  "description": "Phone companion chat for controlling Thomas AI assistant.",
   "start_url": "/companion",
   "scope": "/",
   "display": "standalone",
   "orientation": "portrait",
   "background_color": "#12161f",
-  "theme_color": "#12161f",
+  "theme_color": "#58a6ff",
+  "categories": ["productivity", "utilities"],
+  "screenshots": [
+    {
+      "src": "/static/companion-icon.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "form_factor": "narrow"
+    }
+  ],
   "icons": [
     {
       "src": "/static/companion-icon.svg",
       "sizes": "any",
       "type": "image/svg+xml",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/static/companion-icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "New Chat",
+      "short_name": "Chat",
+      "description": "Start a new chat with Thomas",
+      "url": "/companion?mode=chat",
+      "icons": [
+        {
+          "src": "/static/companion-icon.svg",
+          "sizes": "any",
+          "type": "image/svg+xml"
+        }
+      ]
     }
   ]
 }

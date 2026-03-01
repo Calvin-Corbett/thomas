@@ -7,12 +7,12 @@ import json
 import os
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
 
 from thomas.core.config import AppConfig, load_config
-from thomas.server.secrets import SecretStore
 
 NO_KEY_PROVIDERS = {"", "local", "ollama", "codex"}
 LOCAL_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -199,7 +199,10 @@ def evaluate_config(
         )
 
     if secret_lookup is None:
-        secret_store = SecretStore(config.memory.root_path / ".thomas")
+        # Resolve server SecretStore lazily to avoid hard module-edge coupling.
+        secret_store_module = import_module("thomas.server.secrets")
+        secret_store_cls = getattr(secret_store_module, "SecretStore")
+        secret_store = secret_store_cls(config.memory.root_path / ".thomas")
         secret_lookup = secret_store.get
 
     default_profile = str(config.default_model or "").strip()

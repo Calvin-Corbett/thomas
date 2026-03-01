@@ -28,7 +28,7 @@ except Exception:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
-DEFAULT_FACILITATOR = "task-manager-agent"
+DEFAULT_FACILITATOR = "thomas"
 NONE_ENTRY = "- none"
 
 SESSIONS_HEADING = "Brainstorm Sessions"

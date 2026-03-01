@@ -1,4 +1,4 @@
-"""Streaming event loop helpers for /api/chat."""
+﻿"""Streaming event loop helpers for /api/chat."""
 
 from __future__ import annotations
 
@@ -19,11 +19,16 @@ from thomas.observability.task_ledger import (
     derive_active_goal,
     extract_missing_inputs,
 )
+from thomas.server.routes.vibe_trace import (
+    build_vibe_trace_event,
+    tool_node_id,
+    tool_node_label,
+)
 
 # Chat pipeline logger + training mode
 try:
     from thomas.chat_logger import ChatEventKind, TrainingMode, chat_logger
-except Exception:  # pragma: no cover – graceful fallback
+except Exception:  # pragma: no cover â€“ graceful fallback
     chat_logger = None  # type: ignore[assignment]
     ChatEventKind = None  # type: ignore[assignment,misc]
     TrainingMode = None  # type: ignore[assignment,misc]
@@ -54,6 +59,8 @@ async def stream_agent_events(
     token_economy_meta: dict[str, Any],
     run_max_iterations: int | None,
     run_done: dict[str, Any],
+    no_human_mode: str | None,
+    require_command_approval: bool,
     llm: Any,
     memory: Any,
     start_t: float,
@@ -61,6 +68,29 @@ async def stream_agent_events(
     normalize_usage_payload: Callable[[Any], dict[str, int]],
 ) -> TaskJournal | None:
     await send_timing("llm_client_ready")
+
+    async def emit_vibe(
+        node_id: str,
+        status: str,
+        *,
+        label: str | None = None,
+        detail: str | None = None,
+        kind: str | None = None,
+        parent_node_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> None:
+        await send(
+            build_vibe_trace_event(
+                trace_id=run_id,
+                node_id=node_id,
+                status=status,
+                label=label,
+                detail=detail,
+                kind=kind,
+                parent_node_id=parent_node_id,
+                metadata=metadata,
+            )
+        )
 
     # --- Chat pipeline logging ---
     if chat_logger is not None:
@@ -89,10 +119,12 @@ async def stream_agent_events(
         "job_type": requested_job_type,
         "token_economy": applied_token_economy,
     }
+    if run_max_iterations is not None:
+        run_kwargs["max_iterations"] = int(run_max_iterations)
     # NOTE: Token economy pass limits (run_max_iterations) are intentionally
-    # NOT applied to the orchestrator — the user-facing chat must always
+    # NOT applied to the orchestrator â€” the user-facing chat must always
     # respond quickly.  Token economy iteration caps only apply to spawned
-    # agents/tasks (swarm workers, coding pipelines, etc.).
+    # agents/tasks (parallel workers, coding pipelines, etc.).
     run_kwargs_effective = dict(run_kwargs)
     try:
         run_sig = inspect.signature(agent.run)
@@ -121,10 +153,20 @@ async def stream_agent_events(
     first_token_sent = False
     tool_call_args_buf = ""
     journal: TaskJournal | None = None
+    vibe_response_stream_active = False
+    seen_tool_nodes: set[str] = set()
 
-    async for event in agent.run(prompt, **run_kwargs_effective):
+    run_result = agent.run(prompt, **run_kwargs_effective)
+    if inspect.isawaitable(run_result):
+        run_result = await run_result
+    if not hasattr(run_result, "__aiter__"):
+        raise TypeError(f"AgentLoop.run returned {type(run_result)!r}, expected async iterator")
+
+    async for event in run_result:
         if event.type == EventType.AGENT_START:
             route_data = event.data.get("route", {})
+            route_path = str((route_data or {}).get("path") or "general")
+            route_conf = float((route_data or {}).get("confidence", 0) or 0)
             await send(
                 {
                     "type": "route",
@@ -136,10 +178,22 @@ async def stream_agent_events(
                     "autonomy_name": str(
                         event.data.get("autonomy_name") or autonomy_level_name(getattr(session, "autonomy_level", 3))
                     ),
+                    "no_human_mode": no_human_mode,
+                    "require_command_approval": bool(require_command_approval),
+                    "command_approval_bypassed": bool(
+                        bool(require_command_approval) and str(no_human_mode or "").lower() == "allow"
+                    ),
                 }
             )
-            route_path = str((route_data or {}).get("path") or "general")
             route_input_source = str(event.data.get("route_input_source") or "").strip()
+            route_detail = f"path={route_path} confidence={route_conf:.2f}"
+            await emit_vibe("route.select", "success", detail=route_detail, kind="router")
+            await emit_vibe(
+                "llm.generate",
+                "active",
+                detail=f"mode={event.data.get('mode', 'auto')}",
+                kind="model",
+            )
             if ledger is not None:
                 try:
                     current_state = ledger.get_current(sid)
@@ -193,7 +247,6 @@ async def stream_agent_events(
                     pass
 
             route_reasons = (route_data or {}).get("reasons", [])
-            route_conf = (route_data or {}).get("confidence", 0)
             route_mode = event.data.get("mode", "auto")
             thinking_lines = ["Analyzing the request..."]
             if route_reasons:
@@ -218,6 +271,9 @@ async def stream_agent_events(
             if not first_token_sent:
                 await send_timing("first_token")
                 first_token_sent = True
+                if not vibe_response_stream_active:
+                    await emit_vibe("response.stream", "active", detail="Streaming model output.", kind="stream")
+                    vibe_response_stream_active = True
             await send({"type": "text", "text": event.data.get("text", "")})
             continue
 
@@ -241,6 +297,23 @@ async def stream_agent_events(
 
         if event.type == EventType.TOOL_CALL_START:
             tool_name = event.data.get("tool_name", "")
+            tool_id = tool_node_id(tool_name)
+            if tool_id not in seen_tool_nodes:
+                seen_tool_nodes.add(tool_id)
+            await emit_vibe(
+                "tool.exec",
+                "active",
+                detail=f"{tool_name} started",
+                kind="tool",
+            )
+            await emit_vibe(
+                tool_id,
+                "active",
+                label=tool_node_label(tool_name),
+                detail="Tool call started.",
+                kind="tool",
+                parent_node_id="tool.exec",
+            )
             await send(
                 {
                     "type": "tool_start",
@@ -269,6 +342,22 @@ async def stream_agent_events(
             tool_ok = bool(event.data.get("ok", False))
             tool_ms = float(event.data.get("duration_ms", 0.0))
             tool_name = event.data.get("tool_name", "")
+            tool_id = tool_node_id(tool_name)
+            status = "success" if tool_ok else "error"
+            await emit_vibe(
+                tool_id,
+                status,
+                label=tool_node_label(tool_name),
+                detail=f"Result in {tool_ms:.0f}ms.",
+                kind="tool",
+                parent_node_id="tool.exec",
+            )
+            await emit_vibe(
+                "tool.exec",
+                status,
+                detail=f"{tool_name} finished in {tool_ms:.0f}ms.",
+                kind="tool",
+            )
             await send(
                 {
                     "type": "tool_result",
@@ -317,6 +406,8 @@ async def stream_agent_events(
                     pass
             run_done["ok"] = False
             run_done["error"] = err
+            await emit_vibe("llm.generate", "error", detail=err, kind="model")
+            await emit_vibe("response.done", "error", detail=err, kind="result")
             deps.task_ledger_update(
                 sid,
                 status="blocked",
@@ -329,6 +420,42 @@ async def stream_agent_events(
             if journal is not None:
                 with contextlib.suppress(Exception):
                     journal.finalize(ok=False, iterations=0, tool_calls=0, error=err)
+            continue
+
+        if event.type == EventType.AGENT_END:
+            end_msg = str(event.data.get("message", ""))
+            if not end_msg:
+                end_msg = str(event.data.get("reason", "Run ended before generating a response."))
+            end_msg = end_msg.strip() or "Run ended before generating a response."
+
+            if chat_logger is not None:
+                try:
+                    chat_logger.log_event(
+                        ChatEventKind.ERROR,
+                        {"error": end_msg[:300]},
+                        session_id=sid,
+                        run_id=run_id,
+                    )
+                except Exception:
+                    pass
+
+            run_done["ok"] = False
+            run_done["error"] = end_msg
+            await emit_vibe("llm.generate", "error", detail=end_msg, kind="model")
+            await emit_vibe("response.done", "error", detail=end_msg, kind="result")
+            with contextlib.suppress(Exception):
+                deps.task_ledger_update(
+                    sid,
+                    status="blocked",
+                    missing_inputs=extract_missing_inputs(end_msg),
+                    last_progress=end_msg,
+                    source="chat.end",
+                    force_event=True,
+                )
+            await send({"type": "error", "error": end_msg})
+            if journal is not None:
+                with contextlib.suppress(Exception):
+                    journal.finalize(ok=False, iterations=0, tool_calls=0, error=end_msg)
             continue
 
         if event.type != EventType.AGENT_DONE:
@@ -414,6 +541,30 @@ async def stream_agent_events(
         run_done["usage"] = usage_obj
 
         assistant_text = str(event.data.get("text") or "")
+        await emit_vibe(
+            "llm.generate",
+            "success",
+            detail=f"iterations={done_iterations} tool_calls={done_tool_calls}",
+            kind="model",
+        )
+        if done_tool_calls <= 0:
+            await emit_vibe("tool.exec", "success", detail="No tools required for this turn.", kind="tool")
+        if assistant_text and not vibe_response_stream_active:
+            await emit_vibe("response.stream", "active", detail="Streaming finalized output.", kind="stream")
+            vibe_response_stream_active = True
+        await emit_vibe(
+            "response.stream",
+            "success",
+            detail=f"{len(assistant_text)} characters delivered.",
+            kind="stream",
+        )
+        await emit_vibe(
+            "response.done",
+            "success",
+            detail="Response finalized.",
+            kind="result",
+            metadata={"iterations": done_iterations, "tool_calls": done_tool_calls},
+        )
 
         # --- Training mode observation ---
         if TrainingMode is not None and chat_logger is not None:
@@ -481,6 +632,7 @@ async def stream_agent_events(
         await send(
             {
                 "type": "done",
+                "text": assistant_text,
                 "iterations": done_iterations,
                 "tool_calls": done_tool_calls,
                 "usage": usage_obj,
@@ -488,6 +640,11 @@ async def stream_agent_events(
                 "session_usage": session_usage_obj,
                 "token_report": token_report,
                 "token_economy": token_economy_meta,
+                "no_human_mode": no_human_mode,
+                "require_command_approval": bool(require_command_approval),
+                "command_approval_bypassed": bool(
+                    bool(require_command_approval) and str(no_human_mode or "").lower() == "allow"
+                ),
                 "rules_of_road": token_report.get("rules_of_road", {}),
                 "runtime_model": runtime_model,
                 "elapsed_ms": float((time.monotonic() - start_t) * 1000.0),
@@ -495,3 +652,4 @@ async def stream_agent_events(
         )
 
     return journal
+

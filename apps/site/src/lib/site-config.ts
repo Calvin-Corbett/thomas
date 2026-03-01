@@ -10,6 +10,7 @@ export const siteConfig = {
     { href: "/download", label: "Download" },
     { href: "/updates", label: "Updates" },
     { href: "/journey", label: "Journey" },
+    { href: "/deep-dive", label: "Deep Dive" },
     { href: "/support", label: "Support" },
   ],
   social: {

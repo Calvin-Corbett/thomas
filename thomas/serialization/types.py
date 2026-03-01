@@ -113,6 +113,9 @@ class SchemaVersion:
             other.patch,
         )
 
+    def __hash__(self) -> int:
+        return hash((self.major, self.minor, self.patch))
+
     def is_compatible_with(self, other: "SchemaVersion") -> bool:
         """Check if this version is forward-compatible with another.
 

@@ -1,31 +1,35 @@
 {
   "rule_version": 2,
-  "captured_at_utc": "2026-02-24T05:01:33.224Z",
+  "captured_at_utc": "2026-03-01T23:46:45.677Z",
   "target_url": "http://127.0.0.1:3108",
   "generator": {
     "script": "scripts/refresh_site_visual_proof.py",
     "runtime_verifier": "scripts/verify_site_visual_runtime.mjs",
-    "generated_at_utc": "2026-02-24T05:01:35.411129+00:00"
+    "generated_at_utc": "2026-03-01T23:46:48.353918+00:00"
   },
   "git": {
-    "head_sha": "41b103e4fadf4acc2b99e0872828af652585831d",
+    "head_sha": "0177d3856720fb730107379c5d50fcf5159aadbe",
     "ui_changed_paths": [
+      "apps/site/src/app/deep-dive/page.tsx",
       "apps/site/src/app/dev/dino-rider-lab/page.tsx",
-      "apps/site/src/app/globals.css"
+      "apps/site/src/app/globals.css",
+      "apps/site/src/app/page.tsx",
+      "apps/site/src/app/sitemap.ts",
+      "apps/site/src/components/footer.tsx"
     ]
   },
   "runtime_report": {
     "path": "apps/site/verification/runtime-report.json",
-    "sha256": "f8ed5bce48b31231ff8da7691e0113ebbebd02bfc38c1c8524b60097bd683227"
+    "sha256": "54f26a99bb95009e242e0e0cb17155575bddd736430d92f0b9f57d3b74be238f"
   },
   "screenshots": {
     "full_page": {
       "path": "apps/site/verification/screenshots/full-page.png",
-      "sha256": "ddb0185f28ccf70bce4da74a514758e0b530a1c1ef3d1a7105c442d661c29819"
+      "sha256": "98125d2fea43342664bfb9b60b86f9f8a75425b31b345111c1ad75542eab68ca"
     },
     "footer_focus": {
       "path": "apps/site/verification/screenshots/footer-focus.png",
-      "sha256": "ebb8d095901413a936a33ee040d1cb9b02a5fd0c41a31367842d9c84f1649236"
+      "sha256": "162a40b96eb97d1e188a83a6136c8a98cfb00d72ce306e3986b53b8c68cd9e41"
     }
   },
   "metrics": {
@@ -35,97 +39,97 @@
     "broken_image_count": 0,
     "viewport_width": 1424,
     "root_scroll_width": 1424,
-    "footer_top": 631,
-    "band_top": 632,
+    "footer_top": 598,
+    "band_top": 599,
     "band_height": 0,
     "riders": [
       {
-        "track_top": 613,
-        "track_bottom": 669,
-        "saddle_top": 634,
-        "saddle_bottom": 639,
+        "track_top": 580,
+        "track_bottom": 636,
+        "saddle_top": 601,
+        "saddle_bottom": 606,
         "saddle_left": 154,
         "saddle_right": 167,
-        "robot_top": 621,
-        "robot_bottom": 649,
-        "robot_left": 145,
-        "robot_right": 176,
+        "robot_top": 593,
+        "robot_bottom": 611,
+        "robot_left": 150,
+        "robot_right": 171,
         "robot_center_x": 160,
-        "robot_width": 31,
-        "robot_height": 28,
-        "robot_body_top": 633,
-        "robot_body_bottom": 645,
-        "robot_body_left": 149,
-        "robot_body_right": 169,
+        "robot_width": 21,
+        "robot_height": 18,
+        "robot_body_top": 601,
+        "robot_body_bottom": 609,
+        "robot_body_left": 153,
+        "robot_body_right": 166,
         "robot_body_center_x": 159,
-        "robot_body_width": 20,
-        "robot_body_height": 12
+        "robot_body_width": 13,
+        "robot_body_height": 8
       },
       {
-        "track_top": 618,
-        "track_bottom": 674,
-        "saddle_top": 636,
-        "saddle_bottom": 641,
+        "track_top": 585,
+        "track_bottom": 641,
+        "saddle_top": 603,
+        "saddle_bottom": 608,
         "saddle_left": 431,
         "saddle_right": 444,
-        "robot_top": 621,
-        "robot_bottom": 652,
-        "robot_left": 420,
-        "robot_right": 455,
+        "robot_top": 593,
+        "robot_bottom": 614,
+        "robot_left": 426,
+        "robot_right": 449,
         "robot_center_x": 438,
-        "robot_width": 35,
-        "robot_height": 30,
-        "robot_body_top": 634,
-        "robot_body_bottom": 647,
-        "robot_body_left": 428,
-        "robot_body_right": 450,
+        "robot_width": 23,
+        "robot_height": 20,
+        "robot_body_top": 602,
+        "robot_body_bottom": 611,
+        "robot_body_left": 432,
+        "robot_body_right": 446,
         "robot_body_center_x": 439,
-        "robot_body_width": 22,
-        "robot_body_height": 13
+        "robot_body_width": 14,
+        "robot_body_height": 9
       },
       {
-        "track_top": 613,
-        "track_bottom": 669,
-        "saddle_top": 634,
-        "saddle_bottom": 639,
+        "track_top": 580,
+        "track_bottom": 636,
+        "saddle_top": 601,
+        "saddle_bottom": 606,
         "saddle_left": 707,
         "saddle_right": 719,
-        "robot_top": 621,
-        "robot_bottom": 649,
-        "robot_left": 697,
-        "robot_right": 729,
+        "robot_top": 593,
+        "robot_bottom": 611,
+        "robot_left": 703,
+        "robot_right": 724,
         "robot_center_x": 713,
-        "robot_width": 31,
-        "robot_height": 28,
-        "robot_body_top": 633,
-        "robot_body_bottom": 645,
-        "robot_body_left": 704,
-        "robot_body_right": 724,
+        "robot_width": 21,
+        "robot_height": 18,
+        "robot_body_top": 601,
+        "robot_body_bottom": 609,
+        "robot_body_left": 707,
+        "robot_body_right": 721,
         "robot_body_center_x": 714,
-        "robot_body_width": 20,
-        "robot_body_height": 12
+        "robot_body_width": 13,
+        "robot_body_height": 8
       },
       {
-        "track_top": 613,
-        "track_bottom": 669,
-        "saddle_top": 634,
-        "saddle_bottom": 639,
+        "track_top": 580,
+        "track_bottom": 636,
+        "saddle_top": 601,
+        "saddle_bottom": 606,
         "saddle_left": 980,
         "saddle_right": 993,
-        "robot_top": 621,
-        "robot_bottom": 649,
-        "robot_left": 971,
-        "robot_right": 1002,
+        "robot_top": 593,
+        "robot_bottom": 611,
+        "robot_left": 976,
+        "robot_right": 997,
         "robot_center_x": 986,
-        "robot_width": 31,
-        "robot_height": 28,
-        "robot_body_top": 633,
-        "robot_body_bottom": 645,
-        "robot_body_left": 975,
-        "robot_body_right": 995,
+        "robot_width": 21,
+        "robot_height": 18,
+        "robot_body_top": 601,
+        "robot_body_bottom": 609,
+        "robot_body_left": 979,
+        "robot_body_right": 992,
         "robot_body_center_x": 985,
-        "robot_body_width": 20,
-        "robot_body_height": 12
+        "robot_body_width": 13,
+        "robot_body_height": 8
       }
     ],
     "route_matrix": [
@@ -134,7 +138,7 @@
         "has_nav": true,
         "has_main": true,
         "has_footer": true,
-        "section_shell_count": 2,
+        "section_shell_count": 5,
         "nav_position": "fixed",
         "nav_top": 0,
         "broken_image_count": 0,
@@ -235,9 +239,9 @@
     "console_error_count": 0,
     "console_error_samples": [],
     "pixel_diff_threshold_ratio": 0.02,
-    "pixel_diff_full_page_ratio": 0.0,
+    "pixel_diff_full_page_ratio": 0.018988720562145615,
     "pixel_diff_footer_focus_ratio": 0.0,
-    "pixel_diff_max_ratio": 0.0,
+    "pixel_diff_max_ratio": 0.018988720562145615,
     "pixel_diff_size_mismatch_count": 0
   },
   "assertions": {
@@ -256,7 +260,7 @@
     "pixel_diff_within_threshold": true
   },
   "commands": [
-    "node F:\\DevHub\\Thomas\\scripts\\verify_site_visual_runtime.mjs --host 127.0.0.1 --port 3108 --timeout-ms 180000 --output-dir F:\\DevHub\\Thomas\\output\\site-visual-proof --report F:\\DevHub\\Thomas\\output\\site-visual-proof\\runtime-report.json",
+    "node C:\\Users\\corbe\\Thomas\\scripts\\verify_site_visual_runtime.mjs --host 127.0.0.1 --port 3108 --timeout-ms 180000 --output-dir C:\\Users\\corbe\\Thomas\\output\\site-visual-proof --report C:\\Users\\corbe\\Thomas\\output\\site-visual-proof\\runtime-report.json",
     "python scripts/check_site_visual_proof.py"
   ]
 }

@@ -259,12 +259,12 @@ def penman_monteith_evapotranspiration(
     # Surface resistance
     r_s = 70.0 if crop_height_m > 0.1 else 100.0
 
+    # Reference crop coefficient approximation
+    cn = 900.0
+
     # Penman-Monteith equation (simplified)
     numerator = 0.408 * delta * net_radiation_mj_m2 + gamma * (cn / (temperature_c + 273.0)) * u_2 * vpd
     denominator = delta + gamma * (1 + (r_s / ra))
-
-    # Reference crop coefficient approximation
-    cn = 900.0
 
     et0 = numerator / denominator
 

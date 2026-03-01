@@ -21,6 +21,8 @@ import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
+from ipaddress import ip_address
+from urllib.parse import urlparse
 from typing import Any
 
 DEFAULT_ROUTE_PATH = "/gateway/restart"
@@ -72,15 +74,57 @@ class GatewayRestartCliError(RuntimeError):
         self.code = code
 
 
+def _normalize_and_validate_server_url(raw: str) -> str:
+    parsed = urlparse(raw)
+    if parsed.scheme not in {"http", "https"}:
+        raise GatewayRestartCliError("invalid_server_url", "Server URL must use http or https.")
+
+    if parsed.username or parsed.password:
+        raise GatewayRestartCliError("invalid_server_url", "Server URL must not include credentials.")
+
+    if parsed.query or parsed.fragment:
+        raise GatewayRestartCliError("invalid_server_url", "Server URL must not include query or fragment.")
+
+    if parsed.path not in ("", "/"):
+        raise GatewayRestartCliError("invalid_server_url", "Server URL must not include a path.")
+
+    if not parsed.hostname:
+        raise GatewayRestartCliError("invalid_server_url", "Server URL must include a hostname.")
+
+    host = parsed.hostname.lower()
+    if not _is_loopback_host(host):
+        raise GatewayRestartCliError(
+            "invalid_server_url",
+            "Admin command requires a loopback server URL (127.0.0.1, localhost, or ::1).",
+        )
+
+    normalized = parsed._replace(fragment="", query="", path="").geturl().rstrip("/")
+    if normalized.endswith("://"):
+        raise GatewayRestartCliError("invalid_server_url", "Server URL is missing host information.")
+    return normalized
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host in {"127.0.0.1", "localhost", "::1"}:
+        return True
+    try:
+        return ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _resolve_server_url(args: argparse.Namespace) -> str:
+    def _pick(raw: str) -> str:
+        return _normalize_and_validate_server_url(raw.strip())
+
     server_url = getattr(args, "server_url", None)
     if isinstance(server_url, str) and server_url.strip():
-        return server_url.strip().rstrip("/")
+        return _pick(server_url)
 
     for env_key in ("THOMAS_SERVER_URL", "THOMAS_BASE_URL", "THOMAS_URL"):
         val = os.environ.get(env_key)
         if val and val.strip():
-            return val.strip().rstrip("/")
+            return _pick(val)
 
     raise GatewayRestartCliError("missing_config", "Missing server URL. Provide --server-url or set THOMAS_SERVER_URL.")
 

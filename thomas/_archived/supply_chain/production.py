@@ -5,16 +5,22 @@ Provides MRP (Material Requirements Planning), capacity requirements planning,
 job shop scheduling, bottleneck detection, WIP tracking, and lot sizing.
 """
 
+from __future__ import annotations
+
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
+
+from typing import Any
 
 from thomas.supply_chain._types import (
     SKU,
     BillOfMaterials,
     ProductionOrder,
 )
+
+Operation = Any
 
 
 @dataclass

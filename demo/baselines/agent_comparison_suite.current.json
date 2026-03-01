@@ -523,7 +523,7 @@
         "demo/agentic-runs/*/benchmark_results.raw.json"
       ],
       "benchmark_evidence_globs": [
-        "demo/agentic-runs/*/benchmark_results.raw.json"
+        "demo/agentic-runs/*/benchmark_results.prog_evidence.json"
       ],
       "benchmark_aliases": [
         "thomas_os",
@@ -625,7 +625,7 @@
         "demo/agentic-runs/*/benchmark_results.raw.json"
       ],
       "benchmark_evidence_globs": [
-        "demo/agentic-runs/*/benchmark_results.raw.json"
+        "demo/agentic-runs/*/benchmark_results.prog_evidence.json"
       ],
       "benchmark_aliases": [
         "openclaw",

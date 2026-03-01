@@ -62,7 +62,14 @@ class TestServerDoneUsageContract(AioHTTPTestCase):
 
     async def get_application(self):
         cfg = AppConfig(
-            models={"local": ModelConfig(name="local", model="dummy")},
+            models={
+                "local": ModelConfig(
+                    name="local",
+                    provider="openai_compat",
+                    base_url="http://127.0.0.1:11434/v1",
+                    model="local-model",
+                )
+            },
             default_model="local",
             memory=MemoryConfig(root=self._tmpdir.name),
             server=ServerConfig(access_mode="local"),

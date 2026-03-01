@@ -5,6 +5,9 @@ Implements counter, gauge, histogram, and summary metric types with full
 label support and Prometheus-compatible exposition format.
 """
 
+from __future__ import annotations
+
+import logging
 import threading
 import time
 from collections import defaultdict
@@ -17,6 +20,8 @@ from thomas.monitoring._types import (
     Label,
     MetricType,
 )
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -374,12 +379,23 @@ class MetricsRegistry:
                     raise MetricError(f"Metric {name} is already registered as {metric['type']}")
                 return metric["instance"]
 
+            # Check cardinality before registering
+            if self._cardinality_count >= self.max_cardinality:
+                log.warning(
+                    "Metric cardinality limit exceeded (%d >= %d). Skipping registration of %s",
+                    self._cardinality_count,
+                    self.max_cardinality,
+                    name,
+                )
+                raise MetricError(f"Metric cardinality limit exceeded for {name}")
+
             counter = Counter(name, help, labelnames, unit)
             self._metrics[name] = {
                 "type": MetricType.COUNTER,
                 "instance": counter,
                 "help": help,
             }
+            self._cardinality_count += 1
             return counter
 
     def gauge(
@@ -397,12 +413,23 @@ class MetricsRegistry:
                     raise MetricError(f"Metric {name} is already registered as {metric['type']}")
                 return metric["instance"]
 
+            # Check cardinality before registering
+            if self._cardinality_count >= self.max_cardinality:
+                log.warning(
+                    "Metric cardinality limit exceeded (%d >= %d). Skipping registration of %s",
+                    self._cardinality_count,
+                    self.max_cardinality,
+                    name,
+                )
+                raise MetricError(f"Metric cardinality limit exceeded for {name}")
+
             gauge = Gauge(name, help, labelnames, unit)
             self._metrics[name] = {
                 "type": MetricType.GAUGE,
                 "instance": gauge,
                 "help": help,
             }
+            self._cardinality_count += 1
             return gauge
 
     def histogram(
@@ -421,12 +448,23 @@ class MetricsRegistry:
                     raise MetricError(f"Metric {name} is already registered as {metric['type']}")
                 return metric["instance"]
 
+            # Check cardinality before registering
+            if self._cardinality_count >= self.max_cardinality:
+                log.warning(
+                    "Metric cardinality limit exceeded (%d >= %d). Skipping registration of %s",
+                    self._cardinality_count,
+                    self.max_cardinality,
+                    name,
+                )
+                raise MetricError(f"Metric cardinality limit exceeded for {name}")
+
             histogram = Histogram(name, help, buckets, labelnames, unit)
             self._metrics[name] = {
                 "type": MetricType.HISTOGRAM,
                 "instance": histogram,
                 "help": help,
             }
+            self._cardinality_count += 1
             return histogram
 
     def summary(
@@ -445,12 +483,23 @@ class MetricsRegistry:
                     raise MetricError(f"Metric {name} is already registered as {metric['type']}")
                 return metric["instance"]
 
+            # Check cardinality before registering
+            if self._cardinality_count >= self.max_cardinality:
+                log.warning(
+                    "Metric cardinality limit exceeded (%d >= %d). Skipping registration of %s",
+                    self._cardinality_count,
+                    self.max_cardinality,
+                    name,
+                )
+                raise MetricError(f"Metric cardinality limit exceeded for {name}")
+
             summary = Summary(name, help, percentiles, labelnames, unit)
             self._metrics[name] = {
                 "type": MetricType.SUMMARY,
                 "instance": summary,
                 "help": help,
             }
+            self._cardinality_count += 1
             return summary
 
     def unregister(self, name: str) -> bool:
@@ -458,6 +507,7 @@ class MetricsRegistry:
         with self._lock:
             if name in self._metrics:
                 del self._metrics[name]
+                self._cardinality_count = max(0, self._cardinality_count - 1)
                 return True
             return False
 

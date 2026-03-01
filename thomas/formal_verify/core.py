@@ -29,7 +29,7 @@ class Invariant:
         """Check if invariant holds for state."""
         try:
             return self.condition(state)
-        except:
+        except Exception:
             return False
 
 

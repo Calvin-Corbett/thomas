@@ -11,6 +11,7 @@ Handles:
 from __future__ import annotations
 
 import re
+from typing import Any
 
 
 def _strip_comments(sql: str) -> str:

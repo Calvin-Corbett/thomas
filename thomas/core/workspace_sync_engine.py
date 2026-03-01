@@ -9,11 +9,10 @@ import shlex
 import subprocess
 import threading
 import time
-from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from fnmatch import fnmatch
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Dict, Iterable, List, Optional
 
 from thomas.core.workspace_sync_coordination import WorkspaceSyncCoordinationClient
 
@@ -117,8 +116,8 @@ def _normalize_rel_path(value: str) -> str:
     return text
 
 
-def _parse_extra_globs(raw: str) -> list[str]:
-    items: list[str] = []
+def _parse_extra_globs(raw: str) -> List[str]:
+    items: List[str] = []
     for piece in str(raw or "").split(","):
         val = _normalize_rel_path(piece).lower()
         if not val:
@@ -140,28 +139,26 @@ class WorkspaceSyncEngine:
     def __init__(
         self,
         *,
-        repo_root: Path | None = None,
-        idle_threshold_s: float | None = None,
-        poll_interval_s: float | None = None,
-        cycle_interval_s: float | None = None,
-        max_cycles_per_session: int | None = None,
-        max_files_per_commit: int | None = None,
-        stable_age_s: float | None = None,
-        auto_push: bool | None = None,
-        exclude_globs: Iterable[str] | None = None,
-        coordination_enabled: bool | None = None,
-        coordination_claim_ttl_s: int | None = None,
-        coordination_script: Path | None = None,
-        notify_fn: Callable[[str], None] | None = None,
-        log_path: Path | None = None,
+        repo_root: Optional[Path] = None,
+        idle_threshold_s: Optional[float] = None,
+        poll_interval_s: Optional[float] = None,
+        cycle_interval_s: Optional[float] = None,
+        max_cycles_per_session: Optional[int] = None,
+        max_files_per_commit: Optional[int] = None,
+        stable_age_s: Optional[float] = None,
+        auto_push: Optional[bool] = None,
+        exclude_globs: Optional[Iterable[str]] = None,
+        coordination_enabled: Optional[bool] = None,
+        coordination_claim_ttl_s: Optional[int] = None,
+        coordination_script: Optional[Path] = None,
+        notify_fn: Optional[Callable[[str], None]] = None,
+        log_path: Optional[Path] = None,
     ) -> None:
         self._repo_root = Path(repo_root or ROOT).resolve()
         self._idle_threshold_s = float(
             _DEFAULT_IDLE_THRESHOLD_S if idle_threshold_s is None else max(0.0, float(idle_threshold_s))
         )
-        self._poll_interval_s = float(
-            _DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s))
-        )
+        self._poll_interval_s = float(_DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s)))
         self._cycle_interval_s = float(
             _DEFAULT_CYCLE_INTERVAL_S if cycle_interval_s is None else max(1.0, float(cycle_interval_s))
         )
@@ -169,7 +166,9 @@ class WorkspaceSyncEngine:
             _DEFAULT_MAX_CYCLES if max_cycles_per_session is None else max(1, int(max_cycles_per_session))
         )
         self._max_files_per_commit = int(
-            _DEFAULT_MAX_FILES_PER_COMMIT if max_files_per_commit is None else max(1, int(max_files_per_commit))
+            _DEFAULT_MAX_FILES_PER_COMMIT
+            if max_files_per_commit is None
+            else max(1, int(max_files_per_commit))
         )
         self._stable_age_s = float(_DEFAULT_STABLE_AGE_S if stable_age_s is None else max(0.0, float(stable_age_s)))
         self._auto_push = bool(_env_bool("THOMAS_WORKSPACE_SYNC_AUTO_PUSH", True) if auto_push is None else auto_push)
@@ -189,7 +188,8 @@ class WorkspaceSyncEngine:
             else max(30, int(coordination_claim_ttl_s))
         )
         self._coordination_note = (
-            str(os.environ.get("THOMAS_WORKSPACE_SYNC_COORDINATION_NOTE") or "").strip() or _DEFAULT_COORDINATION_NOTE
+            str(os.environ.get("THOMAS_WORKSPACE_SYNC_COORDINATION_NOTE") or "").strip()
+            or _DEFAULT_COORDINATION_NOTE
         )
         self._coordination_timeout_s = float(
             _env_float(
@@ -242,16 +242,18 @@ class WorkspaceSyncEngine:
         self._exclude_globs = sorted(set(_normalize_rel_path(v).lower() for v in all_globs if str(v).strip()))
 
         self._running = False
-        self._thread: threading.Thread | None = None
+        self._thread: Optional[threading.Thread] = None
         self._active_cycle = False
         self._lock = threading.Lock()
         self._last_user_ts = time.monotonic()
         self._last_cycle_ts = 0.0
         self._cycle_count = 0
-        self._last_report: dict[str, Any] = {}
+        self._last_report: Dict[str, Any] = {}
+        self._last_error: Optional[str] = None
+        self._last_error_at: Optional[str] = None
         self._enabled = _env_bool("THOMAS_WORKSPACE_SYNC_ENGINE_ENABLED", True)
 
-    def start(self, *, notify_fn: Callable[[str], None] | None = None) -> None:
+    def start(self, *, notify_fn: Optional[Callable[[str], None]] = None) -> None:
         if notify_fn is not None:
             self._notify_fn = notify_fn
         if self._running or not self._enabled:
@@ -270,11 +272,11 @@ class WorkspaceSyncEngine:
     def is_idle(self) -> bool:
         return (time.monotonic() - self._last_user_ts) >= self._idle_threshold_s
 
-    def last_report(self) -> dict[str, Any]:
+    def last_report(self) -> Dict[str, Any]:
         with self._lock:
             return dict(self._last_report)
 
-    def status_snapshot(self) -> dict[str, Any]:
+    def status_snapshot(self) -> Dict[str, Any]:
         with self._lock:
             return {
                 "running": bool(self._running),
@@ -290,6 +292,8 @@ class WorkspaceSyncEngine:
                 "last_committed": bool(self._last_report.get("committed")) if self._last_report else False,
                 "last_commit_sha": str(self._last_report.get("commit_sha") or ""),
                 "last_skip_reason": str(self._last_report.get("skip_reason") or ""),
+                "last_error": str(self._last_error or ""),
+                "last_error_at": str(self._last_error_at or ""),
             }
 
     def summary_text(self) -> str:
@@ -301,7 +305,7 @@ class WorkspaceSyncEngine:
             f"last_skip={snap['last_skip_reason'] or 'none'}"
         )
 
-    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> dict[str, Any]:
+    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> Dict[str, Any]:
         if not force:
             if not self._enabled:
                 return {"ok": False, "reason": "engine_disabled"}
@@ -313,7 +317,7 @@ class WorkspaceSyncEngine:
             self._active_cycle = True
             self._last_cycle_ts = time.monotonic()
         try:
-            return self._run_cycle(reason=reason, force=force)
+            return self._run_cycle_checked(reason=reason, force=force)
         finally:
             with self._lock:
                 self._active_cycle = False
@@ -350,12 +354,21 @@ class WorkspaceSyncEngine:
 
     def _run_cycle_threadsafe(self, reason: str) -> None:
         try:
-            self._run_cycle(reason=reason, force=False)
+            self._run_cycle_checked(reason=reason, force=False)
         finally:
             with self._lock:
                 self._active_cycle = False
 
-    def _run_cycle(self, *, reason: str, force: bool) -> dict[str, Any]:
+    def _run_cycle_checked(self, *, reason: str, force: bool) -> Dict[str, Any]:
+        started = time.monotonic()
+        try:
+            report = self._run_cycle(reason=reason, force=force)
+            self._clear_last_error()
+            return report
+        except Exception as exc:  # pragma: no cover - defensive path
+            return self._error_report(reason=reason, force=force, exc=exc, started=started)
+
+    def _run_cycle(self, *, reason: str, force: bool) -> Dict[str, Any]:
         started = time.monotonic()
         retry_wait_s = self._coordination_retry_seconds(now=started)
         if not force and retry_wait_s > 0:
@@ -418,7 +431,8 @@ class WorkspaceSyncEngine:
 
         coordination = self._acquire_coordination_claim(files)
         if not coordination.get("ok"):
-            if coordination.get("reason") == "folder_conflicts":
+            const_reason = str(coordination.get("reason") or "").strip().lower()
+            if const_reason in {"folder_conflict", "folder_conflicts"}:
                 self._record_coordination_conflict(coordination)
                 coordination.update(self._coordination_retry_status(reason="folder_conflicts"))
             else:
@@ -486,7 +500,7 @@ class WorkspaceSyncEngine:
 
             commit_sha = str(self._git_text("rev-parse", "--short", "HEAD") or "").strip()
             push = self._push_latest()
-            details: dict[str, Any] = {
+            details: Dict[str, Any] = {
                 "files": staged_after_add[:50],
                 "commit_message": title,
                 "push": push,
@@ -503,8 +517,8 @@ class WorkspaceSyncEngine:
         finally:
             self._release_coordination_claim(claim_id)
 
-    def _preflight_issues(self) -> list[str]:
-        issues: list[str] = []
+    def _preflight_issues(self) -> List[str]:
+        issues: List[str] = []
         inside = self._git_text("rev-parse", "--is-inside-work-tree").strip().lower()
         if inside != "true":
             issues.append("not_git_repo")
@@ -520,8 +534,8 @@ class WorkspaceSyncEngine:
                     issues.append(f"git_state:{marker.lower()}")
         return issues
 
-    def _select_candidate_files(self, status_rows: list[str]) -> list[dict[str, Any]]:
-        out: list[dict[str, Any]] = []
+    def _select_candidate_files(self, status_rows: List[str]) -> List[Dict[str, Any]]:
+        out: List[Dict[str, Any]] = []
         for raw in status_rows:
             line = str(raw or "")
             if len(line) < 4:
@@ -539,13 +553,13 @@ class WorkspaceSyncEngine:
                 continue
             deleted = "D" in code
             out.append({"path": rel, "deleted": bool(deleted), "code": code})
-        dedup: dict[str, dict[str, Any]] = {}
+        dedup: Dict[str, Dict[str, Any]] = {}
         for row in out:
             dedup[str(row["path"])] = row
         return [dedup[key] for key in sorted(dedup.keys())]
 
-    def _stable_candidates(self, rows: list[dict[str, Any]]) -> list[str]:
-        out: list[str] = []
+    def _stable_candidates(self, rows: List[Dict[str, Any]]) -> List[str]:
+        out: List[str] = []
         for row in rows:
             rel = str(row.get("path") or "")
             deleted = bool(row.get("deleted"))
@@ -567,14 +581,14 @@ class WorkspaceSyncEngine:
                 return True
         return False
 
-    def _validate_python_syntax(self, files: list[str]) -> dict[str, Any]:
-        py_files: list[str] = []
+    def _validate_python_syntax(self, files: List[str]) -> Dict[str, Any]:
+        py_files: List[str] = []
         for rel in files:
             if str(rel).lower().endswith(".py"):
                 py_files.append(rel)
         if not py_files:
             return {"ok": True, "checked": 0, "errors": []}
-        errors: list[dict[str, Any]] = []
+        errors: List[Dict[str, Any]] = []
         for rel in py_files:
             path = (self._repo_root / rel).resolve()
             if not path.exists():
@@ -599,9 +613,7 @@ class WorkspaceSyncEngine:
         name = self._git_text("config", "--get", "user.name").strip()
         email = self._git_text("config", "--get", "user.email").strip()
         if not name:
-            fallback_name = (
-                str(os.environ.get("THOMAS_WORKSPACE_SYNC_GIT_NAME") or "Thomas Bot").strip() or "Thomas Bot"
-            )
+            fallback_name = str(os.environ.get("THOMAS_WORKSPACE_SYNC_GIT_NAME") or "Thomas Bot").strip() or "Thomas Bot"
             self._git("config", "user.name", fallback_name)
         if not email:
             fallback_email = str(os.environ.get("THOMAS_WORKSPACE_SYNC_GIT_EMAIL") or "thomas@local.invalid").strip()
@@ -609,7 +621,7 @@ class WorkspaceSyncEngine:
                 fallback_email = "thomas@local.invalid"
             self._git("config", "user.email", fallback_email)
 
-    def _build_commit_message(self, files: list[str], *, reason: str) -> tuple[str, str]:
+    def _build_commit_message(self, files: List[str], *, reason: str) -> tuple[str, str]:
         scope_parts = [str(item).split("/", 1)[0] for item in files[:12] if "/" in str(item)]
         scopes = sorted(set(scope_parts))
         scope_hint = ", ".join(scopes[:3]) if scopes else "workspace"
@@ -626,8 +638,8 @@ class WorkspaceSyncEngine:
             body_lines.append(f"  - ... and {len(files) - 20} more")
         return title, "\n".join(body_lines)
 
-    def _push_latest(self) -> dict[str, Any]:
-        push: dict[str, Any] = {
+    def _push_latest(self) -> Dict[str, Any]:
+        push: Dict[str, Any] = {
             "enabled": bool(self._auto_push),
             "attempted": False,
             "ok": False,
@@ -668,13 +680,13 @@ class WorkspaceSyncEngine:
         push["reason"] = "push_failed"
         return push
 
-    def _acquire_coordination_claim(self, files: list[str]) -> dict[str, Any]:
+    def _acquire_coordination_claim(self, files: List[str]) -> Dict[str, Any]:
         return self._coordination.acquire(files)
 
     def _release_coordination_claim(self, claim_id: str) -> None:
         self._coordination.release(claim_id)
 
-    def _coordination_retry_seconds(self, now: float | None = None) -> float:
+    def _coordination_retry_seconds(self, now: Optional[float] = None) -> float:
         if not self._coordination_retry_enabled:
             return 0.0
         if self._coordination_retry_until <= 0.0:
@@ -684,7 +696,7 @@ class WorkspaceSyncEngine:
             return 0.0
         return self._coordination_retry_until - now
 
-    def _coordination_retry_status(self, reason: str = "retry_wait") -> dict[str, Any]:
+    def _coordination_retry_status(self, reason: str = "retry_wait") -> Dict[str, Any]:
         return {
             "enabled": bool(self._coordination_retry_enabled),
             "reason": reason,
@@ -693,7 +705,7 @@ class WorkspaceSyncEngine:
             "blocking_agent": str(self._coordination_conflict_agent or ""),
         }
 
-    def _record_coordination_conflict(self, payload: dict[str, Any]) -> None:
+    def _record_coordination_conflict(self, payload: Dict[str, Any]) -> None:
         self._coordination_conflict_count += 1
         self._coordination_conflict_agent = ""
         conflicts = payload.get("conflicts") or []
@@ -719,13 +731,13 @@ class WorkspaceSyncEngine:
         committed: bool,
         skip_reason: str = "",
         commit_sha: str = "",
-        details: dict[str, Any] | None = None,
+        details: Optional[Dict[str, Any]] = None,
         elapsed_ms: float,
-    ) -> dict[str, Any]:
+    ) -> Dict[str, Any]:
         with self._lock:
             self._cycle_count += 1
             cycle_id = int(self._cycle_count)
-        report: dict[str, Any] = {
+        report: Dict[str, Any] = {
             "ok": True,
             "cycle": cycle_id,
             "reason": str(reason or "manual"),
@@ -740,6 +752,8 @@ class WorkspaceSyncEngine:
         self._write_cycle_log(report)
         with self._lock:
             self._last_report = report
+            self._last_error = None
+            self._last_error_at = None
         if self._notify_fn is not None:
             try:
                 if committed:
@@ -750,13 +764,48 @@ class WorkspaceSyncEngine:
                 pass
         return report
 
-    def _write_cycle_log(self, report: dict[str, Any]) -> None:
+    def _write_cycle_log(self, report: Dict[str, Any]) -> None:
         try:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             with self._log_path.open("a", encoding="utf-8") as handle:
                 handle.write(json.dumps(report, ensure_ascii=False) + "\n")
         except Exception as exc:
             log.debug("WorkspaceSyncEngine failed to write log: %s", exc)
+
+    def _error_report(self, *, reason: str, force: bool, exc: BaseException, started: float) -> Dict[str, Any]:
+        with self._lock:
+            cycle_id = int(self._cycle_count) + 1
+            self._cycle_count = cycle_id
+            self._last_error = f"{type(exc).__name__}: {exc}"
+            self._last_error_at = _now_iso()
+
+        report = {
+            "ok": False,
+            "cycle": cycle_id,
+            "reason": "engine_error",
+            "requested_reason": str(reason or "manual"),
+            "force": bool(force),
+            "error_type": type(exc).__name__,
+            "error": f"{type(exc).__name__}: {exc}",
+            "timestamp": _now_iso(),
+            "elapsed_ms": round((time.monotonic() - started) * 1000.0, 1),
+            "committed": False,
+            "skip_reason": "engine_exception",
+        }
+        self._write_cycle_log(report)
+        with self._lock:
+            self._last_report = report
+
+        if self._notify_fn is not None:
+            try:
+                self._notify_fn(f"[WorkspaceSyncEngine] cycle {cycle_id} failed: {type(exc).__name__}: {exc}")
+            except Exception:
+                pass
+        return report
+
+    def _clear_last_error(self) -> None:
+        self._last_error = None
+        self._last_error_at = None
 
     def _git(self, *args: str) -> subprocess.CompletedProcess[str]:
         cmd = ["git", *[str(a) for a in args]]
@@ -774,7 +823,7 @@ class WorkspaceSyncEngine:
             return ""
         return str(proc.stdout or "")
 
-    def _git_lines(self, *args: str) -> list[str]:
+    def _git_lines(self, *args: str) -> List[str]:
         out = self._git_text(*args)
         rows = [line.strip() for line in str(out or "").splitlines() if str(line or "").strip()]
         return rows
@@ -783,7 +832,7 @@ class WorkspaceSyncEngine:
         return " ".join(shlex.quote(str(a)) for a in ("git", *args))
 
 
-_engine: WorkspaceSyncEngine | None = None
+_engine: Optional[WorkspaceSyncEngine] = None
 _engine_lock = threading.Lock()
 
 

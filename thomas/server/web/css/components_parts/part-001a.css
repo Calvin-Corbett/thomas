@@ -46,6 +46,7 @@
     transition: border-color 0.2s, box-shadow 0.2s;
     position: relative;
     overflow: visible;
+    gap: 8px;
 }
 
 .composer-box:focus-within {
@@ -58,6 +59,7 @@
     align-items: flex-end;
     /* Align the buttons to the bottom of the growing textarea */
     gap: var(--space-2);
+    width: 100%;
 }
 
 .composer-mode-chip {
@@ -120,6 +122,7 @@
     overflow-y: auto;
     line-height: 1.5;
     padding: 4px 0;
+    min-height: 34px;
     /* Align with icon vertical center */
 }
 

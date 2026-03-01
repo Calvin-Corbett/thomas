@@ -16,6 +16,7 @@ export function Footer() {
           <Link href="/download">Download</Link>
           <Link href="/updates">Updates</Link>
           <Link href="/journey">Journey</Link>
+          <Link href="/deep-dive">Deep Dive</Link>
           {repoUrl ? (
             <a href={repoUrl} target="_blank" rel="noreferrer">
               GitHub (Advanced)

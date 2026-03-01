@@ -212,6 +212,15 @@ _SUSPICIOUS_RE = _re.compile(
     _re.IGNORECASE | _re.DOTALL,
 )
 
+_NO_HUMAN_MODES = {"human", "allow", "deny"}
+
+
+def _normalize_no_human_mode(value: Optional[str]) -> str:
+    mode = str(value or "human").strip().lower()
+    if mode in _NO_HUMAN_MODES:
+        return mode
+    return "human"
+
 
 def check_prompt_suspicious(text: str) -> tuple[bool, str]:
     """Return (is_suspicious, matched_pattern) for a given prompt text."""
@@ -225,6 +234,7 @@ def gate_suspicious_prompt(
     text: str,
     action_description: str = "Proceed with flagged request",
     precomputed: Optional[tuple] = None,
+    no_human_mode: Optional[str] = None,
 ) -> bool:
     """If the prompt looks suspicious, require Windows PIN before continuing.
 
@@ -244,6 +254,20 @@ def gate_suspicious_prompt(
 
     if not suspicious:
         return True
+
+    mode = _normalize_no_human_mode(no_human_mode)
+    if mode == "allow":
+        log.warning(
+            "Suspicious prompt detected (matched: %r). no-human mode allow: bypassing PIN gate.",
+            matched,
+        )
+        return True
+    if mode == "deny":
+        log.warning(
+            "Suspicious prompt detected (matched: %r). no-human mode deny: blocking request.",
+            matched,
+        )
+        return False
 
     log.warning("Suspicious prompt detected (matched: %r). Requiring Windows PIN.", matched)
     gate = get_auth_gate()

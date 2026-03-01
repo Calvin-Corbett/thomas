@@ -18,15 +18,26 @@ This is a thin facade that delegates to specialized modules:
 
 from __future__ import annotations
 
+import ast
 import asyncio
+import ipaddress
 import logging
+import re
 import os
+import inspect
 import time
+import textwrap
+import ssl
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from thomas.agent.response_tone import (
+    best_practice_gate_hint,
+    best_practice_default_hint,
+    prompt_requests_code_output,
+    simplified_review_default_hint,
     live_test_default_hint,
 )
 from thomas.agent.skills_runtime import (
@@ -90,13 +101,280 @@ _TPM_WINDOW_SECONDS = 60.0
 _TPM_MAX_AUTO_WAIT_S = 20.0
 
 
+async def _coerce_async_iterator(value: Any, *, source: str) -> AsyncIterator[Any]:
+    try:
+        return aiter(value)
+    except TypeError as exc:
+        if inspect.isawaitable(value):
+            try:
+                resolved = await value
+            except Exception as await_exc:
+                raise TypeError(
+                    f"{source} returned awaitable that failed to resolve: {type(await_exc).__name__}: {await_exc}"
+                ) from await_exc
+            try:
+                return aiter(resolved)
+            except TypeError as resolved_exc:
+                raise TypeError(
+                    f"{source} returned {type(resolved)!r} after await, not an async iterator."
+                ) from resolved_exc
+        raise TypeError(f"{source} returned unsupported type {type(value)!r}; expected async iterator.") from exc
+
+
+def _extract_benchmark_context(prompt_text: str) -> tuple[str, str]:
+    """Extract probable code context and explicit entry-point from a benchmark prompt."""
+    src = str(prompt_text or "")
+    if not src.strip():
+        return "", ""
+
+    entry_point = ""
+    entry_match = re.search(r"(?im)^.*\bentry\s*point\s*:\s*([A-Za-z_][A-Za-z0-9_]*)", src)
+    if entry_match:
+        entry_point = str(entry_match.group(1) or "").strip()
+
+    marker_match = re.search(
+        r"(?is)---\s*prompt\s*start\s*---(.*?)---\s*prompt\s*end\s*---",
+        src,
+    )
+    if marker_match:
+        return str(marker_match.group(1) or "").strip(), entry_point
+
+    lines = src.splitlines()
+    block: list[str] = []
+    block_indent = 0
+    for line in lines:
+        if re.match(r"^\s*(?:def|class)\s+[A-Za-z_][A-Za-z0-9_]*\b", line):
+            block = [line.rstrip()]
+            block_indent = len(line) - len(line.lstrip())
+            continue
+        if block:
+            if line.strip() == "":
+                block.append("")
+                continue
+            line_indent = len(line) - len(line.lstrip())
+            if line_indent <= block_indent:
+                break
+            block.append(line.rstrip())
+    if block:
+        return "\n".join(block).strip(), entry_point
+    return "", entry_point
+
+
+def _benchmark_continuation_has_non_trivial_body(continuation: str) -> tuple[bool, str]:
+    """Return whether continuation body is non-trivial for benchmark prompts."""
+    body_text = textwrap.dedent(str(continuation or ""))
+    if not body_text.strip():
+        return False, "empty continuation body"
+
+    probe_source = (
+        "def __thomas_benchmark_probe__():\n"
+        + textwrap.indent(body_text, "    ")
+    )
+    try:
+        probe_tree = ast.parse(probe_source)
+    except SyntaxError as exc:
+        return False, f"code-body parse error: {exc.msg}"
+
+    probe_func = probe_tree.body[0] if probe_tree.body else None
+    if not isinstance(probe_func, ast.FunctionDef):
+        return False, "benchmark continuation structure invalid"
+    probe_body = list(probe_func.body)
+    if not probe_body:
+        return False, "no benchmark continuation statements"
+
+    meaningful = [
+        n
+        for n in probe_body
+        if not (
+            isinstance(n, ast.Pass)
+            or (
+                isinstance(n, ast.Expr)
+                and isinstance(n.value, ast.Constant)
+                and isinstance(n.value.value, str)
+            )
+        )
+    ]
+    if not meaningful:
+        return False, "continuation is only a placeholder/trivial stub"
+    return True, ""
+
+
+def _validate_benchmark_code_output(
+    *,
+    prompt_text: str,
+    continuation: str,
+) -> tuple[bool, str, str]:
+    """Validate that benchmark output is valid and non-trivial continuation code."""
+    context_text, entry_point = _extract_benchmark_context(prompt_text)
+    candidate = str(continuation or "")
+    if not candidate.strip():
+        issue = "empty benchmark code output"
+        if entry_point:
+            issue = f"{issue} for entry point '{entry_point}'"
+        return False, issue, entry_point
+
+    context = context_text.strip()
+    combined = (context + ("\n" if context else "")) + candidate
+    compile_ok = False
+    compile_issue = ""
+    try:
+        compile(combined, "<benchmark>", "exec")
+        compile_ok = True
+    except SyntaxError as exc:
+        compile_issue = f"benchmark code syntax error: {exc.msg}"
+
+    if not compile_ok:
+        # Retry as a function-body candidate.
+        indented = candidate
+        if not re.match(r"^\\s+[A-Za-z_#\\n]", candidate or "", flags=re.M):
+            # not obviously body-like; leave as-is
+            indented = textwrap.indent(textwrap.dedent(candidate), "    ")
+        try:
+            compile("def __thomas_benchmark_probe__():\n" + indented, "<benchmark>", "exec")
+            compile_ok = True
+        except SyntaxError as exc:
+            issue = f"{compile_issue or 'invalid'}; {exc.msg}"
+            if entry_point:
+                issue = (
+                    issue
+                    + f" (expected a working continuation for entry point '{entry_point}' and no explanations)."
+                )
+            return False, issue, entry_point
+
+    has_non_trivial, reason = _benchmark_continuation_has_non_trivial_body(candidate)
+    if not has_non_trivial:
+        issue = reason
+        if entry_point:
+            issue = (
+                f"{issue} (expected a non-trivial continuation for entry point '{entry_point}',"
+                " avoid no-op stubs)"
+            )
+        return False, issue, entry_point
+
+    if not prompt_requests_code_output(prompt_text):
+        return False, "prompt did not request benchmark code output", entry_point
+
+    return True, "", entry_point
+
+
 # Sentinel for catching connection errors without importing httpx at module level
 try:
     import httpx as _httpx
 
     httpx_ConnectError = _httpx.ConnectError
 except ImportError:
+    _httpx = None  # type: ignore[assignment]
     httpx_ConnectError = OSError  # type: ignore[misc,assignment]
+
+
+def _coerce_bool(value: str | None, default: bool) -> bool:
+    if value is None:
+        return default
+    normalized = value.strip().lower()
+    if normalized in {"1", "true", "yes", "on", "y", "enabled"}:
+        return True
+    if normalized in {"0", "false", "no", "off", "n", "disabled"}:
+        return False
+    return default
+
+
+def _is_loopback_host(host: str | None) -> bool:
+    if not host:
+        return False
+    host = host.strip().strip("[]")
+    if host.lower() in {"localhost", "::1"}:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _build_min_tls_ssl_context() -> Any:
+    ca_path = os.environ.get("THOMAS_OUTBOUND_CA_BUNDLE")
+    if ca_path:
+        ca_file = str(Path(ca_path).expanduser())
+        if not Path(ca_file).is_file():
+            raise LLMError(f"Configured THOMAS_OUTBOUND_CA_BUNDLE not found: {ca_file}")
+        context = ssl.create_default_context(cafile=ca_file)
+    else:
+        context = ssl.create_default_context()
+
+    try:
+        context.minimum_version = ssl.TLSVersion.TLSv1_2
+    except AttributeError:
+        if hasattr(ssl, "OP_NO_SSLv3"):
+            context.options |= ssl.OP_NO_SSLv3  # type: ignore[attr-defined]
+        if hasattr(ssl, "OP_NO_TLSv1"):
+            context.options |= ssl.OP_NO_TLSv1  # type: ignore[attr-defined]
+        if hasattr(ssl, "OP_NO_TLSv1_1"):
+            context.options |= ssl.OP_NO_TLSv1_1  # type: ignore[attr-defined]
+    return context
+
+
+async def _ensure_llm_hardened_client(llm: Any) -> None:
+    if _httpx is None:
+        return
+
+    provider = str(getattr(llm.config, "provider", "") or "").lower()
+    if provider == "codex":
+        return
+
+    base_url = str(getattr(llm.config, "base_url", "") or "").strip()
+    if not base_url:
+        return
+    parsed = urlparse(base_url)
+    scheme = (parsed.scheme or "").lower()
+    if scheme and scheme not in {"http", "https"}:
+        raise LLMError(f"Unsupported LLM base_url scheme '{parsed.scheme}' in '{base_url}'. Use http:// or https://")
+    if scheme == "http" and not _is_loopback_host(parsed.hostname):
+        raise LLMError(
+            "Outbound LLM calls require HTTPS for non-loopback hosts. "
+            f"Configure '{base_url}' with https:// or a loopback address."
+        )
+    if scheme != "https":
+        return
+
+    verify_tls = _coerce_bool(os.environ.get("THOMAS_OUTBOUND_VERIFY_TLS"), True)
+    if not verify_tls:
+        raise LLMError(
+            "TLS certificate verification is disabled via THOMAS_OUTBOUND_VERIFY_TLS=false, "
+            "but outbound TLS verification is required."
+        )
+
+    if getattr(llm, "_thomas_tls_hardened_base_url", None) == base_url:
+        existing_client = getattr(llm, "_client", None)
+        if existing_client is not None and not existing_client.is_closed:
+            return
+
+    headers = {"Content-Type": "application/json"}
+    if getattr(llm.config, "extra_headers", None):
+        headers.update(llm.config.extra_headers)
+
+    if llm.config.api_key:
+        if provider == "anthropic":
+            headers["x-api-key"] = str(llm.config.api_key)
+            headers.setdefault("anthropic-version", "2023-06-01")
+        else:
+            header_name = llm.config.api_key_header or "Authorization"
+            prefix = llm.config.api_key_prefix or ""
+            headers[header_name] = f"{prefix}{llm.config.api_key}"
+
+    existing_client = getattr(llm, "_client", None)
+    if existing_client is not None and not existing_client.is_closed:
+        await existing_client.aclose()
+
+    llm._client = _httpx.AsyncClient(
+        headers=headers,
+        timeout=_httpx.Timeout(
+            connect=10.0,
+            read=float(getattr(llm.config, "timeout_s", 120.0)),
+            write=10.0,
+            pool=10.0,
+        ),
+        verify=_build_min_tls_ssl_context(),
+    )
+    llm._thomas_tls_hardened_base_url = base_url
 
 
 class AgentLoop(_AgentLoopBase):
@@ -121,7 +399,15 @@ class AgentLoop(_AgentLoopBase):
         iteration: int,
     ) -> AsyncIterator[AgentEvent]:
         """Execute tool calls, running independent calls in parallel."""
-        async for event in execute_tools(self, tool_calls, iteration):
+        try:
+            tool_stream = await _coerce_async_iterator(
+                execute_tools(self, tool_calls, iteration),
+                source="execute_tools",
+            )
+        except TypeError as exc:
+            raise TypeError(f"Tool stream is not async iterable: {exc}") from exc
+
+        async for event in tool_stream:
             yield event
 
     def _retrieve_memory(
@@ -331,6 +617,9 @@ class AgentLoop(_AgentLoopBase):
                     prompt_text,
                     action_description="Proceed with flagged request",
                     precomputed=(is_suspicious, matched_pattern),
+                    no_human_mode=os.environ.get("THOMAS_NO_HUMAN_MODE")
+                    or os.environ.get("THOMAS_GUARDRAILS_NO_HUMAN_MODE")
+                    or "human",
                 )
                 if not authorized:
                     yield AgentEvent(
@@ -346,20 +635,52 @@ class AgentLoop(_AgentLoopBase):
             log.debug("Suspicious prompt gate check failed (non-fatal): %s", e)
 
         route_input, route_input_source = self._routing_input_text(prompt_text)
+
+        # Check conversation intelligence for multi-turn context
+        is_followup = self.check_if_followup(prompt_text)
+        user_is_confused = self.detect_user_confusion(prompt_text)
+        if is_followup:
+            # For follow-ups, try to resolve pronouns and references
+            resolved_prompt = self.resolve_message_references(prompt_text)
+            # Only use resolved version if it added context
+            if len(resolved_prompt) > len(prompt_text):
+                prompt_text = resolved_prompt
+
         route = self._router.decide(
             route_input,
             requested_mode=mode,
             requested_tools_policy=tools_policy,
+            is_followup=is_followup,
         )
         autonomy = autonomy_spec(self._autonomy_level)
         autonomy_name = str(autonomy.name)
         effective_mode = route.mode
         applied_token_economy = normalize_token_economy_level(token_economy)
         token_economy_meta = build_token_economy_meta(token_economy, applied_token_economy)
-        # Token economy is a pass limiter for spawned agents only.
-        # The orchestrator (this loop) always uses "optimal" budgets so it
-        # never gets artificially throttled by cheap/max context caps.
-        _budget_economy = "optimal"
+        _budget_economy = applied_token_economy
+        strict_issue_ownership = bool(
+            self._non_coder_profile
+            or str(self._profile_type or "").strip().lower() == "non_coder"
+            or str(self._profile_type or "").strip().lower() == "non-coder"
+        )
+        best_practice_gate_active = bool(self._non_coder_profile) or bool(best_practice_gate_hint(prompt_text))
+        best_practice_gate_source = "profile_non_coder" if bool(self._non_coder_profile) else ""
+        if (
+            not best_practice_gate_source
+            and best_practice_gate_hint(prompt_text)
+        ):
+            best_practice_gate_source = "prompt"
+
+        review_quality_hint = simplified_review_default_hint(
+            self._review_depth,
+            non_coder_profile=bool(self._non_coder_profile),
+        )
+        best_practice_hint = (
+            best_practice_default_hint()
+            if bool(self._non_coder_profile)
+            else best_practice_gate_hint(prompt_text)
+        )
+        code_output_validation_enabled = bool(prompt_requests_code_output(prompt_text))
         runtime_skills_context = ""
         runtime_skills_payload: dict[str, Any] = {
             "enabled": False,
@@ -420,7 +741,9 @@ class AgentLoop(_AgentLoopBase):
                 self._record_event("user_message", prompt_text)
                 self._capture_profile_hints(prompt_text)
             self._conversation.append({"role": "user", "content": prompt})
+            self._sync_user_message_to_intelligence(prompt)
             self._conversation.append({"role": "assistant", "content": answer})
+            self._sync_assistant_message_to_intelligence(answer)
             yield AgentEvent.text_delta(answer, iteration=0)
 
             usage_obj = {
@@ -451,6 +774,13 @@ class AgentLoop(_AgentLoopBase):
                 "clarification_question_cap": 0,
                 "clarification_questions_asked": 0,
                 "clarification_reprompt_count": 0,
+                "best_practice_gate_active": bool(best_practice_gate_active),
+                "best_practice_gate_source": str(best_practice_gate_source),
+                "profile_type": str(self._profile_type),
+                "code_output_guard_reprompts": 0,
+                "code_output_guard_last_issue": "",
+                "strict_issue_ownership": bool(strict_issue_ownership),
+                "high_prompt_spend_fail_iters": 0,
             }
             token_report["token_economy"] = dict(token_economy_meta)
             token_report["skills"] = dict(runtime_skills_payload)
@@ -477,6 +807,7 @@ class AgentLoop(_AgentLoopBase):
                 require_verification_for_coding=bool(getattr(quality_cfg, "require_verification_for_coding", True)),
                 require_tests_for_code_edits=bool(getattr(quality_cfg, "require_tests_for_code_edits", False)),
                 require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
+                strict_issue_ownership=bool(strict_issue_ownership),
                 attempt=int(_quality_retry_count),
             )
             token_report["rules_of_road"] = rules_report
@@ -487,11 +818,19 @@ class AgentLoop(_AgentLoopBase):
                 0,
                 min(3, int(getattr(quality_cfg, "max_auto_retries", 1) or 0)),
             )
-            if (
-                quality_enabled
-                and quality_enforce
-                and not bool(rules_report.get("passed", False))
-                and _quality_retry_count < quality_max_retries
+            if strict_issue_ownership:
+                quality_max_retries = max(quality_max_retries, 2)
+            issue_ownership_blocked = bool(
+                (bool(rules_report.get("signals") or {}).get("strict_issue_ownership"))
+                and bool(rules_report.get("signals", {}).get("unresolved_issue_detected"))
+            )
+            quality_required = not bool(rules_report.get("passed", False))
+            if quality_required and _quality_retry_count < quality_max_retries and (
+                (
+                    quality_enabled
+                    and quality_enforce
+                )
+                or strict_issue_ownership
             ):
                 remediation_prompt = build_remediation_prompt(rules_report)
                 if remediation_prompt:
@@ -508,6 +847,25 @@ class AgentLoop(_AgentLoopBase):
                     ):
                         yield retry_event
                     return
+                if strict_issue_ownership and issue_ownership_blocked:
+                    block_error = (
+                        "Issue-ownership quality gate blocked completion: "
+                        "user-facing text still appears to describe unresolved issues or workaround-only work."
+                    )
+                    yield AgentEvent.agent_error(block_error, iteration=0)
+                return
+            if (
+                quality_required
+                and strict_issue_ownership
+                and issue_ownership_blocked
+                and _quality_retry_count >= quality_max_retries
+            ):
+                block_error = (
+                    "Issue-ownership quality gate blocked completion: "
+                    "user-facing text still appears to describe unresolved issues or workaround-only work."
+                )
+                yield AgentEvent.agent_error(block_error, iteration=0)
+                return
 
             yield AgentEvent.agent_done(
                 text=answer,
@@ -615,6 +973,8 @@ class AgentLoop(_AgentLoopBase):
         tool_chars_kept = 0
         iter_prompt_spends: list[int] = []
         high_prompt_spend_fail_iters = 0
+        code_output_guard_reprompts = 0
+        code_output_guard_last_issue = ""
         followup_suppressed_count = 0
         thought_leak_suppressed_count = 0
         quality_tool_events: list[dict[str, Any]] = []
@@ -683,6 +1043,12 @@ class AgentLoop(_AgentLoopBase):
                 "token_economy": token_economy_meta,
                 "library_enabled": bool(self._library is not None),
                 "skills": dict(runtime_skills_payload),
+                "conversation_intelligence": {
+                    "is_followup": is_followup,
+                    "user_is_confused": user_is_confused,
+                    "turn_count": self._conv_intel.turn_count,
+                    "current_topic": self._conv_intel.current_topic,
+                },
                 "history_policy": {
                     "preserve_first": int(preserve_first),
                     "preserve_last": int(preserve_last),
@@ -717,18 +1083,54 @@ class AgentLoop(_AgentLoopBase):
             # deep-thinking coding sessions and non-coding routes.
             if str(route.path or "") != "coding_task" or str(effective_mode or "").strip().lower() == "thinking":
                 library_text = self._retrieve_library(prompt_text, route)
+            extra_context_parts: list[str] = []
+            if memory_text:
+                extra_context_parts.append(str(memory_text))
+            if continuity_hint:
+                extra_context_parts.append(str(continuity_hint))
+            if best_practice_gate_active and best_practice_hint:
+                extra_context_parts.append(str(best_practice_hint))
+            if code_output_validation_enabled:
+                extra_context_parts.append(
+                    "Return ONLY the requested output format for this task, no prose or commentary."
+                )
+            if review_quality_hint:
+                extra_context_parts.append(str(review_quality_hint))
+            if test_visibility_hint:
+                extra_context_parts.append(str(test_visibility_hint))
+            if library_text:
+                extra_context_parts.append(str(library_text))
+            memory_text = "\n\n".join([p for p in extra_context_parts if p is not None and str(p).strip()])
+
             memory_tokens = (
                 estimate_tokens(memory_text)
-                + estimate_tokens(continuity_hint)
-                + estimate_tokens(test_visibility_hint)
-                + estimate_tokens(library_text)
             )
 
         # Add user message to conversation for history
         self._conversation.append({"role": "user", "content": prompt})
+        self._sync_user_message_to_intelligence(prompt)
 
         for iteration in range(max_iter):
             state.iteration = iteration
+
+            # Auto-compact conversation if approaching token budget.
+            # This runs before _build_messages to avoid hard truncation.
+            if iteration >= 1:
+                try:
+                    compact_result = await self._auto_compact_if_needed(
+                        hard_cap=28000,
+                        threshold=0.70,
+                        preserve_recent=max(6, preserve_last + 2),
+                    )
+                    if compact_result:
+                        log.info(
+                            "Auto-compacted conversation: %d -> %d tokens (saved %d)",
+                            compact_result["original_tokens"],
+                            compact_result["compacted_tokens"],
+                            compact_result["tokens_saved"],
+                        )
+                except Exception as _ac_err:
+                    log.debug("Auto-compaction check failed (non-fatal): %s", _ac_err)
 
             # Build messages with context window management
             # Only inject memory on first iteration
@@ -818,7 +1220,13 @@ class AgentLoop(_AgentLoopBase):
 
             try:
                 llm_stream_error: str | None = None
-                async for event in self.llm.stream_chat(messages, tool_specs):
+                await _ensure_llm_hardened_client(self.llm)
+                llm_stream = await _coerce_async_iterator(
+                    self.llm.stream_chat(messages, tool_specs),
+                    source="LLMClient.stream_chat",
+                )
+
+                async for event in llm_stream:
                     if event.type == "thinking":
                         # Forward thinking/reasoning tokens to the stream
                         yield AgentEvent(
@@ -992,6 +1400,7 @@ class AgentLoop(_AgentLoopBase):
                         route_input_source=route_input_source,
                     )
                 self._conversation.append({"role": "user", "content": nudge})
+                self._sync_user_message_to_intelligence(nudge)
                 continue
 
             if buffer_text_tokens and iter_text:
@@ -1013,12 +1422,64 @@ class AgentLoop(_AgentLoopBase):
             iter_prompt_spend = max(0, iter_prompt_now - int(iter_prompt_start_total))
             iter_prompt_spends.append(int(iter_prompt_spend))
 
+            if iter_prompt_hard_cap is not None and iter_prompt_spend > int(iter_prompt_hard_cap):
+                high_prompt_spend_fail_iters += 1
+                runaway_guard_reason = (
+                    "High prompt-token spend per iteration exceeded hard cap. "
+                    "Stopping to prevent token waste and runaway budget usage."
+                )
+                yield AgentEvent.agent_error(runaway_guard_reason, iteration=iteration)
+                state.error = runaway_guard_reason
+                state.finished = True
+                break
+
+            benchmark_validation_ok = True
+            benchmark_issue = ""
+            if (
+                str(job_type or "").strip().lower() == "benchmark"
+                and code_output_validation_enabled
+            ):
+                benchmark_validation_ok, benchmark_issue, _ = _validate_benchmark_code_output(
+                    prompt_text=prompt_text,
+                    continuation=iter_text,
+                )
+            if not benchmark_validation_ok:
+                code_output_guard_reprompts += 1
+                code_output_guard_last_issue = str(benchmark_issue or "")
+                if (iteration + 1) < max_iter:
+                    guard_context = str(prompt_text or "").strip().replace("\n", " ")
+                    if guard_context:
+                        user_prompt = (
+                            f"Original request: {guard_context}\n"
+                            "Previous continuation failed code-output validation: "
+                            f"{code_output_guard_last_issue}. "
+                            "Return only valid Python continuation code meeting code-output requirements."
+                        )
+                    else:
+                        user_prompt = (
+                            "Previous continuation failed code-output validation: "
+                            f"{code_output_guard_last_issue}. "
+                            "Return only valid Python continuation code meeting code-output requirements."
+                        )
+                    self._conversation.append({"role": "user", "content": user_prompt})
+                    self._sync_user_message_to_intelligence(user_prompt)
+                    continue
+                issue_error = (
+                    "Code-output guard blocked completion: "
+                    f"{code_output_guard_last_issue}".strip()
+                )
+                state.error = issue_error
+                yield AgentEvent.agent_error(issue_error, iteration=iteration)
+                state.finished = True
+                break
+
             state.text_response += iter_text
 
             # If no tool calls, we're done
             if not pending_tool_calls:
                 if iter_text:
                     self._conversation.append({"role": "assistant", "content": iter_text})
+                    self._sync_assistant_message_to_intelligence(iter_text)
                     self._record_event("assistant_response", iter_text)
                 state.finished = True
                 break
@@ -1041,6 +1502,7 @@ class AgentLoop(_AgentLoopBase):
                 for tc in pending_tool_calls
             ]
             self._conversation.append(assistant_msg)
+            self._sync_assistant_message_to_intelligence(iter_text)
 
             # Execute tool calls (parallel when multiple), streaming each completion.
             tool_results: list[AgentEvent] = []
@@ -1126,15 +1588,18 @@ class AgentLoop(_AgentLoopBase):
                         repeated_failure_signature = current_signature
                         repeated_failure_count = 1
 
-                    if repeated_failure_count >= 2:
-                        yield AgentEvent.agent_error(
-                            f"Tool loop stability issue: {tc.get('name')} has failed repeatedly. "
-                            "Stopping to avoid runaway loops.",
-                            iteration=iteration,
-                        )
-                        state.error = "Tool loop repeated failures"
-                        state.finished = True
-                        break
+                if repeated_failure_count >= 2:
+                    yield AgentEvent.agent_error(
+                        "Tool loop stability issue: "
+                        f"{tc.get('name')} has failed repeatedly. Prevent token waste by stopping this loop.",
+                        iteration=iteration,
+                    )
+                    runaway_guard_reason = (
+                        "Tool loop stability issue. Stopping to prevent repeated tool-loop failure waste."
+                    )
+                    state.error = "Tool loop repeated failures"
+                    state.finished = True
+                    break
 
             if state.finished or state.user_interrupted:
                 break
@@ -1216,6 +1681,13 @@ class AgentLoop(_AgentLoopBase):
             "clarification_question_cap": int(clarification_question_cap),
             "clarification_questions_asked": int(clarification_questions_asked),
             "clarification_reprompt_count": int(clarification_reprompt_count),
+            "best_practice_gate_active": bool(best_practice_gate_active),
+            "best_practice_gate_source": str(best_practice_gate_source),
+            "profile_type": str(self._profile_type),
+            "code_output_guard_reprompts": int(code_output_guard_reprompts),
+            "code_output_guard_last_issue": str(code_output_guard_last_issue),
+            "strict_issue_ownership": bool(strict_issue_ownership),
+            "high_prompt_spend_fail_iters": int(high_prompt_spend_fail_iters),
         }
         token_report["token_economy"] = dict(token_economy_meta)
         token_report["skills"] = dict(runtime_skills_payload)
@@ -1301,20 +1773,33 @@ class AgentLoop(_AgentLoopBase):
             require_verification_for_coding=require_verify,
             require_tests_for_code_edits=require_tests,
             require_monolith_guard_for_coding=bool(getattr(quality_cfg, "require_monolith_guard_for_coding", True)),
+            strict_issue_ownership=bool(strict_issue_ownership),
             attempt=int(_quality_retry_count),
         )
         token_report["rules_of_road"] = rules_report
 
+        issue_ownership_signals = rules_report.get("signals") or {}
+        issue_ownership_blocked = bool(
+            bool(issue_ownership_signals.get("strict_issue_ownership"))
+            and bool(issue_ownership_signals.get("unresolved_issue_detected"))
+        )
+
         # Quality-gate retries are for action routes only (coding, debug, etc.).
         # Low-intent routes (casual chat, greetings) should NEVER trigger a
         # quality retry — it wastes time and confuses the user.
+        quality_required = not bool(rules_report.get("passed", False))
+        if strict_issue_ownership:
+            quality_max_retries = max(quality_max_retries, 2)
+        quality_retry_enabled = (
+            strict_issue_ownership
+            or str(route.path or "") not in _low_intent_skip_quality
+        )
         if (
-            quality_enabled
-            and quality_enforce
-            and not bool(rules_report.get("passed", False))
-            and not bool(state.error)
+            quality_required
             and _quality_retry_count < quality_max_retries
-            and str(route.path or "") not in _low_intent_skip_quality
+            and ((quality_enabled and quality_enforce) or strict_issue_ownership)
+            and not bool(state.error)
+            and quality_retry_enabled
         ):
             remediation_prompt = build_remediation_prompt(rules_report)
             if remediation_prompt:
@@ -1331,6 +1816,21 @@ class AgentLoop(_AgentLoopBase):
                 ):
                     yield retry_event
                 return
+
+        if (
+            quality_required
+            and strict_issue_ownership
+            and issue_ownership_blocked
+            and _quality_retry_count >= quality_max_retries
+            and not bool(state.error)
+        ):
+            block_error = (
+                "Issue-ownership quality gate blocked completion: "
+                "user-facing text still appears to describe unresolved issues or workaround-only work."
+            )
+            yield AgentEvent.agent_error(block_error, iteration=state.iteration)
+            state.error = block_error
+            return
 
         # Done
         yield AgentEvent.agent_done(

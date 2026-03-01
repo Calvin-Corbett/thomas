@@ -11,20 +11,49 @@ from thomas.core.ui_workflow_engine import get_ui_workflow_engine
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
 
+_TRUE_BOOL_VALUES = {"1", "true", "yes", "on"}
+_FALSE_BOOL_VALUES = {"0", "false", "no", "off"}
+
 
 def _parse_bool(value: Any, *, default: bool) -> bool:
     if value is None:
         return default
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on"}
+    if isinstance(value, int):
+        if value == 1:
+            return True
+        if value == 0:
+            return False
+        raise ValueError("value must be boolean")
+    if isinstance(value, float):
+        raise ValueError("value must be boolean")
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _TRUE_BOOL_VALUES:
+            return True
+        if normalized in _FALSE_BOOL_VALUES:
+            return False
+    raise ValueError("value must be boolean")
 
 
 def _parse_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
-    try:
-        parsed = int(value)
-    except Exception:
-        parsed = default
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        raise ValueError("value must be integer")
+    if isinstance(value, int):
+        parsed = value
+    elif isinstance(value, str):
+        stripped = value.strip()
+        if not stripped:
+            return default
+        try:
+            parsed = int(stripped)
+        except ValueError as exc:
+            raise ValueError("value must be integer") from exc
+    else:
+        raise ValueError("value must be integer")
     return max(minimum, min(maximum, parsed))
 
 
@@ -34,7 +63,11 @@ def _parse_providers(value: Any) -> List[str]:
     if isinstance(value, str):
         raw = [part.strip().lower() for part in value.split(",")]
     elif isinstance(value, (list, tuple, set)):
-        raw = [str(part or "").strip().lower() for part in value]
+        raw = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("providers entries must be strings")
+            raw.append(item.strip().lower())
     else:
         raise ValueError("providers must be a list or comma-separated string")
     out: List[str] = []
@@ -53,13 +86,17 @@ def _parse_changed_paths(value: Any) -> List[str]:
     if isinstance(value, str):
         raw = [part.strip() for part in value.split(",")]
     elif isinstance(value, (list, tuple, set)):
-        raw = [str(part or "").strip() for part in value]
+        raw = []
+        for item in value:
+            if not isinstance(item, str):
+                raise ValueError("changed_paths entries must be strings")
+            raw.append(item.strip())
     else:
         raise ValueError("changed_paths must be a list or comma-separated string")
     out: List[str] = []
     seen: set[str] = set()
     for item in raw:
-        normalized = str(item or "").replace("\\", "/").strip()
+        normalized = item.replace("\\", "/").strip()
         if not normalized or normalized in seen:
             continue
         seen.add(normalized)
@@ -120,7 +157,10 @@ def register_ui_engine_routes(
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
         reason = str(payload.get("reason") or "manual").strip() or "manual"
-        force = _parse_bool(payload.get("force"), default=False)
+        try:
+            force = _parse_bool(payload.get("force"), default=False)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc))
         report = _engine().run_cycle_once(reason=reason, force=force)
 
         if not bool(report.get("ok", True)):
@@ -142,7 +182,10 @@ def register_ui_engine_routes(
         query = str(payload.get("query") or payload.get("q") or "").strip()
         if len(query) < 2:
             raise web.HTTPBadRequest(text="query must be at least 2 characters")
-        limit = _parse_int(payload.get("limit"), default=12, minimum=1, maximum=50)
+        try:
+            limit = _parse_int(payload.get("limit"), default=12, minimum=1, maximum=50)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc))
 
         providers: Iterable[str] | None = None
         if "providers" in payload:
@@ -166,7 +209,10 @@ def register_ui_engine_routes(
             raise web.HTTPBadRequest(text="payload must be a JSON object")
 
         intent = str(payload.get("intent") or "").strip()
-        strict = _parse_bool(payload.get("strict"), default=True)
+        try:
+            strict = _parse_bool(payload.get("strict"), default=True)
+        except ValueError as exc:
+            raise web.HTTPBadRequest(text=str(exc))
         changed_paths: Iterable[str] | None = None
         if "changed_paths" in payload:
             try:

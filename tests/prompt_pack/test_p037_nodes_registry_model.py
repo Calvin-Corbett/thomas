@@ -108,6 +108,42 @@ def test_load_nodes_registry_external_parse_error(tmp_path: Path) -> None:
         load_nodes_registry(source=str(p))
 
 
+def test_load_nodes_registry_rejects_loopback_registry_url() -> None:
+    with pytest.raises(NodesRegistryInputError, match="public host"):
+        load_nodes_registry(source="http://127.0.0.1:8080/registry.json")
+
+
+def test_load_nodes_registry_rejects_local_registry_host() -> None:
+    with pytest.raises(NodesRegistryInputError, match="public host"):
+        load_nodes_registry(source="http://nodes.local/registry.json")
+
+
+def test_load_nodes_registry_loads_from_public_http_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    payload = json.dumps([{"id": "n1", "endpoint": "http://n1"}]).encode("utf-8")
+
+    class FakeResponse:
+        def __enter__(self) -> "FakeResponse":
+            return self
+
+        def __exit__(self, *_exc: object) -> bool:
+            return False
+
+        def read(self) -> bytes:
+            return payload
+
+    def fake_urlopen(_url: str, timeout: float) -> FakeResponse:
+        return FakeResponse()
+
+    monkeypatch.setattr(
+        "thomas.nodes.p037_nodes_registry_model.urllib.request.urlopen",
+        fake_urlopen,
+    )
+
+    reg = load_nodes_registry(source="https://example.com/registry.json")
+    assert reg.source == "url:https://example.com/registry.json"
+    assert [n.node_id for n in reg.nodes] == ["n1"]
+
+
 def test_run_nodes_registry_model_non_throwing_error_response() -> None:
     out = run_nodes_registry_model({"timeout_s": 0})
     assert out["ok"] is False

@@ -1,28 +1,23 @@
-"""Interactive REPL for Thomas using prompt_toolkit and rich.
-
-Architecture:
-- prompt_toolkit handles input (history, completion, multiline via Alt+Enter)
-- rich handles output rendering (panels, styled text)
-- Agent loop runs as a coroutine between prompt cycles (no event loop conflict)
-- Slash commands are handled directly by the REPL, bypassing the agent
-"""
-
+﻿"""Interactive REPL for Thomas using prompt_toolkit and rich."""
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+import inspect
 import re
 import sys
+import time
 from pathlib import Path
 from typing import Any
 
 try:
     from prompt_toolkit import PromptSession
-    from prompt_toolkit.completion import WordCompleter
     from prompt_toolkit.formatted_text import HTML
     from prompt_toolkit.history import FileHistory
     from prompt_toolkit.key_binding import KeyBindings
+    from prompt_toolkit.shortcuts import CompleteStyle
     from prompt_toolkit.styles import Style
 except ImportError:
     raise ImportError("prompt_toolkit is required for the REPL. Install with: pip install prompt_toolkit>=3.0")
@@ -43,11 +38,29 @@ from thomas.core.config import AppConfig
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
 from thomas.core.token_economy import normalize_token_economy_level
+from thomas.cli.repl_picker import PickerCompleter, PickerOption, picker_toolbar_hint, resolve_picker_selection
+from thomas.cli.repl_slash import (
+    SlashCommandCompleter,
+    extract_slash_token,
+    is_known_slash_command,
+    list_slash_specs,
+    normalize_slash_command,
+    resolve_slash_selection,
+    suggest_slash_commands,
+)
+from thomas.cli.repl_background import BackgroundTaskManager
+from thomas.cli.repl_keybindings import apply_keybindings, load_keybindings
+from thomas.cli.repl_plan import PlanModeHandler
+from thomas.cli.repl_project import discover_project_instructions, instruction_file_path
+from thomas.cli.repl_skills import expand_skill, list_all_skills
+from thomas.cli.repl_state import ReplUiState, is_valid_ui_transition
+from thomas.cli.repl_approval import ReplApprovalHandler, create_repl_approval_handler
+from thomas.cli.repl_hooks import HookRunner
+from thomas.cli.repl_runtime import ThomasREPLRuntimeMixin
+from thomas.cli.repl_agent_runtime import ThomasREPLAgentMixin
 from thomas.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
-
-# Optional memory import - graceful if not available
 try:
     from thomas.memory.autonomy import AutonomyMemoryEngine
 
@@ -56,28 +69,20 @@ except ImportError:
     _HAS_MEMORY = False
 
 
-_SLASH_COMMANDS = [
-    "/help",
-    "/clear",
-    "/save",
-    "/load",
-    "/model",
-    "/tools",
-    "/memory",
-    "/pin",
-    "/unpin",
-    "/autonomy",
-    "/status",
-    "/permissions",
-    "/cost",
-    "/review",
-    "/todo",
-    "/exit",
-    "/quit",
-]
+# Backward-compat exports used by tests and older imports.
+_SlashCommandCompleter = SlashCommandCompleter
+
+USER_PROMPT_LABEL = "you"
+USER_PANEL_TITLE = "USER"
+ASSISTANT_PANEL_TITLE = "THOMAS"
+AUTO_LABEL = "THOMAS"
 
 
-class ThomasREPL:
+def _is_known_slash_command(text: str) -> bool:
+    return is_known_slash_command(text)
+
+
+class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
     """Interactive REPL with rich terminal UI."""
 
     def __init__(self, config: AppConfig, tools: ToolRegistry):
@@ -87,12 +92,61 @@ class ThomasREPL:
         self._current_model: str = config.default_model
         self._autonomy_level: int = 3
         self._last_model_choices: list[str] = []
+        self._ui_state: ReplUiState = ReplUiState.IDLE
+        self._slash_specs = list(list_slash_specs())
         self._llm: LLMClient | None = None
         self._memory: Any | None = None
         self._console = Console(highlight=False)
         self._history_path = Path(config.memory.root) / "repl_history.txt"
         self._history_path.parent.mkdir(parents=True, exist_ok=True)
+        self._conversation_state_path = Path(config.memory.root_path) / "repl_conversation.json"
+        self._conversation_state_path.parent.mkdir(parents=True, exist_ok=True)
+        # Codex-style UX keeps slash/model interactions in-place by default.
+        # Alternate-screen overlays remain available as an explicit opt-in.
+        self._use_alt_screen = str(os.environ.get("THOMAS_REPL_ALT_SCREEN", "0")).strip().lower() not in (
+            "0",
+            "false",
+            "no",
+            "off",
+        )
+        self._overlay_depth = 0
+        self._alt_screen_active = False
+        self._slash_completer = SlashCommandCompleter(arg_provider=self._slash_arg_values)
         self._session = self._build_session()
+
+        # Project instructions (THOMAS.md)
+        self._project_instructions_path = instruction_file_path(config.tools.sandbox_path)
+        self._project_instructions: str | None = None
+        if self._project_instructions_path:
+            try:
+                self._project_instructions = self._project_instructions_path.read_text(
+                    encoding="utf-8", errors="replace"
+                ).strip() or None
+            except OSError:
+                self._project_instructions = None
+
+        # MCP tool bridge (initialized at run() startup)
+        self._mcp_bridge: Any = None
+
+        # Git worktree state
+        self._worktree: Any = None         # WorktreeInfo if active
+        self._original_sandbox: Path | None = None
+
+        # Background task manager
+        self._bg_manager = BackgroundTaskManager(self)
+
+        # Plan mode handler
+        self._plan_handler = PlanModeHandler(self)
+
+        # Tool approval handler (guardrails)
+        self._approval_handler: ReplApprovalHandler = create_repl_approval_handler(
+            self._console, config,
+        )
+
+        # Claude Code-style hooks (PreToolUse / PostToolUse)
+        self._hook_runner = HookRunner.from_project(
+            Path(config.tools.sandbox_path) if hasattr(config.tools, "sandbox_path") else None
+        )
 
         # Initialize memory engine
         if _HAS_MEMORY:
@@ -102,33 +156,352 @@ class ThomasREPL:
             except Exception as e:
                 self._console.print(f"[yellow]Memory engine failed to start: {e}[/yellow]")
                 self._memory = None
+        self._restore_conversation_state()
+
+    def _restore_conversation_state(self) -> None:
+        if not self._conversation_state_path.exists():
+            return
+        try:
+            payload = json.loads(self._conversation_state_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            return
+        if not isinstance(payload, list):
+            return
+        restored: list[dict[str, Any]] = []
+        for row in payload:
+            if not isinstance(row, dict):
+                continue
+            role = str(row.get("role") or "").strip()
+            content = row.get("content")
+            if role not in {"user", "assistant", "system"}:
+                continue
+            if not isinstance(content, str):
+                continue
+            restored.append({"role": role, "content": content})
+        if restored:
+            self._conversation = restored
+
+    def _persist_conversation_state(self) -> None:
+        try:
+            safe_rows: list[dict[str, str]] = []
+            for row in self._conversation:
+                role = str(row.get("role") or "").strip()
+                content = row.get("content")
+                if role not in {"user", "assistant", "system"}:
+                    continue
+                if not isinstance(content, str):
+                    continue
+                safe_rows.append({"role": role, "content": content})
+            self._conversation_state_path.write_text(
+                json.dumps(safe_rows, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+        except OSError:
+            return
 
     def _build_session(self) -> PromptSession:
         history = FileHistory(str(self._history_path))
 
         bindings = KeyBindings()
 
-        @bindings.add("escape", "enter")  # Alt+Enter = newline
-        def _insert_newline(event: Any) -> None:
-            event.current_buffer.insert_text("\n")
+        # Apply configurable keybindings (newline, exit, clear_screen)
+        kb_specs = load_keybindings(self.config)
+        apply_keybindings(bindings, kb_specs, self)
+        overlay_picker_states = {ReplUiState.SLASH_POPUP, ReplUiState.PICKER}
 
-        # prompt_toolkit expects a compiled regex for `pattern` (not a string).
-        completer = WordCompleter(_SLASH_COMMANDS, pattern=re.compile(r"^/\w*"))
+        @bindings.add("backspace")
+        def _close_slash_popup_on_backspace(event: Any) -> None:
+            if self._ui_state != ReplUiState.SLASH_POPUP:
+                event.current_buffer.delete_before_cursor(count=1)
+                return
+            text = str(event.current_buffer.text or "")
+            if text == "/":
+                event.app.exit(result="")
+                return
+            event.current_buffer.delete_before_cursor(count=1)
+
+        @bindings.add("tab")
+        def _tab_autocomplete_slash_popup(event: Any) -> None:
+            if self._ui_state not in overlay_picker_states:
+                return
+            buffer = event.current_buffer
+            if buffer.complete_state and buffer.complete_state.current_completion:
+                buffer.apply_completion(buffer.complete_state.current_completion)
+                return
+            buffer.start_completion(select_first=True)
+            if buffer.complete_state and buffer.complete_state.current_completion:
+                buffer.apply_completion(buffer.complete_state.current_completion)
+
+        @bindings.add("down")
+        def _overlay_picker_next(event: Any) -> None:
+            if self._ui_state not in overlay_picker_states:
+                event.current_buffer.auto_down(count=1)
+                return
+            buffer = event.current_buffer
+            if buffer.complete_state:
+                buffer.complete_next()
+                return
+            buffer.start_completion(select_first=True)
+
+        @bindings.add("up")
+        def _overlay_picker_previous(event: Any) -> None:
+            if self._ui_state not in overlay_picker_states:
+                event.current_buffer.auto_up(count=1)
+                return
+            buffer = event.current_buffer
+            if buffer.complete_state:
+                buffer.complete_previous()
+                return
+            buffer.start_completion(select_first=True)
+
+        @bindings.add("enter")
+        def _overlay_picker_enter(event: Any) -> None:
+            if self._ui_state not in overlay_picker_states:
+                event.current_buffer.validate_and_handle()
+                return
+            buffer = event.current_buffer
+            if buffer.complete_state and buffer.complete_state.current_completion:
+                buffer.apply_completion(buffer.complete_state.current_completion)
+            event.app.exit(result=str(buffer.text or ""))
 
         style = Style.from_dict(
             {
-                "prompt": "ansigreen bold",
+                "prompt": "ansiblue bold",
+                # Explicit overlay selection styling so active command/model is always visible.
+                "completion-menu": "bg:#1f2430 #d9d9d9",
+                "completion-menu.completion.current": "bg:#2e7d32 #ffffff bold",
+                "completion-menu.meta.completion.current": "bg:#2e7d32 #d7ffd9",
             }
         )
 
-        return PromptSession(
-            history=history,
-            key_bindings=bindings,
-            completer=completer,
-            style=style,
-            multiline=False,
-            complete_while_typing=False,
+        session_kwargs = {
+            "history": history,
+            "key_bindings": bindings,
+            "completer": self._slash_completer,
+            "style": style,
+            "multiline": False,
+            "complete_while_typing": True,
+            "complete_style": CompleteStyle.COLUMN,
+            "reserve_space_for_menu": 12,
+        }
+        if "full_screen" in inspect.signature(PromptSession).parameters:
+            session_kwargs["full_screen"] = False
+        return PromptSession(**session_kwargs)
+
+    def _known_model_profile_names(self) -> list[str]:
+        names = list(self.config.models.keys())
+        names.sort(key=lambda x: x.lower())
+        return names
+
+    def _pinned_keys(self) -> list[str]:
+        if not (self._memory and self._memory.started):
+            return []
+        try:
+            pins = self._memory.list_pins()
+        except (OSError, ValueError, TypeError):
+            return []
+        values: list[str] = []
+        for key, _text, _score in pins:
+            key_s = str(key or "").strip()
+            if key_s:
+                values.append(key_s)
+        return sorted(set(values), key=lambda x: x.lower())
+
+    def _slash_arg_values(self, command: str) -> list[str]:
+        if command == "/model":
+            values = [*self._known_model_profile_names()]
+            values.extend([f"id:{model_id}" for model_id in self._last_model_choices[:50]])
+            return values
+        if command == "/autonomy":
+            return ["1", "2", "3", "4", "L1", "L2", "L3", "L4"]
+        if command == "/unpin":
+            return self._pinned_keys()
+        if command in ("/load", "/save"):
+            json_files = [p.name for p in Path.cwd().glob("*.json") if p.is_file()]
+            return sorted(json_files, key=lambda x: x.lower())
+        if command == "/skill":
+            try:
+                return sorted(list_all_skills().keys())
+            except Exception:
+                return []
+        if command == "/worktree":
+            return ["create", "list", "remove"]
+        return []
+
+    def _composer_toolbar_hint(self) -> str:
+        token_info = self._get_token_usage_display()
+        base = "Enter send  Ctrl+J newline  / commands  // literal slash"
+        if token_info:
+            return f"{base}  [{token_info}]"
+        return base
+
+    def _transition_ui_state(self, target: ReplUiState) -> None:
+        source = self._ui_state
+        if not is_valid_ui_transition(source, target):
+            log.debug("Invalid REPL UI state transition: %s -> %s", source.value, target.value)
+            self._ui_state = ReplUiState.IDLE
+            return
+        self._ui_state = target
+
+    async def _prompt_overlay(
+        self,
+        prompt_html: HTML,
+        *,
+        default: str = "",
+        completer: Any | None = None,
+        menu_rows: int = 10,
+        toolbar_text: str = "",
+    ) -> str:
+        """Render a non-destructive overlay prompt and return user selection."""
+        self._enter_overlay_screen()
+        # Keep overlay menus scrollable and sized relative to terminal height.
+        try:
+            terminal_height = int(self._console.size.height or 24)
+        except (TypeError, ValueError, OSError):
+            terminal_height = 24
+        adaptive_rows = max(4, min(int(menu_rows), terminal_height - 8))
+        prompt_async_params = inspect.signature(self._session.prompt_async).parameters
+        overlay_kwargs = {
+            "default": default,
+            "completer": completer,
+            "complete_while_typing": True,
+            "reserve_space_for_menu": adaptive_rows,
+        }
+        if "bottom_toolbar" in prompt_async_params:
+            overlay_kwargs["bottom_toolbar"] = (lambda: toolbar_text) if toolbar_text else None
+        if "erase_when_done" in prompt_async_params:
+            overlay_kwargs["erase_when_done"] = True
+        try:
+            if "prompt" in prompt_async_params:
+                typed = await self._session.prompt_async(prompt=prompt_html, **overlay_kwargs)
+            elif "message" in prompt_async_params:
+                typed = await self._session.prompt_async(message=prompt_html, **overlay_kwargs)
+            else:
+                typed = await self._session.prompt_async(prompt_html, **overlay_kwargs)
+            return str(typed or "").strip()
+        finally:
+            self._exit_overlay_screen()
+
+    def _enter_overlay_screen(self) -> None:
+        self._overlay_depth += 1
+        if not self._use_alt_screen:
+            return
+        if not bool(getattr(sys.stdout, "isatty", lambda: False)()):
+            return
+        if self._alt_screen_active:
+            return
+        # Alternate screen enter (DECSET 1049).
+        sys.stdout.write("\x1b[?1049h")
+        sys.stdout.flush()
+        self._alt_screen_active = True
+
+    def _exit_overlay_screen(self) -> None:
+        self._overlay_depth = max(0, self._overlay_depth - 1)
+        if not self._use_alt_screen:
+            return
+        if not bool(getattr(sys.stdout, "isatty", lambda: False)()):
+            return
+        if not self._alt_screen_active:
+            return
+        if self._overlay_depth > 0:
+            return
+        # Alternate screen leave (DECRST 1049).
+        sys.stdout.write("\x1b[?1049l")
+        sys.stdout.flush()
+        self._alt_screen_active = False
+
+    async def _pick_model_choice(self, profiles: list[str], model_ids: list[str]) -> str:
+        self._transition_ui_state(ReplUiState.PICKER)
+        profile_set = {name.lower(): name for name in profiles}
+        model_id_set = {mid.lower(): mid for mid in model_ids}
+        current_profile = str(self._current_model or "").strip()
+        current_model_id = str(self.config.models.get(self._current_model).model or "").strip()
+        options: list[PickerOption] = [
+            PickerOption(
+                value=name,
+                label=name,
+                description="profile",
+                is_current=name == current_profile,
+            )
+            for name in profiles
+        ]
+        options.extend(
+            PickerOption(
+                value=mid,
+                label=mid,
+                description="model id",
+                is_current=mid == current_model_id,
+            )
+            for mid in model_ids
         )
+        if not options:
+            self._transition_ui_state(ReplUiState.IDLE)
+            return ""
+        default_value = self._current_model if self._current_model in profiles else ""
+        menu_rows = 10
+        try:
+            selected = await self._prompt_overlay(
+                HTML("<prompt>model</prompt> > "),
+                default=default_value,
+                completer=PickerCompleter(options, match_middle=True),
+                menu_rows=menu_rows,
+                toolbar_text=picker_toolbar_hint(len(options), menu_rows),
+            )
+        except (KeyboardInterrupt, EOFError):
+            self._transition_ui_state(ReplUiState.IDLE)
+            return ""
+        self._transition_ui_state(ReplUiState.IDLE)
+        picked = resolve_picker_selection(selected, options)
+        lowered = picked.lower()
+        if lowered in profile_set:
+            return profile_set[lowered]
+        if lowered in model_id_set:
+            return model_id_set[lowered]
+        return ""
+
+    async def _maybe_pick_reasoning_level(self, selected_model_id: str) -> None:
+        model_id = str(selected_model_id or "").strip().lower()
+        if not model_id.startswith("gpt-5"):
+            return
+        levels = ["minimal", "low", "medium", "high"]
+        current = str(self.config.get_model(self._current_model).reasoning_effort or "").strip().lower()
+        default_value = current if current in levels else "medium"
+        options = [
+            PickerOption(value=level, label=level, is_current=(level == default_value))
+            for level in levels
+        ]
+        try:
+            picked = await self._prompt_overlay(
+                HTML("<prompt>reasoning</prompt> > "),
+                default=default_value,
+                completer=PickerCompleter(options, match_middle=False),
+                menu_rows=6,
+                toolbar_text=picker_toolbar_hint(len(options), 6),
+            )
+        except (KeyboardInterrupt, EOFError):
+            return
+        picked = resolve_picker_selection(str(picked or "").strip(), options)
+        if picked not in levels:
+            return
+        self.config.models[self._current_model].reasoning_effort = picked
+        self._console.print(f"[dim]Reasoning level set to {picked}[/dim]")
+
+    async def _flash_status(self, text: str, seconds: float = 0.9) -> None:
+        message = str(text or "").strip()
+        if not message:
+            return
+        live = Live(Text(message, style="dim"), console=self._console, transient=True, refresh_per_second=30)
+        try:
+            live.start()
+            await asyncio.sleep(max(0.1, float(seconds)))
+        except (ValueError, OSError):
+            self._console.print(f"[dim]{message}[/dim]")
+            return
+        finally:
+            try:
+                live.stop()
+            except OSError:
+                pass
 
     def _get_llm(self) -> LLMClient:
         if self._llm is None:
@@ -144,8 +517,13 @@ class ThomasREPL:
 
     def _get_prompt(self) -> HTML:
         return HTML(
-            f"<prompt>thomas</prompt> " f"<ansigray>[{self._current_model} | L{self._autonomy_level}]</ansigray> > "
+            f"<prompt>{USER_PROMPT_LABEL}</prompt> "
+            f"<ansigray>[{self._current_model} | L{self._autonomy_level}]</ansigray> > "
         )
+
+    def _print_auto(self, text: str) -> None:
+        label = f"[bold magenta]{AUTO_LABEL}[/bold magenta]"
+        self._console.print(f"{label} [dim]{text}[/dim]")
 
     def _handle_nl_model(self, text: str) -> bool:
         """Handle natural-language model switches or listing. Returns True if handled."""
@@ -197,15 +575,32 @@ class ThomasREPL:
     async def run(self) -> None:
         """Main REPL loop."""
         version = _get_version()
-        self._console.print(
-            Panel(
-                f"[bold green]Thomas[/bold green] v{version} - "
-                f"model: [cyan]{self._current_model}[/cyan]\n"
-                f"Type [dim]/help[/dim] for commands, [dim]Alt+Enter[/dim] for multiline, "
-                f"[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit.",
-                border_style="dim",
+        banner_lines = [
+            f"[bold green]Thomas[/bold green] v{version} - "
+            f"model: [cyan]{self._current_model}[/cyan]",
+            f"Type [dim]/help[/dim] for commands, [dim]Ctrl+J[/dim] for multiline, "
+            f"[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit. "
+            f"Use [dim]//[/dim] to send a literal slash message.",
+        ]
+        if self._project_instructions_path:
+            banner_lines.append(
+                f"[dim]Project instructions: {self._project_instructions_path}[/dim]"
             )
-        )
+        if self._conversation:
+            banner_lines.append(
+                f"[dim]Recovered {len(self._conversation)} messages from last REPL session.[/dim]"
+            )
+        self._console.print(Panel("\n".join(banner_lines), border_style="dim"))
+
+        # Connect to MCP servers at startup (best-effort)
+        try:
+            from thomas.tools.mcp_bridge import register_mcp_tools
+            self._mcp_bridge = await register_mcp_tools(self.tools, self.config)
+            connected = self._mcp_bridge.list_servers()
+            if connected:
+                self._console.print(f"[dim]MCP servers: {', '.join(connected)}[/dim]")
+        except Exception as e:
+            log.debug("MCP startup failed: %s", e)
 
         while True:
             try:
@@ -213,6 +608,7 @@ class ThomasREPL:
                 user_input = await self._session.prompt_async(
                     self._get_prompt(),
                     rprompt=HTML(f"<ansigray>{turns} turns</ansigray>") if turns > 0 else None,
+                    bottom_toolbar=(lambda: self._composer_toolbar_hint()),
                 )
             except KeyboardInterrupt:
                 self._console.print("\n[dim](interrupted - type /exit to quit)[/dim]")
@@ -228,552 +624,51 @@ class ThomasREPL:
             if self._handle_nl_model(user_input):
                 continue
 
+            # Escape hatch for literal slash-prefixed chat text.
+            if user_input.startswith("//"):
+                user_input = user_input[1:]
+
             # Slash commands
             if user_input.startswith("/"):
-                should_exit = await self._handle_slash(user_input)
+                should_exit, handled = await self._handle_slash(user_input)
                 if should_exit:
                     break
-                continue
+                if handled:
+                    continue
 
             # Run agent
+            self._console.print(
+                Panel(Text(user_input), title=USER_PANEL_TITLE, border_style="bright_blue", expand=True)
+            )
             await self._run_agent(user_input)
+            self._persist_conversation_state()
 
         self._console.print("[dim]Goodbye.[/dim]")
+
+        # Cancel background tasks
+        await self._bg_manager.cancel_all()
+
+        # Disconnect MCP servers
+        if self._mcp_bridge:
+            try:
+                await self._mcp_bridge.disconnect_all()
+            except Exception as e:
+                log.debug("MCP cleanup failed: %s", e)
+
+        # Prompt about worktree cleanup
+        if self._worktree:
+            self._console.print(
+                f"[yellow]Active worktree: {self._worktree.name} at {self._worktree.path}[/yellow]"
+            )
+            self._console.print("[dim]Use 'git worktree remove' to clean up manually.[/dim]")
+
+        while self._alt_screen_active:
+            self._exit_overlay_screen()
         if self._llm:
             await self._llm.close()
         if self._memory:
             self._memory.close()
-
-    async def _handle_slash(self, cmd: str) -> bool:
-        """Handle a slash command. Returns True if REPL should exit."""
-        parts = cmd.split(None, 1)
-        command = parts[0].lower()
-        arg = parts[1] if len(parts) > 1 else ""
-
-        if command in ("/exit", "/quit"):
-            return True
-
-        elif command == "/help":
-            self._console.print(
-                Panel(
-                    "\n".join(
-                        [
-                            "[bold]/clear[/bold]           Clear conversation history",
-                            "[bold]/save [file][/bold]     Save conversation to JSON file",
-                            "[bold]/load [file][/bold]     Load conversation from JSON file",
-                            "[bold]/model [name][/bold]    Show or switch model profile",
-                            "[bold]/autonomy [1-4][/bold]  Show or set autonomy level",
-                            "[bold]/status[/bold]          Show current REPL/runtime status",
-                            "[bold]/permissions[/bold]     Show tool + server access posture",
-                            "[bold]/cost[/bold]            Show token/cost tracking for this process",
-                            "[bold]/review[/bold]          Quick review of recent conversation turns",
-                            "[bold]/todo[/bold]            Show open todo/goals from memory/state",
-                            "[bold]/tools[/bold]           List available tools",
-                            "[bold]/memory[/bold]          Show memory stats, pins, and token usage",
-                            "[bold]/pin key=val[/bold]     Pin context (always included in memory)",
-                            "[bold]/unpin key[/bold]       Remove a pinned context",
-                            "[bold]/help[/bold]            Show this help",
-                            "[bold]/exit[/bold]            Quit",
-                            "",
-                            "[dim]Alt+Enter for multiline input[/dim]",
-                        ]
-                    ),
-                    title="Commands",
-                    border_style="dim",
-                )
-            )
-
-        elif command == "/clear":
-            self._conversation.clear()
-            if self._llm:
-                await self._llm.close()
-                self._llm = None
-            self._console.print("[dim]Conversation cleared.[/dim]")
-
-        elif command == "/save":
-            filename = arg or "thomas_conversation.json"
-            try:
-                path = Path(filename)
-                path.write_text(
-                    json.dumps(self._conversation, indent=2, ensure_ascii=False),
-                    encoding="utf-8",
-                )
-                self._console.print(f"[dim]Saved {len(self._conversation)} messages to {path}[/dim]")
-            except OSError as e:
-                self._console.print(f"[red]Save failed: {e}[/red]")
-
-        elif command == "/load":
-            filename = arg or "thomas_conversation.json"
-            try:
-                path = Path(filename)
-                data = json.loads(path.read_text(encoding="utf-8"))
-                if isinstance(data, list):
-                    self._conversation = data
-                    self._console.print(f"[dim]Loaded {len(data)} messages from {path}[/dim]")
-                else:
-                    self._console.print("[red]Invalid conversation format[/red]")
-            except (OSError, json.JSONDecodeError) as e:
-                self._console.print(f"[red]Load failed: {e}[/red]")
-
-        elif command == "/model":
-            from thomas.models.discovery import (
-                discover_models_async,
-                model_family,
-                parse_params_b,
-            )
-
-            # No args: show profiles + best-effort endpoint discovery for the current profile.
-            if not arg:
-                self._last_model_choices = []
-
-                self._console.print("[bold]Model Profiles[/bold]")
-                for name, m in self.config.models.items():
-                    mark = "*" if name == self._current_model else " "
-                    self._console.print(f"  {mark} [cyan]{name}[/cyan]  " f"[dim]{m.provider}[/dim]  {m.model}")
-
-                # Best-effort discovery of model ids at the current endpoint.
-                discovered = []
-                try:
-                    cfg = self.config.get_model(self._current_model)
-                    discovered = await discover_models_async(cfg, timeout_s=1.5)
-                except (ValueError, TypeError):
-                    cfg = None  # type: ignore[assignment]
-
-                if not discovered or cfg is None:
-                    self._console.print(
-                        "\n[dim](No endpoint model list available. "
-                        "If you're using Ollama, make sure it's running.)[/dim]"
-                    )
-                    return False
-
-                ids = [d.id for d in discovered]
-                # De-dupe while preserving order.
-                seen: set[str] = set()
-                ids = [x for x in ids if not (x in seen or seen.add(x))]
-                self._last_model_choices = ids
-
-                # Build above/below suggestions within each family (sorted by params_b when present).
-                fam_map: dict[str, list[tuple[str, float | None]]] = {}
-                for mid in ids:
-                    fam_map.setdefault(model_family(mid), []).append((mid, parse_params_b(mid)))
-
-                neighbor: dict[str, tuple[str | None, str | None]] = {}
-                for fam, items in fam_map.items():
-                    items_sorted = sorted(items, key=lambda x: (x[1] is None, x[1] or 0.0, x[0]))
-                    mids = [m for m, _ in items_sorted]
-                    for idx, mid in enumerate(mids):
-                        above = mids[idx + 1] if idx + 1 < len(mids) else None
-                        below = mids[idx - 1] if idx - 1 >= 0 else None
-                        neighbor[mid] = (above, below)
-
-                current_id = self.config.get_model(self._current_model).model
-                self._console.print(f"\n[bold]Models At {cfg.base_url}[/bold]")
-                for i, mid in enumerate(ids, start=1):
-                    mark = "*" if mid == current_id else " "
-                    above, below = neighbor.get(mid, (None, None))
-                    hints: list[str] = []
-                    if above:
-                        hints.append(f"better: {above}")
-                    if below:
-                        hints.append(f"lighter: {below}")
-                    hint_text = f"  [dim]{'  '.join(hints)}[/dim]" if hints else ""
-                    self._console.print(f"  {mark} {i:>2}. {mid}{hint_text}")
-
-                self._console.print("\n[dim]Switch profile: /model <profile>[/dim]")
-                self._console.print(
-                    "[dim]Switch model id: /model <number> (from list above) " "or /model id:<model_id>[/dim]"
-                )
-                return False
-
-            # Switch profile: /model <profile>
-            if arg in self.config.models:
-                self._current_model = arg
-                if self._llm:
-                    await self._llm.close()
-                    self._llm = None
-                self._console.print(f"[dim]Switched to [cyan]{arg}[/cyan][/dim]")
-                return False
-
-            # Switch model id by number from the last discovery list: /model 12
-            if arg.isdigit():
-                idx = int(arg)
-                if 1 <= idx <= len(self._last_model_choices):
-                    chosen = self._last_model_choices[idx - 1]
-                    self.config.models[self._current_model].model = chosen
-                    if self._llm:
-                        await self._llm.close()
-                        self._llm = None
-                    self._console.print(f"[dim]Set model id for [cyan]{self._current_model}[/cyan] -> {chosen}[/dim]")
-                    return False
-
-            # Switch model id explicitly: /model id:foo
-            if arg.lower().startswith("id:"):
-                chosen = arg[3:].strip()
-                if not chosen:
-                    self._console.print("[yellow]Usage: /model id:<model_id>[/yellow]")
-                    return False
-                self.config.models[self._current_model].model = chosen
-                if self._llm:
-                    await self._llm.close()
-                    self._llm = None
-                self._console.print(f"[dim]Set model id for [cyan]{self._current_model}[/cyan] -> {chosen}[/dim]")
-                return False
-
-            self._console.print(
-                f"[red]Unknown model/profile '{arg}'. "
-                f"Try /model (no args) to list profiles and endpoint models.[/red]"
-            )
-
-        elif command == "/autonomy":
-            if not arg:
-                level = int(self._autonomy_level)
-                self._console.print(f"[dim]Autonomy: L{level} ({autonomy_level_name(level)})[/dim]")
-                return False
-
-            m = re.search(r"[1-4]", str(arg))
-            if not m:
-                self._console.print("[yellow]Usage: /autonomy <1|2|3|4>[/yellow]")
-                return False
-
-            level = clamp_autonomy_level(m.group(0), default=self._autonomy_level)
-            self._autonomy_level = int(level)
-            self._console.print(f"[dim]Autonomy set to L{level} ({autonomy_level_name(level)})[/dim]")
-
-        elif command == "/status":
-            user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
-            asst_turns = sum(1 for m in self._conversation if m.get("role") == "assistant")
-            tool_count = 0
-            for cat in self.tools.list_categories():
-                tool_count += len(self.tools.list_tools(cat))
-            self._console.print(f"[dim]Model: {self._current_model}[/dim]")
-            self._console.print(
-                f"[dim]Autonomy: L{self._autonomy_level} " f"({autonomy_level_name(self._autonomy_level)})[/dim]"
-            )
-            self._console.print(
-                f"[dim]Conversation: {user_turns} user, {asst_turns} assistant, "
-                f"{len(self._conversation)} total messages[/dim]"
-            )
-            self._console.print(f"[dim]Tools: {tool_count} registered[/dim]")
-            self._console.print(
-                f"[dim]Access: server={self.config.server.access_mode}, "
-                f"shell={'enabled' if self.config.tools.allow_shell else 'disabled'}[/dim]"
-            )
-
-        elif command == "/permissions":
-            self._console.print(f"[dim]server.access_mode = {self.config.server.access_mode}[/dim]")
-            self._console.print(
-                f"[dim]server.api_token configured = " f"{bool(str(self.config.server.api_token or '').strip())}[/dim]"
-            )
-            self._console.print(f"[dim]tools.allow_shell = {bool(self.config.tools.allow_shell)}[/dim]")
-            self._console.print(f"[dim]tools.sandbox_root = {self.config.tools.sandbox_path}[/dim]")
-            self._console.print(f"[dim]tools.max_file_size = {self.config.tools.max_file_size} bytes[/dim]")
-
-        elif command == "/cost":
-            if self._llm:
-                usage = self._llm.session_usage
-                self._console.print(
-                    f"[dim]LLM session tokens: prompt={usage.prompt_tokens}, "
-                    f"completion={usage.completion_tokens}, total={usage.total_tokens}[/dim]"
-                )
-            else:
-                self._console.print("[dim]LLM session tokens: no active model session yet[/dim]")
-            try:
-                from thomas.core.cost_tracker import get_cost_tracker
-
-                tracker = get_cost_tracker()
-                session_tokens = tracker.session_tokens()
-                self._console.print(
-                    f"[dim]Cost tracker tokens: prompt={session_tokens.get('prompt_tokens', 0)}, "
-                    f"completion={session_tokens.get('completion_tokens', 0)}, "
-                    f"total={session_tokens.get('total_tokens', 0)}[/dim]"
-                )
-                self._console.print(
-                    f"[dim]Cost tracker: calls={tracker.session_call_count()}, "
-                    f"usd={tracker.session_usd():.6f}[/dim]"
-                )
-            except Exception as e:
-                self._console.print(f"[yellow]Cost tracker unavailable: {type(e).__name__}[/yellow]")
-
-        elif command == "/review":
-            if not self._conversation:
-                self._console.print("[dim]No conversation to review yet.[/dim]")
-                return False
-            user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
-            asst_turns = sum(1 for m in self._conversation if m.get("role") == "assistant")
-            self._console.print(
-                f"[dim]Review: {user_turns} user turns, {asst_turns} assistant turns, "
-                f"{len(self._conversation)} messages total[/dim]"
-            )
-            self._console.print("[dim]Recent turns:[/dim]")
-            for row in self._conversation[-6:]:
-                role = str(row.get("role") or "unknown")
-                text = str(row.get("content") or "").replace("\n", " ").strip()
-                if len(text) > 140:
-                    text = text[:137] + "..."
-                self._console.print(f"  [cyan]{role}[/cyan]: {text}")
-            self._console.print("[dim]Tip: pin priorities with /pin todo.<key>=<task>[/dim]")
-
-        elif command == "/todo":
-            todos: list[tuple[str, str]] = []
-            seen: set[str] = set()
-            if self._memory and self._memory.started:
-                try:
-                    pins = self._memory.list_pins()
-                except (ValueError, TypeError):
-                    pins = []
-                for key, text, _score in pins:
-                    key_s = str(key or "").strip()
-                    text_s = str(text or "").strip()
-                    if not key_s or not text_s:
-                        continue
-                    if not key_s.lower().startswith("todo"):
-                        continue
-                    marker = f"pin:{key_s.lower()}"
-                    if marker in seen:
-                        continue
-                    seen.add(marker)
-                    todos.append((f"pin:{key_s}", text_s))
-
-            for candidate in (
-                Path(self.config.memory.root_path) / "thomas_state.json",
-                Path.cwd() / "thomas_state.json",
-            ):
-                if not candidate.exists():
-                    continue
-                try:
-                    payload = json.loads(candidate.read_text(encoding="utf-8"))
-                except json.JSONDecodeError:
-                    continue
-                goals = payload.get("goals") if isinstance(payload, dict) else None
-                if not isinstance(goals, list):
-                    continue
-                for idx, row in enumerate(goals, start=1):
-                    if not isinstance(row, dict):
-                        continue
-                    status = str(row.get("status") or "open").strip().lower()
-                    if status in {"done", "completed", "closed"}:
-                        continue
-                    text = str(row.get("text") or row.get("goal") or row.get("title") or "").strip()
-                    if not text:
-                        continue
-                    marker = f"goal:{status}:{text.lower()}"
-                    if marker in seen:
-                        continue
-                    seen.add(marker)
-                    todos.append((f"goal:{idx}", text))
-
-            if not todos:
-                self._console.print("[dim]No open todos found. Add one with /pin todo.<key>=<task>[/dim]")
-            else:
-                self._console.print(f"[dim]Open todos: {len(todos)}[/dim]")
-                for origin, text in todos[:20]:
-                    self._console.print(f"  - {origin}: {text}")
-
-        elif command == "/tools":
-            for cat in self.tools.list_categories():
-                self._console.print(f"\n[bold]{cat}[/bold]")
-                for tool in self.tools.list_tools(cat):
-                    self._console.print(f"  [cyan]{tool.name}[/cyan] - {tool.description[:70]}")
-
-        elif command == "/memory":
-            user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
-            asst_turns = sum(1 for m in self._conversation if m.get("role") == "assistant")
-            self._console.print(
-                f"[dim]Conversation: {user_turns} user, {asst_turns} assistant, "
-                f"{len(self._conversation)} total messages[/dim]"
-            )
-            if self._llm:
-                usage = self._llm.session_usage
-                self._console.print(
-                    f"[dim]Tokens: {usage.prompt_tokens} prompt + "
-                    f"{usage.completion_tokens} completion = {usage.total_tokens} total[/dim]"
-                )
-            if self._memory and self._memory.started:
-                stats = self._memory.stats()
-                self._console.print(
-                    f"[dim]Memory: {stats['event_count']} events, "
-                    f"dense={'yes (dim=' + str(stats['dense_dim']) + ')' if stats['has_dense'] else 'no (hash fallback)'}[/dim]"
-                )
-                pins = self._memory.list_pins()
-                if pins:
-                    self._console.print(f"[dim]Pins: {len(pins)} active[/dim]")
-                    for key, text, _ in pins:
-                        self._console.print(f"  [cyan]{key}[/cyan]: {text[:60]}")
-            else:
-                self._console.print("[dim]Memory engine: not active[/dim]")
-
-        elif command == "/pin":
-            if not arg:
-                self._console.print("[yellow]Usage: /pin key=value[/yellow]")
-            elif "=" not in arg:
-                self._console.print(
-                    "[yellow]Usage: /pin key=value (e.g. /pin style=concise code with comments)[/yellow]"
-                )
-            elif self._memory and self._memory.started:
-                key, _, value = arg.partition("=")
-                self._memory.pin(key.strip(), value.strip())
-                self._console.print(f"[dim]Pinned: [cyan]{key.strip()}[/cyan][/dim]")
-            else:
-                self._console.print("[yellow]Memory engine not active[/yellow]")
-
-        elif command == "/unpin":
-            if not arg:
-                self._console.print("[yellow]Usage: /unpin key[/yellow]")
-            elif self._memory and self._memory.started:
-                self._memory.unpin(arg.strip())
-                self._console.print(f"[dim]Unpinned: [cyan]{arg.strip()}[/cyan][/dim]")
-            else:
-                self._console.print("[yellow]Memory engine not active[/yellow]")
-
-        else:
-            self._console.print(f"[yellow]Unknown command: {command}. Type /help for help.[/yellow]")
-
-        return False
-
-    async def _run_agent(self, prompt: str) -> None:
-        """Run the agent loop, streaming events to the terminal.
-
-        Uses a thinking spinner while waiting for the LLM, and renders
-        the final text response as markdown for code blocks, bold, etc.
-        """
-        llm = self._get_llm()
-        agent = AgentLoop(
-            config=self.config,
-            llm=llm,
-            tools=self.tools,
-            conversation=self._conversation,
-            memory=self._memory,
-            thread_id="repl",
-            autonomy_level=self._autonomy_level,
-        )
-
-        # State for managing the spinner + streaming output
-        thinking = True
-        spinner_live: Live | None = None
-        text_buffer: list[str] = []
-        usage_hint = ""
-        token_info = ""
-
-        try:
-            token_economy = normalize_token_economy_level(os.environ.get("THOMAS_TOKEN_ECONOMY", "optimal"))
-            async for event in agent.run(prompt, token_economy=token_economy):
-                if event.type == EventType.AGENT_START:
-                    route = event.data.get("route", {}) if isinstance(event.data.get("route"), dict) else {}
-                    mode = route.get("mode") or event.data.get("mode") or "auto"
-                    policy = event.data.get("tools_policy", "auto")
-                    level = int(event.data.get("autonomy_level", self._autonomy_level) or self._autonomy_level)
-                    name = str(event.data.get("autonomy_name") or autonomy_level_name(level))
-                    self._console.print(f"[dim][route {mode}, tools={policy}, autonomy=L{level} {name}][/dim]")
-
-                elif event.type == EventType.AGENT_ITERATION:
-                    # Show thinking spinner
-                    ctx_tokens = event.data.get("token_estimate", 0)
-                    ctx_window = event.data.get("context_window", 0)
-                    iteration = event.data.get("iteration", 0)
-                    if iteration == 0:
-                        usage_hint = f"~{ctx_tokens:,}/{ctx_window:,} tokens"
-                    if thinking and spinner_live is None:
-                        spinner_live = Live(
-                            Spinner("dots", text=Text(f" thinking... ({usage_hint})", style="dim")),
-                            console=self._console,
-                            transient=True,
-                        )
-                        spinner_live.start()
-
-                elif event.type == EventType.TEXT_DELTA:
-                    # Stop spinner on first token
-                    if spinner_live is not None:
-                        spinner_live.stop()
-                        spinner_live = None
-                        thinking = False
-                    text_buffer.append(event.data["text"])
-                    # Stream raw text for responsiveness
-                    sys.stdout.write(event.data["text"])
-                    sys.stdout.flush()
-
-                elif event.type == EventType.TOOL_CALL_START:
-                    # Stop spinner, show tool info
-                    if spinner_live is not None:
-                        spinner_live.stop()
-                        spinner_live = None
-                        thinking = False
-                    # Flush any text before tool call
-                    if text_buffer:
-                        sys.stdout.write("\n")
-                        text_buffer.clear()
-                    name = event.data["tool_name"]
-                    self._console.print(f"  [dim][tool] {name}...[/dim]", end="")
-                    # Show a spinner for tool execution too
-                    thinking = True
-                    spinner_live = Live(
-                        Spinner("dots", text=Text(" running...", style="dim")),
-                        console=self._console,
-                        transient=True,
-                    )
-                    spinner_live.start()
-
-                elif event.type == EventType.TOOL_RESULT:
-                    if spinner_live is not None:
-                        spinner_live.stop()
-                        spinner_live = None
-                        thinking = False
-                    ok = event.data["ok"]
-                    name = event.data["tool_name"]
-                    ms = event.data["duration_ms"]
-                    if ok:
-                        self._console.print(f" [green]ok[/green] [dim]{name} ({ms:.0f}ms)[/dim]")
-                    else:
-                        err = event.data.get("result", "failed")[:100]
-                        self._console.print(f" [red]fail[/red] [dim]{name}:[/dim] [red]{err}[/red]")
-                    # Restart thinking for next LLM iteration
-                    thinking = True
-                    spinner_live = Live(
-                        Spinner("dots", text=Text(" thinking...", style="dim")),
-                        console=self._console,
-                        transient=True,
-                    )
-                    spinner_live.start()
-
-                elif event.type == EventType.AGENT_ERROR:
-                    if spinner_live is not None:
-                        spinner_live.stop()
-                        spinner_live = None
-                    sys.stdout.write("\n")
-                    self._console.print(f"[bold red]Error:[/bold red] {event.data['error']}")
-
-                elif event.type == EventType.AGENT_DONE:
-                    if spinner_live is not None:
-                        spinner_live.stop()
-                        spinner_live = None
-                    sys.stdout.write("\n")
-                    token_report = event.data.get("token_report")
-                    if isinstance(token_report, dict):
-                        try:
-                            prompt_tokens = int(token_report.get("prompt_tokens", 0) or 0)
-                            completion_tokens = int(token_report.get("completion_tokens", 0) or 0)
-                            total_tokens = int(token_report.get("total_tokens", 0) or 0)
-                            if total_tokens > 0:
-                                token_info = f"{prompt_tokens}+{completion_tokens}={total_tokens} tokens"
-                        except (OSError, FileNotFoundError):
-                            token_info = ""
-                    iters = event.data["iterations"]
-                    tc = event.data["tool_calls"]
-                    parts = []
-                    if iters > 1:
-                        parts.append(f"{iters} iterations")
-                    if tc > 0:
-                        parts.append(f"{tc} tool call{'s' if tc != 1 else ''}")
-                    if token_info:
-                        parts.append(token_info)
-                    if parts:
-                        self._console.print(f"[dim]({', '.join(parts)})[/dim]")
-
-        except KeyboardInterrupt:
-            if spinner_live is not None:
-                spinner_live.stop()
-            sys.stdout.write("\n")
-            self._console.print("[yellow](interrupted)[/yellow]")
-
+        self._persist_conversation_state()
 
 def _get_version() -> str:
     try:
@@ -782,3 +677,4 @@ def _get_version() -> str:
         return __version__
     except (ImportError, AttributeError):
         return "?"
+

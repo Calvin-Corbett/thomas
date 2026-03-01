@@ -17,9 +17,15 @@ import re
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import lru_cache
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from thomas.agent.conversation import ConversationIntelligence
 from thomas.agent.guidance import load_cached_purpose_brief
+from thomas.agent.project_instructions import (
+    discover_project_instructions,
+    format_project_instructions,
+)
 from thomas.agent.prompt_templates import (
     build_route_system_prompt,
     format_memory_context,
@@ -40,6 +46,15 @@ from thomas.core.tokens import (
 from thomas.library import ResearchLibrary, default_library_root
 from thomas.tools.registry import ToolRegistry
 
+try:
+    from thomas.agent.context_compaction import (
+        ContextCompactor,
+        estimate_conversation_tokens as _compact_estimate_tokens,
+    )
+    _HAS_CONTEXT_COMPACTOR = True
+except ImportError:
+    _HAS_CONTEXT_COMPACTOR = False
+
 if TYPE_CHECKING:
     from thomas.agent.guarded_tools import GuardedToolRunner
     from thomas.core.llm import LLMClient
@@ -47,6 +62,38 @@ if TYPE_CHECKING:
     from thomas.policy.policy import PolicyEngine
 
 log = logging.getLogger(__name__)
+
+# Compiled regex patterns for performance (used repeatedly in methods)
+_ACTION_INTENT_PATTERN = re.compile(
+    r"\b("
+    r"run|execute|edit|write|create|delete|remove|install|apply|patch|commit"
+    r"|open|search|find|read|fix|debug|build|deploy"
+    r"|make|change|update|modify|add|set|adjust|move|resize|implement"
+    r"|refactor|rename|replace|merge|revert|undo|redo|configure|setup"
+    r"|check|look|show|list|scan|analyze|locate|explore|inspect|test"
+    r"|start|stop|restart|enable|disable|toggle|switch|connect|send"
+    r"|download|upload|fetch|pull|push|sync|copy|paste|duplicate|clone"
+    r"|convert|transform|generate|scaffold|migrate|optimize|clean|format"
+    r"|put|do|help|handle|process|use|try|give|tell|explain"
+    r")\b",
+    re.IGNORECASE,
+)
+_BLOCKED_RESPONSE_PATTERN = re.compile(
+    r"\b("
+    r"i(?: still)? need|"
+    r"please provide|"
+    r"cannot proceed|"
+    r"can't proceed|"
+    r"unable to continue|"
+    r"to continue,?|"
+    r"before i can|"
+    r"missing|"
+    r"i require"
+    r")\b"
+)
+_TOKEN_PATTERN = re.compile(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b")
+_NUMERIC_ID_PATTERN = re.compile(r"\s*-?\d{5,}\s*")
+_FILE_PATH_PATTERN = re.compile(r"[A-Za-z]:\\\\|/|\\\\|\\.py\b|\\.js\b|\\.ts\b|\\.json\b|\\.toml\b|\\.md\b")
 
 _TPM_WINDOW_SECONDS = 60.0
 _TPM_HEADROOM_DEFAULT = 0.90
@@ -117,6 +164,9 @@ class AgentLoop:
         max_parallel_tools: int | None = None,
         tool_timeout_s: int | None = None,
         message_queue: Any | None = None,
+        non_coder_profile: bool = False,
+        profile_type: str | None = None,
+        review_depth: str | None = None,
     ):
         self.config = config
         self.llm = llm
@@ -124,6 +174,8 @@ class AgentLoop:
         self._system_prompt = system_prompt
         # Preserve the caller-provided list object even if it's empty.
         self._conversation = conversation if conversation is not None else []
+        # Conversation intelligence tracker for multi-turn coherence
+        self._conv_intel = ConversationIntelligence(max_turns=12)
         self._memory = memory
         self._thread_id = thread_id or "default"
         self._run_id = run_id or self._thread_id
@@ -145,7 +197,24 @@ class AgentLoop:
                 self._tool_timeout_s = max(1, int(tool_timeout_s))
             except (ValueError, TypeError):
                 self._tool_timeout_s = None
-        self._context_window = llm.config.context_window
+        raw_profile_type = str(profile_type or "").strip().lower()
+        if not raw_profile_type:
+            raw_profile_type = "non_coder" if bool(non_coder_profile) else "adaptive"
+        self._non_coder_profile = bool(non_coder_profile)
+        self._profile_type = raw_profile_type
+        self._review_depth = str(review_depth or "adaptive").strip().lower() or "adaptive"
+        # Set context window with bounds checking
+        context_window = llm.config.context_window
+        min_window = 1000
+        max_window = 200000
+        if context_window < min_window:
+            log.warning("Context window %d is below minimum %d. Clamping to minimum.", context_window, min_window)
+            self._context_window = min_window
+        elif context_window > max_window:
+            log.warning("Context window %d exceeds maximum %d. Clamping to maximum.", context_window, max_window)
+            self._context_window = max_window
+        else:
+            self._context_window = context_window
         self._router = IntentRouter()
         self._library_enabled = str(os.environ.get("THOMAS_LIBRARY_ENABLED", "1")).strip().lower() not in (
             "0",
@@ -155,9 +224,6 @@ class AgentLoop:
         )
         self._library_auto_capture = str(
             os.environ.get("THOMAS_LIBRARY_AUTO_CAPTURE_RESEARCH", "1")
-        ).strip().lower() not in ("0", "false", "no", "off")
-        self._memory_curator_enabled = str(
-            os.environ.get("THOMAS_MEMORY_CURATOR_ENABLED", "1")
         ).strip().lower() not in ("0", "false", "no", "off")
         self._library: ResearchLibrary | None = None
         if self._library_enabled:
@@ -170,6 +236,18 @@ class AgentLoop:
         self._message_queue = message_queue
         self._last_sanitize_flags: dict[str, bool] = {}
         self._context_preserve_mode = str(os.environ.get("THOMAS_CONTEXT_PRESERVE_MODE", "default")).strip().lower()
+        # Intelligent context compaction (ContextCompactor)
+        self._context_compactor: ContextCompactor | None = None
+        self._last_compaction_result: Any = None
+        if _HAS_CONTEXT_COMPACTOR:
+            try:
+                self._context_compactor = ContextCompactor(
+                    llm=llm,
+                    max_summary_tokens=400,
+                    segment_size=8,
+                )
+            except Exception as e:  # REVIEWED: log-and-continue — compaction is optional
+                log.debug("ContextCompactor init failed: %s", e)
 
     def _build_system_message(
         self,
@@ -216,6 +294,25 @@ class AgentLoop:
                 + autonomy_directive
                 + "\n--- End Autonomy Profile ---\n"
             )
+
+        # Editing policy: prefer diff.create over fs.write_file for edits
+        prompt = (
+            prompt.rstrip()
+            + "\n\n--- Editing Policy ---\n"
+            "When editing existing files, prefer diff.create (find-and-replace) over fs.write_file.\n"
+            "diff.create is safer: it only changes what's needed and shows exact before/after.\n"
+            "Only use fs.write_file for creating entirely new files.\n"
+            "--- End Editing Policy ---\n"
+        )
+
+        # Per-project instructions (THOMAS.md)
+        try:
+            sandbox_root = Path(os.getcwd())
+            project_content = discover_project_instructions(sandbox_root)
+            if project_content:
+                prompt = prompt.rstrip() + "\n\n" + format_project_instructions(project_content)
+        except Exception:
+            pass  # Best-effort: project instructions are optional
 
         if skills_context:
             prompt = prompt.rstrip() + "\n\n" + str(skills_context).strip()
@@ -296,6 +393,81 @@ class AgentLoop:
 
         return messages
 
+    async def _auto_compact_if_needed(
+        self,
+        *,
+        hard_cap: int = 28000,
+        threshold: float = 0.75,
+        preserve_recent: int = 6,
+    ) -> dict[str, Any] | None:
+        """Auto-compact the conversation if approaching the token budget.
+
+        This should be called before _build_messages() in the agent loop.
+        Operates on self._conversation in-place.
+
+        Returns compaction result dict if compaction occurred, else None.
+        """
+        if not _HAS_CONTEXT_COMPACTOR or self._context_compactor is None:
+            return None
+
+        conv_tokens = _compact_estimate_tokens(self._conversation)
+        if conv_tokens < int(hard_cap * threshold):
+            return None
+
+        log.info(
+            "Auto-compaction triggered: conversation at %d tokens (%.0f%% of %d cap)",
+            conv_tokens,
+            (conv_tokens / hard_cap) * 100,
+            hard_cap,
+        )
+
+        try:
+            target = int(hard_cap * 0.55)  # Compact to ~55% to give headroom
+            result = await self._context_compactor.compact(
+                self._conversation,
+                target_budget=target,
+                preserve_recent=preserve_recent,
+                use_llm=True,
+            )
+            self._last_compaction_result = result
+            return {
+                "original_tokens": result.original_tokens,
+                "compacted_tokens": result.compacted_tokens,
+                "tokens_saved": result.tokens_saved,
+                "original_messages": result.original_message_count,
+                "compacted_messages": result.compacted_message_count,
+                "segments_summarized": result.segments_summarized,
+                "elapsed_ms": result.elapsed_ms,
+            }
+        except Exception as e:
+            log.warning("Auto-compaction failed: %s", e)
+            return None
+
+    def get_token_usage_info(self) -> dict[str, Any]:
+        """Return current token usage info for the conversation.
+
+        Used by the REPL to display token budget in the toolbar and
+        by the /compact command.
+        """
+        if not _HAS_CONTEXT_COMPACTOR:
+            conv_tokens = estimate_messages_tokens(self._conversation) if self._conversation else 0
+            hard_cap = 28000
+            usage_ratio = conv_tokens / max(1, hard_cap)
+            return {
+                "current_tokens": conv_tokens,
+                "context_window": hard_cap,
+                "usage_ratio": usage_ratio,
+                "usage_pct": int(usage_ratio * 100),
+                "message_count": len(self._conversation),
+                "should_compact": usage_ratio > 0.75,
+                "display": f"{conv_tokens / 1000:.1f}k" if conv_tokens >= 1000 else str(conv_tokens),
+                "display_budget": f"{hard_cap / 1000:.1f}k",
+            }
+        return self._context_compactor.token_usage_info(
+            self._conversation,
+            context_window=self._context_window,
+        )
+
     def _history_preserve_counts(self, route: RouteDecision) -> tuple[int, int]:
         """Choose how much conversation history to preserve per route."""
         path = str(getattr(route, "path", "") or "")
@@ -356,22 +528,7 @@ class AgentLoop:
     @staticmethod
     def _has_explicit_action_intent(prompt: str) -> bool:
         """Check if prompt contains explicit action words."""
-        return bool(
-            re.search(
-                r"\b("
-                r"run|execute|edit|write|create|delete|remove|install|apply|patch|commit"
-                r"|open|search|find|read|fix|debug|build|deploy"
-                r"|make|change|update|modify|add|set|adjust|move|resize|implement"
-                r"|refactor|rename|replace|merge|revert|undo|redo|configure|setup"
-                r"|check|look|show|list|scan|analyze|locate|explore|inspect|test"
-                r"|start|stop|restart|enable|disable|toggle|switch|connect|send"
-                r"|download|upload|fetch|pull|push|sync|copy|paste|duplicate|clone"
-                r"|convert|transform|generate|scaffold|migrate|optimize|clean|format"
-                r"|put|do|help|handle|process|use|try|give|tell|explain"
-                r")\b",
-                str(prompt or "").lower(),
-            )
-        )
+        return bool(_ACTION_INTENT_PATTERN.search(str(prompt or "").lower()))
 
     @staticmethod
     def _is_low_intent_route(path: str) -> bool:
@@ -472,8 +629,8 @@ class AgentLoop:
         s = str(text or "").strip()
         if not s:
             return False
-        token_like = bool(re.search(r"\b\d{6,12}:[A-Za-z0-9_-]{20,}\b", s))
-        numeric_id_like = bool(re.fullmatch(r"\s*-?\d{5,}\s*", s))
+        token_like = bool(_TOKEN_PATTERN.search(s))
+        numeric_id_like = bool(_NUMERIC_ID_PATTERN.fullmatch(s))
         return token_like or numeric_id_like
 
     def _is_blocked_response(self, text: str) -> bool:
@@ -481,22 +638,7 @@ class AgentLoop:
         s = str(text or "").strip().lower()
         if not s:
             return False
-        return bool(
-            re.search(
-                r"\b("
-                r"i(?: still)? need|"
-                r"please provide|"
-                r"cannot proceed|"
-                r"can't proceed|"
-                r"unable to continue|"
-                r"to continue,?|"
-                r"before i can|"
-                r"missing|"
-                r"i require"
-                r")\b",
-                s,
-            )
-        )
+        return bool(_BLOCKED_RESPONSE_PATTERN.search(s))
 
     def _is_project_related_prompt(self, prompt: str) -> bool:
         """Heuristic for whether a prompt likely needs repo/project context."""
@@ -554,6 +696,87 @@ class AgentLoop:
             return True
 
         # File-ish patterns (paths, extensions)
-        if re.search(r"[A-Za-z]:\\\\|/|\\\\|\\.py\\b|\\.js\\b|\\.ts\\b|\\.json\\b|\\.toml\\b|\\.md\\b", prompt):
+        if _FILE_PATH_PATTERN.search(prompt):
             return True
         return False
+
+    def _sync_user_message_to_intelligence(self, text: str) -> None:
+        """Sync a user message to the conversation intelligence tracker.
+
+        This ensures the intelligence system stays in sync with the main
+        conversation list.
+
+        Args:
+            text: The user message content
+        """
+        if not text:
+            return
+        try:
+            self._conv_intel.update("user", text)
+        except Exception as e:
+            log.debug("Failed to sync user message to intelligence: %s", e)
+
+    def _sync_assistant_message_to_intelligence(self, text: str) -> None:
+        """Sync an assistant message to the conversation intelligence tracker.
+
+        This ensures the intelligence system stays in sync with the main
+        conversation list.
+
+        Args:
+            text: The assistant message content
+        """
+        if not text:
+            return
+        try:
+            self._conv_intel.update("assistant", text)
+        except Exception as e:
+            log.debug("Failed to sync assistant message to intelligence: %s", e)
+
+    def check_if_followup(self, message: str) -> bool:
+        """Check if a message is a follow-up using conversation intelligence.
+
+        Args:
+            message: The user message to check
+
+        Returns:
+            True if the message is detected as a follow-up
+        """
+        try:
+            return self._conv_intel.is_followup(message)
+        except Exception as e:
+            log.debug("Failed to check follow-up status: %s", e)
+            return False
+
+    def resolve_message_references(self, message: str) -> str:
+        """Resolve pronouns and references in a message using conversation context.
+
+        If the message is ambiguous (short, has pronouns, or is a follow-up),
+        this injects relevant conversation context to help the LLM understand
+        what the user is referring to.
+
+        Args:
+            message: The user message to potentially augment
+
+        Returns:
+            The message, possibly with conversation context injected
+        """
+        try:
+            return self._conv_intel.resolve_references(message)
+        except Exception as e:
+            log.debug("Failed to resolve message references: %s", e)
+            return message
+
+    def detect_user_confusion(self, message: str) -> bool:
+        """Detect if the user appears confused by the prior response.
+
+        Args:
+            message: The user's current message
+
+        Returns:
+            True if the user appears confused
+        """
+        try:
+            return self._conv_intel.detect_confusion(message)
+        except Exception as e:
+            log.debug("Failed to detect confusion: %s", e)
+            return False

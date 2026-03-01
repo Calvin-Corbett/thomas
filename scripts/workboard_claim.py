@@ -19,9 +19,11 @@ from pathlib import Path
 try:
     from scripts import agent_identity
     from scripts import check_workboard_claims as claims_gate
+    from scripts import virtual_office_identity
 except Exception:  # pragma: no cover
     import agent_identity  # type: ignore
     import check_workboard_claims as claims_gate  # type: ignore
+    import virtual_office_identity  # type: ignore
 
 try:
     from scripts import workboard_message as workboard_message_mod
@@ -30,6 +32,13 @@ except Exception:  # pragma: no cover
         import workboard_message as workboard_message_mod  # type: ignore
     except Exception:  # pragma: no cover
         workboard_message_mod = None  # type: ignore
+try:
+    from scripts import workboard_issue as workboard_issue_mod
+except Exception:  # pragma: no cover
+    try:
+        import workboard_issue as workboard_issue_mod  # type: ignore
+    except Exception:  # pragma: no cover
+        workboard_issue_mod = None  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -44,20 +53,31 @@ ACTIVE_TASK_HEADING_PREFIX = "active tasks"
 ACTIVE_TASK_HEADING_LABEL = "Active Tasks"
 CLAIM_ROLE_VALUES = ("solo", "parent", "worker")
 DEFAULT_DISPATCH_TARGET_WORKERS = 2
+DEFAULT_MIN_DISPATCH_TARGET_WORKERS = 2
 DEFAULT_DISPATCH_MAX_SUGGESTIONS = 5
 DEFAULT_DIRTY_RELEASE_REASON_MIN_LEN = 12
-DEFAULT_TASK_MANAGER_AGENT = "task-manager-agent"
+DEFAULT_TASK_MANAGER_AGENT = "thomas"
 TEMP_TASK_CREATOR_TASK_TAG = "[temp-task-creator]"
 TEMP_TASK_CREATOR_SCOPE = "runtime/coordination/temp-task-creator"
 TEMP_TASK_CREATOR_AGENT_PREFIX = "temp-task-creator"
 TEMP_TASK_CREATOR_NAME_PREFIX = "Temp-Task-Creator"
 TEMP_TASK_CREATOR_RELEASE_REASON = "task manager ended temporary task creator assignment"
+TASK_MANAGER_AGENT_ALIASES = {"thomas", "task-manager-agent", "task-manager"}
 _TEMP_TASK_CREATOR_OWNER_PATTERN = re.compile(r"owner=`([^`]+)`", re.IGNORECASE)
 _TEMP_TASK_CREATOR_MANAGER_PATTERN = re.compile(r"manager=`([^`]+)`", re.IGNORECASE)
 
 
 def _agent_key(agent: str) -> str:
     return str(agent or "").strip().lower()
+
+
+def _task_manager_agent_keys(manager_agent: str) -> set[str]:
+    manager_key = _agent_key(manager_agent)
+    if not manager_key:
+        return set(TASK_MANAGER_AGENT_ALIASES)
+    if manager_key in TASK_MANAGER_AGENT_ALIASES:
+        return set(TASK_MANAGER_AGENT_ALIASES)
+    return {manager_key}
 
 
 def _normalize_scope_token(scope: str) -> str:
@@ -359,7 +379,7 @@ def _resolve_display_name(name: str | None, agent: str) -> str:
     candidate = str(name or "").strip()
     if candidate:
         return _sanitize_field("name", candidate)
-    return _sanitize_field("name", agent)
+    return _sanitize_field("name", virtual_office_identity.default_display_name(agent))
 
 
 def _normalize_parent_token(parent: str | None) -> str:
@@ -879,6 +899,37 @@ def _validate_and_write(workboard_path: Path, original_text: str, new_text: str)
     return True, []
 
 
+def _remove_up_for_grabs_entry(lines: list[str], task_id: str) -> tuple[bool, str]:
+    if workboard_issue_mod is None:
+        return False, "workboard_issue module unavailable"
+    if not task_id:
+        return False, "task_id is required to remove up-for-grabs entry"
+    section = workboard_issue_mod._find_up_for_grabs_section(lines)  # type: ignore[attr-defined]
+    key = _normalize_task_id(task_id)
+    remove_idx: int | None = None
+    entry_field: dict[str, str] | None = None
+    for idx in workboard_issue_mod._bullet_indices(lines, section[0], section[1]):  # type: ignore[attr-defined]
+        entry, fields, err = workboard_issue_mod._parse_up_for_grabs_line(idx + 1, lines[idx])  # type: ignore[attr-defined]
+        if err:
+            return False, err
+        if entry is not None and workboard_issue_mod._is_none_entry(entry):  # type: ignore[attr-defined]
+            continue
+        if fields and _normalize_task_id(fields.get("task_id", "")) == key:
+            remove_idx = idx
+            entry_field = fields
+            break
+
+    if remove_idx is None:
+        return False, f"up-for-grabs task `{task_id}` not found"
+    if not entry_field:
+        return False, f"up-for-grabs task `{task_id}` entry is malformed"
+
+    del lines[remove_idx]
+    section = workboard_issue_mod._find_up_for_grabs_section(lines)  # type: ignore[attr-defined]
+    workboard_issue_mod._ensure_none_if_empty(lines, section_start=section[0], section_end=section[1])  # type: ignore[attr-defined]
+    return True, f"removed up-for-grabs task `{entry_field.get('task_id', task_id)}`"
+
+
 def claim(
     workboard_path: Path,
     *,
@@ -946,6 +997,7 @@ def claim(
             lines.insert(insert_at, formatted)
             action = f"added claim for `{agent}`"
 
+        claim_task_id = _task_id_from_agent(agent)
         task_ok, task_msg = _upsert_active_task(
             lines,
             agent=agent,
@@ -956,10 +1008,37 @@ def claim(
             parent=claim_parent,
         )
         if not task_ok:
-            return False, task_msg
+            if "task_id appears in both active tasks and up-for-grabs" in task_msg.lower():
+                ok_remove, remove_msg = _remove_up_for_grabs_entry(lines, task_id=claim_task_id)
+                if not ok_remove:
+                    return False, remove_msg
+                task_ok, task_msg = _upsert_active_task(
+                    lines,
+                    agent=agent,
+                    scope=scope,
+                    task=task,
+                    name=claim_name,
+                    role=claim_role,
+                    parent=claim_parent,
+                )
+                if not task_ok:
+                    return False, task_msg
+            else:
+                return False, task_msg
+
+        overlap_guard_phrase = f"task_id appears in both active tasks and up-for-grabs: `{claim_task_id}`"
 
         new_text = "\n".join(lines) + ("\n" if original_text.endswith("\n") else "")
         ok, violations = _validate_and_write(workboard_path, original_text, new_text)
+        if not ok and any(overlap_guard_phrase in str(item).lower() for item in violations):
+            ok_remove, remove_msg = _remove_up_for_grabs_entry(lines, task_id=claim_task_id)
+            if not ok_remove:
+                joined = "; ".join(violations)
+                return False, f"claim update rejected by gate: {joined}"
+
+            new_text = "\n".join(lines) + ("\n" if original_text.endswith("\n") else "")
+            ok, violations = _validate_and_write(workboard_path, original_text, new_text)
+
         if not ok:
             joined = "; ".join(violations)
             return False, f"claim update rejected by gate: {joined}"
@@ -1183,7 +1262,7 @@ def suggest_delegation(
     commands: list[str] = []
     for idx, item in enumerate(ready, start=1):
         child_agent = f"{parent_agent}-Worker-{idx}"
-        child_name = f"{parent_name}-worker-{idx}"
+        child_name = virtual_office_identity.default_display_name(child_agent)
         task_label = f"[WIP][AUTO-{idx:02d}] {item['task_id']}: {item['summary']}"
         command = (
             "python scripts/workboard_claim.py --claim "
@@ -1347,8 +1426,10 @@ def release_temp_task_creator(
 ) -> tuple[bool, dict[str, object] | str]:
     actor_clean = _sanitize_field("agent", actor_agent)
     manager_clean = _sanitize_field("task_manager_agent", task_manager_agent or DEFAULT_TASK_MANAGER_AGENT)
-    if _agent_key(actor_clean) != _agent_key(manager_clean):
-        return False, f"only `{manager_clean}` can release temporary task creator assignment"
+    allowed_actors = _task_manager_agent_keys(manager_clean)
+    if _agent_key(actor_clean) not in allowed_actors:
+        allowed_text = ", ".join(sorted(allowed_actors))
+        return False, f"only {allowed_text} can release temporary task creator assignment"
 
     violations, claims, _active_tasks, _up_for_grabs, _issues = claims_gate.evaluate_board(workboard_path)
     if violations:
@@ -1432,7 +1513,7 @@ def dispatch_workers(
     task_manager_agent: str = DEFAULT_TASK_MANAGER_AGENT,
     notify_task_manager: bool = True,
 ) -> tuple[bool, dict[str, object] | str]:
-    target = max(1, int(target_workers or 1))
+    target = max(DEFAULT_MIN_DISPATCH_TARGET_WORKERS, int(target_workers or DEFAULT_DISPATCH_TARGET_WORKERS))
     max_items = max(1, int(max_suggestions or 1))
     parent_key = _agent_key(parent_agent)
 
@@ -1531,7 +1612,7 @@ def dispatch_workers(
             if worker_index is None:
                 worker_index = _next_worker_index(parent_agent, claims)
             child_agent = suggested_agent or f"{parent_agent}-Worker-{worker_index}"
-            child_name = suggested_name or f"{parent_name}-worker-{worker_index}"
+            child_name = suggested_name or virtual_office_identity.default_display_name(child_agent)
             task_label = f"[WIP][AUTO-{worker_index:02d}] {task_id}: {summary}"
 
             attempted_this_round = True
@@ -1671,7 +1752,10 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--dispatch-target-workers",
         type=int,
         default=DEFAULT_DISPATCH_TARGET_WORKERS,
-        help=("Target active workers for --dispatch-workers " f"(default: {DEFAULT_DISPATCH_TARGET_WORKERS})."),
+        help=(
+            "Target active workers for --dispatch-workers (minimum 2). "
+            f"(default: {DEFAULT_DISPATCH_TARGET_WORKERS})."
+        ),
     )
     parser.add_argument(
         "--dispatch-max-suggestions",

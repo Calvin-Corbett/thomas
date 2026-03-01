@@ -1,3 +1,4 @@
+import os
 import unittest
 
 from thomas.autonomy.workflows import WorkflowRunner
@@ -135,7 +136,53 @@ class _CodingPipelineAdapter:
         return {"output": "ok"}
 
 
+class _ApprovalBrokerStub:
+    def __init__(self, approve: bool = True):
+        self.approve = approve
+        self.calls: list[dict[str, str]] = []
+
+    async def require(
+        self,
+        *,
+        run_id,
+        tool_call_id,
+        session_id,
+        tool_name,
+        args_preview,
+        reason,
+        timeout_s,
+    ):
+        self.calls.append(
+            {
+                "run_id": str(run_id),
+                "tool_call_id": str(tool_call_id),
+                "session_id": str(session_id),
+                "tool_name": str(tool_name),
+                "reason": str(reason),
+                "timeout_s": str(timeout_s),
+            }
+        )
+        return self.approve
+
+
 class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
+    ENV_KEYS = ("THOMAS_AUTONOMY_NO_HUMAN_MODE", "THOMAS_NO_HUMAN_MODE", "THOMAS_GUARDRAILS_NO_HUMAN_MODE")
+
+    async def asyncSetUp(self):
+        self._previous_env = {k: os.environ.get(k) for k in self.ENV_KEYS}
+        for k in self.ENV_KEYS:
+            os.environ.pop(k, None)
+        return await super().asyncSetUp()
+
+    async def asyncTearDown(self):
+        await super().asyncTearDown()
+        for k in self.ENV_KEYS:
+            previous = self._previous_env.get(k)
+            if previous is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = previous
+
     async def test_chain_workflow_runs_multiple_steps(self):
         runner = WorkflowRunner(chat_adapter=_ChainParallelAdapter(), session_id="s1")
         out = await runner.run(
@@ -308,3 +355,63 @@ class TestWorkflowRunner(unittest.IsolatedAsyncioTestCase):
         self.assertIn("return 2", str(out.get("final_output") or ""))
         steps = out.get("steps") or []
         self.assertGreaterEqual(len(steps), 4)
+
+    async def test_chain_allow_mode_skips_approval_broker(self):
+        broker = _ApprovalBrokerStub(approve=False)
+        runner = WorkflowRunner(
+            chat_adapter=_ChainParallelAdapter(),
+            session_id="s1",
+            approval_broker=broker,
+            no_human_mode="allow",
+        )
+        out = await runner.run(
+            {
+                "workflow": "chain",
+                "goal": "update deployment notes",
+                "steps": [{"name": "doc", "prompt": "rewrite notes", "approval": True}],
+            }
+        )
+        self.assertEqual(out.get("pattern"), "chain")
+        self.assertEqual(len(out.get("steps", [])), 1)
+        self.assertEqual(len(broker.calls), 0)
+
+    async def test_chain_deny_mode_blocks_approval_step(self):
+        broker = _ApprovalBrokerStub(approve=True)
+        runner = WorkflowRunner(
+            chat_adapter=_ChainParallelAdapter(),
+            session_id="s1",
+            approval_broker=broker,
+            no_human_mode="deny",
+        )
+        out = await runner.run(
+            {
+                "workflow": "chain",
+                "goal": "update deployment notes",
+                "steps": [{"name": "doc", "prompt": "rewrite notes", "approval": True}],
+            }
+        )
+        self.assertEqual(out.get("pattern"), "chain")
+        self.assertIs(out.get("ok"), False)
+        self.assertIn("blocked by no-human deny", str(out.get("error") or ""))
+        self.assertEqual(int(out.get("completed_steps") or 0), 0)
+        self.assertEqual(len(broker.calls), 0)
+
+    async def test_chain_mode_uses_no_human_env_mode_allow(self):
+        os.environ["THOMAS_NO_HUMAN_MODE"] = "allow"
+        broker = _ApprovalBrokerStub(approve=False)
+        runner = WorkflowRunner(
+            chat_adapter=_ChainParallelAdapter(),
+            session_id="s1",
+            approval_broker=broker,
+            no_human_mode="human",
+        )
+        out = await runner.run(
+            {
+                "workflow": "chain",
+                "goal": "env override review",
+                "steps": [{"name": "doc", "prompt": "review release note", "approval": True}],
+            }
+        )
+        self.assertEqual(out.get("pattern"), "chain")
+        self.assertEqual(len(out.get("steps", [])), 1)
+        self.assertEqual(len(broker.calls), 0)

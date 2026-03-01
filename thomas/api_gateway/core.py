@@ -5,11 +5,17 @@ and authentication middleware for managing API traffic.
 """
 
 import hashlib
+import logging
+import os
+import secrets
+import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 
 class RateLimitStrategy(str, Enum):
@@ -122,7 +128,13 @@ class AuthMiddleware:
 
     def __init__(self):
         self.tokens: dict[str, AuthToken] = {}
-        self.secret_key: str = "default-secret-key"
+        self.secret_key: str = os.environ.get("THOMAS_SECRET_KEY", "")
+        if not self.secret_key:
+            warnings.warn(
+                "THOMAS_SECRET_KEY not set — using random key. Set this env var for production.",
+                stacklevel=2,
+            )
+            self.secret_key = secrets.token_hex(32)
 
     def register_token(self, token: AuthToken) -> None:
         """Register an authentication token."""
@@ -152,8 +164,7 @@ class AuthMiddleware:
 
     def generate_token(self, client_id: str, scope: list[str], ttl_hours: int = 24) -> str:
         """Generate a new authentication token."""
-        token_data = f"{client_id}-{datetime.now().isoformat()}"
-        token = hashlib.sha256(token_data.encode()).hexdigest()
+        token = secrets.token_hex(32)
 
         expires_at = datetime.now() + timedelta(hours=ttl_hours)
         auth_token = AuthToken(token=token, client_id=client_id, scope=scope, expires_at=expires_at)
@@ -209,6 +220,8 @@ class APIGateway:
         self.request_log.append(
             {"timestamp": datetime.now().isoformat(), "path": path, "method": method, "client_id": client_id}
         )
+        if len(self.request_log) > 10000:
+            self.request_log = self.request_log[-5000:]
 
         # Check authentication
         if headers and "Authorization" in headers:
@@ -244,7 +257,8 @@ class APIGateway:
             if handler:
                 response = await handler(e)
             else:
-                response = {"status": 500, "error": "Internal Server Error", "message": str(e)}
+                log.exception("Handler error for %s", route_key)
+                response = {"status": 500, "error": "Internal Server Error", "message": "An unexpected error occurred"}
 
         # Apply interceptors
         for interceptor in self.response_interceptors:

@@ -46,7 +46,12 @@ def register_search_routes(
         v = _qp(request, key)
         if v is None:
             return None
-        return v.strip().lower() in ("1", "true", "yes")
+        normalized = v.strip().lower()
+        if normalized in ("1", "true", "yes"):
+            return True
+        if normalized in ("0", "false", "no"):
+            return False
+        raise web.HTTPBadRequest(text=f"invalid boolean value for '{key}'")
 
     async def _read_json(request: web.Request) -> Dict[str, Any]:
         try:
@@ -71,7 +76,9 @@ def register_search_routes(
         since = _qp(request, "since")
         before = _qp(request, "before")
         has_tools = _qp_bool(request, "has_tools")
-        sort = _qp(request, "sort", "relevance") or "relevance"
+        sort = ((_qp(request, "sort", "relevance") or "relevance").strip().lower())
+        if sort not in {"relevance", "newest"}:
+            raise web.HTTPBadRequest(text="query parameter 'sort' must be one of: relevance, newest")
         scope_raw = _qp(request, "scope", "all") or "all"
         scopes = {s.strip().lower() for s in scope_raw.split(",") if s.strip()} or {"all"}
         saved_id = _qp_int(request, "saved_id", -1)

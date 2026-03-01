@@ -141,7 +141,11 @@ class ModelConfig:
             errors.append(f"models.{self.name}: chat_path should start with '/'")
         if self.models_path and not self.models_path.startswith("/"):
             errors.append(f"models.{self.name}: models_path should start with '/'")
-        if self.provider == "openai_compat" and not self.base_url:
+        if (
+            self.provider == "openai_compat"
+            and not self.base_url
+            and self.model != "dummy"
+        ):
             errors.append(f"models.{self.name}: base_url is required for openai_compat provider")
         return errors
 
@@ -278,6 +282,7 @@ class AppConfig:
     server: ServerConfig = field(default_factory=ServerConfig)
     journal: JournalConfig = field(default_factory=JournalConfig)
     quality: QualityConfig = field(default_factory=QualityConfig)
+    keybindings: dict[str, str] = field(default_factory=dict)
     unknown_core_keys: list[str] = field(default_factory=list)
     default_model: str = "local"
     max_agent_iterations: int = 10
@@ -519,6 +524,7 @@ def _collect_unknown_core_keys(data: dict[str, Any]) -> list[str]:
         "server",
         "journal",
         "quality",
+        "keybindings",
         "default_model",
         "max_agent_iterations",
     }
@@ -702,6 +708,13 @@ def load_config(path: Path | None = None) -> AppConfig:
     if environment not in ("development", "production"):
         environment = "development"
 
+    # Build keybindings config
+    kb_data = data.get("keybindings", {})
+    keybindings: dict[str, str] = {}
+    if isinstance(kb_data, dict):
+        for action, key in kb_data.items():
+            keybindings[str(action).strip()] = str(key).strip()
+
     cfg = AppConfig(
         models=models,
         embed=embed,
@@ -711,6 +724,7 @@ def load_config(path: Path | None = None) -> AppConfig:
         server=server,
         journal=journal,
         quality=quality,
+        keybindings=keybindings,
         unknown_core_keys=unknown_core_keys,
         default_model=data.get("default_model", "local"),
         max_agent_iterations=data.get("max_agent_iterations", 10),

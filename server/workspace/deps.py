@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select
 
 from .models import Workspace, WorkspaceMembership
-from .rbac import WorkspaceRole, role_allows
+from .rbac import WorkspaceRole, normalize_role, role_allows
 
 
 def _import_symbol(candidates: Sequence[str], hint: str):
@@ -119,7 +119,10 @@ def enforce_workspace(
     if not ws:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 
-    role = WorkspaceRole(str(membership.role))
+    try:
+        role = normalize_role(membership.role, field="membership role")
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Invalid membership role") from exc
     request.state.workspace_id = ws_id
     request.state.workspace_role = role.value
 

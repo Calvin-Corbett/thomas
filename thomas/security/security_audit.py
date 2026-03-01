@@ -8,7 +8,7 @@ from typing import Any
 
 from thomas.plugins.certification import certify_extension_catalog
 from thomas.security.dependency_policy import evaluate_dependency_policy
-from thomas.security.incident_drill import run_security_incident_drill
+from thomas.security.incident_drill import _validate_scoped_path, run_security_incident_drill
 from thomas.security.mutating_route_policy import evaluate_mutating_route_policy_exceptions
 from thomas.security.threat_model_cadence import evaluate_threat_model_cadence
 from thomas.system.release_contracts import build_release_contract_report
@@ -46,10 +46,32 @@ def run_security_audit(
             "summary": {"error_count": 1, "warning_count": 0},
         }
 
-    checks["threat_model_cadence"] = evaluate_threat_model_cadence(
-        root / "docs" / "THREAT_MODEL_WEB_API.md",
-        max_age_days=max_threat_model_age_days,
-    )
+    threat_model_path = root / "docs" / "THREAT_MODEL_WEB_API.md"
+    try:
+        threat_model_path = _validate_scoped_path(
+            root,
+            "docs/THREAT_MODEL_WEB_API.md",
+            scope="plan",
+        )
+    except ValueError as exc:
+        checks["threat_model_cadence"] = {
+            "ok": False,
+            "path": str(threat_model_path),
+            "errors": [
+                {
+                    "code": "threat_model.scope_violation",
+                    "message": str(exc),
+                    "remediation": "Verify threat-model file path ownership against declared plan scope.",
+                }
+            ],
+            "warnings": [],
+            "summary": {"error_count": 1, "warning_count": 0},
+        }
+    else:
+        checks["threat_model_cadence"] = evaluate_threat_model_cadence(
+            threat_model_path,
+            max_age_days=max_threat_model_age_days,
+        )
 
     checks["mutating_route_policy"] = evaluate_mutating_route_policy_exceptions(root)
 

@@ -9,7 +9,7 @@ import math
 import random
 import time
 from dataclasses import dataclass
-from typing import Optional
+from typing import Dict, Optional
 
 from thomas.pathfinding._types import Obstacle, Path, PathResult
 

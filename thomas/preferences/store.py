@@ -46,7 +46,7 @@ Theme = Literal["auto", "light", "dark"]
 BubbleStyle = Literal["rounded", "square", "compact"]
 AutonomyLevel = Literal["L1", "L2", "L3", "L4"]
 ReasoningEffort = Literal["low", "medium", "high", "max", "xhigh"]
-RunMode = Literal["auto", "fast", "thinking", "swarm", "batch"]
+RunMode = Literal["auto", "fast", "thinking"]
 TokenEconomyLevel = Literal["cheap", "optimal", "max"]
 ContradictionPolicy = Literal["latest_wins", "ask", "strict"]
 ContextPruneStrategy = Literal["recency", "balanced", "aggressive"]
@@ -211,7 +211,7 @@ class NotificationPrefs(BaseModel):
 
 
 class AutonomyPrefs(BaseModel):
-    default_level: AutonomyLevel = "L3"
+    default_level: AutonomyLevel = "L1"
     concurrency_limit: int = Field(default=2, ge=1, le=64)
 
 
@@ -527,8 +527,8 @@ class AutonomyPatch(BaseModel):
             num = max(1, min(4, num))  # clamp to 1-4
             return f"L{num}"
         except (ValueError, TypeError):
-            # Default to L3 (balanced)
-            return "L3"
+            # Default to L1 (chat-only)
+            return "L1"
 
 
 class OnboardingPatch(BaseModel):
@@ -641,8 +641,8 @@ class AdvancedRuntimePatch(BaseModel):
         mode_str = str(v or "").strip().lower()
         if not mode_str:
             return None
-        # Valid modes: "auto", "fast", "thinking", "swarm", "batch"
-        valid_modes = {"auto", "fast", "thinking", "swarm", "batch"}
+        # Valid modes: "auto", "fast", "thinking"
+        valid_modes = {"auto", "fast", "thinking"}
         if mode_str in valid_modes:
             return mode_str
         # Normalize common aliases
@@ -653,10 +653,6 @@ class AdvancedRuntimePatch(BaseModel):
             "quick": "fast",
             "thinking": "thinking",
             "reason": "thinking",
-            "swarm": "swarm",
-            "multi": "swarm",
-            "batch": "batch",
-            "bulk": "batch",
         }
         return aliases.get(mode_str, "auto")
 

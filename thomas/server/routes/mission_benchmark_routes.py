@@ -186,7 +186,7 @@ def register_mission_benchmark_routes(
         profile = str(payload.get("profile") or "local").strip() or "local"
         include_baseline = bool(payload.get("include_baseline", False))
         thomas_mode = str(payload.get("thomas_mode") or "fast").strip().lower()
-        if thomas_mode not in {"fast", "auto", "thinking", "swarm"}:
+        if thomas_mode not in {"fast", "auto", "thinking"}:
             thomas_mode = "fast"
         token_economy = str(payload.get("token_economy") or "optimal").strip().lower()
         if token_economy not in {"cheap", "optimal", "max"}:

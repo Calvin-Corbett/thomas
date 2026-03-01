@@ -10,6 +10,7 @@ import asyncio
 import json
 import logging
 import re
+import inspect
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
@@ -68,6 +69,17 @@ class _ProviderCooldown:
 
 
 _PROVIDER_COOLDOWNS: dict[str, _ProviderCooldown] = {}
+
+
+async def _coerce_async_iterator(value: Any, *, source: str) -> AsyncIterator[Any]:
+    if hasattr(value, "__aiter__"):
+        return value
+    if inspect.isawaitable(value):
+        resolved = await value
+        if hasattr(resolved, "__aiter__"):
+            return resolved
+        raise TypeError(f"{source} returned {type(resolved)!r} after await, not an async iterator.")
+    raise TypeError(f"{source} returned unsupported type {type(value)!r}; expected async iterator.")
 
 
 def _get_cooldown(key: str) -> _ProviderCooldown:
@@ -546,7 +558,7 @@ class LLMClient:
                 attempt["status"] = "error"
                 attempt["error"] = f"{type(e).__name__}: {e}"
                 raise
-            except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException, OSError) as e:
+            except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException, OSError, NotImplementedError) as e:
                 attempt["status"] = "error"
                 attempt["error"] = f"{type(e).__name__}: {e}"
                 raise
@@ -630,7 +642,7 @@ class LLMClient:
                     )
                     continue
                 raise
-            except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException, OSError) as e:
+            except (httpx.ConnectError, httpx.ReadError, httpx.TimeoutException, OSError, NotImplementedError) as e:
                 last_error = e
                 attempt["status"] = "error"
                 attempt["error"] = f"{type(e).__name__}: {e}"
@@ -656,13 +668,25 @@ class LLMClient:
     ) -> AsyncIterator[StreamEvent]:
         if self.config.provider == "codex":
             provider = await self._get_codex_provider()
-            async for event in provider.stream_chat(messages, tools):
+            stream_obj = await _coerce_async_iterator(
+                provider.stream_chat(messages, tools),
+                source="provider.stream_chat",
+            )
+            async for event in stream_obj:
                 yield event
         elif self.config.provider == "anthropic":
-            async for event in self._stream_anthropic(messages, tools):
+            stream_obj = await _coerce_async_iterator(
+                self._stream_anthropic(messages, tools),
+                source="stream_anthropic",
+            )
+            async for event in stream_obj:
                 yield event
         else:
-            async for event in self._stream_openai(messages, tools):
+            stream_obj = await _coerce_async_iterator(
+                self._stream_openai(messages, tools),
+                source="stream_openai",
+            )
+            async for event in stream_obj:
                 yield event
 
     async def _stream_openai(
@@ -670,7 +694,11 @@ class LLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
-        async for event in stream_openai(self, messages, tools):
+        stream_obj = await _coerce_async_iterator(
+            stream_openai(self, messages, tools),
+            source="stream_openai",
+        )
+        async for event in stream_obj:
             yield event
 
     async def _stream_anthropic(
@@ -678,7 +706,11 @@ class LLMClient:
         messages: list[dict[str, Any]],
         tools: list[dict[str, Any]] | None = None,
     ) -> AsyncIterator[StreamEvent]:
-        async for event in stream_anthropic(self, messages, tools):
+        stream_obj = await _coerce_async_iterator(
+            stream_anthropic(self, messages, tools),
+            source="stream_anthropic",
+        )
+        async for event in stream_obj:
             yield event
 
     async def chat(

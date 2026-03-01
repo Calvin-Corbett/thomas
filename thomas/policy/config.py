@@ -11,6 +11,17 @@ try:
 except Exception:  # pragma: no cover
     tomllib = None  # type: ignore
 
+
+_NO_HUMAN_MODES = {"human", "allow", "deny"}
+
+
+def _normalize_no_human_mode(value: Optional[str]) -> str:
+    mode = str(value or "human").strip().lower()
+    if mode not in _NO_HUMAN_MODES:
+        return "human"
+    return mode
+
+
 def _env_bool(name: str, default: Optional[bool] = None) -> Optional[bool]:
     v = os.environ.get(name)
     if v is None:
@@ -26,6 +37,7 @@ def _env_bool(name: str, default: Optional[bool] = None) -> Optional[bool]:
 class GuardrailsSettings:
     enabled: bool = False
     approval_timeout_s: int = 60
+    no_human_mode: str = "human"
     # If true, only certain tools require approvals; otherwise use rules.
     tools_require_approval: List[str] = field(default_factory=list)
 
@@ -49,6 +61,9 @@ class PolicyConfig:
         g = m.get("guardrails") or {}
         cfg = PolicyConfig()
         cfg.guardrails.enabled = bool(g.get("enabled", cfg.guardrails.enabled))
+        cfg.guardrails.no_human_mode = _normalize_no_human_mode(
+            g.get("no_human_mode", cfg.guardrails.no_human_mode)
+        )
         cfg.guardrails.approval_timeout_s = int(g.get("approval_timeout_s", cfg.guardrails.approval_timeout_s))
         cfg.guardrails.tools_require_approval = list(g.get("tools_require_approval", cfg.guardrails.tools_require_approval))
         cfg.deny_roots = list(m.get("deny_roots", cfg.deny_roots))
@@ -91,6 +106,11 @@ def load_policy_config(runtime_root: str) -> PolicyConfig:
     env_override = _env_bool("THOMAS_GUARDRAILS", None)
     if env_override is not None:
         cfg.guardrails.enabled = env_override
+
+    cfg.guardrails.no_human_mode = _normalize_no_human_mode(
+        os.environ.get("THOMAS_NO_HUMAN_MODE") or os.environ.get("THOMAS_GUARDRAILS_NO_HUMAN_MODE") or
+        cfg.guardrails.no_human_mode
+    )
 
     to = os.environ.get("THOMAS_GUARDRAILS_TIMEOUT_S")
     if to:

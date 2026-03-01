@@ -6,6 +6,8 @@ Run once to exercise syntax/lint, core gates, and test suite.
 from __future__ import annotations
 
 import argparse
+import getpass
+import json
 import os
 import shlex
 import subprocess
@@ -17,6 +19,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
 CLEAN_DEV_VERIFY_PRESETS: tuple[str, ...] = ("strict-worktree",)
+DEFAULT_PROBLEM_TASK_ID = "audit-24h-backstop"
+BREAKGLASS_ENV = "THOMAS_SKIP_BREAKGLASS"
+BREAKGLASS_TICKET_ENV = "THOMAS_SKIP_TICKET"
+BREAKGLASS_REASON_ENV = "THOMAS_SKIP_REASON"
+AGENT_ENV_KEYS: tuple[str, ...] = (
+    "AGENT_ID",
+    "THOMAS_AGENT_ID",
+    "THOMAS_AGENT_NAME",
+    "CODEX_AGENT_NAME",
+    "AGENT_NAME",
+)
 
 CORE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Python compile check", (PY, "-m", "compileall", "-q", "thomas", "tests")),
@@ -42,7 +55,9 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Pre-commit skip policy gate", (PY, "scripts/check_precommit_skip_policy.py")),
     ("Surface parity gate", (PY, "scripts/check_surface_parity.py")),
     ("Workboard claims gate", (PY, "scripts/check_workboard_claims.py")),
+    ("Workboard task problems gate", (PY, "scripts/check_workboard_task_problems.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
+    ("Workboard problem recorder smoke", (PY, "scripts/workboard_problem_record.py", "--help")),
     ("Feature master sync gate", (PY, "scripts/sync_feature_master_list.py", "--check")),
     ("Release hygiene gate", (PY, "scripts/check_release_hygiene.py")),
     ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
@@ -76,6 +91,60 @@ def _run_step(label: str, cmd: Sequence[str]) -> int:
     return int(completed.returncode)
 
 
+def _record_problem_failure(
+    *,
+    label: str,
+    cmd: Sequence[str],
+    exit_code: int,
+    task_id: str,
+    agent: str,
+) -> tuple[bool, str]:
+    record_cmd: list[str] = [
+        PY,
+        "scripts/workboard_problem_record.py",
+        "--runner",
+        "auto_checks",
+        "--step",
+        str(label),
+        "--exit-code",
+        str(int(exit_code)),
+        "--command",
+        _fmt_cmd(cmd),
+        "--json",
+    ]
+    task_clean = str(task_id or "").strip()
+    if task_clean:
+        record_cmd.extend(["--task-id", task_clean])
+    agent_clean = str(agent or "").strip()
+    if agent_clean:
+        record_cmd.extend(["--agent", agent_clean])
+
+    completed = subprocess.run(record_cmd, cwd=ROOT, capture_output=True, text=True, check=False)
+    stdout = str(completed.stdout or "").strip()
+    if completed.returncode != 0:
+        if stdout:
+            try:
+                payload = json.loads(stdout)
+            except json.JSONDecodeError:
+                payload = {}
+            error = str(payload.get("error", "")).strip()
+            if error:
+                return False, error
+        stderr = str(completed.stderr or "").strip()
+        return False, stderr or f"problem recorder exited {completed.returncode}"
+
+    if stdout:
+        try:
+            payload = json.loads(stdout)
+        except json.JSONDecodeError:
+            payload = {}
+        problem_path = str(payload.get("problem_path", "")).strip()
+        task = str(payload.get("task_id", "")).strip()
+        if task and problem_path:
+            return True, f"task `{task}` -> {problem_path}"
+    return True, "problem record updated"
+
+
 def _warn_missing_optional_modules() -> None:
     missing: list[str] = []
     for module_name, package_name in OPTIONAL_MODULES:
@@ -93,6 +162,44 @@ def _warn_missing_optional_modules() -> None:
 def _truthy_env(name: str) -> bool:
     raw = str(os.getenv(name, "")).strip().lower()
     return raw in {"1", "true", "yes", "on"}
+
+
+def _resolve_agent_id() -> str:
+    for key in AGENT_ENV_KEYS:
+        value = str(os.getenv(key, "")).strip()
+        if value:
+            return value
+    fallback = str(getpass.getuser() or "").strip()
+    return fallback
+
+
+def _ensure_breakglass_metadata(*, skip_gates: bool, skip_tests: bool) -> tuple[str | None, list[str]]:
+    notes: list[str] = []
+    if not (skip_gates or skip_tests):
+        return None, notes
+    if not _truthy_env(BREAKGLASS_ENV):
+        return (
+            f"--skip-gates/--skip-tests are breakglass-only. Set {BREAKGLASS_ENV}=1 and provide audited metadata.",
+            notes,
+        )
+    agent = _resolve_agent_id()
+    if agent and not str(os.getenv("AGENT_ID", "")).strip():
+        os.environ["AGENT_ID"] = agent
+        notes.append("agent id auto-filled")
+    ticket = str(os.getenv(BREAKGLASS_TICKET_ENV, "")).strip()
+    if len(ticket) < 6:
+        auto_ticket = f"AUTO-{int(time.time())}-{agent[:6].lower() or 'agent'}"
+        os.environ[BREAKGLASS_TICKET_ENV] = auto_ticket
+        notes.append("ticket auto-generated")
+    reason = " ".join(str(os.getenv(BREAKGLASS_REASON_ENV, "")).split()).strip()
+    if len(reason) < 12:
+        reason = (
+            f"auto-generated breakglass for runner skip flags; "
+            f"skip_gates={bool(skip_gates)} skip_tests={bool(skip_tests)}"
+        )
+        os.environ[BREAKGLASS_REASON_ENV] = reason
+        notes.append("reason auto-generated")
+    return None, notes
 
 
 def _default_require_clean_worktree() -> bool:
@@ -140,11 +247,29 @@ def run(argv: Iterable[str] | None = None) -> int:
     parser.add_argument("--skip-gates", action="store_true", help="Skip gate scripts.")
     parser.add_argument("--skip-tests", action="store_true", help="Skip pytest suite.")
     parser.add_argument(
+        "--problem-task-id",
+        default=str(os.getenv("THOMAS_TASK_ID", "")).strip() or DEFAULT_PROBLEM_TASK_ID,
+        help=(
+            "Task id used for automatic PROBLEM.md failure logging "
+            "(defaults to THOMAS_TASK_ID or audit-24h-backstop)."
+        ),
+    )
+    parser.add_argument(
+        "--problem-agent",
+        default="",
+        help="Agent id used for automatic PROBLEM.md failure logging (defaults from AGENT_ID/THOMAS_AGENT_ID env).",
+    )
+    parser.add_argument(
+        "--no-record-problem-on-fail",
+        action="store_true",
+        help="Disable automatic task PROBLEM.md logging when a step fails.",
+    )
+    parser.add_argument(
         "--require-clean-worktree",
         dest="require_clean_worktree",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help=("Override repo-hygiene dirty-worktree enforcement. " "Defaults to enabled in CI and disabled locally."),
+        help=("Override repo-hygiene dirty-worktree enforcement. Defaults to enabled in CI and disabled locally."),
     )
     parser.add_argument(
         "--continue-on-fail",
@@ -152,6 +277,15 @@ def run(argv: Iterable[str] | None = None) -> int:
         help="Continue running remaining steps after a failure.",
     )
     args = parser.parse_args(list(argv) if argv is not None else None)
+    skip_override_error, breakglass_notes = _ensure_breakglass_metadata(
+        skip_gates=bool(args.skip_gates),
+        skip_tests=bool(args.skip_tests),
+    )
+    if skip_override_error:
+        print(f"[auto] FAIL {skip_override_error}")
+        return 1
+    for note in breakglass_notes:
+        print(f"[auto] breakglass metadata: {note}")
 
     steps: list[tuple[str, tuple[str, ...]]] = []
     if args.clean_dev_artifacts:
@@ -181,19 +315,35 @@ def run(argv: Iterable[str] | None = None) -> int:
     _warn_missing_optional_modules()
 
     failures: list[tuple[str, int]] = []
+    recorder_failures: list[str] = []
     started = time.monotonic()
     for label, cmd in steps:
         rc = _run_step(label, cmd)
         if rc != 0:
             failures.append((label, rc))
+            if not args.no_record_problem_on_fail:
+                logged, details = _record_problem_failure(
+                    label=label,
+                    cmd=cmd,
+                    exit_code=rc,
+                    task_id=str(args.problem_task_id),
+                    agent=str(args.problem_agent),
+                )
+                if logged:
+                    print(f"[auto] Problem ledger updated for failed step ({details})")
+                else:
+                    recorder_failures.append(f"{label}: {details}")
+                    print(f"[auto] FAIL problem ledger update for `{label}`: {details}")
             if not args.continue_on_fail:
                 break
 
     elapsed = time.monotonic() - started
-    if failures:
+    if failures or recorder_failures:
         print("\n[auto] Summary: FAILED")
         for label, rc in failures:
             print(f"[auto] - {label}: exit {rc}")
+        for item in recorder_failures:
+            print(f"[auto] - Problem ledger: {item}")
         print(f"[auto] Total time: {elapsed:.1f}s")
         return 1
 

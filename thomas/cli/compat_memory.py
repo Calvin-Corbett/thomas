@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import importlib
 import json
+import os
 from typing import Any
 
 import click
@@ -12,6 +14,12 @@ from thomas.cli.parity_support import (
 )
 from thomas.cli.parity_support import (
     skill_conflicts as _skill_conflicts,
+)
+from thomas.cli.parity_support import (
+    skills_state_path as _skills_state_path,
+)
+from thomas.cli.parity_support import (
+    utc_iso as _utc_iso,
 )
 from thomas.core.config import AppConfig
 
@@ -70,6 +78,40 @@ _MEMORY_DESCRIBE_RUN_HINT = (
     "Pass --run to attempt execution; unimplemented operations return a structured non-zero error."
 )
 _MEMORY_RUN_MODE_HELP = "Execute backend operation (--run) or describe compatibility surface (--describe)."
+
+
+def _compat_not_implemented_payload(
+    domain: str,
+    action: str,
+    *,
+    message: str,
+    hint: str = "",
+    target: str = "",
+    mode: str = "run",
+) -> dict[str, Any]:
+    domain_text = str(domain or "").strip() or "compat"
+    action_text = str(action or "").strip()
+    mode_text = str(mode or "run").strip() or "run"
+    payload: dict[str, Any] = {
+        "ok": False,
+        "command": domain_text,
+        "action": action_text,
+        "mode": mode_text,
+        "executed": False,
+        "timestamp_utc": _utc_iso(),
+        "error": {
+            "category": "not_implemented",
+            "code": f"{domain_text}_operation_not_implemented",
+            "message": str(message or "").strip() or "Operation not implemented.",
+        },
+    }
+    hint_text = str(hint or "").strip()
+    if hint_text:
+        payload["error"]["hint"] = hint_text
+    target_text = str(target or "").strip()
+    if target_text:
+        payload["target"] = target_text
+    return payload
 
 
 def _memory_payload(

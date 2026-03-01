@@ -18,6 +18,8 @@ import sqlite3
 import time
 from collections import OrderedDict
 from datetime import datetime
+from html import unescape
+from html.parser import HTMLParser
 from typing import Any
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
 
@@ -25,6 +27,21 @@ try:
     import httpx
 except ImportError:
     from thomas._vendor import httpx_shim as httpx  # type: ignore[assignment]
+
+# Defaults + public constants consumed by web_search.py
+_BRAVE_ENDPOINT = "https://api.search.brave.com/res/v1/web/search"
+_DDG_ENDPOINT = "https://api.duckduckgo.com/"
+_DDG_HTML_ENDPOINT = "https://duckduckgo.com/html/"
+_MIN_RESULTS = 1
+_MAX_RESULTS = 10
+_DEFAULT_TIMEOUT_S = 10.0
+_DEFAULT_MAX_FETCH_CHARS = 8000
+_DEFAULT_MAX_FETCH_BYTES = 2_000_000
+_DEFAULT_RETRIES = 1
+_DEFAULT_CACHE_TTL_S = 120
+_DEFAULT_CACHE_MAX_ENTRIES = 256
+_TOML_CACHE_TTL_S = 5.0
+_TOML_CACHE: tuple[float, dict[str, Any] | None] = (0.0, None)
 
 
 def _now_ms() -> float:

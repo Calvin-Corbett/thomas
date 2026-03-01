@@ -616,11 +616,12 @@ const easySetupBackBtn = document.getElementById('easySetupBackBtn');
 const easySetupDismissBtn = document.getElementById('easySetupDismissBtn');
 const easySetupNextBtn = document.getElementById('easySetupNextBtn');
 
-let activeAutonomyLevel = 3;
+let activeAutonomyLevel = 1;
 let activeTokenEconomy = 'balanced';
 let activeReasoningEffort = '';
 let activeModelOverride = '';
 let activeChatMode = '';
+let autonomyLevelManuallySet = false;
 const KNOWN_MODEL_SUGGESTIONS = {
     codex: ['gpt-5.3-codex', 'gpt-5.2-codex', 'gpt-5.1-codex-max', 'gpt-5.2', 'gpt-5.1-codex-mini'],
 };
@@ -1265,11 +1266,21 @@ const CHAT_ROBOT_DOCK_ID = 'chatRobotDock';
 const CHAT_ROBOT_DOCK_WIDTH = 20;
 const CHAT_ROBOT_DOCK_HEIGHT = 18;
 const CHAT_ROBOT_DOCK_OUTSIDE_GAP = 24;
+const CHAT_ROBOT_DOCK_TOP_MARGIN = 4;
+const CHAT_ROBOT_DOCK_SAFE_TOP_OFFSET = 4;
 const CHAT_ROBOT_EXIT_FALL_MS = 1980;
 const CHAT_ROBOT_ENTRY_PORTAL_LEAD_MS = 360;
 const CHAT_ROBOT_ENTRY_STEP_MS = 520;
 const CHAT_ROBOT_STATUS_PORTAL_PAUSE_MS = 280;
+const CHAT_COMPOSER_OFFSET_MIN = 200;
+const CHAT_COMPOSER_OFFSET_BUFFER = 34;
+const CHAT_COMPOSER_OFFSET_EPSILON = 1;
+const CHAT_ROBOT_EXIT_WALK_MAX = 860;
+const CHAT_ROBOT_EXIT_FALL_MIN = 64;
+const CHAT_ROBOT_EXIT_FALL_MAX = 1400;
 let _lastRobotAnim = '';
+let _lastComposerOffset = 0;
+let _composerOffsetRaf = 0;
 function _pickRobotAnimation() {
     let pick;
     do {
@@ -1316,8 +1327,10 @@ function _positionRobotDock() {
     const topRaw = Math.round(anchorRect.top + ((anchorRect.height - CHAT_ROBOT_DOCK_HEIGHT) * 0.5));
     const viewportWidth = Math.max(0, Number(window.innerWidth) || 0);
     const maxLeft = Math.max(4, viewportWidth - CHAT_ROBOT_DOCK_WIDTH - 4);
+    const viewportHeight = Math.max(0, Number(window.innerHeight) || 0);
+    const maxTop = Math.max(CHAT_ROBOT_DOCK_SAFE_TOP_OFFSET, viewportHeight - CHAT_ROBOT_DOCK_HEIGHT - CHAT_ROBOT_DOCK_TOP_MARGIN);
     const left = Math.max(4, Math.min(maxLeft, leftRaw));
-    const top = Math.max(4, topRaw);
+    const top = Math.max(CHAT_ROBOT_DOCK_SAFE_TOP_OFFSET, Math.min(maxTop, topRaw));
     dock.style.left = `${left}px`;
     dock.style.top = `${top}px`;
     dock.classList.remove('is-hidden');
@@ -3939,6 +3952,7 @@ function init() {
         settingsModal.classList.add('hidden');
     }
     initComposer();
+    _initThinkingDropdown();
     initActions();
     initChatSearch();
     initChatGame();
@@ -3965,10 +3979,18 @@ function init() {
 }
 
 function syncChatComposerOffset() {
-    if (!(chatMessagesInner instanceof HTMLElement) || !(composerContainer instanceof HTMLElement)) return;
-    const rect = composerContainer.getBoundingClientRect();
-    const offset = Math.max(200, Math.ceil(rect.height) + 34);
-    chatMessagesInner.style.setProperty('--composer-offset', `${offset}px`);
+    if (_composerOffsetRaf) return;
+    _composerOffsetRaf = window.requestAnimationFrame(() => {
+        _composerOffsetRaf = 0;
+        if (!(chatMessagesInner instanceof HTMLElement) || !(composerContainer instanceof HTMLElement)) return;
+        const rect = composerContainer.getBoundingClientRect();
+        const offset = Math.max(CHAT_COMPOSER_OFFSET_MIN, Math.ceil(rect.height) + CHAT_COMPOSER_OFFSET_BUFFER);
+        if (Math.abs(offset - _lastComposerOffset) < CHAT_COMPOSER_OFFSET_EPSILON) return;
+        _lastComposerOffset = offset;
+        const offsetValue = `${offset}px`;
+        chatMessagesInner.style.setProperty('--composer-offset', offsetValue);
+        document.documentElement.style.setProperty('--composer-offset', offsetValue);
+    });
 }
 
 /**
@@ -3979,6 +4001,117 @@ function composerSyncSendButtonState() {
     const canSend = composerTextarea.value.trim().length > 0 || pendingDocs.length > 0 || pendingImages.length > 0;
     sendBtn.disabled = !canSend;
     sendBtn.style.color = canSend ? 'var(--text-primary)' : '';
+}
+
+/* ── Thinking / Reasoning Effort Dropdown ── */
+function _initThinkingDropdown() {
+    const inputRow = composerTextarea?.closest('.composer-input-row');
+    if (!inputRow) return;
+    const micBtn = document.getElementById('micBtn');
+
+    // Create the thinking toggle button
+    const thinkBtn = document.createElement('button');
+    thinkBtn.className = 'btn-icon thinking-effort-btn';
+    thinkBtn.id = 'thinkingEffortBtn';
+    thinkBtn.title = 'Thinking mode';
+    thinkBtn.type = 'button';
+    thinkBtn.innerHTML = '<i class="ph ph-brain"></i>';
+
+    // Create the dropdown
+    const dropdown = document.createElement('div');
+    dropdown.className = 'thinking-effort-dropdown hidden';
+    dropdown.id = 'thinkingEffortDropdown';
+    dropdown.setAttribute('role', 'menu');
+    dropdown.innerHTML = `
+        <div class="thinking-effort-dropdown-title">Thinking Mode</div>
+        <button class="thinking-effort-option" data-effort="" type="button">
+            <i class="ph ph-lightning"></i>
+            <div><strong>Auto</strong><span class="thinking-effort-desc">Model decides when to think</span></div>
+        </button>
+        <button class="thinking-effort-option" data-effort="low" type="button">
+            <i class="ph ph-minus-circle"></i>
+            <div><strong>Quick</strong><span class="thinking-effort-desc">Fast, less reasoning</span></div>
+        </button>
+        <button class="thinking-effort-option" data-effort="medium" type="button">
+            <i class="ph ph-equals"></i>
+            <div><strong>Balanced</strong><span class="thinking-effort-desc">Default reasoning depth</span></div>
+        </button>
+        <button class="thinking-effort-option" data-effort="high" type="button">
+            <i class="ph ph-brain"></i>
+            <div><strong>Deep Think</strong><span class="thinking-effort-desc">Maximum reasoning, slower</span></div>
+        </button>
+    `;
+
+    // Insert before mic button
+    if (micBtn) {
+        inputRow.insertBefore(thinkBtn, micBtn);
+    } else {
+        inputRow.insertBefore(thinkBtn, sendBtn);
+    }
+    thinkBtn.insertAdjacentElement('afterend', dropdown);
+
+    // Inject styles
+    const style = document.createElement('style');
+    style.textContent = `
+        .thinking-effort-btn { position: relative; }
+        .thinking-effort-btn.active { color: var(--accent) !important; }
+        .thinking-effort-dropdown {
+            position: absolute; bottom: calc(100% + 8px); right: 0;
+            background: var(--bg-surface, #1f232c); border: 1px solid var(--border-light, rgba(255,255,255,0.12));
+            border-radius: var(--radius-lg, 12px); padding: 8px; min-width: 220px;
+            box-shadow: var(--shadow-strong, 0 22px 60px rgba(0,0,0,0.45));
+            z-index: var(--z-dropdown, 20);
+        }
+        .thinking-effort-dropdown.hidden { display: none; }
+        .thinking-effort-dropdown-title {
+            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+            color: var(--text-muted, #929bb0); padding: 4px 8px 8px; border-bottom: 1px solid var(--border-light, rgba(255,255,255,0.12));
+            margin-bottom: 4px;
+        }
+        .thinking-effort-option {
+            display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
+            background: none; border: none; border-radius: var(--radius-md, 8px);
+            color: var(--text-primary, #ececf1); cursor: pointer; text-align: left; font-size: 13px;
+        }
+        .thinking-effort-option:hover { background: var(--bg-surface-hover, #242936); }
+        .thinking-effort-option.selected { background: rgba(88, 166, 255, 0.12); color: var(--accent, #58a6ff); }
+        .thinking-effort-option i { font-size: 18px; width: 20px; text-align: center; flex-shrink: 0; }
+        .thinking-effort-option div { display: flex; flex-direction: column; }
+        .thinking-effort-desc { font-size: 11px; color: var(--text-muted, #929bb0); margin-top: 1px; }
+        .thinking-effort-option.selected .thinking-effort-desc { color: var(--accent, #58a6ff); opacity: 0.7; }
+    `;
+    document.head.appendChild(style);
+
+    // Sync selection UI
+    function syncSelection() {
+        dropdown.querySelectorAll('.thinking-effort-option').forEach(opt => {
+            opt.classList.toggle('selected', (opt.dataset.effort || '') === (activeReasoningEffort || ''));
+        });
+        thinkBtn.classList.toggle('active', !!activeReasoningEffort);
+    }
+    syncSelection();
+
+    // Toggle dropdown
+    thinkBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        dropdown.classList.toggle('hidden');
+    });
+
+    // Handle option clicks
+    dropdown.addEventListener('click', (e) => {
+        const opt = e.target.closest('.thinking-effort-option');
+        if (!opt) return;
+        activeReasoningEffort = opt.dataset.effort || '';
+        syncSelection();
+        dropdown.classList.add('hidden');
+    });
+
+    // Close on outside click
+    document.addEventListener('click', (e) => {
+        if (!thinkBtn.contains(e.target) && !dropdown.contains(e.target)) {
+            dropdown.classList.add('hidden');
+        }
+    });
 }
 
 function initComposer() {
@@ -3996,6 +4129,14 @@ function initComposer() {
     });
 
     composerTextarea.addEventListener('keydown', (e) => {
+        if (_modelPaletteVisible) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); _modelPaletteNav(1); return; }
+            if (e.key === 'ArrowUp') { e.preventDefault(); _modelPaletteNav(-1); return; }
+            if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); _modelPaletteSelect(); return; }
+            if (e.key === 'Escape') { e.preventDefault(); _hideModelPalette(); return; }
+            if (e.key === 'Tab') { e.preventDefault(); _modelPaletteSelect(); return; }
+        }
+
         // Slash palette navigation
         if (_slashPaletteVisible) {
             if (e.key === 'ArrowDown') { e.preventDefault(); _slashPaletteNav(1); return; }
@@ -4103,6 +4244,7 @@ const SLASH_COMMANDS = [
     { cmd: '/code',      desc: 'Code-focused mode â€” programming assistance' },
     { cmd: '/write',     desc: 'Writing mode â€” essays, emails, creative text' },
     { cmd: '/analyze',   desc: 'Analyze documents, data, or complex topics' },
+    { cmd: '/model',     desc: 'Switch active model/profile inline' },
     { cmd: '/status',    desc: 'Show live engine status and runtime details' },
     { cmd: '/issues',    desc: 'Run code issue detection and automated fixes' },
     { cmd: '/upgrade',   desc: 'Run self-upgrade engine cycle' },
@@ -4117,6 +4259,10 @@ let _slashPaletteVisible = false;
 let _slashPaletteIndex = 0;
 let _slashPaletteFiltered = [];
 let _slashPaletteEl = null;
+let _modelPaletteVisible = false;
+let _modelPaletteIndex = 0;
+let _modelPaletteOptions = [];
+let _modelPaletteEl = null;
 
 function _getSlashPaletteEl() {
     if (_slashPaletteEl) return _slashPaletteEl;
@@ -4131,6 +4277,7 @@ function _getSlashPaletteEl() {
 }
 
 function _updateSlashPalette() {
+    if (_modelPaletteVisible) return;
     const text = composerTextarea.value;
     if (!text.startsWith('/') || text.includes(' ') || text.includes('\n')) {
         _hideSlashPalette();
@@ -4183,6 +4330,11 @@ function _slashPaletteSelect() {
 
     _hideSlashPalette();
 
+    if (selected.cmd === '/model') {
+        _openModelPalette();
+        return;
+    }
+
     // Handle action commands
     if (selected.cmd === '/clear') {
         composerTextarea.value = '';
@@ -4210,6 +4362,124 @@ function _slashPaletteSelect() {
     if (typeof composerSetMode === 'function') {
         composerSetMode(modeId);
     }
+}
+
+function _getModelPaletteEl() {
+    if (_modelPaletteEl) return _modelPaletteEl;
+    _modelPaletteEl = document.createElement('div');
+    _modelPaletteEl.className = 'slash-palette model-palette';
+    const composerArea = composerTextarea.closest('.composer') || composerTextarea.parentElement;
+    if (composerArea) {
+        composerArea.style.position = composerArea.style.position || 'relative';
+        composerArea.appendChild(_modelPaletteEl);
+    }
+    return _modelPaletteEl;
+}
+
+function _buildModelPaletteOptions() {
+    const profiles = Array.isArray(availableModelProfiles) ? availableModelProfiles : [];
+    return profiles
+        .filter((profile) => safeString(profile?.name))
+        .map((profile) => {
+            const name = safeString(profile.name);
+            const provider = safeString(profile.provider);
+            const modelId = safeString(profile.model).split('/').pop();
+            const status = profile?.has_api_key === false ? 'not configured' : 'ready';
+            return {
+                profile: name,
+                title: name,
+                detail: [provider, modelId, status].filter(Boolean).join(' | '),
+            };
+        });
+}
+
+function _openModelPalette() {
+    _modelPaletteOptions = _buildModelPaletteOptions();
+    if (_modelPaletteOptions.length === 0) {
+        notifyUser('No model profiles available yet.', { tone: 'warn', durationMs: 2200, debugKind: 'engine-action' });
+        return;
+    }
+    _modelPaletteIndex = 0;
+    _modelPaletteVisible = true;
+    composerTextarea.value = '';
+    composerTextarea.dispatchEvent(new Event('input'));
+    _renderModelPalette();
+}
+
+function _renderModelPalette() {
+    if (!_modelPaletteVisible) return;
+    const el = _getModelPaletteEl();
+    const activeProfile = safeString(modelSelector?.value);
+    el.innerHTML = _modelPaletteOptions.map((option, index) => {
+        const isActive = option.profile === activeProfile;
+        return `<div class="slash-palette-item${index === _modelPaletteIndex ? ' active' : ''}" data-idx="${index}">
+            <span class="slash-cmd">${escapeHtml(option.title)}${isActive ? ' ✓' : ''}</span>
+            <span class="slash-desc">${escapeHtml(option.detail)}</span>
+        </div>`;
+    }).join('');
+    el.classList.add('visible');
+    el.querySelectorAll('.slash-palette-item').forEach((item) => {
+        item.addEventListener('click', () => {
+            _modelPaletteIndex = parseInt(item.dataset.idx, 10);
+            _modelPaletteSelect();
+        });
+    });
+}
+
+function _hideModelPalette() {
+    _modelPaletteVisible = false;
+    _modelPaletteIndex = 0;
+    _modelPaletteOptions = [];
+    if (_modelPaletteEl) _modelPaletteEl.classList.remove('visible');
+}
+
+function _modelPaletteNav(dir) {
+    _modelPaletteIndex = Math.max(0, Math.min(_modelPaletteOptions.length - 1, _modelPaletteIndex + dir));
+    _renderModelPalette();
+}
+
+async function _persistModelProfileSelection(profile, modelId = '') {
+    const patch = {
+        advanced: {
+            model: {
+                active_profile: profile,
+                model_id: modelId,
+                reasoning_effort: activeReasoningEffort || 'medium',
+            },
+        },
+    };
+    try {
+        const res = await fetch('/api/preferences', {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch),
+        });
+        if (res.ok) {
+            currentPreferences = await res.json();
+            updateSidebarIdentity();
+        }
+    } catch (error) {
+        console.error('Failed to persist /model selection:', error);
+    }
+}
+
+function _modelPaletteSelect() {
+    const selected = _modelPaletteOptions[_modelPaletteIndex];
+    if (!selected) { _hideModelPalette(); return; }
+    _hideModelPalette();
+    const nextProfile = safeString(selected.profile);
+    if (!nextProfile) return;
+    applyProfileSelection(nextProfile);
+    const profileMeta = availableModelProfiles.find((entry) => safeString(entry?.name) === nextProfile);
+    activeModelOverride = safeString(profileMeta?.model).split('/').pop() || activeModelOverride;
+    try { window.localStorage.setItem('thomas_active_profile', nextProfile); } catch (_) {}
+    try { window.localStorage.setItem('thomas_active_model_id', activeModelOverride || ''); } catch (_) {}
+    void _persistModelProfileSelection(nextProfile, activeModelOverride || '');
+    notifyUser(`Model profile set to ${nextProfile}.`, {
+        tone: 'success',
+        durationMs: 2200,
+        debugKind: 'engine-action',
+    });
 }
 
 function composerShowGamesColumn(show) {
@@ -6958,7 +7228,22 @@ function initActions() {
 
     document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
-            // Stop generation first if running
+            // Close any open overlays/modals/popovers
+            const thinkDrop = document.getElementById('thinkingEffortDropdown');
+            if (thinkDrop && !thinkDrop.classList.contains('hidden')) {
+                thinkDrop.classList.add('hidden');
+                return;
+            }
+            if (settingsModal && !settingsModal.classList.contains('hidden')) {
+                settingsModal.classList.add('hidden');
+                return;
+            }
+            if (easySetupModal && !easySetupModal.classList.contains('hidden')) {
+                easySetupModal.classList.add('hidden');
+                if (easySetupBackdrop) easySetupBackdrop.classList.add('hidden');
+                return;
+            }
+            // Stop generation if running
             if (isGenerating) {
                 stopGeneration();
                 return;
@@ -7114,6 +7399,7 @@ function buildSendJobFromComposer(textRaw = '') {
     const docsToSend = [...pendingDocs];
     const imagesToSend = [...pendingImages];
     if (!text && docsToSend.length === 0 && imagesToSend.length === 0) return null;
+    const clientMessageId = `u-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
 
     composerTextarea.value = '';
     composerTextarea.dispatchEvent(new Event('input'));
@@ -7126,7 +7412,13 @@ function buildSendJobFromComposer(textRaw = '') {
         docsToSend.length > 0 ? `Attached ${docsToSend.length} document(s)` : '',
         imagesToSend.length > 0 ? `Attached ${imagesToSend.length} image(s)` : '',
     ].filter(Boolean).join(' | ');
-    return { text, docsToSend, imagesToSend, suggestionUserContext };
+    return {
+        text,
+        docsToSend,
+        imagesToSend,
+        suggestionUserContext,
+        clientMessageId,
+    };
 }
 
 async function drainQueuedSends() {
@@ -7149,6 +7441,7 @@ async function runChatSendJob(sendJob) {
     const docsToSend = Array.isArray(sendJob?.docsToSend) ? sendJob.docsToSend : [];
     const imagesToSend = Array.isArray(sendJob?.imagesToSend) ? sendJob.imagesToSend : [];
     const suggestionUserContext = safeString(sendJob?.suggestionUserContext);
+    const clientMessageId = safeString(sendJob?.clientMessageId) || `u-${Date.now()}-${Math.floor(Math.random() * 100000)}`;
     if (!text && docsToSend.length === 0 && imagesToSend.length === 0) return;
 
     if (safeString(suggestionContext) !== 'onboarding') {
@@ -7163,16 +7456,24 @@ async function runChatSendJob(sendJob) {
         chatScrollArea.classList.remove('hidden');
     }
 
-    let uiText = text;
-    if (docsToSend.length > 0) uiText += `\n\n*(Attached ${docsToSend.length} document(s))*`;
-    if (imagesToSend.length > 0) uiText += `\n\n*(Attached ${imagesToSend.length} image(s))*`;
-    const userContent = uiText || '(Sent Attachments)';
-    renderMessage({ role: 'user', content: userContent });
+    // Build user message content once for both display and history.
+    let userContent = safeString(text);
+    if (docsToSend.length > 0) userContent += `\n\n*(Attached ${docsToSend.length} document(s))*`;
+    if (imagesToSend.length > 0) userContent += `\n\n*(Attached ${imagesToSend.length} image(s))*`;
+    userContent = userContent || '(Sent Attachments)';
+
+    // Skip rendering if already shown when queued
+    if (!sendJob._alreadyRendered) {
+        const existingUserRow = document.getElementById(clientMessageId);
+        if (!existingUserRow) {
+            renderMessage({ role: 'user', content: userContent, id: clientMessageId });
+        }
+    }
     if (!safeString(activeChatId)) {
         activeChatId = safeString(sessionId) || `chat-${Date.now()}`;
     }
     chatHistory.push({
-        id: `u-${Date.now()}`,
+        id: clientMessageId,
         role: 'user',
         content: userContent,
         createdAt: Date.now(),
@@ -7199,7 +7500,7 @@ async function runChatSendJob(sendJob) {
         applyProfileSelection(preferredProfile);
     }
     const requestedMode = normalizeChatMode(activeChatMode) || 'auto';
-    const safeMode = requestedMode === 'swarm' ? 'auto' : requestedMode;
+    const fastMode = requestedMode !== 'thinking';
     const payload = {
         message: modelMessage || text,
         docs: docsToSend,
@@ -7208,11 +7509,12 @@ async function runChatSendJob(sendJob) {
         profile: resolvedProfile,
         model: resolvedProfile,
         model_id: activeModelOverride || undefined,
-        mode: safeMode,
-        autonomy_level: activeAutonomyLevel,
+        mode: requestedMode,
+        autonomy_level: autonomyLevelManuallySet ? activeAutonomyLevel : 1,
         token_economy: activeTokenEconomy,
         reasoning_effort: activeReasoningEffort || undefined,
         system_prompt: finalPrompt || undefined,
+        fast_mode: fastMode,
     };
     if (studioChatContext.enabled) {
         payload.asset_studio_mode = 'comfy_studio';
@@ -7291,17 +7593,1058 @@ async function handleSend() {
     const sendJob = buildSendJobFromComposer(text);
     if (!sendJob) return;
     if (isGenerating) {
-        pendingSendQueue.push(sendJob);
-        notifyUser(`Queued message (${pendingSendQueue.length} waiting).`, {
-            tone: 'info',
-            durationMs: 1800,
-            debugKind: 'chat',
-        });
-        composerSyncSendButtonState();
-        return;
+        // Cancel current generation and send the new message immediately
+        // (like ChatGPT / Claude — interrupt, don't queue)
+        stopGeneration();
+        // Small delay to let abort settle before firing new request
+        await new Promise(r => setTimeout(r, 120));
     }
 
     await runChatSendJob(sendJob);
+}
+
+const VIBE_CODE_FALLBACK_NODES = [
+    {
+        id: 'user.input',
+        label: 'User Input',
+        kind: 'user',
+        summary: 'Waiting for request.',
+    },
+    {
+        id: 'api.chat.request',
+        label: 'Chat API Request',
+        kind: 'server',
+        summary: 'Waiting for request.',
+    },
+    {
+        id: 'session.resolve',
+        label: 'Session + Runtime Resolve',
+        kind: 'server',
+        summary: 'Waiting for request.',
+    },
+    {
+        id: 'route.select',
+        label: 'Route Selection',
+        kind: 'router',
+        summary: 'Waiting for route selection.',
+    },
+    {
+        id: 'llm.generate',
+        label: 'LLM Generate',
+        kind: 'model',
+        summary: 'Waiting for model output.',
+    },
+    {
+        id: 'tool.exec',
+        label: 'Tool Execution',
+        kind: 'tool',
+        summary: 'No tools yet.',
+    },
+    {
+        id: 'response.stream',
+        label: 'Response Stream',
+        kind: 'stream',
+        summary: 'Waiting for streamed response.',
+    },
+    {
+        id: 'response.done',
+        label: 'Response Finalized',
+        kind: 'result',
+        summary: 'Waiting for completion.',
+    },
+];
+const VIBE_CODE_FALLBACK_EDGES = [
+    { from: 'user.input', to: 'api.chat.request' },
+    { from: 'api.chat.request', to: 'session.resolve' },
+    { from: 'session.resolve', to: 'route.select' },
+    { from: 'route.select', to: 'llm.generate' },
+    { from: 'llm.generate', to: 'tool.exec' },
+    { from: 'tool.exec', to: 'response.stream' },
+    { from: 'response.stream', to: 'response.done' },
+];
+const VIBE_CODE_PROJECT_NODES = [
+    { id: 'project.frontend', label: 'Frontend UI', summary: 'Sidebar, composer, and user input.' },
+    { id: 'project.api', label: 'Chat API', summary: 'HTTP/SSE stream entrypoint.' },
+    { id: 'project.session', label: 'Session + Memory', summary: 'Session/profile/runtime context.' },
+    { id: 'project.router', label: 'Route + Planner', summary: 'Routing and execution strategy.' },
+    { id: 'project.model', label: 'Model Runtime', summary: 'Reasoning + generation.' },
+    { id: 'project.tools', label: 'Tool Runtime', summary: 'Tool calls and integration steps.' },
+    { id: 'project.mission', label: 'Mission Engine', summary: 'Jobs, approvals, automation graph.' },
+    { id: 'project.content', label: 'Content Engine', summary: 'Publishing and workflows.' },
+    { id: 'project.modules', label: 'Workspace Modules', summary: 'Office/mission/content/module tabs.' },
+    { id: 'project.output', label: 'Streaming Output', summary: 'Token stream and final render.' },
+];
+const VIBE_CODE_PROJECT_EDGES = [
+    { from: 'project.frontend', to: 'project.api' },
+    { from: 'project.api', to: 'project.session' },
+    { from: 'project.session', to: 'project.router' },
+    { from: 'project.router', to: 'project.model' },
+    { from: 'project.model', to: 'project.tools' },
+    { from: 'project.model', to: 'project.output' },
+    { from: 'project.tools', to: 'project.mission' },
+    { from: 'project.tools', to: 'project.content' },
+    { from: 'project.mission', to: 'project.modules' },
+    { from: 'project.content', to: 'project.modules' },
+    { from: 'project.modules', to: 'project.output' },
+];
+const VIBE_CODE_CORE_PROJECT_MODULES = new Set([
+    'project.frontend',
+    'project.api',
+    'project.session',
+    'project.router',
+    'project.model',
+    'project.tools',
+    'project.output',
+]);
+const VIBE_CODE_STATUS_ORDER = {
+    pending: 0,
+    active: 1,
+    success: 2,
+    error: 3,
+};
+const vibeCodeState = {
+    traces: new Map(),
+    activeTraceId: '',
+    panel: null,
+    graphEl: null,
+    projectFlowEl: null,
+    runtimeFlowEl: null,
+    logEl: null,
+    discoveryEl: null,
+    metaEl: null,
+    statusPillEl: null,
+    bodyEl: null,
+    toggleBtn: null,
+    controlsEl: null,
+    moduleGridEl: null,
+    edgeCountEl: null,
+    collapsed: false,
+    discoveredNodes: new Map(),
+    controls: {
+        projectEnabled: true,
+        runtimeEnabled: true,
+        disconnectedEdges: new Set(),
+        moduleEnabled: new Set(VIBE_CODE_PROJECT_NODES.map((node) => safeString(node.id)).filter(Boolean)),
+    },
+};
+
+function vibeCodeNormalizeStatus(status) {
+    const normalized = safeString(status).toLowerCase();
+    return Object.prototype.hasOwnProperty.call(VIBE_CODE_STATUS_ORDER, normalized) ? normalized : 'pending';
+}
+
+function vibeCodeMergeStatus(leftRaw, rightRaw) {
+    const left = vibeCodeNormalizeStatus(leftRaw);
+    const right = vibeCodeNormalizeStatus(rightRaw);
+    return (VIBE_CODE_STATUS_ORDER[right] || 0) > (VIBE_CODE_STATUS_ORDER[left] || 0) ? right : left;
+}
+
+function vibeCodeToneFromStatus(statusRaw) {
+    const status = vibeCodeNormalizeStatus(statusRaw);
+    if (status === 'success') return 'ok';
+    if (status === 'error') return 'error';
+    if (status === 'active') return 'warn';
+    return '';
+}
+
+function vibeCodeTopStatus(trace) {
+    if (!trace || !(trace.nodes instanceof Map) || !trace.nodes.size) return 'pending';
+    let top = 'pending';
+    for (const node of trace.nodes.values()) {
+        top = vibeCodeMergeStatus(top, node?.status);
+    }
+    return top;
+}
+
+function vibeCodeNodeEdgeKey(fromRaw, toRaw) {
+    return `${safeString(fromRaw)}->${safeString(toRaw)}`;
+}
+
+function vibeCodeSortNodeIds(trace) {
+    const orderMap = new Map();
+    trace.order.forEach((id, index) => {
+        orderMap.set(id, index);
+    });
+    return [...trace.nodes.keys()].sort((left, right) => {
+        const leftOrder = orderMap.has(left) ? Number(orderMap.get(left)) : Number.MAX_SAFE_INTEGER;
+        const rightOrder = orderMap.has(right) ? Number(orderMap.get(right)) : Number.MAX_SAFE_INTEGER;
+        if (leftOrder !== rightOrder) return leftOrder - rightOrder;
+        return left.localeCompare(right);
+    });
+}
+
+function vibeCodeCreateTrace(traceId) {
+    const trace = {
+        id: safeString(traceId),
+        nodes: new Map(),
+        order: [],
+        edges: [...VIBE_CODE_FALLBACK_EDGES],
+        events: [],
+        meta: {},
+    };
+    for (const node of VIBE_CODE_FALLBACK_NODES) {
+        const nodeId = safeString(node.id);
+        if (!nodeId) continue;
+        trace.nodes.set(nodeId, {
+            id: nodeId,
+            label: safeString(node.label) || nodeId,
+            kind: safeString(node.kind) || 'step',
+            summary: safeString(node.summary),
+            detail: safeString(node.summary),
+            status: 'pending',
+        });
+        trace.order.push(nodeId);
+    }
+    return trace;
+}
+
+function vibeCodeActiveTrace() {
+    return vibeCodeState.traces.get(vibeCodeState.activeTraceId) || null;
+}
+
+function vibeCodeRegisterNode(nodeRaw, statusRaw = '') {
+    const node = nodeRaw && typeof nodeRaw === 'object' ? nodeRaw : {};
+    const nodeId = safeString(node.id);
+    if (!nodeId) return;
+    const now = Date.now();
+    const existing = vibeCodeState.discoveredNodes.get(nodeId);
+    const next = {
+        id: nodeId,
+        label: safeString(node.label) || safeString(existing?.label) || nodeId,
+        kind: safeString(node.kind) || safeString(existing?.kind) || 'step',
+        detail: safeString(node.detail) || safeString(node.summary) || safeString(existing?.detail),
+        status: vibeCodeNormalizeStatus(statusRaw || node.status || existing?.status || 'pending'),
+        firstSeenMs: Number(existing?.firstSeenMs) || now,
+        lastSeenMs: now,
+        seenCount: (Number(existing?.seenCount) || 0) + 1,
+    };
+    vibeCodeState.discoveredNodes.set(nodeId, next);
+}
+
+function vibeCodeProjectStageForNode(nodeIdRaw, kindRaw = '') {
+    const nodeId = safeString(nodeIdRaw).toLowerCase();
+    const kind = safeString(kindRaw).toLowerCase();
+    if (nodeId === 'user.input' || kind === 'user' || kind === 'input') return 'project.frontend';
+    if (nodeId === 'api.chat.request' || kind === 'server') return 'project.api';
+    if (nodeId === 'session.resolve' || /session|memory/.test(kind)) return 'project.session';
+    if (nodeId === 'route.select' || /route|router/.test(kind)) return 'project.router';
+    if (nodeId === 'llm.generate' || /model|reason/.test(kind)) return 'project.model';
+    if (nodeId === 'tool.exec' || nodeId.startsWith('tool.') || /tool|integration/.test(kind)) return 'project.tools';
+    if (nodeId === 'response.stream' || nodeId === 'response.done' || /stream|result|response/.test(kind)) return 'project.output';
+    if (/mission|job|approval/.test(kind)) return 'project.mission';
+    if (/content|publish|workflow/.test(kind)) return 'project.content';
+    if (/module|workspace|ui/.test(kind)) return 'project.modules';
+    return '';
+}
+
+function vibeCodeEnsureModuleControlState() {
+    if (!(vibeCodeState.controls?.moduleEnabled instanceof Set)) {
+        vibeCodeState.controls.moduleEnabled = new Set();
+    }
+    if (!vibeCodeState.controls.moduleEnabled.size) {
+        VIBE_CODE_PROJECT_NODES.forEach((node) => {
+            const id = safeString(node?.id);
+            if (id) vibeCodeState.controls.moduleEnabled.add(id);
+        });
+    }
+    return vibeCodeState.controls.moduleEnabled;
+}
+
+function vibeCodeModuleEnabled(stageIdRaw = '') {
+    const stageId = safeString(stageIdRaw);
+    if (!stageId) return true;
+    const enabled = vibeCodeEnsureModuleControlState();
+    return enabled.has(stageId);
+}
+
+function vibeCodeApplyModulePreset(presetRaw = 'all') {
+    const preset = safeString(presetRaw).toLowerCase();
+    const enabled = vibeCodeEnsureModuleControlState();
+    enabled.clear();
+    VIBE_CODE_PROJECT_NODES.forEach((node) => {
+        const stageId = safeString(node?.id);
+        if (!stageId) return;
+        if (preset === 'core') {
+            if (VIBE_CODE_CORE_PROJECT_MODULES.has(stageId)) {
+                enabled.add(stageId);
+            }
+            return;
+        }
+        enabled.add(stageId);
+    });
+}
+
+function vibeCodeBuildFlowLayout(nodesRaw, { columns = 4, nodeWidth = 210, nodeHeight = 96, gapX = 28, gapY = 32, padding = 16 } = {}) {
+    const nodes = Array.isArray(nodesRaw) ? nodesRaw : [];
+    const positions = new Map();
+    const maxColumns = Math.max(1, Number(columns) || 1);
+    nodes.forEach((node, index) => {
+        const col = index % maxColumns;
+        const row = Math.floor(index / maxColumns);
+        const x = padding + (col * (nodeWidth + gapX));
+        const y = padding + (row * (nodeHeight + gapY));
+        positions.set(safeString(node?.id), { x, y, w: nodeWidth, h: nodeHeight });
+    });
+    const rows = Math.max(1, Math.ceil(nodes.length / maxColumns));
+    const visibleColumns = Math.max(1, Math.min(maxColumns, nodes.length));
+    const width = Math.max(340, padding * 2 + visibleColumns * nodeWidth + Math.max(0, visibleColumns - 1) * gapX);
+    const height = Math.max(160, padding * 2 + rows * nodeHeight + Math.max(0, rows - 1) * gapY);
+    return { positions, width, height };
+}
+
+function vibeCodeRenderFlowCanvas(container, { nodes = [], edges = [], emptyText = 'No flow data yet.', enableEdgeControls = false, onEdgeToggle = null } = {}) {
+    if (!(container instanceof HTMLElement)) return;
+    container.innerHTML = '';
+    if (!Array.isArray(nodes) || !nodes.length) {
+        const empty = document.createElement('div');
+        empty.className = 'vibe-code-empty';
+        empty.textContent = emptyText;
+        container.appendChild(empty);
+        return;
+    }
+
+    const layout = vibeCodeBuildFlowLayout(nodes, {
+        columns: Math.min(4, Math.max(2, Math.ceil(Math.sqrt(nodes.length)))),
+    });
+    const stage = document.createElement('div');
+    stage.className = 'vibe-flow-stage';
+    stage.style.width = `${layout.width}px`;
+    stage.style.height = `${layout.height}px`;
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'vibe-flow-links');
+    svg.setAttribute('viewBox', `0 0 ${layout.width} ${layout.height}`);
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.innerHTML = `
+        <defs>
+            <marker id="vibeFlowArrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+                <path d="M 0 0 L 10 5 L 0 10 z" fill="rgba(150, 181, 255, 0.75)"></path>
+            </marker>
+        </defs>
+    `;
+    const nodeById = new Map();
+    nodes.forEach((nodeRaw) => {
+        const node = nodeRaw && typeof nodeRaw === 'object' ? nodeRaw : {};
+        const nodeId = safeString(node.id);
+        if (!nodeId) return;
+        nodeById.set(nodeId, node);
+    });
+    const validEdges = Array.isArray(edges) ? edges : [];
+    validEdges.forEach((edgeRaw) => {
+        const edge = edgeRaw && typeof edgeRaw === 'object' ? edgeRaw : {};
+        const from = safeString(edge.from);
+        const to = safeString(edge.to);
+        if (!from || !to) return;
+        const fromPos = layout.positions.get(from);
+        const toPos = layout.positions.get(to);
+        if (!fromPos || !toPos) return;
+        const fromNode = nodeById.get(from);
+        const toNode = nodeById.get(to);
+        const edgeKey = vibeCodeNodeEdgeKey(from, to);
+        const manuallyDisconnected = vibeCodeState.controls.disconnectedEdges.has(edgeKey);
+        const moduleDisconnected = Boolean(fromNode && fromNode.moduleEnabled === false) || Boolean(toNode && toNode.moduleEnabled === false);
+        const disconnected = manuallyDisconnected || moduleDisconnected;
+        const x1 = fromPos.x + fromPos.w;
+        const y1 = fromPos.y + (fromPos.h / 2);
+        const x2 = toPos.x;
+        const y2 = toPos.y + (toPos.h / 2);
+        const bend = Math.max(26, Math.abs(x2 - x1) * 0.33);
+        const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+        const edgeClassNames = ['vibe-flow-edge'];
+        if (disconnected) edgeClassNames.push('is-disconnected');
+        if (moduleDisconnected) edgeClassNames.push('is-locked');
+        path.setAttribute('class', edgeClassNames.join(' '));
+        path.setAttribute('d', `M ${x1} ${y1} C ${x1 + bend} ${y1}, ${x2 - bend} ${y2}, ${x2} ${y2}`);
+        path.setAttribute('marker-end', 'url(#vibeFlowArrow)');
+        if (enableEdgeControls) {
+            path.dataset.edgeFrom = from;
+            path.dataset.edgeTo = to;
+            path.dataset.edgeKey = edgeKey;
+            if (!moduleDisconnected) {
+                const onToggle = () => {
+                    const currentlyDisconnected = vibeCodeState.controls.disconnectedEdges.has(edgeKey);
+                    if (currentlyDisconnected) {
+                        vibeCodeState.controls.disconnectedEdges.delete(edgeKey);
+                    } else {
+                        vibeCodeState.controls.disconnectedEdges.add(edgeKey);
+                    }
+                    if (typeof onEdgeToggle === 'function') {
+                        onEdgeToggle({
+                            from,
+                            to,
+                            edgeKey,
+                            disconnected: !currentlyDisconnected,
+                        });
+                    }
+                };
+                path.setAttribute('role', 'button');
+                path.setAttribute('tabindex', '0');
+                path.setAttribute('aria-label', disconnected
+                    ? `Reconnect edge ${from} to ${to}`
+                    : `Disconnect edge ${from} to ${to}`);
+                path.addEventListener('click', (event) => {
+                    event.preventDefault();
+                    onToggle();
+                });
+                path.addEventListener('keydown', (event) => {
+                    if (event.key !== 'Enter' && event.key !== ' ') return;
+                    event.preventDefault();
+                    onToggle();
+                });
+            }
+        }
+        svg.appendChild(path);
+    });
+    stage.appendChild(svg);
+
+    nodes.forEach((nodeRaw) => {
+        const node = nodeRaw && typeof nodeRaw === 'object' ? nodeRaw : {};
+        const nodeId = safeString(node.id);
+        const pos = layout.positions.get(nodeId);
+        if (!pos) return;
+        const status = vibeCodeNormalizeStatus(node.status);
+        const moduleEnabled = node.moduleEnabled !== false;
+        const card = document.createElement('article');
+        card.className = `vibe-flow-node is-${status}${moduleEnabled ? '' : ' is-module-off'}`;
+        card.style.left = `${pos.x}px`;
+        card.style.top = `${pos.y}px`;
+        card.style.width = `${pos.w}px`;
+        card.style.height = `${pos.h}px`;
+        card.innerHTML = `
+            <div class="vibe-flow-node-head">
+                <strong>${escapeHtml(safeString(node.label) || nodeId)}</strong>
+                <span>${escapeHtml(moduleEnabled ? status : 'module off')}</span>
+            </div>
+            <div class="vibe-flow-node-kind">${escapeHtml(safeString(node.kind) || 'step')}</div>
+            <p>${escapeHtml(moduleEnabled
+                ? (safeString(node.detail) || safeString(node.summary) || 'Waiting')
+                : 'Module disabled. Paths in and out are disconnected.')}</p>
+        `;
+        stage.appendChild(card);
+    });
+    container.appendChild(stage);
+}
+
+function vibeCodeBuildProjectGraph(trace) {
+    const statusById = new Map();
+    VIBE_CODE_PROJECT_NODES.forEach((node) => {
+        statusById.set(node.id, 'pending');
+    });
+    if (missionState?.lastPayload && typeof missionState.lastPayload === 'object') {
+        statusById.set('project.mission', 'success');
+    }
+    if (contentState?.payload && typeof contentState.payload === 'object') {
+        statusById.set('project.content', 'success');
+    }
+    if (sidebarNavMode === 'office' || sidebarNavMode === 'mission' || sidebarNavMode === 'content' || MODULE_NAV_MODE_SET.has(sidebarNavMode)) {
+        statusById.set('project.modules', 'active');
+    }
+    if (trace && trace.nodes instanceof Map) {
+        for (const node of trace.nodes.values()) {
+            const stageId = vibeCodeProjectStageForNode(node?.id, node?.kind);
+            if (!stageId) continue;
+            statusById.set(stageId, vibeCodeMergeStatus(statusById.get(stageId), node?.status));
+        }
+    }
+    return {
+        nodes: VIBE_CODE_PROJECT_NODES.map((node) => {
+            const stageId = safeString(node.id);
+            const moduleEnabled = vibeCodeModuleEnabled(stageId);
+            return {
+                ...node,
+                kind: 'system',
+                detail: node.summary,
+                status: statusById.get(stageId) || 'pending',
+                moduleEnabled,
+                stageId,
+            };
+        }),
+        edges: [...VIBE_CODE_PROJECT_EDGES],
+    };
+}
+
+function vibeCodeBuildRuntimeGraph(trace) {
+    const fallbackNodes = VIBE_CODE_FALLBACK_NODES.map((node) => {
+        const id = safeString(node.id);
+        const stageId = vibeCodeProjectStageForNode(id, node?.kind);
+        return {
+            id,
+            label: safeString(node.label) || safeString(node.id),
+            kind: safeString(node.kind) || 'step',
+            detail: safeString(node.summary),
+            summary: safeString(node.summary),
+            status: 'pending',
+            stageId,
+            moduleEnabled: vibeCodeModuleEnabled(stageId),
+        };
+    });
+    if (!trace || !(trace.nodes instanceof Map)) {
+        return { nodes: fallbackNodes, edges: [...VIBE_CODE_FALLBACK_EDGES] };
+    }
+    const ids = vibeCodeSortNodeIds(trace);
+    const nodes = ids.map((nodeId) => {
+        const node = trace.nodes.get(nodeId);
+        const stageId = vibeCodeProjectStageForNode(nodeId, node?.kind);
+        return {
+            id: nodeId,
+            label: safeString(node?.label) || nodeId,
+            kind: safeString(node?.kind) || 'step',
+            detail: safeString(node?.detail) || safeString(node?.summary) || 'Waiting',
+            summary: safeString(node?.summary),
+            status: vibeCodeNormalizeStatus(node?.status),
+            stageId,
+            moduleEnabled: vibeCodeModuleEnabled(stageId),
+        };
+    });
+    const nodeIdSet = new Set(ids);
+    let edges = Array.isArray(trace.edges)
+        ? trace.edges
+            .map((edgeRaw) => ({
+                from: safeString(edgeRaw?.from || edgeRaw?.source || edgeRaw?.src || edgeRaw?.from_id),
+                to: safeString(edgeRaw?.to || edgeRaw?.target || edgeRaw?.dst || edgeRaw?.to_id),
+            }))
+            .filter((edge) => edge.from && edge.to && nodeIdSet.has(edge.from) && nodeIdSet.has(edge.to))
+        : [];
+    if (!edges.length) {
+        edges = [];
+        for (let index = 0; index < ids.length - 1; index += 1) {
+            edges.push({ from: ids[index], to: ids[index + 1] });
+        }
+    }
+    return { nodes, edges };
+}
+
+function vibeCodeCollectVisibleEdgeKeys(trace = vibeCodeActiveTrace()) {
+    const keys = new Set();
+    const graphs = [];
+    if (vibeCodeState.controls.projectEnabled) {
+        graphs.push(vibeCodeBuildProjectGraph(trace));
+    }
+    if (vibeCodeState.controls.runtimeEnabled) {
+        graphs.push(vibeCodeBuildRuntimeGraph(trace));
+    }
+    graphs.forEach((graph) => {
+        const nodes = Array.isArray(graph?.nodes) ? graph.nodes : [];
+        const edges = Array.isArray(graph?.edges) ? graph.edges : [];
+        const nodeById = new Map();
+        nodes.forEach((nodeRaw) => {
+            const node = nodeRaw && typeof nodeRaw === 'object' ? nodeRaw : {};
+            const id = safeString(node.id);
+            if (!id) return;
+            nodeById.set(id, node);
+        });
+        edges.forEach((edgeRaw) => {
+            const from = safeString(edgeRaw?.from);
+            const to = safeString(edgeRaw?.to);
+            if (!from || !to) return;
+            const fromNode = nodeById.get(from);
+            const toNode = nodeById.get(to);
+            if (fromNode && fromNode.moduleEnabled === false) return;
+            if (toNode && toNode.moduleEnabled === false) return;
+            keys.add(vibeCodeNodeEdgeKey(from, to));
+        });
+    });
+    return [...keys];
+}
+
+function vibeCodeSetVisibleEdgesDisconnected(disconnected = true) {
+    const keys = vibeCodeCollectVisibleEdgeKeys(vibeCodeActiveTrace());
+    keys.forEach((key) => {
+        if (disconnected) {
+            vibeCodeState.controls.disconnectedEdges.add(key);
+        } else {
+            vibeCodeState.controls.disconnectedEdges.delete(key);
+        }
+    });
+    return keys.length;
+}
+
+function vibeCodeRenderModuleControls() {
+    if (!(vibeCodeState.moduleGridEl instanceof HTMLElement)) return;
+    const enabled = vibeCodeEnsureModuleControlState();
+    vibeCodeState.moduleGridEl.innerHTML = '';
+    VIBE_CODE_PROJECT_NODES.forEach((node) => {
+        const stageId = safeString(node?.id);
+        if (!stageId) return;
+        const button = document.createElement('button');
+        button.type = 'button';
+        button.className = `vibe-module-chip${enabled.has(stageId) ? '' : ' is-off'}`;
+        button.dataset.vibeModuleId = stageId;
+        button.setAttribute('aria-pressed', enabled.has(stageId) ? 'true' : 'false');
+        button.textContent = safeString(node?.label) || stageId;
+        button.addEventListener('click', () => {
+            if (enabled.has(stageId)) {
+                enabled.delete(stageId);
+            } else {
+                enabled.add(stageId);
+            }
+            vibeCodeRender();
+            if (sidebarNavMode === 'vibe_code') {
+                moduleRender('vibe_code', { touch: false });
+            }
+        });
+        vibeCodeState.moduleGridEl.appendChild(button);
+    });
+    if (vibeCodeState.edgeCountEl instanceof HTMLElement) {
+        vibeCodeState.edgeCountEl.textContent = `${vibeCodeState.controls.disconnectedEdges.size} edge${vibeCodeState.controls.disconnectedEdges.size === 1 ? '' : 's'} cut`;
+    }
+}
+
+function vibeCodeRenderDiscovered() {
+    if (!(vibeCodeState.discoveryEl instanceof HTMLElement)) return;
+    const rows = [...vibeCodeState.discoveredNodes.values()]
+        .sort((left, right) => (Number(right?.lastSeenMs) || 0) - (Number(left?.lastSeenMs) || 0))
+        .slice(0, 16);
+    vibeCodeState.discoveryEl.innerHTML = '';
+    if (!rows.length) {
+        const empty = document.createElement('div');
+        empty.className = 'vibe-code-empty';
+        empty.textContent = 'Nodes auto-appear here as the project executes new paths.';
+        vibeCodeState.discoveryEl.appendChild(empty);
+        return;
+    }
+    const list = document.createElement('ul');
+    list.className = 'vibe-code-discovery-list';
+    rows.forEach((row) => {
+        const status = vibeCodeNormalizeStatus(row?.status);
+        const item = document.createElement('li');
+        item.className = `vibe-code-discovery-item is-${status}`;
+        item.innerHTML = `
+            <strong>${escapeHtml(safeString(row?.label) || safeString(row?.id) || 'node')}</strong>
+            <span>${escapeHtml(safeString(row?.kind) || 'step')} · seen ${escapeHtml(String(Number(row?.seenCount) || 1))}x</span>
+        `;
+        list.appendChild(item);
+    });
+    vibeCodeState.discoveryEl.appendChild(list);
+}
+
+function vibeCodeBuildQueueRows(limit = 12) {
+    const trace = vibeCodeActiveTrace();
+    if (!trace) {
+        return [
+            {
+                id: 'vibe-waiting',
+                title: 'Waiting for first trace',
+                meta: 'Send a message in chat to execute and visualize runtime flow.',
+                badge: 'pending',
+                tone: 'warn',
+                actions: [],
+            },
+        ];
+    }
+    return vibeCodeSortNodeIds(trace)
+        .map((nodeId) => trace.nodes.get(nodeId))
+        .filter(Boolean)
+        .slice(0, Math.max(1, Number(limit) || 12))
+        .map((node) => ({
+            id: safeString(node.id),
+            title: safeString(node.label) || safeString(node.id) || 'Node',
+            meta: safeString(node.detail) || safeString(node.summary) || 'Waiting',
+            badge: vibeCodeNormalizeStatus(node.status),
+            tone: vibeCodeToneFromStatus(node.status),
+            actions: [],
+        }));
+}
+
+function vibeCodeBuildHealthRows(limit = 10) {
+    const trace = vibeCodeActiveTrace();
+    return vibeCodeBuildProjectGraph(trace).nodes
+        .slice(0, Math.max(1, Number(limit) || 10))
+        .map((node) => ({
+            id: safeString(node.id),
+            title: safeString(node.label) || safeString(node.id) || 'System',
+            meta: safeString(node.summary) || '',
+            badge: vibeCodeNormalizeStatus(node.status),
+            tone: vibeCodeToneFromStatus(node.status),
+            actions: [],
+        }));
+}
+
+function vibeCodeBuildActivityRows(limit = 14) {
+    const trace = vibeCodeActiveTrace();
+    if (!trace || !Array.isArray(trace.events)) return [];
+    return trace.events
+        .slice(0, Math.max(1, Number(limit) || 14))
+        .map((entry, index) => ({
+            id: `vibe-event-${index}-${safeString(trace.id)}`,
+            title: safeString(entry?.text) || 'Runtime event',
+            meta: new Date(Number(entry?.tsMs) || Date.now()).toLocaleTimeString(),
+            badge: vibeCodeNormalizeStatus(entry?.status),
+            tone: vibeCodeToneFromStatus(entry?.status),
+            actions: [],
+        }));
+}
+
+function vibeCodeCollectStats() {
+    const trace = vibeCodeActiveTrace();
+    const discovered = vibeCodeState.discoveredNodes.size;
+    const moduleEnabled = vibeCodeEnsureModuleControlState().size;
+    const modulesDisabled = Math.max(0, VIBE_CODE_PROJECT_NODES.length - moduleEnabled);
+    const cutEdges = vibeCodeState.controls.disconnectedEdges.size;
+    if (!trace || !(trace.nodes instanceof Map)) {
+        return {
+            trace_count: vibeCodeState.traces.size,
+            runtime_steps: 0,
+            runtime_active: 0,
+            runtime_errors: 0,
+            runtime_discovered: discovered,
+            runtime_cut_edges: cutEdges,
+            modules_disabled: modulesDisabled,
+        };
+    }
+    let activeCount = 0;
+    let errorCount = 0;
+    trace.nodes.forEach((node) => {
+        const status = vibeCodeNormalizeStatus(node?.status);
+        if (status === 'active') activeCount += 1;
+        if (status === 'error') errorCount += 1;
+    });
+    return {
+        trace_count: vibeCodeState.traces.size,
+        runtime_steps: trace.nodes.size,
+        runtime_active: activeCount,
+        runtime_errors: errorCount,
+        runtime_discovered: discovered,
+        runtime_cut_edges: cutEdges,
+        modules_disabled: modulesDisabled,
+    };
+}
+
+function vibeCodeEnsurePanel(mountTarget = null) {
+    vibeCodeEnsureModuleControlState();
+    const mount = mountTarget instanceof HTMLElement
+        ? mountTarget
+        : ((sidebarNavMode === 'vibe_code' && moduleWorkbench instanceof HTMLElement) ? moduleWorkbench : null);
+    if (!mount) return null;
+
+    if (vibeCodeState.panel instanceof HTMLElement && document.body.contains(vibeCodeState.panel)) {
+        if (vibeCodeState.panel.parentElement !== mount) {
+            mount.appendChild(vibeCodeState.panel);
+        }
+        return vibeCodeState.panel;
+    }
+
+    const panel = document.createElement('section');
+    panel.id = 'vibeCodePanel';
+    panel.className = 'vibe-code-panel vibe-code-panel-module';
+    panel.innerHTML = `
+        <header class="vibe-code-head">
+            <div class="vibe-code-heading">
+                <strong>Vibe Code</strong>
+                <span class="vibe-code-sub">Project flowchart + live runtime trace</span>
+            </div>
+            <div class="vibe-code-head-actions">
+                <span class="vibe-code-status-pill" data-vibe-status>idle</span>
+                <button class="vibe-code-toggle" type="button" data-vibe-toggle aria-expanded="true">Collapse</button>
+            </div>
+        </header>
+        <p class="vibe-code-meta" data-vibe-meta>Waiting for trace graph...</p>
+        <div class="vibe-code-controls" data-vibe-controls>
+            <div class="vibe-code-controls-row">
+                <label><input type="checkbox" data-vibe-project-toggle checked> Project flow</label>
+                <label><input type="checkbox" data-vibe-runtime-toggle checked> Runtime flow</label>
+                <button type="button" class="vibe-code-btn" data-vibe-disconnect-visible>Disconnect Visible</button>
+                <button type="button" class="vibe-code-btn" data-vibe-reconnect-visible>Reconnect Visible</button>
+                <span class="vibe-code-edge-count" data-vibe-edge-count>0 edges cut</span>
+            </div>
+            <div class="vibe-code-controls-row vibe-code-controls-row-modules">
+                <span class="vibe-code-control-label">Modules</span>
+                <button type="button" class="vibe-code-btn" data-vibe-modules-all>All</button>
+                <button type="button" class="vibe-code-btn" data-vibe-modules-core>Core Path</button>
+            </div>
+            <div class="vibe-code-module-grid" data-vibe-module-grid></div>
+            <p class="vibe-code-control-note">Click edges to disconnect/reconnect. Disable modules to cut entire paths.</p>
+        </div>
+        <div class="vibe-code-body" data-vibe-body>
+            <section class="vibe-code-block" data-vibe-project-block>
+                <h4>Project Systems</h4>
+                <div class="vibe-flow-canvas" data-vibe-project-flow></div>
+            </section>
+            <section class="vibe-code-block" data-vibe-runtime-block>
+                <h4>Live Request Flow (Comfy-style)</h4>
+                <div class="vibe-flow-canvas" data-vibe-runtime-flow></div>
+            </section>
+            <section class="vibe-code-block">
+                <h4>Runtime Events</h4>
+                <ol class="vibe-code-log" data-vibe-log></ol>
+            </section>
+            <section class="vibe-code-block">
+                <h4>Discovered Nodes</h4>
+                <div class="vibe-code-discovery" data-vibe-discovery></div>
+            </section>
+        </div>
+    `;
+    mount.appendChild(panel);
+
+    vibeCodeState.panel = panel;
+    vibeCodeState.graphEl = panel.querySelector('[data-vibe-runtime-flow]');
+    vibeCodeState.projectFlowEl = panel.querySelector('[data-vibe-project-flow]');
+    vibeCodeState.runtimeFlowEl = panel.querySelector('[data-vibe-runtime-flow]');
+    vibeCodeState.logEl = panel.querySelector('[data-vibe-log]');
+    vibeCodeState.discoveryEl = panel.querySelector('[data-vibe-discovery]');
+    vibeCodeState.metaEl = panel.querySelector('[data-vibe-meta]');
+    vibeCodeState.statusPillEl = panel.querySelector('[data-vibe-status]');
+    vibeCodeState.bodyEl = panel.querySelector('[data-vibe-body]');
+    vibeCodeState.toggleBtn = panel.querySelector('[data-vibe-toggle]');
+    vibeCodeState.controlsEl = panel.querySelector('[data-vibe-controls]');
+    vibeCodeState.moduleGridEl = panel.querySelector('[data-vibe-module-grid]');
+    vibeCodeState.edgeCountEl = panel.querySelector('[data-vibe-edge-count]');
+    vibeCodeState.collapsed = false;
+
+    if (vibeCodeState.toggleBtn instanceof HTMLButtonElement) {
+        vibeCodeState.toggleBtn.addEventListener('click', () => {
+            vibeCodeState.collapsed = !vibeCodeState.collapsed;
+            panel.classList.toggle('collapsed', vibeCodeState.collapsed);
+            vibeCodeState.toggleBtn.textContent = vibeCodeState.collapsed ? 'Expand' : 'Collapse';
+            vibeCodeState.toggleBtn.setAttribute('aria-expanded', vibeCodeState.collapsed ? 'false' : 'true');
+        });
+    }
+
+    const projectToggle = panel.querySelector('[data-vibe-project-toggle]');
+    const runtimeToggle = panel.querySelector('[data-vibe-runtime-toggle]');
+    if (projectToggle instanceof HTMLInputElement) {
+        projectToggle.checked = Boolean(vibeCodeState.controls.projectEnabled);
+        projectToggle.addEventListener('change', () => {
+            vibeCodeState.controls.projectEnabled = Boolean(projectToggle.checked);
+            panel.classList.toggle('project-disabled', !vibeCodeState.controls.projectEnabled);
+            vibeCodeRender();
+        });
+    }
+    if (runtimeToggle instanceof HTMLInputElement) {
+        runtimeToggle.checked = Boolean(vibeCodeState.controls.runtimeEnabled);
+        runtimeToggle.addEventListener('change', () => {
+            vibeCodeState.controls.runtimeEnabled = Boolean(runtimeToggle.checked);
+            panel.classList.toggle('runtime-disabled', !vibeCodeState.controls.runtimeEnabled);
+            vibeCodeRender();
+        });
+    }
+    panel.classList.toggle('project-disabled', !vibeCodeState.controls.projectEnabled);
+    panel.classList.toggle('runtime-disabled', !vibeCodeState.controls.runtimeEnabled);
+    const disconnectVisibleBtn = panel.querySelector('[data-vibe-disconnect-visible]');
+    const reconnectVisibleBtn = panel.querySelector('[data-vibe-reconnect-visible]');
+    const modulesAllBtn = panel.querySelector('[data-vibe-modules-all]');
+    const modulesCoreBtn = panel.querySelector('[data-vibe-modules-core]');
+    if (disconnectVisibleBtn instanceof HTMLButtonElement) {
+        disconnectVisibleBtn.addEventListener('click', () => {
+            vibeCodeSetVisibleEdgesDisconnected(true);
+            vibeCodeRender();
+        });
+    }
+    if (reconnectVisibleBtn instanceof HTMLButtonElement) {
+        reconnectVisibleBtn.addEventListener('click', () => {
+            vibeCodeSetVisibleEdgesDisconnected(false);
+            vibeCodeRender();
+        });
+    }
+    if (modulesAllBtn instanceof HTMLButtonElement) {
+        modulesAllBtn.addEventListener('click', () => {
+            vibeCodeApplyModulePreset('all');
+            vibeCodeRender();
+        });
+    }
+    if (modulesCoreBtn instanceof HTMLButtonElement) {
+        modulesCoreBtn.addEventListener('click', () => {
+            vibeCodeApplyModulePreset('core');
+            vibeCodeRender();
+        });
+    }
+    vibeCodeRenderModuleControls();
+    return panel;
+}
+
+function vibeCodeRender() {
+    const panel = vibeCodeEnsurePanel(sidebarNavMode === 'vibe_code' ? moduleWorkbench : null);
+    if (!(panel instanceof HTMLElement)) return;
+    const trace = vibeCodeActiveTrace();
+    const topStatus = trace ? vibeCodeTopStatus(trace) : 'pending';
+
+    if (vibeCodeState.metaEl instanceof HTMLElement) {
+        if (!trace) {
+            vibeCodeState.metaEl.textContent = 'Waiting for trace graph. Send a chat message to animate the pipeline.';
+        } else {
+            const meta = trace.meta || {};
+            const profileText = safeString(meta.profile) || '-';
+            const modeText = safeString(meta.mode) || '-';
+            const sessionText = safeString(meta.session_id || '').slice(0, 12) || '-';
+            const traceText = safeString(trace.id).slice(0, 12) || '-';
+            vibeCodeState.metaEl.textContent = `Session ${sessionText} | Trace ${traceText} | profile=${profileText} | mode=${modeText}`;
+        }
+    }
+    if (vibeCodeState.statusPillEl instanceof HTMLElement) {
+        vibeCodeState.statusPillEl.textContent = trace ? topStatus : 'idle';
+        vibeCodeState.statusPillEl.className = trace
+            ? `vibe-code-status-pill is-${topStatus}`
+            : 'vibe-code-status-pill';
+    }
+
+    const projectBlock = panel.querySelector('[data-vibe-project-block]');
+    const runtimeBlock = panel.querySelector('[data-vibe-runtime-block]');
+    if (projectBlock instanceof HTMLElement) {
+        projectBlock.classList.toggle('hidden', !vibeCodeState.controls.projectEnabled);
+    }
+    if (runtimeBlock instanceof HTMLElement) {
+        runtimeBlock.classList.toggle('hidden', !vibeCodeState.controls.runtimeEnabled);
+    }
+
+    const edgeToggleHandler = () => {
+        vibeCodeRender();
+    };
+
+    if (vibeCodeState.controls.projectEnabled) {
+        const projectGraph = vibeCodeBuildProjectGraph(trace);
+        vibeCodeRenderFlowCanvas(vibeCodeState.projectFlowEl, {
+            nodes: projectGraph.nodes,
+            edges: projectGraph.edges,
+            emptyText: 'Project systems flow unavailable.',
+            enableEdgeControls: true,
+            onEdgeToggle: edgeToggleHandler,
+        });
+    }
+    if (vibeCodeState.controls.runtimeEnabled) {
+        const runtimeGraph = vibeCodeBuildRuntimeGraph(trace);
+        vibeCodeRenderFlowCanvas(vibeCodeState.runtimeFlowEl, {
+            nodes: runtimeGraph.nodes,
+            edges: runtimeGraph.edges,
+            emptyText: 'Waiting for runtime graph.',
+            enableEdgeControls: true,
+            onEdgeToggle: edgeToggleHandler,
+        });
+    }
+
+    if (vibeCodeState.logEl instanceof HTMLElement) {
+        vibeCodeState.logEl.innerHTML = '';
+        const events = trace && Array.isArray(trace.events) ? trace.events.slice(0, 24) : [];
+        if (!events.length) {
+            const row = document.createElement('li');
+            row.className = 'vibe-log-item';
+            row.innerHTML = '<span class="vibe-log-time">--:--:--</span><span class="vibe-log-text">Waiting for runtime events.</span>';
+            vibeCodeState.logEl.appendChild(row);
+        } else {
+            const logFragment = document.createDocumentFragment();
+            for (const entry of events) {
+                const row = document.createElement('li');
+                row.className = `vibe-log-item is-${vibeCodeNormalizeStatus(entry?.status)}`;
+                row.innerHTML = `
+                    <span class="vibe-log-time">${escapeHtml(new Date(Number(entry?.tsMs) || Date.now()).toLocaleTimeString())}</span>
+                    <span class="vibe-log-text">${escapeHtml(safeString(entry?.text) || 'event')}</span>
+                `;
+                logFragment.appendChild(row);
+            }
+            vibeCodeState.logEl.appendChild(logFragment);
+        }
+    }
+    vibeCodeRenderModuleControls();
+    vibeCodeRenderDiscovered();
+}
+
+function vibeCodePrepareForRequest(payload) {
+    if (sidebarNavMode !== 'vibe_code') return;
+    const panel = vibeCodeEnsurePanel(moduleWorkbench);
+    if (!(panel instanceof HTMLElement)) return;
+    const sessionText = safeString(payload?.session_id || sessionId).slice(0, 12) || '-';
+    if (vibeCodeState.metaEl instanceof HTMLElement) {
+        vibeCodeState.metaEl.textContent = `Session ${sessionText} | waiting for trace graph...`;
+    }
+    if (vibeCodeState.statusPillEl instanceof HTMLElement) {
+        vibeCodeState.statusPillEl.textContent = 'pending';
+        vibeCodeState.statusPillEl.className = 'vibe-code-status-pill is-pending';
+    }
+}
+
+function vibeCodeHandleGraphEvent(evt) {
+    const traceId = safeString(evt?.trace_id || evt?.run_id);
+    if (!traceId) return;
+    const trace = vibeCodeCreateTrace(traceId);
+    const graph = evt?.graph;
+    if (graph && Array.isArray(graph.nodes)) {
+        trace.nodes.clear();
+        trace.order = [];
+        for (const node of graph.nodes) {
+            if (!node || typeof node !== 'object') continue;
+            const nodeId = safeString(node.id);
+            if (!nodeId) continue;
+            const nextNode = {
+                id: nodeId,
+                label: safeString(node.label) || nodeId,
+                kind: safeString(node.kind) || 'step',
+                summary: safeString(node.summary),
+                detail: safeString(node.summary),
+                status: 'pending',
+            };
+            trace.nodes.set(nodeId, nextNode);
+            trace.order.push(nodeId);
+            vibeCodeRegisterNode(nextNode);
+        }
+    }
+    if (graph && Array.isArray(graph.edges)) {
+        trace.edges = graph.edges
+            .map((edgeRaw) => ({
+                from: safeString(edgeRaw?.from || edgeRaw?.source || edgeRaw?.src || edgeRaw?.from_id),
+                to: safeString(edgeRaw?.to || edgeRaw?.target || edgeRaw?.dst || edgeRaw?.to_id),
+            }))
+            .filter((edge) => edge.from && edge.to);
+    }
+    trace.meta = (evt && typeof evt.meta === 'object' && evt.meta) ? { ...evt.meta } : {};
+    trace.events.unshift({
+        tsMs: Date.now(),
+        status: 'pending',
+        text: 'Trace graph received.',
+    });
+    vibeCodeState.traces.set(traceId, trace);
+    vibeCodeState.activeTraceId = traceId;
+    vibeCodeRender();
+    if (sidebarNavMode === 'vibe_code') {
+        moduleRender('vibe_code', { touch: false });
+    }
+}
+
+function vibeCodeHandleTraceEvent(evt) {
+    const traceId = safeString(evt?.trace_id || evt?.run_id);
+    if (!traceId) return;
+    if (!vibeCodeState.traces.has(traceId)) {
+        vibeCodeState.traces.set(traceId, vibeCodeCreateTrace(traceId));
+    }
+    const trace = vibeCodeState.traces.get(traceId);
+    if (!trace) return;
+    const nodeId = safeString(evt?.node_id);
+    if (!nodeId) return;
+    let node = trace.nodes.get(nodeId);
+    if (!node) {
+        node = {
+            id: nodeId,
+            label: safeString(evt?.label) || nodeId,
+            kind: safeString(evt?.kind) || 'step',
+            summary: '',
+            detail: '',
+            status: 'pending',
+        };
+        trace.nodes.set(nodeId, node);
+        trace.order.push(nodeId);
+        const prevNodeId = trace.order.length > 1 ? trace.order[trace.order.length - 2] : '';
+        if (prevNodeId && prevNodeId !== nodeId) {
+            trace.edges.push({ from: prevNodeId, to: nodeId });
+        }
+    }
+    const status = vibeCodeNormalizeStatus(evt?.status);
+    const labelText = safeString(evt?.label);
+    if (labelText) node.label = labelText;
+    const detailText = safeString(evt?.detail);
+    if (detailText) node.detail = detailText;
+    const kindText = safeString(evt?.kind);
+    if (kindText) node.kind = kindText;
+    node.status = status;
+    vibeCodeRegisterNode(node, status);
+    trace.events.unshift({
+        tsMs: Number(evt?.ts_ms) || Date.now(),
+        status,
+        text: `${safeString(node.label) || nodeId}: ${detailText || status}`,
+    });
+    trace.events = trace.events.slice(0, 40);
+    vibeCodeState.activeTraceId = traceId;
+    vibeCodeRender();
+    if (sidebarNavMode === 'vibe_code') {
+        moduleRender('vibe_code', { touch: false });
+    }
 }
 
 /**
@@ -7318,6 +8661,7 @@ async function handleSend() {
 async function streamChatResponse(payload, { userContext = '', existingBubbleId = '' } = {}) {
     try {
         const landedRobotExit = _portalOutLandedRobot();
+        vibeCodePrepareForRequest(payload);
 
         // Wire AbortController for stop generation
         currentAbortController = new AbortController();
@@ -7493,8 +8837,8 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 const targetTop = Number.isFinite(dockRect?.top) && Number.isFinite(rowRect.top)
                     ? Math.round(dockRect.top - rowRect.top)
                     : (startTop + 360);
-                const walkDx = Math.max(-960, Math.min(960, targetLeft - startLeft));
-                const fallDy = Math.max(48, Math.min(2200, targetTop - startTop + 2));
+                const walkDx = Math.max(-CHAT_ROBOT_EXIT_WALK_MAX, Math.min(CHAT_ROBOT_EXIT_WALK_MAX, targetLeft - startLeft));
+                const fallDy = Math.max(CHAT_ROBOT_EXIT_FALL_MIN, Math.min(CHAT_ROBOT_EXIT_FALL_MAX, targetTop - startTop + 2));
                 clone.style.setProperty('--robot-exit-walk-dx', `${walkDx}px`);
                 clone.style.setProperty('--robot-exit-fall-dy', `${fallDy}px`);
                 clone.style.zIndex = '10';
@@ -7561,13 +8905,6 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             }
             return true;
         }
-        function _shouldRenderSwarmAgentText(evt) {
-            const agentId = safeString(evt?.agent_id || evt?.agent || '').toLowerCase();
-            const taskId = safeString(evt?.task_id || '').toLowerCase();
-            // Keep planner/task-graph chatter internal; only reviewer text is user-facing.
-            return agentId === 'reviewer' || taskId === '__review__';
-        }
-
         // Collected tool calls for this response
         const collectedToolCalls = [];
         // Live tool card instances for rendering
@@ -7619,10 +8956,14 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                         } else if (evt.type === 'journal_status') {
                             const status = safeString(evt.status) || 'unknown';
                             pushDebugEvent('chat', `Journal status: ${status}`);
+                        } else if (evt.type === 'vibe_graph') {
+                            vibeCodeHandleGraphEvent(evt);
+                        } else if (evt.type === 'vibe_trace') {
+                            vibeCodeHandleTraceEvent(evt);
                         } else if (evt.type === 'text' && evt.text) {
                             _consumeAssistantChunk(evt.text);
                         } else if (evtType === 'agent_text' && evtText) {
-                            if (_shouldRenderSwarmAgentText(evt)) _consumeAssistantChunk(evtText);
+                            _consumeAssistantChunk(evtText);
                         } else if (['assistant_delta', 'delta', 'message_delta'].includes(evtType) && evtText) {
                             _consumeAssistantChunk(evtText);
                         } else if (evt.type === 'done') {
@@ -7631,19 +8972,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                                 const doneText = safeString(evt.text || evt.final || evt.output_text);
                                 if (doneText) _consumeAssistantChunk(doneText);
                             }
-                        } else if (evt.type === 'swarm_done') {
-                            streamDone = true;
-                            if (!fullText.trim()) {
-                                const swarmFinal = safeString(evt.final || evt.text || evt.output_text);
-                                const swarmError = safeString(evt.error);
-                                if (swarmFinal) {
-                                    _consumeAssistantChunk(swarmFinal);
-                                } else if (swarmError) {
-                                    _consumeAssistantChunk(`Swarm run failed: ${swarmError}`);
-                                }
-                            }
                         } else if (evt.type === 'error') {
                             if (!hasRenderableText) _clearRobotStatus();
+                            if (bubbleMsgContent) bubbleMsgContent.classList.remove('streaming-active');
                             const errorText = safeString(evt.error) || 'Unknown stream error.';
                             fullText += `\n\n**Error:** ${errorText}`;
                             hasRenderableText = true;
@@ -7692,22 +9023,34 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                                 const detailsEl = bubbleMsgContent?.querySelector('.chat-robot-thinking-details');
                                 if (detailsEl) _updateThinkingDisplay(detailsEl, thinkingText);
                             }
-                        } else if (evt.type === 'route' || evt.type === 'swarm_start' || evt.type === 'task_update') {
+                        } else if (evt.type === 'orchestrator_ack') {
+                            // Orchestrator acknowledged — show status immediately
+                            const ackMsg = safeString(evt.message);
+                            if (ackMsg && !hasRenderableText) {
+                                if (robotSayingInterval) _clearRobotStatus();
+                                _startRobotStatus();
+                                _setRobotSaying(ackMsg);
+                            }
+                        } else if (evt.type === 'route' || evt.type === 'task_update') {
                             if (!hasRenderableText) _startRobotStatus();
                         } else if (evt.type === 'iteration') {
                             if (!hasRenderableText && !robotSayingInterval) _startRobotStatus();
                         }
                     } catch (e) {
-                        console.warn("Failed to parse stream line:", line);
+                        console.warn("Failed to parse stream line:", line, e);
+                        if (bubbleMsgContent) bubbleMsgContent.classList.remove('streaming-active');
                     }
                 }
             }
         } catch (abortErr) {
             if (abortErr.name === 'AbortError') {
                 _clearRobotStatus();
+                if (bubbleMsgContent) bubbleMsgContent.classList.remove('streaming-active');
                 fullText += '\n\n*\\[Generation stopped\\]*';
                 updateMessage(bubbleId, fullText, false);
             } else {
+                // On any error, always clean up the streaming cursor
+                if (bubbleMsgContent) bubbleMsgContent.classList.remove('streaming-active');
                 throw abortErr;
             }
         }
@@ -7731,12 +9074,16 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 } else if (evt.type === 'journal_status') {
                     const status = safeString(evt.status) || 'unknown';
                     pushDebugEvent('chat', `Journal status: ${status}`);
+                } else if (evt.type === 'vibe_graph') {
+                    vibeCodeHandleGraphEvent(evt);
+                } else if (evt.type === 'vibe_trace') {
+                    vibeCodeHandleTraceEvent(evt);
                 } else if (evt.type === 'guardrails') {
                     void missionRefresh({ force: true, silent: true });
                 } else if (evt.type === 'text' && evt.text) {
                     _consumeAssistantChunk(evt.text, { renderNow: true });
                 } else if (evtType === 'agent_text' && evtText) {
-                    if (_shouldRenderSwarmAgentText(evt)) _consumeAssistantChunk(evtText, { renderNow: true });
+                    _consumeAssistantChunk(evtText, { renderNow: true });
                 } else if (['assistant_delta', 'delta', 'message_delta'].includes(evtType) && evtText) {
                     _consumeAssistantChunk(evtText, { renderNow: true });
                 } else if (evt.type === 'done') {
@@ -7744,17 +9091,6 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                     if (!fullText.trim()) {
                         const doneText = safeString(evt.text || evt.final || evt.output_text);
                         if (doneText) _consumeAssistantChunk(doneText, { renderNow: true });
-                    }
-                } else if (evt.type === 'swarm_done') {
-                    streamDone = true;
-                    if (!fullText.trim()) {
-                        const swarmFinal = safeString(evt.final || evt.text || evt.output_text);
-                        const swarmError = safeString(evt.error);
-                        if (swarmFinal) {
-                            _consumeAssistantChunk(swarmFinal, { renderNow: true });
-                        } else if (swarmError) {
-                            _consumeAssistantChunk(`Swarm run failed: ${swarmError}`, { renderNow: true });
-                        }
                     }
                 }
             } catch (ignore) { }
@@ -7800,6 +9136,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         } else {
             console.error(err);
         }
+        if (bubbleMsgContent) bubbleMsgContent.classList.remove('streaming-active');
         currentAbortController = null;
         let errorMsg = err.name === 'AbortError' ? '' : (err.message || '');
         if (!errorMsg) {
@@ -7927,7 +9264,7 @@ function cancelEditMessage(row) {
     const contentDiv = row.querySelector('.message-content');
     if (contentDiv && row.dataset.originalContent) {
         contentDiv.innerHTML = row.dataset.originalContent;
-        contentDiv.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
+        contentDiv.querySelectorAll('pre code').forEach(el => { try { hljs.highlightElement(el); } catch (_e) { /* ignore unknown lang */ } });
         addCodeBlockControls(contentDiv);
     }
     row.classList.remove('message-editing');
@@ -8002,7 +9339,7 @@ async function commitEditMessage(row) {
         applyProfileSelection(preferredProfile);
     }
     const requestedMode = normalizeChatMode(activeChatMode) || 'auto';
-    const safeMode = requestedMode === 'swarm' ? 'auto' : requestedMode;
+    const fastMode = requestedMode !== 'thinking';
     const payload = {
         message: newText,
         docs: [],
@@ -8011,11 +9348,12 @@ async function commitEditMessage(row) {
         profile: resolvedProfile,
         model: resolvedProfile,
         model_id: activeModelOverride || undefined,
-        mode: safeMode,
-        autonomy_level: activeAutonomyLevel,
+        mode: requestedMode,
+        autonomy_level: autonomyLevelManuallySet ? activeAutonomyLevel : 1,
         token_economy: activeTokenEconomy,
         reasoning_effort: activeReasoningEffort || undefined,
         system_prompt: finalPrompt || undefined,
+        fast_mode: fastMode,
     };
     if (studioChatContext.enabled) {
         payload.asset_studio_mode = 'comfy_studio';
@@ -8080,7 +9418,7 @@ async function regenerateResponse(row) {
         applyProfileSelection(preferredProfile);
     }
     const requestedMode = normalizeChatMode(activeChatMode) || 'auto';
-    const safeMode = requestedMode === 'swarm' ? 'auto' : requestedMode;
+    const fastMode = requestedMode !== 'thinking';
     const payload = {
         message: userMsg.content,
         docs: [],
@@ -8089,11 +9427,12 @@ async function regenerateResponse(row) {
         profile: resolvedProfile,
         model: resolvedProfile,
         model_id: activeModelOverride || undefined,
-        mode: safeMode,
-        autonomy_level: activeAutonomyLevel,
+        mode: requestedMode,
+        autonomy_level: autonomyLevelManuallySet ? activeAutonomyLevel : 1,
         token_economy: activeTokenEconomy,
         reasoning_effort: activeReasoningEffort || undefined,
         system_prompt: finalPrompt || undefined,
+        fast_mode: fastMode,
     };
     if (studioChatContext.enabled) {
         payload.asset_studio_mode = 'comfy_studio';
@@ -8414,7 +9753,7 @@ function renderMessage(msg) {
 
     // Apply highlighting to new code blocks, then add header controls
     chatMessagesInner.lastElementChild.querySelectorAll('pre code').forEach((el) => {
-        hljs.highlightElement(el);
+        try { hljs.highlightElement(el); } catch (_e) { /* ignore unknown lang */ }
     });
     addCodeBlockControls(content);
     updateDebugDockSnapshot();
@@ -8431,7 +9770,7 @@ function updateMessage(id, newContent, isStreaming = true) {
 
         contentDiv.innerHTML = formatMarkdown(newContent);
         contentDiv.querySelectorAll('pre code').forEach((el) => {
-            hljs.highlightElement(el);
+            try { hljs.highlightElement(el); } catch (_e) { /* ignore unknown lang */ }
         });
         addCodeBlockControls(contentDiv);
 
@@ -14319,11 +15658,17 @@ function officeScheduleMissionStreamReconnect(delayMs = 0) {
         ? delayMs
         : officeClamp(Number(stream.retryMs) || OFFICE_STREAM_RETRY_MIN_MS, OFFICE_STREAM_RETRY_MIN_MS, OFFICE_STREAM_RETRY_MAX_MS);
     stream.retryMs = Math.min(OFFICE_STREAM_RETRY_MAX_MS, Math.round(retryMs * 1.75));
-    stream.reconnectTimer = window.setTimeout(() => {
+    const timerId = window.setTimeout(() => {
         if (!officeState?.stream) return;
         officeState.stream.reconnectTimer = 0;
         void officeStartMissionStream();
     }, retryMs);
+    // Guard against race: if another call beat us, cancel ours
+    if (stream.reconnectTimer) {
+        window.clearTimeout(timerId);
+        return;
+    }
+    stream.reconnectTimer = timerId;
 }
 
 function officeStopMissionStream() {
@@ -16400,6 +17745,7 @@ function missionEnsureState() {
         actionInFlight: false,
         controlsBound: false,
         pollTimerId: 0,
+        autoStartQueuedJobsPending: false,
         autoRefresh: true,
         lastPayload: null,
         lastJobsPayload: null,
@@ -17389,6 +18735,67 @@ function missionStartPolling() {
     }, MISSION_POLL_INTERVAL_MS);
 }
 
+async function missionRunJobNowDirect(jobId) {
+    const url = missionJobActionUrl(jobId, 'run_now');
+    if (!url) return false;
+    try {
+        const res = await fetch(url, { method: 'POST' });
+        if (!res.ok) {
+            const details = await res.text();
+            console.warn('Mission auto-run queued job failed', details || `HTTP ${res.status}`);
+            return false;
+        }
+        return true;
+    } catch (error) {
+        console.warn('Mission auto-run queued job request failed', error);
+        return false;
+    }
+}
+
+async function missionAutoStartQueuedJobsFromPayload(jobsPayload) {
+    const state = missionEnsureState();
+    if (!state || !state.autoStartQueuedJobsPending) return;
+    if (!state.active || state.actionInFlight) return;
+
+    const jobs = Array.isArray(jobsPayload?.jobs) ? jobsPayload.jobs : [];
+    if (!jobs.length) {
+        state.autoStartQueuedJobsPending = false;
+        return;
+    }
+
+    const now = Date.now();
+    const nowDueJobs = jobs
+        .filter((job) => {
+            const status = missionStatusValue(job?.status);
+            if (status !== 'queued' && status !== 'pending') return false;
+
+            const nextRunAt = missionToEpoch(job?.next_run_at);
+            if (!nextRunAt) return true;
+            return nextRunAt <= now + 30000;
+        })
+        .sort((a, b) => missionToEpoch(a?.next_run_at) - missionToEpoch(b?.next_run_at));
+
+    state.autoStartQueuedJobsPending = false;
+    if (!nowDueJobs.length) return;
+
+    let started = 0;
+    for (const job of nowDueJobs) {
+        if (state.actionInFlight) break;
+        const jobId = safeString(job?.id);
+        if (!jobId) continue;
+        const ok = await missionRunJobNowDirect(jobId);
+        if (ok) started += 1;
+    }
+
+    if (started > 0) {
+        notifyUser(`Auto-started ${started} queued task${started === 1 ? '' : 's'}.`, {
+            tone: 'success',
+            debugKind: 'success',
+            durationMs: 1800,
+        });
+    }
+}
+
 async function missionRefresh({ force = false, silent = false } = {}) {
     const state = missionEnsureState();
     if (!state) return;
@@ -17424,6 +18831,7 @@ async function missionRefresh({ force = false, silent = false } = {}) {
         state.lastFetchedAt = Date.now();
         missionRender(payload, jobsPayload);
         missionSetConnectionState('ok', 'Live');
+        await missionAutoStartQueuedJobsFromPayload(jobsPayload);
     } catch (error) {
         console.error('Mission refresh failed', error);
         missionSetConnectionState('danger', 'Offline');
@@ -17662,6 +19070,7 @@ function missionEnterMode() {
     const state = missionEnsureState();
     if (!state) return;
     state.active = true;
+    state.autoStartQueuedJobsPending = true;
     state.autoRefresh = true;
     missionStartPolling();
 
@@ -17671,6 +19080,7 @@ function missionEnterMode() {
     } else {
         missionRender(state.lastPayload, state.lastJobsPayload);
         missionSetConnectionState('ok', 'Live');
+        void missionAutoStartQueuedJobsFromPayload(state.lastJobsPayload);
     }
 }
 
@@ -18286,6 +19696,7 @@ const MODULE_NAV_MODES = Object.freeze([
     'studio',
     'dev_studio',
     'app_builder',
+    'vibe_code',
     'game_studio',
     'lab_3d',
     'research_lab',
@@ -18452,6 +19863,24 @@ const MODULE_MODE_SEEDS = Object.freeze({
             { id: 'add_connector', label: 'Add Connector', meta: 'Link API, DB, or sheet.' },
             { id: 'preview', label: 'Preview Runtime', meta: 'Open test runtime environment.' },
             { id: 'publish', label: 'Publish', meta: 'Release app to selected users.' },
+        ],
+    },
+    vibe_code: {
+        title: 'Vibe Code',
+        subtitle: 'Project-level flow chart with live runtime tracing and controllable edges.',
+        pill: 'Flow',
+        kpis: [
+            { label: 'Traces', key: 'trace_count', meta: 'captured request runs' },
+            { label: 'Runtime Steps', key: 'runtime_steps', meta: 'nodes in active trace' },
+            { label: 'Active Nodes', key: 'runtime_active', meta: 'currently executing' },
+            { label: 'Cut Edges', key: 'runtime_cut_edges', meta: 'manually disconnected links' },
+            { label: 'Errors', key: 'runtime_errors', meta: 'failing path nodes' },
+        ],
+        actions: [
+            { id: 'switch_chat', label: 'Open Chat', meta: 'Run a message and watch the flow animate.' },
+            { id: 'disconnect_edges', label: 'Disconnect Edges', meta: 'Cut all currently visible links across enabled modules.' },
+            { id: 'reconnect_edges', label: 'Reconnect Edges', meta: 'Restore visible links without resetting trace history.' },
+            { id: 'reset_trace', label: 'Reset Active Trace', meta: 'Clear current view while keeping history.' },
         ],
     },
     game_studio: {
@@ -18636,6 +20065,7 @@ const MODULE_MODE_SURFACES = Object.freeze({
     studio: { layout: 'editor_media', sections: ['Library', 'Creation', 'Audio', 'Delivery'] },
     dev_studio: { layout: 'editor_code', sections: ['Repo', 'Issues', 'PRs', 'Builds'] },
     app_builder: { layout: 'canvas', sections: ['UI', 'Data', 'Logic', 'Publish'] },
+    vibe_code: { layout: 'canvas', sections: ['Project', 'Runtime', 'Events', 'Nodes'] },
     game_studio: { layout: 'editor_game', sections: ['Projects', 'Assets', 'Builds', 'Playtests'] },
     lab_3d: { layout: 'editor_3d', sections: ['Models', 'Materials', 'Repairs', 'Print Queue'] },
     research_lab: { layout: 'research', sections: ['Collections', 'Sources', 'Notes', 'Citations'] },
@@ -18683,7 +20113,10 @@ const MODULE_SECTION_ICONS = Object.freeze({
     builds: 'ph-hammer',
     ui: 'ph-app-window',
     data: 'ph-database',
+    project: 'ph-git-branch',
+    runtime: 'ph-activity',
     publish: 'ph-paper-plane-tilt',
+    nodes: 'ph-circles-three',
     assets: 'ph-image-square',
     playtests: 'ph-game-controller',
     models: 'ph-cube',
@@ -18722,6 +20155,7 @@ const MODULE_SECTION_ICONS = Object.freeze({
 const MODULE_WORKBENCH_MODES = new Set([
     'automations',
     'app_builder',
+    'vibe_code',
     'studio',
     'dev_studio',
     'game_studio',
@@ -19598,6 +21032,7 @@ function moduleCollectSignals(snapshot = moduleBuildSnapshot()) {
     const workflows = contentToCount(snapshot.summary?.workflows, snapshot.workflows.length);
     const scheduleRows = snapshot.scheduler.length;
     const toolsCount = snapshot.tools.length;
+    const vibeStats = vibeCodeCollectStats();
 
     let inboxUnread = 0;
     let inboxUrgent = 0;
@@ -19723,6 +21158,13 @@ function moduleCollectSignals(snapshot = moduleBuildSnapshot()) {
         timeline_automated: snapshot.events.filter((event) => /automation|workflow|job|run/.test(`${safeString(event?.type)} ${safeString(event?.text)}`.toLowerCase())).length,
         timeline_approvals: snapshot.approvalsAutonomy.length + snapshot.approvalsGuardrails.length,
         timeline_retries: snapshot.events.filter((event) => /retry/.test(`${safeString(event?.type)} ${safeString(event?.text)}`.toLowerCase())).length,
+        trace_count: vibeStats.trace_count,
+        runtime_steps: vibeStats.runtime_steps,
+        runtime_active: vibeStats.runtime_active,
+        runtime_errors: vibeStats.runtime_errors,
+        runtime_discovered: vibeStats.runtime_discovered,
+        runtime_cut_edges: vibeStats.runtime_cut_edges,
+        modules_disabled: vibeStats.modules_disabled,
         devices_paired: 0,
         handoffs_pending: infiniteSignals,
         offline_captures: snapshot.events.filter((event) => /offline|capture/.test(`${safeString(event?.type)} ${safeString(event?.text)}`.toLowerCase())).length,
@@ -19841,6 +21283,15 @@ function modulePanelLabels(mode) {
         labels.queueMeta = 'Apps and publish readiness';
         labels.healthTitle = 'Connector Health';
         labels.healthMeta = 'Data links and permissions';
+    } else if (mode === 'vibe_code') {
+        labels.queueTitle = 'Active Trace Nodes';
+        labels.queueMeta = 'Live runtime path ordered by flow';
+        labels.healthTitle = 'Project Systems';
+        labels.healthMeta = 'High-level system graph status';
+        labels.actionsTitle = 'Flow Controls';
+        labels.actionsMeta = 'Control and inspect graph execution';
+        labels.activityTitle = 'Trace Events';
+        labels.activityMeta = 'Realtime event stream from active trace';
     } else if (mode === 'research_lab') {
         labels.queueTitle = 'Research Queue';
         labels.queueMeta = 'Active investigations and briefs';
@@ -19929,6 +21380,10 @@ function moduleBuildDefinition(mode, snapshot, signals) {
         queueRows = baseWorkflows;
         healthRows = basePlatforms;
         activityRows = [...injectedActivity, ...moduleBuildEventRows(snapshot.events, { limit: 10, includeTags: ['workflows', 'integrations'] })].slice(0, 10);
+    } else if (mode === 'vibe_code') {
+        queueRows = vibeCodeBuildQueueRows(14);
+        healthRows = vibeCodeBuildHealthRows(10);
+        activityRows = [...injectedActivity, ...vibeCodeBuildActivityRows(16)].slice(0, 16);
     } else if (mode === 'game_studio') {
         queueRows = moduleBuildEventRows(snapshot.events, { limit: 10, includeTags: ['game'] });
         activityRows = [...injectedActivity, ...moduleBuildEventRows(snapshot.events, { limit: 10, includeTags: ['game', 'errors'] })].slice(0, 10);
@@ -20060,6 +21515,13 @@ function moduleBuildFocusCards(mode, snapshot, signals) {
             { label: 'Failing Runs', value: signals?.flow_failures, meta: 'needs intervention', tone: Number(signals?.flow_failures || 0) > 0 ? 'error' : 'ok' },
             { label: 'Approvals', value: signals?.flow_approvals, meta: 'human gates waiting', tone: Number(signals?.flow_approvals || 0) > 0 ? 'warn' : '' },
             { label: 'Active Flows', value: signals?.flow_active, meta: 'live workflow count', tone: '' },
+        ];
+    }
+    if (mode === 'vibe_code') {
+        return [
+            { label: 'Trace Runs', value: signals?.trace_count, meta: 'captured lifecycle traces', tone: Number(signals?.trace_count || 0) > 0 ? 'ok' : '' },
+            { label: 'Cut Edges', value: signals?.runtime_cut_edges, meta: 'manually disconnected links', tone: Number(signals?.runtime_cut_edges || 0) > 0 ? 'warn' : 'ok' },
+            { label: 'Modules Off', value: signals?.modules_disabled, meta: 'project modules disconnected', tone: Number(signals?.modules_disabled || 0) > 0 ? 'warn' : 'ok' },
         ];
     }
     if (mode === 'agents') {
@@ -20238,6 +21700,13 @@ function moduleBuildFlair(mode, signals, snapshot) {
             { label: 'Flows', value: moduleFocusValue(signals?.flow_active), tone: '' },
             { label: 'Failing', value: moduleFocusValue(signals?.flow_failures), tone: Number(signals?.flow_failures || 0) > 0 ? 'warn' : 'ok' },
             { label: 'Jobs', value: moduleFocusValue(jobs), tone: '' },
+        ];
+    }
+    if (mode === 'vibe_code') {
+        return [
+            { label: 'Traces', value: moduleFocusValue(signals?.trace_count), tone: Number(signals?.trace_count || 0) > 0 ? 'ok' : '' },
+            { label: 'Cuts', value: moduleFocusValue(signals?.runtime_cut_edges), tone: Number(signals?.runtime_cut_edges || 0) > 0 ? 'warn' : 'ok' },
+            { label: 'Modules Off', value: moduleFocusValue(signals?.modules_disabled), tone: Number(signals?.modules_disabled || 0) > 0 ? 'warn' : 'ok' },
         ];
     }
     if (mode === 'agents') {
@@ -21313,6 +22782,7 @@ const MODULE_WORKBENCH_OPERATOR_COPY = Object.freeze({
     lab_3d: 'Thomas runs 3D and fabrication pipelines. Use this tab to dispatch modeling/slicing jobs and verify print-ready outputs.',
     research_lab: 'Thomas runs deep research workflows. Use this tab to track source-backed progress and final brief outputs.',
     automations: 'Thomas executes automation flows. Use this tab to define routes, monitor run health, and handle approvals.',
+    vibe_code: 'Thomas exposes a controllable system flowchart. Use this tab to inspect, disconnect, and reconnect runtime paths.',
 });
 
 function moduleWorkbenchOperatorNote(modeRaw) {
@@ -21383,12 +22853,24 @@ function moduleRenderWorkbench(modeRaw, snapshot, signals, definition, { force =
         moduleRenderWorkbenchGameStudio(moduleWorkbench, wb, { signals, snapshot, definition });
     } else if (mode === 'research_lab') {
         moduleRenderWorkbenchResearch(moduleWorkbench, wb, { signals, snapshot, definition });
+    } else if (mode === 'vibe_code') {
+        moduleRenderWorkbenchVibeCode(moduleWorkbench, wb, { signals, snapshot, definition });
     } else {
         moduleWorkbench.classList.add('hidden');
     }
 
     wb.mounted = true;
     runtime.workbenchMode = mode;
+}
+
+function moduleRenderWorkbenchVibeCode(container, wb, _context = {}) {
+    if (!(container instanceof HTMLElement)) return;
+    const mount = document.createElement('section');
+    mount.className = 'module-wb-vibe-shell';
+    container.appendChild(mount);
+    vibeCodeEnsurePanel(mount);
+    vibeCodeRender();
+    wb.mounted = true;
 }
 
 function moduleWorkbenchClamp(value, min, max) {
@@ -30386,6 +31868,41 @@ function initModuleWorkspace() {
             const mode = MODULE_NAV_MODE_SET.has(target.dataset.moduleMode) ? target.dataset.moduleMode : (state.activeMode || 'dashboard');
             const label = safeString(target.dataset.moduleActionLabel) || 'Action';
             const actionId = safeString(target.dataset.moduleActionId).toLowerCase();
+            if (mode === 'vibe_code') {
+                if (actionId === 'switch_chat') {
+                    setSidebarNavMode('chat');
+                    if (composerTextarea) composerTextarea.focus();
+                    notifyUser('Switched to chat. Send a message to animate the flow.', { tone: 'info', durationMs: 1700, debugKind: 'vibe-code' });
+                    return;
+                }
+                if (actionId === 'disconnect_edges') {
+                    const disconnected = vibeCodeSetVisibleEdgesDisconnected(true);
+                    vibeCodeRender();
+                    moduleRecordActivity(mode, `Disconnected ${disconnected} visible edge${disconnected === 1 ? '' : 's'}.`, 'warn');
+                    moduleTouch(mode);
+                    moduleRender(mode, { touch: false });
+                    notifyUser(`${disconnected} visible edge${disconnected === 1 ? '' : 's'} disconnected.`, { tone: 'warning', durationMs: 1600, debugKind: 'vibe-code' });
+                    return;
+                }
+                if (actionId === 'reconnect_edges') {
+                    const reconnected = vibeCodeSetVisibleEdgesDisconnected(false);
+                    vibeCodeRender();
+                    moduleRecordActivity(mode, `Reconnected ${reconnected} visible edge${reconnected === 1 ? '' : 's'}.`, 'ok');
+                    moduleTouch(mode);
+                    moduleRender(mode, { touch: false });
+                    notifyUser(`${reconnected} visible edge${reconnected === 1 ? '' : 's'} reconnected.`, { tone: 'success', durationMs: 1500, debugKind: 'vibe-code' });
+                    return;
+                }
+                if (actionId === 'reset_trace') {
+                    vibeCodeState.activeTraceId = '';
+                    vibeCodeRender();
+                    moduleRecordActivity(mode, 'Cleared active trace view.', 'warn');
+                    moduleTouch(mode);
+                    moduleRender(mode, { touch: false });
+                    notifyUser('Active trace reset.', { tone: 'info', durationMs: 1500, debugKind: 'vibe-code' });
+                    return;
+                }
+            }
             moduleRecordActivity(mode, `${label} queued from ${moduleSeed(mode).title}.`, 'ok');
             moduleTouch(mode);
             moduleRender(mode, { touch: false });
@@ -31674,18 +33191,17 @@ function initFeatures() {
         sidebarCollapseBtn.addEventListener('click', toggleSidebarCollapsed);
     }
 
+    // Convert pencil button to New Chat button
     if (newChatSidebar) {
+        newChatSidebar.innerHTML = '<i class="ph ph-plus"></i>';
+        newChatSidebar.title = 'New Chat';
+        newChatSidebar.setAttribute('aria-label', 'Start new chat');
         newChatSidebar.addEventListener('click', (event) => {
-            const wantsNewChat = Boolean(event && (event.shiftKey || event.metaKey || event.ctrlKey));
-            if (wantsNewChat) {
-                ensureSettingsUiClosed();
-                createNewSessionAndRefresh();
-                if (globalSearchInput) globalSearchInput.value = '';
-                setSidebarNavMode('chat');
-                setSidebarSearchScope('chat');
-                return;
-            }
-            void promptRenameAgentIdentity();
+            ensureSettingsUiClosed();
+            createNewSessionAndRefresh();
+            if (globalSearchInput) globalSearchInput.value = '';
+            setSidebarNavMode('chat');
+            setSidebarSearchScope('chat');
         });
     }
 
@@ -31909,8 +33425,7 @@ function initFeatures() {
 // ╚═══════════════════════════════════════════════════════════════════════════╝
 
 function initModelSetup() {
-    // Open Trigger
-    modelSetupBtn.addEventListener('click', () => {
+    const openModelSetupModal = () => {
         modelSetupModal.classList.add('active');
         modelSetupModal.style.display = 'flex';
 
@@ -31922,7 +33437,7 @@ function initModelSetup() {
         // Restore segmented controls from preferences
         const savedAutonomy = safeString(currentPreferences?.autonomy?.default_level).replace('L', '');
         if (savedAutonomy) {
-            activeAutonomyLevel = parseInt(savedAutonomy, 10) || 3;
+            activeAutonomyLevel = parseInt(savedAutonomy, 10) || 1;
             setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
         }
         const prefsEconomy = safeString(currentPreferences?.advanced?.runtime?.default_token_economy);
@@ -31933,6 +33448,18 @@ function initModelSetup() {
         }
 
         if (typeof _syncProviderUI === 'function') _syncProviderUI(savedProfile);
+        if (setupProviderSelector) setupProviderSelector.focus();
+    };
+
+    // Open Trigger
+    modelSetupBtn.addEventListener('click', () => {
+        openModelSetupModal();
+    });
+    modelSetupBtn.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown' || event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            openModelSetupModal();
+        }
     });
 
     // Close Triggers
@@ -31968,7 +33495,10 @@ function initModelSetup() {
         });
     };
 
-    bindSegmentedControl('setupAutonomyGroup', val => activeAutonomyLevel = parseInt(val, 10));
+    bindSegmentedControl('setupAutonomyGroup', val => {
+        autonomyLevelManuallySet = true;
+        activeAutonomyLevel = parseInt(val, 10);
+    });
     bindSegmentedControl('setupEconomyGroup', val => activeTokenEconomy = val);
     bindSegmentedControl('setupReasoningEffortGroup', val => { activeReasoningEffort = val; });
 
@@ -32028,6 +33558,7 @@ function initModelSetup() {
     // Async model discovery from server
     async function _discoverProfileModels(profileName, defaultModel) {
         try {
+            const inFlightSelection = safeString(setupModelSelector?.value);
             const res = await fetch(`/api/models/${encodeURIComponent(profileName)}/ids`);
             if (!res.ok) return;
             const data = await res.json();
@@ -32036,9 +33567,21 @@ function initModelSetup() {
             const staticFallbacks = KNOWN_MODEL_SUGGESTIONS[provider] || [];
             const merged = [defaultModel, ...discovered, ...staticFallbacks];
             _populateModelSelect(merged);
-            // Re-select saved model_id if available
+
+            // Preserve the in-flight user selection; otherwise prefer saved profile model.
+            if (inFlightSelection && setupModelSelector.querySelector(`option[value="${CSS.escape(inFlightSelection)}"]`)) {
+                setupModelSelector.value = inFlightSelection;
+                activeModelOverride = inFlightSelection;
+                return;
+            }
+
             const savedModelId = safeString(currentPreferences?.advanced?.model?.model_id);
-            if (savedModelId && setupModelSelector.querySelector(`option[value="${CSS.escape(savedModelId)}"]`)) {
+            const savedProfile = safeString(currentPreferences?.advanced?.model?.active_profile);
+            if (
+                savedModelId
+                && savedProfile === profileName
+                && setupModelSelector.querySelector(`option[value="${CSS.escape(savedModelId)}"]`)
+            ) {
                 setupModelSelector.value = savedModelId;
                 activeModelOverride = savedModelId;
             }
@@ -32093,16 +33636,29 @@ function initModelSetup() {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(patch),
             });
-            if (res.ok) {
-                currentPreferences = await res.json();
-                updateSidebarIdentity();
+            if (!res.ok) {
+                const details = await res.text();
+                throw new Error(details || `HTTP ${res.status}`);
             }
+            currentPreferences = await res.json();
+            updateSidebarIdentity();
+            notifyUser('Model setup saved.', {
+                tone: 'success',
+                durationMs: 1800,
+                debugKind: 'settings',
+            });
+            modelSetupModal.style.display = 'none';
         } catch (e) {
             console.error('Failed to persist model setup:', e);
+            notifyUser(
+                `Could not save model setup: ${safeString(e?.message) || 'unknown error'}`,
+                {
+                    tone: 'error',
+                    durationMs: 3200,
+                    debugKind: 'error',
+                }
+            );
         }
-
-        // 5. Close Modal
-        modelSetupModal.style.display = 'none';
     });
 
     // Restart Server button
@@ -32295,7 +33851,7 @@ async function refreshPowerPcRecommendationBadge() {
 
 function normalizeChatMode(modeRaw) {
     const mode = safeString(modeRaw).toLowerCase();
-    return new Set(['auto', 'fast', 'thinking', 'swarm', 'batch']).has(mode) ? mode : '';
+    return new Set(['auto', 'fast', 'thinking']).has(mode) ? mode : '';
 }
 
 function _profileHeaderLabel(profileName) {
@@ -32383,13 +33939,13 @@ async function refreshIdentityState() {
         if (prefsRes.ok) {
             currentPreferences = await prefsRes.json();
             if (!currentPreferences || typeof currentPreferences !== 'object') currentPreferences = {};
-            const prefAutonomyRaw = safeString(currentPreferences?.autonomy?.default_level).replace(/^l/i, '');
-            const prefAutonomy = Number.parseInt(prefAutonomyRaw, 10);
-            if (Number.isFinite(prefAutonomy)) {
-                activeAutonomyLevel = Math.max(1, Math.min(4, prefAutonomy));
-                setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
-                if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
-            }
+        const prefAutonomyRaw = safeString(currentPreferences?.autonomy?.default_level).replace(/^l/i, '');
+        const prefAutonomy = Number.parseInt(prefAutonomyRaw, 10);
+        if (Number.isFinite(prefAutonomy)) {
+            activeAutonomyLevel = Math.max(1, Math.min(4, prefAutonomy));
+            setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
+            if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
+        }
         }
         if (codexRes.ok) {
             currentCodexStatus = codexRes.data || null;
@@ -32448,7 +34004,7 @@ async function loadSettings() {
         updateSettingsSectionNavVisibility();
 
         if (settingTheme) settingTheme.value = safeString(appearance.theme) || 'auto';
-        const autonomyDefaultLevel = safeString(autonomy.default_level) || 'L2';
+        const autonomyDefaultLevel = safeString(autonomy.default_level) || 'L1';
         if (settingAutonomy) settingAutonomy.value = autonomyDefaultLevel;
         const autonomyNumeric = Number.parseInt(autonomyDefaultLevel.replace(/^l/i, ''), 10);
         if (Number.isFinite(autonomyNumeric)) {
@@ -32735,7 +34291,7 @@ async function saveSettings() {
                 telegram: Boolean(settingTelegram?.checked),
             },
             autonomy: {
-                default_level: safeString(settingAutonomy?.value) || 'L2',
+                default_level: safeString(settingAutonomy?.value) || 'L1',
                 concurrency_limit: toInt(settingConcurrencyLimit?.value, 2, 1, 64),
             },
             voice: {

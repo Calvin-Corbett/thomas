@@ -98,20 +98,10 @@ export function attachCompanionRuntime(runtime) {
         }
         return;
       }
-      if (type === "done" || type === "swarm_done") {
+      if (type === "done") {
         const finalText = asText(packet && (packet.final || packet.text || packet.output_text), "");
         if (finalText) {
           appendDelta(finalText);
-        } else if (type === "swarm_done") {
-          const swarmError = asText(packet && packet.error, "");
-          if (swarmError) {
-            failed = true;
-            updateMessage(assistantId, () => ({
-              text: `Swarm run failed: ${swarmError}`,
-              error: true,
-            }));
-            render();
-          }
         }
         return;
       }

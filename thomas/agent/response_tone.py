@@ -67,6 +67,12 @@ def apply_social_tone_adjustments(text: str, *, prompt_text: str) -> tuple[str, 
 
     # Remove only clearly robotic filler fragments mid-text.
     # Keep "got it" and "understood" as they're natural conversational markers.
+    if prompt_has_frustration_signal(prompt_text):
+        out2 = re.sub(r"(?i)(?:^|\s)(?:understood)\.?,?(?:\s|$)", " ", out)
+        if out2 != out:
+            out = re.sub(r"\s{2,}", " ", out2).strip()
+            changed = True
+
     out2 = re.sub(r"(?i)(?:^|\s)(?:certainly|absolutely)\.(?:\s|$)", " ", out)
     if out2 != out:
         out = re.sub(r"[ \t]{2,}", " ", out2).strip()
@@ -372,6 +378,7 @@ def _likely_reasoning_or_work_summary(text: str) -> bool:
         or _WORK_SUMMARY_TAIL_RE.search(src)
         or _REASONING_BLOCK_TAG_RE.search(src)
         or _REASONING_BLOCK_FENCE_RE.search(src)
+        or _REASONING_SCAFFOLD_RE.search(src)
         or _CANDIDATE_SELECTION_BLOCK_RE.search(src)
         or _CANDIDATE_SELECTION_NOSPACE_RE.search(src)
         or _EXTRACT_FINAL_REPLY_RE.search(src)

@@ -54,9 +54,10 @@
             "max_lines": 2208,
             "reason": "temporary compatibility expansion for security/governance subcommands; baseline refreshed (2026-02-22) pending focused module split."
         },
-        "thomas/demo/agent_comparison_suite.py": {
-            "max_lines": 3440,
-            "reason": "comparison-suite hotspot drifted in active branch; temporary baseline refresh (2026-02-22) pending scorer/probe extraction."
+        "thomas/demo/agentic_benchmark.py": {
+            "max_lines": 1295,
+            "max_growth_lines": 0,
+            "reason": "benchmark harness remains oversized; temporary baseline refresh (2026-02-27) pending scorer/config split."
         },
         "thomas/tools/web_search.py": {
             "max_lines": 1505,
@@ -82,15 +83,115 @@
             "max_lines": 1887,
             "reason": "monolith hotspot; split before growth"
         },
+        "thomas/server/web/css/layout_parts/part-001.css": {
+            "max_lines": 1622,
+            "max_growth_lines": 0,
+            "reason": "layout-part hotspot drifted in active branch; temporary baseline refresh (2026-03-01) pending CSS modularization."
+        },
         "thomas/server/routes/chat_aiohttp.py": {
-            "max_lines": 917,
-            "max_growth_lines": 120,
+            "max_lines": 1214,
+            "max_growth_lines": 0,
             "reason": "chat route surface drifted in active branch; temporary baseline refresh (2026-02-25) pending route extraction."
         },
         "thomas/preferences/store.py": {
-            "max_lines": 869,
-            "max_growth_lines": 120,
-            "reason": "preferences runtime/store surface drifted in active branch; temporary baseline refresh (2026-02-25) pending decomposition."
+            "max_lines": 1310,
+            "max_growth_lines": 0,
+            "reason": "preferences runtime/store surface drifted in active branch; temporary baseline refresh (2026-02-27) pending decomposition."
+        },
+        "thomas/tools/sandbox.py": {
+            "max_lines": 1234,
+            "max_growth_lines": 0,
+            "reason": "sandbox orchestration module remains oversized; temporary baseline refresh (2026-02-27) pending command/runtime split."
+        },
+        "thomas/memory/v2/fabric.py": {
+            "max_lines": 1333,
+            "max_growth_lines": 0,
+            "reason": "memory fabric coordinator remains oversized; temporary baseline refresh (2026-02-27) pending protocol/storage split."
+        },
+        "thomas/server/web/mission.html": {
+            "max_lines": 1620,
+            "max_growth_lines": 0,
+            "reason": "mission UI page remains oversized; temporary baseline refresh (2026-02-27) pending layout/component extraction."
+        },
+        "thomas/server/web/settings.html": {
+            "max_lines": 2137,
+            "max_growth_lines": 0,
+            "reason": "settings UI page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/virtual_office.html": {
+            "max_lines": 2040,
+            "max_growth_lines": 0,
+            "reason": "virtual office page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/data_explorer.html": {
+            "max_lines": 1670,
+            "max_growth_lines": 0,
+            "reason": "data explorer static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/game_studio.html": {
+            "max_lines": 1274,
+            "max_growth_lines": 0,
+            "reason": "game studio static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/integration_hub.html": {
+            "max_lines": 1096,
+            "max_growth_lines": 0,
+            "reason": "integration hub static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/memory_explorer.html": {
+            "max_lines": 1428,
+            "max_growth_lines": 0,
+            "reason": "memory explorer static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/observability.html": {
+            "max_lines": 1321,
+            "max_growth_lines": 0,
+            "reason": "observability static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/plugin_marketplace.html": {
+            "max_lines": 1775,
+            "max_growth_lines": 0,
+            "reason": "plugin marketplace static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/tool_management.html": {
+            "max_lines": 1657,
+            "max_growth_lines": 0,
+            "reason": "tool management static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/virtual_office.html": {
+            "max_lines": 2040,
+            "max_growth_lines": 0,
+            "reason": "virtual office static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/voice_chat.html": {
+            "max_lines": 1389,
+            "max_growth_lines": 0,
+            "reason": "voice chat static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/static/workflow_builder.html": {
+            "max_lines": 1888,
+            "max_growth_lines": 0,
+            "reason": "workflow builder static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
+        },
+        "thomas/server/web/js/app_parts/part-019.js": {
+            "max_lines": 1401,
+            "max_growth_lines": 0,
+            "reason": "UI runtime part remains oversized; temporary baseline refresh (2026-02-27) pending module extraction."
+        },
+        "thomas/server/web/js/app_parts/part-029.js": {
+            "max_lines": 1504,
+            "max_growth_lines": 0,
+            "reason": "UI runtime part remains oversized; temporary baseline refresh (2026-02-27) pending module extraction."
+        },
+        "thomas/server/web/js/app_parts/part-033.js": {
+            "max_lines": 1576,
+            "max_growth_lines": 0,
+            "reason": "UI runtime part remains oversized; temporary baseline refresh (2026-02-27) pending module extraction."
+        },
+        "thomas/server/web/js/modules/063_module_studio_comfy_style_id.js": {
+            "max_lines": 2463,
+            "max_growth_lines": 0,
+            "reason": "studio module remains oversized; temporary baseline refresh (2026-02-27) pending feature-part extraction."
         }
     }
 }

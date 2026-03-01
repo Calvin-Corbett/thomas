@@ -30,6 +30,38 @@ def register(app: typer.Typer) -> None:
         destination: Path = typer.Option(Path("."), "--dest", help="Directory to create the plugin package within."),
         description: str = typer.Option("Thomas plugin package", "--description", help="Plugin package description."),
         author: str = typer.Option("", "--author", help="Author string used in generated metadata."),
+        make_skill: bool = typer.Option(True, "--make-skill/--skip-skill", help="Create matching .codex SKILL.md file."),
+        make_manifest: bool = typer.Option(True, "--make-manifest/--skip-manifest", help="Create plugin.json/thomas_plugin.json/manifest.json files."),
+        version: str = typer.Option("0.1.0", "--version", help="Plugin version written to generated manifests."),
+        install: bool = typer.Option(False, "--install", help="Install the generated plugin after bootstrapping."),
+        install_root: Path | None = typer.Option(
+            None,
+            "--install-root",
+            help="Directory where the plugin should be installed (defaults to THOMAS_HOME/plugins).",
+        ),
+        install_overwrite: bool = typer.Option(False, "--install-overwrite", help="Overwrite existing installed plugin during install."),
+        skill_root: Path | None = typer.Option(
+            None,
+            "--skill-root",
+            help="Directory where the generated SKILL.md should be written.",
+        ),
+        skill_name: str = typer.Option("", "--skill-name", help="Skill directory name (defaults to normalized plugin name)."),
+        skill_intent: list[str] | None = typer.Option(
+            None,
+            "--skill-intent",
+            help="Repeatable intent declaration for generated SKILL.md.",
+        ),
+        skill_tool: list[str] | None = typer.Option(
+            None,
+            "--skill-tool",
+            help="Repeatable tool declaration for generated SKILL.md.",
+        ),
+        skill_example: list[str] | None = typer.Option(
+            None,
+            "--skill-example",
+            help="Repeatable usage example for generated SKILL.md.",
+        ),
+        validate: bool = typer.Option(True, "--validate/--skip-validate", help="Validate generated artifacts before returning."),
         overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing files if the package exists."),
         json_output: bool = typer.Option(False, "--json", help="Machine readable output."),
     ) -> None:
@@ -40,6 +72,18 @@ def register(app: typer.Typer) -> None:
                     destination_dir=destination,
                     description=description,
                     author=author,
+                    create_skill=make_skill,
+                    skill_root=skill_root,
+                    skill_name=skill_name,
+                    skill_intents=skill_intent or (),
+                    skill_tools=skill_tool or (),
+                    skill_examples=skill_example or (),
+                    create_manifest=make_manifest,
+                    plugin_version=version,
+                    validate=validate,
+                    install_after_bootstrap=install,
+                    install_root=install_root,
+                    install_overwrite=install_overwrite,
                     overwrite=overwrite,
                 )
             )
@@ -54,3 +98,13 @@ def register(app: typer.Typer) -> None:
             _emit_json({"ok": True, "result": result.to_dict()})
         else:
             typer.echo(f"Bootstrapped plugin package at: {result.package_dir}")
+            typer.echo(f"Validation: {'OK' if result.validation_ok else 'FAILED'}")
+            if result.validation_errors:
+                for item in result.validation_errors:
+                    typer.echo(f"Validation issue: {item}", err=True)
+            if result.skill_file:
+                typer.echo(f"Bootstrapped matching skill at: {result.skill_file}")
+            if result.manifest_file:
+                typer.echo(f"Bootstrapped plugin manifest at: {result.manifest_file}")
+            if result.installed_path:
+                typer.echo(f"Installed generated plugin at: {result.installed_path}")

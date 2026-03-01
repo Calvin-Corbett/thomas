@@ -374,6 +374,8 @@ export interface CompanionRelease {
   compliance_violations: number;
   compliance_warnings: number;
   compliance_checked_at: string;
+  bundle_archive_sha256?: string;
+  bundle_archive_size?: number;
 }
 
 export interface CompanionDeviceUpdatesCheckRequest {

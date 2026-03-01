@@ -2,25 +2,44 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
 import time
+from pathlib import Path
 from typing import Any
 
 from sqlalchemy import inspect, text
+from sqlalchemy.exc import SQLAlchemyError
 
 from .database import (
     Tool,
+    ToolResult,
+    _atomic_write_json,
+    _connections_file_path,
+    _dialect_from_connection_string,
+    _encrypt_connection,
     _get_engine,
+    _load_connections_raw,
+    _mask_connection_string,
 )
 from .database_safety import (
     _apply_auto_limit_if_needed,
     _apply_dialect_session_guards,
+    _contains_multiple_statements,
     _get_statement_timeout_ms,
     _requires_confirm,
     _reset_mysql_session,
     _rows_json_safe,
     _sanitize_error_message,
 )
+
+
+def _tool_ok(data: Any) -> ToolResult:
+    return ToolResult(ok=True, data=data)
+
+
+def _tool_err(message: str) -> ToolResult:
+    return ToolResult(ok=False, error=str(message))
 
 
 def _query_sync(

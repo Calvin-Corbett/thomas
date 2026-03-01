@@ -1215,6 +1215,348 @@
       "fingerprint": "90adceb8833dd0643c87b8a4b6e3b5db9b2dc2f04d9d898eee50d052b04685e1",
       "query": "okay you should only go until like tax execution behavior and whatever other behaviors you know if you've read context so this should be a context check if you don't have context check like have you read previous context like last conversation if you have not read the last conversation or got any kind of like context from that like just a little bit of knowing like what's going on then you fail your context check and you can't fucking go to other modes you need to stay in chat mode or whatever and tell me if this is a stupid way of doing that but I don't think you read that you don't you you know what's going on in this conversation so you're confused when I say I restarted the server or whatever if you were to read the conversation you would see the previous thing was we're testing something so I don't know what your memory is not working I guess",
       "auto_captured": true
+    },
+    {
+      "id": "1772228295-well-aren-t-your-video-current-code-base-is-it-not-set-up-like-that-currently",
+      "title": "well aren't your video current code base is it not set up like that currently",
+      "category": "research-notes",
+      "summary": "I’m going to verify the current repo state for video support by scanning the project docs and code paths that define runtime features, then I’ll report exactly what is and isn’t wired today.I found many “video” mentions, but a lot are unrelated (event streams)",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772228295-well-aren-t-your-video-current-code-base-is-it-not-set-up-like-that-currently.md",
+      "created_ts_utc": 1772228295,
+      "updated_ts_utc": 1772228295,
+      "fingerprint": "992a3279d6ce1ffeaf1390befc905f9aa915ff824be303304aa8fc6d16826d34",
+      "query": "well aren't your video current code base is it not set up like that currently",
+      "auto_captured": true
+    },
+    {
+      "id": "1772230025-list-assumptions-and-what-to-validate-first.-context---user-context-now---latest",
+      "title": "List assumptions and what to validate first. Context: - User context: now - Latest response: I encountered issues proces",
+      "category": "research-notes",
+      "summary": "Assumptions to make (explicitly) 1. The failing code is doing `async for x in <expr>`. 2. `<expr>` currently returns a coroutine (from `async def`) instead of an async iterable. 3. The error happens before iteration starts (type mismatch), not due to item cont",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1772230025-list-assumptions-and-what-to-validate-first.-context---user-context-now---latest.md",
+      "created_ts_utc": 1772230025,
+      "updated_ts_utc": 1772230025,
+      "fingerprint": "850f92a8d4764bf96aaeb37becd31b18088994e2bd4cc64475cbe7d9a0e58b08",
+      "query": "List assumptions and what to validate first. Context: - User context: now - Latest response: I encountered issues processing your request. 'async for' requires an object with __aiter__ method, got coroutine",
+      "auto_captured": true
+    },
+    {
+      "id": "1772314139-okay-i-just-want-to-see-if-your-agents-work-can-you-make-agents-make-like-can-yo",
+      "title": "okay I just want to see if your agents work can you make agents make like can you spawn an agent and make it research wh",
+      "category": "research-notes",
+      "summary": "Running a second autonomous proof now: I’m spawning another sub-agent to independently research “Calvin Corbett,” then I’ll return its result and lifecycle actions.Sub-agent is running; I’m waiting for completion and will report exactly what it returned.1) Cle",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1772314139-okay-i-just-want-to-see-if-your-agents-work-can-you-make-agents-make-like-can-yo.md",
+      "created_ts_utc": 1772314139,
+      "updated_ts_utc": 1772314139,
+      "fingerprint": "742a0b57326d3824f58e499d7d981ba5a4f2720171860806f10d41fbad869cae",
+      "query": "okay I just want to see if your agents work can you make agents make like can you spawn an agent and make it research who Calvin Corbett is",
+      "auto_captured": true
+    },
+    {
+      "id": "1772323309-all-right-can-you-can-you-spawn-up-a-local-agent-and-make-him-research-on-a-rele",
+      "title": "all right can you can you spawn up a local agent and make him research on a relevant task that would make you better or",
+      "category": "research-notes",
+      "summary": "I’ll spin up a local sub-agent now and have it research practical ways to improve local LLM performance for agent workflows, with concrete recommendations you can apply here. I’ll report back with its findings.The sub-agent is running (`Turing`) with a structu",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1772323309-all-right-can-you-can-you-spawn-up-a-local-agent-and-make-him-research-on-a-rele.md",
+      "created_ts_utc": 1772323309,
+      "updated_ts_utc": 1772323309,
+      "fingerprint": "c7d3a5e451b2bfdec9a6765e18a7f58d59f1a1da1d36c8507c109f8874a598a8",
+      "query": "all right can you can you spawn up a local agent and make him research on a relevant task that would make you better or make make tell him to research how to make local llms better for agents",
+      "auto_captured": true
+    },
+    {
+      "id": "1772390183-ui-fixed-test",
+      "title": "ui fixed test",
+      "category": "research-notes",
+      "summary": "I’m treating this as a request to run the UI verification tests and report whether the fix passes. I’ll quickly check the repo’s required test flow and then run the relevant UI proof checks.I’ve loaded the required root docs and will now locate the module-spec",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772390183-ui-fixed-test.md",
+      "created_ts_utc": 1772390183,
+      "updated_ts_utc": 1772390183,
+      "fingerprint": "2f8308d1fa4b770e5313024134041f3d3e13d921cde334a50209bd63ff1e9248",
+      "query": "ui fixed test",
+      "auto_captured": true
+    },
+    {
+      "id": "1772391214-just-give-me-a-plan-and-do-not-execute-any-actions",
+      "title": "just give me a plan and do not execute any actions",
+      "category": "research-notes",
+      "summary": "1. Confirm scope and target outcome with you first (exact feature/bug, files/modules, and acceptance criteria). 2. Read required docs in order before any code work: `GUARDRAILS.md`, module-level `GUARDRAILS.md`, `PROJECT_INDEX.md`, `thomas/_architecture.py`, `",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-planning"
+      ],
+      "path": "entries/research-notes/1772391214-just-give-me-a-plan-and-do-not-execute-any-actions.md",
+      "created_ts_utc": 1772391214,
+      "updated_ts_utc": 1772391214,
+      "fingerprint": "b000a23124509fab79c53212876c94c1e19f6894edb0a638b25418154efd741a",
+      "query": "just give me a plan and do not execute any actions",
+      "auto_captured": true
+    },
+    {
+      "id": "1772391365-just-give-me-a-plan-and-do-not-execute-any-actions.",
+      "title": "just give me a plan and do not execute any actions.",
+      "category": "research-notes",
+      "summary": "1. Clarify scope and target files: confirm exact task outcome, affected module(s), and acceptance criteria. 2. Read required guardrails first: root `GUARDRAILS.md`, module-level `GUARDRAILS.md`, then `PROJECT_INDEX.md`, `thomas/_architecture.py`, and `KNOWN_IS",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-planning"
+      ],
+      "path": "entries/research-notes/1772391365-just-give-me-a-plan-and-do-not-execute-any-actions..md",
+      "created_ts_utc": 1772391365,
+      "updated_ts_utc": 1772391365,
+      "fingerprint": "ee35c59720a9537baf59ae5997b75122911c973b0ca228f77f8a403662b897b0",
+      "query": "just give me a plan and do not execute any actions.",
+      "auto_captured": true
+    },
+    {
+      "id": "1772391409-just-give-me-a-plan-and-do-not-execute-any-actions.",
+      "title": "just give me a plan and do not execute any actions.",
+      "category": "research-notes",
+      "summary": "1. Clarify scope: confirm the exact feature/bug and target module(s), plus success criteria. 2. Read required docs first: `GUARDRAILS.md`, module-level `GUARDRAILS.md`, `PROJECT_INDEX.md`, `KNOWN_ISSUES.md`, and `thomas/_architecture.py`. 3. Check active owner",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-planning"
+      ],
+      "path": "entries/research-notes/1772391409-just-give-me-a-plan-and-do-not-execute-any-actions..md",
+      "created_ts_utc": 1772391409,
+      "updated_ts_utc": 1772391409,
+      "fingerprint": "0fff504b5e432ac401ec623600828a866f39e76f9ab671ae736672fc982efba5",
+      "query": "just give me a plan and do not execute any actions.",
+      "auto_captured": true
+    },
+    {
+      "id": "1772391446-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume",
+      "title": "Create a text note explaining web ui reply behavior and save it as a test document.",
+      "category": "research-notes",
+      "summary": "I’ll create a short note file in this workspace, but first I’m checking the required guardrail docs so the file follows project rules.I’ve confirmed the core guardrails; next I’m quickly checking architecture guidance, then I’ll create a concise test note file",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772391446-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume.md",
+      "created_ts_utc": 1772391446,
+      "updated_ts_utc": 1772391446,
+      "fingerprint": "743bb7b992a4c424a8f2acf4e4784ff3a37cd005aa66bceed5867c28adeb959a",
+      "query": "Create a text note explaining web ui reply behavior and save it as a test document.",
+      "auto_captured": true
+    },
+    {
+      "id": "1772391588-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume",
+      "title": "Create a text note explaining web ui reply behavior and save it as a test document.",
+      "category": "research-notes",
+      "summary": "I’ll create a short text note describing web UI reply behavior and save it as a test document in the repo. First I’m checking the required guardrail files, then I’ll write the document.I’ve read the required project docs and will now create a concise test docu",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772391588-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume.md",
+      "created_ts_utc": 1772391588,
+      "updated_ts_utc": 1772391588,
+      "fingerprint": "7af637b05a8461ac920a8a2688ffd24b6f36990ad1f1a3640079a79b33f481bd",
+      "query": "Create a text note explaining web ui reply behavior and save it as a test document.",
+      "auto_captured": true
+    },
+    {
+      "id": "1772393579-model-profiles-gemini-openai_compat-gemini-2.5-pro-local-openai_compat-qwen2.5-c",
+      "title": "Model Profiles gemini openai_compat gemini-2.5-pro local openai_compat qwen2.5-coder:7b * codex codex gpt-5.3-codex open",
+      "category": "research-notes",
+      "summary": "I’m going to fix the REPL crash shown in your traceback and then wire the PowerShell `thomas` command behavior so it launches the REPL directly. First I’ll read the required guardrail docs and inspect the failing code path in `thomas/cli/repl.py`.I’ve read the",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-debug_audit"
+      ],
+      "path": "entries/research-notes/1772393579-model-profiles-gemini-openai_compat-gemini-2.5-pro-local-openai_compat-qwen2.5-c.md",
+      "created_ts_utc": 1772393579,
+      "updated_ts_utc": 1772393579,
+      "fingerprint": "ebad6ccfb63ad7d4c5f594a34213897b9309ca69c6e33142c2f617d09e0ebc0c",
+      "query": "Model Profiles gemini openai_compat gemini-2.5-pro local openai_compat qwen2.5-coder:7b * codex codex gpt-5.3-codex openai openai_compat gpt-4o-mini anthropic anthropic claude-sonnet-4-5-20250929 mistral openai_compat mistral-large-latest groq openai_compat llama-3.3-70b-versatile together openai_compat meta-llama/Llama-3.1-70B-Instruct-Turbo openrouter openai_compat openai/gpt-4o-mini deepinfra openai_compat meta-llama/Meta-Llama-3.1-70B-Instruct fireworks openai_compat accounts/fireworks/models/llama-v3p1-70b-instruct perplexity openai_compat sonar-pro xai openai_compat grok-4-1-fast-reasoning glm openai_compat glm-5 cerebras openai_compat llama3.1-70b litellm openai_compat gpt-4o-mini Models At * 1. gpt-5.3-codex 2. gpt-5.3-codex-spark 3. gpt-5.2-codex 4. gpt-5.1-codex-max 5. gpt-5.2 6. gpt-5.1-codex-mini Traceback (most recent call last): File \"<frozen runpy>\", line 198, in _run_module_as_main File \"<frozen runpy>\", line 88, in _run_code File \"C:\\Users\\corbe\\Thomas\\thomas\\__main__.py\", line 4, in <module> main() File \"C:\\Users\\corbe\\Thomas\\thomas\\cli\\main.py\", line 1675, in main cli(obj={}) File \"C:\\Users\\corbe\\Thomas\\.venv\\Lib\\site-packages\\click\\core.py\", line 1485, in __call__ return self.main(*args, **kwargs) ^^^^^^^^^^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\.venv\\Lib\\site-packages\\click\\core.py\", line 1406, in main rv = self.invoke(ctx) ^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\.venv\\Lib\\site-packages\\click\\core.py\", line 1873, in invoke return _process_result(sub_ctx.command.invoke(sub_ctx)) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\.venv\\Lib\\site-packages\\click\\core.py\", line 1269, in invoke return ctx.invoke(self.callback, **ctx.params) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\.venv\\Lib\\site-packages\\click\\core.py\", line 824, in invoke return callback(*args, **kwargs) ^^^^^^^^^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\.venv\\Lib\\site-packages\\click\\decorators.py\", line 34, in new_func return f(get_current_context(), *args, **kwargs) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\thomas\\cli\\main.py\", line 1615, in repl asyncio.run(repl_instance.run()) File \"C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\asyncio\\runners.py\", line 195, in run return runner.run(main) ^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\asyncio\\runners.py\", line 118, in run return self._loop.run_until_complete(task) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\asyncio\\base_events.py\", line 691, in run_until_complete return future.result() ^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\thomas\\cli\\repl.py\", line 299, in run should_exit = await self._handle_slash(user_input) ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\Thomas\\thomas\\cli\\repl.py\", line 464, in _handle_slash ).run() ^^^^^ File \"C:\\Users\\corbe\\Thomas\\.venv\\Lib\\site-packages\\prompt_toolkit\\application\\application.py\", line 1002, in run return asyncio.run(coro) ^^^^^^^^^^^^^^^^^ File \"C:\\Users\\corbe\\AppData\\Local\\Programs\\Python\\Python312\\Lib\\asyncio\\runners.py\", line 191, in run raise RuntimeError( RuntimeError: asyncio.run() cannot be called from a running event loop sys:1: RuntimeWarning: coroutine 'Application.run_async' was never awaited also make it where if im in powershell i cant type thomas and pulls up the repl",
+      "auto_captured": true
+    },
+    {
+      "id": "1772393622-give-the-next-3-highest-impact-actions-from-here.-context---user-context-idk---l",
+      "title": "Give the next 3 highest-impact actions from here. Context: - User context: idk - Latest response: No worries. If you wan",
+      "category": "research-notes",
+      "summary": "1. Define the immediate goal in one sentence: “I want to ___ by ___ (time).” 2. List your blockers in bullets (what you don’t know, what you’ve tried, where you’re stuck). 3. Share those two items so I can give you a concrete step-by-step plan tailored to your",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-research"
+      ],
+      "path": "entries/research-notes/1772393622-give-the-next-3-highest-impact-actions-from-here.-context---user-context-idk---l.md",
+      "created_ts_utc": 1772393622,
+      "updated_ts_utc": 1772393622,
+      "fingerprint": "779a14922ea32ff546b2a8a265619042e3efcd1a11f50561b387699e7e80959d",
+      "query": "Give the next 3 highest-impact actions from here. Context: - User context: idk - Latest response: No worries. If you want, tell me what you’re trying to do and I’ll help you sort it out quickly.",
+      "auto_captured": true
+    },
+    {
+      "id": "1772394630-thomas-tui-overhaul-build-interactive-slash-commands-like-codex-cli",
+      "title": "# Thomas TUI Overhaul — Build Interactive Slash Commands Like Codex CLI",
+      "category": "research-notes",
+      "summary": "I understand you want a Thomas TUI overhaul focused on interactive slash commands similar to Codex CLI. I’m going to first read the required project guardrails and architecture docs, then inspect the current TUI/command implementation before making changes.I’v",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772394630-thomas-tui-overhaul-build-interactive-slash-commands-like-codex-cli.md",
+      "created_ts_utc": 1772394630,
+      "updated_ts_utc": 1772394630,
+      "fingerprint": "be9078cf21b5b49608cafbbd2eb55b5c8882ad02c02e48e3c96b0e6a5da1387f",
+      "query": "# Thomas TUI Overhaul — Build Interactive Slash Commands Like Codex CLI",
+      "auto_captured": true
+    },
+    {
+      "id": "1772395242-how-to-implement-this-in-thomas",
+      "title": "## How to Implement This in Thomas",
+      "category": "research-notes",
+      "summary": "I’m proceeding to make this implementation explicit in code by centralizing overlay picker behavior into a single non-destructive prompt helper, so Thomas consistently follows the TUI rules across slash/model/reasoning states.Implemented “How to implement this",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772395242-how-to-implement-this-in-thomas.md",
+      "created_ts_utc": 1772395242,
+      "updated_ts_utc": 1772395242,
+      "fingerprint": "2d965134560fcce7d6405920efd16f0b07a9333f5c11a748caf4f8c5c0777aa1",
+      "query": "## How to Implement This in Thomas",
+      "auto_captured": true
+    },
+    {
+      "id": "1772395251-option-a-if-thomas-is-node.js-typescript",
+      "title": "### Option A: If Thomas is Node.js/TypeScript",
+      "category": "research-notes",
+      "summary": "Use a dedicated TUI state machine + overlay renderer (Ink/Blessed) instead of line-by-line logs. **Option A (Node.js/TypeScript)** 1. Define explicit UI states: - `IDLE` - `SLASH_POPUP` - `PICKER` 2. Centralize transition rules: - `IDLE -> SLASH_POPUP -> PICKE",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772395251-option-a-if-thomas-is-node.js-typescript.md",
+      "created_ts_utc": 1772395251,
+      "updated_ts_utc": 1772395251,
+      "fingerprint": "3518d97f03337bde6792103177a85b892da7dd426c97cfef80a98c89bd5ef9d1",
+      "query": "### Option A: If Thomas is Node.js/TypeScript",
+      "auto_captured": true
+    },
+    {
+      "id": "1772395412-implementation-blueprint-node.js-ink-approach",
+      "title": "## Implementation Blueprint (Node.js / Ink Approach)",
+      "category": "research-notes",
+      "summary": "1. Project structure ```txt src/tui/ components/ hooks/ ``` 2. State machine (`stateMachine.ts`) - States: `IDLE | SLASH_POPUP | PICKER` - Events: `INPUT_CHANGED`, `OPEN_SLASH`, `SELECT_COMMAND`, `OPEN_PICKER`, `SELECT_MODEL`, `CANCEL`, `SUBMIT` - Enforce tran",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772395412-implementation-blueprint-node.js-ink-approach.md",
+      "created_ts_utc": 1772395412,
+      "updated_ts_utc": 1772395412,
+      "fingerprint": "ca66fd32e73342a71a5982b73f7df96019d35bfd8ac9739e82387a4ca3d8a344",
+      "query": "## Implementation Blueprint (Node.js / Ink Approach)",
+      "auto_captured": true
+    },
+    {
+      "id": "1772396095-fuzzy-filter-as-user-types-using-fuse.js-or-similar",
+      "title": "- **Fuzzy filter** as user types (using fuse.js or similar)",
+      "category": "research-notes",
+      "summary": "I’m implementing true fuzzy matching now (not just prefix/contains): both slash popup and generic picker suggestions will use similarity scoring so near-typed terms still rank correctly as you type. Then I’ll run the REPL test suite again.Fuzzy scoring is now",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772396095-fuzzy-filter-as-user-types-using-fuse.js-or-similar.md",
+      "created_ts_utc": 1772396095,
+      "updated_ts_utc": 1772396095,
+      "fingerprint": "89d20cbb494fe6f0d83162474ebdbd1f3f171fbb966c7aa58d9329d5e208b8f3",
+      "query": "- **Fuzzy filter** as user types (using fuse.js or similar)",
+      "auto_captured": true
+    },
+    {
+      "id": "1772404208-i-need-your-name-the-main-one-to-be-thomas.-when-he-makes-sub-agents-and-they-re",
+      "title": "i need your name the main one to be thomas. when he makes sub agents and they reply in here they can be codex plus a nam",
+      "category": "research-notes",
+      "summary": "Understood. From now on in this workspace: - Main agent name: `Thomas` (me) - Sub-agent format: `Codex <CharacterName>` (for example `Codex Riley`, `Codex Morgan`) I’ll treat these as persistent characters during this working session and reuse them for tasks.",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772404208-i-need-your-name-the-main-one-to-be-thomas.-when-he-makes-sub-agents-and-they-re.md",
+      "created_ts_utc": 1772404208,
+      "updated_ts_utc": 1772404208,
+      "fingerprint": "8ad7d9f8123a8e4259d70a355259a9b75b326aaf82011face7d024501ee2f6e2",
+      "query": "i need your name the main one to be thomas. when he makes sub agents and they reply in here they can be codex plus a name he chooses that a real agent from the virtual office. im really big on agents be permanet characters in this program you recall on to do task",
+      "auto_captured": true
+    },
+    {
+      "id": "1772405555-there-is-an-actual-virtual-office-in-thomas-repo-thats-the-one-is-said-connect-t",
+      "title": "there is an actual virtual office in thomas repo thats the one is said connect to also this cli has no memeory working s",
+      "category": "research-notes",
+      "summary": "I’ll locate the virtual-office configuration in this repo and then check why session memory isn’t being persisted in this CLI flow. I’m starting by reading the required guardrail/index files and searching for “virtual office” and memory-related config.I found",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1772405555-there-is-an-actual-virtual-office-in-thomas-repo-thats-the-one-is-said-connect-t.md",
+      "created_ts_utc": 1772405555,
+      "updated_ts_utc": 1772405555,
+      "fingerprint": "ee7fcc6c136d919ad7636a34f69d0c3b93eeabbb115aba221598c4e6835734c0",
+      "query": "there is an actual virtual office in thomas repo thats the one is said connect to also this cli has no memeory working so you cant see previous chats please fix rhat",
+      "auto_captured": true
     }
   ]
 }

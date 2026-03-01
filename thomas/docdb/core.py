@@ -188,7 +188,7 @@ class Collection:
                             elif agg_op == "$min":
                                 groups[key][field] = min(groups[key].get(field, value), value)
 
-                result = [type("", (), {"data": g, "doc_id": k})() for g in groups.values()]
+                result = [type("", (), {"data": g, "doc_id": key})() for key, g in groups.items()]
 
             elif "$sort" in stage:
                 sort_spec = stage["$sort"]

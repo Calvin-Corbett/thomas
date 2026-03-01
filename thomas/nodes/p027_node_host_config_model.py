@@ -20,7 +20,7 @@ from typing import Any, TypedDict
 
 try:
     import json5  # type: ignore
-except (json.JSONDecodeError, ValueError, KeyError):  # pragma: no cover - optional dependency
+except ImportError:  # pragma: no cover - optional dependency
     json5 = None  # type: ignore
 
 

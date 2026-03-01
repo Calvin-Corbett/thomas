@@ -9,7 +9,7 @@ import json
 import os
 import subprocess
 from collections.abc import Sequence
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -26,6 +26,9 @@ BREAKGLASS_ENV = "THOMAS_SKIP_BREAKGLASS"
 BREAKGLASS_TICKET_ENV = "THOMAS_SKIP_TICKET"
 DEFAULT_MAX_SKIP_HOOKS = 4
 DEFAULT_MAX_STAGED_FILES_WITH_SKIP = 200
+DEFAULT_MAX_STAGED_FILES_WITH_BREAKGLASS = 60
+DEFAULT_BREAKGLASS_MAX_PER_AGENT_24H = 3
+DEFAULT_BREAKGLASS_COOLDOWN_MINUTES = 15
 PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "ruff",
     "ruff-format",
@@ -35,12 +38,17 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-workboard-changed-files-gate",
     "thomas-workboard-agent-claim-gate",
     "thomas-workboard-audit-backstop-gate",
+    "thomas-monolith-guard",
     "thomas-repo-hygiene-gate",
     "thomas-repo-identity-gate",
     "thomas-repo-clean-worktree-gate",
     "thomas-architecture",
     "thomas-auto-checks-quick",
 )
+
+
+def _now_utc() -> datetime:
+    return datetime.now(timezone.utc)
 
 
 def _run_git(args: Sequence[str]) -> str | None:
@@ -67,6 +75,22 @@ def _parse_skip_env(raw_skip: str) -> list[str]:
         if token:
             tokens.append(token)
     return tokens
+
+
+def _sanitize_reason(raw: str) -> str:
+    return " ".join(str(raw or "").split()).strip()
+
+
+def _auto_breakglass_ticket(*, now: datetime, agent: str) -> str:
+    stamp = now.strftime("%Y%m%d%H%M%S")
+    slug = "".join(ch for ch in str(agent or "").lower() if ch.isalnum())[:6] or "agent"
+    return f"AUTO-{stamp}-{slug}"
+
+
+def _auto_breakglass_reason(*, agent: str, skip_hooks: Sequence[str], branch: str) -> str:
+    hook_list = ",".join(str(item) for item in list(skip_hooks)[:4]) or "unknown-hook"
+    branch_clean = str(branch or "").strip() or "unknown-branch"
+    return f"auto-generated breakglass for {agent} on {branch_clean}; skip hooks={hook_list}; follow-up fix required"
 
 
 def _find_broad_skip_tokens(tokens: Sequence[str]) -> list[str]:
@@ -122,15 +146,19 @@ def _append_audit_log(
     breakglass_used: bool,
     skip_ticket: str,
     protected_hooks_skipped: Sequence[str],
+    breakglass_ticket_auto: bool,
+    breakglass_reason_auto: bool,
 ) -> None:
     payload: dict[str, object] = {
         "gate": "precommit_skip_policy",
-        "timestamp_utc": datetime.now(timezone.utc).isoformat(),
+        "timestamp_utc": _now_utc().isoformat(),
         "agent": agent,
         "skip_hooks": list(skip_hooks),
         "reason": reason,
         "breakglass_used": bool(breakglass_used),
         "skip_ticket": skip_ticket,
+        "breakglass_ticket_auto": bool(breakglass_ticket_auto),
+        "breakglass_reason_auto": bool(breakglass_reason_auto),
         "protected_hooks_skipped": list(protected_hooks_skipped),
         "branch": _run_git(["rev-parse", "--abbrev-ref", "HEAD"]) or "",
         "head": _run_git(["rev-parse", "HEAD"]) or "",
@@ -140,6 +168,51 @@ def _append_audit_log(
     audit_log.parent.mkdir(parents=True, exist_ok=True)
     with audit_log.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, sort_keys=True) + "\n")
+
+
+def _parse_iso_utc(raw: str) -> datetime | None:
+    value = str(raw or "").strip()
+    if not value:
+        return None
+    if value.endswith("Z"):
+        value = value[:-1] + "+00:00"
+    try:
+        parsed = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _load_breakglass_history(*, audit_log: Path, agent: str, now: datetime) -> list[datetime]:
+    if not audit_log.exists():
+        return []
+    out: list[datetime] = []
+    agent_key = str(agent or "").strip().lower()
+    try:
+        lines = audit_log.read_text(encoding="utf-8").splitlines()
+    except Exception:
+        return []
+    for line in lines:
+        token = str(line or "").strip()
+        if not token:
+            continue
+        try:
+            payload = json.loads(token)
+        except Exception:
+            continue
+        if not bool(payload.get("breakglass_used", False)):
+            continue
+        if str(payload.get("agent", "")).strip().lower() != agent_key:
+            continue
+        stamp = _parse_iso_utc(str(payload.get("timestamp_utc", "")))
+        if stamp is None:
+            continue
+        if stamp > now + timedelta(minutes=1):
+            continue
+        out.append(stamp)
+    return sorted(out)
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -160,6 +233,24 @@ def run(argv: Sequence[str] | None = None) -> int:
         type=int,
         default=DEFAULT_MAX_STAGED_FILES_WITH_SKIP,
         help="Maximum staged file count allowed with SKIP without breakglass (default: 200).",
+    )
+    parser.add_argument(
+        "--max-staged-files-with-breakglass",
+        type=int,
+        default=DEFAULT_MAX_STAGED_FILES_WITH_BREAKGLASS,
+        help="Maximum staged file count allowed with breakglass SKIP (default: 60).",
+    )
+    parser.add_argument(
+        "--breakglass-max-per-agent-24h",
+        type=int,
+        default=DEFAULT_BREAKGLASS_MAX_PER_AGENT_24H,
+        help="Maximum breakglass SKIP uses per agent in rolling 24h window (default: 3).",
+    )
+    parser.add_argument(
+        "--breakglass-cooldown-minutes",
+        type=int,
+        default=DEFAULT_BREAKGLASS_COOLDOWN_MINUTES,
+        help="Minimum minutes required between breakglass SKIP uses by same agent (default: 15).",
     )
     parser.add_argument(
         "--protected-hook",
@@ -219,8 +310,32 @@ def run(argv: Sequence[str] | None = None) -> int:
     max_skip_hooks = max(1, int(args.max_skip_hooks))
     unique_skip_hooks = sorted(set(skip_hooks), key=str.lower)
     breakglass_enabled = _is_truthy(os.getenv(BREAKGLASS_ENV, ""))
-    if len(unique_skip_hooks) > max_skip_hooks and not breakglass_enabled:
-        message = f"SKIP contains {len(unique_skip_hooks)} hook ids; max is {max_skip_hooks} unless {BREAKGLASS_ENV}=1"
+    if not breakglass_enabled:
+        message = (
+            "SKIP is breakglass-only. Fix the failing hooks and retry; "
+            f"only emergency overrides may set {BREAKGLASS_ENV}=1 with {BREAKGLASS_TICKET_ENV}."
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "gate": "precommit_skip_policy",
+                        "ok": False,
+                        "skip_hooks": list(skip_hooks),
+                        "error": message,
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            print("Pre-commit skip policy gate: FAIL")
+            print(f"- {message}")
+        return 1
+
+    if len(unique_skip_hooks) > max_skip_hooks:
+        message = (
+            f"SKIP contains {len(unique_skip_hooks)} hook ids; max is {max_skip_hooks} even with {BREAKGLASS_ENV}=1"
+        )
         if args.json:
             print(
                 json.dumps(
@@ -265,81 +380,20 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- protected hooks: {', '.join(protected_skipped)}")
         return 1
 
-    reason = str(os.getenv("THOMAS_SKIP_REASON", "")).strip()
-    if not reason:
-        message = "THOMAS_SKIP_REASON is required when SKIP is set"
-        if args.json:
-            print(
-                json.dumps(
-                    {
-                        "gate": "precommit_skip_policy",
-                        "ok": False,
-                        "skip_hooks": list(skip_hooks),
-                        "error": message,
-                    },
-                    sort_keys=True,
-                )
-            )
-        else:
-            print("Pre-commit skip policy gate: FAIL")
-            print(f"- {message}")
-        return 1
-    if len(reason) < 12:
-        message = "THOMAS_SKIP_REASON must be at least 12 characters"
-        if args.json:
-            print(
-                json.dumps(
-                    {
-                        "gate": "precommit_skip_policy",
-                        "ok": False,
-                        "skip_hooks": list(skip_hooks),
-                        "error": message,
-                    },
-                    sort_keys=True,
-                )
-            )
-        else:
-            print("Pre-commit skip policy gate: FAIL")
-            print(f"- {message}")
-        return 1
-    if any(ch in reason for ch in ("\n", "\r")):
-        message = "THOMAS_SKIP_REASON cannot contain newlines"
-        if args.json:
-            print(
-                json.dumps(
-                    {
-                        "gate": "precommit_skip_policy",
-                        "ok": False,
-                        "skip_hooks": list(skip_hooks),
-                        "error": message,
-                    },
-                    sort_keys=True,
-                )
-            )
-        else:
-            print("Pre-commit skip policy gate: FAIL")
-            print(f"- {message}")
-        return 1
-
+    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"]) or ""
+    now_for_meta = _now_utc()
+    reason = _sanitize_reason(os.getenv("THOMAS_SKIP_REASON", ""))
     skip_ticket = str(os.getenv(BREAKGLASS_TICKET_ENV, "")).strip()
+    breakglass_reason_auto = False
+    breakglass_ticket_auto = False
+    if breakglass_enabled and len(reason) < 12:
+        reason = _auto_breakglass_reason(
+            agent=_resolve_agent() or "unknown-agent", skip_hooks=skip_hooks, branch=branch
+        )
+        breakglass_reason_auto = True
     if breakglass_enabled and len(skip_ticket) < 6:
-        message = f"{BREAKGLASS_TICKET_ENV} is required (>=6 chars) when {BREAKGLASS_ENV}=1"
-        if args.json:
-            print(
-                json.dumps(
-                    {
-                        "gate": "precommit_skip_policy",
-                        "ok": False,
-                        "skip_hooks": list(skip_hooks),
-                        "error": message,
-                    },
-                    sort_keys=True,
-                )
-            )
-        else:
-            print("Pre-commit skip policy gate: FAIL")
-            print(f"- {message}")
-        return 1
+        skip_ticket = _auto_breakglass_ticket(now=now_for_meta, agent=_resolve_agent() or "unknown-agent")
+        breakglass_ticket_auto = True
 
     staged_files = _staged_files()
     max_staged_files_with_skip = max(1, int(args.max_staged_files_with_skip))
@@ -347,6 +401,29 @@ def run(argv: Sequence[str] | None = None) -> int:
         message = (
             f"SKIP with {len(staged_files)} staged files exceeds limit {max_staged_files_with_skip}; "
             f"use smaller commits or set {BREAKGLASS_ENV}=1 with {BREAKGLASS_TICKET_ENV}"
+        )
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "gate": "precommit_skip_policy",
+                        "ok": False,
+                        "skip_hooks": list(skip_hooks),
+                        "staged_file_count": len(staged_files),
+                        "error": message,
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            print("Pre-commit skip policy gate: FAIL")
+            print(f"- {message}")
+        return 1
+    max_staged_files_with_breakglass = max(1, int(args.max_staged_files_with_breakglass))
+    if breakglass_enabled and len(staged_files) > max_staged_files_with_breakglass:
+        message = (
+            f"breakglass SKIP with {len(staged_files)} staged files exceeds hard limit "
+            f"{max_staged_files_with_breakglass}; split the commit before retrying"
         )
         if args.json:
             print(
@@ -385,6 +462,59 @@ def run(argv: Sequence[str] | None = None) -> int:
             print("Pre-commit skip policy gate: FAIL")
             print(f"- {message}")
         return 1
+    if breakglass_enabled:
+        now = _now_utc()
+        history = _load_breakglass_history(audit_log=audit_log, agent=agent, now=now)
+        cooldown_minutes = max(0, int(args.breakglass_cooldown_minutes))
+        if cooldown_minutes > 0 and history:
+            latest = history[-1]
+            delta = now - latest
+            if delta < timedelta(minutes=cooldown_minutes):
+                remaining = max(1, int((timedelta(minutes=cooldown_minutes) - delta).total_seconds() // 60))
+                message = (
+                    f"breakglass cooldown active for `{agent}`; retry in ~{remaining} minute(s) "
+                    f"(cooldown={cooldown_minutes}m)"
+                )
+                if args.json:
+                    print(
+                        json.dumps(
+                            {
+                                "gate": "precommit_skip_policy",
+                                "ok": False,
+                                "skip_hooks": list(skip_hooks),
+                                "error": message,
+                            },
+                            sort_keys=True,
+                        )
+                    )
+                else:
+                    print("Pre-commit skip policy gate: FAIL")
+                    print(f"- {message}")
+                return 1
+        max_breakglass_per_agent = max(1, int(args.breakglass_max_per_agent_24h))
+        window_start = now - timedelta(hours=24)
+        recent_24h = [stamp for stamp in history if stamp >= window_start]
+        if len(recent_24h) >= max_breakglass_per_agent:
+            message = (
+                f"breakglass quota exceeded for `{agent}`: "
+                f"{len(recent_24h)} uses in last 24h (max {max_breakglass_per_agent})"
+            )
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "gate": "precommit_skip_policy",
+                            "ok": False,
+                            "skip_hooks": list(skip_hooks),
+                            "error": message,
+                        },
+                        sort_keys=True,
+                    )
+                )
+            else:
+                print("Pre-commit skip policy gate: FAIL")
+                print(f"- {message}")
+            return 1
 
     try:
         _append_audit_log(
@@ -396,6 +526,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             breakglass_used=breakglass_enabled,
             skip_ticket=skip_ticket,
             protected_hooks_skipped=protected_skipped,
+            breakglass_ticket_auto=breakglass_ticket_auto,
+            breakglass_reason_auto=breakglass_reason_auto,
         )
     except Exception as exc:
         message = f"failed to write skip audit log: {exc}"
@@ -426,6 +558,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                     "skip_hooks": list(skip_hooks),
                     "skip_hook_count": len(skip_hooks),
                     "breakglass_used": breakglass_enabled,
+                    "breakglass_ticket_auto": breakglass_ticket_auto,
+                    "breakglass_reason_auto": breakglass_reason_auto,
                     "protected_hooks_skipped": protected_skipped,
                     "staged_file_count": len(staged_files),
                     "audit_log": str(audit_log),
@@ -438,6 +572,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"- recorded {len(skip_hooks)} skipped hook(s) for `{agent}`")
         if breakglass_enabled:
             print(f"- breakglass enabled via {BREAKGLASS_ENV}")
+            if breakglass_ticket_auto or breakglass_reason_auto:
+                print("- breakglass metadata auto-generated")
             if protected_skipped:
                 print(f"- protected hooks skipped: {', '.join(protected_skipped)}")
         print(f"- audit log: {audit_log}")

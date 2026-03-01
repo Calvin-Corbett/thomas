@@ -374,7 +374,7 @@ function pumpTTS() {
   window.speechSynthesis.speak(utter);
 }
 
-async function startAudio({ ptt=false } = {})({ ptt=false } = {}) {
+async function startAudio({ ptt=false } = {}) {
   if (!compat.hasMediaDevices) {
     showBanner("No microphone support (getUserMedia). Text mode still works.", "warn");
     return;

@@ -22,7 +22,7 @@ except Exception:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
-DEFAULT_COORDINATOR = "task-manager-agent"
+DEFAULT_COORDINATOR = "thomas"
 SWARM_HEADING = "Swarm Sessions"
 NONE_ENTRY = "- none"
 SWARM_STATES = {"planned", "active", "completed", "cancelled"}
@@ -317,19 +317,21 @@ def _make_manifest(
 
         startup_status_cmd = (
             "python scripts/workboard_message.py "
-            f'--send --from-agent "{agent}" --to-agent "{coordinator}" '
-            f'--task-id "{task_id}" --kind status --priority p0 '
-            f'--summary "swarm {swarm_id} terminal online" --requested-action none --decision pending'
+            f'--send --from-agent {_ps_single_quote(agent)} --to-agent {_ps_single_quote(coordinator)} '
+            f'--task-id {_ps_single_quote(task_id)} --kind status --priority p0 '
+            f'--summary {_ps_single_quote(f"swarm {swarm_id} terminal online")} '
+            "--requested-action none --decision pending"
         )
         claim_cmd = (
             "python scripts/workboard_claim.py "
-            f'--claim --agent "{agent}" --name "{agent}" --role solo --parent none '
-            f'--scope "{lane_scope}" --task "[WIP][SWARM:{swarm_id}] {task_id} lane"'
+            f'--claim --agent {_ps_single_quote(agent)} --name {_ps_single_quote(agent)} --role solo --parent none '
+            f'--scope {_ps_single_quote(lane_scope)} '
+            f'--task {_ps_single_quote(f"[WIP][SWARM:{swarm_id}] {task_id} lane")}'
         )
         bootstrap_parts = [
-            f'Set-Location "{root_path}"',
-            f'$env:THOMAS_AGENT_NAME="{agent}"',
-            f'$env:CODEX_AGENT_NAME="{agent}"',
+            f"Set-Location {_ps_single_quote(root_path)}",
+            f"$env:THOMAS_AGENT_NAME={_ps_single_quote(agent)}",
+            f"$env:CODEX_AGENT_NAME={_ps_single_quote(agent)}",
         ]
         if not has_active_claim:
             bootstrap_parts.append(claim_cmd)

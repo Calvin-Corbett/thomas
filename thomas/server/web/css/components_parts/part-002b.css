@@ -339,8 +339,8 @@
 .robot-alert-stage {
     position: absolute;
     left: 0;
-    bottom: 116px;
-    width: 360px;
+    width: min(360px, calc(100vw - 24px));
+    bottom: calc(var(--composer-offset, 200px) - 84px);
     height: 190px;
     pointer-events: none;
     z-index: 38;
@@ -504,9 +504,9 @@
 
 .robot-alert-bubble {
     position: absolute;
-    left: 122px;
+    left: clamp(88px, calc(100% - 238px), 122px);
     bottom: 72px;
-    max-width: 218px;
+    max-width: clamp(150px, calc(100% - 142px), 218px);
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     background: rgba(17, 23, 33, 0.94);

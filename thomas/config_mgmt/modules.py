@@ -1,6 +1,7 @@
 """Built-in modules for task execution."""
 
 import os
+import shlex
 import shutil
 import subprocess
 from pathlib import Path
@@ -536,9 +537,10 @@ class CommandModule(BaseModule):
                 raise ModuleError("'cmd' is required")
 
             try:
+                cmd_parts = shlex.split(cmd)
                 proc_result = subprocess.run(
-                    cmd,
-                    shell=True,
+                    cmd_parts,
+                    shell=False,
                     capture_output=True,
                     text=True,
                     timeout=300,

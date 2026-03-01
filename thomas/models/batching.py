@@ -30,9 +30,19 @@ class BatchAPIError(RuntimeError):
 
 def _to_int(value: Any, default: int = 0) -> int:
     try:
+        if value is None:
+            return int(default)
         return int(value)
-    except ImportError:
+    except (ImportError, TypeError, ValueError):
         return int(default)
+
+
+def _pick_first(*values: Any, default: Any = None) -> Any:
+    """Return first value that is not None (preserving zero)."""
+    for value in values:
+        if value is not None:
+            return value
+    return default
 
 
 def _root_obj(payload: dict[str, Any]) -> dict[str, Any]:
@@ -67,23 +77,53 @@ def parse_batch_state(payload: dict[str, Any]) -> dict[str, Any]:
     status = str(obj.get("status") or payload.get("status") or "").strip().lower()
 
     num_requests = _to_int(
-        state.get("num_requests") or state.get("numRequests") or obj.get("num_requests") or obj.get("numRequests"),
+        _pick_first(
+            state.get("num_requests"),
+            state.get("numRequests"),
+            obj.get("num_requests"),
+            obj.get("numRequests"),
+            default=0,
+        ),
         0,
     )
     num_pending = _to_int(
-        state.get("num_pending") or state.get("numPending") or obj.get("num_pending") or obj.get("numPending"),
+        _pick_first(
+            state.get("num_pending"),
+            state.get("numPending"),
+            obj.get("num_pending"),
+            obj.get("numPending"),
+            default=0,
+        ),
         0,
     )
     num_success = _to_int(
-        state.get("num_success") or state.get("numSuccess") or obj.get("num_success") or obj.get("numSuccess"),
+        _pick_first(
+            state.get("num_success"),
+            state.get("numSuccess"),
+            obj.get("num_success"),
+            obj.get("numSuccess"),
+            default=0,
+        ),
         0,
     )
     num_error = _to_int(
-        state.get("num_error") or state.get("numError") or obj.get("num_error") or obj.get("numError"),
+        _pick_first(
+            state.get("num_error"),
+            state.get("numError"),
+            obj.get("num_error"),
+            obj.get("numError"),
+            default=0,
+        ),
         0,
     )
     num_cancelled = _to_int(
-        state.get("num_cancelled") or state.get("numCancelled") or obj.get("num_cancelled") or obj.get("numCancelled"),
+        _pick_first(
+            state.get("num_cancelled"),
+            state.get("numCancelled"),
+            obj.get("num_cancelled"),
+            obj.get("numCancelled"),
+            default=0,
+        ),
         0,
     )
 

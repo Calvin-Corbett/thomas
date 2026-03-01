@@ -1,26 +1,28 @@
 ﻿# Repo Structure Protocol
 
-Last updated: 2026-02-20
+Last updated: 2026-03-01
 
 This document defines how Thomas is organized so any agent can enter the repo and execute work without guessing.
 
 ## 1) Top-Level Intent
 
 - `thomas/`: product runtime and server code.
+- `apps/`: product surfaces and platform clients (`apps/site` website, `apps/android`, `apps/ios`, `apps/macos`, `apps/shared` scaffolds).
 - `tests/`: automated test coverage for product behavior.
 - `docs/`: stable specs/protocols/reference docs (not active execution plans).
-- `plans/`: active execution plans and workboards.
-- `tasks/`: historical per-conversation notes/transcripts.
-- `Inbox/`, `docs/inbox/`, `.inbox_extract_*`: external drops and unpacked intake artifacts (not source of truth).
+- `plans/thomas/`: active execution plans, workboards, and planning artifacts.
+- `docs/inbox/`, `.inbox_extract_*`, `Installed_Features/`: external drops and unpacked intake artifacts (not source of truth).
 
 ## 2) Canonical Planning Layout
 
-All active plans must live in `plans/`.
+All active plans must live in `plans/thomas/`.
 
 Current convention:
 - `plans/README.md`: global planning rules.
-- `plans/thomas/README.md`: Thomas plan entry point.
+- `plans/thomas/README.md`: Thomas plan hub and plan index.
 - `plans/thomas/WORKBOARD.md`: active priorities + statuses.
+- `plans/thomas/tasks/.../PLAN.md`: active task plans.
+- `plans/thomas/problems/.../PROBLEM.md`: problem statements tied to task plans.
 - domain plan files under `plans/thomas/<domain>/...`.
 
 Do not create new random plan files at repo root or in `docs/`.
@@ -31,13 +33,14 @@ If a plan is moved, keep a pointer file at the old path.
 For every new task, read in this order:
 1. `AGENTS.md`
 2. `plans/thomas/WORKBOARD.md`
-3. Relevant plan under `plans/thomas/...`
-4. Supporting docs from `docs/` as needed
+3. `plans/thomas/README.md`
+4. Relevant plan under `plans/thomas/...`
+5. Supporting docs from `docs/` as needed
 
 If there is conflict:
 - `AGENTS.md` process rules win.
 - Plan files define current execution intent.
-- Docs define stable contracts/specs.
+- Docs define stable contracts.
 
 ## 4) Directory Rules
 
@@ -58,11 +61,12 @@ If there is conflict:
 - `docs/` should not be used as an active sprint board.
 
 ### 4.4 Plans
-- Active execution plans live in `plans/` only.
+- Active execution plans live in `plans/thomas/` only.
 - `plans/thomas/WORKBOARD.md` is the active board for agent coordination.
+- `plans/thomas/README.md` must reference every non-generated plan file.
 
 ### 4.5 Intake/Archive
-- `Inbox/`, `docs/inbox/`, `.inbox_extract_*`, `Installed_Features/` are intake/archive zones.
+- `docs/inbox/`, `.inbox_extract_*`, `Installed_Features/` are intake/archive zones.
 - Do not treat intake files as production source of truth until integrated.
 
 ## 5) Change Hygiene Requirements
@@ -88,7 +92,7 @@ If a file moved:
 ## 6) Repo Health Audit Questions
 
 Before closing work, agents should confirm:
-1. Is the active plan in `plans/`?
+1. Is the active plan in `plans/thomas/`?
 2. Is workboard status updated?
 3. Are version/changelog rules satisfied for shipped behavior changes?
 4. Are tests present for behavior changes?
@@ -101,6 +105,7 @@ Before closing work, agents should confirm:
 - `plans/thomas/ui/UI_UPGRADE_PLAN.md`
 - `plans/thomas/roadmap/WEEKLY_DEEP_DIVE_PLAN.md`
 - `plans/thomas/launch/LAUNCH_V1_PLAN.md`
+- `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
 
 ## 8) Legacy Redirects (Expected)
 
@@ -109,6 +114,7 @@ These may exist as pointers and are intentional:
 - `docs/WEEKLY_DEEP_DIVE_PLAN.md`
 - `docs/LAUNCH_V1.md`
 - `docs/COMPANION_STORE_COMPLIANCE_PLAN.md`
+- `docs/THOMAS_ONBOARDING_UX_PLAN.md`
 
 ## 9) Automation Gates
 

@@ -126,7 +126,7 @@ def test_runtime_skills_context_format_includes_selected_instructions(tmp_path: 
         max_selected=2,
     )
     ctx = format_runtime_skills_context(selection)
-    assert "<runtime_skills" in ctx
+    assert "--- Runtime Skills ---" in ctx
     assert "robot-ui" in ctx
     assert "Verify before finishing" in ctx
 
@@ -170,7 +170,7 @@ def test_agent_loop_injects_runtime_skill_context_into_system_prompt(tmp_path: P
     system_msg = llm.last_messages[0]
     assert str(system_msg.get("role")) == "system"
     text = str(system_msg.get("content") or "")
-    assert "<runtime_skills" in text
+    assert "--- Runtime Skills ---" in text
     assert "robot-theme" in text
 
 
@@ -289,9 +289,79 @@ def test_runtime_skills_provider_conformance_same_selection_and_prompt(tmp_path:
 
         assert llm.last_messages
         system_text = str((llm.last_messages[0] or {}).get("content") or "")
-        assert "<runtime_skills" in system_text
+        assert "--- Runtime Skills ---" in system_text
         assert "robot-theme" in system_text
-        prompt_snippets.append(system_text.split("<runtime_skills", 1)[1][:220])
+        prompt_snippets.append(system_text.split("--- Runtime Skills ---", 1)[1][:220])
 
     assert len(set(selected_sets)) == 1
     assert len(set(prompt_snippets)) == 1
+
+
+def test_runtime_skills_allows_unlimited_count_when_configured(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    codex_home = tmp_path / "codex-home"
+    home_root.mkdir(parents=True, exist_ok=True)
+    codex_home.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.delenv("THOMAS_RUNTIME_MAX_SKILLS", raising=False)
+    monkeypatch.delenv("THOMAS_RUNTIME_MAX_SKILL_CHARS", raising=False)
+    monkeypatch.delenv("THOMAS_SKILLS_EXTRA_DIRS", raising=False)
+
+    for i in range(1, 6):
+        _write_skill(
+            codex_home,
+            f"big-skill-{i}",
+            f"# Big Skill {i}\n- Step {i}.",
+        )
+
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="please apply $big-skill-1, $big-skill-2, $big-skill-3, $big-skill-4, $big-skill-5",
+        relevance_text="",
+        route_path="coding_task",
+        cwd=tmp_path,
+        max_selected=0,
+    )
+
+    selected_names = [s.name for s in selection.selected]
+    assert len(selected_names) == 5
+    assert set(selected_names) == {f"big-skill-{i}" for i in range(1, 6)}
+
+
+def test_runtime_skills_all_mode_and_unbounded_chars_env(tmp_path: Path, monkeypatch) -> None:
+    cfg = _build_cfg(tmp_path)
+    home_root = tmp_path / "home"
+    codex_home = tmp_path / "codex-home"
+    home_root.mkdir(parents=True, exist_ok=True)
+    codex_home.mkdir(parents=True, exist_ok=True)
+
+    monkeypatch.setenv("HOME", str(home_root))
+    monkeypatch.setenv("USERPROFILE", str(home_root))
+    monkeypatch.setenv("CODEX_HOME", str(codex_home))
+    monkeypatch.setenv("THOMAS_RUNTIME_MAX_SKILLS", "all")
+    monkeypatch.setenv("THOMAS_RUNTIME_MAX_SKILL_CHARS", "0")
+    monkeypatch.setenv("THOMAS_RUNTIME_LOAD_ALL_SKILLS", "1")
+    monkeypatch.delenv("THOMAS_SKILLS_EXTRA_DIRS", raising=False)
+
+    for i in range(1, 7):
+        long_body = "# Long Skill\n- " + "x " * 80
+        _write_skill(
+            codex_home,
+            f"long-skill-{i}",
+            long_body,
+        )
+
+    selection = resolve_runtime_skills(
+        cfg,
+        prompt_text="use all long-skill-1 long-skill-2 long-skill-3 long-skill-4 long-skill-5 long-skill-6",
+        relevance_text="long skill",
+        route_path="coding_task",
+        cwd=tmp_path,
+    )
+
+    assert len(selection.selected) == 6
+    assert {s.name for s in selection.selected} >= {f"long-skill-{i}" for i in range(1, 7)}

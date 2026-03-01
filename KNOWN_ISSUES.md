@@ -4,7 +4,7 @@
 > discover a recurring issue that cost significant debugging time. This file is
 > the project's cross-session memory for common pitfalls.
 >
-> Last updated: 2026-02-24 (v0.11.71).
+> Last updated: 2026-03-01 (v0.14.17).
 
 ---
 
@@ -169,6 +169,29 @@ This has caused production-breaking issues multiple times. See AGENTS.md.
 - After a failed bind, call `await site.stop()` (best-effort) before retrying.
 
 **Prevention:** For aiohttp bind retries, never reuse a previously failed `TCPSite` instance.
+
+---
+
+## 12. Memory Engine Appears "Off" Despite Being Enabled in Configurator (Fixed v0.14.17)
+
+**Symptom:** User enables Memory Engine in Model Setup/Settings, but chats still behave like memory is not persistent. In some cases, applying Model Setup appears to do nothing.
+
+**Cause:** Two gaps:
+1. `/api/chat` did not consistently apply effective thread/global memory preferences at runtime.
+2. Advanced memory flags (global/profile include toggles) were not enforced in per-run memory policy.
+3. Model Setup apply silently swallowed `/api/preferences` PATCH failures and closed the modal, making failures look like dead controls.
+
+**Diagnosis:**
+1. Inspect `/api/preferences` response and confirm `memory.enabled_global` + advanced memory flags are set as expected.
+2. Send a chat turn and verify server chat path resolves effective memory state for the current `session_id`.
+3. In browser devtools, check Model Setup apply network response; if non-200 and no UI error, this bug is present.
+
+**Fix (v0.14.17):**
+- `thomas/server/routes/chat_aiohttp.py` now reads preferences with `thread_id=session_id` and applies effective memory enablement for each turn.
+- `thomas/agent/loop_streaming.py` now honors advanced memory include toggles when setting thread memory policy.
+- `thomas/server/web/js/app_runtime_joined.mjs` now surfaces Model Setup save errors and keeps modal open on failure.
+
+**Prevention:** Any new preference control must be validated end-to-end: UI PATCH payload, server persistence, and runtime consumption in the chat loop.
 
 ---
 

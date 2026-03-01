@@ -42,6 +42,15 @@ from thomas.memory.store import (
     MetaDB,
 )
 
+# Episodic memory system
+from thomas.memory.episodic import (
+    EpisodicMemory,
+    Episode,
+    EpisodeStore,
+    MemoryRetriever,
+    SimpleEmbedder,
+)
+
 log = logging.getLogger(__name__)
 
 

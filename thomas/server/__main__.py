@@ -98,6 +98,24 @@ def _print_startup_banner(config, host: str, port: int) -> None:
     logger.info("  Default model: %s (%d profile(s) loaded)", default_model, model_count)
     logger.info("  Shell access: %s", "enabled" if config.tools.allow_shell else "disabled")
     logger.info("  Access mode : %s", config.server.access_mode)
+
+    # ── User space override check ──
+    try:
+        from thomas.core.user_space import check_conflicts, get_user_dir, list_overrides
+
+        user_dir = get_user_dir()
+        overrides = list_overrides()
+        if overrides:
+            logger.info("  User space  : %s (%d override(s))", user_dir, len(overrides))
+            conflicts = check_conflicts()
+            if conflicts:
+                logger.warning("  ⚠ %d override conflict(s) detected! Run:", len(conflicts))
+                logger.warning("    python scripts/thomas_update_check.py")
+        else:
+            logger.info("  User space  : %s (no overrides)", user_dir)
+    except Exception:
+        pass  # User space not set up — that's fine
+
     logger.info("=" * 60)
 
 

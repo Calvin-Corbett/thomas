@@ -162,7 +162,8 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
             memory=MemoryConfig(root=self._tmpdir.name),
             server=ServerConfig(access_mode="local"),
         )
-        return create_app(cfg)
+        with patch("thomas.server.routes.chat_v2.register_chat_v2_routes", side_effect=RuntimeError("legacy-chat-required")):
+            return create_app(cfg)
 
     async def _new_session_id(self) -> str:
         sess_resp = await self.client.post("/api/session/new")
@@ -518,6 +519,32 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
         self.assertFalse(bool(probe.get("ok", True)))
         self.assertIn("require_command_approval", str(probe.get("error") or ""))
+
+    async def test_require_command_approval_bypassed_for_autonomy_level_4(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allow_shell": True, "require_command_approval": True}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "shell.exec"
+        _FakeAgentLoopPolicyProbe.probe_args = {"command": "echo hi", "cwd": "."}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "autonomy_level": 4,
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertEqual(len([e for e in events if e.get("type") == "done"]), 1)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertTrue(bool(probe.get("ok", False)))
 
     async def test_blocked_commands_policy_blocks_matching_shell_command(self):
         sid = await self._new_session_id()

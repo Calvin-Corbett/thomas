@@ -157,6 +157,16 @@ def _git_blob_line_count(repo_root: Path, *, ref: str, rel_path: str) -> int | N
     return len(text.splitlines())
 
 
+def _git_ref_exists(repo_root: Path, ref: str) -> bool:
+    proc = subprocess.run(
+        ["git", "rev-parse", "--verify", f"{ref}^{{commit}}"],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    return proc.returncode == 0
+
+
 def run_guard(
     repo_root: Path,
     baseline_path: Path,
@@ -206,10 +216,11 @@ def run_guard(
 
     violations: list[dict[str, Any]] = []
     measured: list[dict[str, Any]] = []
+    normalized_base_ref = str(base_ref or "").strip() or None
     growth_context: dict[str, Any] = {
         "staged_only": bool(staged_only),
-        "enabled": bool(str(base_ref or "").strip()),
-        "base_ref": str(base_ref or ""),
+        "enabled": bool(normalized_base_ref),
+        "base_ref": str(normalized_base_ref or ""),
         "head_ref": str(head_ref or "HEAD"),
         "changed_file_count": 0,
     }
@@ -218,6 +229,11 @@ def run_guard(
     scoped_files: set[str] | None = None
     prior_line_cache: dict[str, int | None] = {}
     growth_lookup_error = ""
+    if staged_only and not normalized_base_ref:
+        if _git_ref_exists(repo_root, "HEAD"):
+            normalized_base_ref = "HEAD"
+            growth_context["base_ref"] = normalized_base_ref
+            growth_context["enabled"] = True
     if staged_only:
         try:
             scoped_files = _git_staged_files(repo_root)
@@ -228,7 +244,7 @@ def run_guard(
         try:
             changed_files = _git_changed_files(
                 repo_root,
-                base_ref=str(base_ref or "").strip(),
+                base_ref=str(normalized_base_ref or "").strip(),
                 head_ref=str(head_ref or "").strip() or "HEAD",
             )
             growth_context["changed_file_count"] = len(changed_files)
@@ -327,7 +343,7 @@ def run_guard(
                     if rel not in prior_line_cache:
                         prior_line_cache[rel] = _git_blob_line_count(
                             repo_root,
-                            ref=str(base_ref or "").strip(),
+                            ref=str(normalized_base_ref or "").strip(),
                             rel_path=rel,
                         )
                     prior_lines = prior_line_cache.get(rel)
@@ -342,7 +358,7 @@ def run_guard(
                                 "baseline_lines": baseline_lines,
                                 "growth_lines": growth,
                                 "max_growth_lines": max_growth,
-                                "base_ref": str(base_ref or ""),
+                                "base_ref": str(normalized_base_ref or ""),
                                 "head_ref": str(head_ref or "HEAD"),
                                 "reason": "baselined file exceeded max_growth_lines",
                             }
@@ -377,7 +393,7 @@ def run_guard(
             {
                 "path": "<git-range>",
                 "reason": f"unable to compute growth range: {growth_lookup_error}",
-                "base_ref": str(base_ref or ""),
+                "base_ref": str(normalized_base_ref or ""),
                 "head_ref": str(head_ref or "HEAD"),
             }
         )

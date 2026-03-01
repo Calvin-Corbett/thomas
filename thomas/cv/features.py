@@ -361,5 +361,5 @@ def _dlt_homography(src: list[tuple[float, float]], dst: list[tuple[float, float
         # Normalize A
         H = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]
         return Transform2D(H, is_perspective=True)
-    except (np.linalg.LinAlgError, ValueError, IndexError):
+    except (ValueError, IndexError):
         return None

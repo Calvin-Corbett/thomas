@@ -77,5 +77,37 @@ class TestPolicyRules(unittest.TestCase):
         dec = engine.evaluate(ctx)
         self.assertEqual(dec.type.value, "ALLOW")
 
+    def test_require_approval_converts_to_allow_when_no_human_allow(self):
+        cfg = PolicyConfig()
+        cfg.guardrails.no_human_mode = "allow"
+        engine = PolicyEngine.from_config(cfg)
+        ctx = PolicyContext(
+            tool_name="shell.exec",
+            args={"cmd": "dir"},
+            cwd=str(__import__("pathlib").Path.cwd()),
+            sandbox_root=str(__import__("pathlib").Path.cwd()),
+            iteration=1,
+            conversation_summary="hi",
+        )
+        dec = engine.evaluate(ctx)
+        self.assertEqual(dec.type.value, "ALLOW")
+        self.assertEqual(dec.meta.get("no_human_mode"), "allow")
+
+    def test_require_approval_converts_to_deny_when_no_human_deny(self):
+        cfg = PolicyConfig()
+        cfg.guardrails.no_human_mode = "deny"
+        engine = PolicyEngine.from_config(cfg)
+        ctx = PolicyContext(
+            tool_name="shell.exec",
+            args={"cmd": "dir"},
+            cwd=str(__import__("pathlib").Path.cwd()),
+            sandbox_root=str(__import__("pathlib").Path.cwd()),
+            iteration=1,
+            conversation_summary="hi",
+        )
+        dec = engine.evaluate(ctx)
+        self.assertEqual(dec.type.value, "DENY")
+        self.assertEqual(dec.meta.get("no_human_mode"), "deny")
+
 if __name__ == "__main__":
     unittest.main()

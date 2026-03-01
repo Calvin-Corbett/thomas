@@ -3,11 +3,16 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
+import os
 from typing import Any
 
 
 class WorkflowExecutionError(ValueError):
     pass
+
+
+_NO_HUMAN_MODES = {"human", "allow", "deny"}
+_DEFAULT_NO_HUMAN_MODE = "human"
 
 
 def _text(value: Any, *, default: str = "") -> str:
@@ -24,6 +29,13 @@ def _text_list(value: Any) -> list[str]:
             if s:
                 out.append(s)
     return out
+
+
+def _normalize_no_human_mode(value: Any) -> str:
+    mode = str(value or _DEFAULT_NO_HUMAN_MODE).strip().lower()
+    if mode not in _NO_HUMAN_MODES:
+        return _DEFAULT_NO_HUMAN_MODE
+    return mode
 
 
 def _as_bool(value: Any, *, default: bool = False) -> bool:
@@ -105,11 +117,18 @@ class WorkflowRunner:
         default_profile: str | None = None,
         capabilities_by_profile: Mapping[str, Mapping[str, bool]] | None = None,
         approval_broker: Any = None,
+        no_human_mode: str = "human",
     ):
         self._chat = chat_adapter
         self._session_id = session_id
         self._default_profile = _text(default_profile)
         self._approval_broker = approval_broker  # optional ApprovalBroker for step gates
+        self._no_human_mode = _normalize_no_human_mode(
+            os.environ.get("THOMAS_AUTONOMY_NO_HUMAN_MODE")
+            or os.environ.get("THOMAS_NO_HUMAN_MODE")
+            or os.environ.get("THOMAS_GUARDRAILS_NO_HUMAN_MODE")
+            or no_human_mode
+        )
         self._caps: dict[str, dict[str, bool]] = {}
         for profile, caps in (capabilities_by_profile or {}).items():
             p = _text(profile)
@@ -386,7 +405,11 @@ class WorkflowRunner:
         outputs: list[dict[str, Any]] = []
         for idx, step in enumerate(steps, start=1):
             # Approval gate: halt for human approval before executing this step.
-            if step.approval_required and self._approval_broker is not None:
+            if (
+                step.approval_required
+                and self._approval_broker is not None
+                and self._no_human_mode == "human"
+            ):
                 approved = await self._approval_broker.require(
                     run_id=goal[:60],
                     tool_call_id=f"workflow_step:{step.name}",
@@ -404,6 +427,18 @@ class WorkflowRunner:
                         "completed_steps": idx - 1,
                         "outputs": outputs,
                     }
+            if (
+                step.approval_required
+                and self._approval_broker is not None
+                and self._no_human_mode == "deny"
+            ):
+                return {
+                    "pattern": "chain",
+                    "ok": False,
+                    "error": f"Step '{step.name}' blocked by no-human deny mode.",
+                    "completed_steps": idx - 1,
+                    "outputs": outputs,
+                }
             step_profile = self._select_profile(capability=step.capability, preferred_profile=step.profile)
             step_exec = await self._ask_json(
                 system_prompt=(

@@ -16,6 +16,11 @@ Production-grade website for non-technical users:
 - Postgres for download-intent event logging
 - Optional PostHog server-side capture
 
+## Release Readiness Warning
+
+This public site is in an alpha release state and was built with a fast, experimental cadence.
+The page is functional and currently shipping, but may still need UI/UX cleanup and layout hardening.
+
 ## Run locally
 
 ```bash
@@ -76,6 +81,19 @@ Without `DATABASE_URL`, the site still works; it just skips event persistence.
   - tracked website download intents (30 days)
 
 ## Deployment
+
+### GitHub setup quick path
+
+To publish this page from this repo:
+
+1. Set `THOMAS_SITE_DEPLOY_ENABLED=true` in repository variables.
+2. Add repository secrets:
+   - `CLOUDFLARE_API_TOKEN`
+   - `CLOUDFLARE_ACCOUNT_ID`
+   - `GITHUB_TOKEN` (optional, recommended for API rate limits)
+3. Push site changes to `dev` for preview deployment.
+4. Open PR from `dev` to `main`/`master`.
+5. Merge and approve the production environment deployment.
 
 ### Safe release flow (recommended)
 

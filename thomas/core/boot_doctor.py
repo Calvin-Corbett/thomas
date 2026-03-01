@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+import inspect
 import re
 import signal
 import socket
@@ -307,7 +308,13 @@ async def _ai_boot_summary(
             {"role": "user", "content": prompt},
         ]
         chunks: list[str] = []
-        async for event in llm.stream_chat(messages, tools=None):
+        stream_obj = llm.stream_chat(messages, tools=None)
+        if inspect.isawaitable(stream_obj):
+            stream_obj = await stream_obj
+        if not hasattr(stream_obj, "__aiter__"):
+            raise RuntimeError("LLM boot summary stream is not async iterable")
+
+        async for event in stream_obj:
             if event.type == "token":
                 chunks.append(str((event.data or {}).get("text") or ""))
             elif event.type == "error":
@@ -506,4 +513,3 @@ def run_boot_doctor(
 
     _write_report(Path(report_path), result)
     return Path(report_path)
-

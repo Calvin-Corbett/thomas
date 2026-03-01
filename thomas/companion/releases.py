@@ -17,6 +17,14 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
 
 
+def _sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as fh:
+        for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
 def _safe_key(text: str) -> str:
     value = re.sub(r"[^a-zA-Z0-9_.-]+", "-", str(text or "").strip())
     return value.strip("-") or "x"
@@ -66,6 +74,70 @@ def _version_tuple(value: str) -> tuple[int, int, int] | None:
     return nums[0], nums[1], nums[2]
 
 
+def _safe_relative_path(value: Any) -> str:
+    text = str(value or "").replace("\\", "/").strip()
+    if not text:
+        return ""
+    if text.startswith("/"):
+        return ""
+    parts = [part for part in text.split("/") if part]
+    if any(part == ".." or part == "." for part in parts):
+        return ""
+    if any(":" in part for part in parts):
+        return ""
+    if any("\x00" in part for part in parts):
+        return ""
+    return "/".join(parts)
+
+
+def compute_release_bundle_fingerprint(bundle_dir: Path, manifest_payload: dict[str, Any]) -> tuple[str, int]:
+    if not isinstance(manifest_payload, dict):
+        return "", 0
+    files_raw = manifest_payload.get("files")
+    if not isinstance(files_raw, list) or not files_raw:
+        return "", 0
+    manifest_path = bundle_dir.resolve() / "manifest.json"
+    if not manifest_path.exists() or not manifest_path.is_file():
+        return "", 0
+
+    manifest_rows: list[dict[str, Any]] = []
+    total_bytes = 0
+    for item in sorted(files_raw, key=lambda item: str((item or {}).get("path") if isinstance(item, dict) else "")):
+        if not isinstance(item, dict):
+            return "", 0
+        rel = _safe_relative_path(item.get("path"))
+        if not rel:
+            return "", 0
+        expected_sha = str(item.get("sha256") or "").strip().lower()
+        if not expected_sha:
+            return "", 0
+        payload_path = (bundle_dir / "payload" / rel).resolve()
+        if not payload_path.exists() or not payload_path.is_file():
+            return "", 0
+        actual_sha = _sha256_file(payload_path)
+        if actual_sha != expected_sha:
+            return "", 0
+        size = payload_path.stat().st_size
+        manifest_rows.append({"path": rel, "sha256": actual_sha, "size": int(size)})
+        total_bytes += int(size)
+
+    manifest_sha = _sha256_file(manifest_path)
+    payload = {
+        "schema_version": int(manifest_payload.get("schema_version") or 0),
+        "bundle_id": str(manifest_payload.get("bundle_id") or ""),
+        "created_at": str(manifest_payload.get("created_at") or ""),
+        "min_kernel_version": str(manifest_payload.get("min_kernel_version") or ""),
+        "module": manifest_payload.get("module") if isinstance(manifest_payload.get("module"), dict) else {},
+        "release_notes": str(manifest_payload.get("release_notes") or ""),
+        "manifest_sha256": manifest_sha,
+        "signature": manifest_payload.get("signature") if isinstance(manifest_payload.get("signature"), dict) else None,
+        "files": sorted(manifest_rows, key=lambda item: str(item.get("path") or "")),
+    }
+    payload_json = json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True)
+    total_bytes += manifest_path.stat().st_size
+    return hashlib.sha256(payload_json.encode("utf-8")).hexdigest(), int(total_bytes)
+
+
 def _app_version_gte(actual: str, minimum: str) -> bool:
     want = str(minimum or "").strip()
     if not want:
@@ -108,6 +180,8 @@ class ReleaseRecord:
     compliance_violations: int
     compliance_warnings: int
     compliance_checked_at: str
+    bundle_archive_sha256: str
+    bundle_archive_size: int
 
     @classmethod
     def from_dict(cls, data: dict[str, Any]) -> ReleaseRecord:
@@ -135,6 +209,8 @@ class ReleaseRecord:
             compliance_violations=_nonneg_int(data.get("compliance_violations"), default=0),
             compliance_warnings=_nonneg_int(data.get("compliance_warnings"), default=0),
             compliance_checked_at=str(data.get("compliance_checked_at") or ""),
+            bundle_archive_sha256=str(data.get("bundle_archive_sha256") or ""),
+            bundle_archive_size=_nonneg_int(data.get("bundle_archive_size"), default=0),
         )
 
     def to_dict(self) -> dict[str, Any]:
@@ -162,6 +238,8 @@ class ReleaseRecord:
             "compliance_violations": int(self.compliance_violations),
             "compliance_warnings": int(self.compliance_warnings),
             "compliance_checked_at": self.compliance_checked_at,
+            "bundle_archive_sha256": self.bundle_archive_sha256,
+            "bundle_archive_size": int(self.bundle_archive_size),
         }
 
 
@@ -261,6 +339,17 @@ class ReleaseRegistry:
 
         manifest = report.manifest
         module = manifest.module
+        archive_sha256, archive_size = compute_release_bundle_fingerprint(
+            bundle_dir,
+            manifest.to_dict(),
+        )
+        if not archive_sha256:
+            return {
+                "ok": False,
+                "errors": ["release artifact fingerprint could not be computed"],
+                "warnings": list(report.warnings),
+                "release": None,
+            }
         channel_norm = str(channel or "stable").strip() or "stable"
         release_id = (
             f"{_safe_key(channel_norm)}."
@@ -297,6 +386,8 @@ class ReleaseRegistry:
             "compliance_violations": _nonneg_int(compliance_violations, default=0),
             "compliance_warnings": _nonneg_int(compliance_warnings, default=0),
             "compliance_checked_at": str(compliance_checked_at or "").strip(),
+            "bundle_archive_sha256": archive_sha256,
+            "bundle_archive_size": archive_size,
         }
         self._save(payload)
         rel = self.get(release_id)
@@ -391,6 +482,8 @@ class ReleaseRegistry:
             "compliance_violations": src.compliance_violations,
             "compliance_warnings": src.compliance_warnings,
             "compliance_checked_at": src.compliance_checked_at,
+            "bundle_archive_sha256": src.bundle_archive_sha256,
+            "bundle_archive_size": src.bundle_archive_size,
             "promoted_from": src.release_id,
         }
         self._save(payload)

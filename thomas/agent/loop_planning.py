@@ -30,6 +30,56 @@ if TYPE_CHECKING:
 log = logging.getLogger(__name__)
 
 
+_CONTROL_META_KEYS = {
+    "clarification_retry",
+    "clarification_cap",
+    "clarification_seen",
+    "route_input_source",
+    "full_auto_retry",
+    "original_request",
+}
+
+
+def _extract_control_metadata(prompt_text: str) -> dict[str, str]:
+    """Extract control metadata appended as '(k=v; ...; original_request=...)'."""
+    src = str(prompt_text or "")
+    if not src or "=" not in src:
+        return {}
+
+    for match in reversed(list(re.finditer(r"\(([^()]*)\)", src, flags=re.S))):
+        body = str(match.group(1) or "").strip()
+        if "=" not in body:
+            continue
+        pairs: dict[str, str] = {}
+        for part in body.split(";"):
+            chunk = str(part or "").strip()
+            if "=" not in chunk:
+                continue
+            key_raw, value_raw = chunk.split("=", 1)
+            key = str(key_raw or "").strip().lower()
+            if not key or not re.match(r"^[a-z0-9_]+$", key):
+                continue
+            pairs[key] = str(value_raw or "").strip()
+        if not pairs:
+            continue
+        if "original_request" in pairs and any(k in pairs for k in _CONTROL_META_KEYS - {"original_request"}):
+            return pairs
+    return {}
+
+
+def effective_prompt_text(prompt_text: str) -> str:
+    """Prefer original user request when prompt contains control-envelope overhead."""
+    src = str(prompt_text or "").strip()
+    if not src:
+        return src
+    meta = _extract_control_metadata(src)
+    original = str(meta.get("original_request") or "").strip()
+    if not original:
+        return src
+    original = original.strip("'\"`").strip()
+    return original or src
+
+
 def strip_premature_followup(text: str) -> tuple[str, bool]:
     """Remove standalone follow-up lines that frequently derail in-progress tasks."""
     src = str(text or "")
@@ -165,11 +215,12 @@ def looks_like_clarifying_question(text: str) -> bool:
 
 def full_auto_nudge(prompt_text: str, retry_index: int) -> str:
     """Generate nudge for Autonomy level 4."""
+    original_request = effective_prompt_text(prompt_text)
     return (
         "Autonomy level 4 is enabled. Do not ask clarifying questions for this task unless "
         "it is genuinely impossible or unsafe. Inspect available context, choose sensible defaults, "
         "execute now, and report concrete actions taken. "
-        f"(full_auto_retry={int(retry_index)}; original_request={prompt_text[:220]})"
+        f"(full_auto_retry={int(retry_index)}; original_request={original_request[:220]})"
     )
 
 
@@ -182,19 +233,20 @@ def assume_and_proceed_nudge(
     route_input_source: str,
 ) -> str:
     """Generate nudge to assume defaults and proceed."""
+    original_request = effective_prompt_text(prompt_text)
     return (
         "Continue execution now. Do not ask another clarifying question unless it is truly blocked by "
         "missing credentials, access, or unsafe constraints. Assume sensible defaults, state assumptions "
         "briefly, and proceed with concrete actions. "
         f"(clarification_retry={int(retry_index)}; clarification_cap={int(question_cap)}; "
         f"clarification_seen={int(questions_seen)}; route_input_source={str(route_input_source or 'prompt_only')}; "
-        f"original_request={prompt_text[:220]})"
+        f"original_request={original_request[:220]})"
     )
 
 
 def routing_input_text(agent: AgentLoop, prompt_text: str) -> tuple[str, str]:
     """Optionally augment routing input with prior assistant context on follow-ups."""
-    src = str(prompt_text or "").strip()
+    src = effective_prompt_text(prompt_text)
     if not src:
         return src, "prompt_only"
     prev_assistant = agent._latest_assistant_message()

@@ -10,8 +10,10 @@ next lane.
 from __future__ import annotations
 
 import argparse
+import os
 import json
 import subprocess
+import shlex
 import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -31,7 +33,7 @@ except Exception:  # pragma: no cover
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_COMMAND_CATALOG = ROOT / "plans" / "thomas" / "worker_command_catalog.json"
-DEFAULT_TASK_MANAGER_AGENT = "task-manager-agent"
+DEFAULT_TASK_MANAGER_AGENT = "thomas"
 DEFAULT_POLL_SECONDS = 15.0
 DEFAULT_IDLE_HEARTBEAT_SECONDS = 300.0
 DEFAULT_LOG_DIR = ROOT / "runtime" / "workers"
@@ -58,6 +60,13 @@ class CommandRun:
 class _SafeFormatDict(dict):
     def __missing__(self, key: str) -> str:  # pragma: no cover - defensive
         return "{" + key + "}"
+
+
+def _quote_for_shell(value: str) -> str:
+    token = str(value or "")
+    if os.name == "nt":
+        return subprocess.list2cmdline([token])
+    return shlex.quote(token)
 
 
 def _norm(value: str) -> str:
@@ -223,7 +232,8 @@ def _resolve_task_commands(
 
 
 def _render_command(template: str, context: dict[str, str]) -> str:
-    return str(template).format_map(_SafeFormatDict(context)).strip()
+    safe_context = {key: _quote_for_shell(value) for key, value in context.items()}
+    return str(template).format_map(_SafeFormatDict(safe_context)).strip()
 
 
 def _trim_log(text: str, *, limit: int = 2000) -> str:

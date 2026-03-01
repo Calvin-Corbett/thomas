@@ -27,6 +27,7 @@ Deterministic failures raise subclasses of MessageThreadReplyError with
 from __future__ import annotations
 
 import importlib
+import json
 import os
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass, field

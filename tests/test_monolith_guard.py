@@ -333,6 +333,51 @@ def test_monolith_guard_staged_only_fails_for_staged_oversized_file(tmp_path: Pa
     assert any(v.get("path") == "thomas/oversized.py" for v in report["violations"])
 
 
+def test_monolith_guard_staged_only_enforces_growth_against_head_by_default(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir(parents=True, exist_ok=True)
+    _init_git_repo(repo)
+    _write_lines(repo / "thomas" / "server" / "app.py", 130)
+
+    baseline_path = repo / "docs" / "monolith_guard_baseline.json"
+    baseline_path.parent.mkdir(parents=True, exist_ok=True)
+    baseline_path.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "scan_roots": ["thomas"],
+                "hard_limits": {"py": 120},
+                "waiver_policy": {
+                    "require_metadata": True,
+                    "allow_legacy_reason": False,
+                    "default_owner": "qa",
+                    "default_expires_on": "2099-12-31",
+                    "default_max_growth_lines": 0,
+                },
+                "allowed_large_files": {
+                    "thomas/server/app.py": {
+                        "max_lines": 200,
+                        "max_growth_lines": 5,
+                        "reason": "monolith debt decomposition in progress",
+                    }
+                },
+            },
+            indent=2,
+        ),
+        encoding="utf-8",
+    )
+
+    _git(repo, "add", ".")
+    _git(repo, "commit", "-m", "initial")
+
+    _write_lines(repo / "thomas" / "server" / "app.py", 136)
+    _git(repo, "add", "thomas/server/app.py")
+
+    report = run_guard(repo, baseline_path, staged_only=True)
+    assert report["ok"] is False
+    assert any(str(v.get("reason")) == "baselined file exceeded max_growth_lines" for v in report["violations"])
+
+
 def test_monolith_guard_soft_limit_fails_for_changed_unbaselined_file(tmp_path: Path) -> None:
     repo = tmp_path / "repo"
     repo.mkdir(parents=True, exist_ok=True)

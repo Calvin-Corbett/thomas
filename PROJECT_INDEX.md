@@ -2,7 +2,7 @@
 
 > **For AI agents.** Read this FIRST before exploring code. Update this file when
 > you change boot paths, add entry points, move key files, or alter the process model.
-> Last updated: 2026-02-25.
+> Last updated: 2026-03-01.
 
 ---
 
@@ -18,7 +18,9 @@ This file is the single authoritative index for active operational docs. Use thi
 - `KNOWN_ISSUES.md` - recurring break/fix patterns and mitigation notes
 - `docs/REPO_STRUCTURE_PROTOCOL.md` - repository structure contract
 - `docs/ops/repo_hygiene.md` - repo hygiene gate and policy operations
+- `docs/ops/AUTONOMY_L4_EXECUTION_PROFILE.md` - high-autonomy execution defaults and escalation boundary
 - `plans/thomas/WORKBOARD.md` - active execution board
+- `plans/thomas/README.md` - active Thomas planning index
 - `docs/ops/ROOT_DOC_ARCHIVE_INDEX.md` - archive map for root doc sprawl candidates
 
 If a root-level doc is not in the active list above, treat it as legacy/archival context unless explicitly promoted.
@@ -132,6 +134,13 @@ UI button "Restart Server" -> `POST /api/server/restart` -> sets `app["_shutdown
 | `~/.thomas/file_audit.db` | File audit log |
 | `~/.thomas/.secrets.json` | API keys (encrypted if keyring available) |
 
+### Product Surfaces
+
+- `thomas/server/web/**` — primary web chat/composition/runtime UI delivered by the local Thomas server.
+- `apps/site` — public marketing site and installer/download portal (Next.js).
+- `apps/shared` — cross-platform companion/shared scaffold contracts.
+- `apps/android`, `apps/ios`, `apps/macos` — companion app scaffolds for future/parallel client implementations.
+
 ---
 
 ## Config
@@ -193,10 +202,12 @@ POST /api/chat
         -> model config resolution (profile + secrets + overrides)
         -> token economy policy
         -> task ledger update (request + route + completion/blocker)
-        -> early exits: UI control, hello shortcut, batch mode, swarm mode
-           (when `orchestrator_only=true`, chat is forced to swarm and direct AgentLoop fallback is blocked)
-        -> main path: resp.prepare() -> AgentLoop.run() -> NDJSON stream
-        -> finally: llm.close(), run store finalize, write_eof
+        -> early exit: UI control chat patch handling
+        -> mode routing:
+           - `batch` when explicitly requested
+           - `swarm` when explicitly requested, `orchestrator_only=true`, or L4 + task-like intent
+           - direct `AgentLoop` for normal conversation / non-task turns
+        -> explicit `mode=swarm` still fails with HTTP 500 if swarm returns no response
 ```
 
 ### Diagnostics
@@ -257,7 +268,9 @@ python -m thomas serve --port 0
    - `scripts/workboard_claim.py --release` now blocks release when claimed scopes have dirty files unless `--allow-dirty-release` is provided with `--dirty-release-reason` (audited to `runtime/coordination/workboard_release_override_audit.jsonl`).
    - If release unexpectedly fails, run `git status --porcelain`, then either commit/stash claim-scope files or provide an auditable override reason.
 
-13. **`orchestrator_only` chat calls must complete through swarm.** In `thomas/server/routes/chat_aiohttp.py`, requests with `orchestrator_only=true` clamp mode to `swarm`, skip quick casual shortcut replies, and raise `HTTP 500` if swarm routing unexpectedly returns no response (instead of silently falling back to direct `AgentLoop` execution).
+13. **`/api/chat` now uses conversation-first routing.** In `thomas/server/routes/chat_aiohttp.py`, normal chat turns run through direct `AgentLoop`; swarm orchestration is opt-in (`mode=swarm`, `orchestrator_only=true`) and auto-selected for L4 task-like requests. Explicit swarm requests still hard-fail with `HTTP 500` if swarm returns no response.
+
+14. **Memory preference toggles are enforced at chat runtime.** `/api/chat` now resolves preferences with `thread_id=session_id` and applies effective memory enablement plus advanced include flags before `AgentLoop` execution. If memory behavior looks wrong, inspect `/api/preferences` for that session id first.
 
 ---
 

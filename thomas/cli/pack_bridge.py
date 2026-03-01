@@ -357,9 +357,11 @@ def register_pack_proxy_commands(
     include_prefix: str = "",
     strict_run_missing_entrypoint: bool = False,
     exclude_modules: Iterable[str] | None = None,
+    allowlisted_modules: Iterable[str] | None = None,
 ) -> int:
     """Run register pack proxy commands."""
     excluded = {str(x).strip() for x in (exclude_modules or []) if str(x).strip()}
+    allowed = {str(x).strip() for x in (allowlisted_modules or []) if str(x).strip()}
     used = set(str(name).strip() for name in group.commands.keys())
     added = 0
 
@@ -374,6 +376,8 @@ def register_pack_proxy_commands(
 
         module_name = f"{package}.{stem}"
         if module_name in excluded:
+            continue
+        if allowed and module_name not in allowed:
             continue
 
         base_name, prompt_id = _derive_command_name(stem, family_hint=family_hint)

@@ -49,6 +49,101 @@ Durable research/reference library for Thomas.
   - File: `entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md`
 
 ## research-notes
+- `1772405555-there-is-an-actual-virtual-office-in-thomas-repo-thats-the-one-is-said-connect-t`: there is an actual virtual office in thomas repo thats the one is said connect to also this cli has no memeory working s
+  - Summary: I’ll locate the virtual-office configuration in this repo and then check why session memory isn’t being persisted in this CLI flow. I’m starting by reading the required guardrail/index files and searching for “virtual office” and memory-related config.I found
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772405555-there-is-an-actual-virtual-office-in-thomas-repo-thats-the-one-is-said-connect-t.md`
+- `1772404208-i-need-your-name-the-main-one-to-be-thomas.-when-he-makes-sub-agents-and-they-re`: i need your name the main one to be thomas. when he makes sub agents and they reply in here they can be codex plus a nam
+  - Summary: Understood. From now on in this workspace: - Main agent name: `Thomas` (me) - Sub-agent format: `Codex <CharacterName>` (for example `Codex Riley`, `Codex Morgan`) I’ll treat these as persistent characters during this working session and reuse them for tasks.
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772404208-i-need-your-name-the-main-one-to-be-thomas.-when-he-makes-sub-agents-and-they-re.md`
+- `1772396095-fuzzy-filter-as-user-types-using-fuse.js-or-similar`: - **Fuzzy filter** as user types (using fuse.js or similar)
+  - Summary: I’m implementing true fuzzy matching now (not just prefix/contains): both slash popup and generic picker suggestions will use similarity scoring so near-typed terms still rank correctly as you type. Then I’ll run the REPL test suite again.Fuzzy scoring is now
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772396095-fuzzy-filter-as-user-types-using-fuse.js-or-similar.md`
+- `1772395412-implementation-blueprint-node.js-ink-approach`: ## Implementation Blueprint (Node.js / Ink Approach)
+  - Summary: 1. Project structure ```txt src/tui/ components/ hooks/ ``` 2. State machine (`stateMachine.ts`) - States: `IDLE | SLASH_POPUP | PICKER` - Events: `INPUT_CHANGED`, `OPEN_SLASH`, `SELECT_COMMAND`, `OPEN_PICKER`, `SELECT_MODEL`, `CANCEL`, `SUBMIT` - Enforce tran
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772395412-implementation-blueprint-node.js-ink-approach.md`
+- `1772395251-option-a-if-thomas-is-node.js-typescript`: ### Option A: If Thomas is Node.js/TypeScript
+  - Summary: Use a dedicated TUI state machine + overlay renderer (Ink/Blessed) instead of line-by-line logs. **Option A (Node.js/TypeScript)** 1. Define explicit UI states: - `IDLE` - `SLASH_POPUP` - `PICKER` 2. Centralize transition rules: - `IDLE -> SLASH_POPUP -> PICKE
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772395251-option-a-if-thomas-is-node.js-typescript.md`
+- `1772395242-how-to-implement-this-in-thomas`: ## How to Implement This in Thomas
+  - Summary: I’m proceeding to make this implementation explicit in code by centralizing overlay picker behavior into a single non-destructive prompt helper, so Thomas consistently follows the TUI rules across slash/model/reasoning states.Implemented “How to implement this
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772395242-how-to-implement-this-in-thomas.md`
+- `1772394630-thomas-tui-overhaul-build-interactive-slash-commands-like-codex-cli`: # Thomas TUI Overhaul — Build Interactive Slash Commands Like Codex CLI
+  - Summary: I understand you want a Thomas TUI overhaul focused on interactive slash commands similar to Codex CLI. I’m going to first read the required project guardrails and architecture docs, then inspect the current TUI/command implementation before making changes.I’v
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772394630-thomas-tui-overhaul-build-interactive-slash-commands-like-codex-cli.md`
+- `1772393622-give-the-next-3-highest-impact-actions-from-here.-context---user-context-idk---l`: Give the next 3 highest-impact actions from here. Context: - User context: idk - Latest response: No worries. If you wan
+  - Summary: 1. Define the immediate goal in one sentence: “I want to ___ by ___ (time).” 2. List your blockers in bullets (what you don’t know, what you’ve tried, where you’re stuck). 3. Share those two items so I can give you a concrete step-by-step plan tailored to your
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1772393622-give-the-next-3-highest-impact-actions-from-here.-context---user-context-idk---l.md`
+- `1772393579-model-profiles-gemini-openai_compat-gemini-2.5-pro-local-openai_compat-qwen2.5-c`: Model Profiles gemini openai_compat gemini-2.5-pro local openai_compat qwen2.5-coder:7b * codex codex gpt-5.3-codex open
+  - Summary: I’m going to fix the REPL crash shown in your traceback and then wire the PowerShell `thomas` command behavior so it launches the REPL directly. First I’ll read the required guardrail docs and inspect the failing code path in `thomas/cli/repl.py`.I’ve read the
+  - Source: thomas:codex
+  - Tags: research, auto, route-debug_audit
+  - File: `entries/research-notes/1772393579-model-profiles-gemini-openai_compat-gemini-2.5-pro-local-openai_compat-qwen2.5-c.md`
+- `1772391588-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume`: Create a text note explaining web ui reply behavior and save it as a test document.
+  - Summary: I’ll create a short text note describing web UI reply behavior and save it as a test document in the repo. First I’m checking the required guardrail files, then I’ll write the document.I’ve read the required project docs and will now create a concise test docu
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772391588-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume.md`
+- `1772391446-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume`: Create a text note explaining web ui reply behavior and save it as a test document.
+  - Summary: I’ll create a short note file in this workspace, but first I’m checking the required guardrail docs so the file follows project rules.I’ve confirmed the core guardrails; next I’m quickly checking architecture guidance, then I’ll create a concise test note file
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772391446-create-a-text-note-explaining-web-ui-reply-behavior-and-save-it-as-a-test-docume.md`
+- `1772391409-just-give-me-a-plan-and-do-not-execute-any-actions.`: just give me a plan and do not execute any actions.
+  - Summary: 1. Clarify scope: confirm the exact feature/bug and target module(s), plus success criteria. 2. Read required docs first: `GUARDRAILS.md`, module-level `GUARDRAILS.md`, `PROJECT_INDEX.md`, `KNOWN_ISSUES.md`, and `thomas/_architecture.py`. 3. Check active owner
+  - Source: thomas:codex
+  - Tags: research, auto, route-planning
+  - File: `entries/research-notes/1772391409-just-give-me-a-plan-and-do-not-execute-any-actions..md`
+- `1772391365-just-give-me-a-plan-and-do-not-execute-any-actions.`: just give me a plan and do not execute any actions.
+  - Summary: 1. Clarify scope and target files: confirm exact task outcome, affected module(s), and acceptance criteria. 2. Read required guardrails first: root `GUARDRAILS.md`, module-level `GUARDRAILS.md`, then `PROJECT_INDEX.md`, `thomas/_architecture.py`, and `KNOWN_IS
+  - Source: thomas:codex
+  - Tags: research, auto, route-planning
+  - File: `entries/research-notes/1772391365-just-give-me-a-plan-and-do-not-execute-any-actions..md`
+- `1772391214-just-give-me-a-plan-and-do-not-execute-any-actions`: just give me a plan and do not execute any actions
+  - Summary: 1. Confirm scope and target outcome with you first (exact feature/bug, files/modules, and acceptance criteria). 2. Read required docs in order before any code work: `GUARDRAILS.md`, module-level `GUARDRAILS.md`, `PROJECT_INDEX.md`, `thomas/_architecture.py`, `
+  - Source: thomas:codex
+  - Tags: research, auto, route-planning
+  - File: `entries/research-notes/1772391214-just-give-me-a-plan-and-do-not-execute-any-actions.md`
+- `1772390183-ui-fixed-test`: ui fixed test
+  - Summary: I’m treating this as a request to run the UI verification tests and report whether the fix passes. I’ll quickly check the repo’s required test flow and then run the relevant UI proof checks.I’ve loaded the required root docs and will now locate the module-spec
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772390183-ui-fixed-test.md`
+- `1772323309-all-right-can-you-can-you-spawn-up-a-local-agent-and-make-him-research-on-a-rele`: all right can you can you spawn up a local agent and make him research on a relevant task that would make you better or
+  - Summary: I’ll spin up a local sub-agent now and have it research practical ways to improve local LLM performance for agent workflows, with concrete recommendations you can apply here. I’ll report back with its findings.The sub-agent is running (`Turing`) with a structu
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1772323309-all-right-can-you-can-you-spawn-up-a-local-agent-and-make-him-research-on-a-rele.md`
+- `1772314139-okay-i-just-want-to-see-if-your-agents-work-can-you-make-agents-make-like-can-yo`: okay I just want to see if your agents work can you make agents make like can you spawn an agent and make it research wh
+  - Summary: Running a second autonomous proof now: I’m spawning another sub-agent to independently research “Calvin Corbett,” then I’ll return its result and lifecycle actions.Sub-agent is running; I’m waiting for completion and will report exactly what it returned.1) Cle
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1772314139-okay-i-just-want-to-see-if-your-agents-work-can-you-make-agents-make-like-can-yo.md`
+- `1772230025-list-assumptions-and-what-to-validate-first.-context---user-context-now---latest`: List assumptions and what to validate first. Context: - User context: now - Latest response: I encountered issues proces
+  - Summary: Assumptions to make (explicitly) 1. The failing code is doing `async for x in <expr>`. 2. `<expr>` currently returns a coroutine (from `async def`) instead of an async iterable. 3. The error happens before iteration starts (type mismatch), not due to item cont
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1772230025-list-assumptions-and-what-to-validate-first.-context---user-context-now---latest.md`
+- `1772228295-well-aren-t-your-video-current-code-base-is-it-not-set-up-like-that-currently`: well aren't your video current code base is it not set up like that currently
+  - Summary: I’m going to verify the current repo state for video support by scanning the project docs and code paths that define runtime features, then I’ll report exactly what is and isn’t wired today.I found many “video” mentions, but a lot are unrelated (event streams)
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772228295-well-aren-t-your-video-current-code-base-is-it-not-set-up-like-that-currently.md`
 - `1772124694-okay-you-should-only-go-until-like-tax-execution-behavior-and-whatever-other-beh`: okay you should only go until like tax execution behavior and whatever other behaviors you know if you've read context s
   - Summary: I’m proceeding in full-autonomous mode and running a context recovery pass from the repo now, focused on “tax execution behavior” and adjacent behavior notes so I can report exactly what context is available in this session.I found the core index files and one
   - Source: thomas:codex
@@ -340,4 +435,4 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md`
 
-_Total entries: 66_
+_Total entries: 85_

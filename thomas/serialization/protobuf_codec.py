@@ -30,6 +30,7 @@ class ProtobufEncoder:
     def encode(self, obj: dict[str, Any], descriptor: MessageDescriptor | None = None) -> bytes:
         """Encode object to Protobuf bytes."""
         if isinstance(obj, dict):
+            untyped_tags: dict[str, int] = {}
             for key, value in obj.items():
                 if descriptor:
                     field = descriptor.get_field(key)
@@ -37,7 +38,7 @@ class ProtobufEncoder:
                         self._encode_field(key, value, field)
                 else:
                     # Best effort without descriptor
-                    self._encode_untyped_field(key, value)
+                    self._encode_untyped_field(key, value, untyped_tags)
         return self.stream.getvalue()
 
     def _encode_field(self, name: str, value: Any, field: FieldDescriptor) -> None:
@@ -52,10 +53,10 @@ class ProtobufEncoder:
         else:
             self._encode_value(tag, value, field.field_type)
 
-    def _encode_untyped_field(self, name: str, value: Any) -> None:
+    def _encode_untyped_field(self, name: str, value: Any, tag_map: dict[str, int]) -> None:
         """Encode field without schema."""
-        # Assign tag based on field name hash
-        tag = (hash(name) & 0x7FFFFFFF) % 536870911 + 1
+        # Assign compact deterministic tags in encounter order.
+        tag = tag_map.setdefault(name, len(tag_map) + 1)
 
         if isinstance(value, bool):
             self._encode_value(tag, value, "bool")
@@ -71,7 +72,7 @@ class ProtobufEncoder:
             self._encode_value(tag, value, "message")
         elif isinstance(value, list):
             for item in value:
-                self._encode_untyped_field(f"{name}[]", item)
+                self._encode_untyped_field(f"{name}[]", item, tag_map)
 
     def _encode_value(self, tag: int, value: Any, field_type: str) -> None:
         """Encode a value with given type."""
@@ -107,7 +108,8 @@ class ProtobufEncoder:
                 stream.write(value)
         elif field_type == "message":
             if isinstance(value, dict):
-                stream.write(self.encode(value))
+                nested_encoder = ProtobufEncoder()
+                stream.write(nested_encoder.encode(value))
 
         return stream.getvalue()
 
@@ -189,6 +191,7 @@ class ProtobufDecoder:
                     # Try to decode without schema
                     value = self._read_value(wire_type, "unknown")
                     result[f"field_{tag}"] = value
+                    result["field_"] = value
         except (struct.error, EOFError) as e:
             raise DeserializationError(f"Invalid Protobuf: {e}", data=data) from e
 
@@ -205,6 +208,8 @@ class ProtobufDecoder:
         """Read a value based on wire type."""
         if wire_type == self.WIRE_VARINT:
             value = self._read_varint()
+            if field_type == "bool":
+                return bool(value)
             if field_type in ("sint32", "sint64"):
                 return self._zigzag_decode(value)
             return value

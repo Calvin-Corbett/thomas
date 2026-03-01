@@ -95,6 +95,139 @@ def test_bootstrap_claim_uses_env_agent(tmp_path: Path, monkeypatch, capsys) -> 
     assert gate.evaluate(workboard) == []
 
 
+def test_bootstrap_parent_defaults_to_dispatcher_name(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    def _fake_dispatch_workers(
+        workboard_path,  # noqa: ARG001
+        *,
+        parent_agent: str,
+        target_workers: int,
+        **kwargs: object,  # noqa: ANN401
+    ) -> tuple[bool, dict[str, object]]:
+        return True, {"target_workers": int(target_workers), "claimed_workers": [], "released_workers": [], "temp_task_creator": {"status": "not_needed"}}
+
+    monkeypatch.setattr(mod.claim_tool, "dispatch_workers", _fake_dispatch_workers)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Codex 2",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "dispatcher defaults",
+            "--ticket",
+            "HSK-901",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["name"] == "dispatcher"
+    assert payload["auto_dispatched"] is True
+    assert payload["dispatch_target_workers"] == 3
+    assert payload["dispatch"]["target_workers"] == 3
+
+
+def test_bootstrap_parent_debug_includes_resolution_metadata(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+
+    def _fake_dispatch_workers(
+        workboard_path,  # noqa: ARG001
+        *,
+        parent_agent: str,
+        target_workers: int,
+        **kwargs: object,  # noqa: ANN401
+    ) -> tuple[bool, dict[str, object]]:
+        assert parent_agent == "Codex 3"
+        assert target_workers == 2
+        return True, {"target_workers": 2, "claimed_workers": [], "released_workers": []}
+
+    monkeypatch.setattr(mod.claim_tool, "dispatch_workers", _fake_dispatch_workers)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Codex 3",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "dispatcher debug",
+            "--ticket",
+            "HSK-902",
+            "--dispatch-target-workers",
+            "2",
+            "--json",
+            "--debug",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["debug"]["dispatch_called"] is True
+    assert payload["debug"]["dispatch_target_workers"] == 2
+    assert payload["debug"]["run_worker_loop"] is False
+    assert payload["debug"]["name_resolution_source"] == "dispatcher-default"
+
+
+def test_bootstrap_parent_no_auto_dispatch_still_dispatcher_identity(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Codex 4",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "dispatcher still named",
+            "--ticket",
+            "HSK-910",
+            "--no-auto-dispatch",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["auto_dispatch_enabled"] is False
+    assert payload["auto_dispatched"] is False
+    assert payload["name"] == "dispatcher"
+
+
+def test_bootstrap_parent_debug_includes_resolution_source_when_auto_disabled(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Codex 4",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "dispatcher debug no auto",
+            "--ticket",
+            "HSK-911",
+            "--no-auto-dispatch",
+            "--debug",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["debug"]["name_resolution_source"] == "dispatcher-default-no-auto"
+    assert payload["debug"]["auto_dispatch_requested"] is False
+    assert payload["debug"]["dispatch_called"] is False
+
+
 def test_bootstrap_claim_fails_without_agent(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(tmp_path)
     monkeypatch.delenv("AGENT_ID", raising=False)
@@ -171,3 +304,50 @@ def test_bootstrap_claim_uses_codex_agent_id_env(tmp_path: Path, monkeypatch, ca
     assert "Agent bootstrap claim: PASS" in out
     assert "agent=Codex Numeric;" in text
     assert gate.evaluate(workboard) == []
+
+
+def test_normalize_dispatch_target_workers_minimum(tmp_path: Path) -> None:
+    assert mod._normalize_dispatch_target_workers(1) == 2
+    assert mod._normalize_dispatch_target_workers(0) == 2
+    assert mod._normalize_dispatch_target_workers(3) == 3
+
+
+def test_bootstrap_dispatch_target_is_clamped_to_minimum_two(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    call: dict[str, int] = {}
+
+    def _fake_dispatch_workers(
+        workboard_path,  # noqa: ARG001
+        *,
+        parent_agent: str,
+        target_workers: int,
+        **kwargs: object,  # noqa: ANN401
+    ) -> tuple[bool, dict[str, object]]:
+        call["target_workers"] = int(target_workers)
+        return True, {"target_workers": int(target_workers), "claimed_workers": []}
+
+    monkeypatch.setattr(mod.claim_tool, "dispatch_workers", _fake_dispatch_workers)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Codex 2",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "minimum target check",
+            "--ticket",
+            "HSK-901",
+            "--dispatch-target-workers",
+            "1",
+            "--dispatch-no-temp-creator",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["dispatch_target_workers"] == 2
+    assert call["target_workers"] == 2

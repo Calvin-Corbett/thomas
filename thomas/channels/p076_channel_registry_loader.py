@@ -302,7 +302,7 @@ def _parse_registry(text: str, path: Path) -> Any:
         if yaml is not None:
             try:
                 return yaml.safe_load(text)
-            except (ValueError, KeyError, AttributeError, RuntimeError):
+            except Exception:
                 pass
         try:
             return json.loads(text)
@@ -319,7 +319,7 @@ def _parse_registry(text: str, path: Path) -> Any:
         )
     except ChannelRegistryError:
         raise
-    except (ValueError, json.JSONDecodeError, RuntimeError, KeyError) as e:
+    except Exception as e:
         raise ChannelRegistryParseError(
             f"Failed to parse channel registry file: {path}",
             details={"path": str(path), "suffix": suffix, "error_type": type(e).__name__},

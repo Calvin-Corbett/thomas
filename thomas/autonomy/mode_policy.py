@@ -4,7 +4,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-_MODE_SET = {"fast", "auto", "thinking", "swarm", "batch"}
+_MODE_SET = {"fast", "auto", "thinking"}
 _TOKEN_ECONOMY_SET = {"cheap", "optimal", "max"}
 _DEFAULT_WORKFLOW_SET = {
     "",

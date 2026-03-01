@@ -24,6 +24,21 @@ log = logging.getLogger(__name__)
 
 _REQUEST_TIMEOUT = 30.0  # seconds for non-streaming requests
 _INIT_TIMEOUT = 15.0
+_STDOUT_READ_LIMIT_DEFAULT = 1024 * 1024  # 1 MiB
+_STDOUT_READ_LIMIT_MIN = 64 * 1024
+_STDOUT_READ_LIMIT_MAX = 64 * 1024 * 1024
+
+
+def _resolve_stdout_read_limit() -> int:
+    """Resolve codex stdout read limit in bytes with sane bounds."""
+    raw = str(os.environ.get("THOMAS_CODEX_STDOUT_LIMIT_BYTES", "")).strip()
+    if not raw:
+        return _STDOUT_READ_LIMIT_DEFAULT
+    try:
+        value = int(raw)
+    except ValueError:
+        return _STDOUT_READ_LIMIT_DEFAULT
+    return max(_STDOUT_READ_LIMIT_MIN, min(value, _STDOUT_READ_LIMIT_MAX))
 
 
 @dataclass
@@ -78,6 +93,7 @@ class CodexBridge:
     def __init__(self, codex_cmd: str | None = None, cwd: str | None = None):
         self._codex_cmd = codex_cmd or _find_codex()
         self._cwd = cwd or os.getcwd()
+        self._stdout_read_limit = _resolve_stdout_read_limit()
         self._proc: asyncio.subprocess.Process | None = None
         self._next_id = 1
         self._pending: dict[int, asyncio.Future] = {}
@@ -105,15 +121,23 @@ class CodexBridge:
         # Suppress Codex's own interactive prompts
         env["CODEX_NONINTERACTIVE"] = "1"
 
-        self._proc = await asyncio.create_subprocess_exec(
-            self._codex_cmd,
-            "app-server",
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-            cwd=self._cwd,
-            env=env,
-        )
+        try:
+            self._proc = await asyncio.create_subprocess_exec(
+                self._codex_cmd,
+                "app-server",
+                stdin=asyncio.subprocess.PIPE,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+                limit=self._stdout_read_limit,
+                cwd=self._cwd,
+                env=env,
+            )
+        except NotImplementedError as exc:
+            raise CodexBridgeError(
+                "Current asyncio event loop does not support subprocess execution. "
+                "Use WindowsProactorEventLoopPolicy (e.g., by running `repl` with a "
+                "Codex profile)."
+            ) from exc
 
         # Start reading stdout
         self._reader_task = asyncio.create_task(self._read_loop())
@@ -618,6 +642,22 @@ class CodexBridge:
 
             except asyncio.CancelledError:
                 break
+            except asyncio.LimitOverrunError as e:
+                # A single JSON line exceeded StreamReader's configured line limit.
+                # Drain buffered bytes so the read loop can recover on next line.
+                consumed = max(int(getattr(e, "consumed", 0)), 1)
+                try:
+                    if self._proc and self._proc.stdout:
+                        await self._proc.stdout.read(consumed)
+                except asyncio.IncompleteReadError:
+                    log.warning("Codex stdout closed while draining oversized line")
+                    break
+                log.error(
+                    "Codex stdout line exceeded read limit (%d bytes). "
+                    "Increase THOMAS_CODEX_STDOUT_LIMIT_BYTES if this persists.",
+                    int(self._stdout_read_limit),
+                )
+                await asyncio.sleep(0.05)
             except Exception as e:
                 log.error("Error in codex read loop: %s", e)
                 await asyncio.sleep(0.1)

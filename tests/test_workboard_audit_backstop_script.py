@@ -51,6 +51,16 @@ def test_backstop_check_fails_when_missing(tmp_path: Path, capsys) -> None:
     assert "missing recurring workboard audit backstop task" in payload["violations"][0]
 
 
+def test_backstop_check_alias_compatibility(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    rc = mod.run(["--workboard", str(workboard), "--check", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert "missing recurring workboard audit backstop task" in payload["violations"][0]
+
+
 def test_backstop_apply_adds_canonical_task(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(tmp_path)
     rc = mod.run(["--workboard", str(workboard), "--apply", "--json"])

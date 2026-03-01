@@ -837,14 +837,14 @@
     }
 
     .robot-alert-stage {
-        width: 280px;
-        bottom: 104px;
+        width: min(280px, calc(100vw - 24px));
+        bottom: max(104px, calc(var(--composer-offset, 200px) - 96px));
         height: 170px;
     }
 
     .robot-alert-bubble {
-        left: 106px;
-        max-width: 165px;
+        left: clamp(78px, calc(100% - 188px), 106px);
+        max-width: clamp(128px, calc(100% - 120px), 165px);
         font-size: 11px;
     }
 

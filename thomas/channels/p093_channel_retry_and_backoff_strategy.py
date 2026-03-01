@@ -435,7 +435,7 @@ def call_with_retry(
         try:
             value = operation()
             return RetryOutcome(ok=True, attempts=attempt, value=value, errors=tuple(errors))
-        except (RuntimeError, ValueError, KeyError, AttributeError, TypeError) as exc:
+        except Exception as exc:
             kind, _ = classify_failure(exc, policy)
             retryable = is_retryable_exception(exc, policy)
 

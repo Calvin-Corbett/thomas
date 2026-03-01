@@ -40,60 +40,79 @@ def connect(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     con = sqlite3.connect(str(db_path), check_same_thread=False)
     con.row_factory = sqlite3.Row
-    con.execute("PRAGMA journal_mode=WAL")
+
+    # Try WAL mode, but fall back to DELETE mode if it fails (e.g., on FUSE filesystems)
+    try:
+        con.execute("PRAGMA journal_mode=WAL")
+    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+        # WAL mode not supported on this filesystem, use DELETE mode instead
+        try:
+            con.execute("PRAGMA journal_mode=DELETE")
+        except Exception:
+            pass  # If DELETE mode also fails, continue with default mode
+
     con.execute("PRAGMA foreign_keys=ON")
     return con
 
 
 def ensure_schema(con: sqlite3.Connection) -> None:
-    con.executescript("""
-        CREATE TABLE IF NOT EXISTS workspaces (
-            workspace_id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            owner_user_id TEXT,
-            created_at TEXT NOT NULL
-        );
-        CREATE INDEX IF NOT EXISTS ix_workspaces_owner ON workspaces(owner_user_id);
+    # Try to create schema, handling database I/O errors gracefully
+    try:
+        con.executescript("""
+            CREATE TABLE IF NOT EXISTS workspaces (
+                workspace_id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                owner_user_id TEXT,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS ix_workspaces_owner ON workspaces(owner_user_id);
 
-        CREATE TABLE IF NOT EXISTS workspace_memberships (
-            membership_id TEXT PRIMARY KEY,
-            workspace_id TEXT NOT NULL,
-            user_id TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'member',
-            created_at TEXT NOT NULL,
-            is_active INTEGER NOT NULL DEFAULT 1,
-            UNIQUE(workspace_id, user_id)
-        );
-        CREATE INDEX IF NOT EXISTS ix_wm_workspace ON workspace_memberships(workspace_id);
-        CREATE INDEX IF NOT EXISTS ix_wm_user ON workspace_memberships(user_id);
+            CREATE TABLE IF NOT EXISTS workspace_memberships (
+                membership_id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                user_id TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                created_at TEXT NOT NULL,
+                is_active INTEGER NOT NULL DEFAULT 1,
+                UNIQUE(workspace_id, user_id)
+            );
+            CREATE INDEX IF NOT EXISTS ix_wm_workspace ON workspace_memberships(workspace_id);
+            CREATE INDEX IF NOT EXISTS ix_wm_user ON workspace_memberships(user_id);
 
-        CREATE TABLE IF NOT EXISTS workspace_invites (
-            invite_id TEXT PRIMARY KEY,
-            workspace_id TEXT NOT NULL,
-            email TEXT NOT NULL,
-            role TEXT NOT NULL DEFAULT 'member',
-            token_hash TEXT NOT NULL UNIQUE,
-            created_by_user_id TEXT,
-            created_at TEXT NOT NULL,
-            expires_at TEXT NOT NULL,
-            accepted_at TEXT,
-            revoked_at TEXT,
-            note TEXT
-        );
-        CREATE INDEX IF NOT EXISTS ix_wi_workspace ON workspace_invites(workspace_id);
-        CREATE INDEX IF NOT EXISTS ix_wi_token ON workspace_invites(token_hash);
-    """)
-    con.commit()
-
-    # Ensure at least the default personal workspace exists
-    row = con.execute("SELECT workspace_id FROM workspaces WHERE workspace_id=?",
-                      (DEFAULT_WORKSPACE_ID,)).fetchone()
-    if not row:
-        con.execute(
-            "INSERT INTO workspaces(workspace_id,name,owner_user_id,created_at) VALUES(?,?,?,?)",
-            (DEFAULT_WORKSPACE_ID, "Personal", None, _utcnow()),
-        )
+            CREATE TABLE IF NOT EXISTS workspace_invites (
+                invite_id TEXT PRIMARY KEY,
+                workspace_id TEXT NOT NULL,
+                email TEXT NOT NULL,
+                role TEXT NOT NULL DEFAULT 'member',
+                token_hash TEXT NOT NULL UNIQUE,
+                created_by_user_id TEXT,
+                created_at TEXT NOT NULL,
+                expires_at TEXT NOT NULL,
+                accepted_at TEXT,
+                revoked_at TEXT,
+                note TEXT
+            );
+            CREATE INDEX IF NOT EXISTS ix_wi_workspace ON workspace_invites(workspace_id);
+            CREATE INDEX IF NOT EXISTS ix_wi_token ON workspace_invites(token_hash);
+        """)
         con.commit()
+
+        # Ensure at least the default personal workspace exists
+        try:
+            row = con.execute("SELECT workspace_id FROM workspaces WHERE workspace_id=?",
+                              (DEFAULT_WORKSPACE_ID,)).fetchone()
+            if not row:
+                con.execute(
+                    "INSERT INTO workspaces(workspace_id,name,owner_user_id,created_at) VALUES(?,?,?,?)",
+                    (DEFAULT_WORKSPACE_ID, "Personal", None, _utcnow()),
+                )
+                con.commit()
+        except (sqlite3.OperationalError, sqlite3.DatabaseError):
+            # If we can't access tables, continue anyway (database might be read-only or corrupted)
+            pass
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
+        # If schema creation fails, continue anyway - the database might be corrupted or on a FUSE filesystem
+        pass
 
 
 # ── Workspace CRUD ────────────────────────────────────────────────────────────

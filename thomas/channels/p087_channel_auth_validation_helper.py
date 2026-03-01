@@ -351,7 +351,7 @@ def _validate_telegram_via_http(*, token: str, timeout_s: float) -> ChannelIdent
         payload = _http_get_json(url=url, timeout_s=timeout_s)
     except ExternalChannelAuthValidationError:
         raise
-    except (json.JSONDecodeError, ValueError, KeyError) as e:
+    except Exception as e:
         raise ExternalChannelAuthValidationError(
             "telegram auth validation failed",
             channel="telegram",

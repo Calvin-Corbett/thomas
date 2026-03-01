@@ -1,6 +1,13 @@
 # Website Release Flow (Safe Mode)
 
 This keeps personal Thomas work separate from the public website.
+This release flow is active and early-stage; the site should be treated as an initial public beta while visual polish and edge-case cases are completed.
+
+## Release-state warning
+
+This page is intentionally released early for feedback and validation. Expect
+non-critical layout/interaction rough edges (especially across long scroll and
+interactive sections) until the next hardening pass.
 
 ## Branch meaning
 

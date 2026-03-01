@@ -1,14 +1,26 @@
-﻿# Plans Workspace
+﻿# Thomas Plan Workspace
 
-This directory is the canonical home for active execution plans.
+Last updated: 2026-03-01
 
-Rules:
-- New plans go under `plans/<product-or-program>/...`.
-- Keep a short README in each product folder with active priorities.
-- If a plan is moved from another location, leave a pointer file at the old path.
-- Do not create active plans in repo root or `docs/`.
-- Use `docs/REPO_STRUCTURE_PROTOCOL.md` for full repo organization rules.
-- Validate structure with: `python scripts/check_plan_structure_gate.py`.
+This is the canonical planning index for the Thomas repo.
 
-Current product folders:
-- `plans/thomas/`
+- `plans/thomas/WORKBOARD.md` — active workboard and current execution statuses.
+- `plans/thomas/tasks/codex-2-task/PLAN.md`
+- `plans/thomas/tasks/codex-env-task/PLAN.md`
+- `plans/thomas/tasks/codex-numeric-task/PLAN.md`
+- `plans/thomas/tasks/temp-task-creator-codex-2-task/PLAN.md`
+- `plans/thomas/tasks/temp-task-creator-codex-env-task/PLAN.md`
+- `plans/thomas/tasks/temp-task-creator-codex-numeric-task/PLAN.md`
+- `plans/thomas/tasks/thomas-task/PLAN.md`
+- `plans/thomas/problems/codex-2-task/PROBLEM.md`
+- `plans/thomas/problems/codex-env-task/PROBLEM.md`
+- `plans/thomas/problems/codex-numeric-task/PROBLEM.md`
+- `plans/thomas/problems/temp-task-creator-codex-2-task/PROBLEM.md`
+- `plans/thomas/problems/temp-task-creator-codex-env-task/PROBLEM.md`
+- `plans/thomas/problems/temp-task-creator-codex-numeric-task/PROBLEM.md`
+- `plans/thomas/problems/thomas-task/PROBLEM.md`
+- `plans/thomas/companion/STORE_COMPLIANCE_PLAN.md`
+- `plans/thomas/ui/UI_UPGRADE_PLAN.md`
+- `plans/thomas/roadmap/WEEKLY_DEEP_DIVE_PLAN.md`
+- `plans/thomas/launch/LAUNCH_V1_PLAN.md`
+- `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`

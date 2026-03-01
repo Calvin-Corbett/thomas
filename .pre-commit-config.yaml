@@ -56,9 +56,21 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-workboard-problem-record-smoke
+        name: Thomas Workboard Problem Record Smoke
+        entry: python scripts/workboard_problem_record.py --help
+        language: system
+        pass_filenames: false
+
       - id: thomas-workboard-audit-backstop-gate
         name: Thomas Workboard Audit Backstop Gate
         entry: python scripts/workboard_audit_backstop.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-monolith-guard
+        name: Thomas Monolith Guard
+        entry: python scripts/check_monolith_guard.py --staged-only
         language: system
         pass_filenames: false
 

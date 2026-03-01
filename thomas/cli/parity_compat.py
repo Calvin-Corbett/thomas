@@ -85,7 +85,50 @@ except (ImportError, ModuleNotFoundError):
         return []
 
     def register_compat_commands(cli: click.Group) -> None:
-        pass
+        commands = [
+            help_cmd,
+            logs_cmd,
+            agent_cmd,
+            browser,
+            message,
+            messages,
+            acp,
+            clawbot,
+            daemon,
+            dns,
+            hooks,
+            memory,
+            skills,
+            completion_cmd,
+            qr_cmd,
+            plugin_cmd,
+            mcp,
+            app,
+            node,
+            nodes,
+        ]
+        for cmd in commands:
+            if not isinstance(cmd, click.Command):
+                continue
+            name = str(getattr(cmd, "name", "") or "").strip()
+            if not name or name in cli.commands:
+                continue
+            cli.add_command(cmd)
+
+        for alias in _compat_aliases():
+            if not isinstance(alias, click.Command):
+                continue
+            name = str(getattr(alias, "name", "") or "").strip()
+            if not name or name in cli.commands:
+                continue
+            cli.add_command(alias)
+
+
+try:
+    if isinstance(app, click.Group):
+        register_compat_commands(app)
+except Exception:
+    pass
 
 
 __all__ = [

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum
-from typing import Iterable
+from typing import Any, Iterable
 
 
 class WorkspaceRole(str, Enum):
@@ -17,6 +17,16 @@ ROLE_RANK = {
     WorkspaceRole.member: 1,
     WorkspaceRole.viewer: 0,
 }
+
+
+def normalize_role(role: Any) -> WorkspaceRole:
+    value = str(role or "").strip().lower()
+    if not value:
+        raise ValueError("role is required")
+    try:
+        return WorkspaceRole(value)
+    except ValueError as exc:
+        raise ValueError(f"unsupported role: {role!r}") from exc
 
 
 def role_allows(current: WorkspaceRole, required: Iterable[WorkspaceRole]) -> bool:

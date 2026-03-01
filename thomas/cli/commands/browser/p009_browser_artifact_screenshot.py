@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 from collections.abc import Sequence
 from pathlib import Path
@@ -107,7 +108,9 @@ def _normalize_browser_container(app: Any) -> Any:
                 candidate = getattr(group_info, attr, None)
                 if isinstance(candidate, typer.Typer):
                     return candidate
-        return app
+        browser_app = typer.Typer(help="Browser commands.")
+        app.add_typer(browser_app, name="browser")
+        return browser_app
 
     try:
         import click
@@ -115,7 +118,13 @@ def _normalize_browser_container(app: Any) -> Any:
         return app
 
     if isinstance(app, click.Group):
-        return app.commands.get("browser", app)
+        browser_group = app.commands.get("browser")
+        if isinstance(browser_group, click.Group):
+            return browser_group
+
+        browser_group = click.Group("browser", help="Browser commands.")
+        app.add_command(browser_group)
+        return browser_group
 
     return app
 

@@ -651,16 +651,24 @@ class UV:
         return UV(self.u + t * (other.u - self.u), self.v + t * (other.v - self.v))
 
 
-# Compatibility re-exports for graphics-facing data structures.
-from thomas.graphics3d import _graphics_types as _gfx_types
+_GRAPHICS_TYPES_EXPORTS = {
+    "Vertex",
+    "Mesh",
+    "Color",
+    "LightType",
+    "Light",
+    "Material",
+    "Camera",
+    "Viewport",
+    "Texture",
+    "FrameBuffer",
+}
 
-Vertex = _gfx_types.Vertex
-Mesh = _gfx_types.Mesh
-Color = _gfx_types.Color
-LightType = _gfx_types.LightType
-Light = _gfx_types.Light
-Material = _gfx_types.Material
-Camera = _gfx_types.Camera
-Viewport = _gfx_types.Viewport
-Texture = _gfx_types.Texture
-FrameBuffer = _gfx_types.FrameBuffer
+
+def __getattr__(name: str) -> Any:
+    """Lazily expose graphics-facing types without import cycles."""
+    if name in _GRAPHICS_TYPES_EXPORTS:
+        from thomas.graphics3d import _graphics_types as _gfx_types
+
+        return getattr(_gfx_types, name)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

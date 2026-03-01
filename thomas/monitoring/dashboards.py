@@ -5,6 +5,8 @@ Supports dashboard definitions with panels, templating, time ranges,
 and multiple panel types.
 """
 
+from __future__ import annotations
+
 import json
 import threading
 from dataclasses import dataclass, field

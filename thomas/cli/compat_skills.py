@@ -5,10 +5,14 @@ from __future__ import annotations
 import json
 import os
 import time
+from pathlib import Path
 from typing import Any
 
 import click
 
+from thomas.cli.parity_support import (
+    annotate_skill_rows as _annotate_skill_rows,
+)
 from thomas.cli.parity_support import (
     compat_group as _compat_group,
 )

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import inspect
 import json
+import subprocess
 from collections.abc import Mapping, MutableMapping
 from typing import Any
 
