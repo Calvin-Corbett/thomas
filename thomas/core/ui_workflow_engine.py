@@ -157,6 +157,8 @@ class UIWorkflowEngine:
         self._last_cycle_ts = 0.0
         self._cycle_count = 0
         self._last_report: Dict[str, Any] = {}
+        self._last_error: Optional[str] = None
+        self._last_error_at: Optional[str] = None
         self._enabled = _env_bool("THOMAS_UI_WORKFLOW_ENGINE_ENABLED", True)
 
     def start(self, *, notify_fn: Optional[Callable[[str], None]] = None) -> None:
@@ -190,6 +192,8 @@ class UIWorkflowEngine:
                 "last_score": int(report.get("score") or 0) if report else None,
                 "last_warning_count": int(report.get("warning_count") or 0) if report else 0,
                 "last_review_verdict": str((report.get("review") or {}).get("verdict") or "") if report else "",
+                "last_error": str(self._last_error or ""),
+                "last_error_at": str(self._last_error_at or ""),
             }
 
     def last_report(self) -> Dict[str, Any]:
@@ -216,7 +220,7 @@ class UIWorkflowEngine:
             self._active_cycle = True
             self._last_cycle_ts = time.monotonic()
         try:
-            return self._run_cycle(reason=reason)
+            return self._run_cycle_checked(reason=reason)
         finally:
             with self._lock:
                 self._active_cycle = False
@@ -332,10 +336,19 @@ class UIWorkflowEngine:
 
     def _run_cycle_threadsafe(self, reason: str) -> None:
         try:
-            self._run_cycle(reason=reason)
+            self._run_cycle_checked(reason=reason)
         finally:
             with self._lock:
                 self._active_cycle = False
+
+    def _run_cycle_checked(self, *, reason: str) -> Dict[str, Any]:
+        started = time.monotonic()
+        try:
+            report = self._run_cycle(reason=reason)
+            self._clear_last_error()
+            return report
+        except Exception as exc:  # pragma: no cover - defensive path
+            return self._error_report(reason=reason, exc=exc, started=started)
 
     def _run_cycle(self, *, reason: str) -> Dict[str, Any]:
         started = time.monotonic()
@@ -369,6 +382,37 @@ class UIWorkflowEngine:
                 pass
 
         return report
+
+    def _error_report(self, *, reason: str, exc: BaseException, started: float) -> Dict[str, Any]:
+        with self._lock:
+            self._cycle_count += 1
+            cycle_id = int(self._cycle_count)
+            self._last_error = f"{type(exc).__name__}: {exc}"
+            self._last_error_at = _now_iso()
+
+        report = {
+            "ok": False,
+            "cycle": cycle_id,
+            "reason": "engine_error",
+            "requested_reason": str(reason or "manual"),
+            "error_type": type(exc).__name__,
+            "error": f"{type(exc).__name__}: {exc}",
+            "timestamp": _now_iso(),
+            "elapsed_ms": round((time.monotonic() - started) * 1000.0, 1),
+        }
+        self._write_cycle_log(report)
+        with self._lock:
+            self._last_report = dict(report)
+        if self._notify_fn is not None:
+            try:
+                self._notify_fn(f"[UIWorkflowEngine] cycle {cycle_id} failed: {type(exc).__name__}: {exc}")
+            except Exception:
+                pass
+        return report
+
+    def _clear_last_error(self) -> None:
+        self._last_error = None
+        self._last_error_at = None
 
     def audit_ui_consistency(self) -> Dict[str, Any]:
         files: List[Path] = [

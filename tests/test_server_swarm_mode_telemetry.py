@@ -137,12 +137,20 @@ class TestServerSwarmModeTelemetry(AioHTTPTestCase):
 
     async def get_application(self):
         cfg = AppConfig(
-            models={"local": ModelConfig(name="local", model="dummy")},
+            models={
+                "local": ModelConfig(
+                    name="local",
+                    provider="openai_compat",
+                    base_url="http://127.0.0.1:11434/v1",
+                    model="local-model",
+                )
+            },
             default_model="local",
             memory=MemoryConfig(root=self._tmpdir.name),
             server=ServerConfig(access_mode="local"),
         )
-        return create_app(cfg)
+        with patch("thomas.server.routes.chat_v2.register_chat_v2_routes", side_effect=RuntimeError("legacy-chat-required")):
+            return create_app(cfg)
 
     async def test_swarm_done_includes_usage_fields(self):
         sess_resp = await self.client.post("/api/session/new")
@@ -202,6 +210,37 @@ class TestServerSwarmModeTelemetry(AioHTTPTestCase):
         tool_result = probes[0].get("tool_result") or {}
         self.assertFalse(bool(tool_result.get("ok", True)))
         self.assertIn("require_command_approval", str(tool_result.get("error") or ""))
+
+    async def test_swarm_mode_bypasses_require_command_approval_for_l4(self):
+        sess_resp = await self.client.post("/api/session/new")
+        self.assertEqual(sess_resp.status, 200)
+        sid = str((await sess_resp.json()).get("session_id") or "")
+        self.assertTrue(sid)
+
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allow_shell": True, "require_command_approval": True}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        with patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestratorPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "mode": "swarm",
+                    "autonomy_level": 4,
+                    "text": "run swarm now",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        probes = [e for e in events if e.get("type") == "policy_probe"]
+        self.assertEqual(len(probes), 1)
+        tool_result = probes[0].get("tool_result") or {}
+        self.assertTrue(bool(tool_result.get("ok", False)))
 
     async def test_swarm_done_includes_budget_report_when_advanced_cost_enabled(self):
         sess_resp = await self.client.post("/api/session/new")

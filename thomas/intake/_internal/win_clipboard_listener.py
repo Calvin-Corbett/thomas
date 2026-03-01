@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ctypes
 import ctypes.wintypes as wt
+import subprocess
 import threading
 from collections.abc import Callable
 

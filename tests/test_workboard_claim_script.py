@@ -516,6 +516,21 @@ def test_suggest_delegation_returns_non_overlapping_candidate(tmp_path: Path, ca
     assert "ready delegation suggestions" in out
     assert "task-a: server lane" in out
     assert '--agent "Codex 3-Worker-1"' in out
+    assert '--name "Codex ' in out
+
+
+def test_resolve_display_name_defaults_to_virtual_office_character() -> None:
+    name = mod._resolve_display_name(None, "Codex 3-Worker-9")
+    assert name.startswith("Codex ")
+
+
+def test_resolve_display_name_uses_agent_model_prefix() -> None:
+    name = mod._resolve_display_name(None, "Claude 2-Worker-4")
+    assert name.startswith("Claude ")
+
+
+def test_resolve_display_name_maps_main_agent_to_thomas() -> None:
+    assert mod._resolve_display_name(None, "thomas") == "Thomas"
 
 
 def test_dispatch_workers_releases_ready_and_claims_lane(tmp_path: Path, capsys) -> None:
@@ -587,6 +602,33 @@ def test_dispatch_workers_passes_when_no_ready_candidates(tmp_path: Path, capsys
     assert payload["active_worker_count"] == 0
     assert payload["claimed_workers"] == []
     assert payload["ready_suggestion_count"] == 0
+
+
+def test_dispatch_workers_clamps_target_workers_to_minimum_two(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=parent; parent=none; scope=thomas/agent; task=coord lane",
+        active_tasks_block="- task_id=codex-3-task; agent=Codex 3; scope=thomas/agent; summary=coord lane; status=active; name=Prime; role=parent; parent=none",
+    )
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--dispatch-workers",
+            "--agent",
+            "Codex 3",
+            "--dispatch-target-workers",
+            "1",
+            "--dispatch-no-temp-creator",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["action"] == "dispatch_workers"
+    assert payload["target_workers"] == 2
 
 
 def test_dispatch_workers_retries_after_transient_claim_error(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -750,7 +792,7 @@ def test_release_temp_task_creator_requires_task_manager_agent(tmp_path: Path, c
 
     assert rc_release == 1
     assert payload_release["ok"] is False
-    assert "only `task-manager-agent` can release temporary task creator assignment" in payload_release["error"]
+    assert "can release temporary task creator assignment" in payload_release["error"]
 
 
 def test_release_temp_task_creator_clears_lease(tmp_path: Path, capsys, monkeypatch) -> None:

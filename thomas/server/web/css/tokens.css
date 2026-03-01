@@ -40,6 +40,17 @@
     --radius-lg: 12px;
     --radius-xl: 16px;
     --radius-2xl: 24px;
+
+    /* Z-Index Scale */
+    --z-base: 0;
+    --z-sticky: 10;
+    --z-dropdown: 20;
+    --z-sidebar: 30;
+    --z-overlay: 40;
+    --z-modal: 50;
+    --z-toast: 60;
+    --z-tooltip: 70;
+    --z-skip-link: 9999;
 }
 
 * {

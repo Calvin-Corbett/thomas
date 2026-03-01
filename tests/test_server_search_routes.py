@@ -55,6 +55,34 @@ class TestSearchRoutesLocal(AioHTTPTestCase):
             resp = await self.client.get("/api/search")
         self.assertEqual(resp.status, 400)
 
+    async def test_search_invalid_has_tools_returns_400(self):
+        with patch("thomas.server.routes.search.get_search", return_value=self._search):
+            resp = await self.client.get("/api/search?q=hello&has_tools=maybe")
+        self.assertEqual(resp.status, 400)
+
+    async def test_search_invalid_sort_returns_400(self):
+        with patch("thomas.server.routes.search.get_search", return_value=self._search):
+            resp = await self.client.get("/api/search?q=hello&sort=oldest")
+        self.assertEqual(resp.status, 400)
+
+    async def test_search_valid_has_tools_values(self):
+        with patch("thomas.server.routes.search.get_search", return_value=self._search):
+            for value in ("true", "false"):
+                with self.subTest(has_tools=value):
+                    resp = await self.client.get(f"/api/search?q=hello&has_tools={value}")
+                    self.assertEqual(resp.status, 200)
+                    body = await resp.json()
+                    self.assertIsInstance(body, list)
+
+    async def test_search_valid_sort_values(self):
+        with patch("thomas.server.routes.search.get_search", return_value=self._search):
+            for value in ("relevance", "newest"):
+                with self.subTest(sort=value):
+                    resp = await self.client.get(f"/api/search?q=hello&sort={value}")
+                    self.assertEqual(resp.status, 200)
+                    body = await resp.json()
+                    self.assertIsInstance(body, list)
+
     # ── GET /api/search/suggest ──
 
     async def test_suggest_empty(self):

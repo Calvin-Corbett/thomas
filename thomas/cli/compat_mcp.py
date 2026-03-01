@@ -2,12 +2,20 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from typing import Any
 
 import click
 
+from thomas.cli.compat_browser import browser
+from thomas.cli.compat_channels import message, messages
+from thomas.cli.compat_core_help import agent_cmd, help_cmd, logs_cmd
+from thomas.cli.compat_memory import approvals, directory, memory, pairing, system
+from thomas.cli.compat_skills import completion_cmd, plugin_cmd, qr_cmd, security, skills, update
+from thomas.cli.compat_tools import acp, clawbot, daemon, dns, hooks
+from thomas.cli.parity_compat_nodes import node, nodes
 from thomas.cli.parity_support import (
     find_mcp_server as _find_mcp_server,
 )
@@ -21,6 +29,9 @@ from thomas.cli.parity_support import (
     load_mcp_registry as _load_mcp_registry,
 )
 from thomas.cli.parity_support import (
+    load_token_store as _load_token_store,
+)
+from thomas.cli.parity_support import (
     mask_secret as _mask_secret,
 )
 from thomas.cli.parity_support import (
@@ -28,6 +39,15 @@ from thomas.cli.parity_support import (
 )
 from thomas.cli.parity_support import (
     save_mcp_registry as _save_mcp_registry,
+)
+from thomas.cli.parity_support import (
+    save_token_store as _save_token_store,
+)
+from thomas.cli.parity_support import (
+    token_store_path as _token_store_path,
+)
+from thomas.cli.parity_support import (
+    utc_iso as _utc_iso,
 )
 from thomas.core.config import AppConfig
 

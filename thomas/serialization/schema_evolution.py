@@ -11,7 +11,23 @@ from dataclasses import field as dataclass_field
 from typing import Any
 
 from .exceptions import IncompatibleSchemaError, SchemaVersionError
-from .types import MessageDescriptor, SchemaVersion
+from .types import FieldDescriptor, MessageDescriptor, SchemaVersion
+
+__all__ = [
+    "FieldDescriptor",
+    "MessageDescriptor",
+    "SchemaVersion",
+    "FieldMigration",
+    "SchemaMigration",
+    "MigrationRegistry",
+    "check_forward_compatibility",
+    "check_backward_compatibility",
+    "apply_migration",
+    "find_migration_path",
+    "apply_migration_chain",
+    "register_migration",
+    "get_migration_registry",
+]
 
 
 def check_forward_compatibility(

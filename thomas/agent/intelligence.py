@@ -184,6 +184,8 @@ class IntelligenceLayer:
     def get_prior_route_hint(self) -> str | None:
         """Get the prior topic for route biasing.
 
+        Available for future use when implementing route history-based biasing.
+
         Returns:
             Topic string or None
         """

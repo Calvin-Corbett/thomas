@@ -113,18 +113,9 @@ class ToolCallExecutor:
 
             logger.info(f"Executing tool: {tool_name} with {params}")
 
-            # TODO: Call actual Thomas tool registry
-            # For now, return mock result
-            output = {
-                "tool": tool_name,
-                "parameters": params,
-                "result": "Tool executed successfully",
-            }
-
-            return StepResult(
-                step_id=step_config.step_id,
-                status=StepStatus.COMPLETED,
-                output=output,
+            raise NotImplementedError(
+                f"Tool registry integration not yet implemented. Tool '{tool_name}' cannot be executed. "
+                "This feature requires integration with the Thomas tool registry."
             )
 
         except Exception as e:
@@ -179,19 +170,9 @@ class LLMPromptExecutor:
 
             logger.info(f"Executing LLM prompt with model: {model}")
 
-            # TODO: Call actual LLM integration
-            # For now, return mock result
-            output = {
-                "model": model,
-                "prompt": prompt,
-                "temperature": temperature,
-                "response": "This is a mock LLM response",
-            }
-
-            return StepResult(
-                step_id=step_config.step_id,
-                status=StepStatus.COMPLETED,
-                output=output,
+            raise NotImplementedError(
+                f"LLM integration not yet implemented. Model '{model}' cannot be called. "
+                "This feature requires integration with the LLM client."
             )
 
         except Exception as e:
@@ -336,16 +317,9 @@ class ParallelExecutor:
             if not step_ids:
                 raise ValueError("steps list is required")
 
-            results = {}
-            # TODO: Execute steps in parallel
-            # For now, sequential mock execution
-            for step_id in step_ids:
-                results[step_id] = {"status": "completed"}
-
-            return StepResult(
-                step_id=step_config.step_id,
-                status=StepStatus.COMPLETED,
-                output={"parallel_steps": len(step_ids), "results": results},
+            raise NotImplementedError(
+                f"Parallel step execution not yet implemented. Cannot execute {len(step_ids)} steps in parallel. "
+                "This feature requires async step orchestration support."
             )
 
         except Exception as e:
@@ -430,12 +404,9 @@ class ApprovalExecutor:
 
             logger.info(f"Waiting for approval: {message}")
 
-            # TODO: Integrate with Thomas approval system
-            # For now, mark as waiting
-            return StepResult(
-                step_id=step_config.step_id,
-                status=StepStatus.WAITING,
-                output={"message": message, "timeout_seconds": timeout},
+            raise NotImplementedError(
+                f"Approval system integration not yet implemented. Message: '{message}'. "
+                "This feature requires integration with the Thomas approval workflow system."
             )
 
         except Exception as e:
@@ -477,19 +448,9 @@ class WebhookExecutor:
 
             logger.info(f"Calling webhook: {method} {url}")
 
-            # TODO: Integrate with actual HTTP client
-            # For now, return mock result
-            output = {
-                "url": url,
-                "method": method,
-                "status": 200,
-                "response": {"success": True},
-            }
-
-            return StepResult(
-                step_id=step_config.step_id,
-                status=StepStatus.COMPLETED,
-                output=output,
+            raise NotImplementedError(
+                f"HTTP client integration not yet implemented. Cannot call {method} {url}. "
+                "This feature requires integration with an HTTP client library."
             )
 
         except Exception as e:

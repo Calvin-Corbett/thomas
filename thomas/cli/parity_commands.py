@@ -675,11 +675,40 @@ def plugins_update(
     if strict and (int(recommended_updates) > 0 or int(summary.get("unknown") or 0) > 0):
         raise SystemExit(1)
 
+_PLUGIN_BOOTSTRAP_MODULES = (
+    "thomas.cli.commands.plugins.p097_plugin_package_bootstrap",
+    "thomas.cli.commands.plugins.p098_plugin_manifest_schema",
+    "thomas.cli.commands.plugins.p100_plugin_discovery_scanner",
+    "thomas.cli.commands.plugins.p101_plugin_enable_and_disable_state_store",
+    "thomas.cli.commands.plugins.p102_plugin_install_from_local_path",
+    "thomas.cli.commands.plugins.p103_plugin_uninstall_cleanup",
+    "thomas.cli.commands.plugins.p104_plugin_update_planner",
+    "thomas.cli.commands.plugins.p105_plugin_registry_core_model",
+    "thomas.cli.commands.plugins.p106_plugin_command_registry_bridge",
+    "thomas.cli.commands.plugins.p107_plugin_hook_types_contract",
+    "thomas.cli.commands.plugins.p108_plugin_hook_runner_core",
+    "thomas.cli.commands.plugins.p109_plugin_hook_before_model",
+    "thomas.cli.commands.plugins.p110_plugin_hook_before_tool",
+    "thomas.cli.commands.plugins.p111_plugin_hook_after_tool",
+    "thomas.cli.commands.plugins.p112_plugin_hook_after_response",
+    "thomas.cli.commands.plugins.p113_plugin_tool_provider_injection",
+    "thomas.cli.commands.plugins.p114_plugin_service_lifecycle_manager",
+    "thomas.cli.commands.plugins.p115_plugin_gateway_handler_registry",
+    "thomas.cli.commands.plugins.p116_plugin_http_route_registry",
+    "thomas.cli.commands.plugins.p117_plugin_config_schema_validator",
+    "thomas.cli.commands.plugins.p118_plugin_diagnostics_collector",
+    "thomas.cli.commands.plugins.p119_plugin_doctor_command",
+    "thomas.cli.commands.plugins.p120_plugin_info_command",
+    "thomas.cli.commands.plugins.p121_plugin_list_command_runtime_backed",
+    "thomas.cli.commands.plugins.p122_plugin_lifecycle_commands_runtime_backed",
+    "thomas.cli.commands.plugins.p123_sample_plugin_skeleton_extension",
+)
 
 register_pack_proxy_commands(
     plugins,
     package="thomas.cli.commands.plugins",
     family_hint="plugin",
+    allowlisted_modules=_PLUGIN_BOOTSTRAP_MODULES,
 )
 
 

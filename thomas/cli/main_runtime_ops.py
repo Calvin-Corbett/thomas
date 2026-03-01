@@ -15,6 +15,10 @@ from typing import Any, Callable, Optional
 import click
 
 from thomas.core.config import AppConfig
+from thomas.core.redaction import Redactor
+
+
+_RUNTIME_OPS_REDACTOR = Redactor()
 
 
 def resolved_config_path(config: AppConfig) -> Path:
@@ -24,6 +28,10 @@ def resolved_config_path(config: AppConfig) -> Path:
     if isinstance(cfg_path, str) and str(cfg_path).strip():
         return Path(str(cfg_path)).resolve()
     return Path("thomas.toml").resolve()
+
+
+def _emit_json(payload: Any, **kwargs: Any) -> None:
+    click.echo(json.dumps(_RUNTIME_OPS_REDACTOR.redact_obj(payload), **kwargs))
 
 
 def repo_root_from_cli_file() -> Path:
@@ -121,7 +129,7 @@ def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree:
     }
 
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False))
+        _emit_json(payload, ensure_ascii=False)
     else:
         click.echo(f"Thomas {payload['version']}")
         click.echo(f"config: {payload['config_path']}")
@@ -166,7 +174,7 @@ def repo_clean_cmd(apply: bool, include_ignored: bool, as_json: bool, strict: bo
     except Exception as exc:
         payload = {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
         if as_json:
-            click.echo(json.dumps(payload, ensure_ascii=False))
+            _emit_json(payload, ensure_ascii=False)
         else:
             click.echo(payload["error"], err=True)
         raise SystemExit(1)
@@ -185,7 +193,7 @@ def repo_clean_cmd(apply: bool, include_ignored: bool, as_json: bool, strict: bo
             "error": f"{type(exc).__name__}: {exc}",
         }
         if as_json:
-            click.echo(json.dumps(payload, ensure_ascii=False))
+            _emit_json(payload, ensure_ascii=False)
         else:
             click.echo(payload["error"], err=True)
         raise SystemExit(1)
@@ -216,7 +224,7 @@ def repo_clean_cmd(apply: bool, include_ignored: bool, as_json: bool, strict: bo
         payload["cleanup_stderr"] = cleanup_stderr
 
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False))
+        _emit_json(payload, ensure_ascii=False)
     else:
         click.echo(f"repo: {payload['repo_root']}")
         click.echo(
@@ -573,3 +581,4 @@ def telegram_run_cmd(
                 memory.close()
             except Exception as e:
                 logger.debug("Failed to close memory engine after telegram stop: %s", e)
+

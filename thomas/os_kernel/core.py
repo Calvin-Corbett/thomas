@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Tuple
 
 
 class ProcessState(Enum):
@@ -296,7 +296,7 @@ class UnixFileSystem(FileSystemAbstraction):
         try:
             os.remove(path)
             return True
-        except:
+        except Exception:
             return False
 
 

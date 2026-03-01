@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import shlex
 import statistics
 import subprocess
 import time
@@ -23,8 +24,8 @@ class PerfOptions:
 
 def _default_runner(command: str, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
-        command,
-        shell=True,
+        shlex.split(command),
+        shell=False,
         capture_output=True,
         text=True,
         timeout=max(1.0, float(timeout_seconds)),

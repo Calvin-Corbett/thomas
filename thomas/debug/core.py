@@ -8,6 +8,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
+from typing import Any
 
 
 class BreakpointType(str, Enum):
@@ -37,7 +38,7 @@ class Breakpoint:
         if self.breakpoint_type == BreakpointType.CONDITIONAL and self.condition:
             try:
                 return self.condition()
-            except:
+            except Exception:
                 return False
         return True
 
@@ -71,6 +72,8 @@ class StackFrame:
 class DebugSession:
     """A debugging session."""
 
+    _MAX_EXECUTION_LOG_SIZE = 1000
+
     def __init__(self, name: str = "session"):
         self.id = str(uuid.uuid4())
         self.name = name
@@ -99,6 +102,9 @@ class DebugSession:
         self.execution_log.append(
             {"timestamp": datetime.now().isoformat(), "action": "frame_push", "function": frame.function_name}
         )
+        # Keep only last 1000 entries
+        if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
+            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
 
     def pop_frame(self) -> StackFrame | None:
         """Pop a frame from the call stack."""
@@ -107,6 +113,9 @@ class DebugSession:
             self.execution_log.append(
                 {"timestamp": datetime.now().isoformat(), "action": "frame_pop", "function": frame.function_name}
             )
+            # Keep only last 1000 entries
+            if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
+                self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
             return frame
         return None
 
@@ -132,11 +141,17 @@ class DebugSession:
         """Pause execution."""
         self.status = "paused"
         self.execution_log.append({"timestamp": datetime.now().isoformat(), "action": "paused"})
+        # Keep only last 1000 entries
+        if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
+            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
 
     def resume(self) -> None:
         """Resume execution."""
         self.status = "active"
         self.execution_log.append({"timestamp": datetime.now().isoformat(), "action": "resumed"})
+        # Keep only last 1000 entries
+        if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
+            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -222,6 +237,8 @@ class Profiler:
 class DebugToolkit:
     """Main debug toolkit."""
 
+    _MAX_ALERT_HISTORY_SIZE = 1000
+
     def __init__(self, name: str = "debug"):
         self.id = str(uuid.uuid4())
         self.name = name
@@ -244,6 +261,9 @@ class DebugToolkit:
         self.logs.append(
             {"timestamp": datetime.now().isoformat(), "level": level, "message": message, "context": context or {}}
         )
+        # Keep only last 1000 entries
+        if len(self.logs) > self._MAX_ALERT_HISTORY_SIZE:
+            self.logs = self.logs[-self._MAX_ALERT_HISTORY_SIZE:]
 
     def get_logs(self, level: str | None = None) -> list[dict[str, Any]]:
         """Get debug logs."""

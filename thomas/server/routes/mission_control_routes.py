@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from aiohttp import web
+from thomas.server.app_keys import APP_APPROVALS_BROKER
 
 from .mission_runtime_views import (
     _job_room_and_summary,
@@ -37,6 +38,14 @@ def build_mission_control_routes(
     run_store_enabled_key: Any,
     run_store_module_key: Any,
 ):
+    def _resolve_approvals_broker():
+        broker = app.get(APP_APPROVALS_BROKER)
+        if broker is None:
+            broker = app.get("approvals")
+            if broker is not None:
+                app[APP_APPROVALS_BROKER] = broker
+        return broker
+
     async def _mission_approvals_payload() -> dict[str, Any]:
         out: dict[str, Any] = {
             "autonomy": [],
@@ -57,7 +66,7 @@ def build_mission_control_routes(
                 out["autonomy"].append(row)
             out["autonomy"].sort(key=lambda r: _iso_to_epoch(r.get("requested_at")), reverse=True)
 
-        broker = app.get("approvals")
+        broker = _resolve_approvals_broker()
         pending_fn = getattr(broker, "pending", None) if broker is not None else None
         if callable(pending_fn):
             try:

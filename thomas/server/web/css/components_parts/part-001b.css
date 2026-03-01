@@ -325,6 +325,7 @@
 /* Chat Messages */
 .message-row {
     display: flex;
+    align-items: flex-start;
     gap: var(--space-4);
     width: 100%;
     position: relative;

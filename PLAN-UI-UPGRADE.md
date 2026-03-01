@@ -1,6 +1,6 @@
-﻿# PLAN-UI-UPGRADE (Legacy Pointer)
-
-This legacy file remains as a pointer only.
+﻿# Moved Plan
 
 Canonical location:
-- `plans/thomas/WORKBOARD.md`
+- `plans/thomas/ui/UI_UPGRADE_PLAN.md`
+
+This file is a compatibility pointer to the canonical plan location.

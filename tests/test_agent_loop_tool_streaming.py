@@ -60,6 +60,18 @@ class _TwoToolLLM:
         yield StreamEvent(type="done", data={})
 
 
+class _CoroutineStreamLLM:
+    def __init__(self) -> None:
+        self.config = ModelConfig(name="dummy", model="dummy", context_window=2048, max_tokens=64)
+
+    async def stream_chat(self, messages, tools):  # noqa: ANN001
+        async def _stream():
+            yield StreamEvent(type="token", data={"text": "ok"})
+            yield StreamEvent(type="done", data={})
+
+        return _stream()
+
+
 def test_agent_loop_streams_tool_results_as_completed() -> None:
     cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
     tools = ToolRegistry()
@@ -82,3 +94,22 @@ def test_agent_loop_streams_tool_results_as_completed() -> None:
         for ev in tool_results
     ]
     assert delays[0] < delays[1]
+
+
+def test_agent_loop_coerces_coroutine_stream_chat_result() -> None:
+    cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+    agent = AgentLoop(cfg, _CoroutineStreamLLM(), ToolRegistry(), conversation=[])
+
+    async def run_once():
+        events = []
+        async for ev in agent.run("respond quickly", tools_policy="never"):
+            events.append(ev)
+        return events
+
+    events = asyncio.run(run_once())
+    text_events = [ev for ev in events if ev.type == EventType.TEXT_DELTA]
+    done = [ev for ev in events if ev.type == EventType.AGENT_DONE]
+
+    assert text_events
+    assert done
+    assert any("ok" in ev.data.get("text", "") for ev in text_events)

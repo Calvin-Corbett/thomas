@@ -155,6 +155,9 @@ def test_pre_commit_includes_workboard_claims_gate_hook() -> None:
     assert "id: thomas-workboard-issue-tool-smoke" in text
     assert "name: Thomas Workboard Issue Tool Smoke" in text
     assert "entry: python scripts/workboard_issue.py --help" in text
+    assert "id: thomas-workboard-problem-record-smoke" in text
+    assert "name: Thomas Workboard Problem Record Smoke" in text
+    assert "entry: python scripts/workboard_problem_record.py --help" in text
     assert "id: thomas-workboard-audit-backstop-gate" in text
     assert "name: Thomas Workboard Audit Backstop Gate" in text
     assert "entry: python scripts/workboard_audit_backstop.py" in text

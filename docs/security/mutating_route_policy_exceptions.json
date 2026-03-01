@@ -2,7 +2,7 @@
   "policy_version": 1,
   "defaults": {
     "authz": "require_api_access",
-    "csrf": "same_origin_browser_local_mode"
+    "csrf": "same_origin_or_optional_custom_header"
   },
   "exceptions": [
     {

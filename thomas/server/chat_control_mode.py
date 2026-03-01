@@ -97,7 +97,7 @@ async def handle_ui_control_chat(
         active_model_id = str(cfg.models[profile].model or "")
 
     mode_for_run = str(patch.get("mode") or mode).strip().lower()
-    if mode_for_run not in ("auto", "fast", "thinking", "swarm", "batch"):
+    if mode_for_run not in ("auto", "fast", "thinking"):
         mode_for_run = mode
 
     enriched_ops_payload: List[Dict[str, Any]] = []

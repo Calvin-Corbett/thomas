@@ -1,4 +1,4 @@
-﻿"""Run threat-model cadence checks."""
+"""Run threat-model cadence checks."""
 
 from __future__ import annotations
 
@@ -7,7 +7,26 @@ import json
 from pathlib import Path
 from typing import List, Optional
 
+from thomas.security.incident_drill import _validate_scoped_path
 from thomas.security.threat_model_cadence import evaluate_threat_model_cadence
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _scope_violation_report(path: str, *, error: str) -> dict[str, object]:
+    return {
+        "ok": False,
+        "path": str(path),
+        "errors": [
+            {
+                "code": "threat_model.scope_violation",
+                "message": str(error),
+                "remediation": "Use the scoped plan artifact path, for example docs/THREAT_MODEL_WEB_API.md.",
+            }
+        ],
+        "warnings": [],
+        "summary": {"error_count": 1, "warning_count": 0},
+    }
 
 
 def main(argv: Optional[List[str]] = None) -> int:
@@ -18,7 +37,18 @@ def main(argv: Optional[List[str]] = None) -> int:
     parser.add_argument("--strict", action="store_true", help="Exit non-zero on cadence errors.")
     args = parser.parse_args(argv)
 
-    report = evaluate_threat_model_cadence(Path(args.path).resolve(), max_age_days=max(1, int(args.max_age_days)))
+    requested_path = Path(args.path)
+    if not requested_path.is_absolute():
+        requested_path = (_REPO_ROOT / requested_path).resolve()
+    try:
+        threat_model_path = _validate_scoped_path(_REPO_ROOT, str(args.path), scope="plan")
+    except ValueError as exc:
+        report = _scope_violation_report(str(requested_path), error=str(exc))
+    else:
+        report = evaluate_threat_model_cadence(
+            threat_model_path,
+            max_age_days=max(1, int(args.max_age_days)),
+        )
 
     if bool(args.as_json):
         print(json.dumps(report, ensure_ascii=False, indent=2))

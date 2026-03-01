@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import inspect
 from dataclasses import dataclass
 from typing import Any, Awaitable, Callable, Dict, Optional
 
@@ -8,7 +9,7 @@ from thomas.policy import PolicyEngine, PolicyDecisionType, PolicyContext
 from thomas.policy.redact import Redactor
 from .approval import ApprovalBroker
 
-ToolExecutor = Callable[[Dict[str, Any]], Awaitable[Dict[str, Any]]]
+ToolExecutor = Callable[[Dict[str, Any]], Any]
 
 def _pretty_args(args: Dict[str, Any], max_len: int = 4000) -> Any:
     try:
@@ -26,6 +27,14 @@ class GuardedToolRunner:
     redactor: Redactor
     audit: Optional[Any] = None  # AuditLog
     approval_timeout_s: int = 60
+    no_human_mode: str = "human"
+
+    @staticmethod
+    def _normalize_no_human_mode(value: Optional[str]) -> str:
+        mode = str(value or "human").strip().lower()
+        if mode in {"human", "allow", "deny"}:
+            return mode
+        return "human"
 
     async def run(
         self,
@@ -40,6 +49,7 @@ class GuardedToolRunner:
         runtime_root: str,
         conversation_summary: str,
         emit_event: Callable[[str, Dict[str, Any]], Awaitable[None]],
+        no_human_mode: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Evaluate policy, potentially require approval, execute tool, redact outputs.
 
@@ -105,27 +115,79 @@ class GuardedToolRunner:
             }
 
         if decision.type == PolicyDecisionType.REQUIRE_APPROVAL:
-            # Emit approval request
-            payload = {
-                "run_id": run_id,
-                "tool_call_id": tool_call_id,
-                "session_id": session_id,
-                "tool_name": tool_name,
-                "args": self.redactor.redact_obj(args),
-                "args_pretty": _pretty_args(self.redactor.redact_obj(args)),
-                "reason": self.redactor.redact_text(decision.reason),
-                "iteration": iteration,
-            }
-            await emit_event("TOOL_APPROVAL_REQUIRED", payload)
-            approved = await self.approvals.require(
-                run_id=run_id,
-                tool_call_id=tool_call_id,
-                session_id=session_id,
-                tool_name=tool_name,
-                args_preview=self.redactor.redact_obj(args),
-                reason=decision.reason,
-                timeout_s=self.approval_timeout_s,
+            effective_no_human_mode = GuardedToolRunner._normalize_no_human_mode(
+                self.no_human_mode if no_human_mode is None else no_human_mode,
             )
+
+            if effective_no_human_mode == "allow":
+                await emit_event("TOOL_APPROVAL_REQUIRED", {
+                    "run_id": run_id,
+                    "tool_call_id": tool_call_id,
+                    "session_id": session_id,
+                    "tool_name": tool_name,
+                    "args": self.redactor.redact_obj(args),
+                    "args_pretty": _pretty_args(self.redactor.redact_obj(args)),
+                    "reason": self.redactor.redact_text(
+                        f"Auto-approved by no-human mode (allow) for tool: {tool_name}"
+                    ),
+                    "iteration": iteration,
+                    "decision": "AUTO_APPROVED_NO_HUMAN",
+                    "no_human_mode": effective_no_human_mode,
+                })
+                await emit_event("TOOL_APPROVAL_RESOLVED", {
+                    "run_id": run_id,
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "approved": True,
+                    "auto": True,
+                    "no_human_mode": effective_no_human_mode,
+                })
+                approved = True
+            elif effective_no_human_mode == "deny":
+                await emit_event("TOOL_APPROVAL_RESOLVED", {
+                    "run_id": run_id,
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "approved": False,
+                    "auto": True,
+                    "no_human_mode": effective_no_human_mode,
+                })
+                err = "Tool execution denied by no-human policy (no-human mode=deny)."
+                await emit_event("TOOL_RESULT", {
+                    "run_id": run_id,
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "ok": False,
+                    "error": err,
+                })
+                return {
+                    "ok": False,
+                    "error": err,
+                    "tool_name": tool_name,
+                    "tool_call_id": tool_call_id,
+                }
+            else:
+                # Emit approval request
+                payload = {
+                    "run_id": run_id,
+                    "tool_call_id": tool_call_id,
+                    "session_id": session_id,
+                    "tool_name": tool_name,
+                    "args": self.redactor.redact_obj(args),
+                    "args_pretty": _pretty_args(self.redactor.redact_obj(args)),
+                    "reason": self.redactor.redact_text(decision.reason),
+                    "iteration": iteration,
+                }
+                await emit_event("TOOL_APPROVAL_REQUIRED", payload)
+                approved = await self.approvals.require(
+                    run_id=run_id,
+                    tool_call_id=tool_call_id,
+                    session_id=session_id,
+                    tool_name=tool_name,
+                    args_preview=self.redactor.redact_obj(args),
+                    reason=decision.reason,
+                    timeout_s=self.approval_timeout_s,
+                )
 
             await emit_event("TOOL_APPROVAL_RESOLVED", {
                 "run_id": run_id,
@@ -161,7 +223,11 @@ class GuardedToolRunner:
                 return {"ok": False, "error": err, "tool_name": tool_name, "tool_call_id": tool_call_id}
 
         # Execute tool
-        result = await executor({"id": tool_call_id, "name": tool_name, "args": args})
+        exec_result = executor({"id": tool_call_id, "name": tool_name, "args": args})
+        if inspect.isawaitable(exec_result):
+            result = await exec_result
+        else:
+            result = exec_result
         redacted = self.redactor.redact_obj(result)
 
         if self.audit:

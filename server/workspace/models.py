@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import secrets
 import hashlib
+import re
 from datetime import datetime, timedelta
 from typing import Optional
 
@@ -17,6 +18,16 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 from .rbac import WorkspaceRole
+
+
+_INVITE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,255}$")
+
+
+def _normalize_invite_token(raw_token: str) -> str:
+    token = str(raw_token).strip()
+    if not _INVITE_TOKEN_RE.fullmatch(token):
+        raise ValueError("Invalid invite token format")
+    return token
 
 
 def _utcnow() -> datetime:
@@ -101,4 +112,4 @@ class WorkspaceInvite(Base):
 
     @staticmethod
     def hash_raw_token(raw: str) -> str:
-        return _hash_token(raw)
+        return _hash_token(_normalize_invite_token(raw))

@@ -68,20 +68,36 @@ Never bulk-delete. For EVERY file or function you want to remove:
 When multiple agents are active, use a double-handshake before bundling commits.
 This applies to every agent identity that touches the repo (Codex, Claude, Grok, Thomas, or human contributors).
 
+### Standard first-pass behavior (baseline)
+Default first-pass behavior is non-negotiable unless user explicitly overrides:
+- Use `agent_bootstrap_claim.py` for orchestration parents.
+- Default to `parent` role for non-orchestrator agents (using callsign `dispatcher`) and auto-run dispatch.
+- Dispatch uses a minimum floor of 2 workers by default.
+- READY workers are released before refill by default.
+- Completion handoff is expected by default: release/mark READY then move on.
+
 1. Claim scope at start:
    - Set explicit id first (PowerShell): `$env:AGENT_ID="<name>"` (or `$env:THOMAS_AGENT_ID="<name>"`)
-   - Optional one-shot bootstrap: `python scripts/agent_bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>"`
+   - Non-orchestrator agents MUST enter active implementation work by running `agent_bootstrap_claim.py` (not manual claim flows) so parent role and child dispatch are standardized on day one.
+   - Optional one-shot bootstrap: `python scripts/agent_bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>" --name "<name>"`
+- For non-orchestrator agents, bootstrap defaults to `parent` role/callsign `dispatcher` and auto-runs dispatch to a handful of workers by default.
+   - Bootstrap fanout is clamped to at least 2 workers unless explicitly overridden with an explicit higher target.
+   - Manual `--dispatch-workers` in `scripts/workboard_claim.py` also enforces the same minimum 2-worker floor.
+   - Disable auto dispatch with `--no-auto-dispatch` (keeps bootstrap claim only).
+- Orchestrator bootstrap intentionally skips auto-dispatch.
    - `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <solo|parent|worker> --parent <none|parent-id> --scope "<path[,path...]>" --task "[WIP][HSK-<id>] <short task>"`
 2. Mark ready when code/tests are complete:
    - `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <solo|parent|worker> --parent <none|parent-id> --scope "<path[,path...]>" --task "[READY][HSK-<id>] <summary>"`
+   - Move on after completion by default; stay on a task only when explicitly told by user or blocked by unresolved dependency.
 3. Parent agents should fan out when possible:
    - `python scripts/workboard_claim.py --suggest-delegation --agent "<parent-name>"`
    - One-command dispatch (release READY workers + claim fresh lanes):  
-     `python scripts/workboard_claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "task-manager-agent"`
-   - If no lanes are available, dispatch auto-claims a temporary task-creator lease and notifies task manager.
+     `python scripts/workboard_claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "thomas"`
+   - Bootstrap dispatch now inherits this behavior by default and requests task handoff when complete.
+   - If no lanes are available, dispatch auto-claims a temporary task-creator lease and notifies orchestrator.
    - Temporary task-creator lease is single-owner: only one agent can hold it at a time.
-   - Task manager clears temp lease when backlog is healthy:  
-     `python scripts/workboard_claim.py --release-temp-task-creator --agent "task-manager-agent" --task-manager-agent "task-manager-agent"`
+- Orchestrator clears temp lease when backlog is healthy:  
+     `python scripts/workboard_claim.py --release-temp-task-creator --agent "thomas" --task-manager-agent "thomas"`
    - Claim at least one suggested worker task when non-overlapping candidates exist.
 4. Report execution issues:
    - Add blocked tasks to `## Active Tasks` with `status=blocked`.
@@ -111,8 +127,12 @@ Guard rails:
 - Validate canonical repo identity gate: `python scripts/check_repo_identity.py`
 - Never commit another agent's scope unless they are marked `[READY]` and ACK is logged.
 - Never use `git commit --no-verify` except explicit emergency approval from maintainers.
-- If using `SKIP=<hook-id[,hook-id...]>`, set both `AGENT_ID` and `THOMAS_SKIP_REASON` (>=12 chars).
+- `SKIP` is breakglass-only. Standard flow is: fix failing hooks, then commit.
+- Emergency SKIP requires `THOMAS_SKIP_BREAKGLASS=1`; agent id is auto-resolved and ticket/reason metadata are auto-generated when missing.
 - All SKIP usage is audited to `.git/thomas_skip_audit.jsonl` by `python scripts/check_precommit_skip_policy.py`.
+- Breakglass is machine-governed with cooldown/quota/scope caps (per-agent cooldown, 24h quota, and hard staged-file limit).
+- Runner skip flags (`--skip-gates`, `--skip-tests`) are breakglass-only and auto-generate missing breakglass metadata.
+- Failed runner steps must be recorded in the canonical task problem ledger via `python scripts/workboard_problem_record.py`.
 - Configure GitHub hard merge guardrails with `python scripts/configure_github_branch_protection.py --apply` or `powershell -ExecutionPolicy Bypass -File scripts/apply_branch_protection.ps1` (see `docs/GITHUB_BRANCH_PROTECTION_SETUP.md`).
 - For proof bundles, run `python scripts/evidence_pack.py --name "<run>" --command "<cmd>" [--command "<cmd2>"]` (see `docs/EVIDENCE_PACK_RUNBOOK.md`).
 
@@ -120,20 +140,23 @@ Guard rails:
 Every agent must follow `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`.
 
 Core rules:
-1. Thomas routes tasks through `task-manager-agent`; agents execute.
+1. Thomas routes tasks through `thomas` (`task-manager-agent` remains a compatibility alias); agents execute.
 2. User-requested tasks outrank background tasks.
 3. Keep the board ordered by priority and urgency (`[P0][NOW]`, `[P1][NEXT]`, `[P2][LATER]`).
-4. All agent-to-agent and agent-to-manager coordination requests go through workboard message traffic.
+4. All agent-to-agent and agent-to-orchestrator coordination requests go through workboard message traffic.
 5. Keep alias identity stable (`Codex 1`, `Codex 2`, etc.) and track unique session ids per run.
 6. Every tracked task must have both `PLAN.md` and `PROBLEM.md` records generated via task-manager sync.
 7. Use only the canonical Thomas clone and remote identity defined by `docs/ops/repo_identity_policy.json`.
+8. Orchestration stewardship is automatic in the orchestrator role: if no active stewardship claim exists for the current board/session, claim `thomas` ownership immediately before any board edits, task creation, or task dispatch.
 
 Required commands:
 - Sync plans: `python scripts/workboard_task_manager.py --sync-plans --apply`
 - Sync plans with explicit roots: `python scripts/workboard_task_manager.py --sync-plans --plan-root "<path>" --problem-root "<path>" --apply`
+- Record a failed check in task problem ledger: `python scripts/workboard_problem_record.py --runner auto_checks --step "<label>" --exit-code <code> --command "<cmd>" --task-id "<task_id>"`
+- `python scripts/auto_checks.py` and `python scripts/doc.py` auto-record failed steps to task `PROBLEM.md` unless `--no-record-problem-on-fail` is set.
 - Sync sessions: `python scripts/workboard_task_manager.py --sync-sessions --apply`
-- Sweep inactive: `python scripts/workboard_task_manager.py --sweep-inactive --max-idle-minutes 1 --apply --task-manager-agent "task-manager-agent"`
-- Message send: `python scripts/workboard_message.py --send --from-agent "<agent>" --to-agent "<agent|task-manager-agent>" --summary "<text>" --task-id "<task_id>"`
+- Sweep inactive: `python scripts/workboard_task_manager.py --sweep-inactive --max-idle-minutes 1 --apply --task-manager-agent "thomas"`
+- Message send: `python scripts/workboard_message.py --send --from-agent "<agent>" --to-agent "<agent|thomas>" --summary "<text>" --task-id "<task_id>"`
 - Message ack: `python scripts/workboard_message.py --ack --msg-id "<msg_id>" --by "<agent>"`
 - Message resolve: `python scripts/workboard_message.py --resolve --msg-id "<msg_id>" --by "<agent>"`
 - Preference capture: `python scripts/workboard_task_manager.py --capture-preference --preference-summary "<summary>" --preference-verbatim "<verbatim>"`

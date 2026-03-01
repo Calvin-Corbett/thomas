@@ -12,9 +12,11 @@ import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Tuple
 
 logger = logging.getLogger(__name__)
+
+DEFAULT_EXTENSIONS = [".py", ".md", ".toml", ".txt"]
 
 # Query operators
 _OP_RE = re.compile(
@@ -555,7 +557,7 @@ def regex_search_impl(
     if ext:
         extset = {ext}
     else:
-        extset = set(DEFAULT_EXTENSIONS) if hasattr(_default_repo_root, "__module__") else {".py", ".md"}
+        extset = set(DEFAULT_EXTENSIONS)
 
     pat = spec.regex or ""
     try:

@@ -36,6 +36,19 @@ _EXECUTABLE_EXTENSIONS = {
     ".wasm",
 }
 
+_COMMAND_INVOCATION_KEYS = {
+    "command",
+    "commands",
+    "cmd",
+    "exec",
+    "execute",
+    "run",
+    "run_command",
+    "script",
+    "python_script",
+    "shell",
+}
+
 
 def _now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
@@ -160,6 +173,42 @@ def _read_json(path: Path) -> Any:
         return None
 
 
+def _json_payload_files(
+    *,
+    bundle_dir: Path,
+    manifest: Any,
+) -> list[tuple[str, Any]]:
+    out: list[tuple[str, Any]] = []
+    if manifest is None:
+        return out
+    for file_entry in list(getattr(manifest, "files", []) or []):
+        if isinstance(file_entry, dict):
+            rel = _text(file_entry.get("path"))
+        else:
+            rel = _text(getattr(file_entry, "path", ""))
+        if not rel:
+            continue
+        if Path(rel).suffix.lower() != ".json":
+            continue
+        payload_path = (bundle_dir / "payload" / rel).resolve()
+        if not payload_path.exists() or not payload_path.is_file():
+            continue
+        payload = _read_json(payload_path)
+        if payload is None:
+            continue
+        out.append((rel, payload))
+    return out
+
+
+def _json_payload_violation_path(*, rel_path: str, command_path: str) -> str:
+    normalized = str(command_path or "").strip()
+    if normalized == "$":
+        normalized = ""
+    elif normalized.startswith("$."):
+        normalized = normalized[2:]
+    return f"manifest.files[{rel_path}]" + (f".{normalized}" if normalized else "")
+
+
 def _collect_component_nodes(
     node: Any, *, path: str = "$", out: list[tuple[str, dict[str, Any]]] | None = None
 ) -> list[tuple[str, dict[str, Any]]]:
@@ -191,6 +240,30 @@ def _collect_url_refs(node: Any, *, path: str = "$", out: list[tuple[str, str]] 
         for idx, value in enumerate(node):
             _collect_url_refs(value, path=f"{path}[{idx}]", out=rows)
     return rows
+
+
+def _collect_command_like_nodes(
+    node: Any, *, path: str = "$", out: list[tuple[str, Any]] | None = None
+) -> list[tuple[str, Any]]:
+    rows = out if out is not None else []
+    if isinstance(node, dict):
+        for key, value in node.items():
+            key_norm = _norm(key)
+            child_path = f"{path}.{key}"
+            if key_norm in _COMMAND_INVOCATION_KEYS:
+                rows.append((child_path, value))
+            _collect_command_like_nodes(value, path=child_path, out=rows)
+    elif isinstance(node, list):
+        for idx, value in enumerate(node):
+            _collect_command_like_nodes(value, path=f"{path}[{idx}]", out=rows)
+    return rows
+
+
+def collect_command_invocation_paths(payload: Any, *, root_path: str = "$") -> list[str]:
+    if not isinstance(payload, (dict, list)):
+        return []
+    normalized_root = str(root_path or "$").strip() or "$"
+    return [path for path, _ in _collect_command_like_nodes(payload, path=normalized_root)]
 
 
 def _make_report_id(
@@ -384,13 +457,23 @@ class PolicyComplianceService:
             )
         else:
             entry_payload = _read_json(entry_path)
-            if not isinstance(entry_payload, (dict, list)):
+            if entry_payload is None:
                 add_violation(
                     code="bundle.entrypoint.invalid_json",
                     severity="block",
                     message="module entrypoint payload is not valid JSON",
                     path=str(entry_path),
                     remediation="Ensure entrypoint payload is valid JSON.",
+                )
+            elif not isinstance(entry_payload, (dict, list)):
+                add_violation(
+                    code="bundle.entrypoint.invalid_payload_type",
+                    severity="block",
+                    message=(
+                        "module entrypoint payload must be a JSON object or array for companion rendering."
+                    ),
+                    path="manifest.module.entrypoint",
+                    remediation="Use a JSON object or array as the module entrypoint payload.",
                 )
 
         payload_commerce_model = _norm(commerce_model)
@@ -578,6 +661,22 @@ class PolicyComplianceService:
                         path=ref_path,
                         remediation="Add host to url_allowlist or remove external navigation.",
                     )
+
+        for rel, payload_obj in _json_payload_files(bundle_dir=bundle_dir, manifest=manifest):
+            if not isinstance(payload_obj, (dict, list)):
+                continue
+            command_nodes = _collect_command_like_nodes(payload_obj)
+            for command_path, _ in command_nodes:
+                add_violation(
+                    code="payload.command_invocation_blocked",
+                    severity="block",
+                    message="payload contains command/tool invocation fields that can trigger external execution",
+                    path=_json_payload_violation_path(
+                        rel_path=str(rel or ""),
+                        command_path=command_path,
+                    ),
+                    remediation="Remove command/script/tool-invocation keys from companion payloads.",
+                )
 
         report = self._finalize_report(
             checked_at=checked_at,

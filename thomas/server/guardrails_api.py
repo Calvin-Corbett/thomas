@@ -1,10 +1,34 @@
 from __future__ import annotations
 
-import json
 from aiohttp import web
-from typing import Any, Dict
+from typing import Any
 
 from thomas.agent.approval import ApprovalBroker
+
+
+def _parse_decision(payload: dict[str, Any], *, default: bool | None = None) -> bool | None:
+    if not isinstance(payload, dict):
+        return default
+    if "decision" in payload:
+        value = payload.get("decision")
+    elif "approved" in payload:
+        value = payload.get("approved")
+    elif "approve" in payload:
+        value = payload.get("approve")
+    else:
+        value = None
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("1", "true", "yes", "ok", "allow", "approve"):
+            return True
+        if v in ("0", "false", "no", "fail", "failed", "deny", "reject"):
+            return False
+    return default
+
 
 def _is_localhost(request: web.Request) -> bool:
     peer = request.transport.get_extra_info("peername") if request.transport else None
@@ -15,6 +39,7 @@ def _is_localhost(request: web.Request) -> bool:
     if not host:
         return False
     return host in ("127.0.0.1", "::1")
+
 
 def install_guardrails_routes(app: web.Application, approvals: ApprovalBroker) -> None:
     async def pending(request: web.Request) -> web.Response:
@@ -29,21 +54,23 @@ def install_guardrails_routes(app: web.Application, approvals: ApprovalBroker) -
             data = await request.json()
         except Exception:
             return web.json_response({"ok": False, "error": "invalid json"}, status=400)
+        if not isinstance(data, dict):
+            data = {}
 
         run_id = str(data.get("run_id") or "")
         tool_call_id = str(data.get("tool_call_id") or "")
-        decision = str(data.get("decision") or "").lower()
+        decision = _parse_decision(data, default=None)
         allow_session_tool = bool(data.get("allow_session_tool", False))
         tool_name = data.get("tool_name")
         session_id = data.get("session_id")
 
-        if not run_id or not tool_call_id or decision not in ("approve", "deny"):
+        if not run_id or not tool_call_id or decision is None:
             return web.json_response({"ok": False, "error": "missing run_id/tool_call_id or invalid decision"}, status=400)
 
         ok = await approvals.resolve(
             run_id=run_id,
             tool_call_id=tool_call_id,
-            approved=(decision == "approve"),
+            approved=bool(decision),
             allow_session_tool=allow_session_tool,
             tool_name=tool_name,
             session_id=session_id,

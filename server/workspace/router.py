@@ -9,7 +9,7 @@ from sqlalchemy import select
 
 from .deps import enforce_workspace, require_roles, get_db, get_current_user, WorkspaceContext
 from .models import Workspace, WorkspaceMembership, WorkspaceInvite
-from .rbac import WorkspaceRole
+from .rbac import WorkspaceRole, normalize_role
 from .schemas import (
     WorkspaceOut,
     WorkspaceCreateIn,
@@ -18,6 +18,13 @@ from .schemas import (
     InviteOut,
     InviteCreateOut,
 )
+
+
+def _coerce_role(value: object, *, field: str) -> WorkspaceRole:
+    try:
+        return normalize_role(value, field=field)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=f"invalid {field}") from exc
 
 
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
@@ -93,11 +100,12 @@ def create_invite(
     if ctx.workspace.workspace_id != workspace_id:
         raise HTTPException(status_code=403, detail="Workspace mismatch")
 
+    invite_role = _coerce_role(data.role, field="invite role")
     raw, token_hash = WorkspaceInvite.new_token_pair()
     inv = WorkspaceInvite(
         workspace_id=workspace_id,
         email=data.email.strip().lower(),
-        role=data.role,
+        role=invite_role.value,
         token_hash=token_hash,
         created_by_user_id=str(getattr(user, "id", getattr(user, "user_id", ""))) or None,
         note=data.note,
@@ -129,12 +137,17 @@ def accept_invite(
     user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    token = str(payload.get("invite_token", "")).strip()
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=422, detail="Invalid payload format")
+    token = payload.get("invite_token", "")
     if not token:
         raise HTTPException(status_code=400, detail="invite_token required")
+    try:
+        token_hash = WorkspaceInvite.hash_raw_token(token)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail="Invalid invite token") from exc
 
     user_id = str(getattr(user, "id", getattr(user, "user_id", "")))
-    token_hash = WorkspaceInvite.hash_raw_token(token)
     inv = db.execute(select(WorkspaceInvite).where(WorkspaceInvite.token_hash == token_hash).limit(1)).scalars().first()
     if not inv:
         raise HTTPException(status_code=404, detail="Invite not found")
@@ -191,10 +204,13 @@ def change_role(
     if not target:
         raise HTTPException(status_code=404, detail="Member not found")
 
-    if ctx.role == WorkspaceRole.admin and str(target.role) == WorkspaceRole.owner.value:
+    target_role = _coerce_role(target.role, field="target role")
+    requested_role = _coerce_role(role, field="role")
+
+    if ctx.role == WorkspaceRole.admin and target_role == WorkspaceRole.owner:
         raise HTTPException(status_code=403, detail="Admins cannot modify owners")
 
-    target.role = role
+    target.role = requested_role.value
     db.commit()
     db.refresh(target)
     return target

@@ -199,9 +199,7 @@ def _mission_display_hhmm_utc(value: Any) -> str:
 
 def _mission_run_display_name(run_meta: dict[str, Any]) -> str:
     mode = str(run_meta.get("mode") or "").strip().lower()
-    if mode == "swarm":
-        base = "Swarm Session"
-    elif mode:
+    if mode:
         base = f"{mode.title()} Session"
     else:
         base = "Chat Session"

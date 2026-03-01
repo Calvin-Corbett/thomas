@@ -47,7 +47,10 @@ ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_PLAN_ROOT = "plans/thomas/tasks"
 DEFAULT_PROBLEM_ROOT = "plans/thomas/problems"
-DEFAULT_TASK_MANAGER_AGENT = "task-manager-agent"
+DEFAULT_TASK_MANAGER_AGENT = "thomas"
+DEFAULT_ORCHESTRATOR_AGENTS = ("thomas", "task-manager-agent", "task-manager")
+DEFAULT_ORCHESTRATOR_ERROR = "auto-start is disabled for orchestrator agents"
+MODEL_ALIAS_OWNER_SUFFIX_RE = re.compile(r"^[\s_-]+\d+$")
 DEFAULT_MAX_IDLE_MINUTES = 1.0
 DEFAULT_MONITOR_INTERVAL_SECONDS = 30.0
 DEFAULT_MONITOR_CYCLES = 1
@@ -66,6 +69,48 @@ BRAINSTORM_TASK_TYPES = {"brainstorm_orchestration"}
 
 def _norm(value: str) -> str:
     return str(value or "").strip().lower()
+
+
+def _canonical_model_alias_owner(owner_agent: str) -> str:
+    return re.sub(r"[\s_-]*\d+$", "", _norm(owner_agent))
+
+
+def _model_alias_owner_suffix(owner_norm: str) -> str:
+    normalized = _norm(owner_norm)
+    owner_base = _canonical_model_alias_owner(normalized)
+    if not owner_base:
+        return ""
+    suffix = normalized[len(owner_base) :]
+    if MODEL_ALIAS_OWNER_SUFFIX_RE.fullmatch(suffix):
+        return suffix
+    return ""
+
+
+def _is_orchestrator_agent(agent: str | None) -> bool:
+    return _norm(agent) in {_norm(name) for name in DEFAULT_ORCHESTRATOR_AGENTS}
+
+
+def _is_authorized_model_alias(preferred_alias: str, owner_agent: str) -> bool:
+    alias_norm = _norm(preferred_alias)
+    owner_norm = _norm(owner_agent)
+    if not alias_norm or not owner_norm:
+        return False
+    if alias_norm == owner_norm:
+        return True
+    owner_base = _canonical_model_alias_owner(owner_norm)
+    if not owner_base:
+        return False
+    if alias_norm == owner_base:
+        return True
+    if not alias_norm.startswith(owner_base):
+        return False
+    suffix = alias_norm[len(owner_base) :]
+    if not suffix:
+        return False
+    owner_suffix = _model_alias_owner_suffix(owner_norm)
+    if not MODEL_ALIAS_OWNER_SUFFIX_RE.fullmatch(suffix):
+        return False
+    return suffix == owner_suffix
 
 
 def _sanitize(label: str, value: str) -> str:
@@ -505,7 +550,7 @@ def _split_up_for_grabs_task_for_dispatch(
         source_depends_on = "none"
     split_depends_on = source_depends_on or ("none" if "[p0]" in _norm(split_summary) else "")
     reporter = (
-        str(target_fields.get("reported_by", "")).strip() or str(task_manager_agent).strip() or "task-manager-agent"
+        str(target_fields.get("reported_by", "")).strip() or str(task_manager_agent).strip() or "thomas"
     )
 
     lines[target_idx] = workboard_issue._format_up_for_grabs(  # type: ignore[attr-defined]
@@ -1052,23 +1097,13 @@ def _run_monitor_cycle(
     max_dispatch_per_cycle: int,
     online_lookback_minutes: float,
     run_swarm_recovery: bool,
+    run_auto_start: bool,
     run_idle_dispatch: bool,
     now: datetime,
     apply: bool,
 ) -> tuple[bool, dict[str, object]]:
     checks: dict[str, dict[str, object]] = {}
     errors: list[str] = []
-
-    ok_plans, payload_plans = _sync_task_plans(
-        workboard_path=workboard_path,
-        plan_root=plan_root,
-        problem_root=problem_root,
-        apply=apply,
-        now=now,
-    )
-    checks["sync_plans"] = payload_plans
-    if not ok_plans:
-        errors.append(str(payload_plans.get("error", "sync_plans failed")))
 
     ok_sessions, payload_sessions = _sync_agent_sessions(
         workboard_path=workboard_path,
@@ -1124,6 +1159,19 @@ def _run_monitor_cycle(
             [str(item) for item in list(payload_sweep.get("errors") or [])] or [str(payload_sweep.get("error", ""))]
         )
 
+    if run_auto_start:
+        ok_auto_start, payload_auto_start = _auto_start_all_claimed_agents(
+            workboard_path=workboard_path,
+            task_manager_agent=task_manager_agent,
+            apply=apply,
+        )
+        checks["auto_start"] = payload_auto_start
+        if not ok_auto_start:
+            errors.extend(
+                [str(item) for item in list(payload_auto_start.get("errors") or [])]
+                or [str(payload_auto_start.get("error", ""))]
+            )
+
     if run_idle_dispatch:
         ok_dispatch, payload_dispatch = _dispatch_up_for_grabs_to_idle_agents(
             workboard_path=workboard_path,
@@ -1139,6 +1187,17 @@ def _run_monitor_cycle(
                 [str(item) for item in list(payload_dispatch.get("errors") or [])]
                 or [str(payload_dispatch.get("error", ""))]
             )
+
+    ok_plans, payload_plans = _sync_task_plans(
+        workboard_path=workboard_path,
+        plan_root=plan_root,
+        problem_root=problem_root,
+        apply=apply,
+        now=now,
+    )
+    checks["sync_plans"] = payload_plans
+    if not ok_plans:
+        errors.append(str(payload_plans.get("error", "sync_plans failed")))
 
     payload: dict[str, object] = {
         "cycle_started_at": now.astimezone(timezone.utc).replace(microsecond=0).isoformat(),
@@ -1163,6 +1222,7 @@ def _monitor_loop(
     max_dispatch_per_cycle: int,
     online_lookback_minutes: float,
     run_swarm_recovery: bool,
+    run_auto_start: bool,
     run_idle_dispatch: bool,
     cycles: int,
     interval_seconds: float,
@@ -1194,6 +1254,7 @@ def _monitor_loop(
             max_dispatch_per_cycle=max_dispatch_per_cycle,
             online_lookback_minutes=online_lookback_minutes,
             run_swarm_recovery=run_swarm_recovery,
+            run_auto_start=run_auto_start,
             run_idle_dispatch=run_idle_dispatch,
             now=cycle_now,
             apply=apply,
@@ -1218,6 +1279,7 @@ def _monitor_loop(
         "cycle_count": cycle_index,
         "cycles": cycle_reports,
         "run_swarm_recovery": bool(run_swarm_recovery),
+        "run_auto_start": bool(run_auto_start),
         "run_idle_dispatch": bool(run_idle_dispatch),
         "max_idle_minutes": float(max_idle_minutes),
         "max_agent_silence_minutes": float(max_agent_silence_minutes),
@@ -1324,7 +1386,11 @@ def _new_session_id(agent: str, now: datetime, used_ids: set[str]) -> str:
 
 
 def _new_model_alias(preferred_alias: str, *, fallback_agent: str, used_aliases: set[str]) -> str:
-    base = str(preferred_alias or "").strip() or str(fallback_agent or "").strip() or "agent"
+    base = str(preferred_alias or "").strip()
+    if not _is_authorized_model_alias(base, fallback_agent):
+        base = str(fallback_agent or "").strip() or "agent"
+    if not base:
+        base = "agent"
     candidate = base
     if _norm(candidate) not in used_aliases:
         return candidate
@@ -1353,6 +1419,7 @@ def _sync_agent_sessions(
 
     existing: dict[str, dict[str, str]] = {}
     parse_errors: list[str] = []
+    alias_violations: list[str] = []
     for idx in _bullet_indices(lines, section_start, section_end):
         entry, fields, err = _parse_kv_entry(idx + 1, lines[idx])
         if err:
@@ -1366,9 +1433,19 @@ def _sync_agent_sessions(
         if not agent:
             parse_errors.append(f"line {idx + 1}: missing agent")
             continue
+        model_alias = str(fields.get("model_alias", "")).strip()
+        if model_alias and not _is_authorized_model_alias(model_alias, agent):
+            alias_violations.append(
+                f"line {idx + 1}: unauthorized model_alias `{model_alias}` for agent `{agent}`"
+            )
         existing[_norm(agent)] = dict(fields)
     if parse_errors:
         return False, {"error": "agent sessions section parse failed", "violations": parse_errors}
+    if alias_violations:
+        return False, {
+            "error": "agent sessions contains unauthorized model_alias swap attempts",
+            "violations": alias_violations,
+        }
 
     task_by_agent: dict[str, str] = {}
     for row in active_tasks:
@@ -2571,12 +2648,330 @@ def _reactivate_task(
     }
 
 
+def _resolve_auto_start_agent(explicit_agent: str | None) -> tuple[bool, str, str]:
+    explicit = str(explicit_agent or "").strip()
+    if _is_orchestrator_agent(explicit):
+        return (
+            False,
+            "",
+            DEFAULT_ORCHESTRATOR_ERROR,
+        )
+    if explicit:
+        return True, explicit, ""
+
+    resolver = getattr(workboard_claim, "_resolve_agent", None)
+    if not callable(resolver):
+        return (
+            False,
+            "",
+            "agent id is required for auto-start; set --agent or configure agent identity env.",
+        )
+    try:
+        resolved = str(resolver(None))
+    except Exception as exc:  # pragma: no cover
+        return False, "", str(exc)
+    if not resolved.strip():
+        return (
+            False,
+            "",
+            "agent id is required for auto-start; pass --agent or configure agent identity env.",
+        )
+    return True, resolved.strip(), ""
+
+
+def _pick_auto_start_up_for_grabs_task(
+    workboard_path: Path,
+) -> tuple[bool, claims_gate.UpForGrabTask | None, str]:
+    violations, _claims, _active_tasks, up_for_grabs, _issues = claims_gate.evaluate_board(workboard_path)
+    if violations:
+        return False, None, "workboard invalid: " + "; ".join(violations)
+    if not up_for_grabs:
+        return False, None, "no up-for-grabs tasks available"
+
+    task_type_map = _task_type_by_task_id(workboard_path)
+
+    def _sort_key(task: claims_gate.UpForGrabTask) -> tuple[int, int, int, str]:
+        task_type = task_type_map.get(_norm(task.task_id), "generalist_engineering")
+        source = _task_priority_source(summary=str(task.summary), task_type=task_type)
+        source_rank = 0 if source == "user" else 1
+        priority, urgency, text = _task_priority_rank(task.summary)
+        return (source_rank, priority, urgency, text)
+
+    selected = sorted(list(up_for_grabs), key=_sort_key)[0]
+    return True, selected, "ok"
+
+
+def _auto_start_task_for_agent(
+    *,
+    workboard_path: Path,
+    agent: str,
+    task_manager_agent: str,
+) -> tuple[bool, dict[str, object]]:
+    if not str(agent).strip():
+        return False, {"error": "agent id is required for auto-start"}
+    if _is_orchestrator_agent(agent):
+        return False, {"error": DEFAULT_ORCHESTRATOR_ERROR}
+
+    violations, _claims, active_tasks, _up_for_grabs, _issues = claims_gate.evaluate_board(workboard_path)
+    if violations:
+        return False, {"error": "workboard invalid", "violations": list(violations)}
+
+    agent_key = _norm(agent)
+    agent_active = [item for item in active_tasks if _norm(item.agent) == agent_key]
+    if agent_active:
+        def _active_status_rank(status: str) -> int:
+            normalized_status = _normalize_task_status(status)
+            if normalized_status == "in_progress":
+                return 0
+            if normalized_status == "claimed":
+                return 1
+            if normalized_status == "queued":
+                return 2
+            return 9
+
+        def _active_sort_key(item: claims_gate.ActiveTask) -> tuple[int, int, int, str]:
+            priority, urgency, text = _task_priority_rank(item.summary)
+            return (_active_status_rank(item.status), priority, urgency, text)
+
+        working_tasks = [
+            item
+            for item in agent_active
+            if _normalize_task_status(item.status) in {"in_progress", "claimed", "queued"}
+        ]
+        if working_tasks:
+            target_task = sorted(working_tasks, key=_active_sort_key)[0]
+            current_status = _normalize_task_status(target_task.status)
+            if current_status == "in_progress":
+                return True, {
+                    "agent": agent,
+                    "task_id": target_task.task_id,
+                    "status": "in_progress",
+                    "started": True,
+                    "source": "existing",
+                }
+
+            if current_status == "queued":
+                ok_claimed, payload_claimed = set_task_status(
+                    workboard_path,
+                    task_id=target_task.task_id,
+                    status="claimed",
+                    actor=agent,
+                    enforce_transition=True,
+                )
+                if not ok_claimed:
+                    return False, {
+                        "error": f"failed to move `{target_task.task_id}` from queued to claimed",
+                        "details": payload_claimed,
+                    }
+
+            ok_in_progress, payload_in_progress = set_task_status(
+                workboard_path,
+                task_id=target_task.task_id,
+                status="in_progress",
+                actor=agent,
+                enforce_transition=True,
+            )
+            if not ok_in_progress:
+                return False, {
+                    "error": f"unable to move `{target_task.task_id}` to in_progress",
+                    "details": payload_in_progress,
+                }
+
+            return True, {
+                "agent": agent,
+                "task_id": target_task.task_id,
+                "status": "in_progress",
+                "started": True,
+                "source": "existing",
+                "previous_status": current_status,
+            }
+
+        non_startable = sorted(
+            [
+                {
+                    "task_id": item.task_id,
+                    "status": _normalize_task_status(item.status),
+                }
+                for item in agent_active
+            ],
+            key=lambda item: item["task_id"],
+        )
+        return False, {
+            "error": f"agent `{agent}` has non-startable active task state(s)",
+            "active_tasks": non_startable,
+            "status_note": "resolve blockers/review/done flow before auto-starting a new task",
+        }
+
+    ok_pick, pick, pick_error = _pick_auto_start_up_for_grabs_task(workboard_path)
+    if not ok_pick or pick is None:
+        return False, {"error": pick_error}
+
+    ok_reactivate, payload_reactivate = _reactivate_task(
+        workboard_path=workboard_path,
+        task_id=str(pick.task_id),
+        agent=agent,
+        task_summary=str(pick.summary),
+        scope_override=",".join(pick.scopes),
+        name=None,
+        role=None,
+        parent=None,
+    )
+    if not ok_reactivate:
+        return False, {"error": f"reactivation failed for `{pick.task_id}`", "details": payload_reactivate}
+
+    task_id = str(payload_reactivate.get("task_id") or pick.task_id)
+    ok_start, payload_start = set_task_status(
+        workboard_path,
+        task_id=task_id,
+        status="in_progress",
+        actor=agent,
+        enforce_transition=True,
+    )
+    if not ok_start:
+        return False, {
+            "error": f"reactivated `{task_id}` but failed to move to in_progress",
+            "details": payload_start,
+            "reactivation": payload_reactivate,
+        }
+
+    return True, {
+        "agent": agent,
+        "task_id": task_id,
+        "status": "in_progress",
+        "started": True,
+        "source": "up_for_grabs",
+        "reactivation": payload_reactivate,
+    }
+
+
+def _auto_start_all_claimed_agents(
+    *,
+    workboard_path: Path,
+    task_manager_agent: str,
+    apply: bool,
+) -> tuple[bool, dict[str, object]]:
+    violations, claims, active_tasks, up_for_grabs, _ = claims_gate.evaluate_board(workboard_path)
+    if violations:
+        return False, {"error": "workboard invalid", "violations": list(violations)}
+
+    active_by_agent: dict[str, set[str]] = {}
+    for row in active_tasks:
+        agent_key = _norm(row.agent)
+        if not agent_key:
+            continue
+        active_by_agent.setdefault(agent_key, set()).add(_normalize_task_status(row.status))
+
+    target_agents: list[str] = []
+    seen_targets: set[str] = set()
+    skipped_non_startable_agents: list[str] = []
+    for claim in claims:
+        claim_agent_key = _norm(claim.agent)
+        claim_agent = str(claim.agent).strip()
+        if not claim_agent or _is_orchestrator_agent(claim_agent):
+            continue
+        if claim_agent_key in seen_targets:
+            continue
+        claim_rows = active_by_agent.get(claim_agent_key, set())
+        if claim_rows and not any(item in {"in_progress", "claimed", "queued"} for item in claim_rows):
+            skipped_non_startable_agents.append(claim_agent)
+            continue
+        target_agents.append(claim_agent)
+        seen_targets.add(claim_agent_key)
+
+    up_for_grabs_available = len(up_for_grabs)
+    if not target_agents:
+        return True, {
+            "candidate_agent_count": 0,
+            "attempted_count": 0,
+            "already_in_progress_count": 0,
+            "auto_started_count": 0,
+            "assigned_count": 0,
+            "up_for_grabs_available": int(up_for_grabs_available),
+            "skipped_non_startable_count": len(skipped_non_startable_agents),
+            "skipped_non_startable_agents": sorted(set(skipped_non_startable_agents), key=str.lower),
+            "no_work_available_count": 0,
+            "failed_agent_count": 0,
+            "results": [],
+            "applied": bool(apply),
+        }
+
+    assignments: list[dict[str, object]] = []
+    attempted_count = 0
+    auto_started_count = 0
+    already_in_progress_count = 0
+    no_work_agents: list[str] = []
+    failed_agents: list[dict[str, object]] = []
+    skipped_non_startable_agents: list[str] = list(skipped_non_startable_agents)
+
+    for agent in target_agents:
+        attempted_count += 1
+        ok_start, payload_start = _auto_start_task_for_agent(
+            workboard_path=workboard_path,
+            agent=agent,
+            task_manager_agent=task_manager_agent,
+        )
+        if ok_start:
+            status = str(payload_start.get("status") or "").strip().lower()
+            source = str(payload_start.get("source") or "").strip().lower()
+            if status == "in_progress" and source == "existing":
+                already_in_progress_count += 1
+            else:
+                auto_started_count += 1
+            assignments.append({"agent": agent, **payload_start})
+            continue
+
+        error_text = str(payload_start.get("error", "")).strip().lower()
+        if (
+            error_text.startswith("agent `")
+            and "non-startable active task state(s)" in error_text
+        ):
+            skipped_non_startable_agents.append(agent)
+            continue
+
+        if (
+            str(payload_start.get("error", ""))
+            .strip()
+            .lower()
+            .startswith("no up-for-grabs tasks available")
+        ):
+            no_work_agents.append(agent)
+            continue
+
+        failed_agents.append({"agent": agent, "error": payload_start.get("error")})
+
+    payload: dict[str, object] = {
+        "candidate_agent_count": len(target_agents),
+        "attempted_count": attempted_count,
+        "already_in_progress_count": already_in_progress_count,
+        "auto_started_count": auto_started_count,
+        "assigned_count": len(assignments),
+        "up_for_grabs_available": int(up_for_grabs_available),
+        "skipped_non_startable_count": len(set(skipped_non_startable_agents)),
+        "skipped_non_startable_agents": sorted(set(skipped_non_startable_agents), key=str.lower),
+        "no_work_available_count": len(no_work_agents),
+        "no_work_available_agents": sorted(set(no_work_agents), key=str.lower),
+        "failed_agent_count": len(failed_agents),
+        "failed_agents": failed_agents,
+        "results": assignments,
+        "applied": bool(apply),
+    }
+    if failed_agents:
+        payload["errors"] = [str(item.get("error") or item) for item in failed_agents]
+        return False, payload
+    return True, payload
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Task-manager automation for WORKBOARD protocols.")
     parser.add_argument("--workboard", default=str(DEFAULT_WORKBOARD))
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
 
     actions = parser.add_mutually_exclusive_group(required=True)
+    actions.add_argument(
+        "--auto-start",
+        action="store_true",
+        help="Auto-claim and move a task to in_progress for --agent when no working task is active.",
+    )
     actions.add_argument("--sync-plans", action="store_true", help="Ensure per-task plan entries/files exist.")
     actions.add_argument("--sweep-inactive", action="store_true", help="Detect and process inactive agents.")
     actions.add_argument("--reactivate", action="store_true", help="Reactivate a task from Up For Grabs.")
@@ -2584,7 +2979,10 @@ def run(argv: Sequence[str] | None = None) -> int:
     actions.add_argument(
         "--monitor",
         action="store_true",
-        help="Run monitor loop: sync board, recover swarms, ping silence, sweep inactive, and dispatch idle agents.",
+        help=(
+            "Run monitor loop: sync board, recover swarms, auto-start claimed agents, "
+            "ping silence, sweep inactive, and dispatch idle agents."
+        ),
     )
     actions.add_argument(
         "--sync-specialists",
@@ -2668,6 +3066,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--no-idle-dispatch",
         action="store_true",
         help="Disable automatic up-for-grabs dispatch to online idle agents in --monitor mode.",
+    )
+    parser.add_argument(
+        "--no-auto-start",
+        action="store_true",
+        help="Disable automatic claimed-agent auto-start in --monitor mode.",
     )
 
     parser.add_argument("--task-id", default="", help="Task id for --reactivate or --specialist-for-task.")
@@ -2783,6 +3186,26 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if args.monitor:
         now_seed = now if str(args.now).strip() else None
+        ok_plan_sync, plan_sync_details = _sync_task_plans(
+            workboard_path=workboard_path,
+            plan_root=str(args.plan_root),
+            problem_root=str(args.problem_root),
+            apply=bool(args.apply),
+            now=now,
+        )
+        if not ok_plan_sync:
+            payload = {
+                "action": "monitor",
+                "ok": False,
+                "workboard": str(workboard_path),
+                "plan_sync": plan_sync_details,
+            }
+            if args.json:
+                print(json.dumps(payload, sort_keys=True))
+            else:
+                print("Workboard task manager: FAIL")
+                print(f"- plan sync failed: {payload.get('error', plan_sync_details.get('error', 'unknown'))}")
+            return 1
         ok, details = _monitor_loop(
             workboard_path=workboard_path,
             plan_root=str(args.plan_root),
@@ -2794,13 +3217,20 @@ def run(argv: Sequence[str] | None = None) -> int:
             max_dispatch_per_cycle=int(args.max_dispatch_per_cycle),
             online_lookback_minutes=float(args.online_lookback_minutes),
             run_swarm_recovery=not bool(args.no_swarm_recovery),
+            run_auto_start=not bool(args.no_auto_start),
             run_idle_dispatch=not bool(args.no_idle_dispatch),
             cycles=int(args.cycles),
             interval_seconds=float(args.interval_seconds),
             now_seed=now_seed,
             apply=bool(args.apply),
         )
-        payload = {"action": "monitor", "ok": bool(ok), "workboard": str(workboard_path), **details}
+        payload = {
+            "action": "monitor",
+            "ok": bool(ok),
+            "workboard": str(workboard_path),
+            "plan_sync": plan_sync_details,
+            **details,
+        }
         if args.json:
             print(json.dumps(payload, sort_keys=True))
         else:
@@ -2808,8 +3238,18 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(
                 f"- cycles run: {payload.get('cycle_count', 0)}; "
                 f"swarm recovery: {payload.get('run_swarm_recovery')}; "
+                f"auto-start: {payload.get('run_auto_start')}; "
                 f"idle dispatch: {payload.get('run_idle_dispatch')}"
             )
+            if ok_plan_sync:
+                print(
+                    "- plan sync: "
+                    f"tracked={payload.get('plan_sync', {}).get('tracked_task_count', 0)}; "
+                    f"created plans={payload.get('plan_sync', {}).get('created_plan_count', 0)}; "
+                    f"created problems={payload.get('plan_sync', {}).get('created_problem_count', 0)}; "
+                    f"missing plans={payload.get('plan_sync', {}).get('missing_plan_count', 0)}; "
+                    f"missing problems={payload.get('plan_sync', {}).get('missing_problem_count', 0)}"
+                )
         return 0 if ok else 1
 
     if args.sync_plans:
@@ -2923,7 +3363,47 @@ def run(argv: Sequence[str] | None = None) -> int:
                     print(f"- {item}")
         return 0 if ok else 1
 
+    if args.auto_start:
+        ok_agent, resolved_agent, agent_error = _resolve_auto_start_agent(args.agent)
+        if not ok_agent:
+            payload = {"action": "auto_start", "ok": False, "error": agent_error}
+            if args.json:
+                print(json.dumps(payload, sort_keys=True))
+            else:
+                print("Workboard task manager: FAIL")
+                print(f"- {payload['error']}")
+            return 1
+
+        ok, details = _auto_start_task_for_agent(
+            workboard_path=workboard_path,
+            agent=resolved_agent,
+            task_manager_agent=str(args.task_manager_agent),
+        )
+        payload = {"action": "auto_start", "ok": bool(ok), "workboard": str(workboard_path), "agent": resolved_agent, **details}
+        if args.json:
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print("Workboard task manager: PASS" if ok else "Workboard task manager: FAIL")
+            if ok:
+                source = str(details.get("source") or "unknown")
+                print(f"- started task `{details.get('task_id')}` for `{resolved_agent}` (source: {source})")
+            else:
+                print(f"- {details.get('error', 'auto-start failed')}")
+        return 0 if ok else 1
+
     if args.reactivate:
+        if _is_orchestrator_agent(str(args.agent)):
+            payload = {
+                "action": "reactivate",
+                "ok": False,
+                "error": "reactivate is disabled for orchestrator agents",
+            }
+            if args.json:
+                print(json.dumps(payload, sort_keys=True))
+            else:
+                print("Workboard task manager: FAIL")
+                print(f"- {payload['error']}")
+            return 1
         if not str(args.task_id).strip() or not str(args.agent).strip():
             payload = {
                 "action": "reactivate",
@@ -2946,6 +3426,23 @@ def run(argv: Sequence[str] | None = None) -> int:
             role=str(args.role).strip() or None,
             parent=str(args.parent).strip() or None,
         )
+        if ok:
+            task_id = str(details.get("task_id") or args.task_id).strip()
+            ok_status, payload_status = set_task_status(
+                workboard_path,
+                task_id=task_id,
+                status="in_progress",
+                actor=str(args.agent).strip(),
+                enforce_transition=True,
+            )
+            if not ok_status:
+                details = {
+                    "error": "reactivation succeeded but transition to in_progress failed",
+                    "reactivation": details,
+                    "status_error": payload_status,
+                }
+                ok = False
+
         payload = {"action": "reactivate", "ok": bool(ok), "workboard": str(workboard_path), **details}
         if args.json:
             print(json.dumps(payload, sort_keys=True))

@@ -75,6 +75,7 @@ def select_tools(
         "fs.write",
         "fs.list",
         "fs.search",  # Filesystem
+        "diff.",  # Diff/patch editing (preferred over fs.write for edits)
         "memory.",  # Memory
         "proc.run",  # Terminals
         "code.search",

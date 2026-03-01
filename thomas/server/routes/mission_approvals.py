@@ -8,6 +8,41 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.server.app_keys import APP_APPROVALS_BROKER
+
+
+def _resolve_approvals_broker(app: web.Application):
+    broker = app.get(APP_APPROVALS_BROKER)
+    if broker is None:
+        broker = app.get("approvals")
+        if broker is not None:
+            app[APP_APPROVALS_BROKER] = broker
+    return broker
+
+
+def _parse_decision(payload: dict[str, Any], *, default: bool | None = None) -> bool | None:
+    if not isinstance(payload, dict):
+        return default
+
+    if "decision" in payload:
+        value = payload.get("decision")
+    elif "approve" in payload:
+        value = payload.get("approve")
+    else:
+        value = None
+
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("1", "true", "yes", "ok", "allow", "approve"):
+            return True
+        if v in ("0", "false", "no", "fail", "failed", "deny", "reject"):
+            return False
+    return default
+
 
 def build_mission_approvals_handlers(
     app: web.Application,
@@ -38,7 +73,7 @@ def build_mission_approvals_handlers(
         except ValueError:
             payload = {}
 
-        approve = bool(payload.get("approve"))
+        approve = _parse_decision(payload, default=False)
         actor = str(payload.get("actor") or "mission_control").strip() or "mission_control"
         reason = str(payload.get("reason") or "").strip() or None
         try:
@@ -77,7 +112,7 @@ def build_mission_approvals_handlers(
 
     async def api_mission_guardrails_approval_resolve(request: web.Request) -> web.Response:
         """Resolve a guardrails approval by approving or denying a tool call."""
-        broker = app.get("approvals")
+        broker = _resolve_approvals_broker(app)
         if broker is None:
             raise web.HTTPNotFound(text="guardrails approvals are not available")
         try:
@@ -92,7 +127,7 @@ def build_mission_approvals_handlers(
         if not run_id or not tool_call_id:
             raise web.HTTPBadRequest(text="missing run_id or tool_call_id")
 
-        approve = bool(payload.get("approve"))
+        approve = bool(_parse_decision(payload, default=False))
         allow_session_tool = bool(payload.get("allow_session_tool"))
         tool_name = str(payload.get("tool_name") or "").strip() or None
         session_id = str(payload.get("session_id") or "").strip() or None

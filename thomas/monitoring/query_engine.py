@@ -4,6 +4,8 @@ Query engine implementing a PromQL subset.
 Supports instant queries, range queries, and common aggregation/function operations.
 """
 
+from __future__ import annotations
+
 import time
 from dataclasses import dataclass
 from enum import Enum

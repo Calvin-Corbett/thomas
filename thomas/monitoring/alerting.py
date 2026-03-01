@@ -5,7 +5,10 @@ Alert rule evaluation with state management, grouping, inhibition,
 silencing, and notification routing.
 """
 
+from __future__ import annotations
+
 import hashlib
+import logging
 import threading
 import time
 from collections import defaultdict
@@ -14,6 +17,8 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 
 from thomas.monitoring._types import Alert, AlertRule, AlertState
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -164,8 +169,8 @@ class AlertManager:
             try:
                 self._evaluate_rules()
                 self._update_alert_states()
-            except Exception:  # REVIEWED: broad catch
-                pass
+            except Exception as e:
+                log.warning("Alert evaluation failed: %s", e)
 
             time.sleep(15.0)
 
@@ -210,8 +215,8 @@ class AlertManager:
                                 alert.state = AlertState.FIRING
                                 alert.firing_at = now
 
-            except Exception:  # REVIEWED: broad catch
-                pass
+            except Exception as e:
+                log.warning("Rule evaluation failed for rule %s: %s", rule.name, e)
 
     def _update_alert_states(self) -> None:
         """Update alert states based on inhibition and silencing."""

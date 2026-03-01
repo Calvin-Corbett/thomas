@@ -5,6 +5,183 @@ All notable changes to this project will be documented in this file.
 Format: Keep a Changelog.
 Versioning: Semantic Versioning.
 
+## [Unreleased]
+
+- Warning: The current release is an early-stage, fast-built/“vibe-coded” branch and should be treated as beta-quality until a stabilization pass is completed.
+
+- Added `LICENSE` (MIT) and documented GitHub-user release preparation in `README.md`.
+- Added `scripts/package_release.py` for building a cleaned user deployment artifact (excluding personal plans/tasks/runtime and generating release notices).
+- Tightened release packaging defaults so the GitHub bundle excludes untracked files by default and adds extra privacy-safe exclusions for research logs and task-manager artifacts.
+
+### Added
+- Added `scripts/virtual_office_identity.py` to resolve stable character identities from `thomas/server/web/static/virtual_office.html`, with deterministic fallback mapping for orchestration display names.
+- Added Vibe Code execution tracing for `/api/chat` in `thomas/server/routes/vibe_trace.py`, `thomas/server/routes/chat_aiohttp.py`, and `thomas/server/routes/chat_stream_events.py` with live `vibe_graph` + `vibe_trace` NDJSON events, including dynamic tool-node discovery.
+- Added regression coverage in `tests/test_server_vibe_trace.py` to verify graph emission, node-status transitions, and tool-node trace updates.
+- Added a complete Thomas website showcase refresh in `apps/site/src/app/page.tsx`:
+  - Built-in proof section for the 14-day Navy-vet build story.
+  - Deep feature atlas with expandable capability groups.
+  - OpenClaw comparison matrix section.
+- Added supporting visual styles for the new homepage sections in `apps/site/src/app/globals.css`.
+- Added the first public-facing website feature narrative that maps core Thomas features to trust signals for non-technical users.
+
+### Changed
+- Updated `scripts/workboard_claim.py` to default unresolved claim/worker display names to virtual-office identities (`Thomas` for the main agent, and `Codex <Character>` for worker agents) instead of generic agent-id derivatives.
+- Updated `scripts/virtual_office_identity.py` default display-name resolution to use model-aware worker labels (`<Model> <VirtualOfficeCharacter>`) while preserving `Thomas` for the main agent identity.
+- Updated Thomas web chat runtime in `thomas/server/web/js/app_runtime_joined.mjs` to render a native-themed `Vibe Code` panel that shows live lifecycle status for each chat request and auto-expands with new traced nodes.
+- Updated web chat stream handlers in `thomas/server/web/js/app_parts/part-008.js` to handle `vibe_graph` and `vibe_trace` events for event-contract parity and legacy fallback compatibility.
+- Added themed UI styles for the `Vibe Code` panel in `thomas/server/web/css/components_parts/part-006-v2-agents.css`.
+- Updated `thomas/agent/loop_planning.py` to detect control-envelope overhead (`clarification_*`, `route_input_source`, `original_request`) and route/nudge on the extracted `original_request`, preventing overhead text from overriding user intent.
+
+### Fixed
+- Cleared architecture dependency-direction regressions for active lanes by removing forbidden direct imports across module boundaries: moved shared redaction helpers to `thomas/core/redaction.py`, moved project-instruction helpers to `thomas/agent/project_instructions.py` (with `thomas/cli/repl_project.py` compatibility wrapper), routed REPL policy wiring through `thomas/agent/policy_runtime.py`, and removed `tools -> cli/plugins` direct imports in `thomas/tools/mcp_bridge.py` and `thomas/tools/plugin_bridge.py`.
+- Fixed delegation suggestion output/tests in `tests/test_workboard_claim_script.py` to validate virtual-office worker naming in generated claim commands.
+- Fixed `thomas repl` conversation continuity in `thomas/cli/repl.py` by automatically restoring/saving `repl_conversation.json` under the memory root, so prior turns survive CLI restarts without manual `/load`.
+- Fixed `thomas repl` overlay behavior in `thomas/cli/repl.py` to disable alternate-screen picker rendering by default (`THOMAS_REPL_ALT_SCREEN=0` unless explicitly enabled), so `/model` and reasoning pickers no longer blank/black out the terminal in normal use and align with Codex CLI in-place interaction expectations.
+- Fixed duplicate user chat bubble rendering in `thomas/server/web/js/app_runtime_joined.mjs` by assigning stable client-side user message IDs during send and guarding against duplicate DOM insertion when the same send job is triggered twice.
+- Updated `thomas repl` role rendering in `thomas/cli/repl.py` to clearly differentiate identities: user prompt/messages now use `you` + blue styling, assistant output is labeled `CODEX`, and automation/system runtime events are labeled `THOMAS-AUTO` with distinct magenta styling.
+- Reworked `thomas repl` slash-command UX to follow Codex-style interactive flows: slash commands now run through overlay completion pickers, `/model` uses a dedicated interactive picker (Up/Down + Enter/Esc), optional GPT-5 reasoning-level picker is applied after model selection, and model switches now emit concise status confirmations like `Model set to <id>`.
+- Updated `thomas repl` model-switch confirmation rendering to use a brief transient status flash (`Model set to <id>`) instead of persistent line noise, matching popup-style TUI feedback behavior.
+- Removed numeric picker shortcuts from REPL slash/model selection so interactive navigation is keyboard-driven (`Up`/`Down` + `Enter` + `Esc`) without number-based command/model selection paths.
+- Added an explicit REPL UI state machine (`IDLE -> SLASH_POPUP -> PICKER -> IDLE`) with guarded transitions in `thomas/cli/repl_state.py` and state-scoped picker handling in `thomas/cli/repl.py`.
+- Made REPL picker prompts non-destructive by enabling `erase_when_done` for slash/model/reasoning overlays, so opening/canceling pickers does not leave residual prompt lines in the terminal.
+- Centralized overlay prompt behavior in `thomas/cli/repl.py` via a shared `_prompt_overlay(...)` helper so slash popup, model picker, and reasoning picker all use the same non-destructive render/interaction path.
+- Improved slash popup filtering in `thomas/cli/repl_slash.py` to support ranked command matching (prefix, contains, fuzzy) so typing after `/` shows a filtered command list in the overlay menu without falling back to numeric shortcuts.
+- Added regression coverage to ensure slash popup filtering updates on each keystroke (`/p` -> `/pe` -> `/perm`) and narrows results deterministically.
+- Updated SLASH_POPUP keyboard behavior so pressing Backspace when the filter is just `/` immediately closes the popup and returns to idle input mode (non-destructive cancel path).
+- Added explicit `Tab` behavior in `SLASH_POPUP`: tab now autocompletes the highlighted command token into the input buffer without executing the command.
+- Added a reusable interactive picker component layer in `thomas/cli/repl_picker.py` (`PickerOption`, `PickerCompleter`, `resolve_picker_selection`) and migrated model/reasoning picker flows in `thomas/cli/repl.py` to use it.
+- Added explicit picker scroll affordance via a shared toolbar hint (`↑↓ navigate ... scroll for more`) and standardized visible picker row limits so long command/model lists remain navigable without terminal spam.
+- Improved picker scroll UX by making overlay menu height terminal-aware (adaptive visible rows) and expanding toolbar hints to include visible-capacity context (`showing up to N`).
+- Added fuzzy filtering to slash popup and reusable picker completion paths (`thomas/cli/repl_slash.py`, `thomas/cli/repl_picker.py`) using similarity scoring, while preserving deterministic narrowing for longer command queries.
+- Updated reusable picker metadata to mark active values as `<- current` for overlay menus, so model/reasoning pickers clearly indicate the currently configured selection.
+- Added persistent composer footer keybinding hints in the REPL prompt (`Enter send`, `Ctrl+J newline`, `/ commands`, `// literal slash`) alongside picker-specific footer hints.
+- Enabled picker-scoped alternate-screen rendering for `thomas repl` overlays (configurable via `THOMAS_REPL_ALT_SCREEN=0`): entering a slash/model/reasoning picker now emits DECSET `1049h` and closing/canceling emits `1049l`.
+- Fixed `thomas repl` model and slash picker UX in `thomas/cli/repl.py` so selection stays in the same terminal: removed popup-style `radiolist_dialog`, made `/` open an inline slash picker, and made `/model` use inline arrow-key completion-based selection.
+- Fixed `thomas repl` slash-triggered model switching in `thomas/cli/repl.py`: entering `/` now routes to `/model`, and `/model` now opens an arrow-key model picker dialog so model IDs can be selected interactively instead of requiring numeric entry.
+- Fixed `thomas repl` keyboard handling in `thomas/cli/repl.py` by replacing the `Esc+Enter` multiline binding with `Ctrl+J`, avoiding escape-sequence collisions that could break `ArrowDown` + `Enter` command selection in some Windows terminals.
+- Improved `thomas repl` chat readability in `thomas/cli/repl.py` by rendering explicit `You` and `Assistant` turn panels and showing a single structured assistant response block instead of interleaved token fragments.
+- Fixed `thomas repl` model picker crash in `thomas/cli/repl.py` by replacing `prompt_toolkit` blocking dialog `.run()` with async-safe `.run_async()` to avoid `RuntimeError: asyncio.run() cannot be called from a running event loop`.
+- Fixed CLI default behavior in `thomas/cli/main.py` so running `thomas` with no subcommand launches the interactive REPL in terminal sessions (for example PowerShell), while non-interactive invocations still print help.
+- Fixed model setup selector behavior in `thomas/server/web/js/app_runtime_joined.mjs` and `thomas/server/web/js/app_parts/part-031.js` so async model discovery no longer overwrites in-progress keyboard selection; users can arrow through models/providers and keep the chosen value before applying.
+- Added keyboard-open support for the top model setup trigger (`ArrowDown`, `Enter`, `Space`) and focus handoff to the provider selector so model selection is fully keyboard operable.
+- Web composer slash command UX now mirrors Codex-style inline model switching in `thomas/server/web/js/app_runtime_joined.mjs`: `/model` opens an in-composer keyboard-navigable picker (arrow keys + Enter/Tab), applies the selected profile directly, and persists profile/model preference without routing to the full settings/options modal.
+- Fixed architecture and CSRF audit gate mismatches for release readiness checks by updating `tests/test_server_csrf_audit.py` for the current mutating-route CSRF policy label and adding `thomas/agent/response_tone.py` debt annotation in `thomas/_architecture.py` so `tests/test_architecture.py` no longer blocks on intentional file-size debt.
+- Fixed chat memory preference application in `thomas/server/routes/chat_aiohttp.py` so `/api/chat` now reads effective thread memory settings from `/api/preferences` and disables memory injection/recording when memory is turned off for that thread/global state.
+- Fixed advanced memory toggle behavior by wiring `advanced.memory.include_global_memory` and `advanced.memory.include_profile_memory` into per-run memory policy in `thomas/agent/loop_streaming.py`, so the configurator settings now control runtime retrieval scope consistently.
+- Fixed model setup apply UX in `thomas/server/web/js/app_runtime_joined.mjs` by surfacing `/api/preferences` PATCH failures to the user and keeping the modal open on error instead of silently closing.
+- Fixed `thomas repl` model picker navigation in `thomas/cli/repl.py` so slash/model overlays now support reliable keyboard selection: `Up/Down` opens and moves completion focus, and `Enter` applies the highlighted model before confirming.
+
+### Added (Round 2 — Security & Integration)
+- Added a personal life tracker CLI at `apps/shared/life_tracker/life_tracker.py` with SQLite-backed daily check-ins, habit logging, day views, rolling summaries, and habit streak reporting.
+- Added tracker docs at `apps/shared/life_tracker/README.md` and regression tests in `tests/test_life_tracker_cli.py`.
+- Added **Skills Runtime v2** — secure skill execution engine with 5-layer defense:
+  - `thomas/skills/_manifest.py` — TOML/JSON manifest loading, validation (ID regex, semver, permission sanity)
+  - `thomas/skills/_sandbox.py` — subprocess isolation with `__builtins__.__import__` interception, resource limits (memory/CPU), env whitelist
+  - `thomas/skills/_security.py` — AST-based static analysis detecting 20+ dangerous patterns (eval, exec, subprocess, os.system, obfuscation, network access)
+  - `thomas/skills/_runtime.py` — full lifecycle: install→scan→register→execute→uninstall with persistent registry and execution stats
+- Added **Channel Health API** at `thomas/server/routes/channels_api.py` — 6 REST endpoints (GET /api/channels, GET /api/channels/health, POST connect/disconnect/test, GET /api/channels/{id})
+- Added **Hooks Registry** at `thomas/agent/hooks_registry.py` — central lifecycle hook system with pre_write, post_write, on_message, on_response categories; fire-and-forget with exception isolation
+- Added **Integration Hooks** at `thomas/agent/integration_hooks.py` — wires channels→agent loop, verification→file writes, checkpoints→file writes, guidelines→system prompt
+- Added **Channel CLI** at `thomas/channels/cli.py` — list/add/remove/health/test channel management functions
+- Added **Async Context Manager** to `ChannelAdapter` — `async with adapter:` pattern for safe resource cleanup
+- Added **95 more tests** across `test_skills_runtime.py` (55) and `test_integration_hooks.py` (40)
+
+### Fixed (Round 2)
+- Fixed `/api/session/import` explicit `model` alias validation so unknown model aliases now return HTTP 400; `profile` fallback behavior is preserved for backward-compatible callers.
+- Fixed `secrets_v2.py` silently falling back to plaintext base64 when cryptography not installed — now warns via logging and exposes `is_encrypted` property
+- Fixed event schema type annotation bug in all `EventBase` subclasses — `__post_init__` was comparing against class dict instead of checking field default
+- Fixed voice agent calling undefined `_call_stt`/`_call_tts` methods — added pluggable handler interface with registration
+- Fixed `DeliveryQueue` busy-wait on unavailable channels — now respects max_retries and dead-letters permanently failed deliveries
+- Fixed `worker_pool.py` `run_in_executor()` keyword argument bug — uses `functools.partial` for sync handlers
+
+### Added
+- Added **Channel Adapter Framework** — universal `ChannelAdapter` ABC at `thomas/channels/_base.py` with `ChannelConfig`, `UnifiedMessage`, `DeliveryReceipt`, `ChannelHealth`, and `ChannelAdapterError` types. Thread-safe `ChannelRegistry` for adapter lifecycle, `DeliveryQueue` with exponential backoff retry and dead-letter handling, `ChannelRouter` with allowlists/priorities/multicast, and `MockChannelAdapter` for testing.
+- Added **8 Channel Adapters** — WhatsApp (Meta Cloud API), Discord (Gateway + REST), Signal (signal-cli bridge), iMessage (BlueBubbles), Microsoft Teams (Bot Framework), Google Chat (Service Account JWT), Matrix (Client-Server API), WebChat (Thomas web UI bridge). Each adapter implements connect/disconnect/send/receive/health with platform-specific features.
+- Added **Memory Summarization** at `thomas/memory/summarization.py` — three strategies (COPY, EXTRACTIVE, ABSTRACTIVE), token-budgeted context packing with `ContextBudget`, compression ratio estimation.
+- Added **Post-Edit Verification Pipeline** at `thomas/agent/verification.py` — 5 verifiers (Syntax, Lint, Import, Boot, Diff), composable `VerificationPipeline`, `AutoRemediator` for generating fix prompts from failures.
+- Added **File Checkpoint & Rewind** at `thomas/agent/checkpoints.py` — SQLite-backed checkpoint store with delta storage for large files, create/restore/diff/rewind/prune lifecycle, unified diff output.
+- Added **Explicit Plan Mode** at `thomas/agent/plan_mode.py` — `PlanStep`/`ExecutionPlan` models, `PlanStore` with file persistence, cost estimation, markdown export, swarm-compatible task graph generation.
+- Added **Project-Scoped Guidelines** at `thomas/agent/project_guidelines.py` — `.thomas.md` file discovery up directory tree, section parsing (Rules/Context/Preferences/Tools), multi-file merging with project-first precedence, SHA256 cache invalidation.
+- Added **Secrets Management v2** at `thomas/core/secrets_v2.py` — Fernet encryption with PBKDF2 key derivation, environment-scoped stores (prod/dev/staging), rotate/delete/list operations.
+- Added **Typed Event Schemas** at `thomas/core/event_schemas.py` — 14 typed event types with polymorphic serialization/deserialization, `EventStream` with monotonic sequencing, heartbeat injection, backpressure detection, filtered retrieval.
+- Added **Bidirectional WebSocket Commands** at `thomas/server/routes/ws_commands.py` — 8 command types (PAUSE/RESUME/CANCEL/INJECT/APPROVE/REJECT/SUBSCRIBE/PING) with JSON parsing, validation, and dispatch.
+- Added **Lightweight Worker Pools** at `thomas/agent/worker_pool.py` — async semaphore-based pool with sync/async task support via `functools.partial`, batch submission, timeout handling, result callbacks, graceful shutdown.
+- Added **Voice Agent Mode** at `thomas/voice/agent_mode.py` — state machine (IDLE→LISTENING→PROCESSING→SPEAKING), wake word detection, VAD (energy-based), continuous mode, transcript/state callbacks, speech truncation.
+- Added **325 comprehensive tests** across 5 test files for all gap-closing modules: `test_channel_framework.py` (99), `test_gap_channel_adapters.py` (74), `test_gap_memory_verification.py` (42), `test_gap_plugins.py` (47), `test_gap_remaining_modules.py` (63). All passing.
+- Added **External Skill Adapter** at `thomas/plugins/external_skill_adapter.py` (774 lines) — auto-detect and adapt skills from OpenClaw (SKILL.md, prompt.md, skill.json), CrewAI (agents.yaml, crew.py), LangGraph (langgraph.json, graph.py), AutoGen (OAI_CONFIG_LIST), and generic prompt directories into Thomas-native plugin format. Confidence-scored platform detection, permission auto-extraction, configurable sandbox levels.
+- Added **Platform Scanner** at `thomas/plugins/platform_scanner.py` (720 lines) — browse and import skills from external platform repos (OpenClaw ClawHub, CrewAI examples, LangGraph workflows, GitHub search). One-command import: clone → detect → adapt → install. Includes OpenClaw migration helper (`scan_openclaw_installation`, `bulk_import_from_openclaw`) for users switching platforms.
+- Added **GitHub-Backed Marketplace** at `thomas/plugins/github_marketplace.py` (799 lines) — local plugin store backed by GitHub repos. Browse official registry + GitHub search, one-click download and install, auto-update via commit hash comparison, version pinning, clean uninstall. State tracked in `~/.thomas/plugins/.marketplace_state.json`.
+- Added **Close the Gap Plan** at `plans/thomas/CLOSE_THE_GAP_PLAN.md` — comprehensive 6-phase, 31-gap plan to achieve and surpass OpenClaw feature parity across channels, ecosystem, memory, verification, mobile, and operational polish.
+- Added CLI `runs` command group to expose non-UI run replay and run-inspection workflows (`list`, `show`, `events`, `replay`, `export`).
+
+### Changed
+- Added Codex-style REPL slash-command aliases in `thomas/cli/repl.py` so shorthand commands map to existing handlers (`/m`, `/a`, `/h`, `/q`, `/c`, `/st`, `/perm`, `/t`, `/mem`, `/models`, `/cls`) and are discoverable via completion/help.
+- Updated REPL command completion in `thomas/cli/repl.py` to show slash-command suggestions while typing (`/` opens the menu immediately, then filters as more characters are entered).
+- Registered `runs` command group in `thomas` CLI entrypoint and added CLI regression coverage for run command discovery and endpoint payload behavior.
+- Captured a persistent task-ecosystem conduct preference for Autonomy L4 execution (`scripts/workboard_task_manager.py --capture-preference`) so default orchestration favors execute-now behavior with minimal clarification loops.
+- Added `docs/ops/AUTONOMY_L4_EXECUTION_PROFILE.md` and indexed it in `PROJECT_INDEX.md` to codify high-autonomy defaults, assumption handling, and escalation boundaries.
+- Updated `scripts/agent_bootstrap_claim.py` to default non-task-manager agents to parent mode and auto-dispatch worker lanes during bootstrap unless disabled.
+- Tightened agent orchestration defaults so bootstrap auto-dispatch keeps worker flow moving (`dispatch-target-workers` defaults to a handful and READY workers are released by default) and protocol docs now require explicit continuation when staying on a task past completion.
+- Clamped bootstrap fanout with a hard minimum (at least 2 workers) and added explicit handoff-intent output so non-JSON bootstrap runs show when completion-to-next-task behavior is active.
+- Mirrored the fanout floor in manual `workboard_claim --dispatch-workers`: active worker target is clamped to at least 2 and parser help now states the minimum.
+- Made non-task-manager first-pass orchestration behavior mandatory in `AGENTS.md` and `TASK_ECOSYSTEM_PROTOCOL.md`: bootstrap claim + automatic dispatch is now the default lane-start protocol.
+- Updated `/api/chat` routing to be conversation-first in `thomas/server/routes/chat_aiohttp.py`: normal turns use direct `AgentLoop`, explicit `mode=swarm`/`orchestrator_only=true` uses swarm, and L4 task-like requests auto-route to swarm.
+- Updated chat runtime wiring in `thomas/server/routes/chat_aiohttp.py` to restore batch handling, direct `AgentLoop` streaming, advanced runtime/failover quality overrides, and model request override propagation (frequency/presence penalties, JSON mode, seed, stop sequences).
+- Updated orchestrator routing docs/tests for the new behavior (`PROJECT_INDEX.md`, `tests/test_server_orchestrator_only_mode.py`).
+- Extended `scripts/agent_bootstrap_claim.py` so worker-role claims can start the persistent worker execution loop (`workboard_worker.py --cycles 0`) automatically after bootstrap so workers continue task-to-task execution without manual restarts.
+- Extended `scripts/agent_bootstrap_claim.py` so when `task-manager-agent` is unclaimed, bootstrap now claims the task-manager position and starts a persistent `workboard_task_manager.py --monitor --apply --cycles 0` loop automatically (unless `--no-run-task-manager-loop` is set).
+- Hardened task-manager bootstrap orchestration in `scripts/agent_bootstrap_claim.py` to fail fast when claim/loop prerequisites are missing, capture non-JSON telemetry (`task_manager_bootstrapped`, loop `pid`, loop error) and keep worker auto-spawn non-blocking for long-lived parent/task-manager modes.
+
+### Fixed
+- Fixed REPL slash-command handling in `thomas/cli/repl.py` so command completion and dispatch only trigger for recognized leading `/...` commands; unknown slash-prefixed input now falls through to normal chat instead of being hijacked.
+- Hardened Codex bridge stdout parsing in `thomas/codex/bridge.py` by raising the subprocess stream read limit (configurable via `THOMAS_CODEX_STDOUT_LIMIT_BYTES`) and recovering from oversized line overruns instead of repeatedly failing the read loop with `chunk is longer than limit`.
+- Simplified `runs replay` transport by using deterministic event-fetch and replay-stream parsing paths with typed fallback behavior.
+- Resolved architecture dependency-direction drift by declaring `thomas.tools` dependencies for modules with `tools.py` adapters, adding missing `cli` edges to `library`/`observability`, and removing static cross-module imports in `thomas/system/config_validator.py` and `thomas/observability/focus_scorecard.py`.
+- Hardened secret handling in CLI diagnostics and logs by redacting secrets before emitting diagnostic JSON and log lines in `thomas/cli`.
+- Wired default `benchmark_evidence_globs` and `benchmark_aliases` for the `thomas` and `openclaw` competitor catalog entries so benchmark suites can score required families consistently.
+
+## [0.14.30] - 2026-03-01
+
+### Added
+- Added `scripts/package_release.py` to produce a user-facing GitHub release bundle with sensitive-path filtering and license notice generation.
+- Added `LICENSE` (MIT) for clear project attribution and included legal attribution output in release bundles.
+
+### Changed
+- Bumped release metadata to `0.14.30` (`pyproject.toml`, `thomas/__init__.py`) to reflect release-preparation behavior updates.
+
+## [0.14.5] - 2026-02-27
+
+### Changed
+- Enforced specialist orchestration as the default and only `/api/chat` execution path in `thomas/server/routes/chat_aiohttp.py`; chat mode is now always clamped to `swarm` and direct `AgentLoop` execution fallback was removed.
+- Updated chat route concurrency behavior to return `409` on overlapping same-session requests instead of queueing interrupts for a direct single-agent run path.
+- Updated orchestrator route docs/tests to match the mandatory specialist path (`PROJECT_INDEX.md`, `tests/test_server_orchestrator_only_mode.py`, `tests/test_server_session_locking.py`).
+
+### Fixed
+- Added regression coverage to assert that simple greetings still route through swarm specialists and that missing swarm responses fail fast with HTTP 500.
+
+## [0.14.2] - 2026-02-27
+
+### Changed
+- Agent: routed guardrail tool execution to honor a per-run no-human override.
+- Tool execution now auto-selects no-human `"allow"` for autonomy level 4+, preventing human approval prompts during full-autonomy loops.
+- Added focused tests to validate `GuardedToolRunner` mode overrides and autonomy-based forwarding behavior.
+
+### Fixed
+- Added regression coverage for guardrail event/approval behavior when no-human mode is switched between `"allow"`, `"deny"`, and `"human"`.
+
+## [0.14.1] - 2026-02-27
+
+### Added
+- Added no-human mode controls for approval decisions using `THOMAS_AUTONOMY_NO_HUMAN_MODE`, `THOMAS_NO_HUMAN_MODE`, and `THOMAS_GUARDRAILS_NO_HUMAN_MODE`.
+- Added no-human automation coverage in autonomy engine/workflow execution paths and approval resolution endpoint parsing.
+
+### Changed
+- Updated autonomy policy decisioning to auto-approve `approve`-mode jobs in no-human allow mode and hard-deny them in no-human deny mode.
+- Workflow chain runner now reads and enforces the same no-human mode behavior for approval-gated steps.
+
+### Fixed
+- Hardened approval endpoints against inconsistent payload shapes by normalizing decision parsing in both mission and guardrails approval handlers.
+
 ## [0.14.0] - 2026-02-26
 
 ### Changed
@@ -161,11 +338,6 @@ Versioning: Semantic Versioning.
 - Fixed 5 bare `except Exception:` handlers in `thomas/agent/loop.py` — replaced with specific `(ValueError, TypeError)` catches for config parsing. Reviewed and documented 19 legitimate broad catches.
 - Fixed 4 bare `except Exception:` handlers in `thomas/core/llm.py` — replaced with specific types (`ValueError`, `AttributeError`, `TypeError`). Added `asyncio.CancelledError` re-raise in `stream_chat()`. Added tiered exception handling (LLMError → network errors → generic).
 - Fixed 49 bare `except Exception:` handlers in `thomas/server/app.py` — replaced with specific exception types across imports, startup, routes, utilities, chat, and process management. Reviewed exception_logger middleware as legitimate last-resort boundary.
-
-## [Unreleased]
-
-### Fixed
-- Fixed architecture and CSRF audit gate mismatches for release readiness checks by updating `tests/test_server_csrf_audit.py` for the current mutating-route CSRF policy label and adding `thomas/agent/response_tone.py` debt annotation in `thomas/_architecture.py` so `tests/test_architecture.py` no longer blocks on intentional file-size debt.
 
 ## [0.11.90] - 2026-02-26
 

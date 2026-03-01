@@ -149,7 +149,7 @@ def _resolve_discord_bot_token(explicit: str | None) -> str:
     # Best-effort Thomas config lookup if available (no hard dependency).
     try:
         from thomas.config import load_config  # type: ignore
-    except (json.JSONDecodeError, ValueError, KeyError):
+    except ImportError:
         load_config = None  # type: ignore
 
     if load_config is not None:
@@ -158,7 +158,7 @@ def _resolve_discord_bot_token(explicit: str | None) -> str:
             tok = _dig_for_token(cfg)
             if tok:
                 return tok
-        except (json.JSONDecodeError, ValueError, KeyError):
+        except Exception:
             pass
 
     raise MissingMessageRoleConfig(

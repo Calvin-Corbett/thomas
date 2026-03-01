@@ -46,7 +46,7 @@ def _norm(value: str) -> str:
 
 
 def _is_task_manager_agent(agent: str) -> bool:
-    return _norm(agent) in {"task-manager-agent", "task-manager"}
+    return _norm(agent) in {"thomas", "task-manager-agent", "task-manager"}
 
 
 def _now_iso() -> str:

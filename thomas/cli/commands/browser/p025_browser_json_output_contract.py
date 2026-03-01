@@ -160,11 +160,22 @@ def attach_json_output_options(command: Any) -> bool:  # noqa: ANN401
 
 
 def _iter_click_command_tree(root: Any):  # noqa: ANN401
-    yield root
-    commands = getattr(root, "commands", None)
-    if isinstance(commands, dict):
-        for child in commands.values():
-            yield from _iter_click_command_tree(child)
+    stack = [root]
+    seen_ids: set[int] = set()
+
+    while stack:
+        node = stack.pop()
+        node_id = id(node)
+        if node_id in seen_ids:
+            continue
+        seen_ids.add(node_id)
+        yield node
+
+        commands = getattr(node, "commands", None)
+        if isinstance(commands, dict):
+            for child in commands.values():
+                if child is not None:
+                    stack.append(child)
 
 
 def _decode_text_or_base64(raw: bytes) -> tuple[str, str | None]:

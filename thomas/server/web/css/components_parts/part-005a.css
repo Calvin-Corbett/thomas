@@ -314,10 +314,11 @@
 /* ── Chat Robot Status (replaces typing + thinking + tool indicators) ── */
 .chat-robot-status {
     display: flex;
-    align-items: center;
+    align-items: flex-start;
     gap: 10px;
     padding: 6px 0;
-    min-height: 28px;
+    min-height: 30px;
+    width: 100%;
     flex-wrap: wrap; /* allow thinking-details to drop to next line */
 }
 .chat-robot-status.chat-robot-status-staging .chat-robot-portal-wrap {
@@ -414,6 +415,10 @@
     height: 22px;
     flex-shrink: 0;
 }
+.chat-robot-text-wrap {
+    min-width: 0;
+    width: calc(100% - 34px);
+}
 .chat-robot-agent-step {
     position: absolute;
     left: 0;
@@ -491,9 +496,6 @@
 }
 
 /* ── Thinking Dropdown (inline in robot status) ── */
-.chat-robot-status {
-    flex-wrap: wrap;  /* allow details to wrap below */
-}
 .chat-robot-saying-row {
     display: inline-flex;
     align-items: center;

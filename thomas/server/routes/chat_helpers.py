@@ -5,9 +5,13 @@ from __future__ import annotations
 import contextlib
 import logging
 import os
+import asyncio
 import re
+import inspect
+from collections.abc import AsyncIterator
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any
 
 try:
@@ -18,16 +22,13 @@ from aiohttp import web
 
 from thomas.core.config import AppConfig
 from thomas.core.llm import LLMClient
-from thomas.server.app_keys import APP_CHAT_AUTOPILOT_LAST_BY_GOAL, APP_CONFIG
+from thomas.server.app_keys import (
+    APP_CHAT_AUTOPILOT_LAST_BY_GOAL,
+    APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK,
+    APP_CONFIG,
+)
 
 log = logging.getLogger(__name__)
-
-
-def _env_flag(name: str, default: bool = False) -> bool:
-    raw = os.environ.get(name)
-    if raw is None:
-        return default
-    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
 
 
 _CHAT_AUTOPILOT_INTENT_RE = re.compile(
@@ -38,8 +39,39 @@ _CHAT_AUTOPILOT_ACTION_RE = re.compile(
     r"\b(build|ship|fix|monitor|manage|orchestrate|maintain|improve|optimize|triage|track|watch|automate)\b",
     re.IGNORECASE,
 )
+_SPECIALIST_PROMPT_DIR = Path(__file__).resolve().parents[2] / "specialists" / "prompts"
+_SPECIALIST_PROMPT_CACHE: dict[str, str] = {}
 _CHAT_AUTOPILOT_MIN_COOLDOWN_S = 15 * 60
 _CHAT_AUTOPILOT_MAX_TRACKED_GOALS = 512
+
+
+def _load_specialist_prompt(agent_id: str, default_prompt: str) -> str:
+    key = str(agent_id or "").strip().lower()
+    if not key:
+        return str(default_prompt or "").strip()
+    if key in _SPECIALIST_PROMPT_CACHE:
+        return _SPECIALIST_PROMPT_CACHE[key] or str(default_prompt or "").strip()
+    for filename in (f"{key}.md", f"{key}.txt"):
+        path = _SPECIALIST_PROMPT_DIR / filename
+        if path.is_file():
+            try:
+                content = path.read_text(encoding="utf-8", errors="replace").strip()
+            except Exception:
+                content = ""
+            if content:
+                _SPECIALIST_PROMPT_CACHE[key] = content
+                return content
+    _SPECIALIST_PROMPT_CACHE[key] = ""
+    return str(default_prompt or "").strip()
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 
 
 def _chat_autopilot_should_auto_start(text_raw: Any) -> bool:
@@ -51,6 +83,15 @@ def _chat_autopilot_should_auto_start(text_raw: Any) -> bool:
     if not _CHAT_AUTOPILOT_ACTION_RE.search(text):
         return False
     return True
+
+
+def _chat_autopilot_goal_cache(request: web.Request) -> dict[str, float]:
+    cache_raw = request.app.get(APP_CHAT_AUTOPILOT_LAST_BY_GOAL)
+    if isinstance(cache_raw, dict):
+        return cache_raw
+    cache: dict[str, float] = {}
+    request.app[APP_CHAT_AUTOPILOT_LAST_BY_GOAL] = cache
+    return cache
 
 
 def _chat_autopilot_goal_from_prompt(text_raw: Any) -> str:
@@ -159,26 +200,50 @@ async def maybe_auto_start_autopilot_from_chat(
 
     now_s = float(time.time())
     cooldown_s = int(_CHAT_AUTOPILOT_MIN_COOLDOWN_S)
-    cache_raw = request.app.get(APP_CHAT_AUTOPILOT_LAST_BY_GOAL)
-    cache: dict[str, float] = cache_raw if isinstance(cache_raw, dict) else {}
+    cache_lock = request.app.get(APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK)
+    lock = cache_lock if isinstance(cache_lock, asyncio.Lock) else None
 
-    try:
-        last_s = float(cache.get(goal_key) or 0.0)
-    except Exception:
-        last_s = 0.0
-    if last_s > 0.0 and (now_s - last_s) < float(cooldown_s):
-        return
-
-    store = request.app.get("autonomy_store")
-    if store is not None and _chat_autopilot_recent_goal_exists(
-        store,
-        goal_key=goal_key,
-        now_s=now_s,
-        cooldown_s=cooldown_s,
-    ):
+    if lock is not None:
+        async with lock:
+            cache = _chat_autopilot_goal_cache(request)
+            try:
+                last_s = float(cache.get(goal_key) or 0.0)
+            except Exception:
+                last_s = 0.0
+            if last_s > 0.0 and (now_s - last_s) < float(cooldown_s):
+                return
+            store = request.app.get("autonomy_store")
+            if store is not None and _chat_autopilot_recent_goal_exists(
+                store,
+                goal_key=goal_key,
+                now_s=now_s,
+                cooldown_s=cooldown_s,
+            ):
+                cache[goal_key] = now_s
+                _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
+                return
+            cache[goal_key] = now_s
+            _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
+    else:
+        cache = _chat_autopilot_goal_cache(request)
+        try:
+            last_s = float(cache.get(goal_key) or 0.0)
+        except Exception:
+            last_s = 0.0
+        if last_s > 0.0 and (now_s - last_s) < float(cooldown_s):
+            return
+        store = request.app.get("autonomy_store")
+        if store is not None and _chat_autopilot_recent_goal_exists(
+            store,
+            goal_key=goal_key,
+            now_s=now_s,
+            cooldown_s=cooldown_s,
+        ):
+            cache[goal_key] = now_s
+            _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
+            return
         cache[goal_key] = now_s
         _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
-        return
 
     body: dict[str, Any] = {
         "goal": goal,
@@ -233,16 +298,39 @@ async def maybe_auto_start_autopilot_from_chat(
         headers["Authorization"] = f"Bearer {api_token}"
 
     timeout = httpx.Timeout(connect=1.0, read=2.0, write=2.0, pool=2.0)
+    started = False
     for endpoint in endpoints:
         try:
             async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(endpoint, headers=headers, json=body)
-            if resp.status_code < 400:
-                cache[goal_key] = now_s
-                _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
-                return
+                if resp.status_code < 400:
+                    started = True
+                    return
         except Exception as exc:
             log.debug("chat autopilot auto-start request failed (%s): %s", endpoint, exc)
+
+    if not started and lock is not None:
+        async with lock:
+            cache = _chat_autopilot_goal_cache(request)
+            try:
+                cache_time = float(cache.get(goal_key) or 0.0)
+            except Exception:
+                cache_time = 0.0
+            if cache_time == now_s:
+                cache.pop(goal_key, None)
+                _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
+                return
+    elif not started:
+        cache = _chat_autopilot_goal_cache(request)
+        try:
+            cache_time = float(cache.get(goal_key) or 0.0)
+        except Exception:
+            cache_time = 0.0
+        if cache_time == now_s:
+            cache.pop(goal_key, None)
+            _chat_autopilot_prune_goal_cache(cache, now_s=now_s)
+
+    return
 
 
 def _normalize_usage_payload(payload: Any) -> dict[str, int]:
@@ -361,8 +449,24 @@ class _LLMSwarmSubagent:
                 {"role": "system", "content": self._system_hint},
                 {"role": "user", "content": user_prompt},
             ]
+            stream_obj = llm.stream_chat(messages, tools=None)
+            try:
+                stream_obj = await _coerce_async_iterator(stream_obj, source="LLMClient.stream_chat")
+            except TypeError as stream_err:
+                return TaskResult(
+                    ok=False,
+                    error=f"LLM stream conversion failed: {stream_err}",
+                    output="".join(chunks),
+                )
 
-            async for ev in llm.stream_chat(messages, tools=None):
+            if not isinstance(stream_obj, AsyncIterator):
+                return TaskResult(
+                    ok=False,
+                    error=f"LLM stream returned unsupported type {type(stream_obj)!r}",
+                    output="".join(chunks),
+                )
+
+            async for ev in stream_obj:
                 if cancel_event.is_set():
                     return TaskResult(ok=False, error="cancelled", output="".join(chunks))
                 if ev.type == "token":
@@ -381,3 +485,14 @@ class _LLMSwarmSubagent:
                 await llm.close()
             except Exception as llm_close_err:
                 log.warning("LLM client close failed: %s", llm_close_err)
+
+
+async def _coerce_async_iterator(value: Any, *, source: str) -> AsyncIterator[Any]:
+    if isinstance(value, AsyncIterator):
+        return value
+    if inspect.isawaitable(value):
+        resolved = await value
+        if isinstance(resolved, AsyncIterator):
+            return resolved
+        raise TypeError(f"{source} returned {type(resolved)!r} after await, not an async iterator.")
+    raise TypeError(f"{source} returned unsupported type {type(value)!r}; expected async iterator.")

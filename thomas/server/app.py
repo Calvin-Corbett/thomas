@@ -33,7 +33,7 @@ from collections import OrderedDict, deque
 from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from thomas import __version__ as THOMAS_VERSION
@@ -56,6 +56,7 @@ from thomas.server.app_keys import (
     APP_CRASH_COUNT,
     APP_DIAGNOSTICS,
     APP_ENGINE_MANAGER,
+    APP_APPROVALS_BROKER,
     APP_GUARDED_TOOL_RUNNER,
     APP_GUARDRAILS_CTX,
     APP_GUARDRAILS_ENABLED,
@@ -75,6 +76,7 @@ from thomas.server.app_keys import (
     APP_SHUTDOWN_EVENT,
     APP_TASK_LEDGER,
     APP_TOOLS,
+    APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK,
 )
 from thomas.server.secrets import SecretStore
 from thomas.server.tool_extensions import register_all_optional_tools
@@ -86,7 +88,39 @@ from thomas.tools.registry import ToolRegistry
 from thomas.tools.shell import register_shell_tools
 from thomas.tools.ssh import register_ssh_tools
 
+if TYPE_CHECKING:
+    from aiohttp import web
+
 log = logging.getLogger(__name__)
+
+_BEARER_TOKEN_RE = re.compile(r"^Bearer\s+([^\s]+)\s*$", re.IGNORECASE)
+
+try:
+    from thomas.server.routes.chat_aiohttp import AgentLoop as _DEFAULT_APP_AGENT_LOOP
+except Exception:  # pragma: no cover
+    from thomas.agent.loop import AgentLoop as _DEFAULT_APP_AGENT_LOOP
+
+AgentLoop = _DEFAULT_APP_AGENT_LOOP
+
+try:
+    from thomas.models.capabilities import supports as model_supports
+except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
+    def model_supports(*_args, **_kwargs):
+        return False
+
+try:
+    from thomas.models.chat_controls import resolve_ui_control_request
+except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
+    def resolve_ui_control_request(*_args, **_kwargs):
+        return None
+
+try:
+    from thomas.server.chat_control_mode import handle_ui_control_chat
+except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
+    from aiohttp import web
+
+    async def handle_ui_control_chat(request: web.Request, **_kwargs):
+        raise web.HTTPInternalServerError(text="ui control handler unavailable")
 
 try:
     from thomas.memory.autonomy import AutonomyMemoryEngine
@@ -99,6 +133,13 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+class _FallbackSecretStore:
+    """Graceful fallback when SecretStore initialization is unavailable."""
+
+    def get(self, _key: str, default: str | None = None) -> str | None:
+        return default
 
 
 def _appkey_identity(key: Any) -> str:
@@ -156,7 +197,7 @@ def _resolve_runtime_config(app: web.Application) -> AppConfig:
     return cfg
 
 
-# ── chat autopilot helpers, swarm subagent, etc. extracted → routes/chat_aiohttp.py ──
+# ── chat autopilot helpers and control handlers extracted → routes/chat_aiohttp.py ──
 
 
 def _runtime_guard_iso_now() -> str:
@@ -409,7 +450,7 @@ def _build_memory(config: AppConfig):
         )
         engine.start()
         return engine
-    except (OSError, RuntimeError, ValueError) as e:
+    except Exception as e:
         log.warning("Memory engine failed to start: %s", e)
         return None
 
@@ -435,7 +476,12 @@ def create_app(config: AppConfig | None = None):
     app[APP_CONFIG] = config
     app[APP_TOOLS] = _build_tools(config)
     app[APP_MEMORY] = _build_memory(config)
-    app[APP_SECRETS] = SecretStore(config.memory.root_path / ".thomas")
+    try:
+        app[APP_SECRETS] = SecretStore(config.memory.root_path / ".thomas")
+    except Exception as secret_exc:
+        log.warning("SecretStore initialization failed: %s", secret_exc)
+        app[APP_SECRETS] = _FallbackSecretStore()
+    app[APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK] = asyncio.Lock()
     app[APP_SESSIONS] = {}
     app[APP_SESSION_LOCKS] = OrderedDict()  # LRU-evicted in _session_lock_for
     app[APP_SESSION_LOCKS_LOCK] = asyncio.Lock()
@@ -548,6 +594,8 @@ def create_app(config: AppConfig | None = None):
         from thomas.server.guardrails_api import install_guardrails_routes
 
         policy_cfg = load_policy_config(str(config.memory.root_path))
+        if "THOMAS_NO_HUMAN_MODE" not in os.environ and "THOMAS_GUARDRAILS_NO_HUMAN_MODE" not in os.environ:
+            os.environ["THOMAS_NO_HUMAN_MODE"] = policy_cfg.guardrails.no_human_mode
 
         # Wire AdvancedToolsPrefs boolean toggles into policy deny_groups.
         try:
@@ -591,10 +639,12 @@ def create_app(config: AppConfig | None = None):
             redactor=redactor,
             audit=audit,
             approval_timeout_s=policy_cfg.guardrails.approval_timeout_s,
+            no_human_mode=policy_cfg.guardrails.no_human_mode,
         )
         install_guardrails_routes(app, approvals)
         app[APP_GUARDRAILS_ENABLED] = bool(policy_cfg.guardrails.enabled)
         app[APP_GUARDED_TOOL_RUNNER] = guarded_runner
+        app[APP_APPROVALS_BROKER] = approvals
         app[APP_GUARDRAILS_CTX] = {
             "config": policy_cfg,
             "approvals": approvals,
@@ -602,6 +652,7 @@ def create_app(config: AppConfig | None = None):
             "audit": audit,
             "policy": policy,
         }
+        app["approvals"] = approvals
     except (ImportError, ModuleNotFoundError, RuntimeError, ValueError, OSError) as e:
         log.warning("Guardrails unavailable: %s", e)
     _diagnostics["guardrails"] = app.get(APP_GUARDRAILS_ENABLED, False)
@@ -645,18 +696,6 @@ def create_app(config: AppConfig | None = None):
     except (ImportError, ModuleNotFoundError, RuntimeError, OSError) as e:
         log.warning("Background engines unavailable: %s", e)
     _diagnostics["engines"] = app.get(APP_ENGINE_MANAGER) is not None
-
-    # Optional: swarm cancellation endpoint
-    try:
-        from thomas.server.swarm_mode import handle_cancel as swarm_cancel_handler
-
-        async def _swarm_cancel_handler(request: web.Request) -> web.Response:
-            _require_api_access(request)
-            return await swarm_cancel_handler(request)
-
-        app.router.add_post("/api/runs/{run_id}/cancel", _swarm_cancel_handler)
-    except (ImportError, ModuleNotFoundError, RuntimeError) as e:
-        log.warning("Swarm cancel endpoint unavailable: %s", e)
 
     # ── Store diagnostics + health endpoint ──
     _diagnostics["memory"] = app[APP_MEMORY] is not None
@@ -744,7 +783,7 @@ def create_app(config: AppConfig | None = None):
         is_prod = bool(getattr(cfg, "is_production", False))
 
         if request.method == "GET":
-            if request.path in {"/", "/mission", "/settings", "/companion"}:
+            if request.path in {"/", "/mission", "/settings", "/companion", "/landing"}:
                 resp.headers.setdefault("Cache-Control", "no-store")
                 resp.headers.setdefault("Pragma", "no-cache")
                 resp.headers.setdefault("Expires", "0")
@@ -771,10 +810,17 @@ def create_app(config: AppConfig | None = None):
             return False
 
     def _extract_request_token(request: web.Request) -> str:
-        auth = str(request.headers.get("Authorization") or "")
-        if auth.lower().startswith("bearer "):
-            return auth.split(" ", 1)[1].strip()
-        return str(request.headers.get("X-Api-Token") or "").strip()
+        auth = str(request.headers.get("Authorization") or "").strip()
+        if auth:
+            match = _BEARER_TOKEN_RE.match(auth)
+            if not match:
+                return ""
+            return match.group(1)
+
+        token = str(request.headers.get("X-Api-Token") or "").strip()
+        if not token or any(ch.isspace() for ch in token):
+            return ""
+        return token
 
     rate_limit_state: dict[str, deque[float]] = {}
     rate_limit_lock = asyncio.Lock()
@@ -1390,6 +1436,20 @@ def create_app(config: AppConfig | None = None):
         except (OSError, UnicodeDecodeError):
             return web.FileResponse(web_dir / "companion.html")
 
+    async def landing(request: web.Request) -> web.StreamResponse:
+        landing_path = web_dir / "landing.html"
+        if not landing_path.exists():
+            raise web.HTTPNotFound(text="Landing page not found")
+        try:
+            html = landing_path.read_text(encoding="utf-8", errors="replace")
+            return web.Response(
+                text=html,
+                content_type="text/html",
+                headers={"Cache-Control": "no-store"},
+            )
+        except (OSError, UnicodeDecodeError):
+            return web.FileResponse(landing_path)
+
     # ── models/profiles/version routes extracted → routes/models_aiohttp.py ──
 
     # ── setup/diagnostics/local-pull routes extracted → routes/setup_aiohttp.py ──
@@ -1586,6 +1646,7 @@ def create_app(config: AppConfig | None = None):
         read_json=_read_json,
         task_ledger_update=_task_ledger_update,
     )
+    # ── Chat V1 remains the active /api/chat handler for stable behavior.
     register_chat_routes(
         app,
         deps=ChatRouteDeps(
@@ -1604,6 +1665,20 @@ def create_app(config: AppConfig | None = None):
             build_tools=_build_tools,
         ),
     )
+    try:
+        from thomas.server.routes.chat_v2 import register_chat_v2_routes
+
+        register_chat_v2_routes(
+            app,
+            config=app.get(APP_CONFIG),
+            llm=None,  # Specialists manage their own LLM calls
+            memory=app.get(APP_MEMORY),
+            tools=app.get(APP_TOOLS),
+            chat_store_dir=None,  # Uses default .thomas/sessions_v2
+        )
+    except Exception as exc:
+        log.debug("Chat V2 session routes unavailable; V1 chat handler remains active: %s", exc)
+
     register_preferences_routes(app, require_api_access=_require_api_access, read_json=_read_json)
     from thomas.server.routes.spend import register_spend_routes
 
@@ -1614,7 +1689,11 @@ def create_app(config: AppConfig | None = None):
     from thomas.server.routes.search import register_search_routes
 
     register_search_routes(app, require_api_access=_require_api_access)
-    register_asset_studio_routes(app, require_api_access=_require_api_access, read_json=_read_json)
+    try:
+        register_asset_studio_routes(app, require_api_access=_require_api_access, read_json=_read_json)
+    except Exception as _asset_exc:
+        log.warning("Asset studio routes unavailable: %s", _asset_exc)
+        _diagnostics["asset_studio"] = False
     register_ui_engine_routes(app, require_api_access=_require_api_access, read_json=_read_json)
     register_engine_actions_routes(
         app,

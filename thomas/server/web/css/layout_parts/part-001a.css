@@ -493,13 +493,13 @@
 
 .chat-container {
     width: 100%;
-    max-width: 800px;
+    max-width: 720px;
     margin: 0 auto;
     padding: var(--space-8) var(--space-5);
     display: flex;
     flex-direction: column;
     gap: var(--space-6);
-    padding-bottom: max(200px, var(--composer-offset, 200px));
+    padding-bottom: calc(max(200px, var(--composer-offset, 200px)) + env(safe-area-inset-bottom));
     /* Keep latest messages visible above the absolute composer, even as it grows. */
 }
 
@@ -546,7 +546,7 @@
 
 .composer-inner {
     width: 100%;
-    max-width: 800px;
+    max-width: 720px;
     padding: 0 var(--space-5);
 }
 
@@ -566,15 +566,79 @@
     align-items: center;
     justify-content: center;
     width: 100%;
+    animation: welcomeFadeIn 0.5s ease-out;
+}
+
+@keyframes welcomeFadeIn {
+    from { opacity: 0; transform: translateY(12px); }
+    to   { opacity: 1; transform: translateY(0); }
 }
 
 .welcome-title {
-    font-size: 24px;
-    font-weight: 600;
+    font-size: 32px;
+    font-weight: 700;
     color: var(--text-primary);
-    margin-bottom: var(--space-8);
+    margin-bottom: var(--space-2);
+    letter-spacing: -0.02em;
 }
 
+.welcome-subtitle {
+    font-size: 16px;
+    color: var(--text-secondary);
+    margin-bottom: var(--space-8);
+    font-weight: 400;
+}
+
+.welcome-cards {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: var(--space-3);
+    max-width: 520px;
+    width: 100%;
+    padding: 0 var(--space-4);
+}
+
+.welcome-card {
+    background: var(--bg-surface);
+    border: 1px solid var(--border-light);
+    padding: var(--space-4);
+    border-radius: var(--radius-xl);
+    color: var(--text-secondary);
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    transition: all 0.2s;
+    text-align: left;
+}
+
+.welcome-card i {
+    font-size: 22px;
+    color: var(--accent, #6366f1);
+    margin-bottom: var(--space-1);
+}
+
+.welcome-card-title {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.welcome-card-desc {
+    font-size: 12px;
+    color: var(--text-tertiary, var(--text-secondary));
+    line-height: 1.4;
+}
+
+.welcome-card:hover {
+    background: var(--bg-surface-hover);
+    border-color: var(--accent, #6366f1);
+    transform: translateY(-1px);
+}
+
+/* Keep old suggestion-chip styles for assistant inline suggestions */
 .welcome-suggestions {
     display: flex;
     gap: var(--space-3);
@@ -597,6 +661,43 @@
 .suggestion-chip:hover {
     background: var(--bg-surface-hover);
     color: var(--text-primary);
+}
+
+@media (max-width: 480px) {
+    .welcome-cards {
+        grid-template-columns: 1fr;
+    }
+    .welcome-title {
+        font-size: 26px;
+    }
+}
+
+/* ── Mobile: Sidebar collapses, chat fills screen ── */
+@media (max-width: 760px) {
+    .sidebar {
+        position: fixed;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        z-index: 100;
+        transform: translateX(-100%);
+        transition: transform 0.25s ease;
+    }
+    .sidebar:not(.collapsed) {
+        transform: translateX(0);
+        box-shadow: 4px 0 24px rgba(0,0,0,0.5);
+    }
+    .main-content {
+        flex: 1;
+        width: 100% !important;
+    }
+    .composer-area {
+        padding-left: 8px;
+        padding-right: 8px;
+    }
+    .sidebar-toggle {
+        display: flex !important;
+    }
 }
 
 .office-workspace {

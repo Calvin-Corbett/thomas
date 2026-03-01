@@ -10,9 +10,12 @@ Provides:
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 import re
+import threading
+import time
 from typing import TYPE_CHECKING, Any
 
 from thomas.agent.prompt_templates import (
@@ -40,6 +43,34 @@ def _should_preserve_context(agent: AgentLoop) -> bool:
     return mode in {"continuous", "persistent", "high_context", "chatty"}
 
 
+def validate_memory_relevance(query: str, memory_text: str) -> float:
+    """
+    Check relevance between query and retrieved memory using token overlap.
+
+    Returns a relevance score from 0.0 to 1.0.
+    If score < 0.1, the memory is likely irrelevant and should be discarded.
+    """
+    if not query or not memory_text:
+        return 0.0
+
+    # Normalize: lowercase and extract word tokens
+    query_tokens = set(re.findall(r"\b\w+\b", query.lower()))
+    memory_tokens = set(re.findall(r"\b\w+\b", memory_text.lower()))
+
+    if not query_tokens or not memory_tokens:
+        return 0.0
+
+    # Calculate Jaccard similarity (intersection over union)
+    intersection = len(query_tokens & memory_tokens)
+    union = len(query_tokens | memory_tokens)
+
+    if union == 0:
+        return 0.0
+
+    relevance_score = intersection / union
+    return relevance_score
+
+
 def retrieve_memory(
     agent: AgentLoop,
     prompt: str,
@@ -47,22 +78,71 @@ def retrieve_memory(
     *,
     budget_override: int | None = None,
 ) -> str:
-    """Retrieve memory context for the prompt (if memory engine available)."""
+    """Retrieve memory context for the prompt (if memory engine available).
+
+    Returns the memory context text, or a warning message if retrieval fails or memory is empty/irrelevant.
+    Includes timing information to detect slow memory operations.
+    """
     if agent._memory is None or not agent._memory.started:
         return ""
+
+    start_time = time.time()
     try:
         budget = max(300, int(budget_override or agent.config.memory.context_budget))
         query_thread: str | None = None if agent._memory_retrieval_scope == "all" else agent._thread_id
-        ctx = agent._memory.retrieve(
-            query=prompt,
-            thread=query_thread,
-            budget=budget,
-            mode=mode,
-        )
-        return ctx.text
-    except Exception as e:  # REVIEWED: log-and-continue — optional feature, fallback to empty
-        log.warning("Memory retrieval failed: %s", e)
-        return ""
+
+        # Retrieve memory with timeout protection
+        result_container = [None]
+        exception_container = [None]
+
+        def _do_retrieve():
+            try:
+                result_container[0] = agent._memory.retrieve(
+                    query=prompt,
+                    thread=query_thread,
+                    budget=budget,
+                    mode=mode,
+                )
+            except Exception as e:
+                exception_container[0] = e
+
+        retrieval_thread = threading.Thread(target=_do_retrieve, daemon=True)
+        retrieval_thread.start()
+        retrieval_thread.join(timeout=10.0)
+
+        if retrieval_thread.is_alive():
+            log.warning("Memory retrieval timed out after 10s")
+            return "[Memory unavailable — responding without prior context]"
+
+        if exception_container[0]:
+            raise exception_container[0]
+
+        ctx = result_container[0]
+        retrieved_text = ctx.text if ctx else ""
+        elapsed_ms = (time.time() - start_time) * 1000
+
+        # Check if memory was actually retrieved
+        if not retrieved_text or not retrieved_text.strip():
+            log.warning("Memory retrieval returned empty text (%.1f ms)", elapsed_ms)
+            return "[Memory unavailable — responding without prior context]"
+
+        # Validate relevance of retrieved memory
+        relevance = validate_memory_relevance(prompt, retrieved_text)
+        if relevance < 0.1:
+            log.warning(
+                "Retrieved memory has low relevance (score=%.2f, %.1f ms); discarding",
+                relevance,
+                elapsed_ms,
+            )
+            return "[Memory unavailable — responding without prior context]"
+
+        log.debug("Memory retrieved successfully (score=%.2f, %.1f ms)", relevance, elapsed_ms)
+        return retrieved_text
+
+    except Exception as e:  # REVIEWED: log-and-continue — optional feature, fallback to warning message
+        elapsed_ms = (time.time() - start_time) * 1000
+        log.warning("Memory retrieval failed after %.1f ms: %s", elapsed_ms, e)
+        return "[Memory unavailable — responding without prior context]"
 
 
 def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
@@ -76,6 +156,12 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
 
     include_global = bool(route.memory_include_global)
     include_profile = bool(route.memory_include_profile)
+    pref_include_global = getattr(agent, "_memory_include_global_pref", None)
+    if pref_include_global is not None:
+        include_global = bool(pref_include_global)
+    pref_include_profile = getattr(agent, "_memory_include_profile_pref", None)
+    if pref_include_profile is not None:
+        include_profile = bool(pref_include_profile)
     budget_tokens = max(300, int(route.memory_budget_tokens))
     path = str(getattr(route, "path", "") or "")
     if _should_preserve_context(agent) and path in {"casual_chat", "personal_context", "assistant_meta", "general"}:
@@ -107,7 +193,10 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
 
 
 def retrieve_library(agent: AgentLoop, prompt: str, route: RouteDecision) -> str:
-    """Retrieve context from the long-form research library."""
+    """Retrieve context from the long-form research library.
+
+    Returns formatted library context, empty string for non-qualifying routes, or a warning message on failure.
+    """
     lib = agent._library
     if lib is None:
         return ""
@@ -116,15 +205,24 @@ def retrieve_library(agent: AgentLoop, prompt: str, route: RouteDecision) -> str
     q = str(prompt or "").strip()
     if not q:
         return ""
+
+    start_time = time.time()
     try:
         budget = max(250, int(route.memory_budget_tokens // 2))
         text = lib.build_context(query=q, max_tokens=budget, limit=4)
+        elapsed_ms = (time.time() - start_time) * 1000
+
         if not text:
-            return ""
+            log.warning("Library retrieval returned empty text (%.1f ms)", elapsed_ms)
+            return "[Library context unavailable]"
+
+        log.debug("Library context retrieved successfully (%.1f ms)", elapsed_ms)
         return format_library_context(text)
-    except Exception as e:  # REVIEWED: log-and-continue — optional library retrieval, fallback
-        log.debug("Library retrieval failed: %s", e)
-        return ""
+
+    except Exception as e:  # REVIEWED: log-and-continue — optional library retrieval, fallback to warning message
+        elapsed_ms = (time.time() - start_time) * 1000
+        log.warning("Library retrieval failed after %.1f ms: %s", elapsed_ms, e)
+        return "[Library context unavailable]"
 
 
 # Routes whose answers are worth auto-capturing into the library.

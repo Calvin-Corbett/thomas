@@ -1,4 +1,4 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8" />
@@ -1242,6 +1242,82 @@
             </div>
           </div>
 
+          <div class="settings-group">
+            <div class="group-title">Tool Permissions</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Shell / Terminal Access</div>
+                <div class="setting-description">Allow Thomas to run shell commands (install packages, run scripts, etc.)</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowShell" data-setting="allowShell" aria-label="Toggle shell access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Browser / Web Browsing</div>
+                <div class="setting-description">Allow Thomas to open pages, click, type, and take screenshots in a browser</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowBrowser" data-setting="allowBrowser" aria-label="Toggle browser access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Git Operations</div>
+                <div class="setting-description">Allow Thomas to commit, push, pull, and manage repositories</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowGit" data-setting="allowGit" aria-label="Toggle git access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">File System Access</div>
+                <div class="setting-description">Allow Thomas to read, write, edit, and delete files</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="allowFilesystem" data-setting="allowFilesystem" aria-label="Toggle filesystem access" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Web Search</div>
+                <div class="setting-description">Allow Thomas to search the web for information</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="allowWebSearch" data-setting="allowWebSearch" aria-label="Toggle web search" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Email & Calendar</div>
+                <div class="setting-description">Allow Thomas to read and send emails, manage calendar events</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowEmail" data-setting="allowEmail" aria-label="Toggle email access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Database Access</div>
+                <div class="setting-description">Allow Thomas to query and modify databases</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowDatabase" data-setting="allowDatabase" aria-label="Toggle database access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">SSH / Remote Access</div>
+                <div class="setting-description">Allow Thomas to connect to remote servers via SSH</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowSSH" data-setting="allowSSH" aria-label="Toggle SSH access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
           <div class="button-group">
             <button class="btn btn-primary" onclick="saveSection('autonomy')">
               <i class="ph ph-check"></i>
@@ -1663,6 +1739,17 @@
       setInputValue('idleTimeout', settings.idleTimeout || 30);
       setToggle('initiativeOnErrors', settings.initiativeOnErrors !== false);
 
+      // Tool Permissions
+      const tp = settings.toolPermissions || {};
+      setToggle('allowShell', tp.allowShell);
+      setToggle('allowBrowser', tp.allowBrowser);
+      setToggle('allowGit', tp.allowGit);
+      setToggle('allowFilesystem', tp.allowFilesystem !== false);
+      setToggle('allowWebSearch', tp.allowWebSearch !== false);
+      setToggle('allowEmail', tp.allowEmail);
+      setToggle('allowDatabase', tp.allowDatabase);
+      setToggle('allowSSH', tp.allowSSH);
+
       // Privacy
       setSelectValue('dataRetention', settings.dataRetention || '90d');
       setToggle('autoDeleteSensitive', settings.autoDeleteSensitive !== false);
@@ -1874,6 +1961,16 @@
           data.autoApproveNotify = document.getElementById('autoApproveNotify').classList.contains('on');
           data.idleTimeout = parseInt(document.getElementById('idleTimeout').value);
           data.initiativeOnErrors = document.getElementById('initiativeOnErrors').classList.contains('on');
+          data.toolPermissions = {
+            allowShell: document.getElementById('allowShell').classList.contains('on'),
+            allowBrowser: document.getElementById('allowBrowser').classList.contains('on'),
+            allowGit: document.getElementById('allowGit').classList.contains('on'),
+            allowFilesystem: document.getElementById('allowFilesystem').classList.contains('on'),
+            allowWebSearch: document.getElementById('allowWebSearch').classList.contains('on'),
+            allowEmail: document.getElementById('allowEmail').classList.contains('on'),
+            allowDatabase: document.getElementById('allowDatabase').classList.contains('on'),
+            allowSSH: document.getElementById('allowSSH').classList.contains('on'),
+          };
           break;
 
         case 'privacy':

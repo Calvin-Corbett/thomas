@@ -22,7 +22,7 @@ _DIRECTIVE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\bplease\b", re.IGNORECASE),
 )
 
-_MODE_VALUES: tuple[str, ...] = ("auto", "fast", "thinking", "swarm", "batch")
+_MODE_VALUES: tuple[str, ...] = ("auto", "fast", "thinking")
 
 _ENABLE_MARKERS: tuple[str, ...] = (
     "turn on",

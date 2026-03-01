@@ -1,6 +1,7 @@
 """Custom exception types for DSL framework."""
 
 from dataclasses import dataclass
+from typing import Any
 
 
 @dataclass
@@ -152,7 +153,7 @@ class ContinueException(Exception):
 class ReturnException(Exception):
     """Control flow exception for return statements."""
 
-    def __init__(self, value: "Value") -> None:
+    def __init__(self, value: Any) -> None:
         """Initialize return exception.
 
         Args:

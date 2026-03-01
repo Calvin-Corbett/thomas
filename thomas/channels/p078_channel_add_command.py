@@ -340,7 +340,7 @@ def _json_loader() -> Callable[[str], Any]:
         import json5  # type: ignore
 
         return json5.loads  # type: ignore[attr-defined]
-    except (json.JSONDecodeError, ValueError, KeyError):
+    except ImportError:
         return json.loads
 
 

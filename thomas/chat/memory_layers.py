@@ -1,0 +1,349 @@
+"""Three-layer memory coordinator.
+
+CRITICAL FIX for Bug #3: memory retrieval only fired once (iteration 0).
+Subsequent iterations got an empty string for memory context, making Thomas
+forget his entire knowledge base mid-turn.
+
+New behaviour: ``MemoryCoordinator.refresh()`` is called at **every**
+iteration by the orchestrator.  Smart caching prevents redundant queries:
+
+    - Working memory: always fresh (rebuilt from conversation state)
+    - Episodic memory: refreshed every iteration (fast-changing)
+    - Semantic memory: refreshed every 3 iterations (slow-changing domain knowledge)
+
+Architecture inspired by A-Mem (2026) and Google DeepMind's delegation
+framework (Feb 2026).
+"""
+
+from __future__ import annotations
+
+import logging
+import time
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from thomas.chat.conversation import ConversationManager
+
+log = logging.getLogger(__name__)
+
+# ── memory context dataclass ─────────────────────────────────────
+
+
+@dataclass
+class MemoryContext:
+    """All three memory layers for a single iteration.
+
+    Attributes
+    ----------
+    working:
+        Current task context — recent decisions, active goals, in-progress
+        variables.  Built directly from conversation state.
+    episodic:
+        What happened in this conversation — summaries of past turns,
+        decisions made, tool results.  Retrieved from memory engine.
+    semantic:
+        Domain knowledge from the knowledge graph, FTS, and sparse vectors.
+        Facts, relationships, procedures.  Retrieved from memory engine.
+    iteration:
+        Which iteration this context was built for.
+    retrieved_at:
+        Timestamp of retrieval.
+    """
+
+    working: str = ""
+    episodic: str = ""
+    semantic: str = ""
+    iteration: int = 0
+    retrieved_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+
+    def to_system_injection(self) -> str:
+        """Format all layers for LLM system prompt injection."""
+        parts: list[str] = []
+        if self.working:
+            parts.append(f"## WORKING CONTEXT (current task)\n{self.working}")
+        if self.episodic:
+            parts.append(f"## CONVERSATION MEMORY\n{self.episodic}")
+        if self.semantic:
+            parts.append(f"## KNOWLEDGE BASE\n{self.semantic}")
+        return "\n\n".join(parts) if parts else ""
+
+    @property
+    def total_tokens(self) -> int:
+        """Rough token estimate across all layers."""
+        total = len(self.working) + len(self.episodic) + len(self.semantic)
+        return max(1, total // 4)
+
+    @property
+    def is_empty(self) -> bool:
+        return not (self.working or self.episodic or self.semantic)
+
+
+# ── memory coordinator ───────────────────────────────────────────
+
+
+class MemoryCoordinator:
+    """Three-layer memory system wrapping Thomas's existing MemoryEngine.
+
+    The coordinator does NOT replace the MemoryEngine — it adds a structured
+    layer on top that separates working, episodic, and semantic memory, and
+    handles refresh scheduling across iterations.
+
+    Parameters
+    ----------
+    memory_engine:
+        Thomas's existing MemoryEngine instance (FTS5 + sparse vec + KG).
+        Can be ``None`` for sessions without memory.
+    session_id:
+        Current session/thread identifier for scoped queries.
+    semantic_refresh_interval:
+        How often to refresh semantic memory (in iterations).  Domain
+        knowledge changes slowly, so refreshing every iteration is wasteful.
+    context_budget:
+        Maximum token budget across all three layers.
+    """
+
+    def __init__(
+        self,
+        memory_engine: Any,
+        session_id: str,
+        *,
+        semantic_refresh_interval: int = 3,
+        context_budget: int = 4_000,
+    ) -> None:
+        self._memory = memory_engine
+        self._session_id = session_id
+        self._semantic_interval = semantic_refresh_interval
+        self._context_budget = context_budget
+
+        # Caches
+        self._semantic_cache: str = ""
+        self._semantic_last_iteration: int = -999
+        self._episodic_cache: str = ""
+
+        # Episode log (for capturing what happened this session)
+        self._episodes: list[dict[str, Any]] = []
+
+    # ── main refresh entry point ─────────────────────────────────
+
+    async def refresh(
+        self,
+        prompt: str,
+        conversation: ConversationManager,
+        iteration: int,
+    ) -> MemoryContext:
+        """Refresh all memory layers for the current iteration.
+
+        Called at **every** iteration (not just #0).  Uses smart caching
+        to avoid redundant queries to the memory engine.
+
+        Returns
+        -------
+        MemoryContext with all three layers populated.
+        """
+        start = time.monotonic()
+
+        # Layer 1: Working memory (always fresh — built from conversation)
+        working = self._build_working_memory(conversation)
+
+        # Layer 2: Episodic memory (refresh every iteration)
+        episodic = await self._refresh_episodic(prompt, conversation)
+
+        # Layer 3: Semantic memory (refresh every N iterations)
+        semantic = await self._refresh_semantic(prompt, iteration)
+
+        # Budget enforcement — trim if total exceeds budget
+        ctx = MemoryContext(
+            working=working,
+            episodic=episodic,
+            semantic=semantic,
+            iteration=iteration,
+        )
+        ctx = self._enforce_budget(ctx)
+
+        elapsed = (time.monotonic() - start) * 1000
+        log.debug(
+            "Memory refresh iter=%d: working=%d episodic=%d semantic=%d (%.0fms)",
+            iteration,
+            len(working),
+            len(episodic),
+            len(semantic),
+            elapsed,
+        )
+        return ctx
+
+    # ── layer builders ───────────────────────────────────────────
+
+    def _build_working_memory(
+        self,
+        conversation: ConversationManager,
+    ) -> str:
+        """Build working memory from current conversation state.
+
+        Working memory captures:
+        - What the user is currently asking
+        - Recent tool results
+        - Active goals / in-progress decisions
+        """
+        parts: list[str] = []
+
+        # Last user message = current task
+        last_user = conversation.last_user_message()
+        if last_user:
+            parts.append(f"Current request: {last_user[:500]}")
+
+        # Last assistant message = what we just said
+        last_asst = conversation.last_assistant_message()
+        if last_asst:
+            parts.append(f"Last response: {last_asst[:300]}")
+
+        # Recent episodes from this session
+        if self._episodes:
+            recent = self._episodes[-3:]  # last 3 episodes
+            summaries = []
+            for ep in recent:
+                s = f"Turn {ep.get('turn', '?')}: {ep.get('summary', '')[:150]}"
+                summaries.append(s)
+            parts.append("Recent activity:\n" + "\n".join(summaries))
+
+        return "\n\n".join(parts)
+
+    async def _refresh_episodic(
+        self,
+        prompt: str,
+        conversation: ConversationManager,
+    ) -> str:
+        """Retrieve episodic memory — what happened in this conversation.
+
+        Uses the memory engine to search for relevant past interactions
+        scoped to this session/thread.
+        """
+        if self._memory is None:
+            return ""
+
+        try:
+            # Query memory engine scoped to this thread
+            if hasattr(self._memory, "retrieve"):
+                ctx = self._memory.retrieve(
+                    query=prompt,
+                    thread=self._session_id,
+                    budget=self._context_budget // 3,
+                    mode="fast",
+                )
+                self._episodic_cache = getattr(ctx, "text", str(ctx)) if ctx else ""
+            elif hasattr(self._memory, "search"):
+                results = self._memory.search(
+                    query=prompt,
+                    thread_id=self._session_id,
+                    limit=10,
+                )
+                self._episodic_cache = "\n".join(str(r) for r in (results or []))
+            return self._episodic_cache
+        except Exception as exc:
+            log.warning("Episodic memory refresh failed: %s", exc)
+            return self._episodic_cache  # return stale cache on error
+
+    async def _refresh_semantic(
+        self,
+        prompt: str,
+        iteration: int,
+    ) -> str:
+        """Retrieve semantic memory — domain knowledge, facts, relationships.
+
+        Only refreshes every ``_semantic_interval`` iterations because
+        domain knowledge changes slowly.  Uses full memory engine with
+        all signals (FTS + sparse vec + knowledge graph).
+        """
+        if self._memory is None:
+            return ""
+
+        # Check if we need to refresh
+        if (iteration - self._semantic_last_iteration) < self._semantic_interval:
+            return self._semantic_cache  # return cached
+
+        try:
+            if hasattr(self._memory, "retrieve"):
+                ctx = self._memory.retrieve(
+                    query=prompt,
+                    thread=None,  # all threads — domain knowledge is global
+                    budget=self._context_budget // 2,
+                    mode="thorough",
+                )
+                self._semantic_cache = getattr(ctx, "text", str(ctx)) if ctx else ""
+            elif hasattr(self._memory, "search"):
+                results = self._memory.search(
+                    query=prompt,
+                    thread_id=None,
+                    limit=20,
+                )
+                self._semantic_cache = "\n".join(str(r) for r in (results or []))
+            self._semantic_last_iteration = iteration
+            return self._semantic_cache
+        except Exception as exc:
+            log.warning("Semantic memory refresh failed: %s", exc)
+            return self._semantic_cache  # return stale cache on error
+
+    # ── budget enforcement ───────────────────────────────────────
+
+    def _enforce_budget(self, ctx: MemoryContext) -> MemoryContext:
+        """Trim memory layers if total exceeds budget."""
+        total = ctx.total_tokens
+        if total <= self._context_budget:
+            return ctx
+
+        # Trim proportionally, prioritising working > episodic > semantic
+        ratio = self._context_budget / max(total, 1)
+        working = ctx.working[: int(len(ctx.working) * min(1.0, ratio * 1.5))]
+        episodic = ctx.episodic[: int(len(ctx.episodic) * ratio)]
+        semantic = ctx.semantic[: int(len(ctx.semantic) * ratio * 0.8)]
+
+        return MemoryContext(
+            working=working,
+            episodic=episodic,
+            semantic=semantic,
+            iteration=ctx.iteration,
+        )
+
+    # ── episode capture ──────────────────────────────────────────
+
+    async def capture_episode(
+        self,
+        turn_number: int,
+        user_message: str,
+        assistant_response: str,
+        thinking: str = "",
+        tool_calls: list[dict[str, Any]] | None = None,
+        specialist: str = "",
+    ) -> None:
+        """Record this turn as an episode for future retrieval.
+
+        Called by the orchestrator after each completed turn.
+        """
+        episode = {
+            "turn": turn_number,
+            "timestamp": time.time(),
+            "user": user_message[:500],
+            "assistant": assistant_response[:500],
+            "summary": f"User asked: {user_message[:100]}... → Assistant: {assistant_response[:100]}...",
+            "specialist": specialist,
+            "tool_count": len(tool_calls) if tool_calls else 0,
+        }
+        self._episodes.append(episode)
+
+        # Also persist to memory engine if available
+        if self._memory is not None:
+            try:
+                if hasattr(self._memory, "add"):
+                    await self._memory.add(
+                        content=f"Turn {turn_number}: {user_message[:300]} → {assistant_response[:300]}",
+                        thread=self._session_id,
+                        metadata={"turn": turn_number, "specialist": specialist},
+                    )
+                elif hasattr(self._memory, "store"):
+                    self._memory.store(
+                        text=f"Turn {turn_number}: {user_message[:300]} → {assistant_response[:300]}",
+                        thread_id=self._session_id,
+                    )
+            except Exception as exc:
+                log.warning("Failed to persist episode to memory engine: %s", exc)

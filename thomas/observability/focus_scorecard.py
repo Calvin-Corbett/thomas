@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
+from importlib import import_module
 from pathlib import Path
 from typing import Any
 
 from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
-from thomas.system.config_validator import validate_config
 
 
 def _now_iso() -> str:
@@ -170,6 +170,7 @@ def build_focus_scorecard(
 ) -> dict[str, Any]:
     days = max(1, min(90, int(window_days)))
     onboarding_report = build_onboarding_outcome_report(runs_db_path, since_days=days)
+    validate_config = getattr(import_module("thomas.system.config_validator"), "validate_config")
     config_report = (
         validate_config(config_path)
         if config_path is not None

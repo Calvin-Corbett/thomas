@@ -688,6 +688,195 @@ def test_monitor_dispatches_online_idle_agent_to_up_for_grabs(tmp_path: Path, ca
     assert gate.evaluate(workboard) == []
 
 
+def test_monitor_applies_plan_sync_before_dispatch(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        up_for_grabs_block=(
+            "- task_id=cleanup-lane; scope=docs/ops,plans/thomas; "
+            "summary=[P0][NOW] monitor lane with plan sync; reported_by=task-manager-agent; depends_on=none"
+        ),
+    )
+    plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
+
+    ok_msg, payload_msg = msg_mod.send_message(
+        workboard,
+        sender="Codex 6",
+        recipient="task-manager-agent",
+        summary="terminal online",
+        task_id="none",
+        kind="ping",
+        priority="p0",
+        requested_action="none",
+        decision="pending",
+    )
+    assert ok_msg is True, payload_msg
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--monitor",
+            "--plan-root",
+            str(plan_root),
+            "--problem-root",
+            str(problem_root),
+            "--cycles",
+            "1",
+            "--interval-seconds",
+            "0",
+            "--max-idle-minutes",
+            "999",
+            "--max-agent-silence-minutes",
+            "30",
+            "--max-dispatch-per-cycle",
+            "1",
+            "--no-swarm-recovery",
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    text = workboard.read_text(encoding="utf-8")
+
+    plan_path = plan_root / "cleanup-lane" / "PLAN.md"
+    problem_path = problem_root / "cleanup-lane" / "PROBLEM.md"
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["action"] == "monitor"
+    assert payload["plan_sync"]["tracked_task_count"] == 1
+    assert payload["plan_sync"]["created_plan_count"] == 1
+    assert payload["plan_sync"]["created_problem_count"] == 1
+    assert plan_path.exists()
+    assert problem_path.exists()
+    assert "## Task Plans" in text
+    assert "## Task Problems" in text
+    assert "task_id=cleanup-lane;" in text
+    assert gate.evaluate(workboard) == []
+
+
+def test_monitor_auto_starts_claimed_agents_without_idle_agents(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block=(
+            "- agent=Codex 1; scope=thomas/cli/main.py; task=[WIP] first lane\n"
+            "- agent=Codex 2; scope=thomas/server/app.py; task=[WIP] second lane"
+        ),
+        active_tasks_block=(
+            "- task_id=lane-two; agent=Codex 2; scope=thomas/server/app.py; summary=second lane; status=active"
+        ),
+        up_for_grabs_block=(
+            "- task_id=lane-one; scope=thomas/cli/main.py; "
+            "summary=[P0][NOW] claimed-lane start check; reported_by=task-manager-agent; depends_on=none"
+        ),
+    )
+    plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--monitor",
+            "--plan-root",
+            str(plan_root),
+            "--problem-root",
+            str(problem_root),
+            "--cycles",
+            "1",
+            "--interval-seconds",
+            "0",
+            "--no-idle-dispatch",
+            "--no-swarm-recovery",
+            "--max-idle-minutes",
+            "999",
+            "--max-agent-silence-minutes",
+            "30",
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    auto_start = dict((payload.get("cycles") or [{}])[0].get("checks", {}).get("auto_start") or {})
+    text = workboard.read_text(encoding="utf-8")
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert auto_start.get("candidate_agent_count") == 2
+    assert auto_start.get("attempted_count") == 2
+    assert auto_start.get("assigned_count") == 2
+    assert auto_start.get("auto_started_count") == 1
+    assert auto_start.get("already_in_progress_count") == 1
+    assert auto_start.get("no_work_available_count") == 0
+    assert auto_start.get("failed_agent_count") == 0
+    assert "task_id=lane-one; agent=Codex 1;" in text
+    assert "task_id=lane-two; agent=Codex 2;" in text
+    assert (
+        "task_id=lane-one; scope=thomas/cli/main.py; "
+        "summary=[P0][NOW] claimed-lane start check; reported_by=task-manager-agent"
+    ) not in text
+    assert gate.evaluate(workboard) == []
+
+
+def test_monitor_auto_start_skips_non_startable_claimed_agents(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block=(
+            "- agent=Codex 1; scope=thomas/cli/main.py; task=[WIP] first lane\n"
+            "- agent=Codex 2; scope=thomas/server/app.py; task=[WIP] second lane"
+        ),
+        active_tasks_block=(
+            "- task_id=lane-two; agent=Codex 2; scope=thomas/server/app.py; summary=second lane; status=blocked"
+        ),
+        up_for_grabs_block=(
+            "- task_id=lane-one; scope=thomas/cli/main.py; "
+            "summary=[P0][NOW] claimed-lane start check; reported_by=task-manager-agent; depends_on=none"
+        ),
+    )
+    plan_root = tmp_path / "task-plans"
+    problem_root = tmp_path / "task-problems"
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--monitor",
+            "--plan-root",
+            str(plan_root),
+            "--problem-root",
+            str(problem_root),
+            "--cycles",
+            "1",
+            "--interval-seconds",
+            "0",
+            "--no-idle-dispatch",
+            "--no-swarm-recovery",
+            "--max-idle-minutes",
+            "999",
+            "--max-agent-silence-minutes",
+            "30",
+            "--apply",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    auto_start = dict((payload.get("cycles") or [{}])[0].get("checks", {}).get("auto_start") or {})
+    text = workboard.read_text(encoding="utf-8")
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert auto_start.get("candidate_agent_count") == 1
+    assert auto_start.get("attempted_count") == 1
+    assert auto_start.get("assigned_count") == 1
+    assert auto_start.get("skipped_non_startable_count") == 1
+    assert auto_start.get("skipped_non_startable_agents") == ["Codex 2"]
+    assert "task_id=lane-one; agent=Codex 1;" in text
+    assert "agent=Codex 2;" in text
+    assert "status=blocked" in text
+    assert gate.evaluate(workboard) == []
+
+
 def test_monitor_dispatch_handles_agent_default_task_id_collision(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
@@ -1079,3 +1268,87 @@ def test_monitor_sends_blocked_dispatch_notice_when_no_non_overlap_task(tmp_path
     assert "dispatch blocked for Codex Idle: no non-overlap queued task" in text
     assert "requested_action=propose scope split for queued tasks: docs-cleanup;" in text
     assert gate.evaluate(workboard) == []
+
+def test_auto_start_assigns_existing_in_progress_task(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block="- agent=Codex 1; scope=thomas/cli/main.py; task=[WIP] existing lane",
+        active_tasks_block=(
+            "- task_id=lane-one; agent=Codex 1; scope=thomas/cli/main.py; summary=existing lane; status=in_progress"
+            "; name=Codex 1; role=solo; parent=none"
+        ),
+        up_for_grabs_block=(
+            "- task_id=queued-lane; scope=thomas/server/app.py; summary=[P0][NOW] queued lane start check; reported_by=task-manager-agent"
+        ),
+    )
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--auto-start",
+            "--agent",
+            "Codex 1",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["action"] == "auto_start"
+    assert payload["agent"] == "Codex 1"
+    assert payload["task_id"] == "lane-one"
+    assert payload["status"] == "in_progress"
+    assert payload["started"] is True
+    assert payload["source"] == "existing"
+    text = workboard.read_text(encoding="utf-8")
+    assert "task_id=lane-one; agent=Codex 1;" in text
+    assert "task_id=queued-lane; scope=thomas/server/app.py; summary=[P0][NOW] queued lane start check; reported_by=task-manager-agent" in text
+
+
+def test_auto_start_rejects_orchestrator_agent(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--auto-start",
+            "--agent",
+            "task-manager-agent",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["action"] == "auto_start"
+    assert "auto-start is disabled for orchestrator agents" in str(payload.get("error", ""))
+
+
+def test_auto_start_fails_when_no_up_for_grabs_available(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        claims_block="- agent=Codex 1; scope=thomas/cli/main.py; task=[WIP] existing lane",
+        active_tasks_block=('- task_id=lane-one; agent=Codex 1; scope=thomas/cli/main.py; summary=existing lane; status=done; name=Codex 1; role=solo; parent=none'),
+    )
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--auto-start",
+            "--agent",
+            "Codex 2",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["action"] == "auto_start"
+    assert payload["agent"] == "Codex 2"
+    assert "no up-for-grabs tasks available" in str(payload.get("error", ""))

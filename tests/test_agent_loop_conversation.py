@@ -199,6 +199,34 @@ class TestAgentLoopConversation(unittest.TestCase):
         self.assertIn("Telegram integration", routed)
         self.assertIn("User reply: ok", routed)
 
+    def test_routing_input_prefers_original_request_from_control_envelope(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        agent = AgentLoop(cfg, DummyLLM(), tools, conversation=[])
+        prompt = (
+            "Continue execution now. "
+            "(clarification_retry=1; clarification_cap=0; clarification_seen=1; "
+            "route_input_source=prompt_only; original_request=fix the chat route fallback)"
+        )
+        routed, src = agent._routing_input_text(prompt)
+        self.assertEqual(src, "prompt_only")
+        self.assertEqual(routed, "fix the chat route fallback")
+
+    def test_assume_nudge_reuses_original_request_when_prompt_already_wrapped(self) -> None:
+        wrapped_prompt = (
+            "Continue execution now. "
+            "(clarification_retry=1; clarification_cap=0; clarification_seen=1; "
+            "route_input_source=prompt_only; original_request=ship the memory toggle fix)"
+        )
+        nudge = AgentLoop._assume_and_proceed_nudge(
+            wrapped_prompt,
+            retry_index=2,
+            question_cap=0,
+            questions_seen=2,
+            route_input_source="prompt_only",
+        )
+        self.assertIn("original_request=ship the memory toggle fix", nudge)
+
     def test_ack_followup_routes_as_coding_from_previous_context(self) -> None:
         cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
         tools = ToolRegistry()

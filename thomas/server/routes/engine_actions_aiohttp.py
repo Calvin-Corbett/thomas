@@ -1,11 +1,17 @@
-"""Manual controls for background engine actions."""
+﻿"""Manual controls for background engine actions."""
 
 from __future__ import annotations
 
-from collections.abc import Awaitable, Callable
-from typing import Any
+from typing import Any, Awaitable, Callable
 
 from aiohttp import web
+
+SUPPORTED_ENGINES = (
+    "code_issue_engine",
+    "self_upgrade_engine",
+    "ui_workflow_engine",
+    "workspace_sync_engine",
+)
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
@@ -16,7 +22,12 @@ def _parse_bool(value: Any, *, default: bool) -> bool:
         return default
     if isinstance(value, bool):
         return value
-    return str(value).strip().lower() in {"1", "true", "yes", "on", "y"}
+    token = str(value).strip().lower()
+    if token in {"1", "true", "yes", "on", "y"}:
+        return True
+    if token in {"0", "false", "no", "off", "n"}:
+        return False
+    raise ValueError(f"invalid boolean token: {value!r}")
 
 
 def _normalize_engine_name(raw: Any) -> str:
@@ -34,10 +45,7 @@ def _normalize_engine_name(raw: Any) -> str:
         "sync": "workspace_sync_engine",
         "workspace_sync": "workspace_sync_engine",
         "workspace_sync_engine": "workspace_sync_engine",
-        "local": "local_agent_engine",
-        "local_agent": "local_agent_engine",
-        "local_agents": "local_agent_engine",
-        "local_agent_engine": "local_agent_engine",
+        "all": "all",
     }
     return aliases.get(name, name)
 
@@ -56,7 +64,7 @@ def register_engine_actions_routes(
             "self_upgrade_engine",
             "ui_workflow_engine",
             "workspace_sync_engine",
-            "local_agent_engine",
+            "all",
         }
 
     async def api_engine_actions(request: web.Request) -> web.Response:
@@ -81,7 +89,16 @@ def register_engine_actions_routes(
             )
 
         action = str(payload.get("action") or "run").strip().lower()
-        force = _parse_bool(payload.get("force"), default=False)
+        force_raw = payload.get("force") if "force" in payload else None
+        try:
+            force = _parse_bool(force_raw, default=False)
+        except ValueError:
+            raise web.HTTPBadRequest(
+                text=(
+                    "payload.force must be one of: "
+                    "true/false/1/0/yes/no/on/off/y/n"
+                )
+            ) from None
         reason = str(payload.get("reason") or "manual").strip() or "manual"
 
         if action not in {"run", "run_once"}:
@@ -92,6 +109,68 @@ def register_engine_actions_routes(
                     "error": f"unsupported action: {action}",
                 },
                 status=400,
+            )
+
+        if engine == "all":
+            results = {}
+            summary = {
+                "ok": True,
+                "executed": 0,
+                "failed": 0,
+            }
+            for each in SUPPORTED_ENGINES:
+                try:
+                    if each == "code_issue_engine":
+                        from thomas.core.code_issue_engine import get_code_issue_engine
+
+                        runner = get_code_issue_engine()
+                    elif each == "self_upgrade_engine":
+                        from thomas.core.self_upgrade_engine import get_self_upgrade_engine
+
+                        runner = get_self_upgrade_engine()
+                    elif each == "ui_workflow_engine":
+                        from thomas.core.ui_workflow_engine import get_ui_workflow_engine
+
+                        runner = get_ui_workflow_engine()
+                    else:
+                        from thomas.core.workspace_sync_engine import get_workspace_sync_engine
+
+                        runner = get_workspace_sync_engine()
+
+                    result = runner.run_cycle_once(force=force, reason=reason)
+                    if not isinstance(result, dict):
+                        result = {
+                            "ok": False,
+                            "reason": "engine_invalid_result",
+                        }
+                    results[each] = result
+                    summary["executed"] += 1
+                    if not bool(result.get("ok")):
+                        summary["failed"] += 1
+                        summary["ok"] = False
+                except Exception as exc:
+                    summary["executed"] += 1
+                    summary["failed"] += 1
+                    summary["ok"] = False
+                    results[each] = {
+                        "ok": False,
+                        "engine": each,
+                        "error": "engine run failed",
+                        "exception": f"{type(exc).__name__}: {exc}",
+                    }
+
+            status = 200 if summary["ok"] else 207
+            return web.json_response(
+                {
+                    "ok": summary["ok"],
+                    "engine": "all",
+                    "action": action,
+                    "force": bool(force),
+                    "reason": reason,
+                    "summary": summary,
+                    "results": results,
+                },
+                status=status,
             )
 
         try:
@@ -111,10 +190,6 @@ def register_engine_actions_routes(
                 from thomas.core.workspace_sync_engine import get_workspace_sync_engine
 
                 runner = get_workspace_sync_engine()
-            elif engine == "local_agent_engine":
-                from thomas.core.local_agent_engine import get_local_agent_engine
-
-                runner = get_local_agent_engine()
             else:
                 return web.json_response(
                     {"ok": False, "engine": engine, "error": f"unsupported engine: {engine}"},
@@ -146,7 +221,7 @@ def register_engine_actions_routes(
         ok = bool(result.get("ok", True))
         reason_code = str(result.get("reason") or "").strip().lower()
         if not ok:
-            if reason_code in {"engine_disabled"}:
+            if reason_code in {"engine_disabled", "engine_error"}:
                 status = 503
             elif reason_code in {"busy", "not_idle", "rate_limited"}:
                 status = 409

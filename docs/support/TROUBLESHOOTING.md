@@ -11,6 +11,14 @@ This is the self-serve support surface for production Thomas operators.
 5. If setup failed, run `POST /api/setup/repair` with options used by the user.
 5. Capture logs and route to the owning lane (onboarding, security, runtime, release).
 
+6. For code-path bug hunts, use CLI run triage (no UI required) and copy `run_id` into handoff notes:
+   - `thomas runs list --json --ok 0 --limit 50` — list recent failed runs.
+   - `thomas runs show <run_id>` — inspect run metadata and summary stats.
+   - `thomas runs events <run_id> --start 0 --limit 400 --json` — step-by-step event timeline.
+   - `thomas runs replay <run_id> --from 0 --json` — stream replay output.
+   - `thomas runs export <run_id> --json` — machine-readable debug artifact.
+   - `GET /api/runs/<run_id>/export.json` remains available for internal tooling.
+
 ## Common failure modes
 
 1. Setup loops or never completes

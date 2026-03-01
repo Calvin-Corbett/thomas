@@ -11,6 +11,9 @@ from __future__ import annotations
 
 import json
 import logging
+import hashlib
+import hmac
+import re
 from collections.abc import Callable
 
 from aiohttp import web
@@ -32,7 +35,9 @@ from .db import (
     list_workspaces_for_user,
     upsert_membership,
 )
-from .rbac import WorkspaceRole, can_manage_members
+from .rbac import WorkspaceRole, can_manage_members, normalize_role
+from thomas.core.config import AppConfig, load_config
+from thomas.server.app_keys import APP_CONFIG
 
 log = logging.getLogger(__name__)
 
@@ -40,6 +45,8 @@ APP_WORKSPACE_CON = web.AppKey("workspace_con", object)
 APP_WORKSPACE_REQUIRE_API_ACCESS = web.AppKey("workspace_require_api_access", object)
 
 RequireAccessFn = Callable[[web.Request], None]
+
+_BEARER_TOKEN_RE = re.compile(r"^Bearer\s+([^\s]+)\s*$", re.IGNORECASE)
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -67,6 +74,41 @@ def _err(status: int, detail: str) -> web.HTTPException:
     )
 
 
+def _extract_request_token(request: web.Request) -> str:
+    auth = str(request.headers.get("Authorization") or "").strip()
+    if auth:
+        match = _BEARER_TOKEN_RE.match(auth)
+        if not match:
+            return ""
+        return match.group(1)
+
+    token = str(request.headers.get("X-Api-Token") or "").strip()
+    if not token or any(ch.isspace() for ch in token):
+        return ""
+    return token
+
+
+def _require_default_api_access(request: web.Request) -> None:
+    cfg = request.app.get(APP_CONFIG)
+    if not isinstance(cfg, AppConfig):
+        cfg = load_config()
+
+    server_cfg = getattr(cfg, "server", None)
+    mode = str(getattr(server_cfg, "access_mode", "local") or "local").strip().lower()
+    if mode != "remote":
+        return
+
+    expected = str(getattr(server_cfg, "api_token", "") or "").strip()
+    if not expected:
+        raise web.HTTPUnauthorized(text="server api token is not configured")
+
+    incoming = _extract_request_token(request)
+    if not incoming:
+        raise web.HTTPUnauthorized(text="missing api token")
+    if not hmac.compare_digest(incoming.encode("utf-8"), expected.encode("utf-8")):
+        raise web.HTTPUnauthorized(text="invalid api token")
+
+
 def _row(r) -> dict:
     if r is None:
         return {}
@@ -74,15 +116,38 @@ def _row(r) -> dict:
 
 
 def _get_user_id(request: web.Request) -> str:
-    """Extract user identity from request. Thomas has no auth — use a default."""
-    # Thomas currently has no user auth layer; use a stable single-user identity.
-    return request.headers.get("X-User-Id", "default")
+    """Extract user identity from request.
+
+    In remote mode, bind identity to the validated API token to avoid trusting
+    caller-controlled headers for authorization decisions.
+    """
+    cfg = request.app.get(APP_CONFIG)
+    if not isinstance(cfg, AppConfig):
+        cfg = load_config()
+
+    server_cfg = getattr(cfg, "server", None)
+    mode = str(getattr(server_cfg, "access_mode", "local") or "local").strip().lower()
+    if mode == "remote":
+        expected = str(getattr(server_cfg, "api_token", "") or "").strip()
+        incoming = _extract_request_token(request)
+        if not incoming:
+            raise web.HTTPUnauthorized(text="missing api token")
+        if not expected:
+            raise web.HTTPUnauthorized(text="server api token is not configured")
+        if not hmac.compare_digest(incoming.encode("utf-8"), expected.encode("utf-8")):
+            raise web.HTTPUnauthorized(text="invalid api token")
+        return hashlib.sha256(incoming.encode("utf-8")).hexdigest()
+
+    raw = str(request.headers.get("X-User-Id") or "").strip()
+    return raw if raw else "default"
 
 
 def _enforce_api_access(request: web.Request) -> None:
     require_api_access = request.app.get(APP_WORKSPACE_REQUIRE_API_ACCESS)
     if callable(require_api_access):
         require_api_access(request)
+        return
+    _require_default_api_access(request)
 
 
 def _pick_workspace_id(request: web.Request) -> str | None:
@@ -90,6 +155,13 @@ def _pick_workspace_id(request: web.Request) -> str | None:
     if ws:
         return ws.strip()
     return None
+
+
+def _require_role(value, *, field: str) -> WorkspaceRole:
+    try:
+        return normalize_role(value)
+    except ValueError:
+        _err(422, f"invalid {field}")
 
 
 def _require_workspace_ctx(con, request: web.Request):
@@ -113,7 +185,7 @@ def _require_workspace_ctx(con, request: web.Request):
         if not ws:
             _err(404, "Workspace not found")
 
-    role = WorkspaceRole(str(membership["role"]))
+    role = _require_role(membership["role"], field="membership role")
     return ws, membership, role
 
 
@@ -190,10 +262,10 @@ async def h_create_invite(request: web.Request) -> web.Response:
     email = str(body.get("email", "")).strip()
     if not email:
         _err(422, "email required")
-    inv_role = str(body.get("role", "member"))
+    inv_role = _require_role(body.get("role", "member"), field="invite role")
     note = body.get("note")
     user_id = _get_user_id(request)
-    inv_row, raw_token = create_invite(con, workspace_id, email, inv_role, user_id, note)
+    inv_row, raw_token = create_invite(con, workspace_id, email, inv_role.value, user_id, note)
     result = {"invite": _row(inv_row), "invite_token": raw_token}
     return web.Response(status=201, content_type="application/json", text=json.dumps(result, default=str))
 
@@ -233,6 +305,7 @@ async def h_accept_invite(request: web.Request) -> web.Response:
 
     if datetime.fromisoformat(inv["expires_at"]) < datetime.now(timezone.utc).replace(tzinfo=None):
         _err(410, "Invite expired")
+    _require_role(inv["role"], field="invite role")
     membership = accept_invite(con, inv["invite_id"], user_id)
     return _json(_row(membership))
 
@@ -251,15 +324,14 @@ async def h_change_role(request: web.Request) -> web.Response:
         body = await request.json()
     except Exception:
         _err(400, "Invalid JSON")
-    new_role = str(body.get("role", "")).strip()
-    if not new_role:
-        _err(422, "role required")
+    new_role = _require_role(body.get("role", ""), field="role")
     target = get_membership(con, workspace_id, target_user_id)
     if not target:
         _err(404, "Member not found")
-    if role == WorkspaceRole.admin and target["role"] == WorkspaceRole.owner.value:
+    target_role = _require_role(target["role"], field="target role")
+    if role == WorkspaceRole.admin and target_role == WorkspaceRole.owner:
         _err(403, "Admins cannot modify owners")
-    updated = upsert_membership(con, workspace_id, target_user_id, new_role)
+    updated = upsert_membership(con, workspace_id, target_user_id, new_role.value)
     return _json(_row(updated))
 
 
@@ -276,7 +348,8 @@ async def h_revoke_member(request: web.Request) -> web.Response:
     target = get_membership(con, workspace_id, target_user_id)
     if not target:
         _err(404, "Member not found")
-    if target["role"] == WorkspaceRole.owner.value:
+    target_role = _require_role(target["role"], field="target role")
+    if target_role == WorkspaceRole.owner:
         _err(403, "Cannot revoke owner")
     deactivate_member(con, workspace_id, target_user_id)
     return web.Response(status=204)
@@ -291,7 +364,7 @@ def setup(app: web.Application, config, *, require_api_access: RequireAccessFn |
     con = connect(db_path)
     ensure_schema(con)
     app[APP_WORKSPACE_CON] = con
-    app[APP_WORKSPACE_REQUIRE_API_ACCESS] = require_api_access
+    app[APP_WORKSPACE_REQUIRE_API_ACCESS] = require_api_access or _require_default_api_access
     log.info("workspace.rbac_multi_tenant: DB at %s", db_path)
 
     async def _close_workspace_connection(app_: web.Application) -> None:

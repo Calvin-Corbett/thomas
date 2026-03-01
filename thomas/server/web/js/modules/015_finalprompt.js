@@ -18,7 +18,6 @@
         applyProfileSelection(preferredProfile);
     }
     const requestedMode = normalizeChatMode(activeChatMode) || 'auto';
-    const safeMode = requestedMode === 'swarm' ? 'auto' : requestedMode;
     const payload = {
         message: modelMessage || text,
         docs: docsToSend,
@@ -27,7 +26,7 @@
         profile: resolvedProfile,
         model: resolvedProfile,
         model_id: activeModelOverride || undefined,
-        mode: safeMode,
+        mode: requestedMode,
         autonomy_level: activeAutonomyLevel,
         token_economy: activeTokenEconomy,
         reasoning_effort: activeReasoningEffort || undefined,

@@ -103,29 +103,35 @@ class ConversationIntelligence:
         return False
 
     def resolve_references(self, message: str) -> str:
-        """Attempt to resolve pronouns/references in a message.
+        """Resolve pronouns/references by injecting conversation context.
 
-        Replaces ambiguous references with inferred referents
-        from recent conversation turns.
+        Instead of just appending a topic, builds a proper context window
+        from recent turns when the message is actually ambiguous.
 
         Args:
             message: User message with potential references
 
         Returns:
-            Message with references resolved (or original if none found)
+            Message with conversation context injected if ambiguous, else original
         """
         text = str(message or "").strip()
         if not text or not self._turns:
             return text
 
-        referent = self._find_likely_referent()
-        if not referent:
+        # Only add context for actually ambiguous messages
+        is_ambiguous = (
+            (len(text) < 40 and len(self._turns) >= 2) or  # Very short + conversation ongoing
+            (self.is_followup(text)) or  # Detected as follow-up
+            (_PRONOUN_RE.search(text) and len(text) < 120)  # Has pronouns and short
+        )
+
+        if not is_ambiguous:
             return text
 
-        # Only resolve if the message has pronouns and is short enough
-        # to be ambiguous
-        if _PRONOUN_RE.search(text) and len(text) < 120:
-            return f"{text} [context: {referent}]"
+        # Build context window with recent turns
+        context = self.build_context_window(text)
+        if context:
+            return f"{text}\n\n{context}"
 
         return text
 
@@ -207,6 +213,45 @@ class ConversationIntelligence:
         """
         return self._current_topic if self._current_topic else None
 
+    def build_context_window(self, message: str, max_turns: int = 4) -> str:
+        """Build a formatted context block of recent conversation turns.
+
+        This creates a structured context window showing the last N turns,
+        useful for injecting conversation history when a follow-up or
+        ambiguous message is detected.
+
+        Args:
+            message: The current message (used to determine relevance)
+            max_turns: Maximum number of turns to include in context window
+
+        Returns:
+            Formatted context string, or empty string if no relevant history
+        """
+        if not self._turns or len(self._turns) < 2:
+            return ""
+
+        # Collect recent turns (both user and assistant)
+        recent = list(self._turns)[-max_turns:]
+
+        if not recent:
+            return ""
+
+        # Build formatted context
+        lines = []
+        turn_count = len(recent)
+        lines.append(f"[Conversation context — last {turn_count} turns:")
+
+        for turn in recent:
+            role_label = "User" if turn.role == "user" else "Assistant"
+            # Truncate long messages to keep context window manageable
+            text = turn.text[:150]
+            if len(turn.text) > 150:
+                text = text.rsplit(" ", 1)[0] + "..."
+            lines.append(f"- {role_label}: {text}")
+
+        lines.append("]")
+        return "\n".join(lines)
+
     @property
     def current_topic(self) -> str:
         """The current conversation topic."""
@@ -220,22 +265,63 @@ class ConversationIntelligence:
     # ── Private Helpers ──────────────────────────────────────
 
     def _extract_topic(self, text: str) -> str:
-        """Extract topic from a message."""
+        """Extract topic from a message.
+
+        Skips common filler prefixes like 'can you', 'please', 'I want to'
+        before extracting the topic from the first clause.
+        """
+        cleaned = text.strip()
+
+        # Skip common filler prefixes
+        filler_prefixes = [
+            r"^can you\s+",
+            r"^could you\s+",
+            r"^would you\s+",
+            r"^please\s+",
+            r"^i want to\s+",
+            r"^i need to\s+",
+            r"^i'd like to\s+",
+            r"^let me\s+",
+            r"^help me\s+",
+            r"^show me\s+",
+            r"^tell me\s+",
+            r"^what'?s\s+",
+            r"^how\s+",
+            r"^when\s+",
+            r"^why\s+",
+            r"^where\s+",
+            r"^who\s+",
+        ]
+
+        for pattern in filler_prefixes:
+            match = re.match(pattern, cleaned, re.I)
+            if match:
+                cleaned = cleaned[match.end():].strip()
+                break
+
         # Use first clause as topic
         for delim in [".", "?", "!", "\n"]:
-            if delim in text:
-                topic = text.split(delim)[0].strip()
+            if delim in cleaned:
+                topic = cleaned.split(delim)[0].strip()
                 if len(topic) > 5:
                     return topic[:80]
-        return text[:80] if len(text) > 5 else ""
+        return cleaned[:80] if len(cleaned) > 5 else ""
 
     def _find_likely_referent(self) -> str | None:
-        """Find the most likely referent for pronouns."""
-        # Look at last assistant response for subjects
+        """Find the most likely referent for pronouns.
+
+        Returns the actual last assistant response text (truncated to 200 chars)
+        rather than just the topic, to avoid lossy topic extraction.
+        """
+        # Look at last assistant response for the actual text
         for turn in reversed(self._turns):
-            if turn.role == "assistant" and turn.topic:
-                return turn.topic
-        # Fall back to last user topic
+            if turn.role == "assistant":
+                # Return the actual response text, truncated to 200 chars
+                truncated = turn.text[:200]
+                if len(turn.text) > 200:
+                    truncated = truncated.rsplit(" ", 1)[0] + "..."
+                return truncated
+        # Fall back to last user topic if no assistant response found
         for turn in reversed(self._turns):
             if turn.role == "user" and turn.topic:
                 return turn.topic

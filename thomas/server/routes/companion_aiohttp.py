@@ -703,7 +703,70 @@ def register_companion_routes(
         dry_run = _boolish(payload.get("dry_run"), default=True)
         if "execute" in payload:
             dry_run = not _boolish(payload.get("execute"), default=False)
-        applier = UpdateApplier(kernel, verifier=_new_verifier(kernel))
+
+        verifier = _new_verifier(kernel)
+        verify_report = verifier.verify_bundle(bundle_dir)
+        verify_payload = verify_report.to_dict()
+        verify_payload["bundle_dir"] = str(bundle_dir)
+        if not verify_report.ok:
+            _audit(kernel).append(
+                "bundle.apply",
+                actor=_actor_from_payload(payload),
+                peer_identity=peer_identity,
+                details={
+                    "bundle_dir": str(bundle_dir),
+                    "ok": False,
+                    "stage": "verify",
+                    "errors": list(verify_report.errors),
+                },
+            )
+            return web.json_response(
+                {
+                    "ok": False,
+                    "errors": list(verify_report.errors),
+                    "warnings": list(verify_report.warnings),
+                    "bundle_dir": str(bundle_dir),
+                    "verify": verify_payload,
+                },
+                status=400,
+            )
+
+        compliance_payload = _run_compliance_check(
+            kernel=kernel,
+            payload=payload,
+            bundle_dir=bundle_dir,
+            verify_report=verify_report,
+            actor=_actor_from_payload(payload),
+            peer_identity=peer_identity,
+        )
+        if not bool(compliance_payload.get("ok")):
+            report = compliance_payload.get("report") or {}
+            _audit(kernel).append(
+                "bundle.apply",
+                actor=_actor_from_payload(payload),
+                peer_identity=peer_identity,
+                details={
+                    "bundle_dir": str(bundle_dir),
+                    "ok": False,
+                    "stage": "compliance",
+                    "policy_profile_id": str(report.get("policy_profile_id") or ""),
+                    "compliance_report_id": str(report.get("report_id") or ""),
+                    "blocking_violations": int((report.get("counts") or {}).get("blocking_violations") or 0),
+                },
+            )
+            return web.json_response(
+                {
+                    "ok": False,
+                    "errors": ["compliance check failed"],
+                    "warnings": list((compliance_payload.get("report") or {}).get("warnings") or []),
+                    "bundle_dir": str(bundle_dir),
+                    "verify": verify_payload,
+                    "compliance": compliance_payload,
+                },
+                status=400,
+            )
+
+        applier = UpdateApplier(kernel, verifier=verifier)
         result = applier.apply_bundle(bundle_dir, dry_run=dry_run)
         result["peer_identity"] = peer_identity
         result["bundle_dir"] = str(bundle_dir)

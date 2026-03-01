@@ -61,7 +61,7 @@ def _run_state_room_and_summary(
         else:
             ok = bool((last_evt or {}).get("ok"))
             summary = _trim_summary(f"{agent_id} {'finished' if ok else 'failed'} {tool_name or 'tool'}", 140)
-    elif event_type in {"route", "iteration", "swarm_start", "task_update", "model_runtime"}:
+    elif event_type in {"route", "iteration", "task_update", "model_runtime"}:
         room = "planning"
         if event_type == "route":
             summary = _trim_summary(
@@ -80,8 +80,6 @@ def _run_state_room_and_summary(
                 status = "blocked"
                 room = "review"
             summary = _trim_summary(f"Task {task_title}: {task_status or 'update'}", 140)
-        elif event_type == "swarm_start":
-            summary = "Swarm plan ready; dispatching agents."
         else:
             summary = "Updating runtime model state."
     elif event_type in {"text", "agent_text"}:
@@ -92,14 +90,6 @@ def _run_state_room_and_summary(
         status = "failed"
         room = "review"
         summary = _trim_summary(str((last_evt or {}).get("error") or "Run failed"), 140)
-    elif event_type == "swarm_done":
-        ok = bool((last_evt or {}).get("ok"))
-        status = "succeeded" if ok else "failed"
-        room = "done" if ok else "review"
-        summary = _trim_summary(
-            str((last_evt or {}).get("final") or ("Swarm complete." if ok else "Swarm failed.")),
-            140,
-        )
     elif event_type == "done":
         status = "succeeded"
         room = "done"

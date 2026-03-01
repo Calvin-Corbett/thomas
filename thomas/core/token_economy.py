@@ -17,7 +17,7 @@ from typing import Any
 from thomas.core.config import AppConfig
 
 TOKEN_ECONOMY_LEVELS = ("cheap", "optimal", "max")
-RUN_MODES = ("auto", "fast", "thinking", "swarm", "batch")
+RUN_MODES = ("auto", "fast", "thinking")
 
 # Number of passes (iterations) per economy level.
 # These multiply against the base max_agent_iterations from config.

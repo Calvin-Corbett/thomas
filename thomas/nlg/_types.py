@@ -332,7 +332,7 @@ class GrammarRule:
 
     def is_terminal(self) -> bool:
         """Check if RHS contains only terminals."""
-        return all(rhs.islower() or rhs in [".", ",", "!", "?"]) if self.rhs else False
+        return all(sym.islower() or sym in [".", ",", "!", "?"] for sym in self.rhs) if self.rhs else False
 
     def is_epsilon(self) -> bool:
         """Check if this is an epsilon rule."""

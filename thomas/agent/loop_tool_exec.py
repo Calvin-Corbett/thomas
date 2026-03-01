@@ -9,6 +9,7 @@ import logging
 import os
 import re
 import time
+from pathlib import Path
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -22,6 +23,126 @@ except ImportError:
     _HAS_VERIFICATION = False
 
 log = logging.getLogger(__name__)
+
+
+_WRITE_TOOL_KEYWORDS = (
+    "write",
+    "edit",
+    "create",
+    "delete",
+    "remove",
+    "replace",
+    "patch",
+    "append",
+    "rename",
+    "move",
+    "mkdir",
+    "touch",
+    "fs.write",
+    "fs.delete",
+    "fs.rename",
+)
+
+_WRITE_TOOL_PATH_KEYS = (
+    "path",
+    "file",
+    "filename",
+    "filepath",
+    "file_path",
+    "source_path",
+    "destination_path",
+    "payload_path",
+    "auth_path",
+    "auth_payload_path",
+)
+
+def _is_write_tool(name: str, file_audit_module: Any) -> bool:
+    name_lower = str(name or "").lower()
+    if file_audit_module is not None:
+        checker = getattr(file_audit_module, "is_write_tool", None)
+        if callable(checker):
+            try:
+                return bool(checker(name_lower))
+            except Exception:
+                pass
+    return any(kw in name_lower for kw in _WRITE_TOOL_KEYWORDS)
+
+
+def _validate_filesystem_path(path_value: Any) -> tuple[str | None, str | None]:
+    if path_value is None:
+        return None, "missing path value"
+
+    try:
+        path_text = os.fspath(path_value)
+    except TypeError:
+        return None, "path must be a string or path-like value"
+
+    if not isinstance(path_text, str):
+        return None, "path must be a string or path-like value"
+
+    path_text = str(path_text).strip()
+
+    if path_text == "":
+        return None, "path cannot be empty"
+
+    if "\x00" in path_text:
+        return None, "path cannot contain null bytes"
+
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in path_text):
+        return None, "path cannot contain control characters"
+
+    if os.path.isabs(path_text) or path_text.startswith(("/", "\\")):
+        return None, "absolute paths are not allowed"
+
+    if re.match(r"^[A-Za-z]:", path_text) or re.match(r"^[/\\]{2,}", path_text):
+        return None, "disallowed root/path prefix in file path"
+
+    if "://" in path_text:
+        return None, "path cannot contain URI-like prefixes"
+
+    parts = re.split(r"[\\/]", path_text)
+    if ".." in parts:
+        return None, "path traversal via '..' segment is not allowed"
+
+    if any(part == "" for part in parts):
+        return None, "path segments cannot be empty"
+
+    # Reject any attempts to normalise into an ancestor path
+    if ".." in Path(path_text).parts:
+        return None, "path traversal via parent directory reference is not allowed"
+
+    return path_text, None
+
+
+def _sanitize_write_tool_path(
+    args: dict[str, Any],
+    *,
+    require_path: bool = True,
+) -> tuple[str | None, str | None]:
+    if not isinstance(args, dict):
+        return None, "tool arguments must be an object"
+
+    validated_path: str | None = None
+    saw_path_key = False
+
+    for key in _WRITE_TOOL_PATH_KEYS:
+        if key not in args:
+            continue
+        saw_path_key = True
+        path_value = args.get(key)
+        if not isinstance(path_value, (str, os.PathLike)):
+            return None, f"{key} must be a string or path-like value"
+        checked_path, error = _validate_filesystem_path(path_value)
+        if error is not None:
+            return None, f"invalid {key}: {error}"
+        args[key] = checked_path
+        if validated_path is None:
+            validated_path = checked_path
+
+    if not saw_path_key and require_path:
+        return None, "missing path argument (expected path, file, or filename)"
+
+    return validated_path, None
 
 
 def parse_tool_args(raw_args: Any) -> tuple[dict[str, Any] | None, str | None]:
@@ -112,6 +233,37 @@ async def execute_tools(
                 iteration=iteration,
             )
 
+        validated_path: str | None = None
+        is_write_tool_call = _is_write_tool(name, file_audit_module)
+        should_sanitize_paths = is_write_tool_call or any(key in args for key in _WRITE_TOOL_PATH_KEYS)
+        if should_sanitize_paths:
+            validated_path, path_error = _sanitize_write_tool_path(
+                args,
+                require_path=is_write_tool_call,
+            )
+            if path_error is not None:
+                msg = f"Invalid file path argument for write tool {name}: {path_error}"
+                await loop._audit_action(
+                    kind="tool_action_invalid_args",
+                    tool_call_id=tc_id,
+                    tool_name=name,
+                    decision="FAILED",
+                    reason=msg,
+                    payload={"arguments": args},
+                )
+                return AgentEvent(
+                    type=EventType.TOOL_RESULT,
+                    data={
+                        "tool_id": tc_id,
+                        "tool_name": name,
+                        "result": msg,
+                        "result_text": msg,
+                        "ok": False,
+                        "duration_ms": 0,
+                    },
+                    iteration=iteration,
+                )
+
         start = time.monotonic()
         await loop._audit_action(
             kind="tool_action_start",
@@ -162,6 +314,7 @@ async def execute_tools(
                     runtime_root=str(loop.config.memory.root_path),
                     conversation_summary=conversation_summary,
                     emit_event=_emit_guardrails_event,
+                    no_human_mode="allow" if int(loop._autonomy_level or 0) >= 4 else None,
                 )
 
             try:
@@ -277,11 +430,7 @@ async def execute_tools(
 
         try:
             if file_audit_module is not None and file_audit_module.is_write_tool(name):
-                file_path = (
-                    str(args.get("path") or args.get("file") or args.get("filename") or "")
-                    if isinstance(args, dict)
-                    else ""
-                )
+                file_path = validated_path or ""
                 action = "delete" if "delet" in name.lower() or "remov" in name.lower() else "write"
                 try:
                     args_snippet = (

@@ -49,7 +49,7 @@ class Rule:
         """Evaluate rule condition."""
         try:
             return self.condition(context)
-        except:
+        except Exception:
             self.status = RuleStatus.ERROR
             return False
 

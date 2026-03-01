@@ -387,10 +387,13 @@ class ExpressionCompiler:
             return lambda values: max((v for v in values if v is not None), default=None)
 
         elif agg_func == "avg":
-            non_null = [v for v in values if v is not None]
-            if not non_null:
-                return None
-            return sum(non_null) / len(non_null)
+            def _avg(values: list[Any]) -> Any:
+                non_null = [v for v in values if v is not None]
+                if not non_null:
+                    return None
+                return sum(non_null) / len(non_null)
+
+            return _avg
 
         elif agg_func == "count_distinct":
             return lambda values: len(set(v for v in values if v is not None))

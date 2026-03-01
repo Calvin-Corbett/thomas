@@ -3,6 +3,27 @@
 
 
 const MODULE_STUDIO_COMFY_STYLE_ID = 'moduleStudioComfyStyles';
+const MODULE_UI_EDITOR_PLUGIN_BOOTSTRAP_ALLOWLIST = [
+    'raw.githubusercontent.com',
+];
+
+function moduleUiEditorNormalizeShellPluginBootstrapSource(urlRaw) {
+    const source = moduleUiEditorNormalizeGitHubRawUrl(urlRaw);
+    if (!source) return { ok: false, reason: 'Missing plugin URL.' };
+    if (!/^(https?):\/\//i.test(source)) {
+        return { ok: false, reason: 'Plugin URL must use http or https.' };
+    }
+    try {
+        const parsed = new URL(source);
+        const host = safeString(parsed.hostname).toLowerCase();
+        if (!MODULE_UI_EDITOR_PLUGIN_BOOTSTRAP_ALLOWLIST.includes(host)) {
+            return { ok: false, reason: 'Plugin URL host is not allowlisted.' };
+        }
+        return { ok: true, source };
+    } catch (_error) {
+        return { ok: false, reason: 'Invalid plugin URL.' };
+    }
+}
 
 function moduleStudioEnsureComfyStyles() {
     if (document.getElementById(MODULE_STUDIO_COMFY_STYLE_ID)) return;
@@ -735,11 +756,11 @@ function moduleUiEditorNormalizeGitHubRawUrl(urlRaw) {
 }
 
 async function moduleUiEditorFetchShellPluginFromUrl(urlRaw) {
-    const source = moduleUiEditorNormalizeGitHubRawUrl(urlRaw);
-    if (!source) return { ok: false, reason: 'Missing plugin URL.' };
-    if (!/^(https?):\/\//i.test(source)) {
-        return { ok: false, reason: 'Plugin URL must use http or https.' };
+    const sourceCheck = moduleUiEditorNormalizeShellPluginBootstrapSource(urlRaw);
+    if (!sourceCheck.ok) {
+        return { ok: false, reason: sourceCheck.reason };
     }
+    const source = sourceCheck.source;
     try {
         const response = await fetch(source, {
             method: 'GET',
@@ -769,11 +790,11 @@ function moduleUiEditorExtractShellPluginManifestEntries(payload) {
 }
 
 async function moduleUiEditorFetchShellPluginManifestFromUrl(urlRaw) {
-    const source = moduleUiEditorNormalizeGitHubRawUrl(urlRaw);
-    if (!source) return { ok: false, reason: 'Missing marketplace URL.' };
-    if (!/^(https?):\/\//i.test(source)) {
-        return { ok: false, reason: 'Marketplace URL must use http or https.' };
+    const sourceCheck = moduleUiEditorNormalizeShellPluginBootstrapSource(urlRaw);
+    if (!sourceCheck.ok) {
+        return { ok: false, reason: sourceCheck.reason };
     }
+    const source = sourceCheck.source;
     try {
         const response = await fetch(source, {
             method: 'GET',
@@ -798,7 +819,8 @@ async function moduleUiEditorFetchShellPluginManifestFromUrl(urlRaw) {
 }
 
 function moduleUiEditorMergeShellPluginCatalogFromManifest(sourceRaw, rowsRaw) {
-    const source = moduleUiEditorNormalizeGitHubRawUrl(sourceRaw);
+    const sourceCheck = moduleUiEditorNormalizeShellPluginBootstrapSource(sourceRaw);
+    const source = sourceCheck.ok ? sourceCheck.source : '';
     const rows = Array.isArray(rowsRaw) ? rowsRaw : [];
     const defaults = moduleUiEditorDefaultShellPlugins()
         .map((row) => moduleUiEditorNormalizeShellPlugin(row))
@@ -965,13 +987,14 @@ function moduleUiEditorReadShellPluginMarketplaceUrl() {
 }
 
 function moduleUiEditorWriteShellPluginMarketplaceUrl(urlRaw) {
-    const value = moduleUiEditorNormalizeGitHubRawUrl(urlRaw);
+    const value = moduleUiEditorNormalizeShellPluginBootstrapSource(urlRaw);
+    const normalized = value.ok ? value.source : '';
     try {
-        if (!value) {
+        if (!normalized) {
             window.localStorage.removeItem(MODULE_UI_EDITOR_PLUGIN_MARKETPLACE_URL_KEY);
             return;
         }
-        window.localStorage.setItem(MODULE_UI_EDITOR_PLUGIN_MARKETPLACE_URL_KEY, value);
+        window.localStorage.setItem(MODULE_UI_EDITOR_PLUGIN_MARKETPLACE_URL_KEY, normalized);
     } catch (_error) {}
 }
 

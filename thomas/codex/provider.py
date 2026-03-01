@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import tempfile
+import inspect
 from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
@@ -134,6 +135,17 @@ class CodexProvider:
             except TypeError:
                 # Backward-compat: older bridge/test doubles may not accept newer kwargs.
                 event_stream = bridge.chat(text, model=model, cwd=chat_cwd, allow_tools=allow_tools)
+
+            if inspect.isawaitable(event_stream):
+                event_stream = await event_stream
+
+            if not hasattr(event_stream, "__aiter__"):
+                yield StreamEvent(
+                    type="error",
+                    data={"error": "Codex bridge returned non-stream object"},
+                )
+                yield StreamEvent(type="done")
+                return
 
             async for event in event_stream:
                 etype = event.get("type", "")

@@ -12,7 +12,7 @@ from thomas.companion.audit import CompanionAuditLog
 from thomas.companion.devices import DeviceRegistry
 from thomas.companion.kernel import CompanionKernel
 from thomas.companion.policy import resolve_policy_profile
-from thomas.companion.releases import ReleaseRegistry
+from thomas.companion.releases import ReleaseRegistry, compute_release_bundle_fingerprint
 from thomas.companion.update import BundleVerifier
 
 RequireAccessFn = Callable[[web.Request], None]
@@ -360,15 +360,36 @@ def register_companion_device_release_routes(
             return web.json_response({"ok": False, "error": f"release not found: {release_id}"}, status=404)
         release_payload = row.to_dict()
         bundle_dir = deps.release_bundle_dir(release_payload)
+        manifest = deps.release_manifest(release_payload)
+        expected_sha = str(release_payload.get("bundle_archive_sha256") or "").strip().lower()
+        expected_size = int(release_payload.get("bundle_archive_size") or 0)
+        if expected_sha:
+            computed_sha, computed_size = compute_release_bundle_fingerprint(bundle_dir, manifest)
+            if not computed_sha:
+                return web.json_response(
+                    {"ok": False, "error": "release artifact integrity metadata is incomplete"},
+                    status=409,
+                )
+            if expected_sha != computed_sha:
+                return web.json_response(
+                    {"ok": False, "error": "release artifact integrity check failed"},
+                    status=409,
+                )
+            expected_size = expected_size or computed_size
         body = deps.zip_bundle(bundle_dir)
         filename = f"{release_id}.zip"
+        headers = {
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Cache-Control": "no-store",
+        }
+        if expected_sha:
+            headers["X-Companion-Release-Archive-Sha256"] = expected_sha
+            if expected_size > 0:
+                headers["X-Companion-Release-Archive-Size"] = str(expected_size)
         return web.Response(
             body=body,
             content_type="application/zip",
-            headers={
-                "Content-Disposition": f'attachment; filename="{filename}"',
-                "Cache-Control": "no-store",
-            },
+            headers=headers,
         )
 
     async def api_companion_release_publish(request: web.Request) -> web.Response:

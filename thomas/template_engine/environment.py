@@ -6,7 +6,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any
+from typing import Any, Union
 
 from ._exceptions import CircularIncludeError
 from ._types import Extension, TemplateConfig

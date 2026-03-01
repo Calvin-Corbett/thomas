@@ -16,6 +16,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import ipaddress
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -423,6 +424,43 @@ def _decode_registry_text(raw: bytes, *, source: str) -> str:
         ) from e
 
 
+def _is_private_or_local_host(host: str) -> bool:
+    normalized = str(host or "").strip().lower().rstrip(".")
+    if not normalized:
+        return True
+    if normalized in {"localhost"} or normalized.endswith(".localhost") or normalized.endswith(".local"):
+        return True
+    try:
+        ip = ipaddress.ip_address(normalized)
+        return bool(
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_multicast
+            or ip.is_reserved
+            or ip.is_unspecified
+        )
+    except Exception:
+        return False
+
+
+def _validate_registry_url(url: str, *, source: str) -> str:
+    parsed = urllib.parse.urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        raise NodesRegistryInputError("Nodes registry source URL is invalid.", details={"source": source, "url": url})
+    if parsed.username or parsed.password:
+        raise NodesRegistryInputError("Nodes registry source URL is invalid.", details={"source": source, "url": url})
+    host = str(parsed.hostname or "").strip().lower()
+    if not host:
+        raise NodesRegistryInputError("Nodes registry source URL is invalid.", details={"source": source, "url": url})
+    if _is_private_or_local_host(host):
+        raise NodesRegistryInputError(
+            "Nodes registry source URL must target a public host.",
+            details={"source": source, "url": url, "host": host},
+        )
+    return url
+
+
 def _load_text_from_file(path: Path) -> str:
     try:
         raw = path.read_bytes()
@@ -629,7 +667,8 @@ def load_nodes_registry(
 
     # Load from URL or file.
     if _is_http_url(resolved):
-        text = _load_text_from_url(resolved, timeout_s=timeout_s)
+        validated_url = _validate_registry_url(resolved, source=f"url:{resolved}")
+        text = _load_text_from_url(validated_url, timeout_s=timeout_s)
         payload = _maybe_load_structured(text, source=f"url:{resolved}")
         return _parse_registry_payload(payload, source=f"url:{resolved}")
 

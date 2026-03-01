@@ -53,6 +53,7 @@ from thomas.core.autonomy import clamp_autonomy_level
 from thomas.core.config import AppConfig, load_config
 from thomas.core.events import EventType
 from thomas.core.llm import LLMClient
+from thomas.core.redaction import Redactor
 from thomas.server.tool_extensions import register_all_optional_tools
 from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
@@ -63,6 +64,16 @@ from thomas.tools.shell import register_shell_tools
 from thomas.tools.ssh import register_ssh_tools
 
 log = logging.getLogger(__name__)
+_CLI_REDACTOR = Redactor()
+
+
+class _RedactingFormatter(logging.Formatter):
+    def format(self, record: logging.LogRecord) -> str:
+        return _CLI_REDACTOR.redact_text(super().format(record))
+
+
+def _emit_json(payload: Any, **kwargs: Any) -> None:
+    click.echo(json.dumps(_CLI_REDACTOR.redact_obj(payload), **kwargs))
 
 # Compatibility marker for prompt-pack integration tests that expect the
 # browser wiring hook to be present on argparse.
@@ -113,11 +124,10 @@ def _parse_model_switch_prompt(prompt: str, config: AppConfig) -> tuple[str | No
 
 def _setup_logging(verbose: bool) -> None:
     level = logging.DEBUG if verbose else logging.WARNING
-    logging.basicConfig(
-        level=level,
-        format="%(asctime)s [%(name)s] %(levelname)s: %(message)s",
-        datefmt="%H:%M:%S",
-    )
+    formatter = _RedactingFormatter("%(asctime)s [%(name)s] %(levelname)s: %(message)s", datefmt="%H:%M:%S")
+    handler = logging.StreamHandler()
+    handler.setFormatter(formatter)
+    logging.basicConfig(level=level, handlers=[handler], force=True)
 
 
 def _build_tools(config: AppConfig) -> ToolRegistry:
@@ -147,6 +157,20 @@ def _build_tools(config: AppConfig) -> ToolRegistry:
 
     # Register all optional domain module tools
     register_all_optional_tools(registry)
+
+    # Notebook tools
+    try:
+        from thomas.tools.notebook import register_notebook_tools
+        register_notebook_tools(registry, sandbox)
+    except ImportError:
+        pass
+
+    # Plugin-provided tools
+    try:
+        from thomas.tools.plugin_bridge import register_plugin_tools
+        register_plugin_tools(registry, config)
+    except ImportError:
+        pass
 
     return registry
 
@@ -357,7 +381,11 @@ def cli(ctx: click.Context, verbose: bool, config_path: str | None) -> None:
                 pass
 
     if ctx.invoked_subcommand is None:
-        click.echo(ctx.get_help())
+        # Default to interactive mode for plain `thomas` invocations when attached to a terminal.
+        if sys.stdin.isatty() and sys.stdout.isatty():
+            ctx.invoke(repl, model_name=None)
+        else:
+            click.echo(ctx.get_help())
 
 
 @cli.command()
@@ -506,7 +534,7 @@ def config_get(ctx: click.Context, key: str, as_json: bool) -> None:
         else:
             payload = {"ok": True, "key": key, "value": value, "source": "runtime"}
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
     else:
         if payload.get("ok"):
             click.echo(f"{payload['key']} = {payload.get('value')}")
@@ -541,7 +569,7 @@ def config_set(ctx: click.Context, key: str, value: str, as_json: bool) -> None:
         "note": "Compatibility override saved (does not rewrite thomas.toml).",
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
     else:
         click.echo(f"set {key} = {parsed}")
         click.echo(payload["note"])
@@ -561,7 +589,7 @@ def config_unset(ctx: click.Context, key: str, as_json: bool) -> None:
         _save_config_overrides(config, overrides)
     payload = {"ok": existed, "key": str(key), "source": "override"}
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
     else:
         if existed:
             click.echo(f"unset {key}")
@@ -582,7 +610,7 @@ def config_validate(ctx: click.Context, as_json: bool, strict: bool) -> None:
     config: AppConfig = ctx.obj["config"]
     report = build_report_for_config(config, config_path=getattr(config, "config_path", None))
     if as_json:
-        click.echo(json.dumps(report, ensure_ascii=False))
+        _emit_json(report, ensure_ascii=False)
     else:
         click.echo(f"ok: {bool(report.get('ok', False))}")
         summary = dict(report.get("summary") or {})
@@ -605,7 +633,7 @@ def config_path(ctx: click.Context, as_json: bool) -> None:
         "exists": path.exists(),
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False))
+        _emit_json(payload, ensure_ascii=False)
         return
     click.echo(str(path))
 
@@ -959,7 +987,7 @@ def _emit_models_compat(action: str, note: str, as_json: bool) -> None:
         "note": str(note),
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
         return
     click.echo(f"models {action}: {note}")
 
@@ -1053,7 +1081,7 @@ def _runtime_model_error(*, as_json: bool, message: str, profile: str = "") -> N
     if profile:
         payload["profile"] = profile
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
     else:
         click.echo(str(message), err=True)
     raise SystemExit(2)
@@ -1071,7 +1099,7 @@ def models_status(ctx: click.Context, as_json: bool) -> None:
         "profile_count": len(config.models),
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
         return
     click.echo(f"default_model: {payload['default_model']}")
     click.echo(f"profiles: {', '.join(payload['profiles'])}")
@@ -1100,7 +1128,7 @@ def models_set(ctx: click.Context, model_id: str, profile_name: str | None, as_j
     if profile not in config.models:
         payload = {"ok": False, "error": "unknown_profile", "profile": profile}
         if as_json:
-            click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+            _emit_json(payload, ensure_ascii=False, indent=2)
         else:
             click.echo(f"Unknown profile '{profile}'. Available: {', '.join(config.models.keys())}", err=True)
         raise SystemExit(2)
@@ -1112,7 +1140,7 @@ def models_set(ctx: click.Context, model_id: str, profile_name: str | None, as_j
         "note": "Updated in-memory profile for this run (does not rewrite thomas.toml).",
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
     else:
         click.echo(f"set profile '{profile}' model to '{model_id}'")
         click.echo(payload["note"])
@@ -1182,7 +1210,7 @@ def models_set_image(
         "note": "Runtime-only mapping (does not rewrite thomas.toml).",
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
         return
     click.echo(f"image profile: {payload['profile']}")
     click.echo(f"image model: {payload['model']}")
@@ -1297,7 +1325,7 @@ def models_aliases(
         payload["resolved"] = resolved_payload
 
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
         return
     click.echo(f"aliases: {payload['count']}")
     for row in rows:
@@ -1370,7 +1398,7 @@ def models_auth(ctx: click.Context, profile_name: str, as_json: bool) -> None:
         "secret_store_path": str(secret_store.storage_info.path),
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
         return
     click.echo(f"profiles: {payload['profile_count']} (ready: {payload['ready_count']})")
     for row in rows:
@@ -1453,7 +1481,7 @@ def models_fallbacks(
         "note": "Runtime-only updates (does not rewrite thomas.toml).",
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
         return
     click.echo(f"primary: {payload['primary_profile']}")
     click.echo(f"enabled: {payload['enabled']}")
@@ -1531,7 +1559,7 @@ def models_image_fallbacks(
         "note": "Runtime-only updates (does not rewrite thomas.toml).",
     }
     if as_json:
-        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        _emit_json(payload, ensure_ascii=False, indent=2)
         return
     click.echo(f"primary: {payload['primary_profile']}")
     click.echo(f"configured_profiles: {', '.join(payload['configured_profiles']) or '(none)'}")
@@ -1588,9 +1616,18 @@ def repl(ctx: click.Context, model_name: str | None) -> None:
 
     tools_registry = _build_tools(config)
 
-    # On Windows, prompt_toolkit may need the SelectorEventLoop
+    # Keep Windows REPL compatible with prompt_toolkit while allowing Codex
+    # flows to spawn its subprocess bridge.
     if sys.platform == "win32":
-        asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+        selected_model = model_name or config.default_model
+        selected_profile = config.models.get(selected_model) if config and config.models else None
+        selected_provider = str(getattr(selected_profile, "provider", "") or "").strip().lower()
+        if selected_provider == "codex":
+            policy_cls = getattr(asyncio, "WindowsProactorEventLoopPolicy", None)
+        else:
+            policy_cls = getattr(asyncio, "WindowsSelectorEventLoopPolicy", None)
+        if policy_cls is not None:
+            asyncio.set_event_loop_policy(policy_cls())
 
     repl_instance = ThomasREPL(config, tools_registry)
     asyncio.run(repl_instance.run())
@@ -1614,7 +1651,7 @@ def onboarding_outcomes_cmd(db_path: str, window_days: int, as_json: bool) -> No
         report = get_outcomes_report(since_days=days)
 
     if as_json:
-        click.echo(json.dumps(report, ensure_ascii=False))
+        _emit_json(report, ensure_ascii=False)
         return
     summary = dict(report.get("summary") or {})
     click.echo(f"events: {int(summary.get('events', 0) or 0)}")
@@ -1637,7 +1674,7 @@ def release_contracts_check_cmd(registry_path: str, as_json: bool, strict: bool)
 
     report = build_release_contract_report(Path(registry_path).resolve() if registry_path else None)
     if as_json:
-        click.echo(json.dumps(report, ensure_ascii=False))
+        _emit_json(report, ensure_ascii=False)
     else:
         summary = dict(report.get("summary") or {})
         click.echo(f"ok: {bool(report.get('ok', False))}")

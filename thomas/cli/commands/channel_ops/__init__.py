@@ -70,6 +70,10 @@ def register(app: typer.Typer) -> None:
                     _restore_typer_state(app, snap)
                     continue
                 raise
+            except NameError:
+                # Some modules carry unresolved type symbols in callback annotations.
+                _restore_typer_state(app, snap)
+                continue
             except (ValueError, TypeError):
                 _restore_typer_state(app, snap)
                 continue

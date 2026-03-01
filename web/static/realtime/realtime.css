@@ -120,7 +120,10 @@ body {
   border: 1px solid rgba(255,255,255,0.10);
   background: rgba(15,22,35,0.75);
   border-radius: 14px;
-  padding: 10px 12px;
+  padding: 12px 14px;
+  min-height: 110px;
+  font-size: 14px;
+  line-height: 1.35;
   color: var(--text);
   resize: none;
   outline: none;

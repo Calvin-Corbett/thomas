@@ -135,6 +135,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Apply canonical backstop entry before validating.",
     )
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Compatibility alias for check mode (default).",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)
 

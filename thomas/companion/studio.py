@@ -11,6 +11,7 @@ from typing import Any
 
 from .contracts import ModuleContract
 from .kernel import CompanionKernel, KERNEL_VERSION
+from .policy.validator import collect_command_invocation_paths
 
 
 def _now_iso() -> str:
@@ -37,6 +38,35 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: fh.read(1024 * 1024), b""):
             h.update(chunk)
     return h.hexdigest()
+
+
+def _decode_json_value(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    raw = value.strip()
+    if not raw:
+        return value
+    try:
+        return json.loads(raw)
+    except Exception:
+        return value
+
+
+def _as_json_container(value: Any, *, source: str) -> dict[str, Any] | list[Any]:
+    payload = _decode_json_value(value)
+    if not isinstance(payload, (dict, list)):
+        raise ValueError(f"{source} must be a JSON object or array")
+    return payload
+
+
+def _require_no_command_invocation(payload: Any, *, source: str) -> None:
+    paths = collect_command_invocation_paths(_decode_json_value(payload), root_path=source)
+    if not paths:
+        return
+    path_list = ", ".join(paths[:5]) if len(paths) > 5 else ", ".join(paths)
+    if len(paths) > 5:
+        path_list += f", ... (+{len(paths) - 5} more)"
+    raise ValueError(f"{source} contains blocked command/script invocation field(s): {path_list}")
 
 
 @dataclass(frozen=True)
@@ -137,14 +167,16 @@ class BundleStudio:
                 "title": module.display_name,
                 "components": [{"type": "text", "value": "hello from Thomas studio"}],
             }
+        screen_payload_obj = _as_json_container(screen_payload, source="screen_payload")
+        _require_no_command_invocation(screen_payload_obj, source="screen_payload")
         entry_path.write_text(
-            json.dumps(screen_payload, ensure_ascii=True, indent=2) + "\n",
+            json.dumps(screen_payload_obj, ensure_ascii=True, indent=2) + "\n",
             encoding="utf-8",
         )
 
         extra_files = payload.get("extra_files")
         if isinstance(extra_files, list):
-            for item in extra_files:
+            for index, item in enumerate(extra_files):
                 if not isinstance(item, dict):
                     continue
                 rel = str(item.get("path") or "").strip().replace("\\", "/")
@@ -159,6 +191,10 @@ class BundleStudio:
                 dst = payload_root / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 content = item.get("content")
+                _require_no_command_invocation(
+                    content,
+                    source=f"extra_files[{index}].content",
+                )
                 if isinstance(content, (dict, list)):
                     text = json.dumps(content, ensure_ascii=True, indent=2) + "\n"
                 else:

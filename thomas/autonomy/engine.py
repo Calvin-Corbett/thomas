@@ -185,7 +185,16 @@ class AutonomyEngine:
                 self.store.add_audit(job.id, "job.policy_denied", "policy", err)
                 return
 
-            if decision.requires_approval and not job.approved:
+            if job.requires_approval and not decision.requires_approval:
+                self.store.set_job_status(
+                    job.id,
+                    "running",
+                    approved=True,
+                    requires_approval=False,
+                    lock_clear=False,
+                )
+                job.approved = True
+            elif job.requires_approval and decision.requires_approval and not job.approved:
                 # Create approval request if none pending.
                 pending = self.store.list_job_approvals(job.id, status="pending")
                 if not pending:

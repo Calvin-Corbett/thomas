@@ -88,8 +88,27 @@ def test_default_suite_config_wires_benchmark_evidence_globs_for_thomas_and_open
         for agent in list(loaded.get("agents") or [])
         if str(agent.get("id") or "").strip()
     }
-    assert agents["thomas"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
-    assert agents["openclaw"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
+    assert agents["thomas"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.prog_evidence.json"]
+    assert agents["openclaw"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.prog_evidence.json"]
+
+
+def test_materialize_competitor_catalog_adds_benchmark_defaults_for_thomas_and_openclaw(tmp_path: Path) -> None:
+    config = {
+        "agents": [],
+        "competitor_catalog": [
+            {"id": "thomas"},
+            {"id": "openclaw"},
+        ],
+    }
+    prepared_agents, _ = suite._materialize_competitor_catalog_agents(
+        suite_config=config,
+        suite_root=tmp_path,
+    )
+    by_id = {str(agent.get("id") or "").strip(): dict(agent) for agent in prepared_agents}
+    assert by_id["thomas"]["benchmark_aliases"] == ["thomas", "thomas_os"]
+    assert by_id["openclaw"]["benchmark_aliases"] == ["openclaw"]
+    assert by_id["thomas"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
+    assert by_id["openclaw"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.raw.json"]
 
 
 def test_assertion_resolution_and_ops() -> None:

@@ -249,7 +249,7 @@ class TestAsAppliedVsAsPresc:
             {"percent_error": 2.5},
         ]
 
-        report = AsAppliedVsAsPrec.field_compliance_report(
+        report = AsAppliedVsAsPresc.field_compliance_report(
             deviations=deviations,
             tolerance_percent=5.0,
         )
@@ -267,7 +267,7 @@ class TestAsAppliedVsAsPresc:
             {"percent_error": 15.0},
         ]
 
-        report = AsAppliedVsAsPrec.field_compliance_report(
+        report = AsAppliedVsAsPresc.field_compliance_report(
             deviations=deviations,
             tolerance_percent=5.0,
         )

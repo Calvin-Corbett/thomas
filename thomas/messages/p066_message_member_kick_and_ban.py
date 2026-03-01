@@ -17,6 +17,7 @@ Public entrypoints:
 
 from __future__ import annotations
 
+import json
 import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
