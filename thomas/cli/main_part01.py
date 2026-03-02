@@ -512,13 +512,17 @@ def chat(
     from thomas.core.model_resolution import resolve_effective_model
     from thomas.preferences.store import get_db_path
 
-    resolved_profile, resolved_model_id = resolve_effective_model(
-        config,
-        cli_profile=selected_profile,
-        env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
-        user_id="default",
-        db_path=get_db_path(),
-    )
+    try:
+        resolved_profile, resolved_model_id = resolve_effective_model(
+            config,
+            cli_profile=selected_profile,
+            env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
+            user_id="default",
+            db_path=get_db_path(),
+        )
+    except Exception:
+        resolved_profile = ""
+        resolved_model_id = ""
     if not resolved_profile:
         selected_profile = _resolve_model_profile_name(config, config.default_model)
         if not selected_profile:
