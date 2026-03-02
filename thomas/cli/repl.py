@@ -13,6 +13,7 @@ import re
 import sys
 import threading
 import time
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
@@ -85,6 +86,15 @@ _MASCOT_LINES = [
     "  │ ██ │",
     "  │_▁▁_│",
     "   ░  ░",
+]
+_ACCENT_PALETTE: list[tuple[str, str]] = [
+    ("bright_cyan", "#00bcd4"),
+    ("bright_magenta", "#d946ef"),
+    ("bright_yellow", "#f59e0b"),
+    ("bright_green", "#22c55e"),
+    ("bright_white", "#e5e7eb"),
+    ("cyan", "#06b6d4"),
+    ("magenta", "#c026d3"),
 ]
 
 
@@ -216,7 +226,14 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         self._runtime_context_window: int | None = None
         self._runtime_context_window_profile: str | None = None
         self._last_context_source: str | None = None
-        self._mascot_style = self._new_session_mascot_style()
+        self._mascot_style, self._accent_hex = self._new_session_theme()
+        self._activity_verbosity = str(os.environ.get("THOMAS_ACTIVITY_VERBOSITY", "normal") or "normal").strip().lower()
+        if self._activity_verbosity not in {"minimal", "normal", "debug"}:
+            self._activity_verbosity = "normal"
+        self._activity_feed: list[str] = []
+        self._activity_panel_open = False
+        self._help_panel_open = False
+        self._panel_focus = "input"
         # Codex-style UX keeps slash/model interactions in-place by default.
         # Alternate-screen overlays remain available as an explicit opt-in.
         self._use_alt_screen = str(os.environ.get("THOMAS_REPL_ALT_SCREEN", "0")).strip().lower() not in (
@@ -431,6 +448,9 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
 
         @bindings.add("tab")
         def _tab_autocomplete_slash_popup(event: Any) -> None:
+            if self._ui_state not in overlay_picker_states and (self._help_panel_open or self._activity_panel_open):
+                self._cycle_panel_focus()
+                return
             if self._ui_state not in overlay_picker_states:
                 return
             buffer = event.current_buffer
@@ -440,6 +460,35 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             buffer.start_completion(select_first=True)
             if buffer.complete_state and buffer.complete_state.current_completion:
                 buffer.apply_completion(buffer.complete_state.current_completion)
+
+        @bindings.add("f1")
+        def _toggle_help_panel(event: Any) -> None:
+            self._help_panel_open = not self._help_panel_open
+            if self._help_panel_open:
+                self._panel_focus = "help"
+            elif self._panel_focus == "help":
+                self._panel_focus = "input"
+            self._render_panels()
+            event.app.invalidate()
+
+        @bindings.add("f2")
+        def _toggle_activity_panel(event: Any) -> None:
+            self._activity_panel_open = not self._activity_panel_open
+            if self._activity_panel_open:
+                self._panel_focus = "activity"
+            elif self._panel_focus == "activity":
+                self._panel_focus = "input"
+            self._render_panels()
+            event.app.invalidate()
+
+        @bindings.add("f3")
+        def _cycle_activity_verbosity(event: Any) -> None:
+            order = ["minimal", "normal", "debug"]
+            current = self._activity_verbosity if self._activity_verbosity in order else "normal"
+            self._activity_verbosity = order[(order.index(current) + 1) % len(order)]
+            self._record_activity(f"verbosity -> {self._activity_verbosity}", level="minimal")
+            self._render_panels()
+            event.app.invalidate()
 
         @bindings.add("down")
         def _overlay_picker_next(event: Any) -> None:
@@ -480,8 +529,8 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
                 "prompt": "ansiblue bold",
                 # Explicit overlay selection styling so active command/model is always visible.
                 "completion-menu": "bg:#1f2430 #d9d9d9",
-                "completion-menu.completion.current": "bg:#2e7d32 #ffffff bold",
-                "completion-menu.meta.completion.current": "bg:#2e7d32 #d7ffd9",
+                "completion-menu.completion.current": f"bg:{self._accent_hex} #ffffff bold",
+                "completion-menu.meta.completion.current": f"bg:{self._accent_hex} #f5f5f5",
             }
         )
 
@@ -654,34 +703,112 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
 
     def _composer_toolbar_hint(self) -> str:
         token_info = self._get_token_usage_display()
-        status = f"[dim]{self._status_badges()}[/dim]"
-        base = (
-            "Type / for commands · Ctrl+Space for palette · Enter send · Ctrl+J newline "
-            "· Esc back · // literal slash"
+        panel_state: list[str] = []
+        if self._help_panel_open:
+            panel_state.append("Help")
+        if self._activity_panel_open:
+            panel_state.append(f"Activity:{self._activity_verbosity}")
+        panels = f" [{'/'.join(panel_state)}]" if panel_state else ""
+        line = (
+            f"{self._status_badges()}{panels}  "
+            "F1 Help  F2 Activity  F3 Logs  Ctrl+Space Commands  Tab Focus"
         )
         if token_info:
-            return f"{status}  [dim]{base}  [{token_info}][/dim]"
-        return f"{status}  [dim]{base}[/dim]"
+            line = f"{line}  {token_info}"
+        return self._truncate_to_terminal(line)
 
     def _status_badges(self) -> str:
         return (
-            f"[model: {self._resolved_model_label()}] "
-            f"[autonomy: L{self._autonomy_level}] "
-            f"[tools: {self._tools_policy}] "
-            f"[route: {self._last_route}]"
+            f"[model:{self._current_model}] "
+            f"[autonomy:L{self._autonomy_level}] "
+            f"[tools:{self._tools_policy}] "
+            f"[route:{self._last_route}]"
         )
 
-    def _new_session_mascot_style(self) -> str:
-        palette = [
-            "bright_cyan",
-            "bright_magenta",
-            "bright_yellow",
-            "bright_green",
-            "bright_white",
-            "cyan",
-            "magenta",
+    def _new_session_theme(self) -> tuple[str, str]:
+        style, hex_color = random.choice(_ACCENT_PALETTE)
+        return style, hex_color
+
+    def _truncate_to_terminal(self, text: str) -> str:
+        try:
+            width = int(self._console.size.width or 120)
+        except Exception:
+            width = 120
+        width = max(20, width - 1)
+        if len(text) <= width:
+            return text
+        return text[: max(1, width - 1)] + "…"
+
+    def _activity_allows(self, level: str) -> bool:
+        order = {"minimal": 0, "normal": 1, "debug": 2}
+        target = order.get(str(level or "normal"), 1)
+        current = order.get(str(self._activity_verbosity or "normal"), 1)
+        return target <= current
+
+    def _record_activity(self, message: str, *, level: str = "normal") -> None:
+        if not self._activity_allows(level):
+            return
+        msg = str(message or "").strip()
+        if not msg:
+            return
+        ts = datetime.now().strftime("%H:%M:%S")
+        line = f"{ts}  {msg}"
+        self._activity_feed.append(line)
+        if len(self._activity_feed) > 200:
+            self._activity_feed = self._activity_feed[-200:]
+        self._console.print(f"[{self._mascot_style}]•[/{self._mascot_style}] [dim]{line}[/dim]")
+        if self._activity_panel_open:
+            self._render_panels()
+
+    def _render_help_panel(self) -> None:
+        lines = [
+            "F1  Toggle Help",
+            "F2  Toggle Activity",
+            "F3  Cycle Logs (minimal/normal/debug)",
+            "Ctrl+Space  Commands",
+            "Tab  Cycle panel focus",
+            "Esc  Back in pickers",
         ]
-        return random.choice(palette)
+        self._console.print(Panel("\n".join(lines), title="Help", border_style=self._mascot_style, expand=False))
+
+    def _render_activity_panel(self) -> None:
+        rows = self._activity_feed[-12:] if self._activity_feed else ["(no activity yet)"]
+        self._console.print(
+            Panel("\n".join(rows), title=f"Activity ({self._activity_verbosity})", border_style=self._mascot_style, expand=False)
+        )
+
+    def _render_panels(self) -> None:
+        try:
+            from prompt_toolkit.application import run_in_terminal
+
+            def _print_panels() -> None:
+                if self._help_panel_open:
+                    self._render_help_panel()
+                if self._activity_panel_open:
+                    self._render_activity_panel()
+
+            run_in_terminal(_print_panels, render_cli_done=False)
+        except Exception:
+            if self._help_panel_open:
+                self._render_help_panel()
+            if self._activity_panel_open:
+                self._render_activity_panel()
+
+    def _cycle_panel_focus(self) -> None:
+        sequence = ["input"]
+        if self._help_panel_open:
+            sequence.append("help")
+        if self._activity_panel_open:
+            sequence.append("activity")
+        if len(sequence) <= 1:
+            self._panel_focus = "input"
+            return
+        try:
+            idx = sequence.index(self._panel_focus)
+        except ValueError:
+            idx = 0
+        self._panel_focus = sequence[(idx + 1) % len(sequence)]
+        self._record_activity(f"focus -> {self._panel_focus}", level="debug")
 
     def _startup_header_lines(self, version: str) -> list[str]:
         model_label = str(self._current_model or "").strip()
@@ -708,7 +835,8 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         if not bool(getattr(sys.stdout, "isatty", lambda: False)()):
             return
         try:
-            sys.stdout.write("\r\033[2K\r")
+            # Cursor is on the next line after Enter; clear both lines so input is ephemeral.
+            sys.stdout.write("\r\033[2K\033[1A\033[2K\r")
             sys.stdout.flush()
         except Exception:
             return
@@ -719,7 +847,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             return
         role_key = (role or "").strip().lower()
         if role_key == "user":
-            self._console.print(Panel(Text(content), title=USER_PANEL_TITLE, border_style="bright_magenta", expand=True))
+            self._console.print(Panel(Text(content), title=USER_PANEL_TITLE, border_style=self._mascot_style, expand=True))
         elif role_key == "assistant":
             self._console.print(Panel(Text(content), title=ASSISTANT_PANEL_TITLE, border_style="cyan", expand=True))
         elif role_key == "system":
@@ -1066,7 +1194,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         version = _get_version()
         if self._should_show_mascot():
             self._console.print("\n".join(self._startup_header_lines(version)))
-            self._console.print("[dim]────────────────────────────────────────[/dim]")
+            self._console.print(f"[{self._mascot_style}]────────────────────────────────────────[/{self._mascot_style}]")
         else:
             self._console.print(f"[bold green]THOMAS[/bold green] v{version}")
             self._console.print(f"[dim]model: {self._resolved_model_label() or self._current_model}[/dim]")
