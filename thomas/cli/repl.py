@@ -78,11 +78,12 @@ _OVERLAY_EXIT_ACCEPT = "accept"
 _OVERLAY_EXIT_BACK = "back"
 _OVERLAY_EXIT_CLOSE = "close"
 _MASCOT_LINES = [
-    "   /-----\\",
-    "  | THOM |",
-    " /  o o  \\",
-    "|   ._.   |",
-    " \\__|_|__/",
+    "   /----\\",
+    "  | ..  |",
+    "  | --  |",
+    " /|_||_|\\",
+    "   |  |",
+    "   |__|",
 ]
 
 
@@ -668,6 +669,26 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             f"[route: {self._last_route}]"
         )
 
+    def _startup_header_lines(self, version: str) -> list[str]:
+        model_label = self._resolved_model_label() or self._current_model
+        details = [
+            f"THOMAS v{version}",
+            f"model: {model_label}",
+            f"autonomy: L{self._autonomy_level}",
+            f"tools: {self._tools_policy}",
+        ]
+        mascot = list(_MASCOT_LINES)
+        pad = max(len(line) for line in mascot) + 2 if mascot else 2
+        merged: list[str] = []
+        for idx in range(max(len(mascot), len(details))):
+            left = mascot[idx] if idx < len(mascot) else ""
+            right = details[idx] if idx < len(details) else ""
+            if right:
+                merged.append(f"[bright_cyan]{left.ljust(pad)}[/bright_cyan] {right}")
+            else:
+                merged.append(f"[bright_cyan]{left}[/bright_cyan]")
+        return merged
+
     def _erase_prompt_line(self) -> None:
         if not bool(getattr(sys.stdout, "isatty", lambda: False)()):
             return
@@ -1030,11 +1051,15 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         """Main REPL loop."""
         version = _get_version()
         if self._should_show_mascot():
-            self._console.print("\n".join(_MASCOT_LINES))
+            self._console.print("\n".join(self._startup_header_lines(version)))
+            self._console.print("[dim]----------------------------------------[/dim]")
+        else:
+            self._console.print(f"[bold green]THOMAS[/bold green] v{version}")
+            self._console.print(f"[dim]model: {self._resolved_model_label() or self._current_model}[/dim]")
+            self._console.print(f"[dim]autonomy: L{self._autonomy_level}[/dim]")
+            self._console.print(f"[dim]tools: {self._tools_policy}[/dim]")
+            self._console.print(f"[dim]route: {self._last_route}[/dim]")
         banner_lines = [
-            f"[bold green]Thomas[/bold green] v{version}",
-            f"[dim]resolved model: [cyan]{self._resolved_model_label() or self._current_model}[/cyan][/dim]",
-            f"[dim]{self._status_badges()}[/dim]",
             "Type [dim]/[/dim] or [dim]Ctrl+Space[/dim] for commands, [dim]Ctrl+J[/dim] for multiline, "
             "[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit. "
             "Use [dim]//[/dim] to send a literal slash message.",
