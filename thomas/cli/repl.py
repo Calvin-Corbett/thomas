@@ -922,7 +922,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             return False
         levels = ["minimal", "low", "medium", "high", "xhigh"]
         current = str(self.config.get_model(self._current_model).reasoning_effort or "").strip().lower()
-        default_value = current if current in levels else "medium"
+        default_value = current if current in levels else ""
         options = [PickerOption(value=level, label=level, is_current=(level == default_value)) for level in levels]
         try:
             picked = await self._run_interactive_flow(
