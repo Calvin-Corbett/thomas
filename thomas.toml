@@ -2,7 +2,7 @@
 # See: README.md for quick start and configuration notes.
 
 # Default model profile to use.
-# Cloud model (anthropic/openai) for reasoning; local models handle delegated subtasks.
+# Dev build default model profile.
 default_model = "codex"
 # Maximum agent loop iterations per query
 max_agent_iterations = 10
