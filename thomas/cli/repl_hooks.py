@@ -2,12 +2,10 @@ import asyncio
 import fnmatch
 import json
 import logging
-import os
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
-from typing import Any, List, Optional
-
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -34,7 +32,7 @@ class HookResult:
     exit_code: int
     stdout: str
     stderr: str
-    error: Optional[str] = None
+    error: str | None = None
 
     @property
     def success(self) -> bool:
@@ -54,8 +52,9 @@ class HookResult:
             return "success"
         return "failed"
 
+
 class HookRunner:
-    def __init__(self, hooks: List[HookConfig]) -> None:
+    def __init__(self, hooks: list[HookConfig]) -> None:
         self._hooks = hooks
 
     @classmethod
@@ -67,7 +66,7 @@ class HookRunner:
     def has_hooks(self) -> bool:
         return len(self._hooks) > 0
 
-    def get_hooks(self, hook_type: HookType, tool_name: str) -> List[HookConfig]:
+    def get_hooks(self, hook_type: HookType, tool_name: str) -> list[HookConfig]:
         matching = []
         for hook in self._hooks:
             if hook.hook_type != hook_type:
@@ -80,9 +79,9 @@ class HookRunner:
         self,
         hook_type: HookType,
         tool_name: str,
-        tool_args: Optional[Any] = None,
-        tool_result: Optional[Any] = None,
-    ) -> List["HookResult"]:
+        tool_args: Any | None = None,
+        tool_result: Any | None = None,
+    ) -> list["HookResult"]:
         hooks = self.get_hooks(hook_type, tool_name)
         results = []
         for hook in hooks:
@@ -94,8 +93,8 @@ class HookRunner:
         self,
         hook: HookConfig,
         tool_name: str,
-        tool_args: Optional[Any],
-        tool_result: Optional[Any],
+        tool_args: Any | None,
+        tool_result: Any | None,
     ) -> "HookResult":
         context = {
             "hook_type": hook.hook_type.value,
@@ -144,14 +143,15 @@ class HookRunner:
                 error=str(exc),
             )
 
-def load_hooks_config(project_root: Path) -> List[HookConfig]:
+
+def load_hooks_config(project_root: Path) -> list[HookConfig]:
     """Load hooks configuration from .thomas/hooks.json or .thomas/settings.json."""
     thomas_dir = project_root / ".thomas"
 
     hooks_json = thomas_dir / "hooks.json"
     if hooks_json.exists():
         try:
-            with open(hooks_json, "r", encoding="utf-8") as f:
+            with open(hooks_json, encoding="utf-8") as f:
                 data = json.load(f)
             return _parse_hooks_json(data)
         except Exception as exc:
@@ -161,7 +161,7 @@ def load_hooks_config(project_root: Path) -> List[HookConfig]:
     settings_json = thomas_dir / "settings.json"
     if settings_json.exists():
         try:
-            with open(settings_json, "r", encoding="utf-8") as f:
+            with open(settings_json, encoding="utf-8") as f:
                 data = json.load(f)
             if "hooks" in data:
                 return _parse_hooks_json(data["hooks"])
@@ -172,7 +172,7 @@ def load_hooks_config(project_root: Path) -> List[HookConfig]:
     return []
 
 
-def _parse_hooks_json(data: Any) -> List[HookConfig]:
+def _parse_hooks_json(data: Any) -> list[HookConfig]:
     """Parse hook JSON structure. Supports a top-level list or a dict with a nested "hooks" key."""
     if isinstance(data, dict) and "hooks" in data:
         data = data["hooks"]
@@ -181,7 +181,7 @@ def _parse_hooks_json(data: Any) -> List[HookConfig]:
         logger.warning("Hooks config must be a list, got %s", type(data).__name__)
         return []
 
-    configs: List[HookConfig] = []
+    configs: list[HookConfig] = []
     for entry in data:
         if not isinstance(entry, dict):
             logger.warning("Skipping invalid hook entry: %r", entry)
@@ -198,13 +198,16 @@ def _parse_hooks_json(data: Any) -> List[HookConfig]:
             logger.warning("Hook entry missing command, skipping: %r", entry)
             continue
         timeout = int(entry.get("timeout", 10))
-        configs.append(HookConfig(
-            hook_type=hook_type,
-            matcher=matcher,
-            command=command,
-            timeout=timeout,
-        ))
+        configs.append(
+            HookConfig(
+                hook_type=hook_type,
+                matcher=matcher,
+                command=command,
+                timeout=timeout,
+            )
+        )
     return configs
+
 
 _TOOL_DISPLAY_NAMES: dict[str, str] = {
     "fs.read_file": "Read",
@@ -242,7 +245,7 @@ def tool_display_name(tool_name: str) -> str:
     return parts[-1].replace("_", " ").title()
 
 
-def tool_summary_line(tool_name: str, tool_args: Optional[Any], duration_ms: float) -> str:
+def tool_summary_line(tool_name: str, tool_args: Any | None, duration_ms: float) -> str:
     """Build a compact one-line summary for a tool call.
 
     Examples:

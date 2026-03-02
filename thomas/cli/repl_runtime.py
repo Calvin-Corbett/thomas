@@ -1,4 +1,4 @@
-﻿"""Runtime command handlers extracted from `ThomasREPL`."""
+"""Runtime command handlers extracted from `ThomasREPL`."""
 
 from __future__ import annotations
 
@@ -8,29 +8,41 @@ from pathlib import Path
 from typing import Any
 
 from prompt_toolkit.formatted_text import HTML
-from rich.live import Live
-from rich.markdown import Markdown
 from rich.panel import Panel
-from rich.spinner import Spinner
 from rich.text import Text
 
 from thomas.cli.repl_project import instruction_file_path
 from thomas.cli.repl_skills import expand_skill, list_all_skills
 from thomas.cli.repl_slash import (
-    SlashCommandCompleter,
     extract_slash_token,
     is_known_slash_command,
-    list_slash_specs,
     normalize_slash_command,
-    resolve_slash_selection,
     suggest_slash_commands,
 )
 from thomas.cli.repl_state import ReplUiState
-from thomas.core.autonomy import autonomy_level_name, clamp_autonomy_level
+from thomas.core.autonomy import autonomy_level_name, clamp_autonomy_level, parse_autonomy_level
 
 USER_PANEL_TITLE = "USER"
 
+
 class ThomasREPLRuntimeMixin:
+    async def _persist_repl_model_selection(self, *, profile: str, model_id: str | None) -> None:
+        resolved_profile = str(profile or "").strip()
+        if not resolved_profile:
+            return
+        try:
+            from thomas.preferences.store import AdvancedModelPatch, PreferencesPatch, PreferencesStore
+            from thomas.preferences.store import get_db_path
+
+            PreferencesStore(get_db_path()).patch(
+                PreferencesPatch(
+                    advanced=AdvancedModelPatch(active_profile=resolved_profile, model_id=(str(model_id or "").strip() or None))
+                ),
+                user_id="default",
+            )
+        except Exception:
+            return
+
     async def _handle_slash(self, cmd: str) -> tuple[bool, bool]:
         """Handle a slash command.
 
@@ -44,23 +56,13 @@ class ThomasREPLRuntimeMixin:
         if command == "/":
             self._transition_ui_state(ReplUiState.SLASH_POPUP)
             try:
-                picked = await self._prompt_overlay(
-                    HTML("<prompt>slash</prompt> > "),
-                    default=f"/{arg}".strip() if arg else "/",
-                    completer=self._slash_completer,
-                    menu_rows=10,
-                    toolbar_text=picker_toolbar_hint(len(self._slash_specs), 10),
-                )
+                selected = await self._pick_slash_command(default=f"/{arg}".strip() if arg else "/")
             except (KeyboardInterrupt, EOFError):
                 self._transition_ui_state(ReplUiState.IDLE)
                 return False, True
-            selected = resolve_slash_selection(str(picked or "").strip(), self._slash_specs)
             if not selected:
                 self._transition_ui_state(ReplUiState.IDLE)
                 return False, True
-            next_command = normalize_slash_command(extract_slash_token(selected))
-            if next_command != "/model":
-                self._transition_ui_state(ReplUiState.IDLE)
             should_exit, handled = await self._handle_slash(selected)
             if not should_exit and self._ui_state != ReplUiState.IDLE:
                 self._transition_ui_state(ReplUiState.IDLE)
@@ -70,12 +72,35 @@ class ThomasREPLRuntimeMixin:
             token = extract_slash_token(cmd)
             tips = suggest_slash_commands(token)
             tip_text = f" Did you mean: {', '.join(tips)}?" if tips else ""
-            self._console.print(
-                f"[yellow]Unknown slash command: {token or cmd}.{tip_text} "
-                f"Use / for picker or // to send literal slash text.[/yellow]"
+            self._print_system_event(
+                f"Unknown slash command: {token or cmd}.{tip_text} Use / for picker or // to send literal slash text.",
+                important=True,
             )
             return False, True
 
+        if command == "/model" and not arg:
+            from thomas.models.discovery import discover_models_async
+
+            discovered: list[Any] = []
+            try:
+                cfg = self.config.get_model(self._current_model)
+                discovered = await discover_models_async(cfg, timeout_s=1.5)
+            except (ValueError, TypeError):
+                discovered = []
+            ids = [d.id for d in discovered]
+            seen: set[str] = set()
+            ids = [x for x in ids if not (x in seen or seen.add(x))]
+            self._last_model_choices = ids
+
+        arg = await self._pick_slash_argument(command, arg)
+        if arg is getattr(self, "_overlay_back_sentinel", None):
+            self._transition_ui_state(ReplUiState.SLASH_POPUP)
+            should_exit, handled = await self._handle_slash("/")
+            if not should_exit and self._ui_state != ReplUiState.IDLE:
+                self._transition_ui_state(ReplUiState.IDLE)
+            return should_exit, handled
+        if self._ui_state != ReplUiState.IDLE:
+            self._transition_ui_state(ReplUiState.IDLE)
         if command == "/exit":
             return True, True
 
@@ -83,7 +108,8 @@ class ThomasREPLRuntimeMixin:
             lines = []
             for spec in self._slash_specs:
                 aliases = f"  [dim]{' '.join(spec.aliases)}[/dim]" if spec.aliases else ""
-                lines.append(f"[bold]{spec.usage}[/bold]  {spec.summary}{aliases}")
+                usage = spec.usage or spec.command
+                lines.append(f"[bold]{usage}[/bold]  {spec.summary}{aliases}")
             lines.append("")
             lines.append("[dim]/ opens picker. Use // to send literal slash text. Ctrl+J for multiline input.[/dim]")
             self._console.print(Panel("\n".join(lines), title="Commands", border_style="dim"))
@@ -123,49 +149,24 @@ class ThomasREPLRuntimeMixin:
                 self._console.print(f"[red]Load failed: {e}[/red]")
 
         elif command == "/model":
-            from thomas.models.discovery import discover_models_async
-
             if not arg:
-                profiles = self._known_model_profile_names()
-                discovered: list[Any] = []
-                try:
-                    cfg = self.config.get_model(self._current_model)
-                    discovered = await discover_models_async(cfg, timeout_s=1.5)
-                except (ValueError, TypeError):
-                    discovered = []
-                ids = [d.id for d in discovered]
-                seen: set[str] = set()
-                ids = [x for x in ids if not (x in seen or seen.add(x))]
-                self._last_model_choices = ids
-                chosen = await self._pick_model_choice(profiles=profiles, model_ids=ids)
-                if not chosen:
-                    return False, True
-                if chosen in self.config.models:
-                    self._current_model = chosen
-                    if self._llm:
-                        await self._llm.close()
-                        self._llm = None
-                    current_model_id = self.config.models[self._current_model].model
-                    await self._flash_status(f"Model set to {current_model_id}")
-                    await self._maybe_pick_reasoning_level(current_model_id)
-                    return False, True
-                self.config.models[self._current_model].model = chosen
-                if self._llm:
-                    await self._llm.close()
-                    self._llm = None
-                await self._flash_status(f"Model set to {chosen}")
-                await self._maybe_pick_reasoning_level(chosen)
+                self._console.print("[dim]No model selected.[/dim]")
                 return False, True
 
             # Switch profile: /model <profile>
             if arg in self.config.models:
                 self._current_model = arg
+                self._reset_context_window_cache()
                 if self._llm:
                     await self._llm.close()
                     self._llm = None
                 current_model_id = self.config.models[self._current_model].model
-                await self._flash_status(f"Model set to {current_model_id}")
-                await self._maybe_pick_reasoning_level(current_model_id)
+                self._print_system_event(f"model set to {current_model_id}", important=True)
+                await self._persist_repl_model_selection(profile=arg, model_id=None)
+                if await self._maybe_pick_reasoning_level(current_model_id):
+                    self._transition_ui_state(ReplUiState.SLASH_POPUP)
+                    should_exit, handled = await self._handle_slash("/model")
+                    return should_exit, handled
                 return False, True
 
             # Switch model id explicitly: /model id:foo
@@ -175,34 +176,60 @@ class ThomasREPLRuntimeMixin:
                     self._console.print("[yellow]Usage: /model id:<model_id>[/yellow]")
                     return False, True
                 self.config.models[self._current_model].model = chosen
+                self._reset_context_window_cache()
                 if self._llm:
                     await self._llm.close()
                     self._llm = None
-                await self._flash_status(f"Model set to {chosen}")
-                await self._maybe_pick_reasoning_level(chosen)
+                self._print_system_event(f"model set to {chosen}", important=True)
+                await self._persist_repl_model_selection(profile=self._current_model, model_id=chosen)
+                if await self._maybe_pick_reasoning_level(chosen):
+                    self._transition_ui_state(ReplUiState.SLASH_POPUP)
+                    should_exit, handled = await self._handle_slash("/model")
+                    return should_exit, handled
+                return False, True
+
+            # Direct model id: /model gpt-5...
+            if arg:
+                self.config.models[self._current_model].model = arg
+                self._reset_context_window_cache()
+                if self._llm:
+                    await self._llm.close()
+                    self._llm = None
+                self._print_system_event(f"model set to {arg}", important=True)
+                await self._persist_repl_model_selection(profile=self._current_model, model_id=arg)
+                if await self._maybe_pick_reasoning_level(arg):
+                    self._transition_ui_state(ReplUiState.SLASH_POPUP)
+                    should_exit, handled = await self._handle_slash("/model")
+                    return should_exit, handled
                 return False, True
 
             self._console.print(
-                f"[red]Unknown model/profile '{arg}'. "
-                "Use /model and select from popup results.[/red]"
+                f"[red]Unknown model/profile '{arg}'. " "Use /model and select from popup results.[/red]"
             )
 
         elif command == "/autonomy":
             if not arg:
                 level = int(self._autonomy_level)
-                self._console.print(f"[dim]Autonomy: L{level} ({autonomy_level_name(level)})[/dim]")
+                self._print_system_event(f"Autonomy: L{level} ({autonomy_level_name(level)})", important=True)
                 return False, True
 
-            m = re.search(r"[1-4]", str(arg))
-            if not m:
-                self._console.print("[yellow]Usage: /autonomy <1|2|3|4>[/yellow]")
+            if str(arg).strip().lower() in {"auto", "default", "l0"}:
+                if str(arg).strip().lower() == "l0":
+                    self._console.print("[dim]L0 is mapped to L1 in this runtime.[/dim]")
+                level = clamp_autonomy_level(3, default=self._autonomy_level)
+                self._autonomy_level = int(level)
+                self._print_system_event(
+                    f"autonomy set to L{self._autonomy_level} ({autonomy_level_name(self._autonomy_level)})",
+                    important=True,
+                )
                 return False, True
 
-            level = clamp_autonomy_level(m.group(0), default=self._autonomy_level)
+            level = parse_autonomy_level(arg, default=self._autonomy_level)
             self._autonomy_level = int(level)
-            self._console.print(f"[dim]Autonomy set to L{level} ({autonomy_level_name(level)})[/dim]")
+            self._print_system_event(f"autonomy set to L{level} ({autonomy_level_name(level)})", important=True)
 
         elif command == "/status":
+            route = str(self._last_route)
             user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
             asst_turns = sum(1 for m in self._conversation if m.get("role") == "assistant")
             tool_count = 0
@@ -212,6 +239,8 @@ class ThomasREPLRuntimeMixin:
             self._console.print(
                 f"[dim]Autonomy: L{self._autonomy_level} " f"({autonomy_level_name(self._autonomy_level)})[/dim]"
             )
+            self._console.print(f"[dim]Tools policy: {self._tools_policy}[/dim]")
+            self._console.print(f"[dim]Route: {route}[/dim]")
             self._console.print(
                 f"[dim]Conversation: {user_turns} user, {asst_turns} assistant, "
                 f"{len(self._conversation)} total messages[/dim]"
@@ -276,6 +305,9 @@ class ThomasREPLRuntimeMixin:
                 self._console.print(f"  [cyan]{role}[/cyan]: {text}")
             self._console.print("[dim]Tip: pin priorities with /pin todo.<key>=<task>[/dim]")
 
+        elif command == "/reads":
+            self._print_read_file_trace("Session")
+
         elif command == "/todo":
             todos: list[tuple[str, str]] = []
             seen: set[str] = set()
@@ -299,7 +331,6 @@ class ThomasREPLRuntimeMixin:
 
             for candidate in (
                 Path(self.config.memory.root_path) / "thomas_state.json",
-                Path.cwd() / "thomas_state.json",
             ):
                 if not candidate.exists():
                     continue
@@ -333,10 +364,42 @@ class ThomasREPLRuntimeMixin:
                     self._console.print(f"  - {origin}: {text}")
 
         elif command == "/tools":
-            for cat in self.tools.list_categories():
-                self._console.print(f"\n[bold]{cat}[/bold]")
-                for tool in self.tools.list_tools(cat):
-                    self._console.print(f"  [cyan]{tool.name}[/cyan] - {tool.description[:70]}")
+            if not arg:
+                for cat in self.tools.list_categories():
+                    self._console.print(f"\n[bold]{cat}[/bold]")
+                    for tool in self.tools.list_tools(cat):
+                        self._console.print(f"  [cyan]{tool.name}[/cyan] - {tool.description[:70]}")
+                self._console.print(f"\n[dim]Current tools mode: {self._tools_policy}[/dim]")
+                return False, True
+
+            policy = str(arg).strip().lower()
+            if policy == "on":
+                self._tools_policy = "always"
+            elif policy == "off":
+                self._tools_policy = "never"
+            elif policy == "auto":
+                self._tools_policy = "auto"
+            else:
+                self._console.print("[yellow]Usage: /tools [auto|on|off][/yellow]")
+                return False, True
+
+            self._print_system_event(f"tools policy set to {self._tools_policy}", important=True)
+
+        elif command == "/verbose":
+            mode = str(arg or "").strip().lower()
+            if not mode:
+                current = "on" if self._show_system_logs else "off"
+                self._console.print(f"[dim]Verbose system logs: {current}[/dim]")
+                return False, True
+            if mode in {"on", "true", "1", "yes"}:
+                self._show_system_logs = True
+                self._console.print("[dim]Verbose system logs: on[/dim]")
+                return False, True
+            if mode in {"off", "false", "0", "no"}:
+                self._show_system_logs = False
+                self._console.print("[dim]Verbose system logs: off[/dim]")
+                return False, True
+            self._console.print("[yellow]Usage: /verbose [on|off][/yellow]")
 
         elif command == "/memory":
             user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
@@ -396,9 +459,10 @@ class ThomasREPLRuntimeMixin:
                 self._project_instructions_path = instruction_file_path(self.config.tools.sandbox_path)
                 if self._project_instructions_path:
                     try:
-                        self._project_instructions = self._project_instructions_path.read_text(
-                            encoding="utf-8", errors="replace"
-                        ).strip() or None
+                        self._project_instructions = (
+                            self._project_instructions_path.read_text(encoding="utf-8", errors="replace").strip()
+                            or None
+                        )
                     except OSError:
                         self._project_instructions = None
                     self._console.print(f"[dim]Reloaded: {self._project_instructions_path}[/dim]")
@@ -407,11 +471,14 @@ class ThomasREPLRuntimeMixin:
                     self._console.print("[dim]No THOMAS.md found.[/dim]")
             elif self._project_instructions:
                 from rich.markdown import Markdown as _Md
-                self._console.print(Panel(
-                    _Md(self._project_instructions),
-                    title=f"Project Instructions ({self._project_instructions_path})",
-                    border_style="dim",
-                ))
+
+                self._console.print(
+                    Panel(
+                        _Md(self._project_instructions),
+                        title=f"Project Instructions ({self._project_instructions_path})",
+                        border_style="dim",
+                    )
+                )
             else:
                 self._console.print(
                     "[dim]No THOMAS.md found. Create .thomas.md or THOMAS.md in your project root.[/dim]"
@@ -462,7 +529,8 @@ class ThomasREPLRuntimeMixin:
                     self._console.print(
                         Panel(Text(expanded[:500]), title=USER_PANEL_TITLE, border_style="bright_blue", expand=True)
                     )
-                    await self._run_agent(expanded)
+                    await self._run_agent_turn(expanded)
+                    self._persist_conversation_state()
 
         elif command == "/worktree":
             sub = arg.strip().lower().split(None, 1) if arg else []
@@ -472,6 +540,7 @@ class ThomasREPLRuntimeMixin:
             if sub_cmd == "create":
                 try:
                     from thomas.tools.git_worktree import create_worktree, get_repo_root
+
                     repo = await get_repo_root(self.config.tools.sandbox_path)
                     if not repo:
                         self._console.print("[red]Not in a git repository.[/red]")
@@ -490,6 +559,7 @@ class ThomasREPLRuntimeMixin:
             elif sub_cmd == "list":
                 try:
                     from thomas.tools.git_worktree import get_repo_root, list_worktrees
+
                     repo = await get_repo_root(self.config.tools.sandbox_path)
                     if not repo:
                         self._console.print("[red]Not in a git repository.[/red]")
@@ -499,12 +569,12 @@ class ThomasREPLRuntimeMixin:
                         self._console.print("[dim]No Thomas-managed worktrees found.[/dim]")
                     else:
                         for wt in wts:
-                            marker = " [bold green]â† active[/bold green]" if (
-                                self._worktree and self._worktree.name == wt.name
-                            ) else ""
-                            self._console.print(
-                                f"  [cyan]{wt.name}[/cyan] ({wt.branch}) at {wt.path}{marker}"
+                            marker = (
+                                " [bold green]â† active[/bold green]"
+                                if (self._worktree and self._worktree.name == wt.name)
+                                else ""
                             )
+                            self._console.print(f"  [cyan]{wt.name}[/cyan] ({wt.branch}) at {wt.path}{marker}")
                 except Exception as e:
                     self._console.print(f"[red]Failed to list worktrees: {e}[/red]")
 
@@ -514,6 +584,7 @@ class ThomasREPLRuntimeMixin:
                 else:
                     try:
                         from thomas.tools.git_worktree import remove_worktree
+
                         await remove_worktree(self._worktree)
                         self._console.print(f"[dim]Removed worktree: {self._worktree.name}[/dim]")
                         if self._original_sandbox:
@@ -542,25 +613,28 @@ class ThomasREPLRuntimeMixin:
                     self._console.print(f"  Prompt: {task.prompt[:100]}")
                     if task.result_text:
                         from rich.markdown import Markdown as _Md
-                        self._console.print(Panel(
-                            _Md(task.result_text[:2000]),
-                            title=f"Result: {task.task_id}",
-                            border_style="cyan",
-                        ))
+
+                        self._console.print(
+                            Panel(
+                                _Md(task.result_text[:2000]),
+                                title=f"Result: {task.task_id}",
+                                border_style="cyan",
+                            )
+                        )
                     if task.error:
                         self._console.print(f"  [red]Error: {task.error}[/red]")
                     # Surface the result summary into the main conversation
                     # so the agent knows what the background task produced.
                     summary = self._bg_manager.surface_result(arg.strip())
                     if summary:
-                        self._conversation.append({
-                            "role": "user",
-                            "content": summary,
-                        })
-                        self._persist_conversation_state()
-                        self._console.print(
-                            "[dim]Background task result added to conversation context.[/dim]"
+                        self._conversation.append(
+                            {
+                                "role": "user",
+                                "content": summary,
+                            }
                         )
+                        self._persist_conversation_state()
+                        self._console.print("[dim]Background task result added to conversation context.[/dim]")
             else:
                 tasks = self._bg_manager.list_tasks()
                 if not tasks:
@@ -570,21 +644,23 @@ class ThomasREPLRuntimeMixin:
                         elapsed = ""
                         if t.finished_at:
                             elapsed = f" ({t.finished_at - t.started_at:.1f}s)"
-                        self._console.print(
-                            f"  [{t.status}] [cyan]{t.task_id}[/cyan]{elapsed} - {t.prompt[:60]}"
-                        )
+                        self._console.print(f"  [{t.status}] [cyan]{t.task_id}[/cyan]{elapsed} - {t.prompt[:60]}")
 
         elif command == "/plan":
             if not arg:
                 # Show active plan or list saved plans
                 if self._plan_handler.active_plan:
-                    from thomas.agent.plan_mode import plan_to_markdown as _ptm
                     from rich.markdown import Markdown as _Md
-                    self._console.print(Panel(
-                        _Md(_ptm(self._plan_handler.active_plan)),
-                        title="Active Plan",
-                        border_style="yellow",
-                    ))
+
+                    from thomas.agent.plan_mode import plan_to_markdown as _ptm
+
+                    self._console.print(
+                        Panel(
+                            _Md(_ptm(self._plan_handler.active_plan)),
+                            title="Active Plan",
+                            border_style="yellow",
+                        )
+                    )
                 else:
                     plans = self._plan_handler.list_plans()
                     if not plans:
@@ -592,9 +668,7 @@ class ThomasREPLRuntimeMixin:
                     else:
                         self._console.print(f"[dim]Saved plans: {len(plans)}[/dim]")
                         for p in plans[:10]:
-                            self._console.print(
-                                f"  [{p.status}] [cyan]{p.plan_id}[/cyan] - {p.task_description[:60]}"
-                            )
+                            self._console.print(f"  [{p.status}] [cyan]{p.plan_id}[/cyan] - {p.task_description[:60]}")
             else:
                 self._console.print("[dim]Creating plan...[/dim]")
                 try:
@@ -617,12 +691,88 @@ class ThomasREPLRuntimeMixin:
 
         return False, True
 
+    def _reset_context_window_cache(self) -> None:
+        self._runtime_context_window = None
+        self._last_context_source = None
+        self._runtime_context_window_profile = None
+
+    def _active_context_limit(self) -> int:
+        """Return a best-effort context window size for the current model."""
+        def _coerce_context_window(value: object) -> int:
+            try:
+                window = int(value)
+            except (TypeError, ValueError):
+                return 0
+            return window if window > 0 else 0
+
+        runtime_window = _coerce_context_window(getattr(self, "_runtime_context_window", 0))
+        runtime_profile = str(getattr(self, "_runtime_context_window_profile", "") or "").strip().lower()
+        current_profile = str(getattr(self, "_current_model", "") or "").strip().lower()
+        if runtime_window > 0 and runtime_profile and runtime_profile != current_profile:
+            stale_profile = runtime_profile
+            stale_window = runtime_window
+            self._runtime_context_window = None
+            self._runtime_context_window_profile = None
+            runtime_window = 0
+            self._last_context_source = None
+            log.debug(
+                "Ignoring stale runtime context window %s for profile %s; current profile is %s",
+                stale_window,
+                stale_profile,
+                current_profile,
+            )
+        if runtime_window > 0:
+            return runtime_window
+
+        profile = str(self._current_model or "").strip()
+        model_cfg = None
+        if profile:
+            model_cfg = self.config.models.get(profile)
+        if model_cfg is None and profile:
+            profile_l = profile.lower()
+            model_name = next(
+                (name for name in self.config.models.keys() if str(name).lower() == profile_l),
+                "",
+            )
+            model_cfg = self.config.models.get(model_name)
+        if model_cfg is None and self._llm is not None:
+            llm_profile = str(getattr(self._llm.config, "name", "") or "").strip()
+            if llm_profile:
+                if llm_profile in self.config.models:
+                    model_cfg = self.config.models[llm_profile]
+                else:
+                    llm_profile_l = llm_profile.lower()
+                    llm_profile_name = next(
+                        (name for name in self.config.models.keys() if str(name).lower() == llm_profile_l),
+                        "",
+                    )
+                    model_cfg = self.config.models.get(llm_profile_name)
+
+        if model_cfg is None:
+            return 8192
+
+        try:
+            limit = int(getattr(model_cfg, "context_window", 0) or 0)
+            if limit > 0:
+                return limit
+        except Exception:
+            pass
+        try:
+            if self._llm is not None:
+                limit = _coerce_context_window(getattr(self._llm.config, "context_window", 0))
+                if limit > 0:
+                    return limit
+        except Exception:
+            pass
+        return 8192
+
     def _get_token_usage_display(self) -> str:
         """Return a compact token usage string for the toolbar."""
         try:
             from thomas.agent.context_compaction import estimate_conversation_tokens
+
             conv_tokens = estimate_conversation_tokens(self._conversation)
-            hard_cap = 28000
+            hard_cap = self._active_context_limit()
             if conv_tokens >= 1000:
                 display = f"{conv_tokens / 1000:.1f}k"
             else:
@@ -643,12 +793,12 @@ class ThomasREPLRuntimeMixin:
         )
 
         conv_tokens = estimate_conversation_tokens(self._conversation)
-        hard_cap = 28000
+        hard_cap = self._active_context_limit()
         pct = int((conv_tokens / max(1, hard_cap)) * 100)
         msg_count = len(self._conversation)
 
         # Show current token usage
-        self._console.print(f"[bold]Context Budget[/bold]")
+        self._console.print("[bold]Context Budget[/bold]")
         self._console.print(
             f"  Tokens: [cyan]{conv_tokens:,}[/cyan] / {hard_cap:,} "
             f"([{'red' if pct > 85 else 'yellow' if pct > 60 else 'green'}]{pct}%[/])"
@@ -661,20 +811,15 @@ class ThomasREPLRuntimeMixin:
         tool_msgs = sum(1 for m in self._conversation if m.get("role") == "tool")
         system_msgs = sum(1 for m in self._conversation if m.get("role") == "system")
         self._console.print(
-            f"  Breakdown: {user_turns} user, {asst_turns} assistant, "
-            f"{tool_msgs} tool, {system_msgs} system"
+            f"  Breakdown: {user_turns} user, {asst_turns} assistant, " f"{tool_msgs} tool, {system_msgs} system"
         )
 
         if conv_tokens < int(hard_cap * 0.50):
-            self._console.print(
-                "\n[dim]Context usage is low. No compaction needed yet.[/dim]"
-            )
+            self._console.print("\n[dim]Context usage is low. No compaction needed yet.[/dim]")
             return
 
         # Ask user if they want to compact
-        self._console.print(
-            f"\n[dim]Compaction will summarize older turns to free token budget.[/dim]"
-        )
+        self._console.print("\n[dim]Compaction will summarize older turns to free token budget.[/dim]")
         try:
             confirm = await self._session.prompt_async(
                 HTML("<prompt>Compact now?</prompt> <ansigray>(y/n)</ansigray> > "),
@@ -694,8 +839,8 @@ class ThomasREPLRuntimeMixin:
             segment_size=8,
         )
 
-        from rich.spinner import Spinner as _Sp
         from rich.live import Live as _Lv
+        from rich.spinner import Spinner as _Sp
 
         spinner = _Lv(
             _Sp("dots", text=Text(" compacting context...", style="dim")),
@@ -719,23 +864,16 @@ class ThomasREPLRuntimeMixin:
         spinner.stop()
 
         # Show results
-        self._console.print(f"\n[bold]Compaction Complete[/bold]")
+        self._console.print("\n[bold]Compaction Complete[/bold]")
         self._console.print(
             f"  Tokens: {result.original_tokens:,} -> "
             f"[green]{result.compacted_tokens:,}[/green] "
             f"(saved {result.tokens_saved:,})"
         )
-        self._console.print(
-            f"  Messages: {result.original_message_count} -> "
-            f"{result.compacted_message_count}"
-        )
+        self._console.print(f"  Messages: {result.original_message_count} -> " f"{result.compacted_message_count}")
         if result.segments_summarized > 0:
-            self._console.print(
-                f"  Segments summarized: {result.segments_summarized}"
-            )
-        self._console.print(
-            f"  Time: {result.elapsed_ms:.0f}ms"
-        )
+            self._console.print(f"  Segments summarized: {result.segments_summarized}")
+        self._console.print(f"  Time: {result.elapsed_ms:.0f}ms")
 
         if result.summary_text:
             summary_preview = result.summary_text
@@ -749,5 +887,3 @@ class ThomasREPLRuntimeMixin:
                     expand=True,
                 )
             )
-
-

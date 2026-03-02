@@ -2,7 +2,6 @@
 
 import logging
 import os
-import random
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,7 +14,7 @@ class VirtualAgent:
     agent_id: str
     name: str
     role: str
-    color: str   # Rich color name
+    color: str  # Rich color name
     accent: str  # hex
     specialty: str
 
@@ -51,17 +50,17 @@ def _hex_to_rich_color(hex_color: str) -> str:
 # Ordered list of (keyword, specialty) tuples -- specific before general so that
 # e.g. "devops" matches before "ops" and "engineer" never steals a more precise hit.
 _ROLE_KEYWORDS: list[tuple[str, str]] = [
-    ("ops",      "Operations"),
-    ("devops",   "DevOps"),
+    ("ops", "Operations"),
+    ("devops", "DevOps"),
     ("research", "Research"),
     ("creative", "Creative"),
-    ("support",  "Support"),
-    ("game",     "Gaming"),
+    ("support", "Support"),
+    ("game", "Gaming"),
     ("security", "Security"),
-    ("data",     "Data"),
-    ("design",   "Design"),
-    ("qa",       "QA"),
-    ("engineer", "Engineering"),   # last -- avoids false matches on e.g. "research"
+    ("data", "Data"),
+    ("design", "Design"),
+    ("qa", "QA"),
+    ("engineer", "Engineering"),  # last -- avoids false matches on e.g. "research"
 ]
 
 
@@ -114,7 +113,7 @@ _AGENT_RE = re.compile(
 )
 
 _ACCENT_RE = re.compile(r"accentColor\s*:\s*'(?P<accent>[^']+)'")
-_BODY_RE   = re.compile(r"bodyColor\s*:\s*'(?P<body>[^']+)'")
+_BODY_RE = re.compile(r"bodyColor\s*:\s*'(?P<body>[^']+)'")
 
 
 def _parse_agents_from_html(html_path: Path) -> tuple["VirtualAgent", ...]:
@@ -127,27 +126,29 @@ def _parse_agents_from_html(html_path: Path) -> tuple["VirtualAgent", ...]:
 
     agents: list[VirtualAgent] = []
     for m in _AGENT_RE.finditer(text):
-        name       = m.group("name")
-        role       = m.group("role")
+        name = m.group("name")
+        role = m.group("role")
         body_block = m.group("body")
 
-        body_m   = _BODY_RE.search(body_block)
+        body_m = _BODY_RE.search(body_block)
         accent_m = _ACCENT_RE.search(body_block)
 
-        body_hex   = body_m.group("body")    if body_m   else "#008B8B"
+        body_hex = body_m.group("body") if body_m else "#008B8B"
         accent_hex = accent_m.group("accent") if accent_m else "#FFFFFF"
 
         rich_color = _hex_to_rich_color(body_hex)
-        specialty  = _role_to_specialty(role)
+        specialty = _role_to_specialty(role)
 
-        agents.append(VirtualAgent(
-            agent_id  = name.lower(),   # use display name (lower-cased) as stable id
-            name      = name,
-            role      = role,
-            color     = rich_color,
-            accent    = accent_hex,
-            specialty = specialty,
-        ))
+        agents.append(
+            VirtualAgent(
+                agent_id=name.lower(),  # use display name (lower-cased) as stable id
+                name=name,
+                role=role,
+                color=rich_color,
+                accent=accent_hex,
+                specialty=specialty,
+            )
+        )
 
     log.debug("Parsed %d agents from %s", len(agents), html_path)
     return tuple(agents)
@@ -157,12 +158,12 @@ def _parse_agents_from_html(html_path: Path) -> tuple["VirtualAgent", ...]:
 # Default fallback roster (used when HTML is not found or yields no agents)
 # ---------------------------------------------------------------------------
 _DEFAULT_ROSTER: tuple[VirtualAgent, ...] = (
-    VirtualAgent("atlas",  "Atlas",  "Engineering Lead",    "blue",   "#2E5C8A", "Engineering"),
-    VirtualAgent("nova",   "Nova",   "Research Specialist", "purple", "#6C3A7D", "Research"),
-    VirtualAgent("spark",  "Spark",  "Creative Director",   "yellow", "#CC7700", "Creative"),
-    VirtualAgent("cipher", "Cipher", "Ops Engineer",        "green",  "#2E7D4E", "Operations"),
-    VirtualAgent("echo",   "Echo",   "Support Lead",        "cyan",   "#008B8B", "Support"),
-    VirtualAgent("pixel",  "Pixel",  "Game Master",         "red",    "#CC3333", "Gaming"),
+    VirtualAgent("atlas", "Atlas", "Engineering Lead", "blue", "#2E5C8A", "Engineering"),
+    VirtualAgent("nova", "Nova", "Research Specialist", "purple", "#6C3A7D", "Research"),
+    VirtualAgent("spark", "Spark", "Creative Director", "yellow", "#CC7700", "Creative"),
+    VirtualAgent("cipher", "Cipher", "Ops Engineer", "green", "#2E7D4E", "Operations"),
+    VirtualAgent("echo", "Echo", "Support Lead", "cyan", "#008B8B", "Support"),
+    VirtualAgent("pixel", "Pixel", "Game Master", "red", "#CC3333", "Gaming"),
 )
 
 
@@ -183,18 +184,14 @@ def get_roster() -> tuple[VirtualAgent, ...]:
     except OSError:
         return _cached_roster or _DEFAULT_ROSTER
 
-    if (
-        _cached_roster is not None
-        and _cached_path == html_path
-        and _cached_mtime == mtime
-    ):
+    if _cached_roster is not None and _cached_path == html_path and _cached_mtime == mtime:
         return _cached_roster
 
     parsed = _parse_agents_from_html(html_path)
     if parsed:
         _cached_roster = parsed
-        _cached_mtime  = mtime
-        _cached_path   = html_path
+        _cached_mtime = mtime
+        _cached_path = html_path
     else:
         log.warning("No agents parsed from %s; using default roster", html_path)
         _cached_roster = _DEFAULT_ROSTER
@@ -205,6 +202,7 @@ def get_roster() -> tuple[VirtualAgent, ...]:
 # ---------------------------------------------------------------------------
 # Lookup helpers
 # ---------------------------------------------------------------------------
+
 
 def _by_id() -> dict[str, VirtualAgent]:
     return {a.agent_id: a for a in get_roster()}
@@ -217,14 +215,14 @@ def _by_name() -> dict[str, VirtualAgent]:
 # ---------------------------------------------------------------------------
 # Assignment tracking
 # ---------------------------------------------------------------------------
-_active_assignments: dict[str, str] = {}   # task_key -> agent_id
+_active_assignments: dict[str, str] = {}  # task_key -> agent_id
 _round_robin_index: int = 0
 
 
 def get_agent(agent_id: str) -> VirtualAgent | None:
     """Look up an agent by id or (case-insensitive) name."""
     agent_id_lower = agent_id.lower()
-    by_id   = _by_id()
+    by_id = _by_id()
     by_name = _by_name()
     return by_id.get(agent_id_lower) or by_name.get(agent_id_lower)
 
@@ -253,7 +251,7 @@ def assign_agent(task_key: str, preferred_id: str | None = None) -> VirtualAgent
 
     # Round-robin fallback.
     roster = get_roster()
-    agent  = roster[_round_robin_index % len(roster)]
+    agent = roster[_round_robin_index % len(roster)]
     _round_robin_index += 1
     _active_assignments[task_key] = agent.agent_id
     return agent
@@ -282,7 +280,7 @@ def list_active() -> dict[str, VirtualAgent]:
 
 def format_agent_label(agent: VirtualAgent, model: str = "") -> str:
     """Return a short display label such as "ATLAS [codex]"."""
-    name_part  = agent.name.upper()
+    name_part = agent.name.upper()
     model_part = f" [{model}]" if model else ""
     return f"{name_part}{model_part}"
 
@@ -292,16 +290,16 @@ def format_agent_label(agent: VirtualAgent, model: str = "") -> str:
 # ---------------------------------------------------------------------------
 SPECIALIST_AGENT_MAP: dict[str, str] = {
     "engineering": "atlas",
-    "research":    "nova",
-    "creative":    "spark",
-    "ops":         "cipher",
-    "support":     "echo",
-    "gaming":      "pixel",
-    "security":    "cipher",
-    "data":        "nova",
-    "design":      "spark",
-    "qa":          "echo",
-    "devops":      "cipher",
+    "research": "nova",
+    "creative": "spark",
+    "ops": "cipher",
+    "support": "echo",
+    "gaming": "pixel",
+    "security": "cipher",
+    "data": "nova",
+    "design": "spark",
+    "qa": "echo",
+    "devops": "cipher",
 }
 
 
