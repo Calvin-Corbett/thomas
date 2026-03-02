@@ -1052,23 +1052,13 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         version = _get_version()
         if self._should_show_mascot():
             self._console.print("\n".join(self._startup_header_lines(version)))
-            self._console.print("[dim]----------------------------------------[/dim]")
+            self._console.print("[dim]────────────────────────────────────────[/dim]")
         else:
             self._console.print(f"[bold green]THOMAS[/bold green] v{version}")
             self._console.print(f"[dim]model: {self._resolved_model_label() or self._current_model}[/dim]")
             self._console.print(f"[dim]autonomy: L{self._autonomy_level}[/dim]")
             self._console.print(f"[dim]tools: {self._tools_policy}[/dim]")
             self._console.print(f"[dim]route: {self._last_route}[/dim]")
-        banner_lines = [
-            "Type [dim]/[/dim] or [dim]Ctrl+Space[/dim] for commands, [dim]Ctrl+J[/dim] for multiline, "
-            "[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit. "
-            "Use [dim]//[/dim] to send a literal slash message.",
-        ]
-        if self._project_instructions_path:
-            banner_lines.append(f"[dim]Project instructions: {self._project_instructions_path}[/dim]")
-        if self._conversation:
-            banner_lines.append(f"[dim]Recovered {len(self._conversation)} messages from last REPL session.[/dim]")
-        self._console.print("\n".join(banner_lines))
         if self._trace_file_reads:
             self._print_read_file_trace("Startup")
 
