@@ -389,7 +389,9 @@ class ThomasREPLRuntimeMixin:
             mode = str(arg or "").strip().lower()
             if not mode:
                 current = "on" if self._show_system_logs else "off"
+                activity = str(getattr(self, "_activity_verbosity", "normal") or "normal").strip().lower()
                 self._console.print(f"[dim]Verbose system logs: {current}[/dim]")
+                self._console.print(f"[dim]Activity verbosity: {activity}[/dim]")
                 return False, True
             if mode in {"on", "true", "1", "yes"}:
                 self._show_system_logs = True
@@ -399,7 +401,11 @@ class ThomasREPLRuntimeMixin:
                 self._show_system_logs = False
                 self._console.print("[dim]Verbose system logs: off[/dim]")
                 return False, True
-            self._console.print("[yellow]Usage: /verbose [on|off][/yellow]")
+            if mode in {"minimal", "normal", "debug"}:
+                self._activity_verbosity = mode
+                self._console.print(f"[dim]Activity verbosity: {mode}[/dim]")
+                return False, True
+            self._console.print("[yellow]Usage: /verbose [on|off|minimal|normal|debug][/yellow]")
 
         elif command == "/memory":
             user_turns = sum(1 for m in self._conversation if m.get("role") == "user")

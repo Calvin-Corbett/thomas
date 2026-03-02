@@ -1,4 +1,4 @@
-﻿"""Execution runtime helpers for ThomasREPL agent loop streaming."""
+"""Execution runtime helpers for ThomasREPL agent loop streaming."""
 
 from __future__ import annotations
 
@@ -19,6 +19,7 @@ from rich.text import Text
 from thomas.agent.loop import AgentLoop
 from thomas.cli.repl_approval import _FILE_WRITE_TOOLS, render_post_edit_summary
 from thomas.cli.repl_hooks import HookType, format_hook_result_line, tool_summary_line
+from thomas.core.autonomy import autonomy_level_name
 from thomas.core.events import EventType
 from thomas.core.token_economy import normalize_token_economy_level
 
@@ -59,6 +60,7 @@ class ThomasREPLAgentMixin:
         spinner_live: Live | None = None
         streamed_text = ""
         is_streaming = False
+        render_phase_emitted = False
         final_text = ""
         usage_hint = ""
         token_info = ""
@@ -96,6 +98,10 @@ class ThomasREPLAgentMixin:
                 self._console.file.flush()
                 is_streaming = False
 
+        def _activity(message: str, *, level: str = "normal") -> None:
+            if hasattr(self, "_record_activity"):
+                self._record_activity(message, level=level)
+
         # Approval handler callbacks to pause/resume spinner
         def _pause_spinner() -> None:
             _stop_spinner()
@@ -121,12 +127,25 @@ class ThomasREPLAgentMixin:
                     policy = event.data.get("tools_policy", "auto")
                     level = int(event.data.get("autonomy_level", self._autonomy_level) or self._autonomy_level)
                     name = str(event.data.get("autonomy_name") or autonomy_level_name(level))
+                    _activity("planning...", level="minimal")
                     self._print_auto(f"route={mode}, tools={policy}, autonomy=L{level} {name}")
+
+                elif event.type == EventType.STATUS:
+                    message = str(event.data.get("message") or "").strip()
+                    if message:
+                        _activity(message, level="debug")
+
+                elif event.type == EventType.MEMORY_QUERY:
+                    _activity("retrieving memory...", level="minimal")
+
+                elif event.type == EventType.MEMORY_RESULT:
+                    _activity("memory result received", level="debug")
 
                 elif event.type == EventType.AGENT_ITERATION:
                     ctx_tokens = event.data.get("token_estimate", 0)
                     ctx_window = event.data.get("context_window", 0)
                     iteration = event.data.get("iteration", 0)
+                    _activity(f"iteration {int(iteration) + 1}", level="debug")
                     if iteration == 0:
                         usage_hint = f"~{ctx_tokens:,}/{ctx_window:,} tokens"
                     if thinking and spinner_live is None:
@@ -137,6 +156,9 @@ class ThomasREPLAgentMixin:
                     _stop_spinner()
                     token = str(event.data.get("text") or "")
                     if token:
+                        if not render_phase_emitted:
+                            render_phase_emitted = True
+                            _activity("rendering response...", level="minimal")
                         streamed_text += token
                         is_streaming = True
                         self._console.file.write(token)
@@ -147,6 +169,7 @@ class ThomasREPLAgentMixin:
                     _finish_stream_line()
                     tc_id = str(event.data.get("tool_id", ""))
                     tname = event.data["tool_name"]
+                    _activity(f"calling tool {tname}...", level="normal")
                     if tc_id:
                         _tool_names[tc_id] = tname
                         _tool_args_buf[tc_id] = ""
@@ -210,6 +233,8 @@ class ThomasREPLAgentMixin:
                             pass
 
                     if ok:
+                        _activity(f"tool result received ({tname})", level="normal")
+                        _activity(f"{tname} completed in {ms:.0f}ms", level="debug")
                         # Claude Code-style: â— summary line
                         summary = tool_summary_line(tname, parsed_args, ms)
                         self._console.print(
@@ -229,6 +254,7 @@ class ThomasREPLAgentMixin:
                             except Exception:
                                 pass
                     else:
+                        _activity(f"tool failed ({tname})", level="normal")
                         err = str(event.data.get("result", "failed"))[:100]
                         self._console.print(
                             f"  [bold red]\u25cf[/bold red] [dim]{tname}[/dim] "
@@ -257,11 +283,13 @@ class ThomasREPLAgentMixin:
                 elif event.type == EventType.AGENT_ERROR:
                     _stop_spinner()
                     _finish_stream_line()
+                    _activity("response failed", level="minimal")
                     self._console.print(f"[bold red]Error:[/bold red] {event.data['error']}")
 
                 elif event.type == EventType.AGENT_DONE:
                     _stop_spinner()
                     _finish_stream_line()
+                    _activity("response complete", level="minimal")
                     final_text = str(event.data.get("text") or "").strip()
                     if not final_text:
                         final_text = streamed_text.strip()
