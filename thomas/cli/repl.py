@@ -79,12 +79,12 @@ _OVERLAY_EXIT_ACCEPT = "accept"
 _OVERLAY_EXIT_BACK = "back"
 _OVERLAY_EXIT_CLOSE = "close"
 _MASCOT_LINES = [
-    "┌───┐",
-    "│▪ ▪│",
-    "└┬─┬┘",
-    " │██│",
-    " │▁▁│",
-    "  ░░",
+    "┌────┐",
+    "│ ▪ ▪ │",
+    "└─┬──┬─┘",
+    "  │ ██ │",
+    "  │_▁▁_│",
+    "   ░  ░",
 ]
 
 
@@ -216,7 +216,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         self._runtime_context_window: int | None = None
         self._runtime_context_window_profile: str | None = None
         self._last_context_source: str | None = None
-        self._mascot_line_styles = self._new_session_mascot_styles()
+        self._mascot_style = self._new_session_mascot_style()
         # Codex-style UX keeps slash/model interactions in-place by default.
         # Alternate-screen overlays remain available as an explicit opt-in.
         self._use_alt_screen = str(os.environ.get("THOMAS_REPL_ALT_SCREEN", "0")).strip().lower() not in (
@@ -671,7 +671,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             f"[route: {self._last_route}]"
         )
 
-    def _new_session_mascot_styles(self) -> list[str]:
+    def _new_session_mascot_style(self) -> str:
         palette = [
             "bright_cyan",
             "bright_magenta",
@@ -681,7 +681,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             "cyan",
             "magenta",
         ]
-        return [random.choice(palette) for _ in _MASCOT_LINES]
+        return random.choice(palette)
 
     def _startup_header_lines(self, version: str) -> list[str]:
         model_label = str(self._current_model or "").strip()
@@ -697,7 +697,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         for idx in range(max(len(mascot), len(details))):
             left = mascot[idx] if idx < len(mascot) else ""
             right = details[idx] if idx < len(details) else ""
-            style = self._mascot_line_styles[idx % len(self._mascot_line_styles)] if self._mascot_line_styles else "bright_cyan"
+            style = str(getattr(self, "_mascot_style", "") or "bright_cyan")
             if right:
                 merged.append(f"[{style}]{left.ljust(pad)}[/{style}] {right}")
             else:
