@@ -303,7 +303,7 @@ class ThomasREPLAgentMixin:
                             Panel(
                                 Markdown(final_text),
                                 title=ASSISTANT_PANEL_TITLE,
-                                border_style="cyan",
+                                border_style=getattr(self, "_mascot_style", "cyan"),
                                 expand=True,
                             )
                         )

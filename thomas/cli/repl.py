@@ -847,9 +847,9 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             return
         role_key = (role or "").strip().lower()
         if role_key == "user":
-            self._console.print(Panel(Text(content), title=USER_PANEL_TITLE, border_style=self._mascot_style, expand=True))
+            self._console.print(Panel(Text(content), title=USER_PANEL_TITLE, border_style="bright_magenta", expand=True))
         elif role_key == "assistant":
-            self._console.print(Panel(Text(content), title=ASSISTANT_PANEL_TITLE, border_style="cyan", expand=True))
+            self._console.print(Panel(Text(content), title=ASSISTANT_PANEL_TITLE, border_style=self._mascot_style, expand=True))
         elif role_key == "system":
             self._console.print(f"[dim]SYSTEM: {content}[/dim]")
         else:
