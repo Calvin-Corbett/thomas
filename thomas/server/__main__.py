@@ -9,12 +9,18 @@ from __future__ import annotations
 import argparse
 import logging
 import os
+import shutil
 import sys
 from collections.abc import Sequence
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
-from thomas.core.config import load_config
+from thomas.core.config import (
+    apply_runtime_data_env_defaults,
+    load_config,
+    normalize_profile_name,
+    resolve_thomas_data_dir,
+)
 
 
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
@@ -27,6 +33,33 @@ def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         dest="config_path",
         default=None,
         help="Path to thomas.toml (default: THOMAS_CONFIG env var or ./thomas.toml)",
+    )
+    parser.add_argument(
+        "--data-dir",
+        default=None,
+        help=(
+            "Base runtime data dir (default: OS app data; Windows uses "
+            "LOCALAPPDATA, e.g. C:\\Users\\<you>\\AppData\\Local\\Thomas)."
+        ),
+    )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="Data profile name. Runtime state is stored under <data-dir>/<profile>/...",
+    )
+    parser.add_argument(
+        "--reset",
+        action="store_true",
+        help="Start fresh by deleting the selected profile dir before startup (requires --profile).",
+    )
+    parser.add_argument(
+        "--demo",
+        action="store_true",
+        help=(
+            "One-command demo mode (stubbed no-key runtime, demo profile reset, "
+            "safe local defaults). Ignores THOMAS_DATA_DIR/THOMAS_PROFILE unless "
+            "--data-dir is provided."
+        ),
     )
     return parser.parse_args(argv)
 
@@ -121,9 +154,53 @@ def _print_startup_banner(config, host: str, port: int) -> None:
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _parse_args(argv)
-    cfg_path = Path(args.config_path).expanduser() if args.config_path else None
 
-    config = load_config(cfg_path)
+    if bool(args.demo):
+        requested_profile = str(args.profile or "").strip()
+        if requested_profile and requested_profile != "demo":
+            print("--demo cannot be combined with --profile other than 'demo'.", file=sys.stderr)
+            return 2
+
+        os.environ.setdefault("THOMAS_NO_AUTO_UPDATE", "1")
+        os.environ.setdefault("THOMAS_GATEWAY_RESPONSES_MODE", "stub")
+        args.profile = "demo"
+        args.reset = True
+
+        if not args.data_dir:
+            args.data_dir = str(
+                resolve_thomas_data_dir(
+                    None,
+                    None,
+                    env={"THOMAS_DATA_DIR": "", "THOMAS_PROFILE": ""},
+                )
+            )
+
+    cfg_path = Path(args.config_path).expanduser() if args.config_path else None
+    try:
+        profile = normalize_profile_name(args.profile)
+    except ValueError as exc:
+        print(f"Invalid --profile: {exc}", file=sys.stderr)
+        return 2
+    if bool(args.reset) and not profile:
+        print("--reset requires --profile <name>.", file=sys.stderr)
+        return 2
+
+    base_override = Path(args.data_dir).expanduser() if args.data_dir else None
+    base_dir = resolve_thomas_data_dir(base_override, None)
+    effective_dir = resolve_thomas_data_dir(base_override if base_override is not None else base_dir, profile)
+    if bool(args.reset):
+        if len(effective_dir.resolve().parts) < 3:
+            print(f"Refusing to reset unsafe profile path: {effective_dir}", file=sys.stderr)
+            return 2
+        shutil.rmtree(effective_dir, ignore_errors=True)
+    effective_dir.mkdir(parents=True, exist_ok=True)
+    apply_runtime_data_env_defaults(base_dir=base_dir, effective_dir=effective_dir, profile=profile, overwrite=True)
+
+    config = load_config(
+        cfg_path,
+        data_dir=Path(args.data_dir).expanduser() if args.data_dir else None,
+        profile=profile or None,
+    )
 
     _setup_logging(config.environment)
     _print_startup_banner(config, str(args.host), int(args.port))
