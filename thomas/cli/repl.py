@@ -1,14 +1,15 @@
-﻿"""Interactive REPL for Thomas using prompt_toolkit and rich."""
+"""Interactive REPL for Thomas using prompt_toolkit and rich."""
+
 from __future__ import annotations
 
 import asyncio
+import contextlib
+import inspect
 import json
 import logging
 import os
-import inspect
 import re
 import sys
-import time
 from pathlib import Path
 from typing import Any
 
@@ -20,44 +21,36 @@ try:
     from prompt_toolkit.shortcuts import CompleteStyle
     from prompt_toolkit.styles import Style
 except ImportError:
-    raise ImportError("prompt_toolkit is required for the REPL. Install with: pip install prompt_toolkit>=3.0")
+    raise ImportError(
+        "prompt_toolkit is required for the REPL. Install with: pip install prompt_toolkit>=3.0"
+    ) from None
 
 try:
     from rich.console import Console
     from rich.live import Live
-    from rich.markdown import Markdown
     from rich.panel import Panel
-    from rich.spinner import Spinner
     from rich.text import Text
 except ImportError:
-    raise ImportError("rich is required for the REPL. Install with: pip install rich>=13.0")
+    raise ImportError("rich is required for the REPL. Install with: pip install rich>=13.0") from None
 
-from thomas.agent.loop import AgentLoop
-from thomas.core.autonomy import autonomy_level_name, clamp_autonomy_level
-from thomas.core.config import AppConfig
-from thomas.core.events import EventType
-from thomas.core.llm import LLMClient
-from thomas.core.token_economy import normalize_token_economy_level
+from thomas.cli.repl_agent_runtime import ThomasREPLAgentMixin
+from thomas.cli.repl_approval import ReplApprovalHandler, create_repl_approval_handler
+from thomas.cli.repl_background import BackgroundTaskManager
+from thomas.cli.repl_hooks import HookRunner
+from thomas.cli.repl_keybindings import apply_keybindings, load_keybindings
 from thomas.cli.repl_picker import PickerCompleter, PickerOption, picker_toolbar_hint, resolve_picker_selection
+from thomas.cli.repl_plan import PlanModeHandler
+from thomas.cli.repl_project import instruction_file_path
+from thomas.cli.repl_runtime import ThomasREPLRuntimeMixin
+from thomas.cli.repl_skills import list_all_skills
 from thomas.cli.repl_slash import (
     SlashCommandCompleter,
-    extract_slash_token,
     is_known_slash_command,
     list_slash_specs,
-    normalize_slash_command,
-    resolve_slash_selection,
-    suggest_slash_commands,
 )
-from thomas.cli.repl_background import BackgroundTaskManager
-from thomas.cli.repl_keybindings import apply_keybindings, load_keybindings
-from thomas.cli.repl_plan import PlanModeHandler
-from thomas.cli.repl_project import discover_project_instructions, instruction_file_path
-from thomas.cli.repl_skills import expand_skill, list_all_skills
 from thomas.cli.repl_state import ReplUiState, is_valid_ui_transition
-from thomas.cli.repl_approval import ReplApprovalHandler, create_repl_approval_handler
-from thomas.cli.repl_hooks import HookRunner
-from thomas.cli.repl_runtime import ThomasREPLRuntimeMixin
-from thomas.cli.repl_agent_runtime import ThomasREPLAgentMixin
+from thomas.core.config import AppConfig
+from thomas.core.llm import LLMClient
 from thomas.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
@@ -119,9 +112,9 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         self._project_instructions: str | None = None
         if self._project_instructions_path:
             try:
-                self._project_instructions = self._project_instructions_path.read_text(
-                    encoding="utf-8", errors="replace"
-                ).strip() or None
+                self._project_instructions = (
+                    self._project_instructions_path.read_text(encoding="utf-8", errors="replace").strip() or None
+                )
             except OSError:
                 self._project_instructions = None
 
@@ -129,7 +122,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         self._mcp_bridge: Any = None
 
         # Git worktree state
-        self._worktree: Any = None         # WorktreeInfo if active
+        self._worktree: Any = None  # WorktreeInfo if active
         self._original_sandbox: Path | None = None
 
         # Background task manager
@@ -140,7 +133,8 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
 
         # Tool approval handler (guardrails)
         self._approval_handler: ReplApprovalHandler = create_repl_approval_handler(
-            self._console, config,
+            self._console,
+            config,
         )
 
         # Claude Code-style hooks (PreToolUse / PostToolUse)
@@ -466,10 +460,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         levels = ["minimal", "low", "medium", "high"]
         current = str(self.config.get_model(self._current_model).reasoning_effort or "").strip().lower()
         default_value = current if current in levels else "medium"
-        options = [
-            PickerOption(value=level, label=level, is_current=(level == default_value))
-            for level in levels
-        ]
+        options = [PickerOption(value=level, label=level, is_current=(level == default_value)) for level in levels]
         try:
             picked = await self._prompt_overlay(
                 HTML("<prompt>reasoning</prompt> > "),
@@ -498,10 +489,8 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             self._console.print(f"[dim]{message}[/dim]")
             return
         finally:
-            try:
+            with contextlib.suppress(OSError):
                 live.stop()
-            except OSError:
-                pass
 
     def _get_llm(self) -> LLMClient:
         if self._llm is None:
@@ -534,11 +523,10 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         t_lower = t.lower()
         if "model" in t_lower and any(k in t_lower for k in ("list", "show", "what models", "available")):
             available = list(self.config.models.keys())
-            self._console.print(f"Current: [cyan]{self._current_model}[/cyan]  " f"Available: {', '.join(available)}")
+            self._console.print(f"Current: [cyan]{self._current_model}[/cyan]  Available: {', '.join(available)}")
             return True
 
         # e.g. "switch to model local", "use model local", "set model local", "switch to local"
-        import re
 
         m = re.match(r"^(switch|use|set|change)\\s+(to\\s+)?(model\\s+)?(?P<name>[\\w\\-\\.:]+)\\s*$", t_lower)
         if not m:
@@ -546,7 +534,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
 
         name = m.group("name")
         # Map back to exact model key if case differs
-        for key in self.config.models.keys():
+        for key in self.config.models:
             if key.lower() == name:
                 name = key
                 break
@@ -569,32 +557,28 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             self._console.print(f"[dim]Switched to [cyan]{name}[/cyan][/dim]")
             return True
 
-        self._console.print(f"[red]Unknown model '{name}'. " f"Available: {', '.join(self.config.models.keys())}[/red]")
+        self._console.print(f"[red]Unknown model '{name}'. Available: {', '.join(self.config.models.keys())}[/red]")
         return True
 
     async def run(self) -> None:
         """Main REPL loop."""
         version = _get_version()
         banner_lines = [
-            f"[bold green]Thomas[/bold green] v{version} - "
-            f"model: [cyan]{self._current_model}[/cyan]",
-            f"Type [dim]/help[/dim] for commands, [dim]Ctrl+J[/dim] for multiline, "
-            f"[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit. "
-            f"Use [dim]//[/dim] to send a literal slash message.",
+            f"[bold green]Thomas[/bold green] v{version} - model: [cyan]{self._current_model}[/cyan]",
+            "Type [dim]/help[/dim] for commands, [dim]Ctrl+J[/dim] for multiline, "
+            "[dim]Ctrl+C[/dim] or [dim]/exit[/dim] to quit. "
+            "Use [dim]//[/dim] to send a literal slash message.",
         ]
         if self._project_instructions_path:
-            banner_lines.append(
-                f"[dim]Project instructions: {self._project_instructions_path}[/dim]"
-            )
+            banner_lines.append(f"[dim]Project instructions: {self._project_instructions_path}[/dim]")
         if self._conversation:
-            banner_lines.append(
-                f"[dim]Recovered {len(self._conversation)} messages from last REPL session.[/dim]"
-            )
+            banner_lines.append(f"[dim]Recovered {len(self._conversation)} messages from last REPL session.[/dim]")
         self._console.print(Panel("\n".join(banner_lines), border_style="dim"))
 
         # Connect to MCP servers at startup (best-effort)
         try:
             from thomas.tools.mcp_bridge import register_mcp_tools
+
             self._mcp_bridge = await register_mcp_tools(self.tools, self.config)
             connected = self._mcp_bridge.list_servers()
             if connected:
@@ -657,9 +641,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
 
         # Prompt about worktree cleanup
         if self._worktree:
-            self._console.print(
-                f"[yellow]Active worktree: {self._worktree.name} at {self._worktree.path}[/yellow]"
-            )
+            self._console.print(f"[yellow]Active worktree: {self._worktree.name} at {self._worktree.path}[/yellow]")
             self._console.print("[dim]Use 'git worktree remove' to clean up manually.[/dim]")
 
         while self._alt_screen_active:
@@ -670,6 +652,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             self._memory.close()
         self._persist_conversation_state()
 
+
 def _get_version() -> str:
     try:
         from thomas import __version__
@@ -677,4 +660,3 @@ def _get_version() -> str:
         return __version__
     except (ImportError, AttributeError):
         return "?"
-
