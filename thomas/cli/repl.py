@@ -78,12 +78,12 @@ _OVERLAY_EXIT_ACCEPT = "accept"
 _OVERLAY_EXIT_BACK = "back"
 _OVERLAY_EXIT_CLOSE = "close"
 _MASCOT_LINES = [
-    "   /----\\",
-    "  | ..  |",
-    "  | --  |",
-    " /|_||_|\\",
-    "   |  |",
-    "   |__|",
+    "┌────┐",
+    "│ ▪ ▪ │",
+    "└─┬──┬─┘",
+    "  │ ██ │",
+    "  │_▁▁_│",
+    "   ░  ░",
 ]
 
 
@@ -670,7 +670,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         )
 
     def _startup_header_lines(self, version: str) -> list[str]:
-        model_label = self._resolved_model_label() or self._current_model
+        model_label = str(self._current_model or "").strip()
         details = [
             f"THOMAS v{version}",
             f"model: {model_label}",
