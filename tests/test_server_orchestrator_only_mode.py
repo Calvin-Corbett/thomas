@@ -2,6 +2,7 @@ import json
 import os
 import tempfile
 import unittest
+from typing import Any
 from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
@@ -21,47 +22,34 @@ def _parse_ndjson(blob: str):
     return out
 
 
-class _FakeSwarmOrchestrator:
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
-        _ = kwargs
-
-    async def astream(self, *, user_request, subagents):  # noqa: ANN001
-        _ = user_request
-        _ = subagents
-        yield {
-            "type": "swarm_done",
-            "ok": True,
-            "final": "SWARM_OK",
-            "summary": {"status": {"t1": "done"}},
-            "duration_ms": 5,
-        }
-
-
 class _FakeAgentLoopConversation:
     initialized = False
+    captured: dict[str, Any] = {}
 
     def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
         _ = args
-        _ = kwargs
+        self._ctor_kwargs = dict(kwargs or {})
         _FakeAgentLoopConversation.initialized = True
+        _FakeAgentLoopConversation.captured = {"ctor_kwargs": dict(self._ctor_kwargs)}
 
     async def run(self, prompt, *, mode="auto", tools_policy="auto", token_economy="optimal", **kwargs):  # noqa: ANN001
         _ = prompt
-        _ = tools_policy
         _ = token_economy
-        _ = kwargs
+        _FakeAgentLoopConversation.captured["run_kwargs"] = {
+            "mode": str(mode),
+            "tools_policy": str(tools_policy),
+            **dict(kwargs or {}),
+        }
         yield AgentEvent(
             type=EventType.AGENT_START,
             data={
                 "route": {"path": "casual_chat", "confidence": 1.0},
                 "mode": str(mode),
-                "tools_policy": "never",
-                "autonomy_level": 3,
+                "tools_policy": str(tools_policy),
+                "autonomy_level": int(self._ctor_kwargs.get("autonomy_level", 3) or 3),
                 "autonomy_name": "Standard",
             },
         )
-        yield AgentEvent.text_delta("CONVO_OK")
         yield AgentEvent.agent_done(
             text="CONVO_OK",
             iterations=1,
@@ -69,18 +57,6 @@ class _FakeAgentLoopConversation:
             usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
             token_report={"mode": str(mode)},
         )
-
-
-class _AgentLoopShouldNotRun:
-    initialized = False
-
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
-        _ = kwargs
-        _AgentLoopShouldNotRun.initialized = True
-
-    async def run(self, *_args, **_kwargs):  # pragma: no cover - should never run
-        raise AssertionError("AgentLoop must not run when swarm orchestration is selected")
 
 
 class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
@@ -103,12 +79,22 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
 
     async def get_application(self):
         cfg = AppConfig(
-            models={"local": ModelConfig(name="local", model="dummy")},
+            models={
+                "local": ModelConfig(
+                    name="local",
+                    provider="openai_compat",
+                    base_url="http://127.0.0.1:11434/v1",
+                    model="dummy",
+                )
+            },
             default_model="local",
             memory=MemoryConfig(root=self._tmpdir.name),
             server=ServerConfig(access_mode="local"),
         )
-        return create_app(cfg)
+        with patch(
+            "thomas.server.routes.chat_v2.register_chat_v2_routes", side_effect=RuntimeError("legacy-chat-required")
+        ):
+            return create_app(cfg)
 
     async def _new_session_id(self) -> str:
         sess_resp = await self.client.post("/api/session/new")
@@ -119,12 +105,10 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
 
     async def test_non_task_chat_defaults_to_agent_loop(self):
         _FakeAgentLoopConversation.initialized = False
+        _FakeAgentLoopConversation.captured = {}
         sid = await self._new_session_id()
 
-        with (
-            patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestrator),
-            patch("thomas.server.app.AgentLoop", _FakeAgentLoopConversation),
-        ):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopConversation):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -141,17 +125,14 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
         done_events = [e for e in events if e.get("type") == "done"]
         self.assertEqual(len(done_events), 1)
         self.assertEqual(str(done_events[0].get("text") or ""), "CONVO_OK")
-        self.assertEqual([e for e in events if e.get("type") == "swarm_done"], [])
         self.assertTrue(_FakeAgentLoopConversation.initialized)
 
-    async def test_explicit_swarm_mode_skips_agent_loop(self):
-        _AgentLoopShouldNotRun.initialized = False
+    async def test_explicit_swarm_mode_uses_agent_loop_with_normalized_mode(self):
+        _FakeAgentLoopConversation.initialized = False
+        _FakeAgentLoopConversation.captured = {}
         sid = await self._new_session_id()
 
-        with (
-            patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestrator),
-            patch("thomas.server.app.AgentLoop", _AgentLoopShouldNotRun),
-        ):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopConversation):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -164,20 +145,19 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
 
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
-        self.assertTrue(events)
-        swarm_done = [e for e in events if e.get("type") == "swarm_done"]
-        self.assertEqual(len(swarm_done), 1)
-        self.assertEqual(str(swarm_done[0].get("final") or ""), "SWARM_OK")
-        self.assertFalse(_AgentLoopShouldNotRun.initialized)
+        done_events = [e for e in events if e.get("type") == "done"]
+        self.assertEqual(len(done_events), 1)
+        self.assertEqual(str(done_events[0].get("text") or ""), "CONVO_OK")
+        self.assertTrue(_FakeAgentLoopConversation.initialized)
+        run_kwargs = dict((_FakeAgentLoopConversation.captured or {}).get("run_kwargs") or {})
+        self.assertEqual(str(run_kwargs.get("mode") or ""), "auto")
 
-    async def test_l4_task_like_request_auto_routes_to_swarm(self):
-        _AgentLoopShouldNotRun.initialized = False
+    async def test_l4_task_like_request_uses_agent_loop_and_keeps_autonomy(self):
+        _FakeAgentLoopConversation.initialized = False
+        _FakeAgentLoopConversation.captured = {}
         sid = await self._new_session_id()
 
-        with (
-            patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestrator),
-            patch("thomas.server.app.AgentLoop", _AgentLoopShouldNotRun),
-        ):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopConversation):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -190,30 +170,11 @@ class TestServerOrchestratorOnlyMode(AioHTTPTestCase):
 
         self.assertEqual(resp.status, 200)
         events = _parse_ndjson(await resp.text())
-        swarm_done = [e for e in events if e.get("type") == "swarm_done"]
-        self.assertEqual(len(swarm_done), 1)
-        self.assertEqual(str(swarm_done[0].get("final") or ""), "SWARM_OK")
-        self.assertFalse(_AgentLoopShouldNotRun.initialized)
-
-    async def test_explicit_swarm_returns_500_when_swarm_handler_returns_none(self):
-        sid = await self._new_session_id()
-
-        async def _no_swarm(*_args, **_kwargs):
-            return None
-
-        with patch("thomas.server.routes.chat_aiohttp.maybe_handle_swarm_mode", side_effect=_no_swarm):
-            resp = await self.client.post(
-                "/api/chat",
-                json={
-                    "session_id": sid,
-                    "profile": "local",
-                    "mode": "swarm",
-                    "text": "force missing swarm",
-                },
-            )
-
-        self.assertEqual(resp.status, 500)
-        self.assertIn("specialist orchestration is required", str(await resp.text()))
+        route_events = [e for e in events if e.get("type") == "route"]
+        self.assertEqual(len(route_events), 1)
+        self.assertEqual(int(route_events[0].get("autonomy_level") or 0), 4)
+        self.assertEqual(str(route_events[0].get("no_human_mode") or ""), "allow")
+        self.assertTrue(_FakeAgentLoopConversation.initialized)
 
 
 if __name__ == "__main__":
