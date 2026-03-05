@@ -7,7 +7,6 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.core.events import AgentEvent, EventType
-from thomas.models.batching import BatchSubmission
 from thomas.server.app import create_app
 
 
@@ -22,6 +21,7 @@ def _parse_ndjson(blob: str):
 
 
 class _FakeAgentLoopTaskLedger:
+    route_path = "coding_task"
     done_text = "Done. Implemented and verified."
     done_token_report = {"rules_of_road": {"passed": True}}
 
@@ -35,7 +35,7 @@ class _FakeAgentLoopTaskLedger:
         yield AgentEvent(
             type=EventType.AGENT_START,
             data={
-                "route": {"path": "coding_task", "confidence": 1.0},
+                "route": {"path": str(type(self).route_path), "confidence": 1.0},
                 "route_input_source": "prompt_only",
                 "mode": mode,
                 "tools_policy": "auto",
@@ -51,72 +51,6 @@ class _FakeAgentLoopTaskLedger:
             usage={"prompt_tokens": 1, "completion_tokens": 1, "total_tokens": 2},
             token_report=dict(type(self).done_token_report),
         )
-
-
-class _FakeBatchClientTaskLedger:
-    def __init__(self, _model_cfg):
-        self._closed = False
-
-    async def close(self):
-        self._closed = True
-
-    async def create_and_add_chat_requests(self, *, batch_name, requests):
-        _ = batch_name
-        _ = requests
-        return BatchSubmission(
-            batch_id="batch_ledger_123",
-            request_id="req_ledger_123",
-            create_payload={"batch_id": "batch_ledger_123"},
-            add_payload={},
-        )
-
-    async def get_batch(self, *, batch_id):
-        _ = batch_id
-        return {
-            "batch_id": "batch_ledger_123",
-            "state": {
-                "num_requests": 1,
-                "num_pending": 0,
-                "num_success": 1,
-                "num_error": 0,
-                "num_cancelled": 0,
-            },
-        }
-
-    async def list_batch_results(self, *, batch_id, limit=200, pagination_token=""):
-        _ = batch_id
-        _ = limit
-        _ = pagination_token
-        return {
-            "results": [
-                {
-                    "batch_request_id": "req_ledger_123",
-                    "response": {
-                        "completion_response": {
-                            "choices": [{"message": {"content": "BATCH_LEDGER_DONE"}}]
-                        }
-                    },
-                }
-            ]
-        }
-
-
-class _FakeSwarmOrchestratorTaskLedger:
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
-        _ = kwargs
-
-    async def astream(self, *, user_request, subagents):  # noqa: ANN001
-        _ = user_request
-        _ = subagents
-        yield {
-            "type": "swarm_done",
-            "ok": True,
-            "final": "SWARM_LEDGER_DONE",
-            "summary": {"status": {"planner": "done", "coder": "done"}},
-            "duration_ms": 8,
-            "usage": {"prompt_tokens": 2, "completion_tokens": 3, "total_tokens": 5},
-        }
 
 
 class TestServerTaskLedger(AioHTTPTestCase):
@@ -160,9 +94,10 @@ class TestServerTaskLedger(AioHTTPTestCase):
     async def test_task_ledger_current_and_history_endpoints(self):
         sid = await self._new_session_id()
 
+        _FakeAgentLoopTaskLedger.route_path = "coding_task"
         _FakeAgentLoopTaskLedger.done_text = "Done. Implemented and verified."
         _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopTaskLedger):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -201,9 +136,10 @@ class TestServerTaskLedger(AioHTTPTestCase):
     async def test_task_ledger_marks_blocked_when_missing_input_is_detected(self):
         sid = await self._new_session_id()
 
+        _FakeAgentLoopTaskLedger.route_path = "coding_task"
         _FakeAgentLoopTaskLedger.done_text = "I need your API key and repository URL to continue."
         _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
-        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopTaskLedger):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -225,7 +161,10 @@ class TestServerTaskLedger(AioHTTPTestCase):
     async def test_task_ledger_updates_for_batch_mode_completion(self):
         sid = await self._new_session_id()
 
-        with patch("thomas.server.app.OpenAICompatBatchClient", _FakeBatchClientTaskLedger):
+        _FakeAgentLoopTaskLedger.route_path = "batch_task"
+        _FakeAgentLoopTaskLedger.done_text = "BATCH_LEDGER_DONE"
+        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -243,19 +182,23 @@ class TestServerTaskLedger(AioHTTPTestCase):
         self.assertEqual(current_resp.status, 200)
         state = (await current_resp.json()).get("state") or {}
         self.assertEqual(str(state.get("status") or ""), "complete")
-        self.assertIn("Batch mode run completed", str(state.get("last_progress") or ""))
+        self.assertIn("BATCH_LEDGER_DONE", str(state.get("last_progress") or ""))
 
         history_resp = await self.client.get(f"/api/task-ledger/history?session_id={sid}&limit=20")
         self.assertEqual(history_resp.status, 200)
         history_events = (await history_resp.json()).get("events") or []
         sources = {str(item.get("source") or "") for item in history_events}
-        self.assertIn("chat.batch", sources)
-        self.assertIn("chat.batch_done", sources)
+        self.assertIn("chat.request", sources)
+        self.assertIn("chat.route", sources)
+        self.assertIn("chat.done", sources)
 
     async def test_task_ledger_updates_for_swarm_mode_completion(self):
         sid = await self._new_session_id()
 
-        with patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestratorTaskLedger):
+        _FakeAgentLoopTaskLedger.route_path = "swarm"
+        _FakeAgentLoopTaskLedger.done_text = "SWARM_LEDGER_DONE"
+        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
             chat_resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -267,7 +210,7 @@ class TestServerTaskLedger(AioHTTPTestCase):
             )
         self.assertEqual(chat_resp.status, 200)
         events = _parse_ndjson(await chat_resp.text())
-        self.assertTrue(any(e.get("type") == "swarm_done" for e in events))
+        self.assertTrue(any(e.get("type") == "done" for e in events))
 
         current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
         self.assertEqual(current_resp.status, 200)
@@ -279,8 +222,9 @@ class TestServerTaskLedger(AioHTTPTestCase):
         self.assertEqual(history_resp.status, 200)
         history_events = (await history_resp.json()).get("events") or []
         sources = {str(item.get("source") or "") for item in history_events}
-        self.assertIn("chat.swarm", sources)
-        self.assertIn("chat.swarm_done", sources)
+        self.assertIn("chat.request", sources)
+        self.assertIn("chat.route", sources)
+        self.assertIn("chat.done", sources)
 
 
 if __name__ == "__main__":

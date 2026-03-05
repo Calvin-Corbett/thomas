@@ -162,7 +162,9 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
             memory=MemoryConfig(root=self._tmpdir.name),
             server=ServerConfig(access_mode="local"),
         )
-        with patch("thomas.server.routes.chat_v2.register_chat_v2_routes", side_effect=RuntimeError("legacy-chat-required")):
+        with patch(
+            "thomas.server.routes.chat_v2.register_chat_v2_routes", side_effect=RuntimeError("legacy-chat-required")
+        ):
             return create_app(cfg)
 
     async def _new_session_id(self) -> str:
@@ -546,11 +548,59 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
         self.assertTrue(bool(probe.get("ok", False)))
 
+    async def test_require_command_approval_blocks_namespaced_shell_exec(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allow_shell": True, "require_command_approval": True}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "functions.shell.exec"
+        _FakeAgentLoopPolicyProbe.probe_args = {"command": "echo hi", "cwd": "."}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("require_command_approval", str(probe.get("error") or ""))
+
     async def test_blocked_commands_policy_blocks_matching_shell_command(self):
         sid = await self._new_session_id()
         patch_resp = await self.client.patch(
             "/api/preferences",
             json={"advanced": {"tools": {"allow_shell": True, "blocked_commands": "curl,wget"}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "shell.exec"
+        _FakeAgentLoopPolicyProbe.probe_args = {"command": "curl https://example.com", "cwd": "."}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("blocked_commands policy", str(probe.get("error") or ""))
+
+    async def test_blocked_commands_policy_blocks_newline_delimited_shell_command(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allow_shell": True, "blocked_commands": "curl\nwget"}}},
         )
         self.assertEqual(patch_resp.status, 200)
 
@@ -593,6 +643,53 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
         self.assertFalse(bool(probe.get("ok", True)))
         self.assertIn("allowed_paths policy", str(probe.get("error") or ""))
+
+    async def test_allowed_paths_policy_blocks_outside_filesystem_access_for_namespaced_fs_tool(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allowed_paths": "workspace"}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "functions.fs.read_file"
+        _FakeAgentLoopPolicyProbe.probe_args = {"path": "..\\outside.txt"}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("allowed_paths policy", str(probe.get("error") or ""))
+
+    async def test_allowed_paths_policy_accepts_multiline_allowlist_entries(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allowed_paths": "workspace\nrepo2"}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "fs.read_file"
+        _FakeAgentLoopPolicyProbe.probe_args = {"path": "workspace\\allowed.txt"}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertNotIn("allowed_paths policy", str(probe.get("error") or ""))
 
     async def test_auto_tool_threshold_can_force_tools_policy(self):
         sid = await self._new_session_id()

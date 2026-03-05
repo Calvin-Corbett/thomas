@@ -6,6 +6,7 @@ from unittest.mock import patch
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
+from thomas.core.events import AgentEvent, EventType
 from thomas.server.app import create_app
 
 
@@ -19,38 +20,36 @@ def _parse_ndjson(blob: str):
     return out
 
 
-class _FakeSwarmOrchestratorNoRunId:
-    def __init__(self, *args, **kwargs):  # noqa: ANN002, ANN003
-        _ = args
+class _FakeAgentLoopContract:
+    def __init__(self, run_cfg, llm, tools, **kwargs):  # noqa: ANN001
+        _ = run_cfg
+        _ = llm
+        _ = tools
         _ = kwargs
 
-    async def astream(self, *, user_request, subagents):  # noqa: ANN001
-        _ = user_request
-        _ = subagents
-        yield {"type": "swarm_start", "agent": "orchestrator"}
-        yield {
-            "type": "agent_tool_start",
-            "agent": "coder",
-            "task_id": "t1",
-            "tool_call_id": "tc1",
-            "tool": "diff.create",
-            "args": {"path": "app.py", "old_str": "a", "new_str": "b"},
-        }
-        yield {
-            "type": "agent_tool_result",
-            "agent": "coder",
-            "task_id": "t1",
-            "tool_call_id": "tc1",
-            "tool": "diff.create",
-            "ok": True,
-        }
-        yield {
-            "type": "swarm_done",
-            "ok": True,
-            "final": "SWARM_CONTRACT_OK",
-            "summary": {"status": {"planner": "done"}},
-            "duration_ms": 3,
-        }
+    async def run(self, prompt, *, mode="auto", tools_policy="auto", token_economy="optimal", **kwargs):  # noqa: ANN001
+        _ = prompt
+        _ = kwargs
+        yield AgentEvent(
+            type=EventType.AGENT_START,
+            data={
+                "route": {"path": "swarm", "confidence": 1.0},
+                "mode": str(mode),
+                "tools_policy": str(tools_policy),
+                "autonomy_level": 3,
+                "autonomy_name": "Auto",
+            },
+        )
+        yield AgentEvent.agent_done(
+            text="SWARM_CONTRACT_OK",
+            iterations=1,
+            tool_calls=0,
+            token_report={
+                "rules_of_road": {
+                    "signals": {"writes_detected": True},
+                }
+            },
+        )
 
 
 class TestServerSwarmEventContract(AioHTTPTestCase):
@@ -66,12 +65,23 @@ class TestServerSwarmEventContract(AioHTTPTestCase):
 
     async def get_application(self):
         cfg = AppConfig(
-            models={"local": ModelConfig(name="local", model="dummy")},
+            models={
+                "local": ModelConfig(
+                    name="local",
+                    provider="openai_compat",
+                    base_url="http://127.0.0.1:11434/v1",
+                    model="dummy",
+                )
+            },
             default_model="local",
             memory=MemoryConfig(root=self._tmpdir.name),
             server=ServerConfig(access_mode="local"),
         )
-        return create_app(cfg)
+        with patch(
+            "thomas.server.routes.chat_v2.register_chat_v2_routes",
+            side_effect=RuntimeError("legacy-chat-required"),
+        ):
+            return create_app(cfg)
 
     async def test_swarm_stream_events_have_run_id_and_usage_contract(self):
         sess_resp = await self.client.post("/api/session/new")
@@ -79,7 +89,7 @@ class TestServerSwarmEventContract(AioHTTPTestCase):
         sid = str((await sess_resp.json()).get("session_id") or "")
         self.assertTrue(sid)
 
-        with patch("thomas.server.swarm_mode.SwarmOrchestrator", _FakeSwarmOrchestratorNoRunId):
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopContract):
             resp = await self.client.post(
                 "/api/chat",
                 json={
@@ -105,10 +115,10 @@ class TestServerSwarmEventContract(AioHTTPTestCase):
             run_ids.add(rid)
         self.assertEqual(len(run_ids), 1)
 
-        done_events = [e for e in events if e.get("type") == "swarm_done"]
+        done_events = [e for e in events if e.get("type") == "done"]
         self.assertEqual(len(done_events), 1)
         done = done_events[0]
-        self.assertEqual(done.get("final"), "SWARM_CONTRACT_OK")
+        self.assertEqual(done.get("text"), "SWARM_CONTRACT_OK")
         expected_usage = {"prompt_tokens": 0, "completion_tokens": 0, "total_tokens": 0}
         self.assertEqual(done.get("usage"), expected_usage)
         self.assertEqual(done.get("run_usage"), expected_usage)
