@@ -10,6 +10,7 @@ Versioning: Semantic Versioning.
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
 ### Added
+- skills: Thomas-native skill platform now ships first-party bundled skills under `skills/`, plus explicit external skill distillation drafts with review, no-copy validation, and promotion commands.
 - safety: New `check_changelog_gate.py` pre-commit hook — rejects commits with 3+ thomas/ code changes when CHANGELOG.md is not staged (Finding 2)
 - safety: New `check_protected_files_gate.py` pre-commit hook — prevents agent modification of GUARDRAILS.md, test_architecture.py, `_architecture.py`, enforcement scripts, and other policy files (Findings 9, 12, 13)
 - safety: New `check_exception_handler_gate.py` pre-commit hook — uses AST ratchet to block NEW bare `except Exception:` handlers that lack both logging and re-raise (Finding 1)
@@ -24,6 +25,7 @@ Versioning: Semantic Versioning.
 - safety: New `_check_worktree_clean()` in `agent_preflight.py` — reports dirty worktree state at session start so agents know they're working in a dirty tree (Finding 11)
 
 ### Changed
+- skills: Runtime skill discovery, CLI diagnostics, and REPL `/skill` now resolve Thomas-native roots (`<thomas_install_root>/skills`, `~/.thomas/skills`, `<cwd>/.thomas/skills`, `<cwd>/skills`) instead of `.codex` roots during normal operation.
 - safety: Placeholder file protection in `validate_agent_changes.py` promoted from warning to hard rejection — commits modifying episodic.py, episodic_store.py, or summarization.py are now BLOCKED (Finding 3)
 - safety: Monolith stub file protection in `validate_agent_changes.py` promoted from warning to hard rejection — commits modifying app.js or app.css build outputs are now BLOCKED (Finding 4)
 - safety: JavaScript syntax check now prints visible warning when Node.js is missing instead of silently passing (Finding 6)

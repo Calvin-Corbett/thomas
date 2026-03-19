@@ -81,7 +81,7 @@ def test_router_classifies_ui_proof_lane(tmp_path: Path) -> None:
 
     assert payload['lane'] == 'ui-proof'
     assert payload['workboard_required'] is True
-    assert '.codex/skills/ui-precision-guard/SKILL.md' in payload['required_reads']
+    assert 'skills/ui-precision-guard/SKILL.md' in payload['required_reads']
 
 
 def test_router_escalates_claim_conflict_to_risky_lane(tmp_path: Path) -> None:

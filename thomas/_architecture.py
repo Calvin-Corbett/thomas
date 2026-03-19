@@ -24,7 +24,7 @@ MODULES = {
     },
     "agent": {
         "tier": "core",
-        "depends_on": ["core", "tools", "memory", "policy", "learning", "models", "observability", "library"],
+        "depends_on": ["core", "tools", "memory", "policy", "learning", "models", "observability", "library", "skills"],
         "health": "yellow",
         "debt": "swarm.py exceeds 1100 lines, loop_part02.py exceeds 900 lines, response_tone.py exceeds 860 lines",
         "description": "Agent loop, tool execution, streaming, guidance",
@@ -83,6 +83,7 @@ MODULES = {
             "upgrade",
             "library",
             "observability",
+            "skills",
         ],
         "health": "yellow",
         "debt": "repl.py exceeds 1800 lines, repl_runtime.py exceeds 1100 lines, main_part02.py exceeds 1000 lines, main_part01.py exceeds 950 lines, parity_commands_part01.py exceeds 890 lines; cli/commands/ has p### files importing many modules",

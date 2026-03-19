@@ -7,6 +7,7 @@ include install.cmd
 
 # Include the thomas package and web assets
 recursive-include thomas *.py *.html *.css *.js *.json *.svg *.png *.ico *.txt
+recursive-include skills *
 
 # Exclude personal/dev data that should NEVER be distributed
 prune runtime

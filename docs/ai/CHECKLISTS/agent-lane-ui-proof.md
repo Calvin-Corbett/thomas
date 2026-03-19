@@ -5,7 +5,7 @@
 - Read:
   - `docs/ai/AGENT_ROUTER.md`
   - `AGENTS.md`
-  - `.codex/skills/ui-precision-guard/SKILL.md`
+  - `skills/ui-precision-guard/SKILL.md`
 - Required checks:
   - `python scripts/refresh_site_visual_proof.py`
   - `python scripts/check_site_visual_proof.py`

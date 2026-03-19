@@ -267,7 +267,7 @@ def classify_task(
     if lane == 'multi-agent':
         reads.extend(['plans/thomas/WORKBOARD.md', 'docs/ops/TASK_ECOSYSTEM_PROTOCOL.md'])
     if lane == 'ui-proof':
-        reads.append('.codex/skills/ui-precision-guard/SKILL.md')
+        reads.append('skills/ui-precision-guard/SKILL.md')
 
     checks = {
         'chat': [],

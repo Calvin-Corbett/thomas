@@ -9,6 +9,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Dict, Iterable, List
 
+from thomas.skills import discover_native_skill_roots
+
 _RISK_KEYWORDS = {
     "deploy",
     "deployment",
@@ -90,30 +92,10 @@ def _memory_root_path(config: Any) -> Path:
     return (Path.cwd() / "runtime").resolve()
 
 
-def _default_trusted_skill_roots(config: Any, *, cwd: Path | None = None) -> List[Path]:
-    roots: List[Path] = []
-    root_cwd = Path(cwd) if cwd is not None else Path.cwd()
-    codex_home = str(os.environ.get("CODEX_HOME") or "").strip()
-    if codex_home:
-        roots.append(Path(codex_home).expanduser() / "skills")
-    roots.append(Path.home() / ".codex" / "skills")
-    roots.append(_memory_root_path(config) / ".codex" / "skills")
-    roots.append(root_cwd / ".codex" / "skills")
 
-    unique: List[Path] = []
-    seen: set[str] = set()
-    for root in roots:
-        try:
-            resolved = root.resolve()
-        except Exception:
-            resolved = root
-        key = str(resolved).lower()
-        if key in seen:
-            continue
-        seen.add(key)
-        if resolved.exists() and resolved.is_dir():
-            unique.append(resolved)
-    return unique
+def _default_trusted_skill_roots(config: Any, *, cwd: Path | None = None) -> List[Path]:
+    _ = config
+    return [path for path, _origin in discover_native_skill_roots(cwd=cwd)]
 
 
 @dataclass
