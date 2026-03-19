@@ -308,6 +308,8 @@ Thomas is **the everything assistant.** Key identity points:
 - **Preferences tied to memory.** Background AI model (cloud or local, user's choice) processes conversations into a preference profile. See `thomas/preferences/STATUS.md`.
 - **CLI targets feature parity with Claude Code / Codex.** Secondary to web UI but should have flavor.
 - **Marketplace is how you add anything.** Plugins, channels, tools, memory modules — all installable. Auto-syncs from website. Thomas can also code missing integrations himself.
+- **Infinite App.** A mobile app that receives headless browser content pushed from Thomas over Tailscale. The user sees a phone-within-a-phone — their own home screen inside the app with draggable app icons. Each "app" is something Thomas built for them, running as a headless browser session pushed to the device. The user tells Thomas to build something, Thomas builds it, and it shows up as an app on their Infinite home screen. The magic is that the user never sees a browser — it just looks like native apps that Thomas made for them.
+- **Roadmap.** The full public roadmap lives at `https://thomas-site.thomasdevhub.workers.dev/roadmap`. Agents should reference this for the complete feature timeline.
 
 ---
 
