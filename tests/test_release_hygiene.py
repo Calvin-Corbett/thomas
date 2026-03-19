@@ -147,3 +147,35 @@ def test_release_hygiene_can_disable_security_audit(monkeypatch, capsys) -> None
     assert "release hygiene: PASS" in out
     assert "security audit:" not in out
     assert called["value"] is False
+
+
+def test_release_hygiene_strict_warnings_fails_on_onboarding_warning(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(
+        mod,
+        "_evaluate_onboarding_gate",
+        lambda **_: _gate_payload(ok=True, errors=[], warnings=["low sample"]),
+    )
+    monkeypatch.setattr(mod, "run_security_audit", lambda *_args, **_kwargs: _security_audit_payload(ok=True))
+
+    rc = mod.run(["--strict-warnings"])
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "release hygiene: FAIL" in out
+    assert "WARN: onboarding outcomes gate warning: low sample" in out
+
+
+def test_release_hygiene_strict_warnings_fails_on_security_warning(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(mod, "_evaluate_onboarding_gate", lambda **_: _gate_payload(ok=True))
+    monkeypatch.setattr(
+        mod,
+        "run_security_audit",
+        lambda *_args, **_kwargs: _security_audit_payload(ok=True, warning_count=2),
+    )
+
+    rc = mod.run(["--strict-warnings"])
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "release hygiene: FAIL" in out
+    assert "WARN: security audit warnings present: 2" in out

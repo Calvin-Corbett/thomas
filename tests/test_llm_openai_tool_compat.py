@@ -1,6 +1,5 @@
 import asyncio
 
-import pytest
 from thomas.core.config import ModelConfig
 from thomas.core.llm import LLMClient, StreamEvent
 

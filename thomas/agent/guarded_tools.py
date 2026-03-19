@@ -1,17 +1,20 @@
 from __future__ import annotations
 
-import json
 import inspect
+import json
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
-from typing import Any, Awaitable, Callable, Dict, Optional
+from typing import Any
 
-from thomas.policy import PolicyEngine, PolicyDecisionType, PolicyContext
+from thomas.policy import PolicyContext, PolicyDecisionType, PolicyEngine
 from thomas.policy.redact import Redactor
+
 from .approval import ApprovalBroker
 
-ToolExecutor = Callable[[Dict[str, Any]], Any]
+ToolExecutor = Callable[[dict[str, Any]], Any]
 
-def _pretty_args(args: Dict[str, Any], max_len: int = 4000) -> Any:
+
+def _pretty_args(args: dict[str, Any], max_len: int = 4000) -> Any:
     try:
         s = json.dumps(args, ensure_ascii=False, indent=2, sort_keys=True)
     except Exception:
@@ -20,17 +23,18 @@ def _pretty_args(args: Dict[str, Any], max_len: int = 4000) -> Any:
         s = s[:max_len] + "…"
     return s
 
+
 @dataclass
 class GuardedToolRunner:
     policy: PolicyEngine
     approvals: ApprovalBroker
     redactor: Redactor
-    audit: Optional[Any] = None  # AuditLog
+    audit: Any | None = None  # AuditLog
     approval_timeout_s: int = 60
     no_human_mode: str = "human"
 
     @staticmethod
-    def _normalize_no_human_mode(value: Optional[str]) -> str:
+    def _normalize_no_human_mode(value: str | None) -> str:
         mode = str(value or "human").strip().lower()
         if mode in {"human", "allow", "deny"}:
             return mode
@@ -40,7 +44,7 @@ class GuardedToolRunner:
         self,
         *,
         executor: ToolExecutor,
-        tool_call: Dict[str, Any],
+        tool_call: dict[str, Any],
         run_id: str,
         session_id: str,
         iteration: int,
@@ -48,9 +52,9 @@ class GuardedToolRunner:
         sandbox_root: str,
         runtime_root: str,
         conversation_summary: str,
-        emit_event: Callable[[str, Dict[str, Any]], Awaitable[None]],
-        no_human_mode: Optional[str] = None,
-    ) -> Dict[str, Any]:
+        emit_event: Callable[[str, dict[str, Any]], Awaitable[None]],
+        no_human_mode: str | None = None,
+    ) -> dict[str, Any]:
         """Evaluate policy, potentially require approval, execute tool, redact outputs.
 
         `tool_call` is expected to contain at least:
@@ -65,6 +69,7 @@ class GuardedToolRunner:
             # If args arrives as JSON string, best-effort parse
             try:
                 import json as _json
+
                 args = _json.loads(args)
             except Exception:
                 args = {"_raw": str(args)}
@@ -100,13 +105,16 @@ class GuardedToolRunner:
                 pass
 
         if decision.type == PolicyDecisionType.DENY:
-            await emit_event("TOOL_RESULT", {
-                "run_id": run_id,
-                "tool_call_id": tool_call_id,
-                "tool_name": tool_name,
-                "ok": False,
-                "error": self.redactor.redact_text(decision.reason),
-            })
+            await emit_event(
+                "TOOL_RESULT",
+                {
+                    "run_id": run_id,
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "ok": False,
+                    "error": self.redactor.redact_text(decision.reason),
+                },
+            )
             return {
                 "ok": False,
                 "error": self.redactor.redact_text(decision.reason),
@@ -120,46 +128,58 @@ class GuardedToolRunner:
             )
 
             if effective_no_human_mode == "allow":
-                await emit_event("TOOL_APPROVAL_REQUIRED", {
-                    "run_id": run_id,
-                    "tool_call_id": tool_call_id,
-                    "session_id": session_id,
-                    "tool_name": tool_name,
-                    "args": self.redactor.redact_obj(args),
-                    "args_pretty": _pretty_args(self.redactor.redact_obj(args)),
-                    "reason": self.redactor.redact_text(
-                        f"Auto-approved by no-human mode (allow) for tool: {tool_name}"
-                    ),
-                    "iteration": iteration,
-                    "decision": "AUTO_APPROVED_NO_HUMAN",
-                    "no_human_mode": effective_no_human_mode,
-                })
-                await emit_event("TOOL_APPROVAL_RESOLVED", {
-                    "run_id": run_id,
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "approved": True,
-                    "auto": True,
-                    "no_human_mode": effective_no_human_mode,
-                })
+                await emit_event(
+                    "TOOL_APPROVAL_REQUIRED",
+                    {
+                        "run_id": run_id,
+                        "tool_call_id": tool_call_id,
+                        "session_id": session_id,
+                        "tool_name": tool_name,
+                        "args": self.redactor.redact_obj(args),
+                        "args_pretty": _pretty_args(self.redactor.redact_obj(args)),
+                        "reason": self.redactor.redact_text(
+                            f"Auto-approved by no-human mode (allow) for tool: {tool_name}"
+                        ),
+                        "iteration": iteration,
+                        "decision": "AUTO_APPROVED_NO_HUMAN",
+                        "no_human_mode": effective_no_human_mode,
+                    },
+                )
+                await emit_event(
+                    "TOOL_APPROVAL_RESOLVED",
+                    {
+                        "run_id": run_id,
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "approved": True,
+                        "auto": True,
+                        "no_human_mode": effective_no_human_mode,
+                    },
+                )
                 approved = True
             elif effective_no_human_mode == "deny":
-                await emit_event("TOOL_APPROVAL_RESOLVED", {
-                    "run_id": run_id,
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "approved": False,
-                    "auto": True,
-                    "no_human_mode": effective_no_human_mode,
-                })
+                await emit_event(
+                    "TOOL_APPROVAL_RESOLVED",
+                    {
+                        "run_id": run_id,
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "approved": False,
+                        "auto": True,
+                        "no_human_mode": effective_no_human_mode,
+                    },
+                )
                 err = "Tool execution denied by no-human policy (no-human mode=deny)."
-                await emit_event("TOOL_RESULT", {
-                    "run_id": run_id,
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "ok": False,
-                    "error": err,
-                })
+                await emit_event(
+                    "TOOL_RESULT",
+                    {
+                        "run_id": run_id,
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "ok": False,
+                        "error": err,
+                    },
+                )
                 return {
                     "ok": False,
                     "error": err,
@@ -189,12 +209,15 @@ class GuardedToolRunner:
                     timeout_s=self.approval_timeout_s,
                 )
 
-            await emit_event("TOOL_APPROVAL_RESOLVED", {
-                "run_id": run_id,
-                "tool_call_id": tool_call_id,
-                "tool_name": tool_name,
-                "approved": bool(approved),
-            })
+            await emit_event(
+                "TOOL_APPROVAL_RESOLVED",
+                {
+                    "run_id": run_id,
+                    "tool_call_id": tool_call_id,
+                    "tool_name": tool_name,
+                    "approved": bool(approved),
+                },
+            )
 
             if self.audit:
                 try:
@@ -213,13 +236,16 @@ class GuardedToolRunner:
 
             if not approved:
                 err = "Tool execution denied (approval required)."
-                await emit_event("TOOL_RESULT", {
-                    "run_id": run_id,
-                    "tool_call_id": tool_call_id,
-                    "tool_name": tool_name,
-                    "ok": False,
-                    "error": err,
-                })
+                await emit_event(
+                    "TOOL_RESULT",
+                    {
+                        "run_id": run_id,
+                        "tool_call_id": tool_call_id,
+                        "tool_name": tool_name,
+                        "ok": False,
+                        "error": err,
+                    },
+                )
                 return {"ok": False, "error": err, "tool_name": tool_name, "tool_call_id": tool_call_id}
 
         # Execute tool

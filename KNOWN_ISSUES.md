@@ -189,9 +189,24 @@ This has caused production-breaking issues multiple times. See AGENTS.md.
 **Fix (v0.14.17):**
 - `thomas/server/routes/chat_aiohttp.py` now reads preferences with `thread_id=session_id` and applies effective memory enablement for each turn.
 - `thomas/agent/loop_streaming.py` now honors advanced memory include toggles when setting thread memory policy.
-- `thomas/server/web/js/app_runtime_joined.mjs` now surfaces Model Setup save errors and keeps modal open on failure.
+- `thomas/server/web/js/app_runtime_primary.mjs` now surfaces Model Setup save errors and keeps modal open on failure.
 
 **Prevention:** Any new preference control must be validated end-to-end: UI PATCH payload, server persistence, and runtime consumption in the chat loop.
+
+---
+
+
+## 13. Placeholder-Backed Source Must Carry a Completion Note
+
+**Symptom:** A module exists on disk but only contains a placeholder banner, so later agents assume the feature is implemented when runtime is actually relying on cached bytecode or a fallback path.
+
+**Cause:** Source placeholders were checked in without recording why they exist, what behavior still needs to land, who owns completion, or what runtime should do until the implementation is restored.
+
+**Diagnosis:** Run `python scripts/check_placeholder_completion_policy.py`. Any placeholder-backed file missing one of `placeholder-why`, `placeholder-scope_to_finish`, `placeholder-owner`, `placeholder-exit_rule`, or `placeholder-acceptance` is still incomplete.
+
+**Fix:** Add the required placeholder note directly in the file and make runtime fail fast or use an explicit fallback until the real source is restored.
+
+**Prevention:** Do not leave placeholder-backed source in place without the full completion note. Thomas agent quality gates now treat missing placeholder annotations as an incomplete coding outcome.
 
 ---
 

@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "max_tracked_root_files": 46,
+  "max_tracked_root_files": 47,
   "allowed_tracked_root_files": [
     ".dockerignore",
     ".env.example",
@@ -16,6 +16,7 @@
     "GUARDRAILS.md",
     "IDENTITY.md",
     "KNOWN_ISSUES.md",
+    "LICENSE",
     "MANIFEST.in",
     "PLAN-UI-UPGRADE.md",
     "PROJECT_INDEX.md",

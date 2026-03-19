@@ -3,7 +3,7 @@ FEATURE 13 -- Dependency Monitor for Thomas (v4 "user-love mode")
 
 Requirements (requested):
 - Background daily check (runs once per day at startup if last check > 24hrs ago)
-- Scans the Thomas project itself (f:\\DevHub\\Thomas) by default
+- Scans the Thomas project root by default
 - If any CRITICAL or HIGH vulns found -> calls notify_fn immediately
 - Persists last scan results and timestamp to persistence engine
 - Singleton: get_dep_monitor()
@@ -19,23 +19,23 @@ Meaningful upgrades:
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
-import hashlib
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from thomas.core.persistence import get_persistence
 from thomas.tools.dep_scanner import deps_scan
 
-
 STATE_KEY = "dep_monitor.state"
 SCHEMA_VERSION = 4
 
-DEFAULT_PROJECT_ROOT = Path(r"f:\DevHub\Thomas")
+DEFAULT_PROJECT_ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_HISTORY_DAYS = 30
 
 
@@ -82,10 +82,11 @@ class _PersistenceKV:
     Adapter over Thomas persistence engine, which may have different method names.
     Stores a JSON blob under STATE_KEY.
     """
+
     def __init__(self, p: Any):
         self._p = p
 
-    def load(self) -> Dict[str, Any]:
+    def load(self) -> dict[str, Any]:
         raw = None
         for name in ("get", "kv_get", "read", "load", "get_json", "get_value"):
             fn = getattr(self._p, name, None)
@@ -118,7 +119,7 @@ class _PersistenceKV:
                 return {}
         return {}
 
-    def save(self, state: Dict[str, Any]) -> None:
+    def save(self, state: dict[str, Any]) -> None:
         # Some persistence implementations accept dicts; try dict first.
         for name in ("set_json", "put_json", "set"):
             fn = getattr(self._p, name, None)
@@ -154,7 +155,7 @@ def _sha1_json(obj: Any) -> str:
     return hashlib.sha1(b).hexdigest()
 
 
-def _safe_get(d: Dict[str, Any], key: str, default: Any) -> Any:
+def _safe_get(d: dict[str, Any], key: str, default: Any) -> Any:
     v = d.get(key, default)
     return v if v is not None else default
 
@@ -162,24 +163,24 @@ def _safe_get(d: Dict[str, Any], key: str, default: Any) -> Any:
 @dataclass
 class DepMonitorState:
     last_scan_ts: float = 0.0
-    last_results: Optional[Dict[str, Any]] = None
+    last_results: dict[str, Any] | None = None
     last_alert_hash: str = ""
-    history: Optional[List[Dict[str, Any]]] = None
+    history: list[dict[str, Any]] | None = None
 
 
 class DepMonitor:
-    def __init__(self, project_root: Optional[Path] = None) -> None:
+    def __init__(self, project_root: Path | None = None) -> None:
         self.project_root = self._resolve_project_root(project_root)
 
         self._p = _PersistenceKV(get_persistence())
         self._state = self._load_state()
 
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._stop = threading.Event()
-        self._notify_fn: Optional[Callable[[Any], None]] = None
+        self._notify_fn: Callable[[Any], None] | None = None
         self._scan_lock = threading.Lock()
 
-    def _resolve_project_root(self, override: Optional[Path]) -> Path:
+    def _resolve_project_root(self, override: Path | None) -> Path:
         if override and override.exists():
             return override
         env = str(os.environ.get("THOMAS_PROJECT_ROOT", "")).strip()
@@ -247,7 +248,7 @@ class DepMonitor:
     def stop(self) -> None:
         self._stop.set()
 
-    def scan_now(self, reason: str = "manual") -> Dict[str, Any]:
+    def scan_now(self, reason: str = "manual") -> dict[str, Any]:
         """
         Run a scan synchronously, persist results, update history, and alert if needed.
         """
@@ -261,7 +262,7 @@ class DepMonitor:
         self._maybe_alert(report, reason=reason)
         return report
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         return {
             "project": str(self.project_root),
             "last_scan_ts": float(self._state.last_scan_ts or 0.0),
@@ -288,7 +289,7 @@ class DepMonitor:
         except Exception:
             pass
 
-    def _scan_project(self) -> Dict[str, Any]:
+    def _scan_project(self) -> dict[str, Any]:
         """
         Scan python + npm manifests in the project root (best-effort).
 
@@ -300,9 +301,9 @@ class DepMonitor:
         }
         """
         root = self.project_root
-        report: Dict[str, Any] = {"python": None, "npm": None, "combined": None, "ts": _now_unix()}
+        report: dict[str, Any] = {"python": None, "npm": None, "combined": None, "ts": _now_unix()}
 
-        combined_vulns: List[Dict[str, Any]] = []
+        combined_vulns: list[dict[str, Any]] = []
         totals = {"total": 0, "critical": 0, "high": 0, "medium": 0, "low": 0}
 
         # Python target preference: pyproject.toml -> requirements.txt
@@ -353,7 +354,7 @@ class DepMonitor:
         report["combined"] = {"vulnerabilities": combined_vulns, **totals}
         return report
 
-    def _update_history(self, report: Dict[str, Any]) -> None:
+    def _update_history(self, report: dict[str, Any]) -> None:
         hist = self._state.history or []
         combined = report.get("combined") if isinstance(report.get("combined"), dict) else {}
         entry = {
@@ -370,14 +371,14 @@ class DepMonitor:
             hist[:] = hist[-DEFAULT_HISTORY_DAYS:]
         self._state.history = hist
 
-    def _extract_high_critical(self, report: Dict[str, Any]) -> List[Dict[str, Any]]:
+    def _extract_high_critical(self, report: dict[str, Any]) -> list[dict[str, Any]]:
         combined = report.get("combined") if isinstance(report.get("combined"), dict) else None
         if not isinstance(combined, dict):
             return []
         vulns = combined.get("vulnerabilities")
         if not isinstance(vulns, list):
             return []
-        out: List[Dict[str, Any]] = []
+        out: list[dict[str, Any]] = []
         for v in vulns:
             if not isinstance(v, dict):
                 continue
@@ -386,12 +387,12 @@ class DepMonitor:
                 out.append(v)
         return out
 
-    def _diff_new_high_critical(self, current: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    def _diff_new_high_critical(self, current: list[dict[str, Any]]) -> list[dict[str, Any]]:
         prev = None
         if isinstance(self._state.last_results, dict):
             prev = self._extract_high_critical(self._state.last_results)
 
-        def key(v: Dict[str, Any]) -> str:
+        def key(v: dict[str, Any]) -> str:
             return f"{v.get('package','')}|{v.get('cve','')}|{v.get('severity','')}|{v.get('fix_version','')}"
 
         prev_set = {key(v) for v in (prev or [])}
@@ -399,7 +400,7 @@ class DepMonitor:
         new_keys = cur_set - prev_set
         return [v for v in current if key(v) in new_keys]
 
-    def _maybe_alert(self, report: Dict[str, Any], reason: str) -> None:
+    def _maybe_alert(self, report: dict[str, Any], reason: str) -> None:
         combined = report.get("combined") if isinstance(report, dict) else None
         if not isinstance(combined, dict):
             return
@@ -446,7 +447,7 @@ class DepMonitor:
             _sleep(3600)
 
 
-_dep_monitor_singleton: Optional[DepMonitor] = None
+_dep_monitor_singleton: DepMonitor | None = None
 
 
 def get_dep_monitor() -> DepMonitor:
@@ -454,4 +455,3 @@ def get_dep_monitor() -> DepMonitor:
     if _dep_monitor_singleton is None:
         _dep_monitor_singleton = DepMonitor(DEFAULT_PROJECT_ROOT)
     return _dep_monitor_singleton
-

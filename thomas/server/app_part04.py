@@ -1,0 +1,318 @@
+class _ServerRestartRequested(Exception):
+    """Sentinel: supervisor loop should restart the server cleanly."""
+
+    pass
+
+
+async def serve_async(
+    config: AppConfig,
+    *,
+    host: str = "127.0.0.1",
+    port: int = 8899,
+    crash_count: int = 0,
+) -> None:
+    from aiohttp import web
+
+    app = create_app(config)
+    app[APP_CRASH_COUNT] = crash_count
+
+    # Shutdown event -- set by restart endpoint or signal handler
+    shutdown_event = asyncio.Event()
+    app[APP_SHUTDOWN_EVENT] = shutdown_event
+    app[APP_RESTART_REQUESTED] = False
+
+    runner = web.AppRunner(app)
+    await runner.setup()
+
+    # ── Port binding with retry (handles TIME_WAIT from previous instance) ──
+    max_bind_attempts = 5
+    for attempt in range(1, max_bind_attempts + 1):
+        site = web.TCPSite(runner, host=host, port=port)
+        try:
+            await site.start()
+            break
+        except OSError as bind_err:
+            # aiohttp may register the site before bind succeeds; stop() ensures
+            # the next retry can create a fresh site without duplicate registration.
+            with contextlib.suppress(Exception):
+                await site.stop()
+            if attempt == max_bind_attempts:
+                print(f"[thomas] Port {port} still busy after {max_bind_attempts} attempts. Giving up.")
+                await runner.cleanup()
+                raise
+            delay = attempt * 1.0
+            print(
+                f"[thomas] Port {port} busy ({bind_err}), retrying in {delay:.0f}s ({attempt}/{max_bind_attempts})..."
+            )
+            await asyncio.sleep(delay)
+
+    # ── Startup summary ──
+    diag = app.get(APP_DIAGNOSTICS, {})
+    boot_dur = app.get(APP_BOOT_DURATION, 0)
+    ok_features = [k for k, v in diag.items() if v]
+    bad_features = [k for k, v in diag.items() if not v]
+    print(f"[thomas] Server booted in {boot_dur:.1f}s")
+    if ok_features:
+        print(f"[thomas]   Features OK:  {', '.join(ok_features)}")
+    if bad_features:
+        print(f"[thomas]   Unavailable:  {', '.join(bad_features)}")
+    if crash_count > 0:
+        print(f"[thomas]   Crash count:  {crash_count}")
+    print(f"[thomas]   Listening:    http://{host}:{port}/")
+
+    # Keep running until shutdown event is set or interrupted.
+    try:
+        while not shutdown_event.is_set():
+            await asyncio.sleep(1)
+    finally:
+        await runner.cleanup()
+        if app.get(APP_RESTART_REQUESTED):
+            raise _ServerRestartRequested()
+
+
+def _check_single_instance(config: AppConfig, host: str, port: int) -> None:
+    """Ensure only one Thomas server runs at a time.
+
+    Uses a PID lock file. If another instance is alive, kills it first so the
+    newest launch always wins. This prevents zombie accumulation when the user
+    clicks "run UI" repeatedly.
+    """
+    import pathlib
+    import signal
+    import time as _time
+
+    def _terminate_pid(pid: int, *, why: str, known_port: Any = "?") -> None:
+        if pid == os.getpid():
+            return
+        try:
+            os.kill(pid, 0)  # process exists
+        except OSError:
+            return
+
+        print(f"[thomas] Stopping previous instance (PID {pid}, port {known_port}, {why})...")
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            return
+
+        # Wait up to 3s for graceful shutdown.
+        for _ in range(30):
+            _time.sleep(0.1)
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                break  # dead
+        else:
+            # Still alive -- force kill.
+            try:
+                os.kill(pid, signal.SIGKILL if hasattr(signal, "SIGKILL") else signal.SIGTERM)
+            except OSError:
+                pass
+        print("[thomas] Previous instance stopped.")
+
+    def _list_duplicate_thomas_server_processes() -> list[tuple[int, str]]:
+        """Best-effort process sweep for legacy/lockless server processes."""
+        current_pid = os.getpid()
+        matches: list[tuple[int, str]] = []
+
+        def _match_cmdline(raw: str) -> bool:
+            text = str(raw or "").strip().lower()
+            if not text:
+                return False
+            return (" -m thomas serve" in text) or (" -m thomas.server" in text)
+
+        try:
+            if os.name == "nt":
+                probe = subprocess.run(
+                    [
+                        "powershell",
+                        "-NoProfile",
+                        "-NonInteractive",
+                        "-Command",
+                        "Get-CimInstance Win32_Process | Select-Object ProcessId,Name,CommandLine | ConvertTo-Json -Compress",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=5.0,
+                    check=False,
+                )
+                if probe.returncode == 0 and probe.stdout.strip():
+                    data = json.loads(probe.stdout)
+                    rows = data if isinstance(data, list) else [data]
+                    for row in rows:
+                        if not isinstance(row, dict):
+                            continue
+                        try:
+                            pid = int(row.get("ProcessId"))
+                        except (ValueError, TypeError):
+                            continue
+                        if pid <= 0 or pid == current_pid:
+                            continue
+                        name = str(row.get("Name") or "").lower()
+                        if name and not name.startswith("python"):
+                            continue
+                        cmdline = str(row.get("CommandLine") or "")
+                        if _match_cmdline(cmdline):
+                            matches.append((pid, cmdline))
+            else:
+                probe = subprocess.run(
+                    ["ps", "-eo", "pid=,args="],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    timeout=5.0,
+                    check=False,
+                )
+                if probe.returncode == 0:
+                    for raw in (probe.stdout or "").splitlines():
+                        line = raw.strip()
+                        if not line:
+                            continue
+                        parts = line.split(maxsplit=1)
+                        if not parts:
+                            continue
+                        try:
+                            pid = int(parts[0])
+                        except (ValueError, TypeError):
+                            continue
+                        if pid <= 0 or pid == current_pid:
+                            continue
+                        cmdline = parts[1] if len(parts) > 1 else ""
+                        if _match_cmdline(cmdline):
+                            matches.append((pid, cmdline))
+        except (OSError, subprocess.TimeoutExpired, json.JSONDecodeError) as exc:
+            log.debug("Duplicate process sweep unavailable: %s", exc)
+
+        # Deduplicate while preserving order.
+        seen: set[int] = set()
+        unique: list[tuple[int, str]] = []
+        for pid, cmd in matches:
+            if pid in seen:
+                continue
+            seen.add(pid)
+            unique.append((pid, cmd))
+        return unique
+
+    lock_dir = pathlib.Path(config.memory.root_path) / ".thomas"
+    lock_dir.mkdir(parents=True, exist_ok=True)
+    lock_file = lock_dir / "serve.lock"
+
+    lock_pid_to_kill: int | None = None
+    lock_port_to_kill: Any = "?"
+    if lock_file.exists():
+        try:
+            data = json.loads(lock_file.read_text(encoding="utf-8"))
+            old_pid = data.get("pid")
+            old_port = data.get("port", "?")
+            if old_pid is not None:
+                try:
+                    lock_pid_to_kill = int(old_pid)
+                except (ValueError, TypeError):
+                    lock_pid_to_kill = None
+                lock_port_to_kill = old_port
+        except (json.JSONDecodeError, KeyError, OSError):
+            pass  # corrupt lock file, overwrite it
+
+    if lock_pid_to_kill is not None:
+        _terminate_pid(lock_pid_to_kill, why="serve.lock owner", known_port=lock_port_to_kill)
+
+    # Extra safeguard: terminate other Thomas server entrypoints, including
+    # legacy `python -m thomas.server` processes that may have no lock file.
+    for pid, cmdline in _list_duplicate_thomas_server_processes():
+        _terminate_pid(pid, why="duplicate thomas server process", known_port="?")
+        log.debug("Stopped duplicate Thomas server PID %s (%s)", pid, cmdline)
+
+    # Write our lock
+    lock_file.write_text(
+        json.dumps({"pid": os.getpid(), "host": host, "port": port}),
+        encoding="utf-8",
+    )
+
+
+def _release_lock(config: AppConfig) -> None:
+    """Remove the lock file on clean shutdown."""
+    import pathlib
+
+    lock_file = pathlib.Path(config.memory.root_path) / ".thomas" / "serve.lock"
+    try:
+        lock_file.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+
+def serve(config: AppConfig, *, host: str = "127.0.0.1", port: int = 8899) -> None:
+    """Run the server with a supervisor loop that auto-restarts on crashes.
+
+    - Clean exits (Ctrl+C, SystemExit) stop immediately.
+    - ``_ServerRestartRequested`` (from /api/server/restart) restarts with no
+      crash count / backoff.
+    - Unhandled exceptions trigger restart with exponential backoff.
+    - After 5 crashes in 5 minutes, the supervisor gives up.
+    """
+    import asyncio
+    import time as _time
+
+    _check_single_instance(config, host, port)
+
+    max_crashes = 5
+    crash_window_s = 300  # 5 minutes
+    crash_times: list = []
+    crash_count = 0
+
+    try:
+        while True:
+            try:
+                asyncio.run(serve_async(config, host=host, port=port, crash_count=crash_count))
+                break  # clean exit (e.g. Ctrl+C handled inside the event loop)
+            except KeyboardInterrupt:
+                print("\n[thomas] Stopped by user.")
+                break
+            except SystemExit:
+                break
+            except _ServerRestartRequested:
+                print("[thomas] Restart requested. Rebooting...")
+                # Clear bytecode cache to avoid stale .pyc issues after hot-edits
+                try:
+                    import importlib
+
+                    import thomas
+
+                    _pkg_root = os.path.dirname(thomas.__file__)
+                    for _dirpath, _dirnames, _filenames in os.walk(_pkg_root):
+                        if "__pycache__" in _dirnames:
+                            _cache_dir = os.path.join(_dirpath, "__pycache__")
+                            shutil.rmtree(_cache_dir, ignore_errors=True)
+                    # Force re-import of critical modules
+                    _stale = [k for k in sys.modules if k.startswith("thomas.")]
+                    for k in _stale:
+                        del sys.modules[k]
+                    if "thomas" in sys.modules:
+                        del sys.modules["thomas"]
+                except (OSError, KeyError, ImportError) as _e:
+                    print(f"[thomas] pycache cleanup: {_e}")
+                continue  # no crash count, no backoff
+            except BaseException as exc:
+                # Catch most exceptions but not KeyboardInterrupt/SystemExit (handled above)
+                if isinstance(exc, (KeyboardInterrupt, SystemExit)):
+                    raise
+                now = _time.time()
+                crash_times.append(now)
+                crash_times = [t for t in crash_times if now - t < crash_window_s]
+                crash_count = len(crash_times)
+
+                print(f"[thomas] CRASH ({crash_count}/{max_crashes}): {type(exc).__name__}: {exc}")
+
+                if crash_count >= max_crashes:
+                    print(
+                        f"[thomas] {crash_count} crashes in {crash_window_s}s -- giving up. Fix the issue and restart manually."
+                    )
+                    break
+
+                delay = min(2.0 * (2 ** (crash_count - 1)), 30.0)
+                print(f"[thomas] Auto-restarting in {delay:.0f}s...")
+                _time.sleep(delay)
+    finally:
+        _release_lock(config)

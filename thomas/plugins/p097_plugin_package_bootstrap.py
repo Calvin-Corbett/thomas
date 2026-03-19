@@ -14,10 +14,10 @@ Deterministic errors are provided for reliable automation.
 import json
 import keyword
 import re
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Mapping, Sequence
-
+from typing import Any
 
 # -----------------------------
 # Deterministic errors
@@ -163,11 +163,11 @@ def _validate_skill_name(name: str) -> str:
 
 def _toml_escape(value: str) -> str:
     # Keep escaping simple and deterministic; this is not a full TOML encoder.
-    return _TOML_ESCAPE_RE.sub(lambda m: {"\r": "\\r", "\n": "\\n", "\t": "\\t", '"': "\\\""}[m.group(0)], value)
+    return _TOML_ESCAPE_RE.sub(lambda m: {"\r": "\\r", "\n": "\\n", "\t": "\\t", '"': '\\"'}[m.group(0)], value)
 
 
 def _py_escape(value: str) -> str:
-    return str(value).replace("\\", "\\\\").replace("\"", "\\\"")
+    return str(value).replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _write_file(path: Path, content: str, *, overwrite: bool) -> bool:
@@ -258,21 +258,21 @@ def _build_skill_md(
 def _build_plugin_code(name: str, description: str, version: str) -> str:
     return (
         "from __future__ import annotations\n\n"
-        f'\"\"\"{_py_escape(description)}\"\"\"\n\n'
+        f'"""{_py_escape(description)}"""\n\n'
         "from dataclasses import dataclass\n"
         "from typing import Any\n\n"
         "@dataclass\n"
         "class Plugin:\n"
-        "    \"\"\"Small plugin shim with deterministic registration entrypoints.\"\"\"\n\n"
+        '    """Small plugin shim with deterministic registration entrypoints."""\n\n'
         f'    name: str = "{_py_escape(name)}"\n'
         f'    version: str = "{_py_escape(version)}"\n'
         f'    description: str = "{_py_escape(description)}"\n\n'
         "    def register(self, registry: Any) -> None:\n"
-        "        \"\"\"Register plugin capabilities with a Thomas registry.\"\"\"\n"
+        '        """Register plugin capabilities with a Thomas registry."""\n'
         "        _ = registry\n"
         "        return\n\n"
         "def register(registry: Any) -> None:\n"
-        "    \"\"\"Compatibility entrypoint for module-style plugin loading.\"\"\"\n"
+        '    """Compatibility entrypoint for module-style plugin loading."""\n'
         "    Plugin().register(registry)\n"
     )
 
@@ -381,11 +381,7 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
     installation_manifest_path: str | None = None
     install_root: str | None = None
 
-    init_py = (
-        "from __future__ import annotations\n\n"
-        "from .plugin import Plugin\n\n"
-        "__all__ = [\"Plugin\"]\n"
-    )
+    init_py = "from __future__ import annotations\n\n" "from .plugin import Plugin\n\n" '__all__ = ["Plugin"]\n'
 
     plugin_py = _build_plugin_code(name, req.description, req.plugin_version)
 
@@ -397,15 +393,15 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
 
     pyproject = (
         "[build-system]\n"
-        "requires = [\"setuptools>=61.0\"]\n"
-        "build-backend = \"setuptools.build_meta\"\n\n"
+        'requires = ["setuptools>=61.0"]\n'
+        'build-backend = "setuptools.build_meta"\n\n'
         "[project]\n"
-        f"name = \"{_toml_escape(name)}\"\n"
-        f"version = \"{_py_escape(req.plugin_version)}\"\n"
-        f"description = \"{_toml_escape(req.description)}\"\n"
+        f'name = "{_toml_escape(name)}"\n'
+        f'version = "{_py_escape(req.plugin_version)}"\n'
+        f'description = "{_toml_escape(req.description)}"\n'
     )
     if req.author.strip():
-        pyproject += f"authors = [{{name = \"{_toml_escape(req.author.strip())}\"}}]\n"
+        pyproject += f'authors = [{{name = "{_toml_escape(req.author.strip())}"}}]\n'
 
     readme = f"# {name}\n\n{req.description}\n"
 
@@ -415,10 +411,26 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
         else:
             warnings.append(warn)
 
-    _track(_write_file(package_dir / "__init__.py", init_py, overwrite=req.overwrite), package_dir / "__init__.py", "__init__.py existed; skipped.")
-    _track(_write_file(package_dir / "plugin.py", plugin_py, overwrite=req.overwrite), package_dir / "plugin.py", "plugin.py existed; skipped.")
-    _track(_write_file(package_dir / "pyproject.toml", pyproject, overwrite=req.overwrite), package_dir / "pyproject.toml", "pyproject.toml existed; skipped.")
-    _track(_write_file(package_dir / "README.md", readme, overwrite=req.overwrite), package_dir / "README.md", "README.md existed; skipped.")
+    _track(
+        _write_file(package_dir / "__init__.py", init_py, overwrite=req.overwrite),
+        package_dir / "__init__.py",
+        "__init__.py existed; skipped.",
+    )
+    _track(
+        _write_file(package_dir / "plugin.py", plugin_py, overwrite=req.overwrite),
+        package_dir / "plugin.py",
+        "plugin.py existed; skipped.",
+    )
+    _track(
+        _write_file(package_dir / "pyproject.toml", pyproject, overwrite=req.overwrite),
+        package_dir / "pyproject.toml",
+        "pyproject.toml existed; skipped.",
+    )
+    _track(
+        _write_file(package_dir / "README.md", readme, overwrite=req.overwrite),
+        package_dir / "README.md",
+        "README.md existed; skipped.",
+    )
 
     if req.create_skill:
         skill_root = _resolve_skill_root(dest, req.skill_root)
@@ -491,7 +503,12 @@ def bootstrap_plugin_package(req: PluginBootstrapRequest) -> PluginBootstrapResu
 
     plugin_py_path = package_dir / "plugin.py"
     if req.validate:
-        for path in (package_dir / "plugin.json", package_dir / "manifest.json", plugin_py_path, package_dir / "thomas_plugin.json"):
+        for path in (
+            package_dir / "plugin.json",
+            package_dir / "manifest.json",
+            plugin_py_path,
+            package_dir / "thomas_plugin.json",
+        ):
             try:
                 if path.name.endswith(".json") and path.exists():
                     _validate_json_file(path)

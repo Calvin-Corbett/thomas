@@ -88,7 +88,15 @@ except ImportError:  # pragma: no cover
 
 def _connections_file_path() -> Path:
     """Get path to connections file."""
-    return Path(os.getenv("THOMAS_DB_CONNECTIONS_FILE", "thomas_db_connections.json")).resolve()
+    env_path = os.getenv("THOMAS_DB_CONNECTIONS_FILE")
+    if env_path:
+        return Path(env_path).expanduser().resolve()
+    try:
+        from thomas.core.config import resolve_thomas_data_dir
+
+        return (resolve_thomas_data_dir() / "thomas_db_connections.json").resolve()
+    except Exception:
+        return (Path.home() / ".thomas" / "thomas_db_connections.json").resolve()
 
 
 def _load_connections_raw() -> dict[str, Any]:

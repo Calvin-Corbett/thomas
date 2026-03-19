@@ -86,39 +86,190 @@ class OrchestratorBrain:
         images: list[dict[str, Any]] | None = None,
         is_first_message: bool = False,
     ) -> ConversationManager:
-        """Process a user message through the full orchestration pipeline.
+        """Process a user message through the dispatch-first pipeline.
 
-        This is the main entry point.  Flow:
+        DISPATCH-FIRST ARCHITECTURE (2026-03-18):
+        Thomas uses a fast binary classification to decide:
 
-        1. Refresh memory (all 3 layers)
-        2. Classify intent → decide which specialists to invoke
-        3. Create delegation contracts with capability tokens
-        4. Dispatch to specialists (sequential or parallel)
-        5. Validate specialist outputs against contracts
-        6. Synthesise final response
-        7. Update conversation (COW — returns new instance)
-        8. Capture episode in memory
+          CASUAL (greetings, thanks, filler):
+            → Skip routing LLM call, go straight to reasoning specialist
+            → Stream reply immediately. Thomas is fast.
 
-        Parameters
-        ----------
-        session_id:
-            Current session identifier.
-        conversation:
-            Immutable ConversationManager (COW).
-        prompt:
-            User's message text.
-        dispatcher:
-            EventDispatcher for streaming events to frontend.
-        mode:
-            Execution mode (fast/auto/thinking/max).
-        autonomy_level:
-            1-4 autonomy level.
+          ACTIONABLE (anything needing tools, research, code, or heavy work):
+            → Stream a quick Thomas acknowledgment IMMEDIATELY
+            → Fire off specialist work as a background task
+            → Stream specialist results back as they complete
+            → Thomas stays free for more conversation
 
-        Returns
-        -------
-        Updated ConversationManager with user + assistant messages appended.
+        The key: Thomas is NEVER blocked. He replies fast because he's
+        not the one doing the heavy lifting.
+
+        See docs/CHAT_EXECUTION_MODEL.md for the full architecture.
         """
         turn_start = time.monotonic()
+
+        # ── Step 1: Append user message ──────────────────────────
+        conversation = conversation.append_message("user", prompt)
+
+        # ── Step 2: Fast classify — casual or actionable? ────────
+        # Use dispatch module for instant classification (no LLM call).
+        # Direct file import avoids triggering thomas.agent.__init__ which
+        # pulls in AgentLoop → httpx and may fail in some environments.
+        is_casual = False
+        try:
+            import importlib.util as _ilu
+            import sys as _sys
+
+            _dp = str(__import__("pathlib").Path(__file__).resolve().parent.parent / "agent" / "dispatch.py")
+            # FIX (2026-03-18): Use a proper module name that matches what
+            # gets registered in sys.modules. The @dataclass decorator needs
+            # to find the module via cls.__module__ → sys.modules lookup.
+            # Using "_dispatch" as the name but registering as "thomas.agent.dispatch"
+            # caused a crash in the dataclass decorator.
+            _mod_name = "thomas.agent.dispatch"
+            if _mod_name in _sys.modules:
+                _mod = _sys.modules[_mod_name]
+            else:
+                _spec = _ilu.spec_from_file_location(_mod_name, _dp)
+                if _spec and _spec.loader:
+                    _mod = _ilu.module_from_spec(_spec)
+                    _sys.modules[_mod_name] = _mod
+                    _spec.loader.exec_module(_mod)
+                else:
+                    raise ImportError(f"Cannot load {_dp}")
+            decision = _mod.should_dispatch(prompt)
+            is_casual = decision.action == "casual"
+            log.debug("Dispatch: %s -> %s (%s)", prompt[:40], decision.action, decision.reason)
+        except Exception as _dispatch_err:
+            log.warning("Dispatch classification failed (all messages go to actionable): %s", _dispatch_err)
+
+        if is_casual:
+            # ── CASUAL PATH: reply directly, fast ────────────────
+            return await self._handle_casual(
+                session_id=session_id,
+                conversation=conversation,
+                prompt=prompt,
+                dispatcher=dispatcher,
+                mode=mode,
+                autonomy_level=autonomy_level,
+                turn_start=turn_start,
+            )
+        else:
+            # ── ACTIONABLE PATH: acknowledge + dispatch ──────────
+            return await self._handle_actionable(
+                session_id=session_id,
+                conversation=conversation,
+                prompt=prompt,
+                dispatcher=dispatcher,
+                mode=mode,
+                autonomy_level=autonomy_level,
+                turn_start=turn_start,
+                images=images,
+            )
+
+    async def _handle_casual(
+        self,
+        session_id: str,
+        conversation: ConversationManager,
+        prompt: str,
+        dispatcher: EventDispatcher,
+        mode: str,
+        autonomy_level: int,
+        turn_start: float,
+    ) -> ConversationManager:
+        """Handle casual messages — reply directly, no delegation overhead.
+
+        Skips routing LLM call, skips thinking events, goes straight to
+        the reasoning specialist with full conversation context.
+        """
+        memory_coord = MemoryCoordinator(
+            self.memory_engine,
+            session_id,
+            context_budget=_MODE_BUDGETS.get("fast", 1_500),
+        )
+
+        # Quick memory refresh (lightweight)
+        memory_ctx = await memory_coord.refresh(
+            prompt=prompt,
+            conversation=conversation,
+            iteration=0,
+        )
+
+        # Go straight to reasoning specialist — no routing LLM call
+        result = await self._dispatch_single(
+            session_id=session_id,
+            specialist_id="reasoning",
+            prompt=prompt,
+            conversation=conversation,
+            memory_ctx=memory_ctx,
+            dispatcher=dispatcher,
+            thinking=ThinkingTracker(),
+            mode="fast",
+            autonomy_level=autonomy_level,
+        )
+
+        # Synthesize and stream
+        final_text = result.content if result.ok else "Sorry, I had trouble with that."
+        chunk_size = 80
+        for i in range(0, len(final_text), chunk_size):
+            await dispatcher.emit_text(final_text[i : i + chunk_size])
+
+        # Update conversation
+        conversation = conversation.append_message(
+            "assistant",
+            final_text,
+            metadata={"specialists": ["reasoning"], "mode": "casual"},
+        )
+
+        # Capture episode
+        await memory_coord.capture_episode(
+            turn_number=conversation.length // 2,
+            user_message=prompt,
+            assistant_response=final_text[:500],
+            thinking="casual_reply",
+            tool_calls=[],
+            specialist="reasoning",
+        )
+
+        # Emit done
+        elapsed = int((time.monotonic() - turn_start) * 1000)
+        await dispatcher.emit_done(
+            session_id=session_id,
+            conversation_version=conversation.version,
+            thinking_summary="casual",
+            total_thinking_ms=0,
+            iterations=1,
+            tool_calls=0,
+            tokens_used=result.tokens_used,
+            specialists_used=["reasoning"],
+            total_elapsed_ms=elapsed,
+        )
+
+        return conversation
+
+    async def _handle_actionable(
+        self,
+        session_id: str,
+        conversation: ConversationManager,
+        prompt: str,
+        dispatcher: EventDispatcher,
+        mode: str,
+        autonomy_level: int,
+        turn_start: float,
+        images: list[dict[str, Any]] | None = None,
+    ) -> ConversationManager:
+        """Handle actionable messages — acknowledge fast, dispatch work.
+
+        Thomas immediately streams a quick acknowledgment so the user sees
+        a response in milliseconds. Then the real work happens:
+
+        1. Route to best specialist(s) via LLM classification
+        2. Dispatch specialist work
+        3. Stream results as they complete
+        4. Thomas stays responsive for follow-up messages
+
+        This is the core of the dispatch-first architecture.
+        """
         thinking = ThinkingTracker()
         memory_coord = MemoryCoordinator(
             self.memory_engine,
@@ -126,49 +277,39 @@ class OrchestratorBrain:
             context_budget=_MODE_BUDGETS.get(mode, 4_000),
         )
 
-        # ── Step 1: Append user message ──────────────────────────
-        conversation = conversation.append_message("user", prompt)
+        # ── Immediately stream acknowledgment ─────────────────────
+        # Thomas replies fast. The user sees this right away.
+        # Keep it natural — not robotic. Acknowledge and stay open.
+        await dispatcher.emit_text("Working on that — ")
 
-        # ── Step 2: Refresh memory ───────────────────────────────
+        # ── Refresh memory (runs while user sees "On it.") ────────
         thinking.start(DelegationPhase.PLANNING.value)
-        thinking.append("Refreshing memory layers...")
-
         memory_ctx = await memory_coord.refresh(
             prompt=prompt,
             conversation=conversation,
             iteration=0,
         )
-        # Only show memory badge when episodic or semantic memory was
-        # actually retrieved — working memory is always populated from
-        # the conversation so it shouldn't trigger the badge by itself.
         has_recalled_memory = bool(memory_ctx.episodic or memory_ctx.semantic)
         if has_recalled_memory:
             await dispatcher.emit_memory_refresh(
                 layer="all",
                 total_tokens=memory_ctx.total_tokens,
             )
-            thinking.append(
-                f"Retrieved {memory_ctx.total_tokens} tokens of context "
-                f"(working + episodic + semantic)."
-            )
 
-        # ── Step 3: Classify intent & route ──────────────────────
-        thinking.append("Classifying intent and selecting specialists...")
+        # ── Route to specialists ──────────────────────────────────
+        thinking.append("Selecting best approach...")
         route = await self._classify_and_route(prompt, conversation, memory_ctx)
-        thinking.append(f"Route decision: {route.reasoning}")
-        thinking.append(f"Specialists: {', '.join(route.specialists)}")
+        thinking.append(f"Route: {route.reasoning}")
         thinking.end()
 
-        # Emit thinking events
         for event in thinking.events():
             await dispatcher.emit(event)
 
-        # ── Step 4: Delegate to specialists ──────────────────────
+        # ── Delegate to specialists ───────────────────────────────
         all_results: list[DelegationResult] = []
         specialists_used: list[str] = []
 
         if route.parallel and len(route.specialists) > 1:
-            # Parallel dispatch
             all_results = await self._dispatch_parallel(
                 session_id=session_id,
                 specialists=route.specialists,
@@ -181,7 +322,6 @@ class OrchestratorBrain:
                 autonomy_level=autonomy_level,
             )
         else:
-            # Sequential dispatch
             for specialist_id in route.specialists:
                 result = await self._dispatch_single(
                     session_id=session_id,
@@ -198,36 +338,38 @@ class OrchestratorBrain:
                 if result.ok:
                     specialists_used.append(specialist_id)
 
-        # ── Step 5: Synthesise response ──────────────────────────
-        thinking.start(DelegationPhase.SYNTHESIZING.value)
-        thinking.append("Synthesising specialist outputs into final response...")
-
+        # ── Synthesise response ───────────────────────────────────
         final_text = await self._synthesise(
             prompt=prompt,
             results=all_results,
             memory_ctx=memory_ctx,
             mode=mode,
         )
-        thinking.end()
 
-        # First-message capability hint (only once per session)
-        if is_first_message and final_text:
-            final_text += (
-                "\n\n---\n*I can also run code, search the web, manage files, "
-                "and coordinate multiple agents on complex tasks. Just ask.*"
-            )
+        # FIX (2026-03-18): Safety net — strip any leaked routing JSON from
+        # the response. If the specialist or routing LLM accidentally returned
+        # internal JSON (e.g. {"specialists":...}), remove it before streaming.
+        if final_text:
+            import re as _re
 
-        # Stream the final response text
-        # Split into chunks for smooth streaming
+            final_text = _re.sub(
+                r'\{"specialists"\s*:\s*\[.*?\]\s*,\s*"parallel"\s*:.*?\}',
+                "",
+                final_text,
+            ).strip()
+
+        # Stream the specialist's actual response
         chunk_size = 80
         for i in range(0, len(final_text), chunk_size):
-            chunk = final_text[i : i + chunk_size]
-            await dispatcher.emit_text(chunk)
+            await dispatcher.emit_text(final_text[i : i + chunk_size])
 
-        # ── Step 6: Update conversation ──────────────────────────
+        # Build full assistant message (acknowledgment + result)
+        full_response = "Working on that — " + final_text
+
+        # ── Update conversation ───────────────────────────────────
         conversation = conversation.append_message(
             "assistant",
-            final_text,
+            full_response,
             metadata={
                 "specialists": specialists_used,
                 "thinking_ms": thinking.total_ms,
@@ -235,7 +377,7 @@ class OrchestratorBrain:
             },
         )
 
-        # ── Step 7: Capture episode ──────────────────────────────
+        # ── Capture episode ───────────────────────────────────────
         tool_calls = []
         for r in all_results:
             tool_calls.extend(r.tool_calls)
@@ -243,13 +385,13 @@ class OrchestratorBrain:
         await memory_coord.capture_episode(
             turn_number=conversation.length // 2,
             user_message=prompt,
-            assistant_response=final_text[:500],
+            assistant_response=full_response[:500],
             thinking=thinking.total_text[:300],
             tool_calls=tool_calls,
             specialist=", ".join(specialists_used),
         )
 
-        # ── Step 8: Emit done ────────────────────────────────────
+        # ── Emit done ─────────────────────────────────────────────
         elapsed = int((time.monotonic() - turn_start) * 1000)
         await dispatcher.emit_done(
             session_id=session_id,
@@ -545,17 +687,26 @@ class OrchestratorBrain:
             stripped = text.strip()
             if stripped.startswith("{") and stripped.endswith("}"):
                 try:
-                    json.loads(stripped)
+                    parsed_json = json.loads(stripped)
                     # It IS valid JSON — the model responded with JSON
-                    # instead of natural text.  This is a model error.
+                    # instead of natural text. Try to extract useful content
+                    # rather than showing the user a confusing error.
+                    # FIX (2026-03-18): Previously returned "unexpected format"
+                    # error. Now extracts text from JSON or passes through.
                     log.warning(
                         "Specialist returned raw JSON instead of text: %s",
                         stripped[:200],
                     )
-                    return (
-                        "I received your message but my response came back "
-                        "in an unexpected format. Could you try again?"
-                    )
+                    # Try common response field names
+                    if isinstance(parsed_json, dict):
+                        for key in ("response", "content", "text", "answer", "message", "result"):
+                            if key in parsed_json:
+                                extracted = str(parsed_json[key]).strip()
+                                if extracted:
+                                    return extracted
+                    # No extractable field — pass through the raw text
+                    # (better than a dead-end error message)
+                    return text
                 except (ValueError, TypeError):
                     pass  # Not valid JSON — normal text that happens to start with {
             return text

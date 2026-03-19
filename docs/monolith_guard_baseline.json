@@ -1,197 +1,42 @@
 {
-    "version": 1,
-    "scan_roots": [
-        "thomas"
-    ],
-    "hard_limits": {
-        "py": 1200,
-        "js": 1200,
-        "ts": 1200,
-        "css": 1600,
-        "html": 1000
+  "version": 1,
+  "scan_roots": [
+    "."
+  ],
+  "hard_limits": {
+    "py": 1200,
+    "js": 1200,
+    "mjs": 1200,
+    "cjs": 1200,
+    "jsx": 1200,
+    "ts": 1200,
+    "tsx": 1200,
+    "css": 1600,
+    "html": 1000
+  },
+  "waiver_policy": {
+    "require_metadata": true,
+    "allow_legacy_reason": false,
+    "default_owner": "thomas-core",
+    "default_expires_on": "2026-06-30",
+    "default_max_growth_lines": 0,
+    "unbaselined_soft_limit_lines": 800,
+    "enforce_soft_limit_changed_only": true
+  },
+  "allowed_large_files": {
+    "thomas/cli/repl.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-06-30",
+      "max_lines": 2000,
+      "max_growth_lines": 0,
+      "reason": "REPL modularization is in-progress; bounded waiver until split lands."
     },
-    "waiver_policy": {
-        "require_metadata": true,
-        "allow_legacy_reason": false,
-        "default_owner": "thomas-core",
-        "default_expires_on": "2026-06-30",
-        "default_max_growth_lines": 0,
-        "unbaselined_soft_limit_lines": 800,
-        "enforce_soft_limit_changed_only": true
-    },
-    "allowed_large_files": {
-        "thomas/server/app.py": {
-            "max_lines": 3829,
-            "max_growth_lines": 220,
-            "reason": "monolith hotspot drifted significantly in active branch; temporary baseline refresh (2026-02-22) while splitting into smaller modules. Growth per change is capped."
-        },
-        "thomas/server/web/js/chat.js": {
-            "max_lines": 2228,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/agent/loop.py": {
-            "max_lines": 2714,
-            "reason": "monolith hotspot drifted in active branch; temporary baseline refresh (2026-02-25) pending decomposition."
-        },
-        "thomas/server/web/goals.js": {
-            "max_lines": 1586,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/tools/email_calendar.py": {
-            "max_lines": 1571,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/cli/main.py": {
-            "max_lines": 1881,
-            "max_growth_lines": 15,
-            "reason": "monolith hotspot drifted in active branch for release/governance CLI surfaces; temporary baseline refresh (2026-02-25) pending command-family extraction. Growth per change is capped."
-        },
-        "thomas/cli/parity_commands.py": {
-            "max_lines": 1318,
-            "reason": "temporary parity and ecosystem command expansion; baseline refreshed (2026-02-22) pending focused module split."
-        },
-        "thomas/cli/parity_compat.py": {
-            "max_lines": 2208,
-            "reason": "temporary compatibility expansion for security/governance subcommands; baseline refreshed (2026-02-22) pending focused module split."
-        },
-        "thomas/demo/agentic_benchmark.py": {
-            "max_lines": 1295,
-            "max_growth_lines": 0,
-            "reason": "benchmark harness remains oversized; temporary baseline refresh (2026-02-27) pending scorer/config split."
-        },
-        "thomas/tools/web_search.py": {
-            "max_lines": 1505,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/core/rag_index.py": {
-            "max_lines": 1482,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/tools/database.py": {
-            "max_lines": 1339,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/tools/dep_scanner.py": {
-            "max_lines": 1323,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/server/web/mission.js": {
-            "max_lines": 2663,
-            "reason": "monolith hotspot; split before growth; baseline refreshed for automation hardening (2026-02-21)"
-        },
-        "thomas/server/web/mission.css": {
-            "max_lines": 1887,
-            "reason": "monolith hotspot; split before growth"
-        },
-        "thomas/server/web/css/layout_parts/part-001.css": {
-            "max_lines": 1622,
-            "max_growth_lines": 0,
-            "reason": "layout-part hotspot drifted in active branch; temporary baseline refresh (2026-03-01) pending CSS modularization."
-        },
-        "thomas/server/routes/chat_aiohttp.py": {
-            "max_lines": 1214,
-            "max_growth_lines": 0,
-            "reason": "chat route surface drifted in active branch; temporary baseline refresh (2026-02-25) pending route extraction."
-        },
-        "thomas/preferences/store.py": {
-            "max_lines": 1310,
-            "max_growth_lines": 0,
-            "reason": "preferences runtime/store surface drifted in active branch; temporary baseline refresh (2026-02-27) pending decomposition."
-        },
-        "thomas/tools/sandbox.py": {
-            "max_lines": 1234,
-            "max_growth_lines": 0,
-            "reason": "sandbox orchestration module remains oversized; temporary baseline refresh (2026-02-27) pending command/runtime split."
-        },
-        "thomas/memory/v2/fabric.py": {
-            "max_lines": 1333,
-            "max_growth_lines": 0,
-            "reason": "memory fabric coordinator remains oversized; temporary baseline refresh (2026-02-27) pending protocol/storage split."
-        },
-        "thomas/server/web/mission.html": {
-            "max_lines": 1620,
-            "max_growth_lines": 0,
-            "reason": "mission UI page remains oversized; temporary baseline refresh (2026-02-27) pending layout/component extraction."
-        },
-        "thomas/server/web/settings.html": {
-            "max_lines": 2137,
-            "max_growth_lines": 0,
-            "reason": "settings UI page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/virtual_office.html": {
-            "max_lines": 2040,
-            "max_growth_lines": 0,
-            "reason": "virtual office page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/data_explorer.html": {
-            "max_lines": 1670,
-            "max_growth_lines": 0,
-            "reason": "data explorer static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/game_studio.html": {
-            "max_lines": 1274,
-            "max_growth_lines": 0,
-            "reason": "game studio static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/integration_hub.html": {
-            "max_lines": 1096,
-            "max_growth_lines": 0,
-            "reason": "integration hub static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/memory_explorer.html": {
-            "max_lines": 1428,
-            "max_growth_lines": 0,
-            "reason": "memory explorer static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/observability.html": {
-            "max_lines": 1321,
-            "max_growth_lines": 0,
-            "reason": "observability static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/plugin_marketplace.html": {
-            "max_lines": 1775,
-            "max_growth_lines": 0,
-            "reason": "plugin marketplace static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/tool_management.html": {
-            "max_lines": 1657,
-            "max_growth_lines": 0,
-            "reason": "tool management static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/virtual_office.html": {
-            "max_lines": 2040,
-            "max_growth_lines": 0,
-            "reason": "virtual office static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/voice_chat.html": {
-            "max_lines": 1389,
-            "max_growth_lines": 0,
-            "reason": "voice chat static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/static/workflow_builder.html": {
-            "max_lines": 1888,
-            "max_growth_lines": 0,
-            "reason": "workflow builder static page remains oversized; temporary baseline refresh (2026-02-27) pending section/component extraction."
-        },
-        "thomas/server/web/js/app_parts/part-019.js": {
-            "max_lines": 1401,
-            "max_growth_lines": 0,
-            "reason": "UI runtime part remains oversized; temporary baseline refresh (2026-02-27) pending module extraction."
-        },
-        "thomas/server/web/js/app_parts/part-029.js": {
-            "max_lines": 1504,
-            "max_growth_lines": 0,
-            "reason": "UI runtime part remains oversized; temporary baseline refresh (2026-02-27) pending module extraction."
-        },
-        "thomas/server/web/js/app_parts/part-033.js": {
-            "max_lines": 1576,
-            "max_growth_lines": 0,
-            "reason": "UI runtime part remains oversized; temporary baseline refresh (2026-02-27) pending module extraction."
-        },
-        "thomas/server/web/js/modules/063_module_studio_comfy_style_id.js": {
-            "max_lines": 2463,
-            "max_growth_lines": 0,
-            "reason": "studio module remains oversized; temporary baseline refresh (2026-02-27) pending feature-part extraction."
-        }
+    "apps/site/src/app/globals.css": {
+      "owner": "thomas-site",
+      "expires_on": "2026-06-30",
+      "max_lines": 3800,
+      "max_growth_lines": 0,
+      "reason": "CSS decomposition tracked; temporary waiver keeps guard strict against further growth."
     }
+  }
 }

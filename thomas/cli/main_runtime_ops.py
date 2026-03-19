@@ -8,15 +8,17 @@ import os
 import socket
 import subprocess
 import sys
+from collections.abc import Callable
 from dataclasses import replace
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 import click
 
+from thomas.cli.product_shell import build_status_experience
+from thomas.core import agent_presence
 from thomas.core.config import AppConfig
 from thomas.core.redaction import Redactor
-
 
 _RUNTIME_OPS_REDACTOR = Redactor()
 
@@ -82,9 +84,12 @@ def git_status_porcelain_lines(repo_root: Path) -> list[str]:
     return out
 
 
-def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree: bool) -> None:
-    from thomas import __version__
+def status_cmd(
+    ctx: click.Context, as_json: bool, strict: bool, strict_worktree: bool, repo_presence: bool = False
+) -> None:
     from scripts.check_repo_hygiene import evaluate_worktree_clean
+
+    from thomas import __version__
 
     config: AppConfig = ctx.obj["config"]
     cfg_path = resolved_config_path(config)
@@ -92,9 +97,7 @@ def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree:
     worktree_error = ""
     worktree: dict[str, Any]
     try:
-        worktree_raw = evaluate_worktree_clean(
-            git_status_porcelain_lines(repo_root_from_cli_file())
-        )
+        worktree_raw = evaluate_worktree_clean(git_status_porcelain_lines(repo_root_from_cli_file()))
         worktree = {
             "ok": bool(worktree_raw.get("ok", False)),
             "summary": dict(worktree_raw.get("summary") or {}),
@@ -127,11 +130,20 @@ def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree:
         "worktree": worktree,
         "worktree_clean": worktree.get("ok"),
     }
+    if repo_presence:
+        try:
+            payload["repo_presence"] = agent_presence.collect_presence(repo_root=repo_root_from_cli_file())
+        except Exception as exc:
+            payload["repo_presence"] = {"success": False, "error": f"{type(exc).__name__}: {exc}"}
+    payload["readiness"] = build_status_experience(payload)
 
     if as_json:
         _emit_json(payload, ensure_ascii=False)
     else:
+        readiness = dict(payload.get("readiness") or {})
         click.echo(f"Thomas {payload['version']}")
+        click.echo(f"state: {readiness.get('state', 'unknown')}")
+        click.echo(f"summary: {readiness.get('summary', '')}")
         click.echo(f"config: {payload['config_path']}")
         click.echo(f"default model: {payload['default_model']}")
         click.echo(f"profiles: {', '.join(payload['profiles']) or '(none)'}")
@@ -158,6 +170,23 @@ def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree:
             click.echo("errors:")
             for err in payload["errors"]:
                 click.echo(f"  - {err}")
+        if repo_presence:
+            presence_payload = dict(payload.get("repo_presence") or {})
+            if presence_payload:
+                click.echo(
+                    "repo presence: "
+                    f"active={int(presence_payload.get('active_count', 0) or 0)} "
+                    f"warnings={len(list(presence_payload.get('warnings') or []))} "
+                    f"conflicts={len(list(presence_payload.get('conflicts') or []))}"
+                )
+        note = str(readiness.get("note") or "").strip()
+        if note:
+            click.echo(f"note: {note}")
+        next_steps = [str(step).rstrip() for step in list(readiness.get("next_steps") or []) if str(step).strip()]
+        if next_steps:
+            click.echo("next steps:")
+            for step in next_steps:
+                click.echo(f"  - {step}")
 
     if strict and not bool(payload.get("ok", False)):
         raise SystemExit(2)
@@ -290,14 +319,10 @@ def run_provider_checks(config: AppConfig) -> None:
                     click.echo(f"\r  {name}: \033[32m{msg}\033[0m")
                     results.append((name, "ok", msg))
                 elif hs.status == "auth_error":
-                    click.echo(
-                        f"\r  {name}: \033[31mAUTH FAILED\033[0m - check/refresh your API key"
-                    )
+                    click.echo(f"\r  {name}: \033[31mAUTH FAILED\033[0m - check/refresh your API key")
                     results.append((name, "auth_error", hs.error or "auth failed"))
                 elif hs.status == "unsupported":
-                    click.echo(
-                        f"\r  {name}: \033[33mNo /models endpoint\033[0m (may still work for chat)"
-                    )
+                    click.echo(f"\r  {name}: \033[33mNo /models endpoint\033[0m (may still work for chat)")
                     results.append((name, "unsupported", "no /models"))
                 elif hs.status == "offline":
                     click.echo(f"\r  {name}: \033[31mOFFLINE\033[0m - endpoint unreachable")
@@ -479,11 +504,11 @@ def telegram_run_cmd(
     token: str,
     allow_chat_ids: tuple[int, ...],
     allow_chats_csv: str,
-    model_name: Optional[str],
+    model_name: str | None,
     shared_memory: bool,
     all_memories: bool,
     profile_memory: bool,
-    sessions_file: Optional[Path],
+    sessions_file: Path | None,
     no_session_persist: bool,
     *,
     build_tools: Callable[[AppConfig], Any],
@@ -500,8 +525,7 @@ def telegram_run_cmd(
     selected_model = model_name or config.default_model
     if selected_model not in config.models:
         click.echo(
-            f"Unknown model profile '{selected_model}'. "
-            f"Available: {', '.join(config.models.keys())}",
+            f"Unknown model profile '{selected_model}'. " f"Available: {', '.join(config.models.keys())}",
             err=True,
         )
         sys.exit(2)
@@ -541,19 +565,10 @@ def telegram_run_cmd(
         click.echo("Allowlisted chat ids: none (all chats accepted).")
     click.echo(
         "Shared memory mode: "
-        + (
-            "enabled (thread telegram:global)"
-            if shared_memory
-            else "disabled (per-chat thread ids, recommended)"
-        )
+        + ("enabled (thread telegram:global)" if shared_memory else "disabled (per-chat thread ids, recommended)")
     )
     click.echo(
-        "Memory retrieval policy: "
-        + (
-            "thread episodic + global facts"
-            if all_memories
-            else "thread episodic only"
-        )
+        "Memory retrieval policy: " + ("thread episodic + global facts" if all_memories else "thread episodic only")
     )
     click.echo("Profile memory: " + ("enabled" if profile_memory else "disabled"))
     click.echo("Session persistence: " + (str(session_store) if session_store is not None else "disabled"))
@@ -581,4 +596,3 @@ def telegram_run_cmd(
                 memory.close()
             except Exception as e:
                 logger.debug("Failed to close memory engine after telegram stop: %s", e)
-

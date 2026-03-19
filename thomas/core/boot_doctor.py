@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import inspect
+import json
+import os
 import re
 import signal
 import socket
@@ -14,7 +15,7 @@ import time
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.llm import LLMClient
@@ -51,6 +52,133 @@ class BootDoctorResult:
 
 def _now_utc_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
+
+BOOT_DOCTOR_RUNTIME_DIRNAME = "runtime/boot_doctor"
+BOOT_DOCTOR_STATUS_FILENAME = "rescue_status.json"
+BOOT_DOCTOR_NOTICE_FILENAME = "recovery_notice.json"
+
+
+def boot_doctor_runtime_dir(root: Path) -> Path:
+    return (Path(root).resolve() / BOOT_DOCTOR_RUNTIME_DIRNAME).resolve()
+
+
+def boot_doctor_status_path(root: Path) -> Path:
+    return boot_doctor_runtime_dir(root) / BOOT_DOCTOR_STATUS_FILENAME
+
+
+def boot_doctor_notice_path(root: Path) -> Path:
+    return boot_doctor_runtime_dir(root) / BOOT_DOCTOR_NOTICE_FILENAME
+
+
+def _write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    tmp.replace(path)
+    return path
+
+
+def write_boot_doctor_status(
+    root: Path,
+    *,
+    status: str,
+    phase: str,
+    message: str,
+    reason: str = "",
+    port: int | None = None,
+    attempts: dict[str, Any] | None = None,
+    extra: dict[str, Any] | None = None,
+) -> Path:
+    payload: dict[str, Any] = {
+        "status": str(status or "unknown").strip() or "unknown",
+        "phase": str(phase or "unknown").strip() or "unknown",
+        "message": str(message or "").strip(),
+        "reason": str(reason or "").strip(),
+        "updated_at_utc": _now_utc_iso(),
+    }
+    if port is not None:
+        payload["port"] = int(port)
+    if attempts:
+        payload["attempts"] = dict(attempts)
+    if extra:
+        payload.update(dict(extra))
+    return _write_json_atomic(boot_doctor_status_path(root), payload)
+
+
+def clear_boot_doctor_status(root: Path) -> None:
+    try:
+        boot_doctor_status_path(root).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def write_boot_recovery_notice(
+    root: Path,
+    *,
+    reason: str,
+    report_path: Path,
+    repairs: list[str],
+    recovered: bool,
+    offline_fallback_reason: str = "",
+    ai_summary: str = "",
+) -> Path:
+    trimmed_repairs = [str(item).strip() for item in repairs if str(item).strip()][:3]
+    if recovered:
+        opening = (
+            "Boot Doctor caught a startup failure before Thomas finished loading and brought the server back online."
+        )
+    else:
+        opening = (
+            "Boot Doctor caught a startup failure, but Thomas still needs attention before the app is fully healthy."
+        )
+
+    if trimmed_repairs:
+        changed = "Changes made: " + "; ".join(trimmed_repairs) + "."
+    else:
+        changed = "Changes made: diagnostics only; no safe automatic repair was available."
+
+    attention = str(offline_fallback_reason or "").strip()
+    if not attention and not recovered:
+        attention = "Thomas still needs a manual boot review."
+
+    lines = [opening, f"Failure: {str(reason or '').strip() or 'startup failure' }.", changed]
+    if attention:
+        lines.append(f"Needs attention: {attention}.")
+    if ai_summary:
+        compact = str(ai_summary).strip().replace("\r", " ").replace("\n", " ")
+        if compact:
+            lines.append(f"Boot Doctor summary: {compact}")
+    lines.append(f"Report: {report_path}")
+
+    payload = {
+        "message": "\n\n".join(lines),
+        "reason": str(reason or "").strip(),
+        "recovered": bool(recovered),
+        "repairs": trimmed_repairs,
+        "needs_attention": attention,
+        "report_path": str(report_path),
+        "updated_at_utc": _now_utc_iso(),
+    }
+    return _write_json_atomic(boot_doctor_notice_path(root), payload)
+
+
+def read_boot_recovery_notice(root: Path, *, consume: bool = False) -> dict[str, Any] | None:
+    path = boot_doctor_notice_path(root)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if consume:
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
+    if isinstance(payload, dict):
+        return payload
+    return None
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -165,7 +293,7 @@ def _pid_cmdline(pid: int) -> str:
 
     if os.name == "nt":
         ps_cmd = (
-            f"(Get-CimInstance Win32_Process -Filter \"ProcessId={int(pid)}\" "
+            f'(Get-CimInstance Win32_Process -Filter "ProcessId={int(pid)}" '
             "| Select-Object -ExpandProperty CommandLine)"
         )
         out = subprocess.run(
@@ -229,7 +357,7 @@ def _run_cmd(cmd: list[str], *, cwd: Path, timeout_s: float = 60.0) -> tuple[boo
     return ok, detail
 
 
-def _best_model_profile(config: AppConfig) -> Optional[str]:
+def _best_model_profile(config: AppConfig) -> str | None:
     if not config.models:
         return None
 
@@ -287,9 +415,7 @@ async def _ai_boot_summary(
 ) -> str:
     llm = LLMClient(model_cfg, failover_enabled=False)
     try:
-        findings_text = "\n".join(
-            f"- [{row.status}] {row.check}: {row.detail}" for row in findings
-        ) or "- none"
+        findings_text = "\n".join(f"- [{row.status}] {row.check}: {row.detail}" for row in findings) or "- none"
         repairs_text = "\n".join(f"- {x}" for x in repairs) or "- none"
         prompt = (
             "You are Thomas Boot Doctor analyst.\n"
@@ -380,10 +506,12 @@ def run_boot_doctor(
     root: Path,
     port: int,
     reason: str,
-    report_path: Optional[Path] = None,
-    allow_paths: Optional[list[Path]] = None,
+    report_path: Path | None = None,
+    allow_paths: list[Path] | None = None,
     auto_repair: bool = True,
     allow_ai: bool = True,
+    relaunch: bool = False,
+    relaunch_host: str = "127.0.0.1",
 ) -> Path:
     root = root.resolve()
     gate = BootDoctorPathGate(root)
@@ -438,13 +566,9 @@ def run_boot_doctor(
                 else:
                     skipped.append(pid)
             if killed:
-                result.repairs.append(
-                    f"Stopped stale Thomas listener PID(s): {', '.join(str(x) for x in killed)}"
-                )
+                result.repairs.append(f"Stopped stale Thomas listener PID(s): {', '.join(str(x) for x in killed)}")
             if skipped:
-                result.repairs.append(
-                    "Skipped non-Thomas or protected PID(s): " + ", ".join(str(x) for x in skipped)
-                )
+                result.repairs.append("Skipped non-Thomas or protected PID(s): " + ", ".join(str(x) for x in skipped))
             time.sleep(0.7)
 
     dep_ok, dep_detail = _run_cmd([str(py_exe), "-c", "import aiohttp, httpx"], cwd=root, timeout_s=20.0)
@@ -455,40 +579,44 @@ def run_boot_doctor(
             cwd=root,
             timeout_s=180.0,
         )
-        result.repairs.append(
-            "Dependency repair: " + ("succeeded" if install_ok else f"failed ({install_detail})")
-        )
+        result.repairs.append("Dependency repair: " + ("succeeded" if install_ok else f"failed ({install_detail})"))
 
     healthy_after = _thomas_http_healthy(int(port))
     if not healthy_after and auto_repair:
         probe_log = report_dir / f"probe_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         with probe_log.open("w", encoding="utf-8") as fh:
             proc = subprocess.Popen(
-                [str(py_exe), "-m", "thomas.server", "--host", "127.0.0.1", "--port", str(int(port))],
+                [str(py_exe), "-m", "thomas.server", "--host", str(relaunch_host), "--port", str(int(port))],
                 cwd=str(root),
                 stdout=fh,
                 stderr=subprocess.STDOUT,
                 text=True,
             )
             started = False
+            keep_running = False
             deadline = time.monotonic() + 10.0
             while time.monotonic() < deadline:
                 if _thomas_http_healthy(int(port)):
                     started = True
+                    if relaunch and proc.poll() is None:
+                        keep_running = True
                     break
                 if proc.poll() is not None:
                     break
                 time.sleep(0.25)
 
-            if proc.poll() is None:
-                _kill_pid(proc.pid)
-            if started:
-                result.repairs.append("Startup probe: server became healthy in diagnostic launch.")
+            if started and keep_running:
+                result.repairs.append(f"Startup recovery launch: server left running on {relaunch_host}:{int(port)}.")
             else:
-                exit_code = proc.poll()
-                result.repairs.append(
-                    f"Startup probe failed (exit={exit_code if exit_code is not None else 'running'}). Log: {probe_log}"
-                )
+                if proc.poll() is None:
+                    _kill_pid(proc.pid)
+                if started:
+                    result.repairs.append("Startup probe: server became healthy in diagnostic launch.")
+                else:
+                    exit_code = proc.poll()
+                    result.repairs.append(
+                        f"Startup probe failed (exit={exit_code if exit_code is not None else 'running'}). Log: {probe_log}"
+                    )
 
     profile = _best_model_profile(config) if allow_ai else None
     if profile:
@@ -511,5 +639,27 @@ def run_boot_doctor(
         result.offline_fallback_reason = "No suitable model profile configured for AI diagnosis."
         result.add("ai_diagnosis", "warn", result.offline_fallback_reason)
 
-    _write_report(Path(report_path), result)
-    return Path(report_path)
+    report_path = Path(report_path)
+    _write_report(report_path, result)
+    recovered = _thomas_http_healthy(int(port))
+    write_boot_doctor_status(
+        root,
+        status=("recovered" if recovered else "attention"),
+        phase="report_complete",
+        message=(
+            "Thomas is healthy again." if recovered else "Boot Doctor finished, but Thomas still needs attention."
+        ),
+        reason=result.reason,
+        port=int(port),
+        extra={"report_path": str(report_path)},
+    )
+    write_boot_recovery_notice(
+        root,
+        reason=result.reason,
+        report_path=report_path,
+        repairs=result.repairs,
+        recovered=recovered,
+        offline_fallback_reason=result.offline_fallback_reason,
+        ai_summary=result.ai_summary,
+    )
+    return report_path

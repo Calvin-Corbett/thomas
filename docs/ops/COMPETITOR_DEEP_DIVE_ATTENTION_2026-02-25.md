@@ -1,7 +1,7 @@
-# Competitor Deep Dive - What Needs Attention (2026-02-25)
+﻿# Competitor Deep Dive - What Needs Attention (2026-02-25)
 
 Data source for this deep dive:
-- Fresh suite artifact: `F:\DevHub\Thomas\docs\openclaw_gap_runs\latest_full_suite_compare.json`
+- Fresh suite artifact: `<repo_root>/docs/openclaw_gap_runs/latest_full_suite_compare.json`
 - Computed at: `2026-02-25T16:04:32Z`
 
 ## Executive Readout
@@ -57,3 +57,5 @@ Freshness signal in C-drive repo:
 3. Capture real token telemetry in benchmark raw rows and enable non-`n/a` token-efficiency scoring.
 4. Close OpenClaw latency and variance gaps on dynamic runs.
 5. Calibrate governance thresholds and reproducibility logic to metric scale so verdicts are meaningful.
+
+

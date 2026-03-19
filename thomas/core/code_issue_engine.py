@@ -15,10 +15,11 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -85,7 +86,7 @@ class CommandCheck:
     timeout_seconds: float = _DEFAULT_COMMAND_TIMEOUT_S
 
 
-def _load_command_checks_from_env() -> List[CommandCheck]:
+def _load_command_checks_from_env() -> list[CommandCheck]:
     raw = str(os.environ.get("THOMAS_CODE_ISSUE_COMMANDS_JSON", "") or "").strip()
     if not raw:
         return []
@@ -95,7 +96,7 @@ def _load_command_checks_from_env() -> List[CommandCheck]:
         return []
     if not isinstance(payload, list):
         return []
-    out: List[CommandCheck] = []
+    out: list[CommandCheck] = []
     for row in payload:
         if not isinstance(row, dict):
             continue
@@ -129,19 +130,21 @@ class CodeIssueEngine:
     def __init__(
         self,
         *,
-        idle_threshold_s: Optional[float] = None,
-        poll_interval_s: Optional[float] = None,
-        cycle_interval_s: Optional[float] = None,
-        max_passes_per_cycle: Optional[int] = None,
-        max_cycles_per_session: Optional[int] = None,
-        command_checks: Optional[List[CommandCheck]] = None,
-        notify_fn: Optional[Callable[[str], None]] = None,
-        log_path: Optional[Path] = None,
+        idle_threshold_s: float | None = None,
+        poll_interval_s: float | None = None,
+        cycle_interval_s: float | None = None,
+        max_passes_per_cycle: int | None = None,
+        max_cycles_per_session: int | None = None,
+        command_checks: list[CommandCheck] | None = None,
+        notify_fn: Callable[[str], None] | None = None,
+        log_path: Path | None = None,
     ) -> None:
         self._idle_threshold_s = float(
             _DEFAULT_IDLE_THRESHOLD_S if idle_threshold_s is None else max(0.0, float(idle_threshold_s))
         )
-        self._poll_interval_s = float(_DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s)))
+        self._poll_interval_s = float(
+            _DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s))
+        )
         self._cycle_interval_s = float(
             _DEFAULT_CYCLE_INTERVAL_S if cycle_interval_s is None else max(1.0, float(cycle_interval_s))
         )
@@ -156,18 +159,18 @@ class CodeIssueEngine:
         self._log_path = Path(log_path or (STATE_DIR / "code_issue_engine.jsonl"))
 
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._active_cycle = False
         self._lock = threading.Lock()
         self._last_user_ts = time.monotonic()
         self._last_cycle_ts = 0.0
         self._cycle_count = 0
-        self._last_report: Dict[str, Any] = {}
-        self._last_error: Optional[str] = None
-        self._last_error_at: Optional[str] = None
+        self._last_report: dict[str, Any] = {}
+        self._last_error: str | None = None
+        self._last_error_at: str | None = None
         self._enabled = _env_bool("THOMAS_CODE_ISSUE_ENGINE_ENABLED", True)
 
-    def start(self, *, notify_fn: Optional[Callable[[str], None]] = None) -> None:
+    def start(self, *, notify_fn: Callable[[str], None] | None = None) -> None:
         if notify_fn is not None:
             self._notify_fn = notify_fn
         if self._running or not self._enabled:
@@ -186,7 +189,7 @@ class CodeIssueEngine:
     def is_idle(self) -> bool:
         return (time.monotonic() - self._last_user_ts) >= self._idle_threshold_s
 
-    def status_snapshot(self) -> Dict[str, Any]:
+    def status_snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
                 "running": bool(self._running),
@@ -202,7 +205,7 @@ class CodeIssueEngine:
                 "last_error_at": str(self._last_error_at or ""),
             }
 
-    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> Dict[str, Any]:
+    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> dict[str, Any]:
         if not force:
             if not self._enabled:
                 return {"ok": False, "reason": "engine_disabled"}
@@ -265,7 +268,7 @@ class CodeIssueEngine:
             with self._lock:
                 self._active_cycle = False
 
-    def _run_cycle_checked(self, *, reason: str) -> Dict[str, Any]:
+    def _run_cycle_checked(self, *, reason: str) -> dict[str, Any]:
         started = time.monotonic()
         try:
             report = self._run_cycle(reason=reason)
@@ -274,13 +277,15 @@ class CodeIssueEngine:
         except Exception as exc:  # pragma: no cover - defensive path
             return self._error_report(reason=reason, exc=exc, started=started)
 
-    def _run_cycle(self, *, reason: str) -> Dict[str, Any]:
+    def _run_cycle(self, *, reason: str) -> dict[str, Any]:
         started = time.monotonic()
-        max_passes = int(_env_int("THOMAS_CODE_ISSUE_MAX_PASSES", self._max_passes_per_cycle, min_value=1, max_value=20))
+        max_passes = int(
+            _env_int("THOMAS_CODE_ISSUE_MAX_PASSES", self._max_passes_per_cycle, min_value=1, max_value=20)
+        )
         include_warn_as_issue = _env_bool("THOMAS_CODE_ISSUE_WARN_AS_ISSUE", False)
 
-        pass_rows: List[Dict[str, Any]] = []
-        unresolved: List[Dict[str, Any]] = []
+        pass_rows: list[dict[str, Any]] = []
+        unresolved: list[dict[str, Any]] = []
         total_fix_attempts = 0
         clean = False
 
@@ -357,7 +362,7 @@ class CodeIssueEngine:
 
         return report
 
-    def _error_report(self, *, reason: str, exc: BaseException, started: float) -> Dict[str, Any]:
+    def _error_report(self, *, reason: str, exc: BaseException, started: float) -> dict[str, Any]:
         with self._lock:
             self._cycle_count += 1
             cycle_id = int(self._cycle_count)
@@ -388,7 +393,7 @@ class CodeIssueEngine:
         self._last_error = None
         self._last_error_at = None
 
-    def _heartbeat_report(self, *, fix: bool) -> Dict[str, Any]:
+    def _heartbeat_report(self, *, fix: bool) -> dict[str, Any]:
         script = ROOT / "scripts" / "heartbeat.py"
         if not script.exists():
             return {
@@ -461,8 +466,8 @@ class CodeIssueEngine:
             payload = {"ok": False, "results": [], "summary": {"total": 0, "pass": 0, "warn": 0, "fail": 0}}
         return payload
 
-    def _heartbeat_unresolved(self, report: Dict[str, Any], *, include_warn: bool) -> List[Dict[str, Any]]:
-        out: List[Dict[str, Any]] = []
+    def _heartbeat_unresolved(self, report: dict[str, Any], *, include_warn: bool) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
         for row in list(report.get("results") or []):
             if not isinstance(row, dict):
                 continue
@@ -482,13 +487,13 @@ class CodeIssueEngine:
             )
         return out
 
-    def _run_command_checks(self) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], int]:
-        rows: List[Dict[str, Any]] = []
-        unresolved: List[Dict[str, Any]] = []
+    def _run_command_checks(self) -> tuple[list[dict[str, Any]], list[dict[str, Any]], int]:
+        rows: list[dict[str, Any]] = []
+        unresolved: list[dict[str, Any]] = []
         fix_attempts = 0
         for spec in self._command_checks:
             check_before = self._run_shell_command(spec.check_command, timeout_seconds=spec.timeout_seconds)
-            fix_row: Dict[str, Any] = {}
+            fix_row: dict[str, Any] = {}
             check_after = check_before
             if check_before.returncode != 0 and spec.fix_command:
                 fix_attempts += 1
@@ -533,7 +538,7 @@ class CodeIssueEngine:
             timeout=max(1.0, float(timeout_seconds)),
         )
 
-    def _write_cycle_log(self, report: Dict[str, Any]) -> None:
+    def _write_cycle_log(self, report: dict[str, Any]) -> None:
         try:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             with self._log_path.open("a", encoding="utf-8") as handle:
@@ -542,7 +547,7 @@ class CodeIssueEngine:
             log.debug("CodeIssueEngine failed to write log: %s", exc)
 
 
-_engine: Optional[CodeIssueEngine] = None
+_engine: CodeIssueEngine | None = None
 _engine_lock = threading.Lock()
 
 

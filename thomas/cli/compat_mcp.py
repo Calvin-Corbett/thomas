@@ -11,7 +11,7 @@ import click
 
 from thomas.cli.compat_browser import browser
 from thomas.cli.compat_channels import message, messages
-from thomas.cli.compat_core_help import agent_cmd, help_cmd, logs_cmd
+from thomas.cli.compat_core_help import agent_cmd, ensure_help_topics, help_cmd, logs_cmd
 from thomas.cli.compat_memory import approvals, directory, memory, pairing, system
 from thomas.cli.compat_skills import completion_cmd, plugin_cmd, qr_cmd, security, skills, update
 from thomas.cli.compat_tools import acp, clawbot, daemon, dns, hooks
@@ -28,6 +28,8 @@ from thomas.cli.parity_support import (
 from thomas.cli.parity_support import (
     load_mcp_registry as _load_mcp_registry,
 )
+
+_PASSTHROUGH_CONTEXT = {"ignore_unknown_options": True, "allow_extra_args": True, "help_option_names": []}
 from thomas.cli.parity_support import (
     load_token_store as _load_token_store,
 )
@@ -217,7 +219,7 @@ def mcp_remove(ctx: click.Context, name: str, as_json: bool) -> None:
 
 @mcp.command(
     "serve",
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    context_settings=_PASSTHROUGH_CONTEXT,
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
@@ -239,7 +241,7 @@ def install_cmd(ctx: click.Context, compat_json: bool, args: tuple[Any, ...]) ->
         "command": "install",
         "compatibility": "mapped",
         "equivalents": ["setup", "plugins install", "gateway install"],
-        "note": "Use `install plugins ...` or `install gateway ...`; bare `install` runs setup diagnostics.",
+        "note": "Use `install plugins ...` or `install gateway ...`; bare `install` runs the guided setup flow.",
     }
     if compat_json:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -459,3 +461,4 @@ def register_compat_commands(cli: click.Group) -> None:
         if name in cli.commands:
             continue
         cli.add_command(cmd)
+    ensure_help_topics(tuple(cli.commands.keys()))

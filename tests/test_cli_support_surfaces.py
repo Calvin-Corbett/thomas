@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -80,6 +80,43 @@ def test_cli_status_json(tmp_path: Path) -> None:
         assert "staged_count" in summary
         assert "unstaged_count" in summary
         assert "untracked_count" in summary
+
+
+def test_cli_root_help_surfaces_start_here_shell(tmp_path: Path) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-c", str(cfg), "--help"])
+    assert result.exit_code == 0, result.output
+    assert "Start Here" in result.output
+    assert "Everyday Use" in result.output
+    assert "Build And Extend" in result.output
+    assert "quickstart" in result.output
+    assert "setup" in result.output
+    assert "status" in result.output
+
+
+def test_cli_status_json_includes_readiness_and_next_steps(tmp_path: Path, monkeypatch) -> None:
+    cfg = _write_min_config(tmp_path)
+    monkeypatch.setattr(cli_runtime_ops, "git_status_porcelain_lines", lambda _repo_root: [])
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-c", str(cfg), "status", "--json"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    readiness = dict(payload.get("readiness") or {})
+    assert readiness["state"] == "ready"
+    assert readiness["summary"] == "Thomas is configured and ready for everyday use."
+    assert any("thomas repl" in step for step in readiness["next_steps"])
+
+
+def test_cli_status_text_surfaces_readiness_and_next_steps(tmp_path: Path, monkeypatch) -> None:
+    cfg = _write_min_config(tmp_path)
+    monkeypatch.setattr(cli_runtime_ops, "git_status_porcelain_lines", lambda _repo_root: [])
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-c", str(cfg), "status"])
+    assert result.exit_code == 0, result.output
+    assert "state: ready" in result.output
+    assert "next steps:" in result.output
+    assert "thomas repl" in result.output
 
 
 def test_cli_library_group_help_surfaces_expected_subcommands(tmp_path: Path) -> None:
@@ -295,3 +332,26 @@ def test_cli_onboarding_outcomes_json(tmp_path: Path) -> None:
     assert payload["summary"]["wizard_opened"] >= 1
     assert "completed_journeys_with_timing" in payload["summary"]
     assert "median_time_to_ready_seconds" in payload["summary"]
+
+
+def test_cli_status_repo_presence_json(tmp_path: Path, monkeypatch) -> None:
+    cfg = _write_min_config(tmp_path)
+    monkeypatch.setattr(cli_runtime_ops, "git_status_porcelain_lines", lambda _repo_root: [])
+    monkeypatch.setattr(
+        cli_runtime_ops.agent_presence,
+        "collect_presence",
+        lambda **_: {
+            "success": True,
+            "repo_root": str(tmp_path),
+            "generated_at": "now",
+            "active_count": 1,
+            "agents": [{"agent_id": "Codex 1"}],
+            "warnings": [],
+            "conflicts": [],
+        },
+    )
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-c", str(cfg), "status", "--json", "--repo-presence"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert payload["repo_presence"]["active_count"] == 1

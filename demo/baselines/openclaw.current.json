@@ -2,10 +2,10 @@
   "system": "openclaw",
   "repo_url": "https://github.com/openclaw/openclaw",
   "baseline_type": "released_snapshot",
-  "commit": "d17a1f3",
-  "captured_at_utc": "2026-02-19T00:00:00Z",
-  "notes": "Pinned release baseline for Thomas competitive program. Update only with reproducible benchmark reruns.",
-  "local_snapshot_path": "F:/DevHub/_tmp_openclaw_count_1771454552",
+  "commit": "fa6c0e1b404f094e579b5fb192c6643c7822c1b6",
+  "captured_at_utc": "2026-03-06T13:06:57Z",
+  "notes": "Pinned latest OpenClaw upstream snapshot for Thomas competitive comparison. Update only with reproducible benchmark reruns.",
+  "local_snapshot_path": "F:/DevHub/_tmp_openclaw_latest_20260306",
   "comparison": {
     "thomas_roots": [
       "thomas",

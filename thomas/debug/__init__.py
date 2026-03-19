@@ -3,10 +3,12 @@
 from thomas.debug.core import (
     Breakpoint,
     BreakpointType,
-    DebugSession as DebugSessionCore,
     DebugToolkit,
     Profiler,
     StackFrame,
+)
+from thomas.debug.core import (
+    DebugSession as DebugSessionCore,
 )
 from thomas.debug.tools import register_debug_tools
 from thomas.debug.tracer import (

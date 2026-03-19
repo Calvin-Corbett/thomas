@@ -1,7 +1,7 @@
 # Repo Orphan Inventory
 
 - generated_at_utc: `2026-02-25T22:09:59.135530+00:00`
-- repo_root: `C:\Users\corbe\Thomas`
+- repo_root: `<repo_root>`
 - inventory_count: `468`
 - staged_count: `238`
 - unstaged_count: `222`
@@ -273,3 +273,5 @@
 | `tests/test_supply_chain_demand.py` | untracked | untracked_review | review | untracked path needs explicit keep/remove decision |
 
 - truncated rows: `218`
+
+

@@ -49,6 +49,31 @@ Durable research/reference library for Thomas.
   - File: `entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md`
 
 ## research-notes
+- `1773755964-make-a-sub-agent-to-research-trey-corbett-windom-tx`: make a sub agent to research trey corbett windom tx
+  - Summary: I’m creating a bounded research sub-agent for “Trey Corbett” in Windom, Texas and asking it to return only publicly available, high-confidence findings with sources.The sub-agent is running now. I’m waiting for its first pass so I can hand back the findings in
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1773755964-make-a-sub-agent-to-research-trey-corbett-windom-tx.md`
+- `1773249484-attached-documents-----angular-version-history_-every-release-date-support-windo`: [Attached documents] --- Angular Version History_ Every Release Date, Support Window, and End-of-Life Date from AngularJ
+  - Summary: I can work with this PDF, but I need your goal. Tell me what you want from it, for example: 1. A concise summary 2. A table of Angular versions with release/support/EOL dates 3. Specific version lookup (e.g., Angular 15 support window) 4. Validation/correction
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1773249484-attached-documents-----angular-version-history_-every-release-date-support-windo.md`
+- `1773162316-research-this-topic-and-compare-the-best-options-with-tradeoffs-and-a-recommenda`: Research this topic and compare the best options with tradeoffs and a recommendation.
+  - Summary: Which topic should I research? If you share the exact topic plus your constraints (budget, timeline, must-haves, location, and intended use), I’ll compare the top options with tradeoffs and give a clear recommendation.
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1773162316-research-this-topic-and-compare-the-best-options-with-tradeoffs-and-a-recommenda.md`
+- `1772409441-that-s-not-how-this-works-when-the-user-ask-for-preferences-to-be-changed-or-som`: that's not how this works when the user ask for preferences to be changed or something like that that they always need t
+  - Summary: You’re correct on persistence: conversation context is temporary. If you want preference changes to stick, they need to live in repo-controlled instruction files (for example `AGENTS.md`), not just chat context. What I can and can’t do: 1. I can update project
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772409441-that-s-not-how-this-works-when-the-user-ask-for-preferences-to-be-changed-or-som.md`
+- `1772409327-your-ui.-the-chat-bar-is-a-little-wide-and-the-bubbkle-is-not-centered.-also-the`: your ui. the chat bar is a little wide and the bubbkle is not centered. also the litle robot on my left doenst match wha
+  - Summary: I understand: you want three UI fixes in this build only: narrow the chat bar, center the chat bubble, and make the left-side robot avatar use the same roster source as the other robots (with color variance allowed). I’m going to locate the relevant UI compone
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1772409327-your-ui.-the-chat-bar-is-a-little-wide-and-the-bubbkle-is-not-centered.-also-the.md`
 - `1772405555-there-is-an-actual-virtual-office-in-thomas-repo-thats-the-one-is-said-connect-t`: there is an actual virtual office in thomas repo thats the one is said connect to also this cli has no memeory working s
   - Summary: I’ll locate the virtual-office configuration in this repo and then check why session memory isn’t being persisted in this CLI flow. I’m starting by reading the required guardrail/index files and searching for “virtual office” and memory-related config.I found
   - Source: thomas:codex
@@ -435,4 +460,4 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md`
 
-_Total entries: 85_
+_Total entries: 90_

@@ -58,7 +58,9 @@ class HookRunner:
         self._hooks = hooks
 
     @classmethod
-    def from_project(cls, project_root: Path) -> "HookRunner":
+    def from_project(cls, project_root: Path | None) -> "HookRunner":
+        if project_root is None:
+            return cls([])
         hooks = load_hooks_config(project_root)
         return cls(hooks)
 

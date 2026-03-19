@@ -12,7 +12,7 @@ import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from fastapi import APIRouter, Header, HTTPException, Request
 from pydantic import BaseModel, Field
@@ -28,6 +28,8 @@ from thomas.server.routes.webhooks_delivery import (
 )
 from thomas.server.routes.webhooks_utils import (
     emit_webhook_event as _emit_event,
+)
+from thomas.server.routes.webhooks_utils import (
     file_lock as _file_lock,
 )
 
@@ -79,7 +81,7 @@ _STORE_LOCK = threading.Lock()
 
 _ENV_TRUE = {"1", "true", "yes", "on"}
 _ENV_FALSE = {"0", "false", "no", "off"}
-_RUNTIME_SIGNATURE_ENFORCEMENT_DEFAULT: Optional[bool] = None
+_RUNTIME_SIGNATURE_ENFORCEMENT_DEFAULT: bool | None = None
 
 
 def _now_iso() -> str:
@@ -90,7 +92,7 @@ def _unix_now() -> int:
     return int(time.time())
 
 
-def _parse_env_flag(name: str) -> Optional[bool]:
+def _parse_env_flag(name: str) -> bool | None:
     raw = os.getenv(name)
     if raw is None:
         return None
@@ -110,7 +112,7 @@ def _is_production_environment() -> bool:
     return False
 
 
-def configure_webhook_signature_enforcement_default(enabled: Optional[bool]) -> None:
+def configure_webhook_signature_enforcement_default(enabled: bool | None) -> None:
     global _RUNTIME_SIGNATURE_ENFORCEMENT_DEFAULT
     if enabled is None:
         _RUNTIME_SIGNATURE_ENFORCEMENT_DEFAULT = None
@@ -130,18 +132,15 @@ def _webhook_signature_enforcement_enabled() -> bool:
 def _require_provider_secrets_for_signature_enforcement(
     *,
     provider: str,
-    secrets: List[str],
-    env_keys: List[str],
+    secrets: list[str],
+    env_keys: list[str],
 ) -> None:
     if secrets or not _webhook_signature_enforcement_enabled():
         return
     joined = ", ".join(str(key).strip() for key in env_keys if str(key).strip())
     raise HTTPException(
         status_code=503,
-        detail=(
-            f"{provider} webhook signature enforcement is enabled; configure "
-            f"{joined or 'provider secrets'}."
-        ),
+        detail=(f"{provider} webhook signature enforcement is enabled; configure " f"{joined or 'provider secrets'}."),
     )
 
 
@@ -161,6 +160,7 @@ def _require_generic_secret_for_signature_enforcement(rec: WebhookRecord) -> Non
 # Paths
 # -----------------------------
 
+
 def _default_store_path() -> Path:
     env = os.getenv("THOMAS_WEBHOOKS_FILE")
     if env:
@@ -176,8 +176,13 @@ def _default_store_path() -> Path:
             except Exception:
                 pass
 
-    thomas_pkg_dir = Path(__file__).resolve().parents[3]
-    return thomas_pkg_dir / "thomas_webhooks.json"
+    try:
+        from thomas.core.config import resolve_thomas_data_dir
+
+        return (resolve_thomas_data_dir() / "json" / "thomas_webhooks.json").resolve()
+    except Exception:
+        thomas_pkg_dir = Path(__file__).resolve().parents[3]
+        return thomas_pkg_dir / "thomas_webhooks.json"
 
 
 def _default_receipts_path(webhooks_path: Path) -> Path:
@@ -205,15 +210,16 @@ def _default_inbox_path(webhooks_path: Path) -> Path:
 # JSON Stores
 # -----------------------------
 
+
 @dataclass(frozen=True)
 class WebhookRecord:
     id: str
-    secret: Optional[str]
+    secret: str | None
     goal_template: str
     created_at: str
     rate_limit_per_min: int
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "secret": self.secret,
@@ -224,9 +230,9 @@ class WebhookRecord:
 
 
 class WebhookStore:
-    def __init__(self, path: Optional[Path] = None):
+    def __init__(self, path: Path | None = None):
         self._path_override = path
-        self._resolved_path: Optional[Path] = None
+        self._resolved_path: Path | None = None
 
     def path(self) -> Path:
         if self._path_override is not None:
@@ -238,7 +244,7 @@ class WebhookStore:
     def _lock_path(self) -> Path:
         return self.path().with_suffix(self.path().suffix + ".lock")
 
-    def _load_unlocked(self) -> Dict[str, Any]:
+    def _load_unlocked(self) -> dict[str, Any]:
         p = self.path()
         if not p.exists():
             return {"version": 2, "webhooks": {}}
@@ -255,17 +261,17 @@ class WebhookStore:
             return {"version": 2, "webhooks": {}}
         return data
 
-    def _save_unlocked(self, data: Dict[str, Any]) -> None:
+    def _save_unlocked(self, data: dict[str, Any]) -> None:
         p = self.path()
         p.parent.mkdir(parents=True, exist_ok=True)
         tmp = p.with_suffix(p.suffix + ".tmp")
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(p)
 
-    def list(self) -> List[WebhookRecord]:
+    def list(self) -> list[WebhookRecord]:
         with _STORE_LOCK, _file_lock(self._lock_path()):
             data = self._load_unlocked()
-            out: List[WebhookRecord] = []
+            out: list[WebhookRecord] = []
             for wid, rec in data["webhooks"].items():
                 if not isinstance(rec, dict):
                     continue
@@ -281,7 +287,7 @@ class WebhookStore:
             out.sort(key=lambda r: r.id)
             return out
 
-    def get(self, wid: str) -> Optional[WebhookRecord]:
+    def get(self, wid: str) -> WebhookRecord | None:
         with _STORE_LOCK, _file_lock(self._lock_path()):
             data = self._load_unlocked()
             rec = data["webhooks"].get(wid)
@@ -325,7 +331,7 @@ class ReceiptStore:
     def _lock_path(self) -> Path:
         return self.path.with_suffix(self.path.suffix + ".lock")
 
-    def _load_unlocked(self) -> Dict[str, Any]:
+    def _load_unlocked(self) -> dict[str, Any]:
         if not self.path.exists():
             return {"version": 1, "receipts": {}}
         try:
@@ -337,13 +343,13 @@ class ReceiptStore:
             return {"version": 1, "receipts": {}}
         return data
 
-    def _save_unlocked(self, data: Dict[str, Any]) -> None:
+    def _save_unlocked(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
         tmp.replace(self.path)
 
-    def _gc_unlocked(self, data: Dict[str, Any]) -> None:
+    def _gc_unlocked(self, data: dict[str, Any]) -> None:
         now = _unix_now()
         receipts = data.get("receipts", {})
         if not isinstance(receipts, dict):
@@ -375,7 +381,7 @@ class ReceiptStore:
             for _ts, k in items[:drop]:
                 receipts.pop(k, None)
 
-    def get_goal_id(self, key: str) -> Optional[str]:
+    def get_goal_id(self, key: str) -> str | None:
         with _STORE_LOCK, _file_lock(self._lock_path()):
             data = self._load_unlocked()
             self._gc_unlocked(data)
@@ -400,13 +406,14 @@ class StatsStore:
       - total_received, total_queued, total_duplicate, total_failed
       - last_received_at, last_goal_id, last_error
     """
+
     def __init__(self, path: Path):
         self.path = path
 
     def _lock_path(self) -> Path:
         return self.path.with_suffix(self.path.suffix + ".lock")
 
-    def _load_unlocked(self) -> Dict[str, Any]:
+    def _load_unlocked(self) -> dict[str, Any]:
         if not self.path.exists():
             return {"version": 1, "stats": {}}
         try:
@@ -418,7 +425,7 @@ class StatsStore:
             return {"version": 1, "stats": {}}
         return data
 
-    def _save_unlocked(self, data: Dict[str, Any]) -> None:
+    def _save_unlocked(self, data: dict[str, Any]) -> None:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         tmp = self.path.with_suffix(self.path.suffix + ".tmp")
         tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -434,19 +441,19 @@ class StatsStore:
 
             for k, v in updates.items():
                 if k.startswith("inc_"):
-                    field = k[len("inc_"):]
+                    field = k[len("inc_") :]
                     stats[field] = int(stats.get(field) or 0) + int(v)
                 else:
                     stats[k] = v
             self._save_unlocked(data)
 
-    def get(self, key: str) -> Dict[str, Any]:
+    def get(self, key: str) -> dict[str, Any]:
         with _STORE_LOCK, _file_lock(self._lock_path()):
             data = self._load_unlocked()
             stats = data["stats"].get(key)
             return stats if isinstance(stats, dict) else {}
 
-    def all(self) -> Dict[str, Any]:
+    def all(self) -> dict[str, Any]:
         with _STORE_LOCK, _file_lock(self._lock_path()):
             data = self._load_unlocked()
             return data["stats"] if isinstance(data.get("stats"), dict) else {}
@@ -457,20 +464,21 @@ class InboxLog:
     Append-only audit log as JSONL.
     Helps operators answer: what hit my webhook? why did it fail? can I retry it?
     """
+
     def __init__(self, path: Path):
         self.path = path
 
     def _lock_path(self) -> Path:
         return self.path.with_suffix(self.path.suffix + ".lock")
 
-    def append(self, record: Dict[str, Any]) -> None:
+    def append(self, record: dict[str, Any]) -> None:
         line = json.dumps(record, ensure_ascii=False)
         with _STORE_LOCK, _file_lock(self._lock_path()):
             self.path.parent.mkdir(parents=True, exist_ok=True)
             with open(self.path, "a", encoding="utf-8") as f:
                 f.write(line + "\n")
 
-    def tail(self, limit: int) -> List[Dict[str, Any]]:
+    def tail(self, limit: int) -> list[dict[str, Any]]:
         limit = max(1, min(int(limit), 500))
         if not self.path.exists():
             return []
@@ -492,7 +500,7 @@ class InboxLog:
                 continue
         return out
 
-    def find_event(self, event_id: str) -> Optional[Dict[str, Any]]:
+    def find_event(self, event_id: str) -> dict[str, Any] | None:
         if not self.path.exists():
             return None
         with _STORE_LOCK, _file_lock(self._lock_path()):
@@ -522,10 +530,11 @@ _INBOX = InboxLog(_default_inbox_path(_STORE.path()))
 # Rate limiter (in-memory token bucket)
 # -----------------------------
 
+
 class TokenBucket:
     def __init__(self) -> None:
         self._lock = threading.Lock()
-        self._state: Dict[str, Tuple[float, float]] = {}  # key -> (tokens, last_ts)
+        self._state: dict[str, tuple[float, float]] = {}  # key -> (tokens, last_ts)
 
     def allow(self, key: str, rate_per_min: int) -> bool:
         rate_per_min = max(1, int(rate_per_min))
@@ -556,7 +565,8 @@ _RATE_LIMITER = TokenBucket()
 # Persistence adapter (goal queueing)
 # -----------------------------
 
-def _queue_goal(goal_text: str, source: str, metadata: Dict[str, Any]) -> str:
+
+def _queue_goal(goal_text: str, source: str, metadata: dict[str, Any]) -> str:
     p = get_persistence()
     goal_id = str(uuid.uuid4())
 
@@ -611,7 +621,8 @@ def _queue_goal(goal_text: str, source: str, metadata: Dict[str, Any]) -> str:
 # Helpers
 # -----------------------------
 
-def _split_secrets(env_value: Optional[str]) -> List[str]:
+
+def _split_secrets(env_value: str | None) -> list[str]:
     if not env_value:
         return []
     out = []
@@ -622,7 +633,7 @@ def _split_secrets(env_value: Optional[str]) -> List[str]:
     return out
 
 
-def _require_admin(x_admin_token: Optional[str]) -> None:
+def _require_admin(x_admin_token: str | None) -> None:
     if not ADMIN_TOKEN:
         raise HTTPException(
             status_code=503,
@@ -634,7 +645,7 @@ def _require_admin(x_admin_token: Optional[str]) -> None:
         raise HTTPException(status_code=401, detail="Invalid X-Admin-Token.")
 
 
-def _require_json_object(body: bytes) -> Dict[str, Any]:
+def _require_json_object(body: bytes) -> dict[str, Any]:
     try:
         obj = json.loads(body.decode("utf-8"))
     except Exception:
@@ -644,7 +655,7 @@ def _require_json_object(body: bytes) -> Dict[str, Any]:
     return obj
 
 
-def _payload_string(payload: Dict[str, Any]) -> str:
+def _payload_string(payload: dict[str, Any]) -> str:
     s = json.dumps(payload, ensure_ascii=False, indent=2)
     if len(s) > MAX_GOAL_PAYLOAD_CHARS:
         s = s[:MAX_GOAL_PAYLOAD_CHARS] + "\n…(truncated)"
@@ -671,11 +682,12 @@ def _client_ip(request: Request) -> str:
 # Signature helpers
 # -----------------------------
 
+
 def _hmac_sha256_hex(secret: str, body: bytes) -> str:
     return hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
 
 
-def _normalize_sig(sig_header: str) -> Tuple[Optional[str], str]:
+def _normalize_sig(sig_header: str) -> tuple[str | None, str]:
     sig_header = (sig_header or "").strip()
     if "=" in sig_header:
         algo, hexsig = sig_header.split("=", 1)
@@ -683,7 +695,7 @@ def _normalize_sig(sig_header: str) -> Tuple[Optional[str], str]:
     return None, sig_header.lower()
 
 
-def _validate_simple_hmac_any(secrets: List[str], body: bytes, signature_header: Optional[str], header_name: str) -> None:
+def _validate_simple_hmac_any(secrets: list[str], body: bytes, signature_header: str | None, header_name: str) -> None:
     if not signature_header:
         raise HTTPException(status_code=401, detail=f"Missing {header_name} header.")
     algo, sig_hex = _normalize_sig(signature_header)
@@ -696,13 +708,13 @@ def _validate_simple_hmac_any(secrets: List[str], body: bytes, signature_header:
     raise HTTPException(status_code=401, detail="Invalid signature.")
 
 
-def _validate_stripe_signature_any(secrets: List[str], body: bytes, stripe_sig_header: Optional[str]) -> None:
+def _validate_stripe_signature_any(secrets: list[str], body: bytes, stripe_sig_header: str | None) -> None:
     if not stripe_sig_header:
         raise HTTPException(status_code=401, detail="Missing Stripe-Signature header.")
 
     parts = [p.strip() for p in stripe_sig_header.split(",") if p.strip()]
-    kv: Dict[str, str] = {}
-    v1s: List[str] = []
+    kv: dict[str, str] = {}
+    v1s: list[str] = []
     for p in parts:
         if "=" not in p:
             continue
@@ -723,7 +735,7 @@ def _validate_stripe_signature_any(secrets: List[str], body: bytes, stripe_sig_h
     if abs(now - ts) > STRIPE_TOLERANCE_SECONDS:
         raise HTTPException(status_code=401, detail="Stripe signature timestamp outside tolerance.")
 
-    signed = (f"{ts}.".encode("utf-8") + body)
+    signed = f"{ts}.".encode() + body
 
     for secret in secrets:
         expected = hmac.new(secret.encode("utf-8"), signed, hashlib.sha256).hexdigest()
@@ -739,8 +751,22 @@ def _validate_stripe_signature_any(secrets: List[str], body: bytes, stripe_sig_h
 # -----------------------------
 
 _ZERO_DECIMAL_CURRENCIES = {
-    "BIF", "CLP", "DJF", "GNF", "JPY", "KMF", "KRW", "MGA", "PYG",
-    "RWF", "UGX", "VND", "VUV", "XAF", "XOF", "XPF",
+    "BIF",
+    "CLP",
+    "DJF",
+    "GNF",
+    "JPY",
+    "KMF",
+    "KRW",
+    "MGA",
+    "PYG",
+    "RWF",
+    "UGX",
+    "VND",
+    "VUV",
+    "XAF",
+    "XOF",
+    "XPF",
 }
 
 
@@ -764,6 +790,7 @@ def _format_stripe_amount(amount: Any, currency: str) -> str:
 # -----------------------------
 
 _PLACEHOLDER_RE = re.compile(r"\{payload(?:\.[^}]+)?\}")
+
 
 def _get_by_path(payload: Any, path: str) -> Any:
     """
@@ -807,7 +834,7 @@ def _stringify_value(v: Any) -> str:
     return s
 
 
-def _interpolate_template(template: str, payload: Dict[str, Any]) -> str:
+def _interpolate_template(template: str, payload: dict[str, Any]) -> str:
     # Fast path for classic {payload}
     full_payload_str = _payload_string(payload)
 
@@ -825,6 +852,7 @@ def _interpolate_template(template: str, payload: Dict[str, Any]) -> str:
 # Inbox / stats updates
 # -----------------------------
 
+
 def _sha256_hex(b: bytes) -> str:
     return hashlib.sha256(b).hexdigest()
 
@@ -832,14 +860,14 @@ def _sha256_hex(b: bytes) -> str:
 def _inbox_record_base(
     *,
     provider: str,
-    webhook_id: Optional[str],
-    request: Optional[Request],
+    webhook_id: str | None,
+    request: Request | None,
     body: bytes,
-    signature_header: Optional[str],
-    delivery_id: Optional[str],
-    extra: Optional[Dict[str, Any]] = None,
-) -> Dict[str, Any]:
-    rec: Dict[str, Any] = {
+    signature_header: str | None,
+    delivery_id: str | None,
+    extra: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    rec: dict[str, Any] = {
         "event_id": str(uuid.uuid4()),
         "received_at": _now_iso(),
         "provider": provider,
@@ -871,7 +899,7 @@ def _inbox_record_base(
     return rec
 
 
-def _stats_key(provider: str, webhook_id: Optional[str]) -> str:
+def _stats_key(provider: str, webhook_id: str | None) -> str:
     return f"{provider}:{webhook_id or '-'}"
 
 
@@ -879,11 +907,12 @@ def _stats_key(provider: str, webhook_id: Optional[str]) -> str:
 # Models
 # -----------------------------
 
+
 class RegisterWebhookRequest(BaseModel):
     id: str = Field(..., min_length=1, max_length=128)
-    secret: Optional[str] = Field(default=None, max_length=2048)
+    secret: str | None = Field(default=None, max_length=2048)
     goal_template: str = Field(..., min_length=1, max_length=100_000)
-    rate_limit_per_min: Optional[int] = Field(default=None, ge=1, le=100000)
+    rate_limit_per_min: int | None = Field(default=None, ge=1, le=100000)
 
 
 class RegisterWebhookResponse(BaseModel):
@@ -892,9 +921,9 @@ class RegisterWebhookResponse(BaseModel):
 
 
 class PatchWebhookRequest(BaseModel):
-    secret: Optional[str] = Field(default=None, max_length=2048)
-    goal_template: Optional[str] = Field(default=None, min_length=1, max_length=100_000)
-    rate_limit_per_min: Optional[int] = Field(default=None, ge=1, le=100000)
+    secret: str | None = Field(default=None, max_length=2048)
+    goal_template: str | None = Field(default=None, min_length=1, max_length=100_000)
+    rate_limit_per_min: int | None = Field(default=None, ge=1, le=100000)
 
 
 class ListWebhookItem(BaseModel):
@@ -913,7 +942,7 @@ class ReceiveWebhookResponse(BaseModel):
 class TestWebhookResponse(BaseModel):
     status: str
     goal_id: str
-    signature: Optional[str] = None
+    signature: str | None = None
 
 
 def _delivery_deps() -> WebhookDeliveryDeps:
@@ -949,10 +978,11 @@ def _delivery_deps() -> WebhookDeliveryDeps:
 # Management routes
 # -----------------------------
 
+
 @webhook_router.post("/register", response_model=RegisterWebhookResponse)
 async def register_webhook(
     body: RegisterWebhookRequest,
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> RegisterWebhookResponse:
     _require_admin(x_admin_token)
 
@@ -985,8 +1015,8 @@ async def register_webhook(
 async def patch_webhook(
     id: str,
     body: PatchWebhookRequest,
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
-) -> Dict[str, Any]:
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> dict[str, Any]:
     _require_admin(x_admin_token)
 
     wid = id.strip()
@@ -1028,8 +1058,8 @@ async def patch_webhook(
 @webhook_router.delete("/{id}")
 async def delete_webhook(
     id: str,
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
-) -> Dict[str, str]:
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> dict[str, str]:
     _require_admin(x_admin_token)
 
     wid = id.strip()
@@ -1038,10 +1068,10 @@ async def delete_webhook(
     return {"status": "deleted", "id": wid}
 
 
-@webhook_router.get("", response_model=List[Dict[str, Any]])
+@webhook_router.get("", response_model=list[dict[str, Any]])
 async def list_webhooks(
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
-) -> List[Dict[str, Any]]:
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> list[dict[str, Any]]:
     _require_admin(x_admin_token)
 
     items = _STORE.list()
@@ -1060,8 +1090,8 @@ async def list_webhooks(
 @webhook_router.get("/{id}")
 async def get_webhook(
     id: str,
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
-) -> Dict[str, Any]:
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> dict[str, Any]:
     _require_admin(x_admin_token)
     wid = id.strip()
     rec = _STORE.get(wid)
@@ -1080,8 +1110,8 @@ async def get_webhook(
 
 @webhook_router.get("/stats/all")
 async def stats_all(
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
-) -> Dict[str, Any]:
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> dict[str, Any]:
     _require_admin(x_admin_token)
     return _STATS.all()
 
@@ -1089,8 +1119,8 @@ async def stats_all(
 @webhook_router.get("/inbox/recent")
 async def inbox_recent(
     limit: int = 50,
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
-) -> List[Dict[str, Any]]:
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
+) -> list[dict[str, Any]]:
     _require_admin(x_admin_token)
     return _INBOX.tail(limit)
 
@@ -1098,7 +1128,7 @@ async def inbox_recent(
 @webhook_router.post("/inbox/retry/{event_id}", response_model=ReceiveWebhookResponse)
 async def inbox_retry(
     event_id: str,
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> ReceiveWebhookResponse:
     payload = await inbox_retry_impl(
         event_id=event_id,
@@ -1111,8 +1141,8 @@ async def inbox_retry(
 @webhook_router.post("/test/{id}", response_model=TestWebhookResponse)
 async def test_webhook(
     id: str,
-    payload: Dict[str, Any],
-    x_admin_token: Optional[str] = Header(default=None, alias="X-Admin-Token"),
+    payload: dict[str, Any],
+    x_admin_token: str | None = Header(default=None, alias="X-Admin-Token"),
 ) -> TestWebhookResponse:
     out = await test_webhook_impl(
         webhook_id=id,
@@ -1127,12 +1157,13 @@ async def test_webhook(
 # Provider routes (must be declared before /receive/{id})
 # -----------------------------
 
+
 @webhook_router.post("/receive/github", response_model=ReceiveWebhookResponse)
 async def receive_github_webhook(
     request: Request,
-    x_hub_signature_256: Optional[str] = Header(default=None, alias="X-Hub-Signature-256"),
-    x_github_event: Optional[str] = Header(default=None, alias="X-GitHub-Event"),
-    x_github_delivery: Optional[str] = Header(default=None, alias="X-GitHub-Delivery"),
+    x_hub_signature_256: str | None = Header(default=None, alias="X-Hub-Signature-256"),
+    x_github_event: str | None = Header(default=None, alias="X-GitHub-Event"),
+    x_github_delivery: str | None = Header(default=None, alias="X-GitHub-Delivery"),
 ) -> ReceiveWebhookResponse:
     payload = await receive_github_webhook_impl(
         request=request,
@@ -1147,7 +1178,7 @@ async def receive_github_webhook(
 @webhook_router.post("/receive/stripe", response_model=ReceiveWebhookResponse)
 async def receive_stripe_webhook(
     request: Request,
-    stripe_signature: Optional[str] = Header(default=None, alias="Stripe-Signature"),
+    stripe_signature: str | None = Header(default=None, alias="Stripe-Signature"),
 ) -> ReceiveWebhookResponse:
     payload = await receive_stripe_webhook_impl(
         request=request,
@@ -1161,12 +1192,13 @@ async def receive_stripe_webhook(
 # Generic inbound endpoint
 # -----------------------------
 
+
 @webhook_router.post("/receive/{id}", response_model=ReceiveWebhookResponse)
 async def receive_webhook(
     id: str,
     request: Request,
-    x_webhook_signature: Optional[str] = Header(default=None, alias="X-Webhook-Signature"),
-    x_webhook_delivery: Optional[str] = Header(default=None, alias="X-Webhook-Delivery"),
+    x_webhook_signature: str | None = Header(default=None, alias="X-Webhook-Signature"),
+    x_webhook_delivery: str | None = Header(default=None, alias="X-Webhook-Delivery"),
 ) -> ReceiveWebhookResponse:
     payload = await receive_webhook_impl(
         webhook_id=id,

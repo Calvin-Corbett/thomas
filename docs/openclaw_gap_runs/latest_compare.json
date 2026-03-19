@@ -1,0 +1,572 @@
+{
+  "computed_at_utc": "2026-03-06T13:12:19Z",
+  "comparison_source": {
+    "baseline_file": "C:\\Users\\corbe\\Thomas\\demo\\baselines\\openclaw.current.json",
+    "openclaw_commit": "fa6c0e1b404f094e579b5fb192c6643c7822c1b6",
+    "openclaw_snapshot_path": "F:\\DevHub\\_tmp_openclaw_latest_20260306",
+    "thomas_roots": [
+      "thomas",
+      "tests"
+    ],
+    "openclaw_roots": [
+      "src",
+      "test",
+      "tests"
+    ]
+  },
+  "loc": {
+    "thomas": {
+      "files": 6752,
+      "loc": 2540968
+    },
+    "openclaw": {
+      "files": 4544,
+      "loc": 782626
+    },
+    "openclaw_over_thomas_ratio": 0.31
+  },
+  "tests": {
+    "thomas": {
+      "files": 2480,
+      "loc": 1029846
+    },
+    "openclaw": {
+      "files": 1796,
+      "loc": 333885
+    }
+  },
+  "subsystems": {
+    "browser": {
+      "thomas": {
+        "files": 1797,
+        "loc": 874258
+      },
+      "openclaw": {
+        "files": 145,
+        "loc": 21157
+      }
+    },
+    "plugins": {
+      "thomas": {
+        "files": 64,
+        "loc": 16898
+      },
+      "openclaw": {
+        "files": 80,
+        "loc": 13287
+      }
+    },
+    "extensions": {
+      "thomas_directories": 529,
+      "openclaw_directories": 40
+    },
+    "mobile_surface": {
+      "thomas_directories": 4,
+      "openclaw_directories": 4
+    }
+  },
+  "gateway_compat": {
+    "chat_completions": {
+      "thomas": {
+        "files_with_hits": 4,
+        "occurrences": 12
+      },
+      "openclaw": {
+        "files_with_hits": 4,
+        "occurrences": 9
+      }
+    },
+    "responses": {
+      "thomas": {
+        "files_with_hits": 8,
+        "occurrences": 26
+      },
+      "openclaw": {
+        "files_with_hits": 5,
+        "occurrences": 8
+      }
+    }
+  },
+  "cli": {
+    "thomas_top_level_commands": 72,
+    "openclaw_top_level_commands": 44,
+    "thomas_subcommand_depth": {
+      "acp": 2,
+      "agents": 4,
+      "browser": 45,
+      "message": 29,
+      "nodes": 24,
+      "gateway": 36,
+      "node": 17,
+      "clawbot": 2,
+      "channels": 31,
+      "config": 6,
+      "cron": 16,
+      "daemon": 7,
+      "dns": 2,
+      "help": 44,
+      "memory": 11,
+      "system": 13,
+      "approvals": 13,
+      "hooks": 7,
+      "models": 12,
+      "plugins": 41,
+      "devices": 11,
+      "directory": 9,
+      "pairing": 11,
+      "sandbox": 3,
+      "skills": 16,
+      "security": 7,
+      "update": 9,
+      "webhooks": 14
+    },
+    "openclaw_subcommand_depth": {
+      "acp": 2,
+      "agents": 4,
+      "browser": 43,
+      "message": 24,
+      "nodes": 16,
+      "gateway": 13,
+      "node": 7,
+      "clawbot": 2,
+      "channels": 10,
+      "config": 3,
+      "cron": 10,
+      "daemon": 7,
+      "dns": 2,
+      "help": 44,
+      "memory": 4,
+      "system": 4,
+      "approvals": 4,
+      "hooks": 7,
+      "models": 9,
+      "plugins": 9,
+      "devices": 8,
+      "directory": 3,
+      "pairing": 3,
+      "sandbox": 3,
+      "skills": 3,
+      "security": 2,
+      "update": 2,
+      "webhooks": 2
+    },
+    "thomas_depth_total": 442,
+    "openclaw_depth_total": 250,
+    "depth_parity_percent": 176.8
+  },
+  "metric_board": [
+    {
+      "metric": "loc.total_files",
+      "thomas": 6752,
+      "openclaw": 4544,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 2208,
+      "rationale": "Larger total code surface is treated as broader capability coverage for this competitive board."
+    },
+    {
+      "metric": "loc.total_loc",
+      "thomas": 2540968,
+      "openclaw": 782626,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 1758342,
+      "rationale": "Higher LOC is treated as broader implemented capability for this competitive board."
+    },
+    {
+      "metric": "tests.files",
+      "thomas": 2480,
+      "openclaw": 1796,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 684,
+      "rationale": "More test files usually indicate broader regression coverage."
+    },
+    {
+      "metric": "tests.loc",
+      "thomas": 1029846,
+      "openclaw": 333885,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 695961,
+      "rationale": "More test LOC generally reflects deeper scenario coverage."
+    },
+    {
+      "metric": "cli.top_level_commands",
+      "thomas": 72,
+      "openclaw": 44,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 28,
+      "rationale": "Top-level command breadth indicates operator entry-point coverage."
+    },
+    {
+      "metric": "cli.depth_total",
+      "thomas": 442,
+      "openclaw": 250,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 192,
+      "rationale": "Subcommand depth tracks operational task coverage."
+    },
+    {
+      "metric": "browser.files",
+      "thomas": 1797,
+      "openclaw": 145,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 1652,
+      "rationale": "Browser subsystem file breadth approximates functional surface area."
+    },
+    {
+      "metric": "browser.loc",
+      "thomas": 874258,
+      "openclaw": 21157,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 853101,
+      "rationale": "Browser subsystem LOC indicates depth of implementation paths."
+    },
+    {
+      "metric": "plugins.files",
+      "thomas": 64,
+      "openclaw": 80,
+      "preference": "higher_is_better",
+      "winner": "openclaw",
+      "delta_thomas_minus_openclaw": -16,
+      "rationale": "Plugin runtime breadth signals extensibility maturity."
+    },
+    {
+      "metric": "plugins.loc",
+      "thomas": 16898,
+      "openclaw": 13287,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 3611,
+      "rationale": "Plugin runtime LOC tracks depth of lifecycle and hook support."
+    },
+    {
+      "metric": "extensions.directories",
+      "thomas": 529,
+      "openclaw": 40,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 489,
+      "rationale": "Extension directory count approximates ecosystem/catalog breadth."
+    },
+    {
+      "metric": "mobile_surface.directories",
+      "thomas": 4,
+      "openclaw": 4,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Mobile/shared directory presence reflects cross-platform scope."
+    },
+    {
+      "metric": "gateway.openai_chat_completions.files",
+      "thomas": 4,
+      "openclaw": 4,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Presence across files indicates endpoint compatibility integration depth."
+    },
+    {
+      "metric": "gateway.openai_chat_completions.occurrences",
+      "thomas": 12,
+      "openclaw": 9,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 3,
+      "rationale": "Occurrences capture endpoint wiring breadth across modules."
+    },
+    {
+      "metric": "gateway.responses.files",
+      "thomas": 8,
+      "openclaw": 5,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 3,
+      "rationale": "Presence of /v1/responses support across files reflects compat breadth."
+    },
+    {
+      "metric": "gateway.responses.occurrences",
+      "thomas": 26,
+      "openclaw": 8,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 18,
+      "rationale": "Occurrences capture breadth of OpenResponses wiring."
+    },
+    {
+      "metric": "cli.depth.acp",
+      "thomas": 2,
+      "openclaw": 2,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `acp` command family."
+    },
+    {
+      "metric": "cli.depth.agents",
+      "thomas": 4,
+      "openclaw": 4,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `agents` command family."
+    },
+    {
+      "metric": "cli.depth.approvals",
+      "thomas": 13,
+      "openclaw": 4,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 9,
+      "rationale": "Subcommand depth for `approvals` command family."
+    },
+    {
+      "metric": "cli.depth.browser",
+      "thomas": 45,
+      "openclaw": 43,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 2,
+      "rationale": "Subcommand depth for `browser` command family."
+    },
+    {
+      "metric": "cli.depth.channels",
+      "thomas": 31,
+      "openclaw": 10,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 21,
+      "rationale": "Subcommand depth for `channels` command family."
+    },
+    {
+      "metric": "cli.depth.clawbot",
+      "thomas": 2,
+      "openclaw": 2,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `clawbot` command family."
+    },
+    {
+      "metric": "cli.depth.config",
+      "thomas": 6,
+      "openclaw": 3,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 3,
+      "rationale": "Subcommand depth for `config` command family."
+    },
+    {
+      "metric": "cli.depth.cron",
+      "thomas": 16,
+      "openclaw": 10,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 6,
+      "rationale": "Subcommand depth for `cron` command family."
+    },
+    {
+      "metric": "cli.depth.daemon",
+      "thomas": 7,
+      "openclaw": 7,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `daemon` command family."
+    },
+    {
+      "metric": "cli.depth.devices",
+      "thomas": 11,
+      "openclaw": 8,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 3,
+      "rationale": "Subcommand depth for `devices` command family."
+    },
+    {
+      "metric": "cli.depth.directory",
+      "thomas": 9,
+      "openclaw": 3,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 6,
+      "rationale": "Subcommand depth for `directory` command family."
+    },
+    {
+      "metric": "cli.depth.dns",
+      "thomas": 2,
+      "openclaw": 2,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `dns` command family."
+    },
+    {
+      "metric": "cli.depth.gateway",
+      "thomas": 36,
+      "openclaw": 13,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 23,
+      "rationale": "Subcommand depth for `gateway` command family."
+    },
+    {
+      "metric": "cli.depth.help",
+      "thomas": 44,
+      "openclaw": 44,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `help` command family."
+    },
+    {
+      "metric": "cli.depth.hooks",
+      "thomas": 7,
+      "openclaw": 7,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `hooks` command family."
+    },
+    {
+      "metric": "cli.depth.memory",
+      "thomas": 11,
+      "openclaw": 4,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 7,
+      "rationale": "Subcommand depth for `memory` command family."
+    },
+    {
+      "metric": "cli.depth.message",
+      "thomas": 29,
+      "openclaw": 24,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 5,
+      "rationale": "Subcommand depth for `message` command family."
+    },
+    {
+      "metric": "cli.depth.models",
+      "thomas": 12,
+      "openclaw": 9,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 3,
+      "rationale": "Subcommand depth for `models` command family."
+    },
+    {
+      "metric": "cli.depth.node",
+      "thomas": 17,
+      "openclaw": 7,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 10,
+      "rationale": "Subcommand depth for `node` command family."
+    },
+    {
+      "metric": "cli.depth.nodes",
+      "thomas": 24,
+      "openclaw": 16,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 8,
+      "rationale": "Subcommand depth for `nodes` command family."
+    },
+    {
+      "metric": "cli.depth.pairing",
+      "thomas": 11,
+      "openclaw": 3,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 8,
+      "rationale": "Subcommand depth for `pairing` command family."
+    },
+    {
+      "metric": "cli.depth.plugins",
+      "thomas": 41,
+      "openclaw": 9,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 32,
+      "rationale": "Subcommand depth for `plugins` command family."
+    },
+    {
+      "metric": "cli.depth.sandbox",
+      "thomas": 3,
+      "openclaw": 3,
+      "preference": "higher_is_better",
+      "winner": "tie",
+      "delta_thomas_minus_openclaw": 0,
+      "rationale": "Subcommand depth for `sandbox` command family."
+    },
+    {
+      "metric": "cli.depth.security",
+      "thomas": 7,
+      "openclaw": 2,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 5,
+      "rationale": "Subcommand depth for `security` command family."
+    },
+    {
+      "metric": "cli.depth.skills",
+      "thomas": 16,
+      "openclaw": 3,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 13,
+      "rationale": "Subcommand depth for `skills` command family."
+    },
+    {
+      "metric": "cli.depth.system",
+      "thomas": 13,
+      "openclaw": 4,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 9,
+      "rationale": "Subcommand depth for `system` command family."
+    },
+    {
+      "metric": "cli.depth.update",
+      "thomas": 9,
+      "openclaw": 2,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 7,
+      "rationale": "Subcommand depth for `update` command family."
+    },
+    {
+      "metric": "cli.depth.webhooks",
+      "thomas": 14,
+      "openclaw": 2,
+      "preference": "higher_is_better",
+      "winner": "thomas",
+      "delta_thomas_minus_openclaw": 12,
+      "rationale": "Subcommand depth for `webhooks` command family."
+    }
+  ],
+  "metric_board_summary": {
+    "thomas_wins": 33,
+    "openclaw_wins": 1,
+    "ties": 10,
+    "total": 44
+  },
+  "openclaw_leads": [
+    {
+      "metric": "plugins.files",
+      "thomas": 64,
+      "openclaw": 80,
+      "preference": "higher_is_better",
+      "winner": "openclaw",
+      "delta_thomas_minus_openclaw": -16,
+      "rationale": "Plugin runtime breadth signals extensibility maturity."
+    }
+  ]
+}

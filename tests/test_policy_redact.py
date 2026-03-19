@@ -1,9 +1,10 @@
 import unittest
 
-from thomas.policy.redact import Redactor
-from thomas.policy.types import PolicyContext
 from thomas.policy.config import PolicyConfig
 from thomas.policy.policy import PolicyEngine
+from thomas.policy.redact import Redactor
+from thomas.policy.types import PolicyContext
+
 
 class TestRedaction(unittest.TestCase):
     def test_private_key_redaction(self):
@@ -31,8 +32,11 @@ abcdefghijklmnopqrstuvwxyz
         r = Redactor()
         obj = {"token": "sk-abcdefghijklmnopqrstuvwxyz0123456789", "nested": [{"password": "hunter2"}]}
         out = r.redact_obj(obj)
-        self.assertEqual(out["token"], "<REDACTED:SECRET_KEY>" if out["token"].startswith("<REDACTED") else out["token"])
+        self.assertEqual(
+            out["token"], "<REDACTED:SECRET_KEY>" if out["token"].startswith("<REDACTED") else out["token"]
+        )
         self.assertIn("<REDACTED>", out["nested"][0]["password"])
+
 
 class TestPolicyRules(unittest.TestCase):
     def test_deny_secret_root(self):
@@ -44,7 +48,7 @@ class TestPolicyRules(unittest.TestCase):
             cwd=str(__import__("pathlib").Path.cwd()),
             sandbox_root=str(__import__("pathlib").Path.cwd()),
             iteration=1,
-            conversation_summary="hi"
+            conversation_summary="hi",
         )
         dec = engine.evaluate(ctx)
         self.assertEqual(dec.type.value, "DENY")
@@ -58,7 +62,7 @@ class TestPolicyRules(unittest.TestCase):
             cwd=str(__import__("pathlib").Path.cwd()),
             sandbox_root=str(__import__("pathlib").Path.cwd()),
             iteration=1,
-            conversation_summary="hi"
+            conversation_summary="hi",
         )
         dec = engine.evaluate(ctx)
         self.assertEqual(dec.type.value, "REQUIRE_APPROVAL")
@@ -72,7 +76,7 @@ class TestPolicyRules(unittest.TestCase):
             cwd=str(__import__("pathlib").Path.cwd()),
             sandbox_root=str(__import__("pathlib").Path.cwd()),
             iteration=1,
-            conversation_summary="hi"
+            conversation_summary="hi",
         )
         dec = engine.evaluate(ctx)
         self.assertEqual(dec.type.value, "ALLOW")
@@ -108,6 +112,7 @@ class TestPolicyRules(unittest.TestCase):
         dec = engine.evaluate(ctx)
         self.assertEqual(dec.type.value, "DENY")
         self.assertEqual(dec.meta.get("no_human_mode"), "deny")
+
 
 if __name__ == "__main__":
     unittest.main()

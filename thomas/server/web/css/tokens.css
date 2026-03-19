@@ -51,6 +51,19 @@
     --z-toast: 60;
     --z-tooltip: 70;
     --z-skip-link: 9999;
+
+    /* ── Button Profile (Thomas Standard) ─────────────────────────────────
+       Thomas uses a SKINNY button profile across the entire UI.
+       All interactive buttons should reference these tokens.
+       Vertical padding is intentionally tight (3–5px) to keep UI dense.
+       ──────────────────────────────────────────────────────────────────── */
+    --btn-pad-y: 4px;
+    --btn-pad-x: 12px;
+    --btn-font-size: 12px;
+    --btn-font-weight: 600;
+    --btn-line-height: 1.4;
+    --btn-radius: var(--radius-sm);
+    --btn-transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
 }
 
 * {
@@ -99,4 +112,82 @@ body {
 
 *::-webkit-scrollbar-thumb:hover {
     background: rgba(173, 179, 194, 0.52);
+}
+
+/* ── Thomas Button Standard ───────────────────────────────────────────────────
+   Reusable utility classes for the skinny button profile.
+   Usage: <button class="t-btn t-btn-accent">Label</button>
+   Variants: t-btn-accent, t-btn-mint, t-btn-ghost, t-btn-danger
+   ─────────────────────────────────────────────────────────────────────────── */
+.t-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: var(--btn-pad-y) var(--btn-pad-x);
+    border-radius: var(--btn-radius);
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--btn-font-size);
+    font-weight: var(--btn-font-weight);
+    font-family: var(--font-sans);
+    line-height: var(--btn-line-height);
+    cursor: pointer;
+    transition: var(--btn-transition);
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-font-smoothing: antialiased;
+}
+.t-btn:hover {
+    background: rgba(162, 191, 233, 0.08);
+    border-color: rgba(255, 255, 255, 0.20);
+    color: var(--text-primary);
+}
+.t-btn:active {
+    transform: scale(0.97);
+}
+.t-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+/* Accent blue variant */
+.t-btn-accent {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+}
+.t-btn-accent:hover {
+    background: rgba(88, 166, 255, 0.14);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+/* Mint / success variant */
+.t-btn-mint {
+    border-color: var(--accent-mint);
+    color: var(--accent-mint);
+    background: rgba(71, 215, 172, 0.06);
+}
+.t-btn-mint:hover {
+    background: rgba(71, 215, 172, 0.14);
+    border-color: var(--accent-mint);
+    color: var(--accent-mint);
+}
+/* Ghost / minimal variant */
+.t-btn-ghost {
+    border-color: transparent;
+    background: transparent;
+}
+.t-btn-ghost:hover {
+    background: rgba(162, 191, 233, 0.10);
+    border-color: transparent;
+}
+/* Danger / destructive variant */
+.t-btn-danger {
+    border-color: var(--danger-line);
+    color: var(--danger-ink);
+    background: var(--danger-bg);
+}
+.t-btn-danger:hover {
+    background: rgba(255, 107, 107, 0.22);
 }

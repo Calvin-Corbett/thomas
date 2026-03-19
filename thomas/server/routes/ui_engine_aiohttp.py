@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable, Iterable, List
+from collections.abc import Awaitable, Callable, Iterable
+from typing import Any
 
 from aiohttp import web
 
@@ -57,7 +58,7 @@ def _parse_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, parsed))
 
 
-def _parse_providers(value: Any) -> List[str]:
+def _parse_providers(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
@@ -70,7 +71,7 @@ def _parse_providers(value: Any) -> List[str]:
             raw.append(item.strip().lower())
     else:
         raise ValueError("providers must be a list or comma-separated string")
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for item in raw:
         if not item or item in seen:
@@ -80,7 +81,7 @@ def _parse_providers(value: Any) -> List[str]:
     return out
 
 
-def _parse_changed_paths(value: Any) -> List[str]:
+def _parse_changed_paths(value: Any) -> list[str]:
     if value is None:
         return []
     if isinstance(value, str):
@@ -93,7 +94,7 @@ def _parse_changed_paths(value: Any) -> List[str]:
             raw.append(item.strip())
     else:
         raise ValueError("changed_paths must be a list or comma-separated string")
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for item in raw:
         normalized = item.replace("\\", "/").strip()

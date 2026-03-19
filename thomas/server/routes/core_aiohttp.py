@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from pathlib import Path
-from typing import Any, Mapping
+from typing import Any
 
 from aiohttp import web
 
@@ -82,6 +83,9 @@ def register_core_routes(
         try:
             return await handler(request)
         except web.HTTPNotFound:
+            path = str(request.path or "")
+            if path.startswith(("/api/", "/gateway/", "/v1/")):
+                raise
             return await handle_404(request)
         except web.HTTPException:
             raise

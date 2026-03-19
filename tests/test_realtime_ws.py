@@ -1,12 +1,13 @@
-import unittest
 import asyncio
+import unittest
+
 from aiohttp import web
 from aiohttp.client_exceptions import WSServerHandshakeError
-from aiohttp.test_utils import TestServer, TestClient
+from aiohttp.test_utils import TestClient, TestServer
 
-from thomas.realtime.routes import setup_realtime_routes
-from thomas.realtime.config import RealtimeConfig
 from thomas.realtime import keys
+from thomas.realtime.config import RealtimeConfig
+from thomas.realtime.routes import setup_realtime_routes
 
 
 async def dummy_streamer(payload):
@@ -50,6 +51,17 @@ class TestRealtimeWS(unittest.IsolatedAsyncioTestCase):
         await self._recv_until(ws, "assistant_delta")
         done = await self._recv_until(ws, "assistant_done")
         self.assertEqual(done["t"], "assistant_done")
+        final_metrics = None
+        while True:
+            msg = await ws.receive_json(timeout=2)
+            if msg.get("t") != "metrics":
+                continue
+            turns = (msg.get("state") or {}).get("turns") or []
+            if turns and turns[-1].get("role") == "assistant":
+                final_metrics = msg
+                break
+        self.assertIsNotNone(final_metrics)
+        self.assertEqual(final_metrics["state"]["turns"][-1]["text"], "hello world")
         await ws.close()
 
     async def test_interrupt_cancels(self):
@@ -94,9 +106,7 @@ class TestRealtimeWSAuth(unittest.IsolatedAsyncioTestCase):
             resp = web.StreamResponse(status=200, headers={"Content-Type": "text/event-stream"})
             await resp.prepare(request)
             await resp.write(b'data: {"type":"assistant_delta","text":"ok"}\n\n')
-            await resp.write(
-                b'data: {"type":"assistant_done","usage":{"input_tokens":1,"output_tokens":1}}\n\n'
-            )
+            await resp.write(b'data: {"type":"assistant_done","usage":{"input_tokens":1,"output_tokens":1}}\n\n')
             await resp.write_eof()
             return resp
 

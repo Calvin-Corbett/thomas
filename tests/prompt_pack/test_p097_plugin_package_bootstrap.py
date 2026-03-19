@@ -47,7 +47,9 @@ def test_bootstrap_plugin_package_invalid_name(tmp_path: Path) -> None:
 def test_bootstrap_plugin_package_exists_without_overwrite(tmp_path: Path) -> None:
     (tmp_path / "my_plugin").mkdir()
     with pytest.raises(AlreadyExistsError):
-        bootstrap_plugin_package(PluginBootstrapRequest(plugin_name="my_plugin", destination_dir=tmp_path, overwrite=False))
+        bootstrap_plugin_package(
+            PluginBootstrapRequest(plugin_name="my_plugin", destination_dir=tmp_path, overwrite=False)
+        )
 
 
 def test_cli_bootstrap_plugin_package_json_success(tmp_path: Path) -> None:
@@ -146,7 +148,9 @@ def test_cli_bootstrap_plugin_package_skip_skill(tmp_path: Path) -> None:
         pass
 
     runner = CliRunner()
-    res = runner.invoke(plugins_app, ["bootstrap", "no_skill_plugin", "--dest", str(tmp_path), "--json", "--skip-skill"])
+    res = runner.invoke(
+        plugins_app, ["bootstrap", "no_skill_plugin", "--dest", str(tmp_path), "--json", "--skip-skill"]
+    )
     assert res.exit_code == 0, res.stdout
     payload = json.loads(res.stdout)
     assert payload["ok"] is True
@@ -166,7 +170,9 @@ def test_cli_bootstrap_plugin_package_skip_manifest(tmp_path: Path) -> None:
         pass
 
     runner = CliRunner()
-    res = runner.invoke(plugins_app, ["bootstrap", "manifestless", "--dest", str(tmp_path), "--json", "--skip-manifest"])
+    res = runner.invoke(
+        plugins_app, ["bootstrap", "manifestless", "--dest", str(tmp_path), "--json", "--skip-manifest"]
+    )
     assert res.exit_code == 0, res.stdout
     payload = json.loads(res.stdout)
     assert payload["ok"] is True

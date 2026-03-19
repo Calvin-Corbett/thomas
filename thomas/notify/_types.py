@@ -97,9 +97,17 @@ class Recipient:
 
     def get_channel_address(self, channel_type: ChannelType) -> str | None:
         """Get the address for a specific channel."""
+        push_device_id = None
+        if isinstance(self.attributes, dict):
+            raw_push_device_id = self.attributes.get("push_device_id")
+            if isinstance(raw_push_device_id, str) and raw_push_device_id.strip():
+                push_device_id = raw_push_device_id.strip()
+
         mapping = {
             ChannelType.EMAIL: self.email,
             ChannelType.SMS: self.phone_number,
+            # Backward compatible: older payloads stored push device IDs in slack_user_id.
+            ChannelType.PUSH: push_device_id or self.slack_user_id,
             ChannelType.SLACK: self.slack_user_id,
             ChannelType.WEBHOOK: self.webhook_url,
         }
@@ -187,7 +195,7 @@ class NotificationPreference:
     user_id: str
     preferences: dict[Category, dict[ChannelType, bool]] = field(default_factory=dict)
     global_opt_out: bool = False
-    quiet_hours_enabled: bool = True
+    quiet_hours_enabled: bool = False
     quiet_hours_start: str = "22:00"  # HH:MM format
     quiet_hours_end: str = "08:00"
     max_per_channel_per_day: dict[ChannelType, int] = field(default_factory=dict)

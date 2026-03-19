@@ -17,6 +17,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
+from thomas.core.config import resolve_thomas_data_dir
+
 ENV_TASK_LEDGER_DB_PATH = "THOMAS_TASK_LEDGER_DB_PATH"
 _VALID_STATUSES = {"in_progress", "blocked", "complete"}
 _MAX_ACTIVE_GOAL_LEN = 320
@@ -144,7 +146,7 @@ def resolve_task_ledger_db_path(default_root: Path | None = None) -> Path:
         return Path(env)
     if default_root is not None:
         return Path(default_root) / ".thomas" / "task_ledger.sqlite3"
-    return Path.home() / ".thomas" / "task_ledger.sqlite3"
+    return resolve_thomas_data_dir() / ".thomas" / "task_ledger.sqlite3"
 
 
 @dataclass(frozen=True)

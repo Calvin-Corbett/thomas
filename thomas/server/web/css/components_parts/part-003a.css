@@ -446,7 +446,6 @@
 
 .module-workspace[data-mode="research_lab"],
 .module-workspace[data-mode="people"],
-.module-workspace[data-mode="marketplace"],
 .module-workspace[data-mode="infinite"] {
     --module-accent: rgba(123, 214, 199, 0.68);
     --module-accent-soft: rgba(123, 214, 199, 0.28);

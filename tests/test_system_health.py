@@ -9,6 +9,21 @@ class _Result:
         self.returncode = code
 
 
+def test_default_runner_expands_python_placeholder(monkeypatch) -> None:
+    captured: dict[str, object] = {}
+
+    def _fake_run(args, **kwargs):  # type: ignore[no-untyped-def]
+        captured["args"] = list(args)
+        captured["kwargs"] = dict(kwargs)
+        return _Result(0)
+
+    monkeypatch.setattr(soak_mod.subprocess, "run", _fake_run)
+
+    soak_mod._default_runner("{python} -m thomas status", 2.0)
+
+    assert captured["args"][0] == soak_mod.sys.executable
+
+
 def test_soak_runner_probe_hook_tracks_failures() -> None:
     probe_calls: list[int] = []
 

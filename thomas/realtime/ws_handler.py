@@ -2,24 +2,27 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-from typing import Any, AsyncIterator, Optional
+from collections.abc import AsyncIterator
+from typing import Any
 
-from aiohttp import web, WSMsgType
+from aiohttp import WSMsgType, web
 
-from .config import RealtimeConfig
 from . import keys
-from .protocol import parse_json_message, make, ProtocolError
-from .state import ConversationState
-from .telemetry import Telemetry
-from .quality import QualityMetrics
-from .stt_dedupe import STTDedupeWindow
-from .intent import predict_intent, next_action_suggestions
+from .config import RealtimeConfig
+from .intent import next_action_suggestions, predict_intent
 from .nudges import NudgeEngine
+from .protocol import ProtocolError, make, parse_json_message
+from .quality import QualityMetrics
+from .state import ConversationState
 from .stt import DisabledSTTAdapter, STTAdapter
+from .stt_dedupe import STTDedupeWindow
+from .telemetry import Telemetry
 from .utils import AsyncCancelScope, utc_ms
 
 
-async def _default_pinned_goals_provider(user_id: str | None, session_id: str, state: ConversationState) -> list[dict[str, Any]]:
+async def _default_pinned_goals_provider(
+    user_id: str | None, session_id: str, state: ConversationState
+) -> list[dict[str, Any]]:
     return list(state.pinned_goals)
 
 
@@ -32,8 +35,9 @@ async def _http_chat_bridge(app: web.Application, payload: dict[str, Any]) -> As
 
     This is a best-effort bridge to minimize integration friction when you don't want to touch internal chat plumbing.
     """
-    import aiohttp
     import json as _json
+
+    import aiohttp
 
     req = payload.get("_request")
     if req is None:
@@ -88,6 +92,7 @@ def _get_cfg(app: web.Application) -> RealtimeConfig:
     cfg: RealtimeConfig | None = app.get(keys.CONFIG) or app.get("realtime.config")
     if cfg is None:
         from .config import load_realtime_config
+
         cfg = load_realtime_config()
         app[keys.CONFIG] = cfg
     return cfg
@@ -105,6 +110,7 @@ async def _get_chat_streamer(app: web.Application, cfg: RealtimeConfig):
 
 class _MetricsPacer:
     """Rate-limits metrics pushes to avoid spamming the WS."""
+
     def __init__(self, min_interval_ms: int = 400):
         self.min_interval_ms = min_interval_ms
         self._next_ms = 0
@@ -124,6 +130,7 @@ class RealtimeSession:
         self.cfg = _get_cfg(app)
 
         from .state import new_session_id
+
         self.state = ConversationState(session_id=new_session_id())
         self.telemetry = Telemetry()
         self.quality = QualityMetrics()
@@ -166,7 +173,14 @@ class RealtimeSession:
     async def send_metrics(self, ws: web.WebSocketResponse, force: bool = False):
         if not force and not self._metrics.due():
             return
-        await ws.send_json(make("metrics", telemetry=self.telemetry.as_dict(), quality=self.quality.as_dict(), state=self.state.to_dict()))
+        await ws.send_json(
+            make(
+                "metrics",
+                telemetry=self.telemetry.as_dict(),
+                quality=self.quality.as_dict(),
+                state=self.state.to_dict(),
+            )
+        )
 
     async def interrupt(self, ws: web.WebSocketResponse, reason: str = "barge_in"):
         self.telemetry.interruptions += 1
@@ -181,7 +195,9 @@ class RealtimeSession:
         self._active_generation = None
         await self.send_metrics(ws)
 
-    async def handle_user_text(self, ws: web.WebSocketResponse, text: str, attachments: list[dict[str, Any]] | None, mode: str | None):
+    async def handle_user_text(
+        self, ws: web.WebSocketResponse, text: str, attachments: list[dict[str, Any]] | None, mode: str | None
+    ):
         if mode:
             self.set_mode(mode)
 
@@ -191,18 +207,40 @@ class RealtimeSession:
 
         intent = predict_intent(text, context={"mode": self.state.mode})
         suggestions = next_action_suggestions(intent, context={"mode": self.state.mode})
-        await ws.send_json(make("intent", intent={"name": intent.name, "confidence": intent.confidence, "slots": intent.slots or {}}, suggestions=suggestions))
+        await ws.send_json(
+            make(
+                "intent",
+                intent={"name": intent.name, "confidence": intent.confidence, "slots": intent.slots or {}},
+                suggestions=suggestions,
+            )
+        )
 
         # Optional nudge
         if self.cfg.nudges.enabled:
-            pg_provider = self.app.get(keys.PINNED_GOALS_PROVIDER) or self.app.get("realtime.pinned_goals_provider") or (lambda user_id, session_id: _default_pinned_goals_provider(user_id, session_id, self.state))
-            rt_provider = self.app.get(keys.RECENT_TASKS_PROVIDER) or self.app.get("realtime.recent_tasks_provider") or _default_recent_tasks_provider
+            pg_provider = (
+                self.app.get(keys.PINNED_GOALS_PROVIDER)
+                or self.app.get("realtime.pinned_goals_provider")
+                or (lambda user_id, session_id: _default_pinned_goals_provider(user_id, session_id, self.state))
+            )
+            rt_provider = (
+                self.app.get(keys.RECENT_TASKS_PROVIDER)
+                or self.app.get("realtime.recent_tasks_provider")
+                or _default_recent_tasks_provider
+            )
             pinned = await pg_provider(self._user_id, self.state.session_id)
             recent = await rt_provider(self._user_id, self.state.session_id)
-            n = self.nudges.maybe_nudge(last_user_text=text, pinned_goals=pinned, recent_tasks=recent, mode=self.state.mode, quality=self.quality.as_dict())
+            n = self.nudges.maybe_nudge(
+                last_user_text=text,
+                pinned_goals=pinned,
+                recent_tasks=recent,
+                mode=self.state.mode,
+                quality=self.quality.as_dict(),
+            )
             if n:
                 self.nudges.record_sent()
-                await ws.send_json(make("nudge", nudge={"title": n.title, "text": n.text, "kind": n.kind, "confidence": n.confidence}))
+                await ws.send_json(
+                    make("nudge", nudge={"title": n.title, "text": n.text, "kind": n.kind, "confidence": n.confidence})
+                )
 
         # Cancel any previous generation
         await self.interrupt(ws, reason="new_user_text")
@@ -211,6 +249,7 @@ class RealtimeSession:
 
         async def run_generation():
             self._assistant_generating = True
+            assistant_chunks: list[str] = []
             try:
                 payload = {
                     "mode": self.state.mode,
@@ -223,6 +262,7 @@ class RealtimeSession:
                 agen = streamer(self.app, payload) if bridge == "http" else streamer(payload)  # type: ignore[misc]
                 async for ev in agen:
                     if ev.get("type") == "delta" and isinstance(ev.get("text"), str):
+                        assistant_chunks.append(ev["text"])
                         self.telemetry.mark_assistant_delta()
                         await ws.send_json(make("assistant_delta", text=ev["text"]))
                         await self.send_metrics(ws)
@@ -235,7 +275,10 @@ class RealtimeSession:
                         await ws.send_json(make("assistant_done", usage=usage, quality={"canceled": False}))
                         await self.send_metrics(ws, force=True)
 
-                self.state.add_turn("assistant", "")
+                assistant_text = "".join(assistant_chunks)
+                if assistant_text:
+                    self.state.add_turn("assistant", assistant_text)
+                    await self.send_metrics(ws, force=True)
             except asyncio.CancelledError:
                 raise
             except Exception as e:
@@ -246,7 +289,17 @@ class RealtimeSession:
 
         self._active_generation = asyncio.create_task(run_generation())
 
-    async def handle_stt_text(self, ws: web.WebSocketResponse, *, text: str, is_final: bool, confidence: float, seq: int, src: str, ts: int | None = None):
+    async def handle_stt_text(
+        self,
+        ws: web.WebSocketResponse,
+        *,
+        text: str,
+        is_final: bool,
+        confidence: float,
+        seq: int,
+        src: str,
+        ts: int | None = None,
+    ):
         dec = self.dedupe.decide(text, is_final=is_final, confidence=confidence, ts_ms=ts)
         if not dec.accept:
             self.telemetry.stt_duplicates_suppressed += 1
@@ -257,7 +310,17 @@ class RealtimeSession:
         if is_final:
             self.telemetry.mark_stt_final()
 
-        await ws.send_json(make("stt_accepted", text=text, is_final=is_final, confidence=confidence, seq=seq, src=src, dedupe={"reason": dec.reason, "sim": dec.similarity}))
+        await ws.send_json(
+            make(
+                "stt_accepted",
+                text=text,
+                is_final=is_final,
+                confidence=confidence,
+                seq=seq,
+                src=src,
+                dedupe={"reason": dec.reason, "sim": dec.similarity},
+            )
+        )
         await self.send_metrics(ws)
 
     async def handle_audio_begin(self, mime: str):
@@ -270,12 +333,22 @@ class RealtimeSession:
         adapter = _get_stt_adapter(self.app)
         self._audio_seq += 1
         try:
-            res = await adapter.transcribe_chunk(data, mime=self._audio_mime, seq=self._audio_seq, meta={"session_id": self.state.session_id})
+            res = await adapter.transcribe_chunk(
+                data, mime=self._audio_mime, seq=self._audio_seq, meta={"session_id": self.state.session_id}
+            )
         except Exception as e:
             await self.send_error(ws, "stt_adapter", str(e), retryable=True)
             return
         if res:
-            await self.handle_stt_text(ws, text=res.text, is_final=res.is_final, confidence=res.confidence, seq=res.seq, src=res.src, ts=utc_ms())
+            await self.handle_stt_text(
+                ws,
+                text=res.text,
+                is_final=res.is_final,
+                confidence=res.confidence,
+                seq=res.seq,
+                src=res.src,
+                ts=utc_ms(),
+            )
 
     async def handle_ping(self, ws: web.WebSocketResponse, n: int, client_ts: int | None):
         self.telemetry.ws_pings += 1
@@ -294,22 +367,36 @@ async def handle_realtime_ws(request: web.Request) -> web.StreamResponse:
     await ws.prepare(request)
 
     if not cfg.enabled:
-        await ws.send_json(make("error", code="disabled", message="Realtime layer is disabled. Set runtime/.thomas/realtime.toml enabled=true.", retryable=False))
+        await ws.send_json(
+            make(
+                "error",
+                code="disabled",
+                message="Realtime layer is disabled. Set runtime/.thomas/realtime.toml enabled=true.",
+                retryable=False,
+            )
+        )
         await ws.close()
         return ws
 
     sess = RealtimeSession(app=app, request=request)
     sess.telemetry.mark_hello()
 
-    await ws.send_json(make("ready", session={"id": sess.state.session_id}, server={"version": "rhai1.1"}, cfg={
-        "budgets": {
-            "fast": vars(cfg.budgets_fast),
-            "balanced": vars(cfg.budgets_balanced),
-            "deep": vars(cfg.budgets_deep),
-        },
-        "stt": {"enabled": cfg.stt.enabled},
-        "nudges": {"enabled": cfg.nudges.enabled},
-    }))
+    await ws.send_json(
+        make(
+            "ready",
+            session={"id": sess.state.session_id},
+            server={"version": "rhai1.1"},
+            cfg={
+                "budgets": {
+                    "fast": vars(cfg.budgets_fast),
+                    "balanced": vars(cfg.budgets_balanced),
+                    "deep": vars(cfg.budgets_deep),
+                },
+                "stt": {"enabled": cfg.stt.enabled},
+                "nudges": {"enabled": cfg.nudges.enabled},
+            },
+        )
+    )
     await sess.send_metrics(ws, force=True)
 
     idle_timer = None
@@ -321,7 +408,9 @@ async def handle_realtime_ws(request: web.Request) -> web.StreamResponse:
             while True:
                 await asyncio.sleep(1)
                 if (utc_ms() - last_activity) > (cfg.ws_idle_timeout_sec * 1000):
-                    await ws.send_json(make("error", code="idle_timeout", message="Realtime session idle timeout", retryable=True))
+                    await ws.send_json(
+                        make("error", code="idle_timeout", message="Realtime session idle timeout", retryable=True)
+                    )
                     await ws.close()
                     break
         except asyncio.CancelledError:
@@ -372,7 +461,11 @@ async def handle_realtime_ws(request: web.Request) -> web.StreamResponse:
                 elif t == "pin_goal":
                     goal = obj.get("goal") or {}
                     if isinstance(goal, dict) and goal.get("title"):
-                        g = {"id": goal.get("id") or f"g_{utc_ms()}", "title": str(goal["title"]), "details": str(goal.get("details") or "")}
+                        g = {
+                            "id": goal.get("id") or f"g_{utc_ms()}",
+                            "title": str(goal["title"]),
+                            "details": str(goal.get("details") or ""),
+                        }
                         sess.state.pinned_goals.insert(0, g)
                         await ws.send_json(make("pin_goal_ok", goal=g))
                         await sess.send_metrics(ws, force=True)

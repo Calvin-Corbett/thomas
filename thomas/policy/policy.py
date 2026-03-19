@@ -1,23 +1,23 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Any, Dict, Iterable, List, Optional
 
 from .config import PolicyConfig
 from .rules import Rule, default_rules
 from .types import PolicyContext, PolicyDecision, PolicyDecisionType
 
+
 @dataclass
 class PolicyEngine:
     config: PolicyConfig
-    rules: List[Rule]
+    rules: list[Rule]
 
     @staticmethod
     def from_config(
         cfg: PolicyConfig,
         *,
-        tool_categories: Optional[Dict[str, str]] = None,
-    ) -> "PolicyEngine":
+        tool_categories: dict[str, str] | None = None,
+    ) -> PolicyEngine:
         rules = default_rules(
             allow_tools=cfg.allow_tools,
             deny_tools=cfg.deny_tools,

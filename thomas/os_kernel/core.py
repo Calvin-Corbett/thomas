@@ -10,7 +10,7 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Any, Tuple
+from typing import Any
 
 
 class ProcessState(Enum):
@@ -305,7 +305,7 @@ class PriorityTaskScheduler(TaskScheduler):
 
     def __init__(self):
         self.tasks: dict[str, dict[str, Any]] = {}
-        self.queue: list[Tuple[int, str]] = []
+        self.queue: list[tuple[int, str]] = []
 
     async def schedule_task(self, task_id: str, task: Callable, priority: int) -> str:
         """Schedule task."""

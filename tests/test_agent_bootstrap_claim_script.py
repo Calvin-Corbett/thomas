@@ -3,8 +3,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+import pytest
 import scripts.agent_bootstrap_claim as mod
 import scripts.check_workboard_claims as gate
+
+
+@pytest.fixture(autouse=True)
+def _presence_gate_ok(monkeypatch) -> None:
+    monkeypatch.setattr(
+        mod.claim_tool.agent_presence, "evaluate_soft_gate", lambda **_: {"ok": True, "warnings": [], "conflicts": []}
+    )
 
 
 def _write_workboard(
@@ -97,6 +105,7 @@ def test_bootstrap_claim_uses_env_agent(tmp_path: Path, monkeypatch, capsys) -> 
 
 def test_bootstrap_parent_defaults_to_dispatcher_name(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(tmp_path)
+
     def _fake_dispatch_workers(
         workboard_path,  # noqa: ARG001
         *,
@@ -104,7 +113,12 @@ def test_bootstrap_parent_defaults_to_dispatcher_name(tmp_path: Path, monkeypatc
         target_workers: int,
         **kwargs: object,  # noqa: ANN401
     ) -> tuple[bool, dict[str, object]]:
-        return True, {"target_workers": int(target_workers), "claimed_workers": [], "released_workers": [], "temp_task_creator": {"status": "not_needed"}}
+        return True, {
+            "target_workers": int(target_workers),
+            "claimed_workers": [],
+            "released_workers": [],
+            "temp_task_creator": {"status": "not_needed"},
+        }
 
     monkeypatch.setattr(mod.claim_tool, "dispatch_workers", _fake_dispatch_workers)
 
@@ -306,6 +320,43 @@ def test_bootstrap_claim_uses_codex_agent_id_env(tmp_path: Path, monkeypatch, ca
     assert gate.evaluate(workboard) == []
 
 
+def test_bootstrap_claim_forwards_dirty_claim_override(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    captured: dict[str, object] = {}
+
+    def _fake_claim(*args: object, **kwargs: object) -> tuple[bool, str]:
+        captured.update(kwargs)
+        return True, "added claim for Codex 5; active task synced"
+
+    monkeypatch.setattr(mod.claim_tool, "claim", _fake_claim)
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Codex 5",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "runtime lane",
+            "--ticket",
+            "HSK-1001",
+            "--no-auto-dispatch",
+            "--allow-dirty-claim",
+            "--dirty-claim-reason",
+            "intentional cleanup lane",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert captured["allow_dirty"] is True
+    assert captured["dirty_reason"] == "intentional cleanup lane"
+
+
 def test_normalize_dispatch_target_workers_minimum(tmp_path: Path) -> None:
     assert mod._normalize_dispatch_target_workers(1) == 2
     assert mod._normalize_dispatch_target_workers(0) == 2
@@ -351,3 +402,29 @@ def test_bootstrap_dispatch_target_is_clamped_to_minimum_two(tmp_path: Path, mon
     assert rc == 0
     assert payload["dispatch_target_workers"] == 2
     assert call["target_workers"] == 2
+
+
+def test_bootstrap_claim_registers_presence_session(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(tmp_path)
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--agent",
+            "Codex 11",
+            "--scope",
+            "thomas/core",
+            "--task",
+            "presence lane",
+            "--ticket",
+            "HSK-1100",
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+    session_id = str(payload["session_id"])
+    session_path = tmp_path / "runtime" / "coordination" / "presence" / f"{session_id}.json"
+
+    assert rc == 0
+    assert session_path.exists()
+    assert "AGENT_SESSION_ID" in payload["powershell_export"]

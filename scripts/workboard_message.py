@@ -273,6 +273,7 @@ def _write_messages(
     workboard_path: Path,
     *,
     messages: Sequence[dict[str, str]],
+    require_claims_to_have_active_task: bool,
 ) -> tuple[bool, list[str]]:
     original_text = workboard_path.read_text(encoding="utf-8")
     lines = original_text.splitlines()
@@ -280,7 +281,12 @@ def _write_messages(
     entries = [_format_message(dict(row)) for row in messages]
     _write_entries(lines, section_start=section[0], section_end=section[1], entries=entries)
     new_text = "\n".join(lines) + ("\n" if original_text.endswith("\n") else "")
-    ok, violations = workboard_issue._validate_and_write(workboard_path, original_text, new_text)  # type: ignore[attr-defined]
+    ok, violations = workboard_issue._validate_and_write(  # type: ignore[attr-defined]
+        workboard_path,
+        original_text,
+        new_text,
+        require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+    )
     return ok, list(violations)
 
 
@@ -330,6 +336,7 @@ def send_message(
     requested_action: str = "none",
     decision: str = "pending",
     msg_id: str = "",
+    require_claims_to_have_active_task: bool = True,
 ) -> tuple[bool, dict[str, object]]:
     sender_clean = _sanitize("from", sender)
     recipient_clean = _sanitize("to", recipient)
@@ -373,7 +380,11 @@ def send_message(
         }
     )
     rows.append(row)
-    ok, violations = _write_messages(workboard_path, messages=rows)
+    ok, violations = _write_messages(
+        workboard_path,
+        messages=rows,
+        require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+    )
     if not ok:
         return False, {"error": "message update rejected by gate", "violations": violations}
     return True, {"message": row}
@@ -415,6 +426,7 @@ def _set_message_state(
     actor: str,
     state: str,
     decision: str = "",
+    require_claims_to_have_active_task: bool = True,
 ) -> tuple[bool, dict[str, object]]:
     msg_key = _norm(msg_id)
     if not msg_key:
@@ -469,7 +481,11 @@ def _set_message_state(
     if decision:
         target["decision"] = _validate_decision(decision)
 
-    ok, violations = _write_messages(workboard_path, messages=rows)
+    ok, violations = _write_messages(
+        workboard_path,
+        messages=rows,
+        require_claims_to_have_active_task=bool(require_claims_to_have_active_task),
+    )
     if not ok:
         return False, {"error": "message update rejected by gate", "violations": violations}
     return True, {"message": target}

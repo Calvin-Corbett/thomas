@@ -1,32 +1,53 @@
 # Thomas Agent Instructions
 
 Thomas is an AI coding agent with intentionally broad scope.
-The breadth is a feature — don't reduce scope without explicit user request.
+The breadth is a feature â€” don't reduce scope without explicit user request.
 
-## Guardrails — Read Before Doing Anything
+## Worktree discipline (required)
+- Read `WORKTREE_RULES.md` before making edits.
+- Use only the explicitly assigned worktree path for the task.
+- If no worktree is specified, use `C:\Users\corbe\Thomas` (`master`).
+- Do not edit multiple worktrees in one task unless explicitly requested.
+- Do not create, remove, move, or rebind worktrees without explicit user approval.
+- Include the active worktree path in status and handoff updates.
+- If branch/worktree intent is unclear, stop and ask before editing.
+- If git status --porcelain is not clean, do not start normal implementation work in that repo. Clean it first, or use only an explicit audited dirty-worktree override for cleanup/remediation lanes.
+
+## Router-First Startup (required)
+- Run `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...` before loading long docs.
+- Read the returned lane card in `docs/ai/CHECKLISTS/` and only the docs it points to.
+- Workboard awareness is always required; full claim/handoff protocol is required only when the router flags tracked, risky, broad, shared, or multi-agent work.
+- Guided mode is the default. Expert mode reduces visible instructions, but it does not disable hard gates.
+## CRITICAL â€” File Editing Rules (Read First!)
+
+**[docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md)** â€” MUST READ before editing ANY file.
+This project has a monolith source loader pattern. Multiple copies of the same code exist in different locations.
+If you edit the wrong file, your changes DO NOTHING. The doc explains exactly which files to edit.
+
+## Guardrails â€” Read Before Doing Anything
 
 Before writing ANY code, read:
-1. **[GUARDRAILS.md](GUARDRAILS.md)** — Immutable project-wide rules
-2. The `GUARDRAILS.md` in the specific module directory you're modifying
+1. **[docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md)** â€” Which files actually run in production
+2. **[GUARDRAILS.md](GUARDRAILS.md)** â€” Immutable project-wide rules
+3. The `GUARDRAILS.md` in the specific module directory you're modifying
 
-**These rules cannot be bypassed.** If a test fails because of your code, fix your code — not the test. If a file is too large, split it — don't increase the limit. If you're unsure, ask the user.
+**These rules cannot be bypassed.** If a test fails because of your code, fix your code â€” not the test. If a file is too large, split it â€” don't increase the limit. If you're unsure, ask the user.
 
 ## Start Here
-1. **`PROJECT_INDEX.md`** — How the project boots, where things live, process model,
-   config flow, logging, data files, verification checklist, gotchas. **Read this first**
-   when you need to understand how anything connects or runs.
-2. **`thomas/_architecture.py`** — Module map, dependency rules, constraints, known debt.
-   The single source of truth for architecture fitness.
-3. **`KNOWN_ISSUES.md`** — Common problems and their fixes. **Read at session start.**
-   Update when you find a new recurring issue that cost debugging time.
+1. Run `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...`.
+2. Read the returned lane card plus `docs/AGENT_FILE_EDITING_RULES.md`, `GUARDRAILS.md`, and any module `GUARDRAILS.md` the router points to.
+3. Use these deeper docs only when the lane requires them:
+   - `PROJECT_INDEX.md` for runtime boot paths and system wiring
+   - `thomas/_architecture.py` for architecture fitness and dependency rules
+   - `KNOWN_ISSUES.md` for recurring pitfalls worth reusing instead of rediscovering
 
 **Keep both files updated.** When you change boot paths, add entry points, move key files,
-or discover a gotcha that cost significant debugging time — update `PROJECT_INDEX.md`.
-When you add/remove modules or change dependencies — update `_architecture.py`.
+or discover a gotcha that cost significant debugging time â€” update `PROJECT_INDEX.md`.
+When you add/remove modules or change dependencies â€” update `_architecture.py`.
 
 ## Changelog & Versioning (Dev Agent Responsibility)
 
-**You own the changelog.** This is your development log — update it as you work, not at the end.
+**You own the changelog.** This is your development log â€” update it as you work, not at the end.
 
 1. **When to write entries:** After each logical unit of work (a bug fix, a new feature, a
    refactor). Don't batch them. Don't wait for "before commit." Write it while the context
@@ -35,7 +56,7 @@ When you add/remove modules or change dependencies — update `_architecture.py`
    version bump in **both** `pyproject.toml` and `thomas/__init__.py`. Bump once per session,
    not once per change.
 3. **Format:** Follow Keep a Changelog categories: `### Added`, `### Changed`, `### Fixed`,
-   `### Removed`. Be specific — name the files, endpoints, or behaviors affected.
+   `### Removed`. Be specific â€” name the files, endpoints, or behaviors affected.
 4. **What counts:** Code changes, new files, config changes, architectural changes, bug fixes.
    Pure docs-only changes (README, comments) don't need a version bump but still get a
    changelog entry under `[Unreleased]` if notable.
@@ -51,7 +72,7 @@ isolation, module coverage, test coverage, health annotations, and cycles.
 
 ## Before You Delete Code
 Never bulk-delete. For EVERY file or function you want to remove:
-1. `grep -r '<name>' thomas/ tests/ scripts/ --include='*.py'` — find ALL references
+1. `grep -r '<name>' thomas/ tests/ scripts/ --include='*.py'` â€” find ALL references
 2. If anything imports it: don't delete. Refactor or replace instead.
 3. If only lazy/conditional imports: stub with safe fallbacks first.
 4. After deletion: verify server boots (`python -m thomas serve --port 0`) and tests pass.
@@ -167,6 +188,7 @@ If a task mentions website/site/homepage/domain/Spline or the user asks for web 
 2. Read `apps/site/README_DEV.md` first for current URLs and workflow.
 3. Run website commands from `apps/site` (`npm run dev`, `npm run typecheck`, deploy scripts).
 4. Apply skill `ui-precision-guard` at `.codex/skills/ui-precision-guard/SKILL.md` for any UI edit.
+5. For `thomas/server/web/**` UI files, use the repo-local `.codex/skills/ui-precision-guard` workflow and satisfy its `Common-Practice Logic Mode` checklist before handoff.
 
 ## Runtime Skills (Model-Agnostic)
 Thomas resolves runtime skills at the orchestrator layer before model calls.

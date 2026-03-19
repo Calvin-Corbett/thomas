@@ -11,4 +11,3 @@ from thomas.agent.project_instructions import (
 )
 
 __all__ = ["discover_project_instructions", "instruction_file_path"]
-

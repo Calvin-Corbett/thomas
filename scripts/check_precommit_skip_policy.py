@@ -44,6 +44,7 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-repo-clean-worktree-gate",
     "thomas-architecture",
     "thomas-auto-checks-quick",
+    "thomas-monolith-filename-pattern-gate",
 )
 
 

@@ -1,0 +1,14 @@
+{
+  "id": "2026-03-07-single-runtime-cleanup",
+  "approved_by_human": true,
+  "files": [
+    "thomas/server/web/js/app_runtime_joined.mjs",
+    "thomas/server/web/js/generated/app_runtime_joined.mjs"
+  ],
+  "reason": "User requested removal of the old joined runtime so Thomas boots from a single live runtime and the fake legacy UI paths cannot be revived.",
+  "verification": [
+    "rg legacy runtime references checked",
+    "python -m pytest tests/test_server_marketplace_routes.py tests/test_ui_editor_rescue_surface.py tests/test_product_surface_copy.py -q",
+    "playwright headed verification for live UI editor and marketplace"
+  ]
+}

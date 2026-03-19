@@ -7,10 +7,10 @@ from dataclasses import asdict, dataclass, field
 from datetime import datetime
 from enum import IntEnum
 from typing import (
+    TYPE_CHECKING,
     Any,
     Optional,
     Protocol,
-    TYPE_CHECKING,
 )
 
 if TYPE_CHECKING:

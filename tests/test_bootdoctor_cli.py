@@ -7,8 +7,10 @@ import pytest
 from thomas.bootdoctor.__main__ import (
     BootDoctorPathPolicy,
     RestrictedTool,
+    _build_parser,
     _extract_patch_targets,
 )
+from thomas.core.boot_doctor import read_boot_recovery_notice, write_boot_recovery_notice
 from thomas.tools.base import Tool, ToolResult
 
 
@@ -55,3 +57,48 @@ async def test_restricted_tool_blocks_out_of_scope_write(tmp_path: Path) -> None
 def test_extract_patch_targets_handles_git_prefixes() -> None:
     patch = "--- a/scripts/run-ui.ps1\n" "+++ b/scripts/run-ui.ps1\n" "@@ -1,1 +1,1 @@\n" "-old\n" "+new\n"
     assert _extract_patch_targets(patch) == ["scripts/run-ui.ps1"]
+
+
+def test_bootdoctor_parser_accepts_rescue_startup_context() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(
+        [
+            "rescue",
+            "--startup-context",
+            "runtime/boot_doctor/startup_context.json",
+            "--max-attempts",
+            "4",
+            "--relaunch",
+        ]
+    )
+
+    assert args.command == "rescue"
+    assert args.startup_context == "runtime/boot_doctor/startup_context.json"
+    assert args.max_attempts == 4
+    assert args.relaunch is True
+
+
+def test_boot_recovery_notice_roundtrip_and_consume(tmp_path: Path) -> None:
+    report_path = (tmp_path / "runtime" / "boot_doctor" / "boot_doctor_test.txt").resolve()
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text("report", encoding="utf-8")
+
+    write_boot_recovery_notice(
+        tmp_path,
+        reason="Startup watchdog timeout",
+        report_path=report_path,
+        repairs=["Stopped stale listener PID 1234", "Reinstalled server deps"],
+        recovered=True,
+        offline_fallback_reason="",
+        ai_summary="Likely stale port ownership during relaunch.",
+    )
+
+    notice = read_boot_recovery_notice(tmp_path, consume=False)
+    assert notice is not None
+    assert notice["recovered"] is True
+    assert "Startup watchdog timeout" in str(notice["message"])
+    assert "Stopped stale listener PID 1234" in str(notice["message"])
+
+    consumed = read_boot_recovery_notice(tmp_path, consume=True)
+    assert consumed is not None
+    assert read_boot_recovery_notice(tmp_path, consume=False) is None

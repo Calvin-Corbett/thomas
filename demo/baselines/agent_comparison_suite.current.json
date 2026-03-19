@@ -70,7 +70,7 @@
       "id": "openclaw",
       "label": "OpenClaw",
       "repo_url": "https://github.com/openclaw/openclaw.git",
-      "root": "F:/DevHub/_tmp_openclaw_count_1771454552",
+      "root": "F:/DevHub/_tmp_openclaw_latest_20260306",
       "branch": "main",
       "enabled": true
     },
@@ -185,10 +185,15 @@
         "extensions",
         "docs",
         "scripts",
-        "cli"
+        "cli",
+        "apps",
+        "demo",
+        "web",
+        "web-ui"
       ],
       "test_roots": [
-        "tests"
+        "tests",
+        "web"
       ],
       "test_dataset_roots": [
         "thomas/browser/workflow_corpus"
@@ -239,7 +244,9 @@
         "**/tests/**",
         "**/test/**",
         "**/*.md",
-        "**/thomas/tools/sandbox.py"
+        "**/thomas/tools/sandbox.py",
+        "**/thomas/tools/sandbox*.py",
+        "**/thomas/benchmarks/**"
       ],
       "cli": {
         "command": [
@@ -533,7 +540,7 @@
     {
       "id": "openclaw",
       "label": "OpenClaw",
-      "root": "F:/DevHub/_tmp_openclaw_count_1771454552",
+      "root": "F:/DevHub/_tmp_openclaw_latest_20260306",
       "repo_sync": {
         "enabled": true,
         "remote": "origin",

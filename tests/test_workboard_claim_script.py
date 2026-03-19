@@ -183,6 +183,81 @@ def test_release_fails_when_agent_claim_missing(tmp_path: Path, capsys) -> None:
     assert "no active claim found for `Codex 9`" in out
 
 
+def test_claim_fails_when_repo_worktree_is_dirty(tmp_path: Path, capsys, monkeypatch) -> None:
+    workboard = _write_workboard(tmp_path)
+    monkeypatch.setattr(mod, "_scope_guard_supported", lambda _: True)
+    monkeypatch.setattr(
+        mod,
+        "_worktree_dirty_paths",
+        lambda _root=mod.ROOT: {
+            "staged": [],
+            "unstaged": ["thomas/cli/main.py"],
+            "untracked": ["scratch/local.txt"],
+        },
+    )
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--claim",
+            "--agent",
+            "Codex 3",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "runtime lane",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "repo worktree is dirty" in out
+    assert "--allow-dirty-claim" in out
+
+
+def test_claim_allow_dirty_with_reason_writes_audit(tmp_path: Path, capsys, monkeypatch) -> None:
+    workboard = _write_workboard(tmp_path)
+    audit_log = tmp_path / "workboard_claim_override_audit.jsonl"
+    monkeypatch.setattr(mod, "_scope_guard_supported", lambda _: True)
+    monkeypatch.setattr(mod, "CLAIM_OVERRIDE_AUDIT_LOG", audit_log)
+    monkeypatch.setattr(
+        mod,
+        "_worktree_dirty_paths",
+        lambda _root=mod.ROOT: {
+            "staged": ["thomas/cli/main.py"],
+            "unstaged": [],
+            "untracked": [],
+        },
+    )
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--claim",
+            "--agent",
+            "Codex 3",
+            "--scope",
+            "thomas/cli/main.py",
+            "--task",
+            "runtime lane",
+            "--allow-dirty-claim",
+            "--dirty-claim-reason",
+            "intentional cleanup lane",
+        ]
+    )
+    out = capsys.readouterr().out
+    rows = [line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()]
+    payload = json.loads(rows[-1])
+
+    assert rc == 0
+    assert "Workboard claim tool: PASS" in out
+    assert payload["agent"] == "Codex 3"
+    assert payload["reason"] == "intentional cleanup lane"
+    assert payload["scope"] == "thomas/cli/main.py"
+
+
 def test_release_fails_when_claim_scope_has_dirty_files(tmp_path: Path, capsys, monkeypatch) -> None:
     workboard = _write_workboard(
         tmp_path,
@@ -329,6 +404,10 @@ def test_list_json_returns_structured_roster(tmp_path: Path, capsys) -> None:
 
 def test_claim_infers_agent_and_branch_task_when_omitted(tmp_path: Path, capsys, monkeypatch) -> None:
     workboard = _write_workboard(tmp_path)
+    monkeypatch.delenv("AGENT_ID", raising=False)
+    monkeypatch.delenv("THOMAS_AGENT_ID", raising=False)
+    monkeypatch.delenv("CODEX_AGENT_ID", raising=False)
+    monkeypatch.delenv("AGENT_NAME", raising=False)
     monkeypatch.setenv("THOMAS_AGENT_NAME", "Codex Auto")
     monkeypatch.setattr(mod, "_detect_branch_name", lambda: "feature/workboard-claims")
 
@@ -357,6 +436,10 @@ def test_release_infers_agent_from_environment(tmp_path: Path, capsys, monkeypat
         "- agent=Codex Auto; scope=thomas/cli/commands/browser/p011_browser_artifact_dom_snapshot.py; task=dom snapshot",
         active_tasks_block="- task_id=codex-auto-task; agent=Codex Auto; scope=thomas/cli/commands/browser/p011_browser_artifact_dom_snapshot.py; summary=dom snapshot; status=active",
     )
+    monkeypatch.delenv("AGENT_ID", raising=False)
+    monkeypatch.delenv("THOMAS_AGENT_ID", raising=False)
+    monkeypatch.delenv("CODEX_AGENT_ID", raising=False)
+    monkeypatch.delenv("AGENT_NAME", raising=False)
     monkeypatch.setenv("THOMAS_AGENT_NAME", "Codex Auto")
 
     rc = mod.run(
@@ -833,3 +916,30 @@ def test_release_temp_task_creator_clears_lease(tmp_path: Path, capsys, monkeypa
     assert payload_release["released_count"] == 1
     assert "TEMP-TASK-CREATOR" not in text
     assert gate.evaluate(workboard) == []
+
+
+def test_claim_presence_gate_requires_override(tmp_path: Path, capsys, monkeypatch) -> None:
+    workboard = _write_workboard(tmp_path)
+    monkeypatch.setattr(
+        mod.agent_presence,
+        "evaluate_soft_gate",
+        lambda **_: {"ok": False, "message": "presence gate requires override"},
+    )
+
+    rc = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--claim",
+            "--agent",
+            "Codex 3",
+            "--scope",
+            "thomas/core",
+            "--task",
+            "runtime lane",
+        ]
+    )
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "presence gate requires override" in out

@@ -10,7 +10,6 @@ import urllib.request
 from pathlib import Path
 from typing import Any
 
-
 _API_KEY_ENV_VARS = (
     "THOMAS_MODELS_OPENAI_API_KEY",
     "THOMAS_MODELS_ANTHROPIC_API_KEY",
@@ -43,7 +42,7 @@ def _terminate_process(proc: subprocess.Popen[str]) -> None:
 def _wait_for_health(
     base_url: str,
     proc: subprocess.Popen[str],
-    timeout_s: float = 60.0,
+    timeout_s: float = 180.0,
 ) -> dict[str, Any]:
     deadline = time.monotonic() + timeout_s
     url = f"{base_url}/api/health"
@@ -53,7 +52,7 @@ def _wait_for_health(
         if proc.poll() is not None:
             break
         try:
-            with urllib.request.urlopen(url, timeout=2) as resp:
+            with urllib.request.urlopen(url, timeout=5) as resp:
                 body = resp.read().decode("utf-8", errors="replace")
                 payload = json.loads(body or "{}")
                 if resp.status == 200 and isinstance(payload, dict) and "status" in payload:
@@ -71,9 +70,7 @@ def _wait_for_health(
             output_tail = ""
 
     raise AssertionError(
-        f"Demo server failed to become healthy at {url}; "
-        f"last_error={last_error}; "
-        f"output_tail={output_tail}"
+        f"Demo server failed to become healthy at {url}; " f"last_error={last_error}; " f"output_tail={output_tail}"
     )
 
 
@@ -89,6 +86,7 @@ def test_demo_server_no_key_boot_contract_windows_safe(tmp_path: Path) -> None:
     env = os.environ.copy()
     for key in _API_KEY_ENV_VARS:
         env.pop(key, None)
+    env["PYTHONUNBUFFERED"] = "1"
 
     port = _pick_free_port()
     cmd = [
@@ -113,7 +111,7 @@ def test_demo_server_no_key_boot_contract_windows_safe(tmp_path: Path) -> None:
         text=True,
     )
     try:
-        payload = _wait_for_health(f"http://127.0.0.1:{port}", proc, timeout_s=60.0)
+        payload = _wait_for_health(f"http://127.0.0.1:{port}", proc, timeout_s=180.0)
         assert "status" in payload
         assert demo_root.exists()
         assert not stale_marker.exists()

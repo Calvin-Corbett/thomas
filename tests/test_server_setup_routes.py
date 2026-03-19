@@ -110,6 +110,10 @@ class TestSetupRoutesLocal(AioHTTPTestCase):
 
     # ── /api/local/pull ──
 
+    async def test_repair_rejects_non_object_json(self):
+        resp = await self.client.post("/api/setup/repair", json=["bad"])
+        self.assertEqual(resp.status, 400)
+
     async def test_local_pull_missing_model_returns_400(self):
         resp = await self.client.post("/api/local/pull", json={})
         self.assertEqual(resp.status, 400)
@@ -154,6 +158,21 @@ class TestSetupRoutesLocal(AioHTTPTestCase):
         runtime = (prefs.get("advanced") or {}).get("runtime") or {}
         self.assertEqual(bool(runtime.get("local_background_agents_enabled")), True)
         self.assertEqual(int(runtime.get("local_background_min_gpu_headroom_pct")), 44)
+
+    async def test_local_background_control_parses_string_false(self):
+        enable_resp = await self.client.post("/api/local/background", json={"enabled": True})
+        self.assertEqual(enable_resp.status, 200)
+
+        resp = await self.client.post("/api/local/background", json={"enabled": "false"})
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        updated = body["updated_settings"]
+        self.assertEqual(bool(updated.get("local_background_agents_enabled")), False)
+
+        prefs_resp = await self.client.get("/api/preferences")
+        self.assertEqual(prefs_resp.status, 200)
+        runtime = ((await prefs_resp.json()).get("advanced") or {}).get("runtime") or {}
+        self.assertEqual(bool(runtime.get("local_background_agents_enabled")), False)
 
     async def test_local_sync_returns_extended_probe_contract(self):
         resp = await self.client.post(

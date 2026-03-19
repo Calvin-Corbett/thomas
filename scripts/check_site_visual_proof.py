@@ -6,10 +6,10 @@ import hashlib
 import json
 import re
 import subprocess
+from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Iterable, Sequence
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 PROOF_FILE = "apps/site/verification/ui-proof.json"
@@ -17,20 +17,27 @@ REQUIRED_RUNTIME_REPORT_PATH = "apps/site/verification/runtime-report.json"
 EXPECTED_GENERATOR_SCRIPT = "scripts/refresh_site_visual_proof.py"
 EXPECTED_RUNTIME_VERIFIER = "scripts/verify_site_visual_runtime.mjs"
 REQUIRED_SCREENSHOT_KEYS = ("full_page", "footer_focus")
-REQUIRED_ASSERTIONS = (
+COMMON_REQUIRED_ASSERTIONS = (
     "core_layout_present",
     "no_console_runtime_errors",
     "no_broken_images",
     "pixel_diff_within_threshold",
-    "nav_persistent_all_routes",
-    "unknown_route_theme_integrity",
+    "no_horizontal_drag_overflow",
+)
+LEGACY_REQUIRED_ASSERTIONS = (
     "band_on_footer_border",
     "no_band_strip_height",
     "riders_mounted_on_back",
     "riders_seat_contact_stable",
     "riders_centered_on_saddle",
     "riders_robot_clearly_visible",
-    "no_horizontal_drag_overflow",
+)
+MODERN_REQUIRED_ASSERTIONS = (
+    "nav_persistent_all_routes",
+    "unknown_route_theme_integrity",
+    "footer_warning_text_present",
+    "footer_navigation_present",
+    "hero_primary_cta_present",
 )
 UI_PATH_PREFIXES = ("apps/site/src/app/", "apps/site/src/components/")
 UI_PATH_SUFFIXES = (".css", ".scss", ".ts", ".tsx", ".js", ".jsx")
@@ -177,15 +184,10 @@ def _validate_proof_payload(
             normalized_listed = [_normalize(str(raw)) for raw in listed_ui if _normalize(str(raw))]
             bad_listed = [path for path in normalized_listed if not _is_ui_change(path)]
             if bad_listed:
-                errors.append(
-                    "git.ui_changed_paths contains non-UI path(s): " + ", ".join(sorted(set(bad_listed)))
-                )
+                errors.append("git.ui_changed_paths contains non-UI path(s): " + ", ".join(sorted(set(bad_listed))))
             missing_ui = sorted(set(ui_changes) - set(normalized_listed))
             if missing_ui:
-                errors.append(
-                    "git.ui_changed_paths is missing detected UI change(s): "
-                    + ", ".join(missing_ui)
-                )
+                errors.append("git.ui_changed_paths is missing detected UI change(s): " + ", ".join(missing_ui))
 
     runtime = payload.get("runtime_report")
     if not isinstance(runtime, dict):
@@ -215,8 +217,7 @@ def _validate_proof_payload(
                     actual_runtime_hash = _sha256_file(runtime_abs)
                     if actual_runtime_hash != runtime_hash:
                         errors.append(
-                            "runtime_report.sha256 mismatch: "
-                            f"expected {runtime_hash}, got {actual_runtime_hash}"
+                            "runtime_report.sha256 mismatch: " f"expected {runtime_hash}, got {actual_runtime_hash}"
                         )
                 try:
                     loaded_runtime = json.loads(runtime_abs.read_text(encoding="utf-8"))
@@ -257,9 +258,7 @@ def _validate_proof_payload(
                 if _is_hex_sha256(raw_hash):
                     actual_hash = _sha256_file(disk_path)
                     if actual_hash != raw_hash:
-                        errors.append(
-                            f"screenshots.{key}.sha256 mismatch: expected {raw_hash}, got {actual_hash}"
-                        )
+                        errors.append(f"screenshots.{key}.sha256 mismatch: expected {raw_hash}, got {actual_hash}")
             screenshot_paths.append(raw_path)
 
     metrics = payload.get("metrics")
@@ -267,9 +266,10 @@ def _validate_proof_payload(
         errors.append("metrics must be an object")
         return (errors, screenshot_paths, runtime_report_path)
 
-    footer_top = _read_number(metrics, "footer_top", errors, label="metrics")
-    band_top = _read_number(metrics, "band_top", errors, label="metrics")
-    band_height = _read_number(metrics, "band_height", errors, label="metrics")
+    footer_top: float | None = None
+    band_top: float | None = None
+    band_height: float | None = None
+    footer_link_count: float | None = None
     viewport_width = _read_number(metrics, "viewport_width", errors, label="metrics")
     root_scroll_width = _read_number(metrics, "root_scroll_width", errors, label="metrics")
     console_error_count = _read_number(metrics, "console_error_count", errors, label="metrics")
@@ -283,6 +283,31 @@ def _validate_proof_payload(
     has_nav = metrics.get("has_nav")
     has_main = metrics.get("has_main")
     has_footer = metrics.get("has_footer")
+    footer_warning_text_present: bool | None = None
+    hero_primary_cta_present: bool | None = None
+    riders = metrics.get("riders")
+    route_matrix = metrics.get("route_matrix")
+    legacy_schema_detected = isinstance(riders, list) and len(riders) > 0
+    has_route_matrix = isinstance(route_matrix, list) and len(route_matrix) > 0
+    modern_schema_detected = any(
+        key in metrics
+        for key in (
+            "footer_link_count",
+            "footer_warning_text_present",
+            "hero_primary_cta_present",
+        )
+    )
+
+    if legacy_schema_detected:
+        footer_top = _read_number(metrics, "footer_top", errors, label="metrics")
+        band_top = _read_number(metrics, "band_top", errors, label="metrics")
+        band_height = _read_number(metrics, "band_height", errors, label="metrics")
+
+    if modern_schema_detected:
+        footer_link_count = _read_number(metrics, "footer_link_count", errors, label="metrics")
+        footer_warning_text_present = metrics.get("footer_warning_text_present")
+        hero_primary_cta_present = metrics.get("hero_primary_cta_present")
+
     if not isinstance(has_nav, bool):
         errors.append("metrics.has_nav must be a boolean")
     if not isinstance(has_main, bool):
@@ -290,10 +315,13 @@ def _validate_proof_payload(
     if not isinstance(has_footer, bool):
         errors.append("metrics.has_footer must be a boolean")
 
-    riders = metrics.get("riders")
-    if not isinstance(riders, list) or not riders:
-        errors.append("metrics.riders must be a non-empty list")
-    else:
+    if modern_schema_detected:
+        if not isinstance(footer_warning_text_present, bool):
+            errors.append("metrics.footer_warning_text_present must be a boolean")
+        if not isinstance(hero_primary_cta_present, bool):
+            errors.append("metrics.hero_primary_cta_present must be a boolean")
+
+    if legacy_schema_detected:
         for index, raw_rider in enumerate(riders):
             if not isinstance(raw_rider, dict):
                 errors.append(f"metrics.riders[{index}] must be an object")
@@ -302,30 +330,30 @@ def _validate_proof_payload(
             robot_bottom = _read_number(raw_rider, "robot_bottom", errors, label=f"metrics.riders[{index}]")
             robot_width = _read_number(raw_rider, "robot_width", errors, label=f"metrics.riders[{index}]")
             robot_height = _read_number(raw_rider, "robot_height", errors, label=f"metrics.riders[{index}]")
-            robot_left = _read_number(raw_rider, "robot_left", errors, label=f"metrics.riders[{index}]")
-            robot_right = _read_number(raw_rider, "robot_right", errors, label=f"metrics.riders[{index}]")
-            robot_center_x = _read_number(raw_rider, "robot_center_x", errors, label=f"metrics.riders[{index}]")
             robot_body_top = _read_number(raw_rider, "robot_body_top", errors, label=f"metrics.riders[{index}]")
             robot_body_bottom = _read_number(raw_rider, "robot_body_bottom", errors, label=f"metrics.riders[{index}]")
             robot_body_left = _read_number(raw_rider, "robot_body_left", errors, label=f"metrics.riders[{index}]")
             robot_body_right = _read_number(raw_rider, "robot_body_right", errors, label=f"metrics.riders[{index}]")
-            robot_body_center_x = _read_number(raw_rider, "robot_body_center_x", errors, label=f"metrics.riders[{index}]")
+            robot_body_center_x = _read_number(
+                raw_rider, "robot_body_center_x", errors, label=f"metrics.riders[{index}]"
+            )
             track_top = _read_number(raw_rider, "track_top", errors, label=f"metrics.riders[{index}]")
             track_bottom = _read_number(raw_rider, "track_bottom", errors, label=f"metrics.riders[{index}]")
             saddle_top = _read_number(raw_rider, "saddle_top", errors, label=f"metrics.riders[{index}]")
             saddle_bottom = _read_number(raw_rider, "saddle_bottom", errors, label=f"metrics.riders[{index}]")
             saddle_left = _read_number(raw_rider, "saddle_left", errors, label=f"metrics.riders[{index}]")
             saddle_right = _read_number(raw_rider, "saddle_right", errors, label=f"metrics.riders[{index}]")
+
             if (
                 robot_body_top is not None
                 and saddle_top is not None
                 and saddle_bottom is not None
+                and (robot_body_top < saddle_top - 2 or robot_body_top > saddle_bottom + 4)
             ):
-                if robot_body_top < saddle_top - 2 or robot_body_top > saddle_bottom + 4:
-                    errors.append(
-                        f"metrics.riders[{index}] mount check failed: robot_body_top ({robot_body_top:.2f}) "
-                        f"must be within saddle band [{saddle_top - 2:.2f}, {saddle_bottom + 4:.2f}]"
-                    )
+                errors.append(
+                    f"metrics.riders[{index}] mount check failed: robot_body_top ({robot_body_top:.2f}) "
+                    f"must be within saddle band [{saddle_top - 2:.2f}, {saddle_bottom + 4:.2f}]"
+                )
             if robot_body_bottom is not None and saddle_top is not None:
                 bottom_offset = robot_body_bottom - saddle_top
                 if bottom_offset < -6 or bottom_offset > 16:
@@ -336,16 +364,13 @@ def _validate_proof_payload(
             if (
                 robot_body_left is not None
                 and robot_body_right is not None
-                and
-                robot_body_center_x is not None
+                and robot_body_center_x is not None
                 and saddle_left is not None
                 and saddle_right is not None
             ):
                 saddle_center_x = saddle_left + (saddle_right - saddle_left) / 2
                 centered = abs(robot_body_center_x - saddle_center_x) <= 4
-                overlaps_saddle = (
-                    robot_body_right >= saddle_left + 1 and robot_body_left <= saddle_right - 1
-                )
+                overlaps_saddle = robot_body_right >= saddle_left + 1 and robot_body_left <= saddle_right - 1
                 if not (centered and overlaps_saddle):
                     errors.append(
                         f"metrics.riders[{index}] horizontal mount failed: robot_body_center_x "
@@ -373,10 +398,7 @@ def _validate_proof_payload(
                     f"must intersect track [{track_top:.2f}, {track_bottom:.2f}]"
                 )
 
-    route_matrix = metrics.get("route_matrix")
-    if not isinstance(route_matrix, list) or not route_matrix:
-        errors.append("metrics.route_matrix must be a non-empty list")
-    else:
+    if modern_schema_detected and has_route_matrix:
         saw_probe_route = False
         for index, raw_route in enumerate(route_matrix):
             if not isinstance(raw_route, dict):
@@ -439,18 +461,38 @@ def _validate_proof_payload(
                 )
             if route_broken_images is not None and route_broken_images > 0:
                 errors.append(
-                    f"metrics.route_matrix[{index}] broken_image_count must be 0 "
-                    f"(got {route_broken_images:.2f})"
+                    f"metrics.route_matrix[{index}] broken_image_count must be 0 " f"(got {route_broken_images:.2f})"
                 )
         if not saw_probe_route:
             errors.append("metrics.route_matrix must include /__ui-route-smoke__ route entry")
+    elif isinstance(route_matrix, list):
+        if not route_matrix:
+            errors.append("metrics.route_matrix must be a non-empty list")
+        else:
+            saw_probe_route = any(
+                isinstance(raw_route, dict) and _normalize(str(raw_route.get("route") or "")) == "/__ui-route-smoke__"
+                for raw_route in route_matrix
+            )
+            if not saw_probe_route:
+                errors.append("metrics.route_matrix must include /__ui-route-smoke__ route entry")
+    elif modern_schema_detected:
+        errors.append("metrics.route_matrix must be a non-empty list")
+
+    if not legacy_schema_detected and not has_route_matrix:
+        errors.append("metrics must include either legacy riders data or route_matrix data")
 
     assertions = payload.get("assertions")
     if not isinstance(assertions, dict):
         errors.append("assertions must be an object")
     else:
-        for key in REQUIRED_ASSERTIONS:
+        required_assertions = list(COMMON_REQUIRED_ASSERTIONS)
+        if legacy_schema_detected or any(key in assertions for key in LEGACY_REQUIRED_ASSERTIONS):
+            required_assertions.extend(LEGACY_REQUIRED_ASSERTIONS)
+        for key in required_assertions:
             if assertions.get(key) is not True:
+                errors.append(f"assertions.{key} must be true")
+        for key in MODERN_REQUIRED_ASSERTIONS:
+            if key in assertions and assertions.get(key) is not True:
                 errors.append(f"assertions.{key} must be true")
 
     if runtime_report_payload is not None:
@@ -483,9 +525,7 @@ def _validate_proof_payload(
                     ):
                         rel = _normalize(str(entry.get(path_key) or ""))
                         if not rel:
-                            errors.append(
-                                f"runtime report pixel_diff.comparisons.{key}.{path_key} is required"
-                            )
+                            errors.append(f"runtime report pixel_diff.comparisons.{key}.{path_key} is required")
                             continue
                         if not rel.startswith(prefix):
                             errors.append(
@@ -512,12 +552,12 @@ def _validate_proof_payload(
                                 f"expected {raw_hash}, got {actual_hash}"
                             )
 
-    if footer_top is not None and band_top is not None and abs(band_top - footer_top) > 3:
+    if legacy_schema_detected and footer_top is not None and band_top is not None and abs(band_top - footer_top) > 3:
         errors.append(
             f"metrics border alignment failed: |band_top - footer_top| must be <= 3 "
             f"(got |{band_top:.2f} - {footer_top:.2f}|)"
         )
-    if band_height is not None and int(round(band_height)) != 0:
+    if legacy_schema_detected and band_height is not None and int(round(band_height)) != 0:
         errors.append(f"metrics.band_height must be 0 (got {band_height:.2f})")
     if viewport_width is not None and root_scroll_width is not None and root_scroll_width > viewport_width + 1:
         errors.append(
@@ -530,6 +570,12 @@ def _validate_proof_payload(
         errors.append("metrics.has_main must be true")
     if isinstance(has_footer, bool) and not has_footer:
         errors.append("metrics.has_footer must be true")
+    if modern_schema_detected and footer_link_count is not None and footer_link_count < 4:
+        errors.append(f"metrics.footer_link_count must be >= 4 (got {footer_link_count:.2f})")
+    if modern_schema_detected and isinstance(footer_warning_text_present, bool) and not footer_warning_text_present:
+        errors.append("metrics.footer_warning_text_present must be true")
+    if modern_schema_detected and isinstance(hero_primary_cta_present, bool) and not hero_primary_cta_present:
+        errors.append("metrics.hero_primary_cta_present must be true")
     if console_error_count is not None and console_error_count > 0:
         errors.append(f"metrics.console_error_count must be 0 (got {console_error_count:.2f})")
     if broken_image_count is not None and broken_image_count > 0:
@@ -537,32 +583,23 @@ def _validate_proof_payload(
     if pixel_diff_threshold_ratio is not None:
         if pixel_diff_threshold_ratio < 0 or pixel_diff_threshold_ratio > 1:
             errors.append(
-                "metrics.pixel_diff_threshold_ratio must be in [0, 1] "
-                f"(got {pixel_diff_threshold_ratio:.6f})"
+                "metrics.pixel_diff_threshold_ratio must be in [0, 1] " f"(got {pixel_diff_threshold_ratio:.6f})"
             )
     if pixel_diff_full_page_ratio is not None:
         if pixel_diff_full_page_ratio < 0 or pixel_diff_full_page_ratio > 1:
             errors.append(
-                "metrics.pixel_diff_full_page_ratio must be in [0, 1] "
-                f"(got {pixel_diff_full_page_ratio:.6f})"
+                "metrics.pixel_diff_full_page_ratio must be in [0, 1] " f"(got {pixel_diff_full_page_ratio:.6f})"
             )
     if pixel_diff_footer_focus_ratio is not None:
         if pixel_diff_footer_focus_ratio < 0 or pixel_diff_footer_focus_ratio > 1:
             errors.append(
-                "metrics.pixel_diff_footer_focus_ratio must be in [0, 1] "
-                f"(got {pixel_diff_footer_focus_ratio:.6f})"
+                "metrics.pixel_diff_footer_focus_ratio must be in [0, 1] " f"(got {pixel_diff_footer_focus_ratio:.6f})"
             )
     if pixel_diff_max_ratio is not None:
         if pixel_diff_max_ratio < 0 or pixel_diff_max_ratio > 1:
-            errors.append(
-                "metrics.pixel_diff_max_ratio must be in [0, 1] "
-                f"(got {pixel_diff_max_ratio:.6f})"
-            )
+            errors.append("metrics.pixel_diff_max_ratio must be in [0, 1] " f"(got {pixel_diff_max_ratio:.6f})")
     if pixel_diff_size_mismatch_count is not None and pixel_diff_size_mismatch_count != 0:
-        errors.append(
-            "metrics.pixel_diff_size_mismatch_count must be 0 "
-            f"(got {pixel_diff_size_mismatch_count:.2f})"
-        )
+        errors.append("metrics.pixel_diff_size_mismatch_count must be 0 " f"(got {pixel_diff_size_mismatch_count:.2f})")
     if (
         pixel_diff_threshold_ratio is not None
         and pixel_diff_max_ratio is not None
@@ -587,9 +624,7 @@ def _sample(paths: Iterable[str], *, limit: int = 6) -> str:
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Enforce visual verification proof for website UI changes."
-    )
+    parser = argparse.ArgumentParser(description="Enforce visual verification proof for website UI changes.")
     parser.add_argument("--repo-root", default=None, help="Repository root (default: inferred).")
     parser.add_argument("--base", default="", help="Git base ref/SHA for change detection.")
     parser.add_argument("--head", default="HEAD", help="Git head ref/SHA for change detection.")

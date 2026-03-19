@@ -403,16 +403,17 @@ class CompressionCodec:
             return filtered
         elif filter_type == 1:  # Sub
             for i in range(1, len(row)):
-                filtered[i] = (row[i] - row[i - 1]) % 256
+                filtered[i] = np.uint8((int(row[i]) - int(row[i - 1])) & 0xFF)
         elif filter_type == 2:  # Up
             # Requires previous row (simplified)
             filtered = row
         elif filter_type == 3:  # Average
             for i in range(1, len(row)):
-                filtered[i] = (row[i] - (row[i - 1] // 2)) % 256
+                filtered[i] = np.uint8((int(row[i]) - (int(row[i - 1]) // 2)) & 0xFF)
         elif filter_type == 4:  # Paeth
             for i in range(1, len(row)):
-                filtered[i] = (row[i] - self._paeth_predictor(row[i - 1], 0, 0)) % 256
+                predictor = self._paeth_predictor(int(row[i - 1]), 0, 0)
+                filtered[i] = np.uint8((int(row[i]) - predictor) & 0xFF)
 
         return filtered
 

@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 
 from thomas.demo import agent_comparison_suite as suite
+from thomas.demo import agent_comparison_suite_metrics as suite_metrics
 from thomas.plugins import benchmark_program as benchmark_program_plugin
 
 
@@ -89,7 +90,9 @@ def test_default_suite_config_wires_benchmark_evidence_globs_for_thomas_and_open
         if str(agent.get("id") or "").strip()
     }
     assert agents["thomas"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.prog_evidence.json"]
-    assert agents["openclaw"]["benchmark_evidence_globs"] == ["demo/agentic-runs/*/benchmark_results.prog_evidence.json"]
+    assert agents["openclaw"]["benchmark_evidence_globs"] == [
+        "demo/agentic-runs/*/benchmark_results.prog_evidence.json"
+    ]
 
 
 def test_materialize_competitor_catalog_adds_benchmark_defaults_for_thomas_and_openclaw(tmp_path: Path) -> None:
@@ -206,6 +209,20 @@ def test_collect_benchmark_summary_reads_raw_rows_for_cost_signals(tmp_path: Pat
     assert summary["raw_tokens_per_success"] == 250.0
 
 
+def test_collect_agent_metrics_counts_extension_directories_without_nameerror(tmp_path: Path) -> None:
+    extensions = tmp_path / "extensions"
+    (extensions / "one").mkdir(parents=True, exist_ok=True)
+    (extensions / "two").mkdir(parents=True, exist_ok=True)
+
+    payload = suite_metrics._collect_agent_metrics(
+        {"id": "thomas", "root": ".", "extensions_root": "extensions"},
+        tracked_commands=[],
+        suite_root=tmp_path,
+    )
+
+    assert payload["metrics"]["extensions.directories"] == 2
+
+
 def test_collect_benchmark_evidence_reads_raw_rows_by_alias(tmp_path: Path) -> None:
     runs = tmp_path / "runs" / "run-1"
     runs.mkdir(parents=True, exist_ok=True)
@@ -314,6 +331,50 @@ def test_risky_regex_ignores_method_exec_calls(tmp_path: Path) -> None:
     (src / "db.ts").write_text("db.exec(`SELECT 1`)\n", encoding="utf-8")
     hits = suite._count_regex_hits([src], [r"(?<!\.)\bexec\s*\("])
     assert hits["total_hits"] == 0
+
+
+def test_count_regex_hits_ignores_python_comments_and_strings(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    src.mkdir(parents=True, exist_ok=True)
+    (src / "scan.py").write_text(
+        "# exec(code)\n" "PATTERN = 'exec(code)'\n" 'doc = """eval(value)"""\n' "exec(code)\n",
+        encoding="utf-8",
+    )
+
+    hits = suite._count_regex_hits([src], [r"(?<!\.)\bexec\s*\(", r"\beval\s*\("])
+
+    assert hits["total_hits"] == 1
+    assert hits["files_with_hits"] == 1
+
+
+def test_tests_to_code_ratio_excludes_counted_test_files_from_denominator(tmp_path: Path) -> None:
+    src = tmp_path / "src"
+    tests_dir = tmp_path / "tests"
+    src.mkdir(parents=True, exist_ok=True)
+    tests_dir.mkdir(parents=True, exist_ok=True)
+    (src / "app.py").write_text("print('ok')\n", encoding="utf-8")
+    (tests_dir / "test_app.py").write_text("def test_ok():\n    assert True\n", encoding="utf-8")
+
+    agent = {
+        "id": "agent_ratio",
+        "root": ".",
+        "source_roots": ["src", "tests"],
+        "test_roots": ["tests"],
+        "browser_roots": [],
+        "plugin_roots": [],
+        "gateway_roots": [],
+        "cli_roots": [],
+        "mobile_roots": ["."],
+        "cli": {"fixed_top_level_commands": 1, "fixed_subcommand_depth": {"x": 1}},
+        "strict_checks": [],
+        "benchmark_scorecard_globs": [],
+        "benchmark_aliases": [],
+    }
+
+    payload = suite._collect_agent_metrics(agent, tracked_commands=["x"], suite_root=tmp_path)
+
+    assert payload["metrics"]["tests.files"] == 1
+    assert payload["metrics"]["tests.to_code_file_ratio"] == 1.0
 
 
 def test_build_metric_rows_and_focus_gaps() -> None:

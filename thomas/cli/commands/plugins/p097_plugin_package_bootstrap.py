@@ -30,8 +30,12 @@ def register(app: typer.Typer) -> None:
         destination: Path = typer.Option(Path("."), "--dest", help="Directory to create the plugin package within."),
         description: str = typer.Option("Thomas plugin package", "--description", help="Plugin package description."),
         author: str = typer.Option("", "--author", help="Author string used in generated metadata."),
-        make_skill: bool = typer.Option(True, "--make-skill/--skip-skill", help="Create matching .codex SKILL.md file."),
-        make_manifest: bool = typer.Option(True, "--make-manifest/--skip-manifest", help="Create plugin.json/thomas_plugin.json/manifest.json files."),
+        make_skill: bool = typer.Option(
+            True, "--make-skill/--skip-skill", help="Create matching .codex SKILL.md file."
+        ),
+        make_manifest: bool = typer.Option(
+            True, "--make-manifest/--skip-manifest", help="Create plugin.json/thomas_plugin.json/manifest.json files."
+        ),
         version: str = typer.Option("0.1.0", "--version", help="Plugin version written to generated manifests."),
         install: bool = typer.Option(False, "--install", help="Install the generated plugin after bootstrapping."),
         install_root: Path | None = typer.Option(
@@ -39,13 +43,17 @@ def register(app: typer.Typer) -> None:
             "--install-root",
             help="Directory where the plugin should be installed (defaults to THOMAS_HOME/plugins).",
         ),
-        install_overwrite: bool = typer.Option(False, "--install-overwrite", help="Overwrite existing installed plugin during install."),
+        install_overwrite: bool = typer.Option(
+            False, "--install-overwrite", help="Overwrite existing installed plugin during install."
+        ),
         skill_root: Path | None = typer.Option(
             None,
             "--skill-root",
             help="Directory where the generated SKILL.md should be written.",
         ),
-        skill_name: str = typer.Option("", "--skill-name", help="Skill directory name (defaults to normalized plugin name)."),
+        skill_name: str = typer.Option(
+            "", "--skill-name", help="Skill directory name (defaults to normalized plugin name)."
+        ),
         skill_intent: list[str] | None = typer.Option(
             None,
             "--skill-intent",
@@ -61,7 +69,9 @@ def register(app: typer.Typer) -> None:
             "--skill-example",
             help="Repeatable usage example for generated SKILL.md.",
         ),
-        validate: bool = typer.Option(True, "--validate/--skip-validate", help="Validate generated artifacts before returning."),
+        validate: bool = typer.Option(
+            True, "--validate/--skip-validate", help="Validate generated artifacts before returning."
+        ),
         overwrite: bool = typer.Option(False, "--overwrite", help="Overwrite existing files if the package exists."),
         json_output: bool = typer.Option(False, "--json", help="Machine readable output."),
     ) -> None:

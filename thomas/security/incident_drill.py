@@ -13,9 +13,7 @@ Runner = Callable[[Sequence[str], Path], tuple[int, str, str]]
 
 
 _SCOPE_PREFIXES: dict[str, tuple[str, ...]] = {
-    "plan": (
-        "docs/THREAT_MODEL_WEB_API.md",
-    ),
+    "plan": ("docs/THREAT_MODEL_WEB_API.md",),
     "workspace": (
         "docs/support/TROUBLESHOOTING.md",
         "docs/support/MIGRATION_GUIDE.md",
@@ -109,12 +107,12 @@ def run_security_incident_drill(
                 {
                     "id": step_id,
                     "type": "artifact_check",
-                "status": "pass" if ok else "fail",
-                "scope": scope,
-                "details": str(path),
-                "scope_error": scope_error,
-            }
-        )
+                    "status": "pass" if ok else "fail",
+                    "scope": scope,
+                    "details": str(path),
+                    "scope_error": scope_error,
+                }
+            )
 
     if include_command_checks:
         command_steps = _command_artifacts()

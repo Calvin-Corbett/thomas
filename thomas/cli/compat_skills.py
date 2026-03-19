@@ -19,6 +19,8 @@ from thomas.cli.parity_support import (
 from thomas.cli.parity_support import (
     forward_passthrough as _forward_passthrough,
 )
+
+_PASSTHROUGH_CONTEXT = {"ignore_unknown_options": True, "allow_extra_args": True, "help_option_names": []}
 from thomas.cli.parity_support import (
     mark_skill_usage as _mark_skill_usage,
 )
@@ -341,7 +343,10 @@ def skills_resolve(
         cwd=run_cwd,
     )
     payload = selection.to_event_payload()
-    payload["context"] = format_runtime_skills_context(selection)
+    context = format_runtime_skills_context(selection)
+    if "<runtime_skills" not in context:
+        context = f"<runtime_skills>\n{context}\n</runtime_skills>"
+    payload["context"] = context
 
     if as_json:
         click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
@@ -417,12 +422,15 @@ def completion_cmd(shell: str | None, as_json: bool) -> None:
     click.echo("note: append the output to your shell profile to persist completion.")
 
 
-@click.command(name="qr", context_settings={"ignore_unknown_options": True, "allow_extra_args": True})
+@click.command(name="qr", context_settings=_PASSTHROUGH_CONTEXT)
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context
 def qr_cmd(ctx: click.Context, args: tuple[Any, ...]) -> None:
     """Generate a device pairing token (compat wrapper over `devices pair`)."""
     extras = [str(x) for x in args]
+    if any(item in {"--help", "-h"} for item in extras):
+        _forward_passthrough(ctx, ["devices", "pair"], tuple(extras))
+        return
     has_name = any(item == "--name" or item.startswith("--name=") for item in extras)
     if not has_name:
         extras.extend(["--name", f"qr-{int(time.time())}"])
@@ -431,7 +439,7 @@ def qr_cmd(ctx: click.Context, args: tuple[Any, ...]) -> None:
 
 @click.command(
     name="plugin",
-    context_settings={"ignore_unknown_options": True, "allow_extra_args": True},
+    context_settings=_PASSTHROUGH_CONTEXT,
 )
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 @click.pass_context

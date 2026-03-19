@@ -286,5 +286,3 @@ def _build_competitor_pressure(
         "ranked_competitors": pressure_rows,
         "top_threats": threats,
     }
-
-

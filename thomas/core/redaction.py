@@ -63,4 +63,3 @@ class Redactor:
         if isinstance(value, str):
             return self.redact_text(value)
         return value
-

@@ -93,6 +93,46 @@ def _fingerprint(*parts: str) -> str:
     return h.hexdigest()
 
 
+def extract_episode_facts(text: str) -> list[tuple[str, str, str, float]]:
+    src = str(text or "")
+    out: list[tuple[str, str, str, float]] = []
+
+    for m in _RE_MY_FACT.finditer(src):
+        raw_pred = _norm_text(m.group("pred"), max_len=48)
+        raw_obj = _norm_text(m.group("obj"), max_len=180)
+        if len(raw_pred) < 2 or len(raw_obj) < 2:
+            continue
+        out.append(("user", _safe_key(raw_pred, fallback="attribute"), raw_obj, 0.74))
+
+    for m in _RE_BUILDING.finditer(src):
+        raw_obj = _norm_text(m.group("obj"), max_len=180)
+        if len(raw_obj) < 3:
+            continue
+        out.append(("user", "current_project", raw_obj, 0.66))
+
+    for m in _RE_USES.finditer(src):
+        raw_obj = _norm_text(m.group("obj"), max_len=140)
+        if len(raw_obj) < 2:
+            continue
+        out.append(("user", "uses", raw_obj, 0.64))
+
+    for m in _RE_TECH_STACK.finditer(src):
+        raw_obj = _norm_text(m.group("obj"), max_len=180)
+        if len(raw_obj) < 2:
+            continue
+        out.append(("project", "tech_stack", raw_obj, 0.67))
+
+    deduped: list[tuple[str, str, str, float]] = []
+    seen: set[tuple[str, str, str]] = set()
+    for subject, predicate, obj, conf in out:
+        key = (subject.lower(), predicate.lower(), obj.lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append((subject, predicate, obj, conf))
+    return deduped
+
+
 @dataclass
 class CuratorConfig:
     enabled: bool = True
@@ -606,43 +646,7 @@ class MemoryCurator:
         }
 
     def _extract_episode_facts(self, text: str) -> list[tuple[str, str, str, float]]:
-        src = str(text or "")
-        out: list[tuple[str, str, str, float]] = []
-
-        for m in _RE_MY_FACT.finditer(src):
-            raw_pred = _norm_text(m.group("pred"), max_len=48)
-            raw_obj = _norm_text(m.group("obj"), max_len=180)
-            if len(raw_pred) < 2 or len(raw_obj) < 2:
-                continue
-            out.append(("user", _safe_key(raw_pred, fallback="attribute"), raw_obj, 0.74))
-
-        for m in _RE_BUILDING.finditer(src):
-            raw_obj = _norm_text(m.group("obj"), max_len=180)
-            if len(raw_obj) < 3:
-                continue
-            out.append(("user", "current_project", raw_obj, 0.66))
-
-        for m in _RE_USES.finditer(src):
-            raw_obj = _norm_text(m.group("obj"), max_len=140)
-            if len(raw_obj) < 2:
-                continue
-            out.append(("user", "uses", raw_obj, 0.64))
-
-        for m in _RE_TECH_STACK.finditer(src):
-            raw_obj = _norm_text(m.group("obj"), max_len=180)
-            if len(raw_obj) < 2:
-                continue
-            out.append(("project", "tech_stack", raw_obj, 0.67))
-
-        deduped: list[tuple[str, str, str, float]] = []
-        seen: set[tuple[str, str, str]] = set()
-        for subject, predicate, obj, conf in out:
-            key = (subject.lower(), predicate.lower(), obj.lower())
-            if key in seen:
-                continue
-            seen.add(key)
-            deduped.append((subject, predicate, obj, conf))
-        return deduped
+        return extract_episode_facts(text)
 
     def _library_confidence(
         self,
@@ -776,10 +780,11 @@ class MemoryCurator:
             o = _norm_text(obj, max_len=220)
             if not s or not p or not o:
                 continue
-            fp = _fingerprint("fact", thread_id or "global", s, p, o)
+            payload_thread_id = None if str(subject).strip().lower() in {"user", "project"} else thread_id
+            fp = _fingerprint("fact", payload_thread_id or "global", s, p, o)
             payload = {
                 "kind": "fact",
-                "thread_id": thread_id,
+                "thread_id": payload_thread_id,
                 "subject": s,
                 "predicate": p,
                 "obj": o,

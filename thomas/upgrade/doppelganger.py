@@ -12,15 +12,16 @@ Key goals:
 
 from __future__ import annotations
 
+import filecmp
 import logging
 import os
 import shutil
 import subprocess  # nosec
 import sys
+from collections.abc import Iterable
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Iterable, Optional
 
 log = logging.getLogger(__name__)
 
@@ -66,7 +67,7 @@ def _venv_python(venv_dir: Path) -> Path:
     return venv_dir / "bin" / "python"
 
 
-def find_project_root(start: Optional[Path] = None) -> Path:
+def find_project_root(start: Path | None = None) -> Path:
     """Find the Thomas project root.
 
     Heuristics:
@@ -83,7 +84,7 @@ def find_project_root(start: Optional[Path] = None) -> Path:
     raise RuntimeError("Could not locate Thomas project root (pyproject.toml + thomas/).")
 
 
-def get_paths(project_root: Optional[Path] = None) -> DoppelgangerPaths:
+def get_paths(project_root: Path | None = None) -> DoppelgangerPaths:
     blue = (project_root or find_project_root()).resolve()
     dg = blue / "runtime" / "doppelganger"
     green = dg / "green"
@@ -128,8 +129,11 @@ def _sync_tree(src: Path, dst: Path) -> None:
         try:
             st_src = p.stat()
             st_dst = target.stat() if target.exists() else None
-            if st_dst and st_dst.st_size == st_src.st_size and int(st_dst.st_mtime) == int(
-                st_src.st_mtime
+            if (
+                st_dst
+                and st_dst.st_size == st_src.st_size
+                and int(st_dst.st_mtime) == int(st_src.st_mtime)
+                and filecmp.cmp(p, target, shallow=False)
             ):
                 continue
         except OSError:
@@ -202,7 +206,7 @@ def create_backup(paths: DoppelgangerPaths) -> Path:
     return backup
 
 
-def latest_backup(paths: DoppelgangerPaths) -> Optional[Path]:
+def latest_backup(paths: DoppelgangerPaths) -> Path | None:
     if not paths.backups_root.exists():
         return None
     items = [p for p in paths.backups_root.iterdir() if p.is_dir()]
@@ -211,7 +215,7 @@ def latest_backup(paths: DoppelgangerPaths) -> Optional[Path]:
     return sorted(items, key=lambda p: p.name)[-1]
 
 
-def rollback(paths: DoppelgangerPaths, backup_dir: Optional[Path] = None) -> Path:
+def rollback(paths: DoppelgangerPaths, backup_dir: Path | None = None) -> Path:
     backup = backup_dir or latest_backup(paths)
     if backup is None:
         raise RuntimeError("No backups found to roll back to.")
@@ -298,7 +302,7 @@ def _stop_thomas_on_port_windows(port: int) -> bool:
             # Avoid PowerShell's built-in $PID (read-only) which is case-insensitive.
             "$procId=[int]$l.OwningProcess;"
             "$cmd='';"
-            "try{ $cmd=(Get-CimInstance Win32_Process -Filter (\\\"ProcessId=$procId\\\") -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine) } catch {};"
+            'try{ $cmd=(Get-CimInstance Win32_Process -Filter (\\"ProcessId=$procId\\") -ErrorAction SilentlyContinue | Select-Object -ExpandProperty CommandLine) } catch {};'
             "if($cmd -and ($cmd -match '(?i)(\\\\b-m\\\\s+thomas\\\\s+serve\\\\b|\\\\bthomas(\\\\.exe)?\\\\s+serve\\\\b)')){"
             "  Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue; exit 0"
             "} else { exit 4 }"

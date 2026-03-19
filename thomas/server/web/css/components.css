@@ -1,8 +1,8 @@
 /* components.css */
 /* Split into ordered parts to keep this file below monolith limits. */
-@import url("./components_parts/part-001.css");
-@import url("./components_parts/part-002.css");
-@import url("./components_parts/part-003.css");
-@import url("./components_parts/part-004.css");
-@import url("./components_parts/part-005.css");
-@import url("./components_parts/part-006.css");
+@import url("./components_parts/part-001.css?v=20260317-ui-refresh-1");
+@import url("./components_parts/part-002.css?v=20260317-ui-refresh-1");
+@import url("./components_parts/part-003.css?v=20260317-ui-refresh-1");
+@import url("./components_parts/part-004.css?v=20260317-ui-refresh-1");
+@import url("./components_parts/part-005.css?v=20260317-ui-refresh-1");
+@import url("./components_parts/part-006.css?v=20260317-ui-refresh-1");

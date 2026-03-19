@@ -5,7 +5,8 @@ from __future__ import annotations
 import copy
 import logging
 import secrets as stdlib_secrets
-from typing import Any, Awaitable, Callable, Dict, List
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -46,12 +47,42 @@ def register_sessions_routes(
     read_json: ReadJsonFn,
     task_ledger_update: TaskLedgerUpdateFn,
 ) -> None:
+    def _resolve_default_model() -> tuple[str, str]:
+        try:
+            from os import environ
+
+            from thomas.core.model_resolution import resolve_effective_model
+            from thomas.preferences.store import get_db_path
+
+            resolved_profile, resolved_model_id = resolve_effective_model(
+                app[APP_CONFIG],
+                env_profile=str(environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
+                user_id="default",
+                db_path=get_db_path(),
+            )
+            if resolved_profile in app[APP_CONFIG].models:
+                return resolved_profile, str(resolved_model_id or "")
+        except Exception:
+            pass
+        cfg_local = app[APP_CONFIG]
+        fallback = str(cfg_local.default_model or "").strip()
+        if fallback not in cfg_local.models and cfg_local.models:
+            fallback = next(iter(cfg_local.models))
+        return fallback, ""
+
     async def api_session_new(request: web.Request) -> web.Response:
         require_api_access(request)
         cfg: AppConfig = request.app[APP_CONFIG]
+        default_profile, default_model_id = _resolve_default_model()
         sid = stdlib_secrets.token_urlsafe(18)
+        if default_profile not in cfg.models:
+            default_profile = str(cfg.default_model or "").strip()
         request.app[APP_SESSIONS][sid] = ChatSession(
-            id=sid, conversation=[], profile=cfg.default_model, model_id=None, autonomy_level=3
+            id=sid,
+            conversation=[],
+            profile=default_profile,
+            model_id=(default_model_id or None),
+            autonomy_level=3,
         )
         task_ledger_update(
             sid,
@@ -118,14 +149,18 @@ def register_sessions_routes(
         require_api_access(request)
         cfg: AppConfig = request.app[APP_CONFIG]
         payload = await read_json(request)
+        default_profile, default_model_id = _resolve_default_model()
 
         explicit_model_alias_requested = "model" in payload and str(payload.get("model")).strip()
-        profile = str(payload.get("profile") or payload.get("model") or cfg.default_model).strip()
+        profile = str(payload.get("profile") or payload.get("model") or "").strip()
         if profile not in cfg.models:
             if explicit_model_alias_requested:
                 raise web.HTTPBadRequest(text=f"unknown profile: {profile}")
-            # Graceful fallback: use default model or first available
-            _fb = cfg.default_model
+            # Graceful fallback: use user-configured default or first available
+            if default_profile and default_profile in cfg.models:
+                _fb = default_profile
+            else:
+                _fb = cfg.default_model
             if _fb not in cfg.models and cfg.models:
                 _fb = next(iter(cfg.models))
             if _fb in cfg.models:
@@ -147,7 +182,7 @@ def register_sessions_routes(
         if len(raw_conv) > 250:
             raise web.HTTPBadRequest(text="conversation too long")
 
-        conversation: List[Dict[str, Any]] = []
+        conversation: list[dict[str, Any]] = []
         for m in raw_conv:
             if not isinstance(m, dict):
                 continue
@@ -165,6 +200,10 @@ def register_sessions_routes(
             conversation.append({"role": role, "content": content})
 
         sid = stdlib_secrets.token_urlsafe(18)
+        if not profile and not model_id and default_profile in cfg.models:
+            profile = default_profile
+        if (not model_id) and profile == default_profile and default_model_id:
+            model_id = default_model_id
         request.app[APP_SESSIONS][sid] = ChatSession(
             id=sid,
             conversation=conversation,

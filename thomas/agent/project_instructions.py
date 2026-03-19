@@ -51,9 +51,4 @@ def format_project_instructions(content: str) -> str:
     body = str(content or "").strip()
     if not body:
         return ""
-    return (
-        "--- Project Instructions ---\n"
-        + body
-        + "\n--- End Project Instructions ---"
-    )
-
+    return "--- Project Instructions ---\n" + body + "\n--- End Project Instructions ---"

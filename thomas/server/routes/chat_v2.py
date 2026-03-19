@@ -25,7 +25,13 @@ from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.session_store import SessionMeta, SessionStore
 from thomas.core.llm import LLMClient
-from thomas.orchestrator.brain import OrchestratorBrain
+
+# V3 brain swap (2026-03-18): Use V3 brain with named bots and async dispatch.
+# Falls back to V2 brain if V3 import fails.
+try:
+    from thomas.orchestrator.brain_v3 import OrchestratorBrainV3 as OrchestratorBrain
+except ImportError:
+    from thomas.orchestrator.brain import OrchestratorBrain
 from thomas.orchestrator.registry import SpecialistRegistry
 from thomas.specialists.coding import CodingSpecialist
 from thomas.specialists.reasoning import ReasoningSpecialist
@@ -197,11 +203,7 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
             if not model_profile or not hasattr(app_config, "models") or model_profile not in app_config.models:
                 model_profile = getattr(app_config, "default_model", "")
             model_cfg = app_config.get_model(model_profile)
-            failover_cfgs = (
-                app_config.failover_chain(model_profile)
-                if hasattr(app_config, "failover_chain")
-                else []
-            )
+            failover_cfgs = app_config.failover_chain(model_profile) if hasattr(app_config, "failover_chain") else []
             failover_enabled = bool(
                 getattr(app_config, "failover", None)
                 and getattr(app_config.failover, "enabled", False)

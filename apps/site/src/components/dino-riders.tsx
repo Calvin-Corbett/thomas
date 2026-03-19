@@ -35,6 +35,7 @@ const PHRASES = [
   "sprint dinosaur approved",
   "ship it then stomp it",
 ];
+const INITIAL_BUBBLE_DELAY_MS = 420;
 
 const MIN_X = -8;
 const MAX_X = 108;
@@ -146,7 +147,7 @@ export function DinoRiders() {
       hideTimer = setTimeout(clearBubble, randomBetween(1500, 2400));
     };
 
-    schedule(1400);
+    schedule(INITIAL_BUBBLE_DELAY_MS);
 
     return () => {
       cancelled = true;

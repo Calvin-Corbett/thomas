@@ -21,10 +21,10 @@ from __future__ import annotations
 import os
 import re
 import shutil
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import Any, Literal, Mapping, Optional, TypedDict
-
+from typing import Any, Literal, TypedDict
 
 # -------------------------
 # Errors
@@ -83,9 +83,9 @@ class PluginUninstallCleanupRequest:
 
     plugin_id: str
     dry_run: bool = False
-    config_path: Optional[Path] = None
-    state_dir: Optional[Path] = None
-    extensions_dir: Optional[Path] = None
+    config_path: Path | None = None
+    state_dir: Path | None = None
+    extensions_dir: Path | None = None
     prune_empty_parents: bool = True
 
 
@@ -214,7 +214,7 @@ def _normalize_plugin_id(plugin_id: str) -> str:
     return "/".join(parts)
 
 
-def _expand_path(value: Optional[Path | str]) -> Optional[Path]:
+def _expand_path(value: Path | str | None) -> Path | None:
     if value is None:
         return None
     return Path(value).expanduser()
@@ -233,16 +233,17 @@ def _resolve_config_path(req: PluginUninstallCleanupRequest) -> Path:
     return state_dir / "thomas.json"
 
 
-def _resolve_state_dir(req: PluginUninstallCleanupRequest, config_path: Optional[Path]) -> Path:
+def _resolve_state_dir(req: PluginUninstallCleanupRequest, config_path: Path | None) -> Path:
     if req.state_dir is not None:
         return _expand_path(req.state_dir)  # type: ignore[return-value]
+
+    if config_path is not None:
+        # Explicit config path should anchor state resolution deterministically.
+        return config_path.expanduser().parent
 
     env = os.environ.get("THOMAS_STATE_DIR")
     if env:
         return Path(env).expanduser()
-
-    if config_path is not None:
-        return config_path.expanduser().parent
 
     return Path("~/.thomas").expanduser()
 
@@ -386,7 +387,7 @@ def parse_tool_input(payload: Mapping[str, Any]) -> PluginUninstallCleanupReques
             details={"field": key},
         )
 
-    def get_path(key: str) -> Optional[Path]:
+    def get_path(key: str) -> Path | None:
         if key not in payload:
             return None
         val = payload[key]

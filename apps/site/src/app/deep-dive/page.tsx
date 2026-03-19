@@ -1,336 +1,443 @@
-import Link from "next/link";
-import type { ReactNode } from "react";
-import { CLI_COMPARISON_ROWS, CLIComparisonRow, COMPARISON_META } from "@/lib/featureComparisonData";
+import type { Metadata } from "next";
+import { CLI_COMPARISON_ROWS, type CLIComparisonRow } from "@/lib/featureComparisonData";
+import { getRepoUrl } from "@/lib/site-config";
+import { StatusChip, type StatusType } from "@/components/status-chip";
+import { SystemPageShell } from "@/components/system-page";
+import { SystemSection } from "@/components/system-section";
+import { CodeBlock } from "@/components/system-code-block";
+import { CommandMatrix, type CommandMatrixRow } from "@/components/command-matrix";
+import { CalloutBlock } from "@/components/system-callout";
 
-const openclawRepository = COMPARISON_META.openclawRepo;
-const openclawCommit = COMPARISON_META.openclawCommit;
-const openclawCommitShort = openclawCommit.slice(0, 7);
-
-const sortedRows = [...CLI_COMPARISON_ROWS].sort((a, b) => a.feature.localeCompare(b.feature));
-const totals = {
-  total: sortedRows.length,
-  thomasPresent: sortedRows.filter((row) => row.thomasPresent).length,
-  openclawPresent: sortedRows.filter((row) => row.openclawPresent).length,
-  shared: sortedRows.filter((row) => row.thomasPresent && row.openclawPresent).length,
-  thomasOnly: sortedRows.filter((row) => row.thomasPresent && !row.openclawPresent).length,
-  openclawOnly: sortedRows.filter((row) => row.openclawPresent && !row.thomasPresent).length,
+export const metadata: Metadata = {
+  title: "How Thomas Works",
+  description: "Execution architecture, command contracts, and plugin boundaries for Thomas.",
 };
 
-const thomasOnlyRows = sortedRows.filter((row) => row.thomasPresent && !row.openclawPresent).map((row) => row.feature);
-const openclawOnlyRows = sortedRows.filter((row) => row.openclawPresent && !row.thomasPresent).map((row) => row.feature);
-const sharedRows = sortedRows.filter((row) => row.thomasPresent && row.openclawPresent).map((row) => row.feature);
+const pipelineFlow = [
+  "user request",
+  "policy + trust gate",
+  "plan generation",
+  "tool execution + hook sequence",
+  "result validation",
+  "audit log",
+  "response returned to caller",
+].join(" -> ");
 
-function winnerLabel(row: CLIComparisonRow): { className: string; text: string } {
-  if (row.thomasPresent && !row.openclawPresent) {
-    return { className: "winner-chip winner-chip-thomas", text: "Thomas only" };
+const sampleAuditLog = {
+  requestId: "rq-2026-03-02-001",
+  timestamp: "2026-03-02T01:09:04Z",
+  route: "/v1/chat/completions",
+  policy: "approved",
+  commandFamily: "/status",
+  result: "ok",
+  elapsedMs: 214,
+  hooks: ["before-model", "before-tool", "after-tool", "after-response"],
+  trace: ["/api-gateway", "/planner", "/hooks", "/tool", "/validation", "/audit-log"],
+  logFile: "/var/log/thomas/events.jsonl",
+};
+
+const sampleExecution = {
+  userPrompt: "List repository status",
+  plan: {
+    family: "status",
+    command: "status",
+    policyGate: "ok",
+    approvalState: "required",
+  },
+  execution: {
+    output: {
+      totalSteps: 6,
+      exitCode: 0,
+    },
+    checks: {
+      schemaValidation: true,
+      policyGate: true,
+      commandContract: true,
+    },
+  },
+  artifacts: {
+    auditId: "rq-2026-03-02-001",
+    artifactPath: "/var/log/thomas/events.jsonl",
+  },
+};
+
+const gatewayCurl = `curl -X POST https://127.0.0.1:8787/v1/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer <local-token>" \\
+  -d '{\\n  "model": "local-gpt",\\n  "messages": [{"role": "user", "content": "List repository status"}],\\n  "stream": false\\n}'`;
+
+const gatewayStream = `event: response.started
+data: {"id":"evt-01","type":"response.started","request_id":"rq-2026-03-02-001"}
+
+event: tool.delta
+data: {"id":"evt-01","type":"tool.delta","tool":"status","payload":{"phase":"running"}}
+
+event: response.final
+data: {"id":"evt-01","type":"response.final","status":"ok","request_id":"rq-2026-03-02-001"}`;
+
+const gatewayResponse = `{
+  "id": "cmp-102",
+  "status": "ok",
+  "model": "local-gpt",
+  "request_id": "rq-2026-03-02-001",
+  "usage": {
+    "prompt_tokens": 14,
+    "completion_tokens": 32
   }
-  if (row.openclawPresent && !row.thomasPresent) {
-    return { className: "winner-chip winner-chip-openclaw", text: "OpenClaw only" };
-  }
-  if (row.thomasDepth > row.openclawDepth) {
-    return { className: "winner-chip winner-chip-thomas", text: "Thomas deeper" };
-  }
-  if (row.openclawDepth > row.thomasDepth) {
-    return { className: "winner-chip winner-chip-openclaw", text: "OpenClaw deeper" };
-  }
-  return { className: "winner-chip winner-chip-tie", text: "Tie / parity" };
+}`;
+
+const gatewayCLI = `thomas prompt "status"
+thomas ask "List repository status"
+thomas --help --json`;
+
+const pluginArchitecture = `client
+  |-- parser + policy gate
+  |-- command planner
+  |-- execution runtime
+  \\-- audit sink
+      |-- before-model hooks
+      |-- before-tool hooks
+      |-- tool.exec hooks
+      |-- after-tool hooks
+      \\-- after-response hooks`;
+
+const pluginManifest = `{
+  "name": "thomas-plugin-guard",
+  "version": "0.1.0",
+  "entry": "dist/index.js",
+  "permissions": ["filesystem", "network:thomas-control"],
+  "hooks": [
+    "before-model",
+    "before-tool",
+    "after-tool",
+    "after-response"
+  ]
+}`;
+
+const pluginLifecycle = [
+  "Install package",
+  "Validate manifest and checksum",
+  "Activate in registry",
+  "Execute through protected path",
+  "Deactivate + remove runtime state",
+  "Uninstall package",
+];
+
+const pluginCommands = `thomas plugin install ./dist/thomas-plugin-guard.zip
+thomas plugin validate thomas-plugin-guard
+thomas plugin activate thomas-plugin-guard
+thomas plugin run thomas-plugin-guard --diagnostic
+thomas plugin deactivate thomas-plugin-guard
+thomas plugin uninstall thomas-plugin-guard`;
+
+const matrixSignals = [
+  "Families with explicit command depth",
+  "Coverage and evidence status per family",
+  "Route/path traceability for execution artifacts",
+];
+
+const roadmap = [
+  {
+    id: "command-evidence-snapshots",
+    title: "Command evidence snapshots",
+    status: "implemented" as const,
+    text: "Row-level coverage metadata is present for families and linked to source artifacts.",
+  },
+  {
+    id: "gateway-contract-coverage",
+    title: "Gateway contract coverage",
+    status: "implemented" as const,
+    text: "HTTP contracts and CLI calls share the same guard and validation surface.",
+  },
+  {
+    id: "plugin-lifecycle-replay",
+    title: "Plugin lifecycle replay",
+    status: "planned" as const,
+    text: "Next up: full install + policy-hook replay with trace replayability.",
+  },
+];
+
+const nonGoals = [
+  "Unbounded autonomous execution.",
+  "Claims of universal API coverage without route evidence.",
+  "Implicit trust without policy gates.",
+];
+
+const integritySamples = [
+  {
+    id: "integrity-audit",
+    title: "Audit log example",
+    metadata: "23 events processed - 214ms total",
+    content: JSON.stringify(sampleAuditLog, null, 2),
+    language: "json" as const,
+  },
+  {
+    id: "integrity-execution-json",
+    title: "Execution JSON example",
+    metadata: "6 steps with schema checks",
+    content: JSON.stringify(sampleExecution, null, 2),
+    language: "json" as const,
+  },
+  {
+    id: "integrity-flow",
+    title: "Flow artifact",
+    metadata: "Execution artifact path and route path",
+    content: pipelineFlow,
+    language: "text" as const,
+  },
+  {
+    id: "integrity-gateway-parity",
+    title: "Gateway parity evidence",
+    metadata: "HTTP and CLI route contract parity",
+    content: gatewayCLI,
+    language: "text" as const,
+  },
+];
+
+function normalizeCommand(command: string): string {
+  return command.trim().replace(/\s+/g, " ").replace(/[()]/g, "");
 }
 
-function statusLabel(present: boolean): string {
-  return present ? "present" : "not present";
+function isValidCommand(command: string): boolean {
+  return /^[a-z0-9][a-z0-9._:-]*$/i.test(command);
 }
 
-function compareDepth(row: CLIComparisonRow): string {
-  if (!row.thomasPresent || !row.openclawPresent) {
-    return "not comparable";
+function analyzeFamily(row: CLIComparisonRow) {
+  const sanitized: string[] = [];
+  let trimmed = 0;
+  let malformed = 0;
+  let duplicates = 0;
+  const seen = new Set<string>();
+
+  for (const raw of row.thomasChildren) {
+    const next = normalizeCommand(raw);
+    if (next !== raw) {
+      trimmed += 1;
+    }
+    if (!isValidCommand(next)) {
+      malformed += 1;
+      continue;
+    }
+    if (seen.has(next)) {
+      duplicates += 1;
+      continue;
+    }
+    seen.add(next);
+    sanitized.push(next);
   }
-  return `${row.thomasDepth} vs ${row.openclawDepth}`;
+
+  let status: StatusType;
+  if (row.thomasDepth === 0 || row.thomasChildren.length === 0) {
+    status = "planned";
+  } else if (malformed > 0 || duplicates > 0) {
+    status = "partial";
+  } else {
+    status = "implemented";
+  }
+
+  return { sanitized, trimmed, malformed, duplicates, status };
 }
 
-function showChildren(commands: string[]): string {
-  if (commands.length === 0) {
-    return "none";
+function buildMatrixRows() {
+  try {
+    const rows: CommandMatrixRow[] = CLI_COMPARISON_ROWS.filter((row) => row.thomasPresent)
+      .map((row) => {
+        const { sanitized, trimmed, malformed, duplicates, status } = analyzeFamily(row);
+        return {
+          feature: row.feature,
+          depth: row.thomasDepth,
+          commandCount: sanitized.length,
+          status,
+          commands: sanitized,
+          trimmed,
+          malformed,
+          duplicates,
+          routeHint: `/${row.feature}`,
+        };
+      })
+      .sort((a, b) => a.feature.localeCompare(b.feature));
+
+    return { rows, error: null as string | null };
+  } catch (error) {
+    return {
+      rows: [] as CommandMatrixRow[],
+      error: error instanceof Error ? error.message : "Matrix data could not be loaded.",
+    };
   }
-  return commands.slice(0, 12).join(", ");
 }
 
-function showChildrenLong(commands: string[]): ReactNode {
-  if (commands.length === 0) {
-    return <p className="feature-metric-line">no child commands</p>;
-  }
-  return (
-    <ul className="owner-feature-list">
-      {commands.map((item) => (
-        <li key={item} className="owner-feature-item">
-          <code>{item}</code>
-        </li>
-      ))}
-    </ul>
-  );
+const matrixRowsData = buildMatrixRows();
+const matrixRows = matrixRowsData.rows;
+
+const matrixStats = {
+  implemented: matrixRows.filter((row) => row.status === "implemented").length,
+  declared: matrixRows.filter((row) => row.status !== "implemented").length,
+  totalCommands: matrixRows.reduce((total, row) => total + row.commandCount, 0),
+};
+
+function localFirstSummary() {
+  return `${matrixStats.implemented} implemented / ${matrixStats.declared} declared`;
 }
 
 export default function DeepDivePage() {
+  const releasesUrl = getRepoUrl();
+  const lastValidatedAt = "2026-03-02T01:09:04Z";
+
   return (
-    <section className="section-shell home-plain-shell">
-      <p className="eyebrow">Deep Dive</p>
-      <h1 className="page-title">Thomas vs OpenClaw - Feature Comparison</h1>
-      <p className="page-intro">
-        This page is the nerdy part: a structured command-surface comparison with evidence pointers and per-feature detail.
-        The homepage keeps the story simple; this section keeps the audit explicit.
-      </p>
-      <div className="alert-note alert-note-critical">
-        Warning: Thomas was vibe-coded in a fast, 14-day build run by a builder without formal software engineering education.
-        This is intentionally explicit source context, not a badge: it means the implementation deserves full testing and
-        independent verification before mission-critical use.
+    <SystemPageShell
+      eyebrow="Technical"
+      title="How Thomas Works"
+      versionLabel="v0.11.39"
+      persistDetails={false}
+    >
+      <div className="system-content-narrow">
+        <SystemSection title="How commands run">
+          <div className="system-grid">
+            <article className="system-metric-card">
+              <p className="system-metric-title">Execution model</p>
+              <p className="system-metric-note">
+                Every request goes through planning, policy gates, and audit tracing before anything runs.
+              </p>
+            </article>
+            <article className="system-metric-card">
+              <p className="system-metric-title">Coverage</p>
+              <p className="system-metric-note">
+                Contract status: {localFirstSummary()}
+                <br />
+                Total command families: {matrixRows.length}
+              </p>
+              <p className="system-metric-line">Last validated: {new Date(lastValidatedAt).toLocaleString()}</p>
+            </article>
+            <article className="system-metric-card">
+              <p className="system-metric-title">What we track</p>
+              <ul className="system-bullets">
+                {matrixSignals.map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </article>
+          </div>
+          <details className="system-subsection" data-system-detail-id="execution-pipeline">
+            <summary className="system-metric-title">Execution pipeline</summary>
+            <CodeBlock title="pipeline" language="text">
+              {pipelineFlow}
+            </CodeBlock>
+          </details>
+        </SystemSection>
+
+      <SystemSection title="Command family matrix" id="command-matrix">
+        {matrixRowsData.error ? (
+          <CalloutBlock tone="warning" title="Command matrix source issue">
+            Command matrix entries could not be fully normalized: {matrixRowsData.error}
+          </CalloutBlock>
+        ) : null}
+        <p className="system-metric-line">
+          Source for command families:
+          {releasesUrl ? (
+            <a className="text-link" href={releasesUrl} target="_blank" rel="noreferrer">
+                {" "}
+                release repository
+              </a>
+            ) : null}
+          </p>
+          <CommandMatrix rows={matrixRows} lastValidatedAt={lastValidatedAt} repoUrl={releasesUrl || undefined} />
+        </SystemSection>
+
+        <SystemSection title="Integrity evidence" id="integrity">
+          {integritySamples.map((sample) => (
+            <details key={sample.id} className="system-subsection" data-system-detail-id={sample.id}>
+              <summary className="system-metric-title">
+                <span className="system-metric-title">{sample.title}</span>
+                <span className="system-metric-line">{sample.metadata}</span>
+              </summary>
+              <CodeBlock title={sample.id} language={sample.language}>
+                {sample.content}
+              </CodeBlock>
+            </details>
+          ))}
+        </SystemSection>
+
+        <SystemSection title="Gateway contracts and CLI parity" id="gateway-contracts">
+          <details className="system-subsection" data-system-detail-id="gateway-request">
+            <summary className="system-metric-title">Non-stream request example</summary>
+            <CodeBlock title="curl request" language="bash">
+              {gatewayCurl}
+            </CodeBlock>
+          </details>
+          <details className="system-subsection" data-system-detail-id="gateway-stream">
+            <summary className="system-metric-title">Streaming event model</summary>
+            <CodeBlock title="sse events" language="text">
+              {gatewayStream}
+            </CodeBlock>
+          </details>
+          <details className="system-subsection" data-system-detail-id="gateway-response">
+            <summary className="system-metric-title">Non-stream response format</summary>
+            <CodeBlock title="response.json" language="json">
+              {gatewayResponse}
+            </CodeBlock>
+          </details>
+          <details className="system-subsection" data-system-detail-id="gateway-cli">
+            <summary className="system-metric-title">CLI parity check</summary>
+            <CodeBlock title="CLI commands" language="bash">
+              {gatewayCLI}
+            </CodeBlock>
+          </details>
+        </SystemSection>
+
+        <SystemSection title="Plugin execution boundary">
+          <details className="system-subsection" data-system-detail-id="plugin-architecture">
+            <summary className="system-metric-title">Hook execution architecture</summary>
+            <CodeBlock title="plugin architecture" language="text">
+              {pluginArchitecture}
+            </CodeBlock>
+          </details>
+          <div className="system-subsection">
+            <details className="system-subsection" data-system-detail-id="plugin-lifecycle">
+              <summary className="system-metric-title">Lifecycle</summary>
+              <div className="system-metric-grid">
+                {pluginLifecycle.map((line) => (
+                  <article key={line} className="system-metric-card">
+                    <p className="system-metric-line">{line}</p>
+                  </article>
+                ))}
+              </div>
+            </details>
+          </div>
+          <details className="system-subsection" data-system-detail-id="plugin-manifest">
+            <summary className="system-metric-title">Manifest example</summary>
+            <CodeBlock title="plugin-manifest.json" language="json">
+              {pluginManifest}
+            </CodeBlock>
+          </details>
+          <details className="system-subsection" data-system-detail-id="plugin-commands">
+            <summary className="system-metric-title">{"Install -> validate -> activate -> execute"}</summary>
+            <CodeBlock title="plugin lifecycle commands" language="bash">
+              {pluginCommands}
+            </CodeBlock>
+          </details>
+        </SystemSection>
+
+        <SystemSection title="What's next">
+          <ul className="system-bullets">
+            {nonGoals.map((item) => (
+              <li key={item}><strong>Not planned:</strong> {item}</li>
+            ))}
+          </ul>
+          <div className="system-version-list">
+            {roadmap.map((item) => (
+              <details key={item.id} className="system-version-card" data-system-detail-id={item.id}>
+                <summary className="system-version-head">
+                  <div>
+                    <p className="system-metric-title">{item.title}</p>
+                  </div>
+                  <StatusChip status={item.status} />
+                </summary>
+                <p className="system-metric-line">{item.text}</p>
+              </details>
+            ))}
+          </div>
+        </SystemSection>
       </div>
-
-      <section className="section-shell home-plain-shell" id="overview">
-        <div className="home-section-head">
-          <p className="eyebrow">Provenance</p>
-          <h2>What this was tested against</h2>
-        </div>
-        <p className="deep-metric-copy">
-          OpenClaw reference snapshot for this compare: commit{" "}
-          <a href={`${openclawRepository}/commit/${openclawCommit}`} target="_blank" rel="noreferrer">
-            <code>{openclawCommitShort}</code>
-          </a>{" "}
-          from{" "}
-          <a href={`${openclawRepository}/tree/main`} target="_blank" rel="noreferrer">
-            openclaw/main
-          </a>{" "}
-          (snapshot date {COMPARISON_META.suiteDateUtc}).
-        </p>
-        <div className="deep-win-grid owner-columns">
-          <article className="feature-inventory-card">
-            <h3 className="feature-inventory-title">Total top-level features</h3>
-            <p className="feature-inventory-count">{totals.total}</p>
-            <p className="feature-inventory-note">Total root command entries in this extracted comparison set.</p>
-          </article>
-          <article className="feature-inventory-card">
-            <h3 className="feature-inventory-title">In both systems</h3>
-            <p className="feature-inventory-count">{totals.shared}</p>
-            <p className="feature-inventory-note">Both expose this command at top-level.</p>
-          </article>
-          <article className="feature-inventory-card">
-            <h3 className="feature-inventory-title">Thomas-only</h3>
-            <p className="feature-inventory-count">{totals.thomasOnly}</p>
-            <p className="feature-inventory-note">Thomas has the command and OpenClaw does not.</p>
-          </article>
-          <article className="feature-inventory-card">
-            <h3 className="feature-inventory-title">OpenClaw-only</h3>
-            <p className="feature-inventory-count">{totals.openclawOnly}</p>
-            <p className="feature-inventory-note">OpenClaw has the command and Thomas does not.</p>
-          </article>
-        </div>
-      </section>
-
-      <section className="section-shell home-plain-shell" id="ownership">
-        <div className="home-section-head">
-          <p className="eyebrow">Ownership split</p>
-          <h2>Who owns what</h2>
-        </div>
-        <div className="deep-win-matrix">
-          <article className="feature-inventory-card">
-            <h3 className="feature-inventory-title">Shared command surface</h3>
-            <ul className="owner-feature-list">
-              {sharedRows.map((row) => (
-                <li key={`shared-${row}`} className="owner-feature-item">
-                  {row}
-                </li>
-              ))}
-            </ul>
-          </article>
-          <article className="feature-inventory-card">
-            <h3 className="feature-inventory-title">Thomas-only</h3>
-            <ul className="owner-feature-list">
-              {thomasOnlyRows.map((row) => (
-                <li key={`thomas-${row}`} className="owner-feature-item">
-                  {row}
-                </li>
-              ))}
-            </ul>
-          </article>
-          <article className="feature-inventory-card">
-            <h3 className="feature-inventory-title">OpenClaw-only</h3>
-            <ul className="owner-feature-list">
-              {openclawOnlyRows.map((row) => (
-                <li key={`openclaw-${row}`} className="owner-feature-item">
-                  {row}
-                </li>
-              ))}
-            </ul>
-          </article>
-        </div>
-      </section>
-
-      <section className="section-shell home-plain-shell" id="feature-matrix">
-        <div className="home-section-head">
-          <p className="eyebrow">Feature-by-feature</p>
-          <h2>Complete matrix with raw depth values</h2>
-          <p>
-            Depth is measured as number of tracked subcommand leaves in the extracted schema. It is a structural breadth/depth
-            signal, not a quality score.
-          </p>
-        </div>
-
-        <div className="feature-comparison-wrap">
-          <table className="comparison-table">
-            <thead>
-              <tr>
-                <th>Feature</th>
-                <th>Thomas</th>
-                <th>OpenClaw</th>
-                <th>Depth (Thomas vs OpenClaw)</th>
-                <th>Winner</th>
-              </tr>
-            </thead>
-            <tbody>
-              {sortedRows.map((row) => {
-                const winner = winnerLabel(row);
-                return (
-                  <tr key={row.feature}>
-                    <th scope="row">
-                      <p className="feature-title-row">
-                        <span className="feature-id">{row.feature}</span>
-                      </p>
-                    </th>
-                    <td>
-                      <p className="feature-metric-line">
-                        Status: <strong>{statusLabel(row.thomasPresent)}</strong>
-                      </p>
-                      <p className="feature-metric-line">Subcommands: {showChildren(row.thomasChildren)}</p>
-                      <details>
-                        <summary className="text-link">full Thomas command list</summary>
-                        {showChildrenLong(row.thomasChildren)}
-                      </details>
-                    </td>
-                    <td>
-                      <p className="feature-metric-line">
-                        Status: <strong>{statusLabel(row.openclawPresent)}</strong>
-                      </p>
-                      <p className="feature-metric-line">Subcommands: {showChildren(row.openclawChildren)}</p>
-                      <details>
-                        <summary className="text-link">full OpenClaw command list</summary>
-                        {showChildrenLong(row.openclawChildren)}
-                      </details>
-                    </td>
-                    <td>
-                      <p className="feature-metric-line">{compareDepth(row)}</p>
-                      <p className="feature-metric-line">
-                        Thomas nodes: <code>{row.thomasDepth}</code>, OpenClaw nodes: <code>{row.openclawDepth}</code>
-                      </p>
-                    </td>
-                    <td>
-                      <p>
-                        <span className={winner.className}>{winner.text}</span>
-                      </p>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="section-shell home-plain-shell" id="methodology">
-        <div className="home-section-head">
-          <p className="eyebrow">Method</p>
-          <h2>How this comparison was built</h2>
-        </div>
-        <div className="deep-win-grid">
-          <article className="deep-metric">
-            <h3 className="deep-metric-title">Scope</h3>
-            <p className="deep-metric-copy">
-              This matrix compares command-surface coverage and subcommand shape from a fixed extract file. It is strong for
-              feature breadth checks, weak for runtime quality assertions.
-            </p>
-          </article>
-          <article className="deep-metric">
-            <h3 className="deep-metric-title">What is not measured</h3>
-            <p className="deep-metric-copy">
-            This page does not claim runtime throughput, fault tolerance, or UX latency outcomes by itself. Those should come from
-            benchmark and release evidence.
-            </p>
-          </article>
-          <article className="deep-metric">
-            <h3 className="deep-metric-title">How to use this</h3>
-            <p className="deep-metric-copy">
-              If a command appears in Thomas-only, inspect release notes for intent and safety behavior. If shared, compare
-              implementation depth and child command list before assuming parity.
-            </p>
-          </article>
-        </div>
-      </section>
-
-      <section className="section-shell home-plain-shell">
-        <div className="deep-callout">
-          <p className="deep-card-title">Audit-ready walk-through</p>
-          <p className="deep-card-text">
-            If you are reviewing this page, treat this as the verification path: baseline data, then winner labels, then raw child
-            command lists, then changelog entries, then release artifacts. This keeps the comparison falsifiable instead of
-            marketing-driven.
-          </p>
-        </div>
-      </section>
-
-      <section className="section-shell home-plain-shell">
-        <div className="deep-callout">
-          <h3 className="deep-card-title">Bottom line</h3>
-          <p className="deep-card-text">
-            Thomas is positioned as a more accessible workflow platform while OpenClaw remains a strong technical baseline.
-            The difference is not just command count; it is how much of that command surface is surfaced for non-technical users
-            as practical, persistent workflows.
-          </p>
-          <p className="deep-card-text">
-            For people wanting a build trail, return to{" "}
-            <Link href="/" className="text-link">
-              homepage
-            </Link>{" "}
-            for concise outcomes, then use this page for implementation-level confirmation.
-          </p>
-        </div>
-      </section>
-
-      <section className="section-shell home-plain-shell">
-        <div className="home-section-head">
-          <p className="eyebrow">Links</p>
-          <h2>Reference points</h2>
-        </div>
-        <div className="plain-comparison-grid">
-          <article className="plain-comparison-card">
-            <p className="plain-comparison-question">OpenClaw repository</p>
-            <div className="plain-comparison-points">
-              <p>
-                <a href={openclawRepository} target="_blank" rel="noreferrer">
-                  {openclawRepository}
-                </a>
-              </p>
-              <p>
-                Commit:{" "}
-                <a href={`${openclawRepository}/commit/${openclawCommit}`} target="_blank" rel="noreferrer">
-                  <code>{openclawCommitShort}</code>
-                </a>
-              </p>
-            </div>
-          </article>
-          <article className="plain-comparison-card">
-            <p className="plain-comparison-question">Source used here</p>
-            <div className="plain-comparison-points">
-              <p>
-                <code>{COMPARISON_META.source}</code> (local project payload)
-              </p>
-              <p>Snapshot date: {COMPARISON_META.suiteDateUtc}</p>
-              <p>
-                Source file: <code>{COMPARISON_META.source}</code> in repository root
-              </p>
-            </div>
-          </article>
-        </div>
-      </section>
-    </section>
+    </SystemPageShell>
   );
 }
-
-
-

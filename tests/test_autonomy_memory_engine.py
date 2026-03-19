@@ -26,6 +26,30 @@ def test_v2_retrieval_stays_thread_scoped_for_episodes(tmp_path) -> None:  # noq
         mem.close()
 
 
+def test_cross_thread_retrieval_can_use_global_user_facts(tmp_path) -> None:  # noqa: ANN001
+    mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
+    mem.start()
+    try:
+        mem.add_event("telegram:1", "user_message", "my deployment target is cloudflare workers")
+
+        ctx_other = mem.retrieve("deployment target", thread="telegram:2", budget=900, mode="auto")
+
+        assert "cloudflare workers" in ctx_other.text.lower()
+    finally:
+        mem.close()
+
+
+def test_assistant_events_do_not_promote_profile_hints(tmp_path) -> None:  # noqa: ANN001
+    mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
+    mem.start()
+    try:
+        mem.add_event("telegram:1", "assistant_message", "My name is Mallory")
+        stats = mem.stats()
+        assert int(stats.get("v2_profile_hints", 0) or 0) == 0
+    finally:
+        mem.close()
+
+
 def test_profile_memory_can_be_enabled_or_disabled_per_thread(tmp_path) -> None:  # noqa: ANN001
     mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
     mem.start()
@@ -39,6 +63,18 @@ def test_profile_memory_can_be_enabled_or_disabled_per_thread(tmp_path) -> None:
         mem.set_thread_memory_policy("telegram:1", include_profile=False)
         without_profile = mem.retrieve("what is my name", thread="telegram:1", budget=900, mode="auto")
         assert "calvin" not in without_profile.text.lower()
+    finally:
+        mem.close()
+
+
+def test_set_thread_memory_policy_accepts_budget_tokens_alias(tmp_path) -> None:  # noqa: ANN001
+    mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
+    mem.start()
+    try:
+        mem.set_thread_memory_policy("telegram:1", budget_tokens=1600, include_profile=True)
+        policy = mem.thread_memory_policy("telegram:1")
+        assert policy.get("max_pack_tokens") == 1600
+        assert policy.get("include_profile") is True
     finally:
         mem.close()
 

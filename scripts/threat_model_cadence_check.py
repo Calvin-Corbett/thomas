@@ -5,7 +5,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
 from thomas.security.incident_drill import _validate_scoped_path
 from thomas.security.threat_model_cadence import evaluate_threat_model_cadence
@@ -29,7 +28,7 @@ def _scope_violation_report(path: str, *, error: str) -> dict[str, object]:
     }
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Validate threat-model review cadence.")
     parser.add_argument("--path", default="docs/THREAT_MODEL_WEB_API.md", help="Threat model file path.")
     parser.add_argument("--max-age-days", type=int, default=14, help="Maximum allowed age in days.")

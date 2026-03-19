@@ -10,10 +10,10 @@ next lane.
 from __future__ import annotations
 
 import argparse
-import os
 import json
-import subprocess
+import os
 import shlex
+import subprocess
 import time
 from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
@@ -23,13 +23,14 @@ from pathlib import Path
 try:
     from scripts import check_workboard_claims as claims_gate
     from scripts import workboard_claim, workboard_message, workboard_task_manager
+    from thomas.core import task_bot_runtime
 except Exception:  # pragma: no cover
     import check_workboard_claims as claims_gate  # type: ignore
     import workboard_claim  # type: ignore
     import workboard_message  # type: ignore
     import workboard_task_manager  # type: ignore
 
-
+    from thomas.core import task_bot_runtime  # type: ignore
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_COMMAND_CATALOG = ROOT / "plans" / "thomas" / "worker_command_catalog.json"
@@ -405,6 +406,14 @@ def _set_task_status_safe(
     return False, message
 
 
+def _runtime_execution_id(task_id: str) -> str:
+    try:
+        payload = task_bot_runtime.find_by_task_id(task_id, repo_root=ROOT)
+    except Exception:
+        return ""
+    return str((payload or {}).get("execution_id") or "").strip()
+
+
 def _request_immediate_dispatch(
     *,
     workboard_path: Path,
@@ -547,6 +556,7 @@ def _worker_loop(
         attempted_markers.add(marker)
         last_task_id = task.task_id
         last_summary = task.summary
+        runtime_execution_id = _runtime_execution_id(task.task_id)
 
         commands, command_source = _resolve_task_commands(
             task=task,
@@ -582,6 +592,19 @@ def _worker_loop(
                 requested_action="provide worker command mapping",
                 decision="pending",
             )
+            if runtime_execution_id:
+                try:
+                    task_bot_runtime.update_execution(
+                        runtime_execution_id,
+                        state="blocked",
+                        progress_summary=f"Worker blocked: no automation command configured for `{task.task_id}`.",
+                        blocker="no_worker_command_configured",
+                        actor=agent,
+                        repo_root=ROOT,
+                        force=True,
+                    )
+                except Exception:
+                    pass
             if release_on_no_command:
                 ok_release, err_release = _release_claim_safe(
                     workboard_path=workboard_path,
@@ -653,6 +676,26 @@ def _worker_loop(
             runs=runs,
             ok=ok_run,
         )
+        if runtime_execution_id:
+            try:
+                task_bot_runtime.attach_proof(
+                    runtime_execution_id,
+                    artifacts=[
+                        {
+                            "kind": "worker_log",
+                            "path": log_path,
+                            "command_source": command_source,
+                            "run_count": len(runs),
+                            "ok": bool(ok_run),
+                        }
+                    ],
+                    summary=f"Worker run log recorded at {log_path}.",
+                    status="attached" if ok_run else "failed",
+                    actor=agent,
+                    repo_root=ROOT,
+                )
+            except Exception:
+                pass
 
         if ok_run:
             completion_count += 1
@@ -675,6 +718,16 @@ def _worker_loop(
             )
             if not ok_done and err_done:
                 errors.append(err_done)
+            if runtime_execution_id:
+                try:
+                    task_bot_runtime.complete_execution(
+                        runtime_execution_id,
+                        actor=agent,
+                        summary=f"Worker completed `{task.task_id}` in {elapsed_total:.2f}s.",
+                        repo_root=ROOT,
+                    )
+                except Exception:
+                    pass
             _send_message_safe(
                 workboard_path=workboard_path,
                 sender=agent,
@@ -763,6 +816,21 @@ def _worker_loop(
                 requested_action="triage failed worker command and update mapping",
                 decision="pending",
             )
+            if runtime_execution_id:
+                try:
+                    task_bot_runtime.fail_execution(
+                        runtime_execution_id,
+                        actor=agent,
+                        summary=(
+                            f"Automation failed for `{task.task_id}` at command {failed_index}: "
+                            f"{failed_command or 'worker command'}"
+                        ),
+                        blocker="worker_command_failed",
+                        proof_status="failed",
+                        repo_root=ROOT,
+                    )
+                except Exception:
+                    pass
             if auto_release_failure:
                 ok_release, err_release = _release_claim_safe(
                     workboard_path=workboard_path,

@@ -7,7 +7,9 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-pytest_plugins = ["tests.conftest_factories"]
+pytest_plugins = []
+if (Path(__file__).with_name("conftest_factories.py")).exists():
+    pytest_plugins.append("tests.conftest_factories")
 
 # Load pytest-asyncio for async test support
 try:

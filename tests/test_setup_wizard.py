@@ -1,8 +1,31 @@
 """Tests for the Thomas setup wizard, quickstart, and shortcuts system."""
 
+import os
+import subprocess
+import sys
 import unittest
 from pathlib import Path
 from unittest.mock import patch
+
+
+def _project_root() -> Path:
+    return Path(__file__).resolve().parent.parent
+
+
+def _run_cli_with_cp1252(cwd: Path, *args: str, user_input: str = "") -> subprocess.CompletedProcess[str]:
+    env = os.environ.copy()
+    env["PYTHONIOENCODING"] = "cp1252"
+    existing_pythonpath = str(env.get("PYTHONPATH") or "").strip()
+    repo_root = str(_project_root())
+    env["PYTHONPATH"] = repo_root if not existing_pythonpath else repo_root + os.pathsep + existing_pythonpath
+    return subprocess.run(
+        [sys.executable, "-m", "thomas", *args],
+        cwd=str(cwd),
+        input=user_input,
+        capture_output=True,
+        text=True,
+        env=env,
+    )
 
 
 class TestSetupWizardProviders(unittest.TestCase):
@@ -121,7 +144,6 @@ class TestQuickstartDetection(unittest.TestCase):
             self.assertEqual(result, [])
 
     def test_write_minimal_config(self):
-        import os
         import tempfile
 
         from thomas.cli.commands.quickstart import _write_minimal_config
@@ -132,11 +154,38 @@ class TestQuickstartDetection(unittest.TestCase):
                 os.chdir(tmpdir)
                 path = _write_minimal_config("https://api.openai.com/v1", "sk-test", "gpt-4o", "openai")
                 self.assertTrue(path.exists())
-                content = path.read_text()
+                content = path.read_text(encoding="utf-8")
                 self.assertIn("[models.default]", content)
                 self.assertIn("gpt-4o", content)
             finally:
                 os.chdir(old_cwd)
+
+    def test_quickstart_subprocess_survives_cp1252_console(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = Path(tmpdir)
+            (cwd / "thomas.toml").write_text("# existing\n", encoding="utf-8")
+            result = _run_cli_with_cp1252(cwd, "quickstart")
+            output = (result.stdout or "") + (result.stderr or "")
+            self.assertEqual(result.returncode, 0, output)
+            self.assertIn("Thomas Quick Start", output)
+            self.assertIn("Config already exists", output)
+            self.assertNotIn("Traceback", output)
+
+    def test_setup_subprocess_survives_cp1252_console(self):
+        import tempfile
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            cwd = Path(tmpdir)
+            (cwd / "thomas.toml").write_text("# existing\n", encoding="utf-8")
+            result = _run_cli_with_cp1252(cwd, "setup", user_input="n\n")
+            output = (result.stdout or "") + (result.stderr or "")
+            self.assertEqual(result.returncode, 0, output)
+            self.assertIn("Thomas Setup Wizard", output)
+            self.assertIn("Found existing config", output)
+            self.assertIn("Keeping existing config. Done!", output)
+            self.assertNotIn("Traceback", output)
 
 
 class TestShortcutsPlatform(unittest.TestCase):
@@ -223,8 +272,7 @@ class TestInstallerScriptsExist(unittest.TestCase):
 
     def _project_root(self):
         """Find the Thomas project root."""
-        p = Path(__file__).resolve().parent.parent
-        return p
+        return _project_root()
 
     def test_install_sh_exists(self):
         path = self._project_root() / "install.sh"

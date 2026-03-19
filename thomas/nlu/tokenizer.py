@@ -277,6 +277,7 @@ class BPETokenizer:
         self.bpe_ranks: dict[tuple[str, str], int] = {}
         self.word_freq: dict[str, int] = defaultdict(int)
         self.vocab: set[str] = set()
+        self.is_trained = False
         self.base_tokenizer = Tokenizer(lowercase=False)
 
     def train(self, texts: list[str]) -> None:
@@ -315,6 +316,7 @@ class BPETokenizer:
             num_merges += 1
 
         self.vocab = vocab
+        self.is_trained = True
 
     def tokenize(self, text: str) -> list[str]:
         """
@@ -326,7 +328,7 @@ class BPETokenizer:
         Returns:
             List of subword tokens
         """
-        if not self.bpe_ranks:
+        if not self.is_trained:
             raise TokenizationError("BPE model not trained. Call train() first.")
 
         # First pass: word tokenization

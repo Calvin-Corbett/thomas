@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -30,6 +31,8 @@ def build_mission_cron_handlers(
     _mission_bootstrap_autonomy: Any,
     _mission_require_store: Any,
     _mission_wakeup_engine: Any,
+    *,
+    require_api_access: Callable[[web.Request], None],
 ) -> tuple:
     """Build scheduled/cron task management route handlers.
 
@@ -44,6 +47,7 @@ def build_mission_cron_handlers(
     """
 
     async def api_mission_autopilot_bootstrap(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Bootstrap the autonomy runtime for autopilot objectives."""
         enabled = await _mission_bootstrap_autonomy()
         store = app.get("autonomy_store")
@@ -66,16 +70,16 @@ def build_mission_cron_handlers(
         )
 
     async def api_mission_autopilot_objective_create(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Create a new autopilot objective (recurring/scheduled task)."""
         try:
             payload = await request.json()
-            if not isinstance(payload, dict):
-                payload = {}
-        except ValueError:
-            payload = {}
+        except Exception as exc:
+            raise web.HTTPBadRequest(text=f"invalid json: {type(exc).__name__}: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="json body must be an object")
 
         auto_enable = _coerce_bool(payload.get("auto_enable"), default=True)
-        store = await _mission_require_store(auto_enable=auto_enable)
 
         goal = (
             str(payload.get("goal") or "").strip()
@@ -112,7 +116,7 @@ def build_mission_cron_handlers(
             risk_class = "low"
 
         session_id = str(payload.get("session_id") or "").strip() or None
-        requires_approval = bool(payload.get("requires_approval"))
+        requires_approval = _coerce_bool(payload.get("requires_approval"), default=False)
         profile = str(payload.get("profile") or "").strip()
         model_id = str(payload.get("model_id") or "").strip()
         workflow = str(payload.get("workflow") or "orchestrator_worker").strip().lower() or "orchestrator_worker"
@@ -147,6 +151,7 @@ def build_mission_cron_handlers(
         }
 
         name = str(payload.get("name") or "").strip() or f"Autopilot: {goal[:64]}"
+        store = await _mission_require_store(auto_enable=auto_enable)
 
         try:
             job = store.create_job(
@@ -174,6 +179,7 @@ def build_mission_cron_handlers(
         )
 
     async def api_mission_autopilot_objectives(request: web.Request) -> web.Response:
+        require_api_access(request)
         """List all autopilot objectives with optional filtering."""
         q = request.query
         limit = max(1, min(_coerce_int(q.get("limit"), 180), 500))
@@ -248,6 +254,7 @@ def build_mission_cron_handlers(
         )
 
     async def api_mission_autopilot_objective_stop(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Stop all jobs associated with an autopilot objective."""
         store = await _mission_require_store()
         objective_id = str(request.match_info.get("objective_id") or "").strip()

@@ -72,6 +72,28 @@ class TestServerCompanionApiLocal(AioHTTPTestCase):
         )
         return create_app(cfg)
 
+    async def test_companion_mutation_routes_reject_non_object_json(self):
+        headers = {"X-Companion-Peer": "builder.owner.ts.net"}
+        unpin = await self.client.post("/api/companion/v1/devices/ios-1/unpin-release", headers=headers, json=["bad"])
+        self.assertEqual(unpin.status, 400)
+        promote = await self.client.post("/api/companion/v1/releases/release-1/promote", headers=headers, json=["bad"])
+        self.assertEqual(promote.status, 400)
+        rollback = await self.client.post(
+            "/api/companion/v1/releases/release-1/rollback", headers=headers, json=["bad"]
+        )
+        self.assertEqual(rollback.status, 400)
+        publish = await self.client.post("/api/companion/v1/releases/publish", headers=headers, json=["bad"])
+        self.assertEqual(publish.status, 400)
+
+    async def test_companion_list_routes_reject_invalid_limit(self):
+        releases_resp = await self.client.get("/api/companion/v1/releases?limit=oops")
+        self.assertEqual(releases_resp.status, 400)
+        self.assertIn("invalid limit", await releases_resp.text())
+
+        audit_resp = await self.client.get("/api/companion/v1/audit/events?limit=oops")
+        self.assertEqual(audit_resp.status, 400)
+        self.assertIn("invalid limit", await audit_resp.text())
+
     async def test_companion_status_contract_and_module_flow(self):
         status_resp = await self.client.get("/api/companion/v1/status")
         self.assertEqual(status_resp.status, 200)

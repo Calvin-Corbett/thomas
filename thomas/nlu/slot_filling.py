@@ -278,7 +278,7 @@ class SlotFiller:
             "number": re.compile(r"\b(\d+(?:\.\d+)?)\b"),
             "email": re.compile(r"\b([A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,})\b"),
             "url": re.compile(r"(https?://[^\s]+|www\.[^\s]+)"),
-            "phone": re.compile(r"\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?[2-9]\d{2}[-.\s]?\d{4}\b"),
+            "phone": re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b"),
         }
 
         # Extract by type
@@ -465,7 +465,7 @@ class PhoneSlotExtractor(SlotExtractor):
     def __init__(self) -> None:
         """Initialize phone extractor."""
         super().__init__()
-        self.pattern = re.compile(r"\b(?:\+?1[-.\s]?)?\(?[2-9]\d{2}\)?[-.\s]?[2-9]\d{2}[-.\s]?\d{4}\b")
+        self.pattern = re.compile(r"\b(?:\+?1[-.\s]?)?\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}\b")
 
     def extract(self, sentence: Sentence) -> str | None:
         """Extract phone number from sentence."""

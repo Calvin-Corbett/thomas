@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import fnmatch
 import glob
+import io
 import json
+import math
 import re
+import tokenize
 from collections.abc import Mapping, Sequence
 from pathlib import Path
 from statistics import mean, pstdev
@@ -10,6 +14,7 @@ from statistics import mean, pstdev
 from thomas.demo.agent_comparison_suite_shared import (
     CODE_EXTENSIONS,
     _assertion_ok,
+    _count_code,
     _is_number,
     _iter_files,
     _resolve_path_value,
@@ -206,6 +211,8 @@ def _count_regex_hits(
             text = path.read_text(encoding="utf-8", errors="ignore")
         except (OSError, FileNotFoundError):
             continue
+        if path.suffix == ".py":
+            text = _strip_python_comments_and_strings(text)
         file_hits = 0
         for regex in compiled:
             file_hits += len(regex.findall(text))
@@ -213,6 +220,30 @@ def _count_regex_hits(
             files_with_hits += 1
             total_hits += int(file_hits)
     return {"files_with_hits": int(files_with_hits), "total_hits": int(total_hits)}
+
+
+def _strip_python_comments_and_strings(text: str) -> str:
+    lines = text.splitlines(keepends=True)
+    try:
+        for tok in tokenize.generate_tokens(io.StringIO(text).readline):
+            if tok.type not in (tokenize.STRING, tokenize.COMMENT):
+                continue
+            start_row, start_col = tok.start
+            end_row, end_col = tok.end
+            if start_row == end_row:
+                line = lines[start_row - 1]
+                lines[start_row - 1] = line[:start_col] + (" " * max(0, end_col - start_col)) + line[end_col:]
+                continue
+
+            first = lines[start_row - 1]
+            lines[start_row - 1] = first[:start_col] + (" " * max(0, len(first) - start_col))
+            for row in range(start_row, end_row - 1):
+                lines[row] = " " * len(lines[row])
+            last = lines[end_row - 1]
+            lines[end_row - 1] = (" " * end_col) + last[end_col:]
+    except (IndentationError, SyntaxError, tokenize.TokenError):
+        return text
+    return "".join(lines)
 
 
 def _run_probe_suite(
@@ -887,5 +918,3 @@ def _collect_benchmark_evidence(agent: Mapping[str, Any], *, suite_root: Path) -
             continue
         errors.append(f"{match}: evidence payload must be an object or list")
     return {"files_used": files_used, "checks": checks, "errors": errors}
-
-

@@ -190,13 +190,18 @@ class CodexBridge:
 
         self._initialized = False
         self._thread_id = None
-        # Fail any pending requests
-        for fut in self._pending.values():
+        self._fail_pending_requests(CodexBridgeError("Bridge stopped"))
+
+    def _fail_pending_requests(self, error: Exception) -> None:
+        """Fail and clear all pending request futures."""
+        if not isinstance(error, Exception):
+            error = CodexBridgeError("Bridge request failed")
+        for fut in list(self._pending.values()):
             if not fut.done():
-                fut.set_exception(CodexBridgeError("Bridge stopped"))
+                fut.set_exception(error)
         self._pending.clear()
 
-    # ── Authentication ──────────────────────────────────────
+    # â”€â”€ Authentication â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def check_auth(self) -> CodexAccount:
         """Check current authentication state."""
@@ -227,7 +232,7 @@ class CodexBridge:
         )
 
     async def login_chatgpt(self) -> CodexAccount:
-        """Start ChatGPT OAuth login flow — opens a browser.
+        """Start ChatGPT OAuth login flow â€” opens a browser.
 
         Blocks until the user completes login or an error occurs.
         Returns the authenticated account.
@@ -283,7 +288,7 @@ class CodexBridge:
         await self._request("account/logout", {})
         self._thread_id = None
 
-    # ── Models ──────────────────────────────────────────────
+    # â”€â”€ Models â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def list_models(self) -> list[CodexModel]:
         """List available models."""
@@ -299,7 +304,7 @@ class CodexBridge:
             )
         return models
 
-    # ── Chat ────────────────────────────────────────────────
+    # â”€â”€ Chat â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def chat(
         self,
@@ -456,7 +461,7 @@ class CodexBridge:
                 turn_params["model"] = model
             if instructions:
                 turn_params["instructions"] = instructions
-            # Auto-approve everything — Thomas handles its own sandboxing
+            # Auto-approve everything â€” Thomas handles its own sandboxing
             if allow_tools:
                 turn_params["approvalPolicy"] = "never"
                 turn_params["sandboxPolicy"] = {
@@ -531,11 +536,11 @@ class CodexBridge:
         log.info("Codex thread started: %s", self._thread_id)
         return self._thread_id
 
-    # ── JSON-RPC transport ──────────────────────────────────
+    # â”€â”€ JSON-RPC transport â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
     async def _request(self, method: str, params: dict[str, Any], timeout: float = _REQUEST_TIMEOUT) -> dict[str, Any]:
         """Send a request and wait for the response."""
-        if not self._proc or not self._proc.stdin:
+        if not self.is_running or not self._proc or not self._proc.stdin:
             raise CodexBridgeError("App-server not running")
 
         req_id = self._next_id
@@ -545,8 +550,11 @@ class CodexBridge:
         line = json.dumps(msg, separators=(",", ":")) + "\n"
         log.debug(">> codex: %s", line.rstrip())
 
-        self._proc.stdin.write(line.encode("utf-8"))
-        await self._proc.stdin.drain()
+        try:
+            self._proc.stdin.write(line.encode("utf-8"))
+            await self._proc.stdin.drain()
+        except (BrokenPipeError, ConnectionResetError, OSError) as e:
+            raise CodexBridgeError(f"Request {method} failed before send: {type(e).__name__}") from e
 
         future: asyncio.Future = asyncio.get_event_loop().create_future()
         self._pending[req_id] = future
@@ -560,7 +568,7 @@ class CodexBridge:
 
     async def _notify(self, method: str, params: dict[str, Any]) -> None:
         """Send a notification (no response expected)."""
-        if not self._proc or not self._proc.stdin:
+        if not self.is_running or not self._proc or not self._proc.stdin:
             raise CodexBridgeError("App-server not running")
 
         msg = {"method": method, "params": params}
@@ -572,7 +580,7 @@ class CodexBridge:
 
     async def _respond(self, req_id: int, result: dict[str, Any]) -> None:
         """Send a response to a server request (e.g. approval)."""
-        if not self._proc or not self._proc.stdin:
+        if not self.is_running or not self._proc or not self._proc.stdin:
             return
 
         msg = {"id": req_id, "result": result}
@@ -592,6 +600,9 @@ class CodexBridge:
                 raw = await self._proc.stdout.readline()
                 if not raw:
                     log.warning("Codex app-server stdout closed")
+                    self._initialized = False
+                    self._thread_id = None
+                    self._fail_pending_requests(CodexBridgeError("Codex app-server stdout closed"))
                     break
 
                 line = raw.decode("utf-8", errors="replace").strip()
@@ -622,7 +633,7 @@ class CodexBridge:
                         else:
                             future.set_result(msg.get("result", {}))
                     # If it has a method too, it's a server-initiated request
-                    # (like approval requests) — handle that below
+                    # (like approval requests) â€” handle that below
                     if "method" not in msg:
                         continue
 
@@ -651,6 +662,9 @@ class CodexBridge:
                         await self._proc.stdout.read(consumed)
                 except asyncio.IncompleteReadError:
                     log.warning("Codex stdout closed while draining oversized line")
+                    self._initialized = False
+                    self._thread_id = None
+                    self._fail_pending_requests(CodexBridgeError("Codex stdout closed while draining oversized line"))
                     break
                 log.error(
                     "Codex stdout line exceeded read limit (%d bytes). "

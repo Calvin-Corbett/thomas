@@ -104,24 +104,40 @@ def record_event(event_type: str, payload: Any, *, t_ms: int | None = None, run_
     rid = run_id or get_current_run_id()
     if not rid:
         return
+    t = t_ms if t_ms is not None else _t_ms()
+    seq = _next_seq()
+    db = resolve_runs_db_path()
+    ensure_schema(db)
 
     # Prefer existing repo's run_store if it has an event writer.
     try:
         from thomas.observability import run_store  # type: ignore
 
-        for fn_name in ("record_event", "append_event", "log_event", "add_event"):
-            fn = getattr(run_store, fn_name, None)
-            if callable(fn):
-                fn(rid, event_type, payload, t_ms=t_ms)  # type: ignore
-                return
+        store_db = getattr(run_store, "_DB_PATH", None)
+        same_db = store_db is not None and os.path.abspath(os.fspath(store_db)) == os.path.abspath(os.fspath(db))
+
+        if same_db:
+            for fn_name in ("record_event", "append_event", "log_event", "add_event"):
+                fn = getattr(run_store, fn_name, None)
+                if callable(fn):
+                    try:
+                        if fn_name == "append_event":
+                            fn(rid, event_type, payload, int(t or 0), seq)  # type: ignore[misc]
+                        else:
+                            try:
+                                fn(rid, event_type, payload, t_ms=t, seq=seq)  # type: ignore[misc]
+                            except TypeError:
+                                try:
+                                    fn(rid, event_type, payload, t_ms=t)  # type: ignore[misc]
+                                except TypeError:
+                                    fn(rid, event_type, payload)  # type: ignore[misc]
+                        return
+                    except TypeError:
+                        continue
+                    except Exception:
+                        break
     except ImportError:
         pass
-
-    db = resolve_runs_db_path()
-    ensure_schema(db)
-
-    t = t_ms if t_ms is not None else _t_ms()
-    seq = _next_seq()
 
     do_redact = os.getenv(ENV_REDACT_WRITE, "0").strip() == "1"
     safe_payload = redact_obj(payload) if do_redact else payload

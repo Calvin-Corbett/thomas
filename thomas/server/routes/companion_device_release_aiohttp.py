@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -56,12 +57,38 @@ class CompanionDeviceReleaseDeps:
     zip_bundle: ZipBundleFn
 
 
+def _parse_query_int(
+    request: web.Request,
+    name: str,
+    *,
+    default: int,
+    min_value: int,
+    max_value: int,
+) -> int:
+    raw = request.query.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text=f"invalid {name}") from exc
+    if value < min_value or value > max_value:
+        raise web.HTTPBadRequest(text=f"invalid {name}")
+    return value
+
+
 def register_companion_device_release_routes(
     app: web.Application,
     *,
     deps: CompanionDeviceReleaseDeps,
 ) -> None:
     """Attach companion device/release/audit API endpoints."""
+
+    async def _read_json_object(request: web.Request) -> dict[str, Any]:
+        payload = await deps.read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="json body must be an object")
+        return payload
 
     async def api_companion_devices(request: web.Request) -> web.Response:
         deps.require_api_access(request)
@@ -75,9 +102,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            raise web.HTTPBadRequest(text="json body must be an object")
+        payload = await _read_json_object(request)
         device_id = str(payload.get("device_id") or "").strip()
         if not device_id:
             raise web.HTTPBadRequest(text="missing device_id")
@@ -126,9 +151,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = await _read_json_object(request)
         device_id = str(request.match_info.get("device_id") or "").strip()
         if not device_id:
             raise web.HTTPBadRequest(text="missing device_id")
@@ -160,9 +183,7 @@ def register_companion_device_release_routes(
             tailscale_identity=peer_identity or current.tailscale_identity,
             capabilities=capabilities,
             runtime_capability_set=runtime_capability_set,
-            installed_modules=(
-                deps.installed_modules_from_payload(payload) or dict(current.installed_modules)
-            ),
+            installed_modules=(deps.installed_modules_from_payload(payload) or dict(current.installed_modules)),
             metadata=dict(payload.get("metadata") or current.metadata),
             policy_profile=policy_profile_id,
             timestamp=deps.now_iso(),
@@ -185,9 +206,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = await _read_json_object(request)
         device_id = str(request.match_info.get("device_id") or "").strip()
         if not device_id:
             raise web.HTTPBadRequest(text="missing device_id")
@@ -212,9 +231,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = await _read_json_object(request)
         device_id = str(request.match_info.get("device_id") or "").strip()
         if not device_id:
             raise web.HTTPBadRequest(text="missing device_id")
@@ -233,9 +250,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = await _read_json_object(request)
         device_id = str(request.match_info.get("device_id") or "").strip()
         if not device_id:
             raise web.HTTPBadRequest(text="missing device_id")
@@ -247,9 +262,9 @@ def register_companion_device_release_routes(
         installed_modules = deps.installed_modules_from_payload(payload) or dict(device.installed_modules)
         release_registry = ReleaseRegistry(kernel)
 
-        pinned_release_id = str(payload.get("pinned_release_id") or "").strip() or str(
-            device.pinned_release_id or ""
-        ).strip()
+        pinned_release_id = (
+            str(payload.get("pinned_release_id") or "").strip() or str(device.pinned_release_id or "").strip()
+        )
         source = "channel"
         updates: list[dict[str, Any]] = []
         if pinned_release_id:
@@ -315,13 +330,9 @@ def register_companion_device_release_routes(
         kernel = deps.kernel_from_config(deps.config)
         channel = str(request.query.get("channel") or "").strip()
         module_id = str(request.query.get("module_id") or "").strip()
-        try:
-            limit = int(request.query.get("limit", "200"))
-        except Exception:
-            limit = 200
+        limit = _parse_query_int(request, "limit", default=200, min_value=1, max_value=1000)
         rows = [
-            rel.to_dict()
-            for rel in ReleaseRegistry(kernel).list(channel=channel, module_id=module_id, limit=limit)
+            rel.to_dict() for rel in ReleaseRegistry(kernel).list(channel=channel, module_id=module_id, limit=limit)
         ]
         return web.json_response({"ok": True, "count": len(rows), "releases": rows})
 
@@ -396,7 +407,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
+        payload = await _read_json_object(request)
         bundle_dir = deps.bundle_path_from_payload(payload)
         channel = str(payload.get("channel") or "stable").strip() or "stable"
         actor = deps.actor_from_payload(payload)
@@ -425,14 +436,14 @@ def register_companion_device_release_routes(
                     "stage": "compliance",
                     "policy_profile_id": str(report.get("policy_profile_id") or ""),
                     "compliance_report_id": str(report.get("report_id") or ""),
-                    "blocking_violations": int(((report.get("counts") or {}).get("blocking_violations") or 0)),
+                    "blocking_violations": int((report.get("counts") or {}).get("blocking_violations") or 0),
                 },
             )
             return web.json_response(
                 {
                     "ok": False,
                     "errors": ["compliance check failed"],
-                    "warnings": list(((report or {}).get("warnings") or [])),
+                    "warnings": list((report or {}).get("warnings") or []),
                     "release": None,
                     "verify": verify_payload,
                     "compliance": compliance_payload,
@@ -451,22 +462,15 @@ def register_companion_device_release_routes(
             min_app_version=str(payload.get("min_app_version") or "").strip(),
             required_capabilities=deps.string_list(payload.get("required_capabilities")),
             status=str(payload.get("status") or "active").strip() or "active",
-            policy_profile_id=str(
-                (compliance_payload.get("report") or {}).get("policy_profile_id") or "strict_global"
-            ),
+            policy_profile_id=str((compliance_payload.get("report") or {}).get("policy_profile_id") or "strict_global"),
             compliance_report_id=str((compliance_payload.get("report") or {}).get("report_id") or ""),
             compliance_status=("pass" if bool(compliance_payload.get("ok")) else "block"),
             compliance_violations=(
-                deps.int_or_none(
-                    (compliance_payload.get("report") or {}).get("counts", {}).get("blocking_violations")
-                )
+                deps.int_or_none((compliance_payload.get("report") or {}).get("counts", {}).get("blocking_violations"))
                 or 0
             ),
             compliance_warnings=(
-                deps.int_or_none(
-                    (compliance_payload.get("report") or {}).get("counts", {}).get("warnings")
-                )
-                or 0
+                deps.int_or_none((compliance_payload.get("report") or {}).get("counts", {}).get("warnings")) or 0
             ),
             compliance_checked_at=str((compliance_payload.get("report") or {}).get("checked_at") or ""),
             timestamp=deps.now_iso(),
@@ -482,9 +486,7 @@ def register_companion_device_release_routes(
                 "bundle_dir": str(bundle_dir),
                 "ok": bool(result.get("ok")),
                 "errors": list(result.get("errors") or []),
-                "policy_profile_id": str(
-                    (compliance_payload.get("report") or {}).get("policy_profile_id") or ""
-                ),
+                "policy_profile_id": str((compliance_payload.get("report") or {}).get("policy_profile_id") or ""),
                 "compliance_report_id": str((compliance_payload.get("report") or {}).get("report_id") or ""),
             },
         )
@@ -495,9 +497,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = await _read_json_object(request)
         release_id = str(request.match_info.get("release_id") or "").strip()
         if not release_id:
             raise web.HTTPBadRequest(text="missing release_id")
@@ -512,9 +512,7 @@ def register_companion_device_release_routes(
                 str(payload.get("min_app_version") or "").strip() if "min_app_version" in payload else None
             ),
             required_capabilities=(
-                deps.string_list(payload.get("required_capabilities"))
-                if "required_capabilities" in payload
-                else None
+                deps.string_list(payload.get("required_capabilities")) if "required_capabilities" in payload else None
             ),
             status=(str(payload.get("status") or "").strip() if "status" in payload else None),
         )
@@ -536,9 +534,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = await _read_json_object(request)
         release_id = str(request.match_info.get("release_id") or "").strip()
         if not release_id:
             raise web.HTTPBadRequest(text="missing release_id")
@@ -567,9 +563,7 @@ def register_companion_device_release_routes(
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
         peer_identity = deps.require_control_plane_identity(request, kernel)
-        payload = await deps.read_json(request)
-        if not isinstance(payload, dict):
-            payload = {}
+        payload = await _read_json_object(request)
         release_id = str(request.match_info.get("release_id") or "").strip()
         if not release_id:
             raise web.HTTPBadRequest(text="missing release_id")
@@ -597,10 +591,7 @@ def register_companion_device_release_routes(
     async def api_companion_audit_events(request: web.Request) -> web.Response:
         deps.require_api_access(request)
         kernel = deps.kernel_from_config(deps.config)
-        try:
-            limit = int(request.query.get("limit", "100"))
-        except Exception:
-            limit = 100
+        limit = _parse_query_int(request, "limit", default=100, min_value=1, max_value=1000)
         event_type = str(request.query.get("event_type") or "").strip()
         rows = deps.audit_for(kernel).list(limit=limit, event_type=event_type)
         return web.json_response({"ok": True, "count": len(rows), "events": rows})

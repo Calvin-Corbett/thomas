@@ -560,16 +560,17 @@
     animation: none;
 }
 
+/* Canonical blocky robot geometry mirrored from apps/site/src/components/pixel-agents.tsx. */
 .office-pixel-agent {
     --agent-primary: #9ad8ff;
     --agent-secondary: #5aaeff;
     --agent-glow: #7abbff;
     --agent-trim: #0d1117;
     position: relative;
-    width: 60px;
-    height: 56px;
-    image-rendering: auto;
-    filter: drop-shadow(0 10px 20px rgba(14, 22, 34, 0.46));
+    width: 52px;
+    height: 48px;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 7px 14px rgba(0, 0, 0, 0.45));
 }
 
 .office-pixel-agent.facing-left {
@@ -588,75 +589,70 @@
 
 .office-agent-head {
     position: absolute;
-    top: 3px;
-    left: 16px;
-    width: 27px;
-    height: 16px;
+    top: 2px;
+    left: 14px;
+    width: 24px;
+    height: 14px;
     border: 2px solid var(--agent-trim);
-    border-radius: 7px;
-    background: linear-gradient(180deg, #d7efff 0%, var(--agent-primary) 100%);
+    background: var(--agent-primary);
 }
 
 .office-agent-body {
     position: absolute;
-    top: 21px;
+    top: 18px;
     left: 11px;
-    width: 35px;
-    height: 20px;
+    width: 30px;
+    height: 18px;
     border: 2px solid var(--agent-trim);
-    border-radius: 8px;
     background:
-        linear-gradient(to bottom, #d3eeff 0, var(--agent-primary) 40%, var(--agent-secondary) 41%, #3f86cf 100%);
+        linear-gradient(to bottom, var(--agent-primary) 0, var(--agent-primary) 44%, var(--agent-secondary) 45%, var(--agent-secondary) 100%);
 }
 
 .office-agent-leg {
     position: absolute;
-    top: 43px;
-    width: 9px;
-    height: 11px;
+    top: 36px;
+    width: 8px;
+    height: 10px;
     border: 2px solid var(--agent-trim);
-    border-radius: 0 0 5px 5px;
     background: var(--agent-secondary);
 }
 
 .office-agent-leg-left {
-    left: 18px;
+    left: 16px;
 }
 
 .office-agent-leg-right {
-    left: 33px;
+    left: 30px;
 }
 
 .office-agent-eye {
     position: absolute;
-    top: 5px;
-    width: 5px;
-    height: 5px;
-    border-radius: 50%;
+    top: 4px;
+    width: 4px;
+    height: 4px;
     background: #0b1726;
-    box-shadow: 0 0 0 1px rgba(214, 239, 255, 0.26);
 }
 
 .office-agent-eye-left {
-    left: 7px;
+    left: 5px;
 }
 
 .office-agent-eye-right {
-    left: 16px;
+    left: 13px;
 }
 
 .office-pixel-agent.looking-user .office-agent-eye {
-    top: 4px;
-    width: 6px;
-    height: 6px;
+    top: 3px;
+    width: 5px;
+    height: 5px;
 }
 
 .office-pixel-agent.looking-user .office-agent-eye-left {
-    left: 6px;
+    left: 4px;
 }
 
 .office-pixel-agent.looking-user .office-agent-eye-right {
-    left: 16px;
+    left: 14px;
 }
 
 .office-pixel-agent.costume-cap::before {

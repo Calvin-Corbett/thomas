@@ -359,7 +359,7 @@ async def openai_chat_completions_stream(request: web.Request) -> web.StreamResp
         finally:
             # Ensure upstream response and session are closed.
             try:
-                await upstream.close()
+                upstream.close()
             finally:
                 await session.close()
 

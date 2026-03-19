@@ -343,14 +343,24 @@ class BeatDetector:
 
         # Convert to onset intervals
         intervals = np.diff(onsets)
+        intervals = intervals[np.isfinite(intervals)]
 
         if len(intervals) == 0:
             return 0.0, 0.0
 
-        # Find most common interval using histogram
-        hist, bin_edges = np.histogram(intervals, bins=50)
-        max_idx = np.argmax(hist)
-        dominant_interval = (bin_edges[max_idx] + bin_edges[max_idx + 1]) / 2.0
+        # Degenerate interval sets (all the same value) can make histogram
+        # edge generation fail with fixed high bin counts.
+        interval_span = float(np.max(intervals) - np.min(intervals))
+        if interval_span <= 1e-9:
+            dominant_interval = float(intervals[0])
+            base_confidence = 1.0
+        else:
+            # Keep bin count bounded by available samples to avoid zero-width bins.
+            bins = int(min(50, max(2, len(intervals))))
+            hist, bin_edges = np.histogram(intervals, bins=bins)
+            max_idx = int(np.argmax(hist))
+            dominant_interval = float((bin_edges[max_idx] + bin_edges[max_idx + 1]) / 2.0)
+            base_confidence = float(hist[max_idx]) / float(len(intervals))
 
         # Convert interval to BPM
         if dominant_interval > 0:
@@ -360,7 +370,7 @@ class BeatDetector:
 
         # Clamp to expected range
         if self.min_bpm <= tempo <= self.max_bpm:
-            confidence = float(hist[max_idx]) / len(intervals)
+            confidence = base_confidence
         else:
             confidence = 0.0
 

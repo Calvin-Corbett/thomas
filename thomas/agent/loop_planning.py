@@ -217,9 +217,9 @@ def full_auto_nudge(prompt_text: str, retry_index: int) -> str:
     """Generate nudge for Autonomy level 4."""
     original_request = effective_prompt_text(prompt_text)
     return (
-        "Autonomy level 4 is enabled. Do not ask clarifying questions for this task unless "
-        "it is genuinely impossible or unsafe. Inspect available context, choose sensible defaults, "
-        "execute now, and report concrete actions taken. "
+        "Autonomy level 4 is enabled. Execute now and keep momentum unless a step is impossible or unsafe. "
+        "HONESTY RULE: never claim actions were executed when they were not, and never fabricate files, outputs, or findings. "
+        "If you cannot proceed because of missing credentials, missing access, or unsafe constraints, say that clearly and continue with what is possible. "
         f"(full_auto_retry={int(retry_index)}; original_request={original_request[:220]})"
     )
 
@@ -236,8 +236,9 @@ def assume_and_proceed_nudge(
     original_request = effective_prompt_text(prompt_text)
     return (
         "Continue execution now. Do not ask another clarifying question unless it is truly blocked by "
-        "missing credentials, access, or unsafe constraints. Assume sensible defaults, state assumptions "
-        "briefly, and proceed with concrete actions. "
+        "missing credentials, access, or unsafe constraints. "
+        "HONESTY RULE: never claim execution you did not perform, and never fabricate files, outputs, or results. "
+        "If blocked, state the blocking reason clearly and proceed with safe concrete steps. "
         f"(clarification_retry={int(retry_index)}; clarification_cap={int(question_cap)}; "
         f"clarification_seen={int(questions_seen)}; route_input_source={str(route_input_source or 'prompt_only')}; "
         f"original_request={original_request[:220]})"

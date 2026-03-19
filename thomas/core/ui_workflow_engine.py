@@ -17,9 +17,10 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Callable, Iterable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, Iterable, List, Optional
+from typing import Any
 
 from thomas.core.ui_effects_catalog import EFFECTS_CATALOG
 from thomas.core.ui_review import review_ui_edits as run_ui_review
@@ -91,8 +92,8 @@ def _clamp_int(value: Any, *, default: int, minimum: int, maximum: int) -> int:
     return max(minimum, min(maximum, parsed))
 
 
-def _to_provider_list(raw: Any, *, default: List[str]) -> List[str]:
-    values: List[str]
+def _to_provider_list(raw: Any, *, default: list[str]) -> list[str]:
+    values: list[str]
     if raw is None:
         values = list(default)
     elif isinstance(raw, str):
@@ -101,7 +102,7 @@ def _to_provider_list(raw: Any, *, default: List[str]) -> List[str]:
         values = [str(part or "").strip().lower() for part in raw]
     else:
         values = list(default)
-    out: List[str] = []
+    out: list[str] = []
     seen: set[str] = set()
     for value in values:
         if not value or value in seen:
@@ -117,19 +118,21 @@ class UIWorkflowEngine:
     def __init__(
         self,
         *,
-        ui_root: Optional[Path] = None,
-        idle_threshold_s: Optional[float] = None,
-        poll_interval_s: Optional[float] = None,
-        cycle_interval_s: Optional[float] = None,
-        max_cycles_per_session: Optional[int] = None,
-        notify_fn: Optional[Callable[[str], None]] = None,
-        log_path: Optional[Path] = None,
+        ui_root: Path | None = None,
+        idle_threshold_s: float | None = None,
+        poll_interval_s: float | None = None,
+        cycle_interval_s: float | None = None,
+        max_cycles_per_session: int | None = None,
+        notify_fn: Callable[[str], None] | None = None,
+        log_path: Path | None = None,
     ) -> None:
         self._ui_root = Path(ui_root or DEFAULT_UI_ROOT)
         self._idle_threshold_s = float(
             _DEFAULT_IDLE_THRESHOLD_S if idle_threshold_s is None else max(0.0, float(idle_threshold_s))
         )
-        self._poll_interval_s = float(_DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s)))
+        self._poll_interval_s = float(
+            _DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s))
+        )
         self._cycle_interval_s = float(
             _DEFAULT_CYCLE_INTERVAL_S if cycle_interval_s is None else max(1.0, float(cycle_interval_s))
         )
@@ -150,18 +153,18 @@ class UIWorkflowEngine:
         self._log_path = Path(log_path or (STATE_DIR / "ui_workflow_engine.jsonl"))
 
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._active_cycle = False
         self._lock = threading.Lock()
         self._last_user_ts = time.monotonic()
         self._last_cycle_ts = 0.0
         self._cycle_count = 0
-        self._last_report: Dict[str, Any] = {}
-        self._last_error: Optional[str] = None
-        self._last_error_at: Optional[str] = None
+        self._last_report: dict[str, Any] = {}
+        self._last_error: str | None = None
+        self._last_error_at: str | None = None
         self._enabled = _env_bool("THOMAS_UI_WORKFLOW_ENGINE_ENABLED", True)
 
-    def start(self, *, notify_fn: Optional[Callable[[str], None]] = None) -> None:
+    def start(self, *, notify_fn: Callable[[str], None] | None = None) -> None:
         if notify_fn is not None:
             self._notify_fn = notify_fn
         if self._running or not self._enabled:
@@ -180,7 +183,7 @@ class UIWorkflowEngine:
     def is_idle(self) -> bool:
         return (time.monotonic() - self._last_user_ts) >= self._idle_threshold_s
 
-    def status_snapshot(self) -> Dict[str, Any]:
+    def status_snapshot(self) -> dict[str, Any]:
         with self._lock:
             report = dict(self._last_report) if isinstance(self._last_report, dict) else {}
             return {
@@ -196,11 +199,11 @@ class UIWorkflowEngine:
                 "last_error_at": str(self._last_error_at or ""),
             }
 
-    def last_report(self) -> Dict[str, Any]:
+    def last_report(self) -> dict[str, Any]:
         with self._lock:
             return dict(self._last_report) if isinstance(self._last_report, dict) else {}
 
-    def list_effects(self, *, category: str = "") -> List[Dict[str, Any]]:
+    def list_effects(self, *, category: str = "") -> list[dict[str, Any]]:
         key = str(category or "").strip().lower()
         rows = [dict(item) for item in EFFECTS_CATALOG]
         if key:
@@ -208,7 +211,7 @@ class UIWorkflowEngine:
         rows.sort(key=lambda row: (str(row.get("category") or ""), str(row.get("name") or "")))
         return rows
 
-    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> Dict[str, Any]:
+    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> dict[str, Any]:
         if not force:
             if not self._enabled:
                 return {"ok": False, "reason": "engine_disabled"}
@@ -230,8 +233,8 @@ class UIWorkflowEngine:
         query: str,
         *,
         limit: int = 12,
-        providers: Optional[Iterable[str]] = None,
-    ) -> Dict[str, Any]:
+        providers: Iterable[str] | None = None,
+    ) -> dict[str, Any]:
         text = str(query or "").strip()
         if len(text) < 2:
             raise ValueError("query must be at least 2 characters")
@@ -244,8 +247,8 @@ class UIWorkflowEngine:
             selected = ["openverse"]
 
         per_provider_limit = _clamp_int(max_items, default=max_items, minimum=1, maximum=30)
-        assets: List[Dict[str, Any]] = []
-        provider_status: List[Dict[str, Any]] = []
+        assets: list[dict[str, Any]] = []
+        provider_status: list[dict[str, Any]] = []
 
         for provider in selected:
             if provider == "openverse":
@@ -260,7 +263,7 @@ class UIWorkflowEngine:
             provider_status.append(status)
             assets.extend(rows)
 
-        deduped: List[Dict[str, Any]] = []
+        deduped: list[dict[str, Any]] = []
         seen: set[str] = set()
         for row in assets:
             key = str(row.get("asset_url") or row.get("source_url") or row.get("id") or "").strip()
@@ -284,9 +287,9 @@ class UIWorkflowEngine:
         self,
         *,
         intent: str = "",
-        changed_paths: Optional[Iterable[str]] = None,
+        changed_paths: Iterable[str] | None = None,
         strict: bool = True,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         review_root = ROOT
         try:
             if self._ui_root.name == "web" and self._ui_root.parent.name == "server":
@@ -341,7 +344,7 @@ class UIWorkflowEngine:
             with self._lock:
                 self._active_cycle = False
 
-    def _run_cycle_checked(self, *, reason: str) -> Dict[str, Any]:
+    def _run_cycle_checked(self, *, reason: str) -> dict[str, Any]:
         started = time.monotonic()
         try:
             report = self._run_cycle(reason=reason)
@@ -350,7 +353,7 @@ class UIWorkflowEngine:
         except Exception as exc:  # pragma: no cover - defensive path
             return self._error_report(reason=reason, exc=exc, started=started)
 
-    def _run_cycle(self, *, reason: str) -> Dict[str, Any]:
+    def _run_cycle(self, *, reason: str) -> dict[str, Any]:
         started = time.monotonic()
         report = self.audit_ui_consistency()
         review = self.review_ui_edits(strict=False)
@@ -383,7 +386,7 @@ class UIWorkflowEngine:
 
         return report
 
-    def _error_report(self, *, reason: str, exc: BaseException, started: float) -> Dict[str, Any]:
+    def _error_report(self, *, reason: str, exc: BaseException, started: float) -> dict[str, Any]:
         with self._lock:
             self._cycle_count += 1
             cycle_id = int(self._cycle_count)
@@ -414,8 +417,8 @@ class UIWorkflowEngine:
         self._last_error = None
         self._last_error_at = None
 
-    def audit_ui_consistency(self) -> Dict[str, Any]:
-        files: List[Path] = [
+    def audit_ui_consistency(self) -> dict[str, Any]:
+        files: list[Path] = [
             self._ui_root / "css" / "tokens.css",
             self._ui_root / "css" / "layout.css",
             self._ui_root / "css" / "components.css",
@@ -426,10 +429,10 @@ class UIWorkflowEngine:
             self._ui_root / "companion.html",
         ]
 
-        css_bodies: List[str] = []
-        js_bodies: List[str] = []
-        html_bodies: List[str] = []
-        scanned: List[str] = []
+        css_bodies: list[str] = []
+        js_bodies: list[str] = []
+        html_bodies: list[str] = []
+        scanned: list[str] = []
 
         for path in files:
             if not path.exists() or not path.is_file():
@@ -452,7 +455,11 @@ class UIWorkflowEngine:
         token_defs = set(_TOKEN_DECL_RE.findall(css_all))
         token_refs = set(_TOKEN_REF_RE.findall(css_all))
         unresolved = sorted(ref for ref in token_refs if ref not in token_defs)
-        hardcoded_colors = len(_HEX_COLOR_RE.findall(css_all)) + len(_RGB_COLOR_RE.findall(css_all)) + len(_HSL_COLOR_RE.findall(css_all))
+        hardcoded_colors = (
+            len(_HEX_COLOR_RE.findall(css_all))
+            + len(_RGB_COLOR_RE.findall(css_all))
+            + len(_HSL_COLOR_RE.findall(css_all))
+        )
         animation_count = len(_ANIMATION_RE.findall(css_all)) + css_all.count("@keyframes")
         transition_count = len(_TRANSITION_RE.findall(css_all))
         reduced_motion_mentions = joined.lower().count("prefers-reduced-motion")
@@ -470,7 +477,7 @@ class UIWorkflowEngine:
         z_values = [int(value) for value in _Z_INDEX_RE.findall(css_all)]
         max_z_index = max(z_values) if z_values else 0
 
-        warnings: List[Dict[str, Any]] = []
+        warnings: list[dict[str, Any]] = []
         if not token_defs:
             warnings.append({"id": "tokens.missing", "severity": "high", "message": "No CSS design tokens detected."})
         if unresolved:
@@ -564,8 +571,8 @@ class UIWorkflowEngine:
             "effects": self.list_effects(),
         }
 
-    def _build_recommendations(self, **metrics: int) -> List[Dict[str, Any]]:
-        out: List[Dict[str, Any]] = []
+    def _build_recommendations(self, **metrics: int) -> list[dict[str, Any]]:
+        out: list[dict[str, Any]] = []
         if int(metrics.get("unresolved_count") or 0) > 0:
             out.append(
                 {
@@ -648,7 +655,7 @@ class UIWorkflowEngine:
             except Exception:
                 return ""
 
-    def _search_openverse(self, query: str, *, limit: int) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def _search_openverse(self, query: str, *, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         encoded = urllib.parse.urlencode({"q": query, "page_size": limit})
         url = f"https://api.openverse.org/v1/images/?{encoded}"
         payload, error = self._fetch_json(url, headers={})
@@ -657,7 +664,7 @@ class UIWorkflowEngine:
         results = payload.get("results")
         if not isinstance(results, list):
             return [], {"provider": "openverse", "ok": False, "error": "invalid response shape"}
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         for item in results[:limit]:
             if not isinstance(item, dict):
                 continue
@@ -668,17 +675,24 @@ class UIWorkflowEngine:
                     "title": str(item.get("title") or item.get("id") or "Openverse image"),
                     "thumbnail_url": str(item.get("thumbnail") or item.get("url") or ""),
                     "asset_url": str(item.get("url") or ""),
-                    "source_url": str(item.get("foreign_landing_url") or item.get("detail_url") or item.get("url") or ""),
+                    "source_url": str(
+                        item.get("foreign_landing_url") or item.get("detail_url") or item.get("url") or ""
+                    ),
                     "creator": str(item.get("creator") or ""),
                     "license": str(item.get("license") or ""),
                 }
             )
         return rows, {"provider": "openverse", "ok": True, "count": len(rows)}
 
-    def _search_unsplash(self, query: str, *, limit: int) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def _search_unsplash(self, query: str, *, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         key = str(os.environ.get("THOMAS_UNSPLASH_ACCESS_KEY", "") or "").strip()
         if not key:
-            return [], {"provider": "unsplash", "ok": False, "skipped": True, "error": "missing THOMAS_UNSPLASH_ACCESS_KEY"}
+            return [], {
+                "provider": "unsplash",
+                "ok": False,
+                "skipped": True,
+                "error": "missing THOMAS_UNSPLASH_ACCESS_KEY",
+            }
         encoded = urllib.parse.urlencode({"query": query, "per_page": limit, "page": 1})
         url = f"https://api.unsplash.com/search/photos?{encoded}"
         payload, error = self._fetch_json(url, headers={"Authorization": f"Client-ID {key}"})
@@ -687,7 +701,7 @@ class UIWorkflowEngine:
         results = payload.get("results")
         if not isinstance(results, list):
             return [], {"provider": "unsplash", "ok": False, "error": "invalid response shape"}
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         for item in results[:limit]:
             if not isinstance(item, dict):
                 continue
@@ -708,7 +722,7 @@ class UIWorkflowEngine:
             )
         return rows, {"provider": "unsplash", "ok": True, "count": len(rows)}
 
-    def _search_pexels(self, query: str, *, limit: int) -> tuple[List[Dict[str, Any]], Dict[str, Any]]:
+    def _search_pexels(self, query: str, *, limit: int) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         key = str(os.environ.get("THOMAS_PEXELS_API_KEY", "") or "").strip()
         if not key:
             return [], {"provider": "pexels", "ok": False, "skipped": True, "error": "missing THOMAS_PEXELS_API_KEY"}
@@ -720,7 +734,7 @@ class UIWorkflowEngine:
         photos = payload.get("photos")
         if not isinstance(photos, list):
             return [], {"provider": "pexels", "ok": False, "error": "invalid response shape"}
-        rows: List[Dict[str, Any]] = []
+        rows: list[dict[str, Any]] = []
         for item in photos[:limit]:
             if not isinstance(item, dict):
                 continue
@@ -739,7 +753,7 @@ class UIWorkflowEngine:
             )
         return rows, {"provider": "pexels", "ok": True, "count": len(rows)}
 
-    def _fetch_json(self, url: str, *, headers: Dict[str, str]) -> tuple[Dict[str, Any], Optional[str]]:
+    def _fetch_json(self, url: str, *, headers: dict[str, str]) -> tuple[dict[str, Any], str | None]:
         request_headers = {
             "User-Agent": "thomas-ui-workflow-engine/1.0",
             "Accept": "application/json",
@@ -763,7 +777,7 @@ class UIWorkflowEngine:
             return {}, "json payload is not an object"
         return data, None
 
-    def _write_cycle_log(self, report: Dict[str, Any]) -> None:
+    def _write_cycle_log(self, report: dict[str, Any]) -> None:
         try:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             with self._log_path.open("a", encoding="utf-8") as handle:
@@ -772,7 +786,7 @@ class UIWorkflowEngine:
             log.debug("UIWorkflowEngine failed to write log: %s", exc)
 
 
-_engine: Optional[UIWorkflowEngine] = None
+_engine: UIWorkflowEngine | None = None
 _engine_lock = threading.Lock()
 
 

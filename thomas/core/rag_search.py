@@ -12,7 +12,7 @@ import sqlite3
 from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Tuple
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -505,7 +505,7 @@ def fts_delete_file_impl(fts_path: Path, file_key: str) -> None:
 
 def fts_upsert_chunks_impl(
     fts_path: Path,
-    rows: list[Tuple[str, str, str, str, int, int, str, str, str]],
+    rows: list[tuple[str, str, str, str, int, int, str, str, str]],
 ) -> None:
     """Insert chunks into FTS index."""
     try:

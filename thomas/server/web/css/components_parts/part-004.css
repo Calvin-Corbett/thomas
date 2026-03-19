@@ -1,3 +1,3 @@
 /* Split wrapper to keep each part file below monolith limits. */
-@import url("./part-004a.css");
-@import url("./part-004b.css");
+@import url("./part-004a.css?v=20260317-ui-refresh-1");
+@import url("./part-004b.css?v=20260317-ui-refresh-1");

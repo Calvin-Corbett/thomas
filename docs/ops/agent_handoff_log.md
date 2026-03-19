@@ -1,4 +1,4 @@
-# Agent Handoff Log
+﻿# Agent Handoff Log
 
 Purpose: durable, timestamped execution notes so future agents can resume instantly when work is uncommitted or partially committed.
 
@@ -69,11 +69,11 @@ Purpose: durable, timestamped execution notes so future agents can resume instan
 
 ### Workspace Git Scope Update
 
-- Set F:\DevHub\Thomas as an independent Git repository root by creating local .git metadata from Thomas-only history split.
-- Verified inside Thomas: git rev-parse --show-toplevel -> F:/DevHub/Thomas.
+- Set <repo_root> as an independent Git repository root by creating local .git metadata from Thomas-only history split.
+- Verified inside Thomas: git rev-parse --show-toplevel -> `<repo_root>`.
 - Renamed current branch to master (Thomas-local).
 - Removed Thomas-local origin remote to prevent accidental pushes to the parent local repo path.
-- Parent repo F:\DevHub still exists separately and still tracks Thomas/* files, but agents should run Git commands from inside F:\DevHub\Thomas for Thomas work.
+- Parent repo <devhub_root> still exists separately and still tracks Thomas/* files, but agents should run Git commands from inside <repo_root> for Thomas work.
 
 ### Current Thomas Repo Cleanliness Snapshot
 
@@ -91,11 +91,11 @@ ode_modules, 	asks, output.
 
 ### Workspace Git Scope Update (Corrected)
 
-- Set `F:\DevHub\Thomas` as an independent Git repository root by creating local `.git` metadata from Thomas-only history split.
-- Verified inside Thomas: `git rev-parse --show-toplevel` -> `F:/DevHub/Thomas`.
+- Set `<repo_root>` as an independent Git repository root by creating local `.git` metadata from Thomas-only history split.
+- Verified inside Thomas: `git rev-parse --show-toplevel` -> `<repo_root>`.
 - Branch: `master`.
 - Removed Thomas-local `origin` remote to prevent accidental push to parent local path.
-- Parent repo `F:\DevHub` still exists separately and still tracks `Thomas/*`, so agents must run Git commands from inside `F:\DevHub\Thomas`.
+- Parent repo `<devhub_root>` still exists separately and still tracks `Thomas/*`, so agents must run Git commands from inside `<repo_root>`.
 
 ### Current Thomas Repo Cleanliness Snapshot
 
@@ -505,3 +505,5 @@ ode_modules, 	asks, output.
 - Codex 8 added approval-audit chronology e2e to assert approval.requested timestamp is not later than approval.decided for the same approval id.
 - Added tests/test_server_mission_control.py::test_mission_autonomy_approval_audit_timestamps_are_chronological.
 - Validation: targeted autonomy approval suite 6 passed; mission suite collect-only reports 30 tests.
+
+

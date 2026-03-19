@@ -15,6 +15,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_POLICY_PATH = "docs/ops/repo_identity_policy.json"
 ENV_CANONICAL_ROOT = "THOMAS_CANONICAL_REPO_ROOT"
+REPO_ROOT_TOKENS = {"<repo_root>", "${repo_root}", "%repo_root%", "{repo_root}", "$repo_root"}
 
 
 def _norm(value: str) -> str:
@@ -35,6 +36,16 @@ def _norm_path(value: str | Path) -> str:
     while "//" in raw:
         raw = raw.replace("//", "/")
     return raw.rstrip("/").lower()
+
+
+def _resolve_local_root(value: str | Path, repo_root: Path) -> str:
+    raw = str(value or "").strip()
+    if not raw:
+        return ""
+    lowered = raw.lower()
+    if lowered in REPO_ROOT_TOKENS:
+        return _norm_path(repo_root)
+    return raw
 
 
 def _extract_slug_from_remote(url: str) -> str | None:
@@ -186,7 +197,11 @@ def run(argv: Sequence[str] | None = None) -> int:
         policy_slug = str(policy.get("canonical_repo_slug") or "").strip()
         expected_slug = str(args.expected_slug or "").strip() or policy_slug
 
-        policy_roots = [str(item) for item in list(policy.get("canonical_local_roots") or []) if str(item).strip()]
+        policy_roots = [
+            _resolve_local_root(item, repo_root)
+            for item in list(policy.get("canonical_local_roots") or [])
+            if str(item).strip()
+        ]
         canonical_roots = [str(item) for item in list(args.canonical_root or []) if str(item).strip()] or policy_roots
         env_root_override = str(os.getenv(ENV_CANONICAL_ROOT, "")).strip()
         if env_root_override:

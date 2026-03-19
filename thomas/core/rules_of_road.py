@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
+
+from thomas.core.placeholder_policy import placeholder_policy_report, repo_relative_placeholder_path
 
 VALID_JOB_TYPES = {
     "coding",
@@ -165,6 +168,7 @@ def evaluate_rules(
     require_monolith_guard_for_coding: bool,
     strict_issue_ownership: bool = False,
     attempt: int = 0,
+    repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
     checks: list[dict[str, Any]] = []
     prompt_text = str(prompt_text or "")
@@ -178,6 +182,9 @@ def evaluate_rules(
     config_change_detected = False
     failed_tools = 0
     write_seen = False
+    placeholder_reports: list[dict[str, Any]] = []
+    placeholder_incomplete_paths: list[str] = []
+    placeholder_repo_root = Path(repo_root).resolve() if repo_root else Path(__file__).resolve().parents[2]
 
     for evt in tool_events:
         name = str(evt.get("name") or "")
@@ -205,6 +212,16 @@ def evaluate_rules(
                 verification_after_write_detected = True
         if path.lower().endswith(".toml"):
             config_change_detected = True
+        if is_write and path:
+            candidate = Path(path)
+            if not candidate.is_absolute():
+                candidate = placeholder_repo_root / candidate
+            report = placeholder_policy_report(candidate)
+            if bool(report.get("is_placeholder")):
+                report["path"] = repo_relative_placeholder_path(candidate, repo_root=placeholder_repo_root)
+                placeholder_reports.append(report)
+                if not bool(report.get("ok", False)):
+                    placeholder_incomplete_paths.append(str(report.get("path") or path))
 
     job_type = normalize_job_type(
         route_path=route_path,
@@ -280,6 +297,21 @@ def evaluate_rules(
                 required=True,
                 passed=monolith_guard_ran,
                 detail="Run `python scripts/check_monolith_guard.py` after code mutations.",
+            )
+        if placeholder_reports:
+            detail = (
+                "Placeholder-backed files must include placeholder-why, placeholder-scope_to_finish, "
+                "placeholder-owner, placeholder-exit_rule, and placeholder-acceptance annotations. "
+                f"Missing annotations: {', '.join(sorted(set(placeholder_incomplete_paths)))}"
+                if placeholder_incomplete_paths
+                else "Placeholder-backed file annotations are complete."
+            )
+            add_check(
+                "coding_placeholder_policy",
+                "Placeholder-backed files carry a completion note",
+                required=True,
+                passed=(len(placeholder_incomplete_paths) == 0),
+                detail=detail,
             )
 
     if job_type == "config":
@@ -366,6 +398,8 @@ def evaluate_rules(
             "config_change_detected": config_change_detected,
             "strict_issue_ownership": bool(strict_issue_ownership),
             "unresolved_issue_detected": bool(unresolved_issue_detected),
+            "placeholder_file_count": len(placeholder_reports),
+            "placeholder_incomplete_paths": sorted(set(placeholder_incomplete_paths)),
         },
     }
 

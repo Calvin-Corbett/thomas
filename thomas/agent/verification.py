@@ -25,7 +25,6 @@ from __future__ import annotations
 import asyncio
 import logging
 import py_compile
-import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path

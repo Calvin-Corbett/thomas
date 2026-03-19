@@ -1,13 +1,13 @@
-# Next Agent Handoff
+﻿# Next Agent Handoff
 
 Last updated: 2026-02-27T00:00:00-06:00
 Latest stability checkpoint commits: `3475aa2`, `36af455`, `7fb8de5`, `d865441`, `8409a3b`
 
 ## Repo Scope
 
-- Active repo root: `F:\DevHub\Thomas`
-- Parent `F:\DevHub` is intentionally not an active repo anymore.
-- Run Git commands from inside `F:\DevHub\Thomas` only.
+- Active repo root: `<repo_root>`
+- Parent `<devhub_root>` is intentionally not an active repo anymore.
+- Run Git commands from inside `<repo_root>` only.
 
 ## Current Status
 
@@ -65,3 +65,5 @@ Standard completion cadence:
 - Release after completion:
   - `python scripts/active_folders.py release --agent "$env:AGENT_ID"`
 - Full guide: `docs/ops/ACTIVE_FOLDERS_COORDINATION.md`
+
+

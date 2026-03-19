@@ -3,7 +3,7 @@
 loc_counter.py  —  Lines-of-Code counter
 Usage:
     python loc_counter.py                     # count current directory
-    python loc_counter.py f:/DevHub/Thomas    # count a specific path
+    python loc_counter.py /path/to/repo       # count a specific path
     python loc_counter.py . --top 20          # show top 20 files
     python loc_counter.py . --ext py js ts    # only these extensions
     python loc_counter.py . --no-blanks       # already the default, explicit
@@ -19,53 +19,69 @@ import os
 import sys
 from collections import defaultdict
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
 
 # ---------------------------------------------------------------------------
 # Language definitions  (extension → display name, comment prefixes)
 # ---------------------------------------------------------------------------
-LANGUAGES: Dict[str, Tuple[str, List[str]]] = {
-    ".py":    ("Python",        ["#"]),
-    ".js":    ("JavaScript",    ["//"]),
-    ".ts":    ("TypeScript",    ["//"]),
-    ".jsx":   ("JSX",           ["//"]),
-    ".tsx":   ("TSX",           ["//"]),
-    ".html":  ("HTML",          ["<!--"]),
-    ".css":   ("CSS",           ["/*"]),
-    ".scss":  ("SCSS",          ["//"]),
-    ".json":  ("JSON",          []),
-    ".toml":  ("TOML",          ["#"]),
-    ".yaml":  ("YAML",          ["#"]),
-    ".yml":   ("YAML",          ["#"]),
-    ".sh":    ("Shell",         ["#"]),
-    ".ps1":   ("PowerShell",    ["#"]),
-    ".bat":   ("Batch",         ["REM", "::"]),
-    ".md":    ("Markdown",      []),
-    ".txt":   ("Text",          []),
-    ".rst":   ("reStructured",  []),
-    ".go":    ("Go",            ["//"]),
-    ".rs":    ("Rust",          ["//"]),
-    ".java":  ("Java",          ["//"]),
-    ".kt":    ("Kotlin",        ["//"]),
-    ".c":     ("C",             ["//"]),
-    ".cpp":   ("C++",           ["//"]),
-    ".h":     ("C Header",      ["//"]),
-    ".cs":    ("C#",            ["//"]),
-    ".rb":    ("Ruby",          ["#"]),
-    ".php":   ("PHP",           ["//"]),
-    ".sql":   ("SQL",           ["--"]),
-    ".lua":   ("Lua",           ["--"]),
-    ".r":     ("R",             ["#"]),
-    ".swift": ("Swift",         ["//"]),
+LANGUAGES: dict[str, tuple[str, list[str]]] = {
+    ".py": ("Python", ["#"]),
+    ".js": ("JavaScript", ["//"]),
+    ".ts": ("TypeScript", ["//"]),
+    ".jsx": ("JSX", ["//"]),
+    ".tsx": ("TSX", ["//"]),
+    ".html": ("HTML", ["<!--"]),
+    ".css": ("CSS", ["/*"]),
+    ".scss": ("SCSS", ["//"]),
+    ".json": ("JSON", []),
+    ".toml": ("TOML", ["#"]),
+    ".yaml": ("YAML", ["#"]),
+    ".yml": ("YAML", ["#"]),
+    ".sh": ("Shell", ["#"]),
+    ".ps1": ("PowerShell", ["#"]),
+    ".bat": ("Batch", ["REM", "::"]),
+    ".md": ("Markdown", []),
+    ".txt": ("Text", []),
+    ".rst": ("reStructured", []),
+    ".go": ("Go", ["//"]),
+    ".rs": ("Rust", ["//"]),
+    ".java": ("Java", ["//"]),
+    ".kt": ("Kotlin", ["//"]),
+    ".c": ("C", ["//"]),
+    ".cpp": ("C++", ["//"]),
+    ".h": ("C Header", ["//"]),
+    ".cs": ("C#", ["//"]),
+    ".rb": ("Ruby", ["#"]),
+    ".php": ("PHP", ["//"]),
+    ".sql": ("SQL", ["--"]),
+    ".lua": ("Lua", ["--"]),
+    ".r": ("R", ["#"]),
+    ".swift": ("Swift", ["//"]),
 }
 
 SKIP_DIRS = {
-    ".git", "__pycache__", ".venv", "venv", "env", "node_modules",
-    ".mypy_cache", ".pytest_cache", ".ruff_cache", "dist", "build",
-    ".next", ".nuxt", "coverage", ".tox", "eggs", "*.egg-info",
-    ".idea", ".vscode",
+    ".git",
+    "__pycache__",
+    ".venv",
+    "venv",
+    "env",
+    "node_modules",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".ruff_cache",
+    "dist",
+    "build",
+    ".next",
+    ".nuxt",
+    "coverage",
+    ".tox",
+    "eggs",
+    "*.egg-info",
+    ".idea",
+    ".vscode",
     # Doppelganger Protocol isolated venvs — not project code
-    "runtime", "doppelganger", "site-packages",
+    "runtime",
+    "doppelganger",
+    "site-packages",
 }
 
 
@@ -73,7 +89,8 @@ SKIP_DIRS = {
 # Core counting
 # ---------------------------------------------------------------------------
 
-def count_file(path: Path, include_blanks: bool) -> Tuple[int, int, int]:
+
+def count_file(path: Path, include_blanks: bool) -> tuple[int, int, int]:
     """Returns (total_lines, code_lines, blank_lines)."""
     ext = path.suffix.lower()
     _, comment_prefixes = LANGUAGES.get(ext, ("", []))
@@ -102,18 +119,15 @@ def count_file(path: Path, include_blanks: bool) -> Tuple[int, int, int]:
 
 def walk(
     root: Path,
-    extensions: Optional[List[str]],
+    extensions: list[str] | None,
     include_blanks: bool,
-) -> List[Dict]:
+) -> list[dict]:
     """Walk root and return per-file stats."""
     results = []
 
     for dirpath, dirnames, filenames in os.walk(root):
         # Prune skip dirs in-place
-        dirnames[:] = [
-            d for d in dirnames
-            if d not in SKIP_DIRS and not d.startswith(".")
-        ]
+        dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS and not d.startswith(".")]
 
         for fname in filenames:
             fpath = Path(dirpath) / fname
@@ -129,15 +143,17 @@ def walk(
                 continue
 
             lang_name, _ = LANGUAGES.get(ext, (ext or "Unknown", []))
-            results.append({
-                "path": str(fpath.relative_to(root)),
-                "language": lang_name,
-                "ext": ext,
-                "total": total,
-                "code": code,
-                "blank": blank,
-                "comment": total - code - blank,
-            })
+            results.append(
+                {
+                    "path": str(fpath.relative_to(root)),
+                    "language": lang_name,
+                    "ext": ext,
+                    "total": total,
+                    "code": code,
+                    "blank": blank,
+                    "comment": total - code - blank,
+                }
+            )
 
     return results
 
@@ -146,6 +162,7 @@ def walk(
 # Formatting helpers
 # ---------------------------------------------------------------------------
 
+
 def _bar(value: int, max_value: int, width: int = 20) -> str:
     if max_value == 0:
         return " " * width
@@ -153,12 +170,12 @@ def _bar(value: int, max_value: int, width: int = 20) -> str:
     return "█" * filled + "░" * (width - filled)
 
 
-def _sep(widths: List[int], char: str = "─") -> str:
+def _sep(widths: list[int], char: str = "─") -> str:
     return "┼".join(char * (w + 2) for w in widths)
 
 
 def print_results(
-    results: List[Dict],
+    results: list[dict],
     root: Path,
     top_n: int,
     include_blanks: bool,
@@ -173,7 +190,7 @@ def print_results(
         return
 
     # ── By language ──────────────────────────────────────────────────────
-    by_lang: Dict[str, Dict] = defaultdict(lambda: {"files": 0, "total": 0, "code": 0, "blank": 0, "comment": 0})
+    by_lang: dict[str, dict] = defaultdict(lambda: {"files": 0, "total": 0, "code": 0, "blank": 0, "comment": 0})
     for r in results:
         b = by_lang[r["language"]]
         b["files"] += 1
@@ -196,12 +213,10 @@ def print_results(
     print(f"  📁  {root.resolve()}")
     print()
 
-    def row_fmt(cols: List[str]) -> str:
+    def row_fmt(cols: list[str]) -> str:
         parts = []
         for i, (w, c) in enumerate(zip(col_widths, cols)):
-            if i == 0:
-                parts.append(f" {c:<{w}} ")
-            elif i == len(col_widths) - 1:
+            if i == 0 or i == len(col_widths) - 1:
                 parts.append(f" {c:<{w}} ")
             else:
                 parts.append(f" {c:>{w}} ")
@@ -217,26 +232,38 @@ def print_results(
         bar = _bar(stats["code"], max_code, BAR_W)
         pct = stats["code"] / total_code * 100 if total_code else 0
         bar_label = f"{bar} {pct:4.1f}%"
-        print("│" + row_fmt([
-            lang,
-            str(stats["files"]),
-            f"{stats['total']:,}",
-            f"{stats['code']:,}",
-            f"{stats['blank']:,}",
-            f"{stats['comment']:,}",
-            bar_label[:BAR_W],
-        ]) + "│")
+        print(
+            "│"
+            + row_fmt(
+                [
+                    lang,
+                    str(stats["files"]),
+                    f"{stats['total']:,}",
+                    f"{stats['code']:,}",
+                    f"{stats['blank']:,}",
+                    f"{stats['comment']:,}",
+                    bar_label[:BAR_W],
+                ]
+            )
+            + "│"
+        )
 
     print("├" + sep_line + "┤")
-    print("│" + row_fmt([
-        "TOTAL",
-        str(total_files),
-        f"{total_lines:,}",
-        f"{total_code:,}",
-        str(sum(v["blank"] for v in by_lang.values())),
-        str(sum(v["comment"] for v in by_lang.values())),
-        "",
-    ]) + "│")
+    print(
+        "│"
+        + row_fmt(
+            [
+                "TOTAL",
+                str(total_files),
+                f"{total_lines:,}",
+                f"{total_code:,}",
+                str(sum(v["blank"] for v in by_lang.values())),
+                str(sum(v["comment"] for v in by_lang.values())),
+                "",
+            ]
+        )
+        + "│"
+    )
     print("└" + "┴".join("─" * (w + 2) for w in col_widths) + "┘")
 
     # ── Top N files ───────────────────────────────────────────────────────
@@ -256,7 +283,7 @@ def print_results(
     file_headers = ["File", "Language", "Code", "Total", "Blank"]
     file_sep = "┼".join("─" * (w + 2) for w in file_col_widths)
 
-    def file_row_fmt(cols: List[str]) -> str:
+    def file_row_fmt(cols: list[str]) -> str:
         parts = []
         for i, (w, c) in enumerate(zip(file_col_widths, cols)):
             if i == 0:
@@ -273,14 +300,20 @@ def print_results(
         bar = _bar(r["code"], max_file_code, 6)
         path_display = r["path"]
         if len(path_display) > path_w:
-            path_display = "…" + path_display[-(path_w - 1):]
-        print("│" + file_row_fmt([
-            path_display,
-            r["language"],
-            f"{r['code']:,}",
-            f"{r['total']:,}",
-            f"{r['blank']:,}",
-        ]) + "│")
+            path_display = "…" + path_display[-(path_w - 1) :]
+        print(
+            "│"
+            + file_row_fmt(
+                [
+                    path_display,
+                    r["language"],
+                    f"{r['code']:,}",
+                    f"{r['total']:,}",
+                    f"{r['blank']:,}",
+                ]
+            )
+            + "│"
+        )
 
     print("└" + "┴".join("─" * (w + 2) for w in file_col_widths) + "┘")
     print()
@@ -291,6 +324,7 @@ def print_results(
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(

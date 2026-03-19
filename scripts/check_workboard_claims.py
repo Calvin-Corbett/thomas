@@ -399,6 +399,7 @@ def _evaluate_board(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
+    require_claims_to_have_active_task: bool = True,
 ) -> tuple[list[str], list[Claim], list[ActiveTask], list[UpForGrabTask], list[WorkboardIssue]]:
     violations: list[str] = []
     claims: list[Claim] = []
@@ -588,10 +589,11 @@ def _evaluate_board(
     for task in active_tasks:
         active_tasks_by_agent.setdefault(_normalize_agent(task.agent), []).append(task)
 
-    for agent_key, claim_rows in claims_by_agent.items():
-        if not active_tasks_by_agent.get(agent_key):
-            agent_label = claim_rows[0].agent
-            violations.append(f"agent `{agent_label}` has active claim but no matching entry in `## Active Tasks`")
+    if require_claims_to_have_active_task:
+        for agent_key, claim_rows in claims_by_agent.items():
+            if not active_tasks_by_agent.get(agent_key):
+                agent_label = claim_rows[0].agent
+                violations.append(f"agent `{agent_label}` has active claim but no matching entry in `## Active Tasks`")
 
     for task in active_tasks:
         agent_key = _normalize_agent(task.agent)
@@ -647,10 +649,12 @@ def _evaluate_claims(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
+    require_claims_to_have_active_task: bool = True,
 ) -> tuple[list[str], list[Claim]]:
     violations, claims, _tasks, _grab, _issues = _evaluate_board(
         workboard_path,
         require_identity_metadata=require_identity_metadata,
+        require_claims_to_have_active_task=require_claims_to_have_active_task,
     )
     return violations, claims
 
@@ -659,11 +663,13 @@ def evaluate_claims(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
+    require_claims_to_have_active_task: bool = True,
 ) -> tuple[list[str], list[Claim]]:
     """Public claims-only evaluation helper for other coordination scripts."""
     return _evaluate_claims(
         workboard_path,
         require_identity_metadata=require_identity_metadata,
+        require_claims_to_have_active_task=require_claims_to_have_active_task,
     )
 
 
@@ -671,11 +677,13 @@ def evaluate_board(
     workboard_path: Path = DEFAULT_WORKBOARD,
     *,
     require_identity_metadata: bool = False,
+    require_claims_to_have_active_task: bool = True,
 ) -> tuple[list[str], list[Claim], list[ActiveTask], list[UpForGrabTask], list[WorkboardIssue]]:
     """Public full-board evaluation helper for coordination gates."""
     return _evaluate_board(
         workboard_path,
         require_identity_metadata=require_identity_metadata,
+        require_claims_to_have_active_task=require_claims_to_have_active_task,
     )
 
 

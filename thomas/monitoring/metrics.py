@@ -31,7 +31,7 @@ class HistogramBucket:
     le: float  # le = less than or equal
     count: int = 0
 
-    def __lt__(self, other: "HistogramBucket") -> bool:
+    def __lt__(self, other: HistogramBucket) -> bool:
         return self.le < other.le
 
 

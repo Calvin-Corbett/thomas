@@ -20,6 +20,9 @@ from thomas.core.config import AppConfig
 
 log = logging.getLogger(__name__)
 
+_GLOBAL_RETRIEVAL_THREAD_ID = "__global__"
+_GLOBAL_EPISODE_FACT_SUBJECTS = frozenset({"user", "project"})
+
 
 @dataclass
 class _MemoryText:
@@ -33,7 +36,7 @@ class AutonomyMemoryEngine:
         self,
         config: AppConfig,
         *,
-        enable_legacy: bool = True,
+        enable_legacy: bool = False,
         enable_v2: bool = True,
     ) -> None:
         self._config = config
@@ -259,6 +262,7 @@ class AutonomyMemoryEngine:
         if len(payload) > 120_000:
             payload = payload[:120_000] + "\n... (truncated)"
 
+        role = self._event_role(etype)
         out_id = 0
 
         if self._legacy is not None:
@@ -272,17 +276,84 @@ class AutonomyMemoryEngine:
                 source = f"agent.{str(etype or 'event').strip().lower()}"
                 v2_id = self._fabric_v2.ingest_episode(
                     thread_id=thread_id,
-                    role=self._event_role(etype),
+                    role=role,
                     content=payload,
                     source=source,
-                    also_extract_profile=True,
+                    also_extract_profile=(role == "user"),
                 )
                 if out_id <= 0:
                     out_id = int(v2_id)
+                self.auto_promote_event_memory(
+                    thread_id,
+                    etype,
+                    payload,
+                    source_episode_id=int(v2_id),
+                )
             except (RuntimeError, OSError) as e:
                 log.warning("Memory Fabric v2 add_event failed: %s", e)
 
         return int(out_id)
+
+    def auto_promote_event_memory(
+        self,
+        thread_id: str,
+        etype: str,
+        text: str,
+        *,
+        source_episode_id: int | None = None,
+        ts_ms: int | None = None,
+    ) -> dict[str, Any]:
+        self._require_started()
+        if self._fabric_v2 is None:
+            return {"promoted": 0, "duplicates": 0, "reason": "fabric_v2_unavailable"}
+        if self._event_role(etype) != "user":
+            return {"promoted": 0, "duplicates": 0, "reason": "role_not_user"}
+
+        payload = str(text or "").strip()
+        if not payload:
+            return {"promoted": 0, "duplicates": 0, "reason": "empty"}
+
+        try:
+            from thomas.memory.curator import extract_episode_facts
+        except Exception as e:
+            log.debug("Runtime fact promotion helper unavailable: %s", e)
+            return {"promoted": 0, "duplicates": 0, "reason": "extractor_unavailable"}
+
+        ts = int(ts_ms or time.time() * 1000)
+        promoted = 0
+        duplicates = 0
+        for subject, predicate, obj, confidence in extract_episode_facts(payload):
+            normalized_subject = str(subject or "").strip().lower()
+            normalized_predicate = str(predicate or "").strip().lower()
+            normalized_obj = str(obj or "").strip()
+            if normalized_subject not in _GLOBAL_EPISODE_FACT_SUBJECTS:
+                continue
+            if not normalized_predicate or not normalized_obj:
+                continue
+            existing = self._fabric_v2.db.execute(
+                """
+                SELECT id FROM semantic_facts
+                WHERE subject=? AND predicate=? AND obj=? AND thread_id IS NULL
+                ORDER BY id DESC LIMIT 1
+                """,
+                (normalized_subject, normalized_predicate, normalized_obj),
+            ).fetchone()
+            if existing is not None:
+                duplicates += 1
+                continue
+            self._fabric_v2.upsert_fact(
+                thread_id=None,
+                subject=normalized_subject,
+                predicate=normalized_predicate,
+                obj=normalized_obj,
+                confidence=float(max(0.0, min(1.0, confidence))),
+                provenance_episode_id=int(source_episode_id) if source_episode_id else None,
+                ts_ms=ts,
+                base_salience=1.15 if normalized_subject == "user" else 1.10,
+            )
+            promoted += 1
+
+        return {"promoted": promoted, "duplicates": duplicates, "reason": "ok"}
 
     def retrieve(
         self,
@@ -294,11 +365,23 @@ class AutonomyMemoryEngine:
         self._require_started()
 
         query_text = str(query or "").strip()
-        thread_id = str(thread or "default").strip() or "default"
+        if thread is None:
+            thread_id = _GLOBAL_RETRIEVAL_THREAD_ID
+        else:
+            thread_id = str(thread).strip() or "default"
 
         if self._fabric_v2 is not None and query_text:
             try:
                 budget_tokens = self._budget_for_mode(budget, mode)
+                if thread is None:
+                    self._fabric_v2.update_thread_settings(
+                        thread_id,
+                        {
+                            "include_thread": False,
+                            "include_global": True,
+                            "include_profile": True,
+                        },
+                    )
                 pack = self._fabric_v2.retrieve(
                     thread_id=thread_id,
                     query=query_text,
@@ -481,9 +564,11 @@ class AutonomyMemoryEngine:
         thread_id: str,
         *,
         enabled: bool | None = None,
+        include_thread: bool | None = None,
         include_global: bool | None = None,
         include_profile: bool | None = None,
         pins_only: bool | None = None,
+        budget_tokens: int | None = None,
         max_pack_tokens: int | None = None,
         max_results: int | None = None,
         decay_half_life_hours: float | None = None,
@@ -505,6 +590,8 @@ class AutonomyMemoryEngine:
         patch: dict[str, Any] = {}
         if enabled is not None:
             patch["enabled"] = bool(enabled)
+        if include_thread is not None:
+            patch["include_thread"] = bool(include_thread)
         if include_global is not None:
             patch["include_global"] = bool(include_global)
         if include_profile is not None:
@@ -513,6 +600,8 @@ class AutonomyMemoryEngine:
             patch["pins_only"] = bool(pins_only)
         if max_pack_tokens is not None:
             patch["max_pack_tokens"] = int(max_pack_tokens)
+        elif budget_tokens is not None:
+            patch["max_pack_tokens"] = int(budget_tokens)
         if max_results is not None:
             patch["max_results"] = int(max_results)
         if decay_half_life_hours is not None:

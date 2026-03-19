@@ -87,17 +87,21 @@ def test_curator_promotes_episode_facts_incrementally(tmp_path, monkeypatch) -> 
     mem.start()
     try:
         mem.add_event("telegram:7", "user_message", "my deployment target is cloudflare workers")
-        before = int(mem.stats().get("v2_facts", 0))
 
+        immediate = mem.retrieve("deployment target", thread="telegram:8", budget=1000, mode="auto")
+        assert "cloudflare workers" in immediate.text.lower()
+
+        before = int(mem.stats().get("v2_facts", 0))
         first = mem.run_curator(force=True)
         after_first = int(mem.stats().get("v2_facts", 0))
 
         second = mem.run_curator(force=True)
         after_second = int(mem.stats().get("v2_facts", 0))
 
+        assert before >= 1
         assert first.get("ran") is True
-        assert int(first.get("facts_promoted", 0)) >= 1
-        assert after_first >= before + 1
+        assert int(first.get("facts_promoted", 0)) == 0
+        assert after_first == before
         assert int(second.get("facts_promoted", 0)) == 0
         assert after_second == after_first
     finally:
@@ -114,7 +118,10 @@ def test_curator_approval_queue_and_apply(tmp_path, monkeypatch) -> None:  # noq
     mem = AutonomyMemoryEngine(cfg, enable_legacy=False, enable_v2=True)
     mem.start()
     try:
-        mem.add_event("telegram:11", "user_message", "I use zed for coding")
+        fabric = mem._fabric_v2
+        assert fabric is not None
+        fabric.ingest_episode("telegram:11", "user", "I use zed for coding", ts_ms=1700000000000)
+
         before = int(mem.stats().get("v2_facts", 0))
         result = mem.run_curator(force=True)
         assert result.get("ran") is True
@@ -135,5 +142,8 @@ def test_curator_approval_queue_and_apply(tmp_path, monkeypatch) -> None:  # noq
 
         after = int(mem.stats().get("v2_facts", 0))
         assert after >= before + 1
+
+        ctx = mem.retrieve("zed for coding", thread="telegram:99", budget=1000, mode="auto")
+        assert "zed" in ctx.text.lower()
     finally:
         mem.close()

@@ -503,6 +503,12 @@ def _telegram_external_health_check(
             "Telegram getMe request failed.",
             {"endpoint": "getMe", "exception_type": type(exc).__name__, "exception": str(exc)},
         )
+    except Exception as exc:  # noqa: BLE001 - normalize to deterministic contract error
+        return (
+            False,
+            "Telegram getMe request failed.",
+            {"endpoint": "getMe", "exception_type": type(exc).__name__, "exception": str(exc)},
+        )
 
     try:
         data = json.loads(raw.decode("utf-8"))

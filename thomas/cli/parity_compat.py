@@ -6,6 +6,7 @@ specialized submodules to keep individual files under the 800-line limit.
 
 from __future__ import annotations
 
+import importlib
 from typing import Any
 
 import click
@@ -56,6 +57,7 @@ except (ImportError, ModuleNotFoundError):
 
 
 # Import all command groups and utilities from compat submodules
+import thomas.cli.compat_memory as _compat_memory_module
 from thomas.cli.compat_browser import browser
 from thomas.cli.compat_channels import message, messages
 from thomas.cli.compat_core_help import agent_cmd, help_cmd, logs_cmd
@@ -65,10 +67,72 @@ from thomas.cli.compat_skills import completion_cmd, plugin_cmd, qr_cmd, skills
 from thomas.cli.compat_tools import acp, clawbot, daemon, dns, hooks
 from thomas.cli.compat_utils import app
 
+
+def _resolve_memory_backend(
+    action: str,
+    *,
+    module_name: str,
+    symbol: str,
+    target: str = "",
+) -> tuple[Any | None, dict[str, Any] | None]:
+    """Compatibility bridge for tests monkeypatching parity_compat internals."""
+    try:
+        module = importlib.import_module(module_name)
+    except ModuleNotFoundError as exc:
+        missing = str(getattr(exc, "name", "") or "").strip()
+        if missing == module_name:
+            return None, _compat_memory_module._memory_unimplemented_payload(action, target=target)
+        return None, _compat_memory_module._memory_runtime_error_payload(
+            action,
+            f"{type(exc).__name__}: {exc}",
+            target=target,
+        )
+    except ImportError as exc:
+        return None, _compat_memory_module._memory_runtime_error_payload(
+            action,
+            f"{type(exc).__name__}: {exc}",
+            target=target,
+        )
+    except Exception as exc:
+        return None, _compat_memory_module._memory_runtime_error_payload(
+            action,
+            f"{type(exc).__name__}: {exc}",
+            target=target,
+        )
+
+    impl = getattr(module, symbol, None)
+    if not callable(impl):
+        return None, _compat_memory_module._memory_runtime_error_payload(
+            action,
+            f"AttributeError: {module_name}.{symbol} is not callable",
+            target=target,
+        )
+    return impl, None
+
+
+def _resolve_memory_backend_dispatch(
+    action: str,
+    *,
+    module_name: str,
+    symbol: str,
+    target: str = "",
+) -> tuple[Any | None, dict[str, Any] | None]:
+    return _resolve_memory_backend(
+        action,
+        module_name=module_name,
+        symbol=symbol,
+        target=target,
+    )
+
+
+# Route compat-memory backend resolution through this module so monkeypatches
+# on `thomas.cli.parity_compat` are observed by memory operation tests.
+_compat_memory_module._resolve_memory_backend = _resolve_memory_backend_dispatch
+
 # Import helper functions that may be referenced elsewhere
 # These functions are typically registered dynamically
 try:
-    from thomas.cli.compat_tools import _compat_aliases, _compat_command, _compat_payload, register_compat_commands
+    from thomas.cli.compat_mcp import _compat_aliases, _compat_command, _compat_payload, register_compat_commands
 except (ImportError, ModuleNotFoundError):
 
     def _compat_payload(name: str, equivalents: list[str], note: str) -> dict[str, Any]:

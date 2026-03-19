@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import json
 import os
 import socket
 import sys
@@ -18,7 +19,10 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
-from thomas.core.boot_doctor import run_boot_doctor
+from thomas.core.boot_doctor import (
+    run_boot_doctor,
+    write_boot_doctor_status,
+)
 from thomas.core.config import AppConfig, load_config
 from thomas.tools.base import Tool, ToolResult
 from thomas.tools.code_search import register_code_search_tools
@@ -151,6 +155,7 @@ def _run_report(
     report_path: Path | None,
     auto_repair: bool,
     allow_ai: bool,
+    relaunch: bool = False,
 ) -> Path:
     try:
         return run_boot_doctor(
@@ -161,6 +166,7 @@ def _run_report(
             report_path=report_path,
             auto_repair=bool(auto_repair),
             allow_ai=bool(allow_ai),
+            relaunch=bool(relaunch),
         )
     except Exception as exc:
         fallback = report_path
@@ -335,24 +341,17 @@ def _build_restricted_tools(root: Path) -> tuple[ToolRegistry, BootDoctorPathPol
     return restricted, policy
 
 
-async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) -> int:
+def _build_bootdoctor_agent(
+    args: argparse.Namespace,
+    *,
+    config: AppConfig,
+    root: Path,
+):
     from thomas.agent.loop import AgentLoop
-    from thomas.core.events import EventType
     from thomas.core.llm import LLMClient
 
     if not config.models:
-        report = _run_report(
-            config=config,
-            root=root,
-            port=int(args.port),
-            reason=str(args.reason or "").strip() or "runtime not detected",
-            report_path=_parse_report_path(args.report, root),
-            auto_repair=not bool(args.no_auto_repair),
-            allow_ai=not bool(args.no_ai),
-        )
-        print("[bootdoctor] no model profiles configured; chat disabled.")
-        print(f"[bootdoctor] report: {report}")
-        return 0
+        return None, None, None
 
     profile = str(args.model or "").strip() or str(config.default_model or "").strip()
     if profile not in config.models:
@@ -389,17 +388,93 @@ async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) 
         autonomy_level=2,
         max_parallel_tools=2,
     )
+    return agent, llm, policy
 
-    report = _run_report(
-        config=config,
-        root=root,
-        port=int(args.port),
-        reason=str(args.reason or "").strip() or "runtime not detected",
-        report_path=_parse_report_path(args.report, root),
-        auto_repair=not bool(args.no_auto_repair),
-        allow_ai=not bool(args.no_ai),
-    )
-    print(f"[bootdoctor] initial report: {report}")
+
+def _load_startup_context(raw_path: str, root: Path) -> dict[str, Any]:
+    path = _parse_report_path(raw_path, root)
+    if path is None or not path.exists():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception as exc:
+        return {"context_path": str(path), "parse_error": f"{type(exc).__name__}: {exc}"}
+    if isinstance(payload, dict):
+        payload.setdefault("context_path", str(path))
+        return payload
+    return {"context_path": str(path), "payload": payload}
+
+
+def _read_report_excerpt(path: Path | None, *, max_chars: int = 2400) -> str:
+    if path is None or not path.exists():
+        return ""
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except Exception as exc:
+        return f"Could not read report: {type(exc).__name__}: {exc}"
+    raw = raw.strip()
+    if len(raw) > max_chars:
+        return raw[-max_chars:]
+    return raw
+
+
+def _rescue_reason(args: argparse.Namespace, context: dict[str, Any]) -> str:
+    explicit = str(args.reason or "").strip()
+    if explicit and explicit.lower() != "runtime not detected":
+        return explicit
+    for key in ("reason", "failure_reason", "message"):
+        value = str(context.get(key, "")).strip()
+        if value:
+            return value
+    return explicit or "runtime not detected"
+
+
+def _build_rescue_prompt(
+    *,
+    args: argparse.Namespace,
+    context: dict[str, Any],
+    report_excerpt: str,
+    attempt_number: int,
+    max_attempts: int,
+) -> str:
+    launch_mode = str(context.get("attempted_launch_mode") or context.get("launch_mode") or "unknown").strip()
+    stderr_tail = str(context.get("stderr_tail") or "").strip()
+    health_status = str(context.get("current_health_status") or "unhealthy").strip()
+    ever_healthy = bool(context.get("ever_healthy_during_boot") or context.get("ever_healthy"))
+    lines = [
+        "Thomas failed to become healthy during startup.",
+        f"Attempt: {attempt_number}/{max_attempts}",
+        f"Launch mode: {launch_mode}",
+        f"Port: {int(args.port)}",
+        f"Health status: {health_status}",
+        f"Ever healthy this boot: {str(ever_healthy).lower()}",
+        f"Failure reason: {_rescue_reason(args, context)}",
+        "",
+        "Work only inside the BootDoctor writable scope.",
+        "Diagnose the startup failure, apply one safe repair batch, then stop.",
+        "Focus on launcher scripts, boot doctor files, dependency repair, Thomas-owned port cleanup, and model/config validation needed for startup.",
+    ]
+    if stderr_tail:
+        lines.extend(["", "Recent stderr/stdout tail:", stderr_tail])
+    if report_excerpt:
+        lines.extend(["", "Current BootDoctor report excerpt:", report_excerpt])
+    lines.extend(["", "After your repair batch, I will rerun startup checks automatically."])
+    return "\n".join(lines).strip()
+
+
+async def _run_interactive_loop(
+    *,
+    agent,
+    llm,
+    policy: BootDoctorPathPolicy,
+    args: argparse.Namespace,
+    config: AppConfig,
+    root: Path,
+    initial_report: Path | None = None,
+) -> int:
+    report = initial_report
+    if report is not None:
+        print(f"[bootdoctor] initial report: {report}")
     print("[bootdoctor] commands: /report [reason], /status, /scope, /quit")
 
     try:
@@ -426,6 +501,7 @@ async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) 
                     report_path=_parse_report_path(args.report, root),
                     auto_repair=not bool(args.no_auto_repair),
                     allow_ai=not bool(args.no_ai),
+                    relaunch=bool(getattr(args, "relaunch", False)),
                 )
                 print(f"[bootdoctor] report: {report}")
                 continue
@@ -446,21 +522,21 @@ async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) 
 
             printed_text = False
             async for event in agent.run(prompt):
-                if event.type == EventType.TEXT_DELTA:
+                if event.type.value == "text_delta":
                     printed_text = True
                     sys.stdout.write(str(event.data.get("text", "")))
                     sys.stdout.flush()
-                elif event.type == EventType.TOOL_CALL_START:
+                elif event.type.value == "tool_call_start":
                     name = str(event.data.get("tool_name", "tool"))
                     sys.stdout.write(f"\n[tool] {name} ...")
                     sys.stdout.flush()
-                elif event.type == EventType.TOOL_RESULT:
+                elif event.type.value == "tool_result":
                     ok = bool(event.data.get("ok", False))
                     ms = float(event.data.get("duration_ms", 0.0) or 0.0)
                     status = "ok" if ok else "fail"
                     sys.stdout.write(f" {status} ({ms:.0f}ms)\n")
                     sys.stdout.flush()
-                elif event.type == EventType.AGENT_ERROR:
+                elif event.type.value == "agent_error":
                     sys.stdout.write(f"\n[bootdoctor] error: {event.data.get('error')}\n")
                     sys.stdout.flush()
             if printed_text:
@@ -472,6 +548,210 @@ async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) 
     return 0
 
 
+async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) -> int:
+    if not config.models:
+        report = _run_report(
+            config=config,
+            root=root,
+            port=int(args.port),
+            reason=str(args.reason or "").strip() or "runtime not detected",
+            report_path=_parse_report_path(args.report, root),
+            auto_repair=not bool(args.no_auto_repair),
+            allow_ai=not bool(args.no_ai),
+            relaunch=bool(getattr(args, "relaunch", False)),
+        )
+        print("[bootdoctor] no model profiles configured; chat disabled.")
+        print(f"[bootdoctor] report: {report}")
+        return 0
+
+    agent, llm, policy = _build_bootdoctor_agent(args, config=config, root=root)
+    report = _run_report(
+        config=config,
+        root=root,
+        port=int(args.port),
+        reason=str(args.reason or "").strip() or "runtime not detected",
+        report_path=_parse_report_path(args.report, root),
+        auto_repair=not bool(args.no_auto_repair),
+        allow_ai=not bool(args.no_ai),
+        relaunch=bool(getattr(args, "relaunch", False)),
+    )
+    return await _run_interactive_loop(
+        agent=agent,
+        llm=llm,
+        policy=policy,
+        args=args,
+        config=config,
+        root=root,
+        initial_report=report,
+    )
+
+
+async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path) -> int:
+    context = _load_startup_context(getattr(args, "startup_context", ""), root)
+    reason = _rescue_reason(args, context)
+    max_attempts = max(1, int(getattr(args, "max_attempts", 3) or 3))
+
+    print("[bootdoctor] Thomas did not start.")
+    print("[bootdoctor] I'm checking what failed.")
+    print("[bootdoctor] I'll try safe repairs and restart it automatically.")
+
+    write_boot_doctor_status(
+        root,
+        status="running",
+        phase="diagnosing",
+        message="Thomas did not start. Boot Doctor is checking what failed.",
+        reason=reason,
+        port=int(args.port),
+        extra={"context": context},
+    )
+
+    report = _run_report(
+        config=config,
+        root=root,
+        port=int(args.port),
+        reason=reason,
+        report_path=_parse_report_path(args.report, root),
+        auto_repair=not bool(args.no_auto_repair),
+        allow_ai=not bool(args.no_ai),
+        relaunch=bool(getattr(args, "relaunch", False)),
+    )
+    if _runtime_detected(str(args.host), int(args.port)):
+        write_boot_doctor_status(
+            root,
+            status="recovered",
+            phase="relaunch_complete",
+            message="Thomas is healthy again.",
+            reason=reason,
+            port=int(args.port),
+            extra={"report_path": str(report)},
+        )
+        print(f"[bootdoctor] recovery report: {report}")
+        print("[bootdoctor] Thomas is healthy again.")
+        return 0
+
+    agent = llm = policy = None
+    if config.models:
+        agent, llm, policy = _build_bootdoctor_agent(args, config=config, root=root)
+
+    if agent is None or llm is None or policy is None:
+        write_boot_doctor_status(
+            root,
+            status="failed",
+            phase="awaiting_user",
+            message="Boot Doctor could not continue automatically because no rescue model is configured.",
+            reason=reason,
+            port=int(args.port),
+            extra={"report_path": str(report)},
+        )
+        print("[bootdoctor] No model profiles are configured for rescue chat.")
+        print(f"[bootdoctor] report: {report}")
+        try:
+            input("[bootdoctor] Press Enter to close this window.")
+        except (KeyboardInterrupt, EOFError):
+            print("")
+        return 1
+
+    try:
+        for attempt in range(1, max_attempts + 1):
+            report_excerpt = _read_report_excerpt(report)
+            write_boot_doctor_status(
+                root,
+                status="running",
+                phase="repairing",
+                message=f"Applying safe repair batch {attempt} of {max_attempts}.",
+                reason=reason,
+                port=int(args.port),
+                attempts={"current": attempt, "max": max_attempts},
+                extra={"report_path": str(report)},
+            )
+            prompt = _build_rescue_prompt(
+                args=args,
+                context=context,
+                report_excerpt=report_excerpt,
+                attempt_number=attempt,
+                max_attempts=max_attempts,
+            )
+            printed_text = False
+            async for event in agent.run(prompt):
+                if event.type.value == "text_delta":
+                    printed_text = True
+                    sys.stdout.write(str(event.data.get("text", "")))
+                    sys.stdout.flush()
+                elif event.type.value == "tool_call_start":
+                    sys.stdout.write(f"\n[tool] {event.data.get('tool_name', 'tool')} ...")
+                    sys.stdout.flush()
+                elif event.type.value == "tool_result":
+                    ok = bool(event.data.get("ok", False))
+                    ms = float(event.data.get("duration_ms", 0.0) or 0.0)
+                    sys.stdout.write(f" {'ok' if ok else 'fail'} ({ms:.0f}ms)\n")
+                    sys.stdout.flush()
+                elif event.type.value == "agent_error":
+                    sys.stdout.write(f"\n[bootdoctor] error: {event.data.get('error')}\n")
+                    sys.stdout.flush()
+            if printed_text:
+                sys.stdout.write("\n")
+                sys.stdout.flush()
+
+            write_boot_doctor_status(
+                root,
+                status="running",
+                phase="retrying",
+                message=f"Retrying Thomas startup after repair batch {attempt}.",
+                reason=reason,
+                port=int(args.port),
+                attempts={"current": attempt, "max": max_attempts},
+            )
+            report = _run_report(
+                config=config,
+                root=root,
+                port=int(args.port),
+                reason=f"startup rescue attempt {attempt}: {reason}",
+                report_path=_parse_report_path(args.report, root),
+                auto_repair=not bool(args.no_auto_repair),
+                allow_ai=not bool(args.no_ai),
+                relaunch=bool(getattr(args, "relaunch", False)),
+            )
+            if _runtime_detected(str(args.host), int(args.port)):
+                write_boot_doctor_status(
+                    root,
+                    status="recovered",
+                    phase="relaunch_complete",
+                    message="Thomas is healthy again.",
+                    reason=reason,
+                    port=int(args.port),
+                    attempts={"current": attempt, "max": max_attempts},
+                    extra={"report_path": str(report)},
+                )
+                print(f"[bootdoctor] recovery report: {report}")
+                print("[bootdoctor] Thomas is healthy again.")
+                return 0
+
+        write_boot_doctor_status(
+            root,
+            status="failed",
+            phase="awaiting_user",
+            message="Automatic recovery ran out of attempts. Boot Doctor is waiting for manual follow-up.",
+            reason=reason,
+            port=int(args.port),
+            attempts={"current": max_attempts, "max": max_attempts},
+            extra={"report_path": str(report)},
+        )
+        print(f"[bootdoctor] Automatic recovery exhausted {max_attempts} attempt(s).")
+        print("[bootdoctor] Staying open for manual follow-up.")
+        return await _run_interactive_loop(
+            agent=agent,
+            llm=llm,
+            policy=policy,
+            args=args,
+            config=config,
+            root=root,
+            initial_report=report,
+        )
+    finally:
+        if llm is not None:
+            await llm.close()
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="bootdoctor",
@@ -481,8 +761,8 @@ def _build_parser() -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="chat",
-        choices=("chat", "report"),
-        help="Use 'report' for one-shot diagnostics or 'chat' for interactive repair.",
+        choices=("chat", "report", "rescue"),
+        help="Use 'report' for one-shot diagnostics, 'chat' for interactive repair, or 'rescue' for startup recovery mode.",
     )
     parser.add_argument("--host", default="127.0.0.1", help="Runtime host to check.")
     parser.add_argument("--port", type=int, default=8899, help="Runtime port to check.")
@@ -494,6 +774,14 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--force", action="store_true", help="Allow BootDoctor even when runtime is detected.")
     parser.add_argument("--no-ai", action="store_true", help="Skip AI summary generation in diagnostic reports.")
     parser.add_argument("--no-auto-repair", action="store_true", help="Collect findings only; skip auto-repairs.")
+    parser.add_argument("--relaunch", action="store_true", help="Leave a recovered Thomas server running after repair.")
+    parser.add_argument("--startup-context", default="", help="Optional JSON context payload for rescue mode.")
+    parser.add_argument(
+        "--max-attempts",
+        type=int,
+        default=3,
+        help="Maximum automatic rescue passes before Boot Doctor waits for manual follow-up.",
+    )
     return parser
 
 
@@ -522,11 +810,14 @@ def main(argv: list[str] | None = None) -> int:
             report_path=report_path,
             auto_repair=not bool(args.no_auto_repair),
             allow_ai=not bool(args.no_ai),
+            relaunch=bool(getattr(args, "relaunch", False)),
         )
         print(report)
         return 0
 
     try:
+        if args.command == "rescue":
+            return asyncio.run(_run_rescue(args, config=config, root=root))
         return asyncio.run(_run_chat(args, config=config, root=root))
     except KeyboardInterrupt:
         print("")

@@ -11,8 +11,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 
+from thomas.core.safe_pickle import safe_pickle_loads
+
 from ._exceptions import PersistenceError
-from ._types import Message
+from ._types import DeliveryMode, Message
 
 
 @dataclass
@@ -153,7 +155,13 @@ class SegmentReader:
                     msg_data = data[offset : offset + msg_len]
                     offset += msg_len
 
-                    message = pickle.loads(msg_data)
+                    message = safe_pickle_loads(
+                        msg_data,
+                        allowed_globals={
+                            ("thomas.message_queue._types", "DeliveryMode"): DeliveryMode,
+                            ("thomas.message_queue._types", "Message"): Message,
+                        },
+                    )
                     self.messages.append(message)
 
             except Exception as e:

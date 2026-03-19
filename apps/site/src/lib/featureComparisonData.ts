@@ -525,4 +525,6 @@ export const COMPARISON_META = {
   source: 'thomas_vs_openclaw_subcommands.json',
   openclawRepo: 'https://github.com/openclaw/openclaw',
   openclawCommit: 'c1428e8df9a497d45b3ed3d35f70419d736fdd4b',
+  openclawLatestCommit: '881ac62005852612315d4ea847edec58b0910f88',
+  openclawLatestDate: '2026-03-01T23:53:03Z',
 };

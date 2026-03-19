@@ -1,9 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
-from typing import Optional
-
-SCHEMA_VERSION = 2
+SCHEMA_VERSION = 3
 
 INIT_SQL = """CREATE TABLE IF NOT EXISTS meta (
   key TEXT PRIMARY KEY,
@@ -131,6 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_contra_reviews_status
 CREATE TABLE IF NOT EXISTS thread_settings (
   thread_id TEXT PRIMARY KEY,
   enabled INTEGER NOT NULL DEFAULT 1,
+  include_thread INTEGER NOT NULL DEFAULT 1,
   include_global INTEGER NOT NULL DEFAULT 1,
   include_profile INTEGER NOT NULL DEFAULT 1,
   pins_only INTEGER NOT NULL DEFAULT 0,
@@ -167,6 +165,7 @@ CREATE INDEX IF NOT EXISTS idx_pins_thread_created ON pins(thread_id, created_at
 CREATE INDEX IF NOT EXISTS idx_contra_resolved_ts ON contradictions(resolved, created_at_ms DESC);
 """
 
+
 def fts_sql(table_name: str = "episodes_fts") -> str:
     return f"""CREATE VIRTUAL TABLE IF NOT EXISTS {table_name} USING fts5(
   content,
@@ -185,6 +184,7 @@ def facts_fts_sql(table_name: str = "semantic_facts_fts") -> str:
   fact_id UNINDEXED
 );
 """
+
 
 FTS_TRIGGERS_SQL = """CREATE TRIGGER IF NOT EXISTS episodes_ai AFTER INSERT ON episodes BEGIN
   INSERT INTO episodes_fts(rowid, content, thread_id, episode_id)

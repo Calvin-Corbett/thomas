@@ -1,0 +1,88 @@
+name: GitHub Publish Safety
+
+on:
+  pull_request:
+    branches: [prod]
+  push:
+    branches: [dev, prod]
+  workflow_dispatch:
+
+concurrency:
+  group: github-publish-safety-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  publish-safety:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[server,repl,test]"
+
+      - name: Release lane policy (PR to prod must be dev -> prod)
+        if: github.event_name == 'pull_request'
+        run: |
+          python scripts/check_release_lane_policy.py \
+            --base "${{ github.base_ref }}" \
+            --head "${{ github.head_ref }}" \
+            --require-base prod \
+            --require-head dev \
+            --json \
+            --strict
+
+      - name: Publish preflight (deep)
+        run: |
+          python scripts/github_publish_preflight.py --deep --json --strict
+
+      - name: Production launch smoke (prod branch only)
+        if: github.ref_name == 'prod'
+        shell: bash
+        run: |
+          set -euo pipefail
+          THOMAS_ENV=production THOMAS_CONFIG=thomas.prod.toml python -m thomas serve --port 18089 > /tmp/thomas-prod.log 2>&1 &
+          server_pid=$!
+          cleanup() {
+            kill "$server_pid" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          ok=0
+          for i in $(seq 1 25); do
+            if curl -sf "http://127.0.0.1:18089/api/health" > /tmp/prod-health.json; then
+              ok=1
+              break
+            fi
+            sleep 1
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "production launch smoke failed; server never became healthy"
+            echo "===== /tmp/thomas-prod.log ====="
+            cat /tmp/thomas-prod.log || true
+            exit 1
+          fi
+
+          echo "production launch smoke passed"
+          cat /tmp/prod-health.json
+
+      - name: Upload prod smoke logs
+        if: always() && github.ref_name == 'prod'
+        uses: actions/upload-artifact@v4
+        with:
+          name: prod-launch-smoke-${{ github.run_id }}
+          path: |
+            /tmp/thomas-prod.log
+            /tmp/prod-health.json
+          if-no-files-found: warn

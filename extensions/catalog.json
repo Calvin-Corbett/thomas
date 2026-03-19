@@ -2,6 +2,68 @@
   "generated_at": "2026-02-21T00:00:00Z",
   "packs": [
     {
+      "id": "life-manager",
+      "name": "Life Manager",
+      "version": "1.0.0",
+      "category": "productivity",
+      "target": "desktop",
+      "mode": "life_manager",
+      "entrypoint": "hooks.py",
+      "capabilities": [
+        "life_manager.tasks",
+        "life_manager.agenda",
+        "life_manager.habits",
+        "life_manager.goals"
+      ],
+      "description": "Track daily tasks, agenda events, habits, and goals in one Thomas plugin.",
+      "categories": [
+        "productivity",
+        "automation"
+      ],
+      "tags": [
+        "productivity",
+        "automation",
+        "command_center",
+        "workspace"
+      ],
+      "marketplace_type": "command_center",
+      "requires": [
+        "life-manager-foundation"
+      ],
+      "left_nav_behavior": "workspace",
+      "default_nav_section": "command_centers",
+      "default_nav_order": 520
+    },
+    {
+      "id": "life-manager-foundation",
+      "name": "Life Manager Foundation",
+      "version": "1.0.0",
+      "category": "productivity",
+      "categories": [
+        "productivity",
+        "automation"
+      ],
+      "target": "desktop",
+      "mode": "life_manager_foundation",
+      "entrypoint": "hooks.py",
+      "capabilities": [
+        "life_manager.foundation",
+        "life_manager.bootstrap"
+      ],
+      "description": "Shared support component for Life Manager installs and future life workflow upgrades.",
+      "marketplace_type": "dependency",
+      "tags": [
+        "productivity",
+        "automation",
+        "dependency",
+        "support"
+      ],
+      "requires": [],
+      "left_nav_behavior": "none",
+      "default_nav_section": "installed",
+      "default_nav_order": 940
+    },
+    {
       "id": "pack-alerts-slack-detect",
       "name": "Alerts Slack Detect Extension Pack",
       "version": "1.0.0",

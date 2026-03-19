@@ -89,6 +89,25 @@ def test_read_server_sources_raises_when_none_exist(monkeypatch: pytest.MonkeyPa
         _ = mod._read_server_sources()
 
 
+def test_read_cli_sources_skips_missing_sources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    first = tmp_path / "first.py"
+    second = tmp_path / "second.py"
+    missing = tmp_path / "missing.py"
+    first.write_text("alpha", encoding="utf-8")
+    second.write_text("beta", encoding="utf-8")
+    monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (missing, first, second))
+
+    assert mod._read_cli_sources() == "alpha\nbeta"
+
+
+def test_read_cli_sources_raises_when_none_exist(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    missing = tmp_path / "missing.py"
+    monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (missing,))
+
+    with pytest.raises(FileNotFoundError):
+        _ = mod._read_cli_sources()
+
+
 def test_read_web_sources_uses_chat_app_and_sorted_parts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     web_dir = tmp_path / "web"
     parts_dir = web_dir / "app_parts"
@@ -133,7 +152,7 @@ def test_required_wire_events_are_present_in_real_sources() -> None:
 
 
 def test_required_cli_events_are_present_in_real_cli_source() -> None:
-    cli_text = mod._read(mod.CLI_MAIN)
+    cli_text = mod._read_cli_sources()
     cli_events = mod._extract_cli_event_handlers(cli_text)
     assert mod.REQUIRED_CLI_EVENTS.issubset(cli_events)
 
@@ -187,7 +206,7 @@ def test_run_passes_with_minimal_valid_sources(monkeypatch: pytest.MonkeyPatch, 
     monkeypatch.setattr(mod, "WEB_CHAT", web)
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
-    monkeypatch.setattr(mod, "CLI_MAIN", cli)
+    monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
     monkeypatch.setattr(sys, "argv", ["check_surface_parity.py"])
 
     assert mod.run() == 0
@@ -218,7 +237,7 @@ def test_run_fails_when_web_missing_required_event(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(mod, "WEB_CHAT", web)
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
-    monkeypatch.setattr(mod, "CLI_MAIN", cli)
+    monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
     monkeypatch.setattr(sys, "argv", ["check_surface_parity.py"])
 
     assert mod.run() == 1
@@ -250,7 +269,7 @@ def test_run_json_pass_payload(
     monkeypatch.setattr(mod, "WEB_CHAT", web)
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
-    monkeypatch.setattr(mod, "CLI_MAIN", cli)
+    monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
     monkeypatch.setattr(sys, "argv", ["check_surface_parity.py", "--json"])
 
     rc = mod.run()
@@ -290,7 +309,7 @@ def test_run_json_fail_payload(
     monkeypatch.setattr(mod, "WEB_CHAT", web)
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
-    monkeypatch.setattr(mod, "CLI_MAIN", cli)
+    monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
     monkeypatch.setattr(sys, "argv", ["check_surface_parity.py", "--json"])
 
     rc = mod.run()
@@ -299,3 +318,52 @@ def test_run_json_fail_payload(
     assert payload["ok"] is False
     assert payload["gate"] == "surface_parity"
     assert "guardrails" in payload["missing_web_required"]
+
+
+def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
+    root = Path(__file__).resolve().parents[1]
+    site_markup = (root / "apps/site/src/components/pixel-agents.tsx").read_text(encoding="utf-8")
+    site_css = (root / "apps/site/src/app/globals.css").read_text(encoding="utf-8")
+    web_index = (root / "thomas/server/web/index.html").read_text(encoding="utf-8")
+    web_css = (root / "thomas/server/web/css/components_parts/part-001a.css").read_text(encoding="utf-8")
+
+    runtime_sources = {
+        "runtime": (root / "thomas/server/web/js/app_runtime_primary.mjs").read_text(encoding="utf-8"),
+        "module": (root / "thomas/server/web/js/modules/060_togglesidebarcollapsed.js").read_text(encoding="utf-8"),
+        "src_module": (root / "thomas/server/web/js/src/runtime_modules/060_togglesidebarcollapsed.js").read_text(
+            encoding="utf-8"
+        ),
+        "app_part": (root / "thomas/server/web/js/app_parts/part-031.js").read_text(encoding="utf-8"),
+    }
+
+    for token in (
+        "pixel-agent pixel-agent-",
+        "agent-head",
+        "agent-eye agent-eye-left",
+        "agent-eye agent-eye-right",
+        "agent-body",
+        "agent-leg agent-leg-left",
+        "agent-leg agent-leg-right",
+    ):
+        assert token in site_markup
+
+    for selector in (
+        ".pixel-agent {",
+        ".pixel-agent-blue {",
+        ".agent-head {",
+        ".agent-body {",
+        ".agent-leg {",
+        ".agent-eye {",
+    ):
+        assert selector in site_css
+        assert selector in web_css
+
+    assert "nav-chat-robot-wrap" in web_index
+    assert "pixel-agent pixel-agent-blue nav-chat-robot" in web_index
+    assert '<i class="ph ph-chat-teardrop"></i>' not in web_index
+
+    for name, text in runtime_sources.items():
+        assert "CANONICAL_NAV_CHAT_ROBOT_MARKUP" in text, name
+        assert "ensureNavChatUsesCanonicalRobot" in text, name
+        assert "MutationObserver" in text, name
+        assert "pixel-agent pixel-agent-blue nav-chat-robot" in text, name

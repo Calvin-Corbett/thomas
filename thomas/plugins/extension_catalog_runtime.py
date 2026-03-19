@@ -5,8 +5,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Dict, List
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parents[2]
 EXTENSIONS_ROOT = ROOT / "extensions"
@@ -18,16 +17,16 @@ class ExtensionPackStatus:
     pack_id: str
     directory: str
     valid: bool
-    errors: List[str]
-    capabilities: List[str]
+    errors: list[str]
+    capabilities: list[str]
 
 
-def _read_json(path: Path) -> Dict[str, Any]:
-    return json.loads(path.read_text(encoding="utf-8"))
+def _read_json(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8-sig"))
 
 
-def _validate_manifest(manifest: Dict[str, Any], expected_id: str) -> List[str]:
-    errors: List[str] = []
+def _validate_manifest(manifest: dict[str, Any], expected_id: str) -> list[str]:
+    errors: list[str] = []
     for key in ("id", "name", "version", "entrypoint", "capabilities"):
         if key not in manifest:
             errors.append(f"missing manifest key: {key}")
@@ -39,7 +38,7 @@ def _validate_manifest(manifest: Dict[str, Any], expected_id: str) -> List[str]:
     return errors
 
 
-def load_extension_catalog(root: Path | None = None) -> Dict[str, Any]:
+def load_extension_catalog(root: Path | None = None) -> dict[str, Any]:
     extensions_root = (root if root is not None else EXTENSIONS_ROOT).resolve()
     catalog_path = extensions_root / "catalog.json"
     if not catalog_path.exists():
@@ -55,10 +54,10 @@ def load_extension_catalog(root: Path | None = None) -> Dict[str, Any]:
     }
 
 
-def validate_extension_catalog(root: Path | None = None) -> Dict[str, Any]:
+def validate_extension_catalog(root: Path | None = None) -> dict[str, Any]:
     loaded = load_extension_catalog(root=root)
     extensions_root = Path(str(loaded["root"]))
-    rows: List[ExtensionPackStatus] = []
+    rows: list[ExtensionPackStatus] = []
     seen: set[str] = set()
 
     for item in loaded["packs"]:
@@ -84,13 +83,13 @@ def validate_extension_catalog(root: Path | None = None) -> Dict[str, Any]:
         manifest_path = pack_dir / "manifest.json"
         hooks_path = pack_dir / "hooks.py"
         readme_path = pack_dir / "README.md"
-        errors: List[str] = []
+        errors: list[str] = []
 
         if not pack_dir.exists() or not pack_dir.is_dir():
             errors.append("pack directory missing")
         if not manifest_path.exists():
             errors.append("manifest.json missing")
-            manifest: Dict[str, Any] = {}
+            manifest: dict[str, Any] = {}
         else:
             manifest = _read_json(manifest_path)
             errors.extend(_validate_manifest(manifest, expected_id=pack_id))

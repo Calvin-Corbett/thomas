@@ -1,4 +1,4 @@
-# Thomas Catch-Up Prompt Pack (2026-02-20)
+﻿# Thomas Catch-Up Prompt Pack (2026-02-20)
 
 Use this to run parallel ChatGPT tabs safely.
 
@@ -27,7 +27,7 @@ Recommended concurrency:
 Paste this block at the top of each prompt:
 
 ```text
-You are implementing capabilities for Thomas in F:\DevHub\Thomas.
+You are implementing capabilities for Thomas in <repo_root>.
 
 Hard constraints:
 1) Do not copy OpenClaw naming, branding, internal identifiers, or docs text.
@@ -424,3 +424,5 @@ After each prompt result:
 5. Merge only if tests pass.
 
 Do not merge multiple untested prompt outputs together.
+
+

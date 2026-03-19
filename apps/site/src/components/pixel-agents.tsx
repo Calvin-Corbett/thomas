@@ -26,6 +26,7 @@ const PHRASES = [
   "deployed and dramatic",
   "no bugs, just features",
 ];
+const INITIAL_DIALOGUE_DELAY_MS = 420;
 
 const DIALOGUE_PRESETS = {
   classic: [
@@ -187,6 +188,7 @@ export function PixelAgents() {
   const [agents, setAgents] = useState<AgentRuntime[]>(() => seedRuntime());
   const [speakerId, setSpeakerId] = useState<string | null>(null);
   const [typedPhrase, setTypedPhrase] = useState("");
+  const [dialogueEnabled, setDialogueEnabled] = useState(true);
   const speakerIdRef = useRef<string | null>(null);
   const agentsRef = useRef<AgentRuntime[]>(agents);
   const jumpTimeouts = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
@@ -213,6 +215,23 @@ export function PixelAgents() {
           yTarget: clamp(agent.yTarget, nextBounds.min, nextBounds.max),
         })),
       );
+    };
+
+    onChange();
+    media.addEventListener("change", onChange);
+    return () => media.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
+    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const onChange = () => {
+      const enabled = !media.matches;
+      setDialogueEnabled(enabled);
+      if (!enabled) {
+        setSpeakerId(null);
+        setTypedPhrase("");
+      }
     };
 
     onChange();
@@ -419,7 +438,7 @@ export function PixelAgents() {
     };
 
     const startSpeaking = () => {
-      if (cancelled) return;
+      if (cancelled || !dialogueEnabled) return;
       const activeAgents = agentsRef.current.filter((agent) => !agent.fleeing && agent.collisionSpeakTimer <= 0);
       if (activeAgents.length === 0) {
         schedule(1800);
@@ -456,11 +475,21 @@ export function PixelAgents() {
       }, 40);
     };
 
-    schedule(1400);
+    if (dialogueEnabled) {
+      schedule(INITIAL_DIALOGUE_DELAY_MS);
+    } else {
+      stopSpeaking();
+    }
+
     return () => {
       cancelled = true;
       if (speakTimer) clearTimeout(speakTimer);
       if (typeTimer) clearInterval(typeTimer);
+    };
+  }, [dialogueEnabled]);
+
+  useEffect(() => {
+    return () => {
       jumpTimeouts.current.forEach((timerId) => clearTimeout(timerId));
       jumpTimeouts.current.clear();
     };
@@ -505,7 +534,7 @@ export function PixelAgents() {
       {agents.map((agent) => {
         const talkSafe = canSpeakAtPosition(agent.x, agent.y);
         const collisionText = talkSafe && agent.collisionSpeakTimer > 0 && agent.collisionPhrase ? agent.collisionPhrase : null;
-        const isSpeaking = talkSafe ? (collisionText ? true : speakerId === agent.id) : false;
+        const isSpeaking = dialogueEnabled && talkSafe ? (collisionText ? true : speakerId === agent.id) : false;
         const facingLeft = agent.direction < 0 && !isSpeaking;
         const trackClass = `pixel-agent-track${agent.fleeing ? " is-fleeing" : ""}`;
         const hitboxClass = `pixel-agent-hitbox${agent.jumping ? " is-jumping" : ""}${agent.bonkTimer > 0 ? " is-bonking" : ""}`;

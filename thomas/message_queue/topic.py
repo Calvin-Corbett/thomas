@@ -190,8 +190,11 @@ class Partition:
             OffsetError: If offset is invalid
         """
         async with self.lock:
-            if offset < 0 or offset >= self.message_count:
-                raise OffsetError(offset, f"Offset out of range [0, {self.message_count})")
+            if offset < 0 or offset > self.message_count:
+                raise OffsetError(offset, f"Offset out of range [0, {self.message_count}]")
+            if offset == self.message_count:
+                # Reading exactly at the log end is valid and returns no records.
+                return []
 
             messages = []
             current_offset = offset

@@ -1,7 +1,7 @@
 import type { MetadataRoute } from "next";
 import { getCanonicalSiteUrl } from "@/lib/site-config";
 
-const routes = ["/", "/download", "/updates", "/journey", "/deep-dive", "/support"];
+const routes = ["/", "/download", "/updates", "/journey", "/infinite", "/deep-dive", "/support"];
 
 export default function sitemap(): MetadataRoute.Sitemap {
   const base = getCanonicalSiteUrl();

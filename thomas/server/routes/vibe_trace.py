@@ -103,4 +103,3 @@ def build_vibe_trace_event(
     if isinstance(metadata, dict) and metadata:
         payload["metadata"] = metadata
     return payload
-

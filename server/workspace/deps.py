@@ -1,11 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
-from typing import Optional, Iterable, Sequence
 
 from fastapi import Depends, HTTPException, Request, status
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
 from .models import Workspace, WorkspaceMembership
 from .rbac import WorkspaceRole, normalize_role, role_allows
@@ -58,7 +58,7 @@ class WorkspaceContext:
     role: WorkspaceRole
 
 
-def _pick_workspace_id(request: Request) -> Optional[str]:
+def _pick_workspace_id(request: Request) -> str | None:
     ws = request.headers.get("X-Workspace-Id") or request.headers.get("X-Workspace-ID")
     if ws:
         return ws.strip()
@@ -80,8 +80,16 @@ def enforce_workspace(
     if any(path.startswith(p) for p in PUBLIC_PATH_PREFIXES):
         # Public routes do not carry tenant context.
         return WorkspaceContext(
-            workspace=Workspace(workspace_id="public", name="public", owner_user_id=None, created_at=request.state.__dict__.get("now")),  # type: ignore
-            membership=WorkspaceMembership(workspace_id="public", user_id="public", role=WorkspaceRole.viewer.value, created_at=request.state.__dict__.get("now"), is_active=True),  # type: ignore
+            workspace=Workspace(
+                workspace_id="public", name="public", owner_user_id=None, created_at=request.state.__dict__.get("now")
+            ),  # type: ignore
+            membership=WorkspaceMembership(
+                workspace_id="public",
+                user_id="public",
+                role=WorkspaceRole.viewer.value,
+                created_at=request.state.__dict__.get("now"),
+                is_active=True,
+            ),  # type: ignore
             role=WorkspaceRole.viewer,
         )
 
@@ -92,30 +100,36 @@ def enforce_workspace(
     ws_id = _pick_workspace_id(request)
 
     if not ws_id:
-        membership = db.execute(
-            select(WorkspaceMembership)
-            .where(WorkspaceMembership.user_id == user_id)
-            .where(WorkspaceMembership.is_active == True)  # noqa: E712
-            .order_by(WorkspaceMembership.created_at.asc())
-            .limit(1)
-        ).scalars().first()
+        membership = (
+            db.execute(
+                select(WorkspaceMembership)
+                .where(WorkspaceMembership.user_id == user_id)
+                .where(WorkspaceMembership.is_active == True)  # noqa: E712
+                .order_by(WorkspaceMembership.created_at.asc())
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
         if not membership:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="No workspace membership")
         ws_id = membership.workspace_id
     else:
-        membership = db.execute(
-            select(WorkspaceMembership)
-            .where(WorkspaceMembership.workspace_id == ws_id)
-            .where(WorkspaceMembership.user_id == user_id)
-            .where(WorkspaceMembership.is_active == True)  # noqa: E712
-            .limit(1)
-        ).scalars().first()
+        membership = (
+            db.execute(
+                select(WorkspaceMembership)
+                .where(WorkspaceMembership.workspace_id == ws_id)
+                .where(WorkspaceMembership.user_id == user_id)
+                .where(WorkspaceMembership.is_active == True)  # noqa: E712
+                .limit(1)
+            )
+            .scalars()
+            .first()
+        )
         if not membership:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not a member of this workspace")
 
-    ws = db.execute(
-        select(Workspace).where(Workspace.workspace_id == ws_id).limit(1)
-    ).scalars().first()
+    ws = db.execute(select(Workspace).where(Workspace.workspace_id == ws_id).limit(1)).scalars().first()
     if not ws:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Workspace not found")
 

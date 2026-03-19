@@ -11,9 +11,9 @@ import re
 import shutil
 import subprocess
 import zipfile
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Sequence
 
 try:
     import tomllib
@@ -62,6 +62,34 @@ EXCLUDE_PREFIXES = (
     "temp_swarm/",
     "_archive/",
     "archives/",
+)
+
+EXCLUDE_PATHS = (
+    ".github/pull_request_template.md",
+    "definitions/model-vs-os.md",
+    "docs/deletion_policy.md",
+    "docs/chat_control_protocol.md",
+    "docs/evidence_pack_runbook.md",
+    "docs/evals/2026-02-21_webui_natural_behavior_eval.md",
+    "docs/feature_13_dep_scanner.md",
+    "docs/launch/launch_gate_scoreboard_2026-02-25.md",
+    "docs/migration_notes_workspace_rbac_multi_tenant.md",
+    "docs/mission_control_ux_blueprint.md",
+    "docs/ops/docker_deploy.md",
+    "docs/ops/focus_program_operating_model.md",
+    "docs/ops/gateway_security_runbook.md",
+    "docs/ops/monolith_baseline_approvals.md",
+    "docs/ops/next_agent_handoff.md",
+    "docs/ops/competitor_deep_dive_attention_2026-02-25.md",
+    "docs/ops/security_program_cadence.md",
+    "docs/website_release_flow.md",
+    "docs/placeholder_completion_policy.md",
+    "docs/release/release_notes_0.11.73.md",
+    "docs/surface_parity_protocol.md",
+    "extensions/vault-fortress/docs/security_checklist.md",
+    "thomas/server/web/accessibility_quick_start.md",
+    "thomas/agent/guardrails.md",
+    "thomas/core/guardrails.md",
 )
 
 EXCLUDE_GLOBS = (
@@ -175,6 +203,7 @@ def _iter_candidates(include_untracked: bool) -> tuple[list[str], list[str]]:
         candidates.update(untracked)
     return sorted(candidates), tracked
 
+
 _DEPENDENCY_LINE_RE = re.compile(r"^\s*([A-Za-z0-9_.+-]+)")
 
 
@@ -217,7 +246,7 @@ def _find_distribution(name: str):
     except importlib_metadata.PackageNotFoundError:
         normalized = name.replace("_", "-").lower()
         for dist in importlib_metadata.distributions():
-            dist_name = (dist.metadata.get("Name", "").replace("_", "-").lower())
+            dist_name = dist.metadata.get("Name", "").replace("_", "-").lower()
             if dist_name == normalized:
                 return dist
         return None
@@ -279,9 +308,7 @@ def _generate_third_party_notices(bundle_root: Path) -> Path:
     )
     optional_requirements = ROOT / "thomas" / "optional_requirements.txt"
     optional_deps = (
-        sorted(optional_requirements.read_text(encoding="utf-8").splitlines())
-        if optional_requirements.exists()
-        else []
+        sorted(optional_requirements.read_text(encoding="utf-8").splitlines()) if optional_requirements.exists() else []
     )
     for dep in optional_deps:
         dep_name = _dependency_name(dep)
@@ -321,6 +348,8 @@ def _is_excluded(path: str) -> str | None:
     normalized = _normalize_path(path).lower()
     if not normalized:
         return "empty"
+    if normalized in EXCLUDE_PATHS:
+        return f"exact:{normalized}"
     for prefix in EXCLUDE_PREFIXES:
         p = prefix.lower().rstrip("/")
         if normalized == p or normalized.startswith(f"{p}/"):
@@ -363,7 +392,9 @@ def _file_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _build_manifest(stage_dir: Path, included: list[str], excluded: list[tuple[str, str]], generated_version: str) -> Path:
+def _build_manifest(
+    stage_dir: Path, included: list[str], excluded: list[tuple[str, str]], generated_version: str
+) -> Path:
     files: list[dict[str, object]] = []
     for rel in sorted(included):
         file_path = stage_dir / rel

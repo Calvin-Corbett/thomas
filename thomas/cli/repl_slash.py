@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable, Iterable, Sequence
 from dataclasses import dataclass, field
 from difflib import SequenceMatcher
-from typing import Any, Callable, Iterable, Sequence
+from typing import Any
 
 from prompt_toolkit.completion import Completer, Completion
 from prompt_toolkit.document import Document
@@ -196,6 +197,15 @@ def _build_session_options(context: Any) -> list[SlashArgOption]:
     ]
 
 
+def _build_evolve_options(context: Any) -> list[SlashArgOption]:
+    _ = context
+    return [
+        SlashArgOption("status", "status", "show latest evolve session"),
+        SlashArgOption("run ", "run", "start a green-side evolve session"),
+        SlashArgOption("promote", "promote", "promote the latest ready evolve session"),
+    ]
+
+
 def slash_arg_options(command: str, context: Any | None = None) -> list[SlashArgOption]:
     """Return all argument options for a command."""
     target = str(command or "").strip().lower()
@@ -253,6 +263,13 @@ _SLASH_SPECS: list[SlashSpec] = [
     ),
     SlashSpec("/status", "Show session status", usage="/status"),
     SlashSpec(
+        "/evolve",
+        "Run green-side self-improvement",
+        usage="/evolve [status|run <goal>|promote]",
+        has_args=True,
+        arg_values_provider=_build_evolve_options,
+    ),
+    SlashSpec(
         "/session",
         "Manage REPL sessions",
         usage="/session [info|new|list|save <name>|load <name>]",
@@ -299,7 +316,9 @@ _SLASH_SPECS: list[SlashSpec] = [
 ]
 
 
-_CANONICAL_COMMANDS: tuple[str, ...] = tuple(spec.command for spec in sorted(_SLASH_SPECS, key=lambda spec: spec.command))
+_CANONICAL_COMMANDS: tuple[str, ...] = tuple(
+    spec.command for spec in sorted(_SLASH_SPECS, key=lambda spec: spec.command)
+)
 _COMMAND_SET: set[str] = {spec.command for spec in _SLASH_SPECS}
 _ALIAS_MAP: dict[str, str] = {}
 for _spec in _SLASH_SPECS:
@@ -349,11 +368,7 @@ def normalize_slash_command(raw: str) -> str:
         if scored:
             best_score, best_command = scored[0]
             second_score = scored[1][0] if len(scored) > 1 else 0.0
-            if (
-                best_score >= 0.74
-                and (best_score - second_score) >= 0.08
-                and abs(len(t) - len(best_command)) <= 1
-            ):
+            if best_score >= 0.74 and (best_score - second_score) >= 0.08 and abs(len(t) - len(best_command)) <= 1:
                 return best_command
     return ""
 
@@ -411,11 +426,7 @@ def suggest_slash_commands(token: str, n: int = 3) -> list[str]:
     scored.sort(key=lambda item: item[0], reverse=True)
     best_score, best_command = scored[0]
     second_score = scored[1][0] if len(scored) > 1 else 0.0
-    if (
-        best_score >= 0.74
-        and (best_score - second_score) >= 0.08
-        and abs(len(lowered) - len(best_command)) <= 1
-    ):
+    if best_score >= 0.74 and (best_score - second_score) >= 0.08 and abs(len(lowered) - len(best_command)) <= 1:
         return [best_command]
     return [command for _, command in scored[:n]]
 

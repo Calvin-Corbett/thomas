@@ -263,7 +263,7 @@ class VUMeter:
         peak_db = 20.0 * np.log10(max(self.peak_level, 1e-6))
         rms_db = 20.0 * np.log10(max(self.rms_level, 1e-6))
 
-        return peak_db, rms_db
+        return float(peak_db), float(rms_db)
 
     def reset(self) -> None:
         """Reset meter state."""

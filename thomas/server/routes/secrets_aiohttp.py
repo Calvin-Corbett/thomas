@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -12,6 +13,22 @@ from thomas.server.secrets import SecretStore
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
+
+
+def _parse_bool(value: Any, *, default: bool | None = None) -> bool | None:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
 
 
 def register_secrets_routes(
@@ -118,8 +135,12 @@ def register_secrets_routes(
             raise web.HTTPNotFound(text="unknown profile")
 
         payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="json body must be an object")
         api_key = str(payload.get("api_key") or "").strip()
-        persist = bool(payload.get("persist", True))
+        persist = _parse_bool(payload.get("persist"), default=True)
+        if persist is None:
+            raise web.HTTPBadRequest(text="persist must be a boolean")
         rotation_days = payload.get("rotation_days")
         if rotation_days is not None:
             try:

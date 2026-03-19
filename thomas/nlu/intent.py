@@ -189,8 +189,8 @@ class IntentClassifier:
             threshold = 0.1
             predictions = {intent: prob for intent, prob in sorted_intents if prob > threshold}
         else:
-            # Return only top intent
-            predictions = {sorted_intents[0][0]: sorted_intents[0][1]}
+            # Single-intent mode exposes a one-hot prediction map.
+            predictions = {sorted_intents[0][0]: 1.0}
 
         top_label, top_conf = sorted_intents[0]
 

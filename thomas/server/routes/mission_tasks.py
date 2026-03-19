@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -13,6 +14,7 @@ from thomas.autonomy.scheduler import compute_next_run
 from .mission_support import (
     _MISSION_ALLOWED_JOB_KINDS,
     _MISSION_ALLOWED_RISK_CLASSES,
+    _coerce_bool,
     _coerce_int,
     _mission_job_payload,
     _mission_normalize_schedule,
@@ -24,6 +26,8 @@ def build_mission_task_handlers(
     app: web.Application,
     _mission_require_store: Any,
     _mission_wakeup_engine: Any,
+    *,
+    require_api_access: Callable[[web.Request], None],
 ) -> tuple:
     """Build task management route handlers.
 
@@ -37,6 +41,7 @@ def build_mission_task_handlers(
     """
 
     async def api_mission_jobs(request: web.Request) -> web.Response:
+        require_api_access(request)
         """List all jobs with optional filtering by status, kind, parent_id, session_id."""
         q = request.query
         status = str(q.get("status") or "").strip() or None
@@ -99,15 +104,14 @@ def build_mission_task_handlers(
         )
 
     async def api_mission_job_create(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Create a new task/job with specified name, kind, and payload."""
-        store = await _mission_require_store(auto_enable=True)
-
         try:
             payload = await request.json()
-            if not isinstance(payload, dict):
-                payload = {}
-        except ValueError:
-            payload = {}
+        except Exception as exc:
+            raise web.HTTPBadRequest(text=f"invalid json: {type(exc).__name__}: {exc}") from exc
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="json body must be an object")
 
         name = str(payload.get("name") or "").strip() or "Mission Task"
         kind = str(payload.get("kind") or "workflow_task").strip().lower() or "workflow_task"
@@ -146,6 +150,34 @@ def build_mission_task_handlers(
             model_id = str(payload.get("model_id") or "").strip() or str(job_payload.get("model_id") or "").strip()
             if model_id:
                 job_payload["model_id"] = model_id
+
+        elif kind == "evolve_session":
+            goal = (
+                str(payload.get("goal") or "").strip()
+                or str(payload.get("prompt") or "").strip()
+                or str(job_payload.get("goal") or "").strip()
+                or str(job_payload.get("prompt") or "").strip()
+            )
+            if goal:
+                job_payload["goal"] = goal
+                if not str(job_payload.get("prompt") or "").strip():
+                    job_payload["prompt"] = goal
+            profile = str(payload.get("profile") or "").strip() or str(job_payload.get("profile") or "").strip()
+            if profile:
+                job_payload["profile"] = profile
+            model_id = str(payload.get("model_id") or "").strip() or str(job_payload.get("model_id") or "").strip()
+            if model_id:
+                job_payload["model_id"] = model_id
+            passes = _coerce_int(payload.get("passes") or job_payload.get("passes"), 1)
+            if passes > 0:
+                job_payload["passes"] = max(1, min(passes, 8))
+            timeout_seconds = _coerce_int(payload.get("timeout_seconds") or job_payload.get("timeout_seconds"), 1800)
+            if timeout_seconds > 0:
+                job_payload["timeout_seconds"] = max(60, min(timeout_seconds, 7200))
+            job_payload["promote_on_pass"] = _coerce_bool(
+                payload.get("promote_on_pass") if "promote_on_pass" in payload else job_payload.get("promote_on_pass"),
+                default=False,
+            )
         elif kind == "reminder":
             msg = (
                 str(payload.get("message") or "").strip()
@@ -183,9 +215,11 @@ def build_mission_task_handlers(
         risk_class = str(payload.get("risk_class") or "low").strip().lower() or "low"
         if risk_class not in _MISSION_ALLOWED_RISK_CLASSES:
             risk_class = "low"
-        requires_approval = bool(payload.get("requires_approval"))
+        requires_approval = _coerce_bool(payload.get("requires_approval"), default=False)
         parent_id = str(payload.get("parent_id") or "").strip() or None
         session_id = str(payload.get("session_id") or "").strip() or None
+
+        store = await _mission_require_store(auto_enable=True)
 
         try:
             job = store.create_job(
@@ -212,6 +246,7 @@ def build_mission_task_handlers(
         )
 
     async def api_mission_job_cancel(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Cancel an existing job by job_id."""
         store = await _mission_require_store()
         job_id = str(request.match_info.get("job_id") or "").strip()
@@ -226,6 +261,7 @@ def build_mission_task_handlers(
         return web.json_response({"ok": True, "job_id": job_id, "action": "cancel"})
 
     async def api_mission_job_run_now(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Immediately queue a job for execution by setting status to queued."""
         store = await _mission_require_store()
         job_id = str(request.match_info.get("job_id") or "").strip()
@@ -245,6 +281,7 @@ def build_mission_task_handlers(
         return web.json_response({"ok": True, "job_id": job_id, "action": "run_now"})
 
     async def api_mission_job_requeue(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Reset a job to queued status, clearing errors and result history."""
         store = await _mission_require_store()
         job_id = str(request.match_info.get("job_id") or "").strip()

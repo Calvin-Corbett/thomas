@@ -193,19 +193,28 @@ textarea:focus:not(:focus-visible),
  * The app's own CSS handles flex/grid layout for nav items, sidebar buttons, etc.
  * Only enforce min-size on standalone interactive elements without app-specific classes.
  */
-button:not(.nav-item):not(.sidebar-chat-row):not(.debug-toggle-btn):not(.suggestion-chip):not(.btn-icon):not([class*="office"]):not([class*="easy-setup"]):not([class*="composer"]):not([class*="nav-"]):not([class*="settings"]):not([class*="modal"]),
+/* Touch target minimums — only for bare buttons without app-specific styling.
+   Buttons with custom classes (mp-*, t-btn, module-*, sidebar-*, etc.) handle
+   their own sizing via the Thomas button standard (tokens.css).
+   We use a pseudo-element tap area approach instead (see .btn-icon below). */
 input[type="checkbox"],
 input[type="radio"] {
   min-width: 44px;
   min-height: 44px;
 }
 
-/* Ensure padding for smaller clickable elements */
+/* Touch target for icon buttons — use pseudo-element tap area instead of inflating the button.
+   This keeps buttons visually 24px but provides a 44px tap target via ::after. */
 .btn-icon,
 button.btn-icon {
-  padding: 10px;
-  min-width: 44px;
-  min-height: 44px;
+  padding: 4px;
+  position: relative;
+}
+.btn-icon::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  /* 44px effective tap area around a 24px button */
 }
 
 /* Spacing between adjacent touch targets — scoped to avoid breaking flex layouts */

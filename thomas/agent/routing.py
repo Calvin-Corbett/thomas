@@ -1,8 +1,21 @@
 """Intent routing for token-efficient, high-quality replies.
 
-Classifies user messages into intent paths, choosing response/tool/memory
-policies per path. Context-aware: accepts prior route hints and follow-up
-signals to avoid misclassification.
+DEPRECATION NOTICE (2026-03-18):
+  The IntentRouter and its 8-path classification system are DEPRECATED.
+  The dispatch-first architecture (dispatch.py) replaces this with a simple
+  binary decision: casual → Thomas replies directly, actionable → workboard.
+
+  This file is KEPT because RouteDecision is still imported by loop_core.py,
+  loop_streaming.py, and other modules that expect a RouteDecision object.
+  The IntentRouter class still works but is no longer the primary routing
+  mechanism for /api/chat.
+
+  See docs/CHAT_EXECUTION_MODEL.md for the current architecture.
+
+Original description:
+  Classifies user messages into intent paths, choosing response/tool/memory
+  policies per path. Context-aware: accepts prior route hints and follow-up
+  signals to avoid misclassification.
 """
 
 from __future__ import annotations
@@ -94,15 +107,15 @@ class _PathPolicy:
     memory_budget_tokens: int
 
 
-# Tools policy: "auto" = use tools based on model decision
-# Previously casual/personal/meta had "never" — now "auto" so
-# Thomas can still answer factual questions in casual mode
+# Tools policy: "auto" = use tools based on model decision.
+# Low-intent chat routes also keep global durable memory enabled so stable
+# user/project facts can follow across chats, while per-thread episodes stay isolated.
 _POLICY: dict[str, _PathPolicy] = {
     PATH_CASUAL: _PathPolicy(
         mode="auto",
         tools_policy="auto",
         include_purpose=False,
-        memory_include_global=False,
+        memory_include_global=True,
         memory_include_profile=True,
         memory_budget_tokens=800,
     ),
@@ -110,7 +123,7 @@ _POLICY: dict[str, _PathPolicy] = {
         mode="auto",
         tools_policy="auto",
         include_purpose=False,
-        memory_include_global=False,
+        memory_include_global=True,
         memory_include_profile=True,
         memory_budget_tokens=800,
     ),
@@ -118,7 +131,7 @@ _POLICY: dict[str, _PathPolicy] = {
         mode="auto",
         tools_policy="auto",
         include_purpose=False,
-        memory_include_global=False,
+        memory_include_global=True,
         memory_include_profile=True,
         memory_budget_tokens=900,
     ),
@@ -150,7 +163,7 @@ _POLICY: dict[str, _PathPolicy] = {
         mode="auto",
         tools_policy="auto",
         include_purpose=False,
-        memory_include_global=False,
+        memory_include_global=True,
         memory_include_profile=True,
         memory_budget_tokens=700,
     ),
@@ -158,7 +171,7 @@ _POLICY: dict[str, _PathPolicy] = {
         mode="auto",
         tools_policy="auto",
         include_purpose=False,
-        memory_include_global=False,
+        memory_include_global=True,
         memory_include_profile=True,
         memory_budget_tokens=800,
     ),

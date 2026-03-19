@@ -7,8 +7,8 @@ from pathlib import Path
 from typing import Any
 
 from thomas.demo.agent_comparison_suite_metrics import (
-    _collect_agent_metrics,
     _build_metric_specs,
+    _collect_agent_metrics,
 )
 from thomas.demo.agent_comparison_suite_scoring import (
     _build_competitor_pressure,
@@ -38,6 +38,7 @@ from thomas.plugins.benchmark_program import evaluate_benchmark_program
 from thomas.plugins.competitor_evo_scope import build_prediction_evo_scope
 from thomas.plugins.competitor_intel_store import load_registry
 from thomas.plugins.test_suite_contract import evaluate_test_suite_contract, load_test_suite_contract
+
 
 def load_suite_config(path: Path) -> dict[str, Any]:
     data = _read_json(path)

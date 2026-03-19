@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
-import os
 from typing import Any
 
 
@@ -405,11 +405,7 @@ class WorkflowRunner:
         outputs: list[dict[str, Any]] = []
         for idx, step in enumerate(steps, start=1):
             # Approval gate: halt for human approval before executing this step.
-            if (
-                step.approval_required
-                and self._approval_broker is not None
-                and self._no_human_mode == "human"
-            ):
+            if step.approval_required and self._approval_broker is not None and self._no_human_mode == "human":
                 approved = await self._approval_broker.require(
                     run_id=goal[:60],
                     tool_call_id=f"workflow_step:{step.name}",
@@ -427,11 +423,7 @@ class WorkflowRunner:
                         "completed_steps": idx - 1,
                         "outputs": outputs,
                     }
-            if (
-                step.approval_required
-                and self._approval_broker is not None
-                and self._no_human_mode == "deny"
-            ):
+            if step.approval_required and self._approval_broker is not None and self._no_human_mode == "deny":
                 return {
                     "pattern": "chain",
                     "ok": False,

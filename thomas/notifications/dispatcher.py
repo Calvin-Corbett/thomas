@@ -125,10 +125,11 @@ class NotificationDispatcher:
 
         # Broadcast to any SSE clients (async, but we can fire-and-forget)
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                loop.create_task(self.broadcaster.publish({"event": "notification", "data": _model_to_dict(notif)}))
-        except (ValueError, TypeError):
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.broadcaster.publish({"event": "notification", "data": _model_to_dict(notif)}))
+        except (RuntimeError, ValueError, TypeError):
+            # No running event loop (e.g., sync worker thread) or invalid loop state.
+            # Broadcast is best-effort and must never break notification persistence.
             pass
 
         # Optional deliveries

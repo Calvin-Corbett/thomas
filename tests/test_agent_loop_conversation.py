@@ -727,6 +727,32 @@ class TestAgentLoopConversation(unittest.TestCase):
         self.assertIn("How about setting a small, achievable task", streamed)
         self.assertNotIn("For example, write down three things", streamed)
 
+    def test_multimodal_prompt_is_forwarded_to_llm(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        llm = CaptureLLM("ok")
+        agent = AgentLoop(cfg, llm, tools, conversation=[])
+        prompt = [
+            {"type": "text", "text": "describe this image"},
+            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAAA"}},
+        ]
+
+        async def run_once():
+            events = []
+            async for ev in agent.run(prompt):
+                events.append(ev)
+            return events
+
+        events = asyncio.run(run_once())
+        self.assertEqual(len([e for e in events if e.type == EventType.AGENT_DONE]), 1)
+        user_msg = next((m for m in llm.last_messages if m.get("role") == "user"), {})
+        content = user_msg.get("content")
+        self.assertIsInstance(content, list)
+        self.assertEqual(content[0].get("type"), "text")
+        self.assertEqual(content[0].get("text"), "describe this image")
+        self.assertEqual(content[1].get("type"), "image_url")
+        self.assertEqual(content[1].get("image_url", {}).get("url"), "data:image/png;base64,AAAA")
+
     def test_live_test_default_hint_added_for_visible_testing_requests(self) -> None:
         cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
         tools = ToolRegistry()

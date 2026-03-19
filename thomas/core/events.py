@@ -9,7 +9,7 @@ from __future__ import annotations
 import time
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, Optional
+from typing import Any
 
 
 class EventType(Enum):
@@ -44,6 +44,20 @@ class EventType(Enum):
     THINKING = "thinking"
     STATUS = "status"
 
+    # ── Task dispatch events (chat → workboard pipeline) ──────────
+    # These are emitted by the dispatch-first chat architecture.
+    # Thomas acknowledges the user instantly and dispatches work to the
+    # workboard task manager. These events let the UI show progress.
+    # See docs/CHAT_EXECUTION_MODEL.md for the full picture.
+    TASK_DISPATCHED = "task_dispatched"
+    TASK_CLAIMED = "task_claimed"
+    TASK_PROGRESS = "task_progress"
+    TASK_WORKER_STARTED = "task_worker_started"
+    TASK_WORKER_DONE = "task_worker_done"
+    TASK_COMPLETE = "task_complete"
+    TASK_FAILED = "task_failed"
+    TASK_BLOCKED = "task_blocked"
+
 
 @dataclass
 class AgentEvent:
@@ -57,7 +71,7 @@ class AgentEvent:
     """
 
     type: EventType
-    data: Dict[str, Any] = field(default_factory=dict)
+    data: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=time.time)
     iteration: int = 0
 
@@ -66,9 +80,7 @@ class AgentEvent:
         return AgentEvent(type=EventType.TEXT_DELTA, data={"text": text}, **kw)
 
     @staticmethod
-    def tool_call_start(
-        tool_id: str, tool_name: str, **kw: Any
-    ) -> AgentEvent:
+    def tool_call_start(tool_id: str, tool_name: str, **kw: Any) -> AgentEvent:
         return AgentEvent(
             type=EventType.TOOL_CALL_START,
             data={"tool_id": tool_id, "tool_name": tool_name},
@@ -76,9 +88,7 @@ class AgentEvent:
         )
 
     @staticmethod
-    def tool_call_args_delta(
-        tool_id: str, delta: str, **kw: Any
-    ) -> AgentEvent:
+    def tool_call_args_delta(tool_id: str, delta: str, **kw: Any) -> AgentEvent:
         return AgentEvent(
             type=EventType.TOOL_CALL_ARGS_DELTA,
             data={"tool_id": tool_id, "delta": delta},
@@ -87,14 +97,10 @@ class AgentEvent:
 
     @staticmethod
     def tool_call_end(tool_id: str, **kw: Any) -> AgentEvent:
-        return AgentEvent(
-            type=EventType.TOOL_CALL_END, data={"tool_id": tool_id}, **kw
-        )
+        return AgentEvent(type=EventType.TOOL_CALL_END, data={"tool_id": tool_id}, **kw)
 
     @staticmethod
-    def tool_start(
-        tool_id: str, tool_name: str, args: Dict[str, Any], **kw: Any
-    ) -> AgentEvent:
+    def tool_start(tool_id: str, tool_name: str, args: dict[str, Any], **kw: Any) -> AgentEvent:
         return AgentEvent(
             type=EventType.TOOL_START,
             data={"tool_id": tool_id, "tool_name": tool_name, "args": args},
@@ -127,11 +133,11 @@ class AgentEvent:
         text: str,
         iterations: int,
         tool_calls: int,
-        usage: Optional[Dict[str, Any]] = None,
-        token_report: Optional[Dict[str, Any]] = None,
+        usage: dict[str, Any] | None = None,
+        token_report: dict[str, Any] | None = None,
         **kw: Any,
     ) -> AgentEvent:
-        data: Dict[str, Any] = {
+        data: dict[str, Any] = {
             "text": text,
             "iterations": iterations,
             "tool_calls": tool_calls,
@@ -148,12 +154,34 @@ class AgentEvent:
 
     @staticmethod
     def agent_error(error: str, **kw: Any) -> AgentEvent:
-        return AgentEvent(
-            type=EventType.AGENT_ERROR, data={"error": error}, **kw
-        )
+        return AgentEvent(type=EventType.AGENT_ERROR, data={"error": error}, **kw)
 
     @staticmethod
     def status(message: str, **kw: Any) -> AgentEvent:
+        return AgentEvent(type=EventType.STATUS, data={"message": message}, **kw)
+
+    # ── Task dispatch event factories ─────────────────────────────
+
+    @staticmethod
+    def task_dispatched(task_id: str, summary: str, **kw: Any) -> AgentEvent:
         return AgentEvent(
-            type=EventType.STATUS, data={"message": message}, **kw
+            type=EventType.TASK_DISPATCHED,
+            data={"task_id": task_id, "summary": summary},
+            **kw,
+        )
+
+    @staticmethod
+    def task_progress(task_id: str, message: str, agent: str = "", **kw: Any) -> AgentEvent:
+        return AgentEvent(
+            type=EventType.TASK_PROGRESS,
+            data={"task_id": task_id, "message": message, "agent": agent},
+            **kw,
+        )
+
+    @staticmethod
+    def task_complete(task_id: str, result: str = "", **kw: Any) -> AgentEvent:
+        return AgentEvent(
+            type=EventType.TASK_COMPLETE,
+            data={"task_id": task_id, "result": result},
+            **kw,
         )

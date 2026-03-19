@@ -116,7 +116,11 @@ class ToolSpecialist(BaseSpecialist):
             messages_direct = [
                 {"role": "system", "content": "You are Thomas's assistant. Respond helpfully."},
             ]
-            messages_direct.extend(conversation_context[-6:])
+            # FIX (2026-03-18): Include full conversation, filter system prompts.
+            for msg in conversation_context:
+                if msg.get("role") == "system":
+                    continue
+                messages_direct.append(msg)
             messages_direct.append({"role": "user", "content": prompt})
             response = await self._call_llm(messages_direct, max_tokens=2_000)
 

@@ -16,8 +16,8 @@ import logging
 import os
 import shutil
 import sys
+import uuid
 from dataclasses import asdict
-from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -50,6 +50,7 @@ from thomas.cli.main_runtime_ops import (
 from thomas.cli.main_runtime_ops import (
     telegram_run_cmd as _telegram_run_cmd,
 )
+from thomas.cli.product_shell import ProductShellGroup
 from thomas.core.autonomy import clamp_autonomy_level
 from thomas.core.config import (
     AppConfig,
@@ -165,6 +166,13 @@ def _setup_logging(verbose: bool) -> None:
     logging.basicConfig(level=level, handlers=[handler], force=True)
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.environ.get(name)
+    if raw is None:
+        return default
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
 def _build_tools(config: AppConfig) -> ToolRegistry:
     """Register all available tools based on configuration."""
     registry = ToolRegistry()
@@ -217,13 +225,9 @@ def _build_memory(config: AppConfig):
     try:
         from thomas.memory.autonomy import AutonomyMemoryEngine
 
-        enable_v2 = str(os.environ.get("THOMAS_MEMORY_V2_ENABLED", "1")).strip().lower() in (
-            "1",
-            "true",
-            "yes",
-            "on",
-        )
-        engine = AutonomyMemoryEngine(config, enable_v2=enable_v2, enable_legacy=True)
+        enable_v2 = _env_flag("THOMAS_MEMORY_V2_ENABLED", True)
+        enable_legacy = _env_flag("THOMAS_MEMORY_LEGACY_ENABLED", False)
+        engine = AutonomyMemoryEngine(config, enable_v2=enable_v2, enable_legacy=enable_legacy)
         engine.start()
         return engine
     except ImportError:
@@ -269,7 +273,7 @@ async def _run_chat(
         llm,
         tools,
         memory=memory,
-        thread_id="cli",
+        thread_id=f"cli:{uuid.uuid4().hex}",
         autonomy_level=clamp_autonomy_level(autonomy_level, default=3),
     )
 
@@ -375,7 +379,7 @@ async def _run_chat(
             memory.close()
 
 
-@click.group(invoke_without_command=True)
+@click.group(cls=ProductShellGroup, invoke_without_command=True)
 @click.option("-v", "--verbose", is_flag=True, help="Enable debug logging")
 @click.option("-c", "--config", "config_path", type=click.Path(exists=False), help="Config file path")
 @click.option(
@@ -406,7 +410,7 @@ def cli(
     data_profile: str | None,
     reset_profile: bool,
 ) -> None:
-    """Thomas - autonomous AI execution platform for local and remote deployments."""
+    """Thomas - start simple, then grow into advanced automation safely."""
     effective_data_dir, normalized_profile = _prepare_runtime_data_environment(
         data_dir_override=data_dir_override,
         data_profile=data_profile,
@@ -434,7 +438,8 @@ def cli(
                 if _detect_existing_config() is None:
                     click.echo(
                         click.style(
-                            "  Thomas isn't configured yet. " "Run `thomas setup` to get started.\n",
+                            "  Thomas isn't configured yet. "
+                            "Run `thomas quickstart` for the fastest path or `thomas setup` for the guided path.\n",
                             fg="yellow",
                         )
                     )
@@ -501,7 +506,9 @@ def chat(
         if nl_model:
             selected_profile = _resolve_model_profile_name(config, nl_model)
             if not selected_profile:
-                click.echo(f"Unknown model profile '{nl_model}'. Available: {', '.join(config.models.keys())}", err=True)
+                click.echo(
+                    f"Unknown model profile '{nl_model}'. Available: {', '.join(config.models.keys())}", err=True
+                )
                 sys.exit(2)
             model_name = selected_profile
             if nl_prompt is None:
@@ -510,7 +517,6 @@ def chat(
             prompt = nl_prompt
 
     from thomas.core.model_resolution import resolve_effective_model
-    from thomas.preferences.store import get_db_path
 
     try:
         resolved_profile, resolved_model_id = resolve_effective_model(
@@ -518,7 +524,6 @@ def chat(
             cli_profile=selected_profile,
             env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
             user_id="default",
-            db_path=get_db_path(),
         )
     except Exception:
         resolved_profile = ""
@@ -751,10 +756,11 @@ def config_path(ctx: click.Context, as_json: bool) -> None:
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
 @click.option("--strict", is_flag=True, help="Exit non-zero when config validation reports errors.")
 @click.option("--strict-worktree", is_flag=True, help="Exit non-zero when git worktree is dirty.")
+@click.option("--repo-presence/--no-repo-presence", default=False, help="Include repo agent presence summary.")
 @click.pass_context
-def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree: bool) -> None:
+def status_cmd(ctx: click.Context, as_json: bool, strict: bool, strict_worktree: bool, repo_presence: bool) -> None:
     """Show a concise runtime/config status summary."""
-    _status_cmd(ctx, as_json, strict, strict_worktree)
+    _status_cmd(ctx, as_json, strict, strict_worktree, repo_presence)
 
 
 @cli.command("repo-clean")
@@ -955,5 +961,3 @@ def _run_models_discover(ctx: click.Context, model_name: str | None, timeout_s: 
     click.echo(f"Models at {cfg.base_url}:")
     for i, dm in enumerate(found, start=1):
         click.echo(f"  {i:>2}. {dm.id}")
-
-

@@ -204,3 +204,105 @@ def test_non_strict_issue_ownership_does_not_require_gate() -> None:
     )
     assert isinstance(issue_check, dict)
     assert issue_check["required"] is False
+
+
+def test_coding_placeholder_backed_write_without_completion_note_fails(tmp_path) -> None:
+    placeholder_file = tmp_path / "thomas" / "core" / "placeholder_runtime.py"
+    placeholder_file.parent.mkdir(parents=True, exist_ok=True)
+    placeholder_file.write_text(
+        "# Source placeholder for placeholder_runtime.py\n",
+        encoding="utf-8",
+    )
+
+    report = evaluate_rules(
+        route_path="coding_task",
+        prompt_text="restore runtime",
+        response_text="Patched and validated.",
+        tool_events=[
+            {
+                "name": "diff.create",
+                "ok": True,
+                "command": "",
+                "path": "thomas/core/placeholder_runtime.py",
+            },
+            {
+                "name": "shell.exec",
+                "ok": True,
+                "command": "python -m pytest -q tests/test_rules_of_road.py",
+                "path": "",
+            },
+            {
+                "name": "shell.exec",
+                "ok": True,
+                "command": "python scripts/check_monolith_guard.py",
+                "path": "",
+            },
+        ],
+        requested_job_type="coding",
+        config_errors=[],
+        unknown_core_keys=[],
+        require_verification_for_coding=True,
+        require_tests_for_code_edits=False,
+        require_monolith_guard_for_coding=True,
+        attempt=0,
+        repo_root=tmp_path,
+    )
+
+    failed_ids = {c["id"] for c in report["checks"] if c["required"] and not c["passed"]}
+    assert "coding_placeholder_policy" in failed_ids
+
+
+def test_coding_placeholder_backed_write_with_completion_note_passes(tmp_path) -> None:
+    placeholder_file = tmp_path / "thomas" / "core" / "placeholder_runtime.py"
+    placeholder_file.parent.mkdir(parents=True, exist_ok=True)
+    placeholder_file.write_text(
+        "\n".join(
+            [
+                "# Source placeholder for placeholder_runtime.py",
+                "# placeholder-why: temporary path-stable stub during restoration.",
+                "# placeholder-scope_to_finish: restore the source-backed runtime.",
+                "# placeholder-owner: thomas/core",
+                "# placeholder-exit_rule: fail fast until the real implementation lands.",
+                "# placeholder-acceptance: runtime tests pass without placeholder state.",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    report = evaluate_rules(
+        route_path="coding_task",
+        prompt_text="restore runtime",
+        response_text="Patched and validated.",
+        tool_events=[
+            {
+                "name": "diff.create",
+                "ok": True,
+                "command": "",
+                "path": "thomas/core/placeholder_runtime.py",
+            },
+            {
+                "name": "shell.exec",
+                "ok": True,
+                "command": "python -m pytest -q tests/test_rules_of_road.py",
+                "path": "",
+            },
+            {
+                "name": "shell.exec",
+                "ok": True,
+                "command": "python scripts/check_monolith_guard.py",
+                "path": "",
+            },
+        ],
+        requested_job_type="coding",
+        config_errors=[],
+        unknown_core_keys=[],
+        require_verification_for_coding=True,
+        require_tests_for_code_edits=False,
+        require_monolith_guard_for_coding=True,
+        attempt=0,
+        repo_root=tmp_path,
+    )
+
+    failed_ids = {c["id"] for c in report["checks"] if c["required"] and not c["passed"]}
+    assert "coding_placeholder_policy" not in failed_ids

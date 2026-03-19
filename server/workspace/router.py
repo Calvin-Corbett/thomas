@@ -1,22 +1,21 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
 from sqlalchemy import select
+from sqlalchemy.orm import Session
 
-from .deps import enforce_workspace, require_roles, get_db, get_current_user, WorkspaceContext
-from .models import Workspace, WorkspaceMembership, WorkspaceInvite
+from .deps import WorkspaceContext, enforce_workspace, get_current_user, get_db, require_roles
+from .models import Workspace, WorkspaceInvite, WorkspaceMembership
 from .rbac import WorkspaceRole, normalize_role
 from .schemas import (
-    WorkspaceOut,
-    WorkspaceCreateIn,
-    MembershipOut,
     InviteCreateIn,
-    InviteOut,
     InviteCreateOut,
+    InviteOut,
+    MembershipOut,
+    WorkspaceCreateIn,
+    WorkspaceOut,
 )
 
 
@@ -30,16 +29,20 @@ def _coerce_role(value: object, *, field: str) -> WorkspaceRole:
 router = APIRouter(prefix="/workspaces", tags=["workspaces"])
 
 
-@router.get("", response_model=List[WorkspaceOut])
+@router.get("", response_model=list[WorkspaceOut])
 def list_workspaces(user=Depends(get_current_user), db: Session = Depends(get_db)):
     user_id = str(getattr(user, "id", getattr(user, "user_id", "")))
-    rows = db.execute(
-        select(Workspace)
-        .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.workspace_id)
-        .where(WorkspaceMembership.user_id == user_id)
-        .where(WorkspaceMembership.is_active == True)  # noqa: E712
-        .order_by(Workspace.created_at.asc())
-    ).scalars().all()
+    rows = (
+        db.execute(
+            select(Workspace)
+            .join(WorkspaceMembership, WorkspaceMembership.workspace_id == Workspace.workspace_id)
+            .where(WorkspaceMembership.user_id == user_id)
+            .where(WorkspaceMembership.is_active == True)  # noqa: E712
+            .order_by(Workspace.created_at.asc())
+        )
+        .scalars()
+        .all()
+    )
     return rows
 
 
@@ -74,7 +77,8 @@ def get_current_membership(ctx: WorkspaceContext = Depends(enforce_workspace)):
 
 # ---- Admin ----
 
-@router.get("/{workspace_id}/members", response_model=List[MembershipOut])
+
+@router.get("/{workspace_id}/members", response_model=list[MembershipOut])
 def list_members(
     workspace_id: str,
     ctx: WorkspaceContext = Depends(require_roles([WorkspaceRole.admin, WorkspaceRole.owner])),
@@ -82,11 +86,15 @@ def list_members(
 ):
     if ctx.workspace.workspace_id != workspace_id:
         raise HTTPException(status_code=403, detail="Workspace mismatch")
-    return db.execute(
-        select(WorkspaceMembership)
-        .where(WorkspaceMembership.workspace_id == workspace_id)
-        .order_by(WorkspaceMembership.created_at.asc())
-    ).scalars().all()
+    return (
+        db.execute(
+            select(WorkspaceMembership)
+            .where(WorkspaceMembership.workspace_id == workspace_id)
+            .order_by(WorkspaceMembership.created_at.asc())
+        )
+        .scalars()
+        .all()
+    )
 
 
 @router.post("/{workspace_id}/invites", response_model=InviteCreateOut, status_code=status.HTTP_201_CREATED)
@@ -116,7 +124,7 @@ def create_invite(
     return InviteCreateOut(invite=inv, invite_token=raw)
 
 
-@router.get("/{workspace_id}/invites", response_model=List[InviteOut])
+@router.get("/{workspace_id}/invites", response_model=list[InviteOut])
 def list_invites(
     workspace_id: str,
     ctx: WorkspaceContext = Depends(require_roles([WorkspaceRole.admin, WorkspaceRole.owner])),
@@ -124,11 +132,15 @@ def list_invites(
 ):
     if ctx.workspace.workspace_id != workspace_id:
         raise HTTPException(status_code=403, detail="Workspace mismatch")
-    return db.execute(
-        select(WorkspaceInvite)
-        .where(WorkspaceInvite.workspace_id == workspace_id)
-        .order_by(WorkspaceInvite.created_at.desc())
-    ).scalars().all()
+    return (
+        db.execute(
+            select(WorkspaceInvite)
+            .where(WorkspaceInvite.workspace_id == workspace_id)
+            .order_by(WorkspaceInvite.created_at.desc())
+        )
+        .scalars()
+        .all()
+    )
 
 
 @router.post("/invites/accept", response_model=MembershipOut)
@@ -158,12 +170,16 @@ def accept_invite(
     if inv.expires_at < datetime.utcnow():
         raise HTTPException(status_code=410, detail="Invite expired")
 
-    existing = db.execute(
-        select(WorkspaceMembership)
-        .where(WorkspaceMembership.workspace_id == inv.workspace_id)
-        .where(WorkspaceMembership.user_id == user_id)
-        .limit(1)
-    ).scalars().first()
+    existing = (
+        db.execute(
+            select(WorkspaceMembership)
+            .where(WorkspaceMembership.workspace_id == inv.workspace_id)
+            .where(WorkspaceMembership.user_id == user_id)
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
 
     if existing:
         existing.is_active = True
@@ -195,12 +211,16 @@ def change_role(
     if ctx.workspace.workspace_id != workspace_id:
         raise HTTPException(status_code=403, detail="Workspace mismatch")
 
-    target = db.execute(
-        select(WorkspaceMembership)
-        .where(WorkspaceMembership.workspace_id == workspace_id)
-        .where(WorkspaceMembership.user_id == user_id)
-        .limit(1)
-    ).scalars().first()
+    target = (
+        db.execute(
+            select(WorkspaceMembership)
+            .where(WorkspaceMembership.workspace_id == workspace_id)
+            .where(WorkspaceMembership.user_id == user_id)
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
     if not target:
         raise HTTPException(status_code=404, detail="Member not found")
 
@@ -226,12 +246,16 @@ def revoke_member(
     if ctx.workspace.workspace_id != workspace_id:
         raise HTTPException(status_code=403, detail="Workspace mismatch")
 
-    target = db.execute(
-        select(WorkspaceMembership)
-        .where(WorkspaceMembership.workspace_id == workspace_id)
-        .where(WorkspaceMembership.user_id == user_id)
-        .limit(1)
-    ).scalars().first()
+    target = (
+        db.execute(
+            select(WorkspaceMembership)
+            .where(WorkspaceMembership.workspace_id == workspace_id)
+            .where(WorkspaceMembership.user_id == user_id)
+            .limit(1)
+        )
+        .scalars()
+        .first()
+    )
     if not target:
         raise HTTPException(status_code=404, detail="Member not found")
 

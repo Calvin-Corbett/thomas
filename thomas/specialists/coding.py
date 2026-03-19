@@ -69,7 +69,11 @@ class CodingSpecialist(BaseSpecialist):
             system += f"Context:\n{memory_context}\n\n"
 
         messages = [{"role": "system", "content": system}]
-        messages.extend(conversation_context[-8:])
+        # FIX (2026-03-18): Include full conversation, filter system prompts.
+        for msg in conversation_context:
+            if msg.get("role") == "system":
+                continue
+            messages.append(msg)
         messages.append({"role": "user", "content": prompt})
 
         # Use extended thinking if available

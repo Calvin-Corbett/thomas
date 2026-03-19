@@ -7,6 +7,8 @@ from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
+from thomas.agent.loop_streaming import apply_memory_policy
+from thomas.agent.routing import RouteDecision
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.core.events import AgentEvent, EventType
 from thomas.server.app import create_app
@@ -20,6 +22,21 @@ def _parse_ndjson(blob: str):
             continue
         out.append(json.loads(line))
     return out
+
+
+class _FakeMemoryRuntime:
+    def __init__(self) -> None:
+        self.started = True
+        self.thread_policies: dict[str, dict[str, Any]] = {}
+
+    def set_thread_memory_policy(self, thread_id: str, **patch: Any) -> dict[str, Any]:
+        current = dict(self.thread_policies.get(thread_id, {}))
+        current.update(patch)
+        self.thread_policies[thread_id] = current
+        return current
+
+    def thread_memory_policy(self, thread_id: str) -> dict[str, Any]:
+        return dict(self.thread_policies.get(thread_id, {}))
 
 
 class _FakeAgentLoopRuntime:
@@ -49,6 +66,8 @@ class _FakeAgentLoopRuntime:
             ),
             "ctor_kwargs": dict(kwargs or {}),
         }
+        self._thread_id = str((kwargs or {}).get("thread_id") or "runtime-thread")
+        self._memory = _FakeMemoryRuntime()
 
     async def run(self, prompt, *, mode="auto", tools_policy="auto", token_economy="optimal", **kwargs):  # noqa: ANN001
         _FakeAgentLoopRuntime.captured["prompt"] = prompt
@@ -58,6 +77,35 @@ class _FakeAgentLoopRuntime:
             "token_economy": str(token_economy),
             **dict(kwargs or {}),
         }
+        _FakeAgentLoopRuntime.captured["memory_pref_attrs"] = {
+            "include_thread": getattr(self, "_memory_include_thread_pref", None),
+            "include_global": getattr(self, "_memory_include_global_pref", None),
+            "include_profile": getattr(self, "_memory_include_profile_pref", None),
+            "pins_only": getattr(self, "_memory_pins_only_pref", None),
+            "max_results": getattr(self, "_memory_max_results_pref", None),
+            "decay_half_life_hours": getattr(self, "_memory_decay_half_life_hours_pref", None),
+            "auto_compact_enabled": getattr(self, "_memory_auto_compact_enabled_pref", None),
+            "auto_compact_episode_threshold": getattr(self, "_memory_auto_compact_episode_threshold_pref", None),
+            "auto_compact_min_interval_hours": getattr(self, "_memory_auto_compact_min_interval_hours_pref", None),
+            "auto_optimize_enabled": getattr(self, "_memory_auto_optimize_enabled_pref", None),
+            "auto_optimize_waste_threshold": getattr(self, "_memory_auto_optimize_waste_threshold_pref", None),
+            "auto_optimize_min_interval_hours": getattr(self, "_memory_auto_optimize_min_interval_hours_pref", None),
+        }
+        apply_memory_policy(
+            self,
+            RouteDecision(
+                path="general",
+                confidence=1.0,
+                reasons=["test"],
+                mode=str(mode),
+                tools_policy=str(tools_policy),
+                include_purpose=False,
+                memory_include_global=False,
+                memory_include_profile=True,
+                memory_budget_tokens=800,
+            ),
+        )
+        _FakeAgentLoopRuntime.captured["memory_thread_policy"] = self._memory.thread_memory_policy(self._thread_id)
         yield AgentEvent(
             type=EventType.AGENT_START,
             data={
@@ -212,7 +260,16 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
                 "memory": {
                     "include_profile_memory": False,
                     "include_thread_memory": False,
+                    "include_global_memory": True,
+                    "pins_only": True,
                     "retrieval_top_k": 3,
+                    "decay_half_life_hours": 72.0,
+                    "auto_compact_enabled": False,
+                    "auto_compact_episode_threshold": 12,
+                    "auto_compact_min_interval_hours": 0.5,
+                    "auto_optimize_enabled": True,
+                    "auto_optimize_waste_threshold": 0.31,
+                    "auto_optimize_min_interval_hours": 1.25,
                     "pinned_context": "Always return concise summaries.",
                 },
                 "cost": {
@@ -273,6 +330,28 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         self.assertEqual(str(run_kwargs.get("mode") or ""), "thinking")
         self.assertIn("[Pinned context]", str(captured.get("prompt") or ""))
         self.assertIn("Always return concise summaries.", str(captured.get("prompt") or ""))
+
+        memory_pref_attrs = captured.get("memory_pref_attrs") or {}
+        self.assertFalse(bool(memory_pref_attrs.get("include_thread")))
+        self.assertTrue(bool(memory_pref_attrs.get("include_global")))
+        self.assertFalse(bool(memory_pref_attrs.get("include_profile")))
+        self.assertTrue(bool(memory_pref_attrs.get("pins_only")))
+        self.assertEqual(int(memory_pref_attrs.get("max_results") or 0), 3)
+        self.assertAlmostEqual(float(memory_pref_attrs.get("decay_half_life_hours") or 0.0), 72.0, places=6)
+
+        memory_policy = captured.get("memory_thread_policy") or {}
+        self.assertFalse(bool(memory_policy.get("include_thread")))
+        self.assertTrue(bool(memory_policy.get("include_global")))
+        self.assertFalse(bool(memory_policy.get("include_profile")))
+        self.assertTrue(bool(memory_policy.get("pins_only")))
+        self.assertEqual(int(memory_policy.get("max_results") or 0), 3)
+        self.assertAlmostEqual(float(memory_policy.get("decay_half_life_hours") or 0.0), 72.0, places=6)
+        self.assertFalse(bool(memory_policy.get("auto_compact_enabled")))
+        self.assertEqual(int(memory_policy.get("auto_compact_episode_threshold") or 0), 12)
+        self.assertAlmostEqual(float(memory_policy.get("auto_compact_min_interval_hours") or 0.0), 0.5, places=6)
+        self.assertTrue(bool(memory_policy.get("auto_optimize_enabled")))
+        self.assertAlmostEqual(float(memory_policy.get("auto_optimize_waste_threshold") or 0.0), 0.31, places=6)
+        self.assertAlmostEqual(float(memory_policy.get("auto_optimize_min_interval_hours") or 0.0), 1.25, places=6)
 
     async def test_non_coder_profile_type_propagates_to_agent_loop(self):
         sid = await self._new_session_id()
@@ -548,6 +627,31 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
         self.assertTrue(bool(probe.get("ok", False)))
 
+    async def test_fast_mode_still_enforces_allow_file_write_policy(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allow_file_write": False}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "fs.write_file"
+        _FakeAgentLoopPolicyProbe.probe_args = {"path": "workspace\\probe.txt", "content": "blocked"}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "fast_mode": True,
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("Unknown tool", str(probe.get("error") or ""))
+
     async def test_require_command_approval_blocks_namespaced_shell_exec(self):
         sid = await self._new_session_id()
         patch_resp = await self.client.patch(
@@ -557,6 +661,30 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         self.assertEqual(patch_resp.status, 200)
 
         _FakeAgentLoopPolicyProbe.probe_name = "functions.shell.exec"
+        _FakeAgentLoopPolicyProbe.probe_args = {"command": "echo hi", "cwd": "."}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("require_command_approval", str(probe.get("error") or ""))
+
+    async def test_require_command_approval_blocks_mcp_prefixed_shell_exec(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allow_shell": True, "require_command_approval": True}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "mcp__shell.exec"
         _FakeAgentLoopPolicyProbe.probe_args = {"command": "echo hi", "cwd": "."}
         with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
             resp = await self.client.post(
@@ -668,6 +796,30 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         self.assertFalse(bool(probe.get("ok", True)))
         self.assertIn("allowed_paths policy", str(probe.get("error") or ""))
 
+    async def test_allowed_paths_policy_blocks_mcp_prefixed_fs_tool(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allowed_paths": "workspace"}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "mcp__fs.read_file"
+        _FakeAgentLoopPolicyProbe.probe_args = {"path": "workspace_evil\\outside.txt"}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("allowed_paths policy", str(probe.get("error") or ""))
+
     async def test_allowed_paths_policy_accepts_multiline_allowlist_entries(self):
         sid = await self._new_session_id()
         patch_resp = await self.client.patch(
@@ -690,6 +842,94 @@ class TestServerPreferencesRuntime(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
         self.assertNotIn("allowed_paths policy", str(probe.get("error") or ""))
+
+    async def test_allowed_paths_policy_blocks_traversal_outside_allowlist(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allowed_paths": "workspace"}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "fs.read_file"
+        _FakeAgentLoopPolicyProbe.probe_args = {"path": "workspace\\..\\outside.txt"}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("allowed_paths policy", str(probe.get("error") or ""))
+
+    async def test_allowed_paths_policy_blocks_prefix_collision_paths(self):
+        sid = await self._new_session_id()
+        patch_resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"tools": {"allowed_paths": "workspace"}}},
+        )
+        self.assertEqual(patch_resp.status, 200)
+
+        _FakeAgentLoopPolicyProbe.probe_name = "fs.read_file"
+        _FakeAgentLoopPolicyProbe.probe_args = {"path": "workspace_evil\\inside.txt"}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopPolicyProbe):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "probe",
+                },
+            )
+        self.assertEqual(resp.status, 200)
+        probe = dict(_FakeAgentLoopPolicyProbe.captured or {})
+        self.assertFalse(bool(probe.get("ok", True)))
+        self.assertIn("allowed_paths policy", str(probe.get("error") or ""))
+
+    async def test_chat_accepts_docs_and_images_as_multimodal_prompt(self):
+        sid = await self._new_session_id()
+
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopRuntime):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "text": "what is in this image and summarize the file",
+                    "docs": [{"name": "notes.txt", "text": "alpha\nbeta"}],
+                    "images": [{"name": "sample.png", "data_url": "data:image/png;base64,AAAA"}],
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertEqual(len([e for e in events if e.get("type") == "done"]), 1)
+
+        prompt = (_FakeAgentLoopRuntime.captured or {}).get("prompt")
+        self.assertIsInstance(prompt, list)
+        prompt_blocks = list(prompt or [])
+        text_block = next(
+            (part for part in prompt_blocks if isinstance(part, dict) and part.get("type") == "text"),
+            {},
+        )
+        image_block = next(
+            (part for part in prompt_blocks if isinstance(part, dict) and part.get("type") == "image_url"),
+            {},
+        )
+        text_payload = str(text_block.get("text") or "")
+        self.assertIn("what is in this image and summarize the file", text_payload)
+        self.assertIn("[Attached documents]", text_payload)
+        self.assertIn("--- notes.txt ---", text_payload)
+        self.assertIn("alpha", text_payload)
+        self.assertEqual(
+            str((image_block.get("image_url") or {}).get("url") or ""),
+            "data:image/png;base64,AAAA",
+        )
 
     async def test_auto_tool_threshold_can_force_tools_policy(self):
         sid = await self._new_session_id()

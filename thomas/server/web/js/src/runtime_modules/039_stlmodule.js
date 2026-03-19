@@ -1,0 +1,243 @@
+// Extracted from part-020b.js
+// From stlmodule
+
+        const stlModule = await import('https://cdn.jsdelivr.net/npm/three@0.183.1/examples/jsm/exporters/STLExporter.js/+esm');
+        return {
+            THREE,
+            OrbitControls: orbitModule.OrbitControls,
+            TransformControls: transformModule.TransformControls,
+            GLTFExporter: gltfModule.GLTFExporter,
+            STLExporter: stlModule.STLExporter,
+        };
+    })().catch((error) => {
+        MODULE_WORKBENCH_OSS.threePromise = null;
+        throw error;
+    });
+    return MODULE_WORKBENCH_OSS.threePromise;
+}
+
+async function moduleWorkbenchLoadLiteGraph() {
+    if (window.LiteGraph) return window.LiteGraph;
+    if (MODULE_WORKBENCH_OSS.liteGraphPromise) return MODULE_WORKBENCH_OSS.liteGraphPromise;
+    MODULE_WORKBENCH_OSS.liteGraphPromise = (async () => {
+        moduleWorkbenchLoadStyle('https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/css/litegraph.css');
+        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/litegraph.js@0.7.18/build/litegraph.min.js', { globalName: 'LiteGraph' });
+        if (!window.LiteGraph) throw new Error('LiteGraph did not initialize.');
+        return window.LiteGraph;
+    })().catch((error) => {
+        MODULE_WORKBENCH_OSS.liteGraphPromise = null;
+        throw error;
+    });
+    return MODULE_WORKBENCH_OSS.liteGraphPromise;
+}
+
+async function moduleWorkbenchLoadGridStack() {
+    if (window.GridStack) return window.GridStack;
+    if (MODULE_WORKBENCH_OSS.gridStackPromise) return MODULE_WORKBENCH_OSS.gridStackPromise;
+    MODULE_WORKBENCH_OSS.gridStackPromise = (async () => {
+        moduleWorkbenchLoadStyle('https://cdn.jsdelivr.net/npm/gridstack@12.4.2/dist/gridstack.min.css');
+        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/gridstack@12.4.2/dist/gridstack-all.js', { globalName: 'GridStack' });
+        if (!window.GridStack) throw new Error('GridStack did not initialize.');
+        return window.GridStack;
+    })().catch((error) => {
+        MODULE_WORKBENCH_OSS.gridStackPromise = null;
+        throw error;
+    });
+    return MODULE_WORKBENCH_OSS.gridStackPromise;
+}
+
+async function moduleWorkbenchLoadWaveSurfer() {
+    if (window.WaveSurfer) return window.WaveSurfer;
+    if (MODULE_WORKBENCH_OSS.waveSurferPromise) return MODULE_WORKBENCH_OSS.waveSurferPromise;
+    MODULE_WORKBENCH_OSS.waveSurferPromise = (async () => {
+        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/wavesurfer.js@7.12.1/dist/wavesurfer.min.js', { globalName: 'WaveSurfer' });
+        if (!window.WaveSurfer) throw new Error('WaveSurfer did not initialize.');
+        return window.WaveSurfer;
+    })().catch((error) => {
+        MODULE_WORKBENCH_OSS.waveSurferPromise = null;
+        throw error;
+    });
+    return MODULE_WORKBENCH_OSS.waveSurferPromise;
+}
+
+async function moduleWorkbenchLoadMonaco() {
+    if (window.monaco?.editor) return window.monaco;
+    if (MODULE_WORKBENCH_OSS.monacoPromise) return MODULE_WORKBENCH_OSS.monacoPromise;
+    MODULE_WORKBENCH_OSS.monacoPromise = (async () => {
+        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs/loader.js', {
+            globalCheck: () => typeof window.require === 'function',
+        });
+        await new Promise((resolve, reject) => {
+            if (typeof window.require !== 'function') {
+                reject(new Error('Monaco loader missing window.require.'));
+                return;
+            }
+            window.require.config({
+                paths: {
+                    vs: 'https://cdn.jsdelivr.net/npm/monaco-editor@0.55.1/min/vs',
+                },
+            });
+            window.require(['vs/editor/editor.main'], () => resolve(true), reject);
+        });
+        if (!window.monaco?.editor) throw new Error('Monaco editor failed to load.');
+        return window.monaco;
+    })().catch((error) => {
+        MODULE_WORKBENCH_OSS.monacoPromise = null;
+        throw error;
+    });
+    return MODULE_WORKBENCH_OSS.monacoPromise;
+}
+
+async function moduleWorkbenchLoadAce() {
+    if (window.ace?.edit) return window.ace;
+    if (MODULE_WORKBENCH_OSS.acePromise) return MODULE_WORKBENCH_OSS.acePromise;
+    MODULE_WORKBENCH_OSS.acePromise = (async () => {
+        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/ace-builds@1.36.2/src-min-noconflict/ace.js', { globalName: 'ace' });
+        if (!window.ace?.edit) throw new Error('Ace editor failed to load.');
+        return window.ace;
+    })().catch((error) => {
+        MODULE_WORKBENCH_OSS.acePromise = null;
+        throw error;
+    });
+    return MODULE_WORKBENCH_OSS.acePromise;
+}
+
+async function moduleWorkbenchLoadPhaser() {
+    if (window.Phaser) return window.Phaser;
+    if (MODULE_WORKBENCH_OSS.phaserPromise) return MODULE_WORKBENCH_OSS.phaserPromise;
+    MODULE_WORKBENCH_OSS.phaserPromise = (async () => {
+        await moduleWorkbenchLoadScript('https://cdn.jsdelivr.net/npm/phaser@3.90.0/dist/phaser.min.js', { globalName: 'Phaser' });
+        if (!window.Phaser) throw new Error('Phaser failed to initialize.');
+        return window.Phaser;
+    })().catch((error) => {
+        MODULE_WORKBENCH_OSS.phaserPromise = null;
+        throw error;
+    });
+    return MODULE_WORKBENCH_OSS.phaserPromise;
+}
+
+function moduleWorkbenchRenderEngineLoading(container, title, subtitle, status, details = '') {
+    moduleWorkbenchHeader(container, title, subtitle);
+    const shell = document.createElement('section');
+    shell.className = 'module-wb-shell module-wb-shell-loading';
+    shell.innerHTML = `
+        <section class="module-wb-stage-card">
+            <div class="module-wb-loader">
+                <strong>${escapeHtml(status || 'Loading engine...')}</strong>
+                <p>${escapeHtml(details || 'Preparing open-source runtime for this tab.')}</p>
+            </div>
+        </section>
+    `;
+    container.appendChild(shell);
+}
+
+function moduleWorkbenchState(mode) {
+    const state = moduleEnsureRuntime();
+    if (!state) return null;
+    if (!state.workbench[mode]) {
+        if (mode === 'lab_3d') {
+            state.workbench[mode] = {
+                mounted: false,
+                tool: 'rect',
+                shapes: [],
+                objects: [],
+                selectedId: '',
+                nextId: 1,
+                draft: null,
+                drawing: false,
+                dragStart: null,
+                canvasWidth: 860,
+                canvasHeight: 420,
+                grid: 24,
+                snap: true,
+                units: 'mm',
+                transformSpace: 'world',
+                transformSnap: false,
+                showGrid: true,
+                wireframe: false,
+                ossReady: false,
+                ossLoading: false,
+                ossError: '',
+            };
+        } else if (mode === 'automations') {
+            state.workbench[mode] = {
+                mounted: false,
+                nextId: 1,
+                selectedId: '',
+                nodes: [],
+                edges: [],
+                connectingFrom: '',
+                logs: [],
+                graphData: null,
+                runInput: '{\n  "subject": "Ops status",\n  "priority": "high"\n}',
+                runReport: null,
+                selectedProjectId: '',
+                ossReady: false,
+                ossLoading: false,
+                ossError: '',
+            };
+        } else if (mode === 'app_builder') {
+            state.workbench[mode] = {
+                mounted: false,
+                nextId: 1,
+                selectedId: '',
+                components: [],
+                device: 'desktop',
+                grid: 16,
+                selectedProjectId: '',
+                previewHtml: '',
+                ossReady: false,
+                ossLoading: false,
+                ossError: '',
+            };
+        } else if (mode === 'studio') {
+            state.workbench[mode] = {
+                mounted: false,
+                nextId: 1,
+                assets: [],
+                timeline: [],
+                playhead: 0,
+                timer: 0,
+                playing: false,
+                selectedAssetId: '',
+                selectedClipId: '',
+                forge: null,
+                assetQuery: '',
+                assetType: 'all',
+                audioPreset: 'podcast_clean',
+                renderPreset: 'master_1080p',
+                generationTool: 'comfyui',
+                generationPrompt: 'cute helper robot in a clean office',
+                batchQueue: [],
+                ossReady: false,
+                ossLoading: false,
+                ossError: '',
+            };
+        } else if (mode === 'dev_studio') {
+            state.workbench[mode] = {
+                mounted: false,
+                code: '',
+                issues: [],
+                logs: [],
+                ossReady: false,
+                ossLoading: false,
+                ossError: '',
+            };
+        } else if (mode === 'game_studio') {
+            const width = 20;
+            const height = 12;
+            state.workbench[mode] = {
+                mounted: false,
+                gridWidth: width,
+                gridHeight: height,
+                brush: 1,
+                dragging: false,
+                tiles: Array.from({ length: height }, () => Array.from({ length: width }, () => 0)),
+                logs: [],
+                highScore: 0,
+                selectedProjectId: '',
+                viewMode: 'split',
+                playTarget: 'auto',
+                godotProjectPath: 'C:/games/MyGodotProject',
+                unrealProjectPath: 'C:/games/MyUnrealProject/MyGame.uproject',
+                unrealViewportUrl: 'http://127.0.0.1:8888',
