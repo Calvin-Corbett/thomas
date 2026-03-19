@@ -9,6 +9,7 @@ from thomas.bootdoctor.__main__ import (
     RestrictedTool,
     _build_parser,
     _extract_patch_targets,
+    _extract_repo_paths_from_text,
 )
 from thomas.core.boot_doctor import read_boot_recovery_notice, write_boot_recovery_notice
 from thomas.tools.base import Tool, ToolResult
@@ -26,9 +27,15 @@ class _DummyWriteTool(Tool):
 
 def _seed_boot_layout(root: Path) -> None:
     (root / "scripts").mkdir(parents=True, exist_ok=True)
+    (root / "thomas" / "agent").mkdir(parents=True, exist_ok=True)
     (root / "thomas" / "bootdoctor").mkdir(parents=True, exist_ok=True)
+    (root / "thomas" / "core").mkdir(parents=True, exist_ok=True)
+    (root / "thomas" / "server").mkdir(parents=True, exist_ok=True)
+    (root / "thomas" / "tray_agent").mkdir(parents=True, exist_ok=True)
+    (root / "runtime" / "logs").mkdir(parents=True, exist_ok=True)
     (root / "runtime" / "boot_doctor").mkdir(parents=True, exist_ok=True)
     (root / "scripts" / "run-ui.ps1").write_text("# test\n", encoding="utf-8")
+    (root / "thomas" / "agent" / "loop_part01.py").write_text("# test\n", encoding="utf-8")
 
 
 def test_bootdoctor_path_policy_scopes(tmp_path: Path) -> None:
@@ -37,6 +44,8 @@ def test_bootdoctor_path_policy_scopes(tmp_path: Path) -> None:
 
     assert policy.is_read_allowed((tmp_path / "scripts" / "run-ui.ps1").resolve())
     assert policy.is_write_allowed((tmp_path / "scripts" / "run-ui.ps1").resolve())
+    assert policy.is_read_allowed((tmp_path / "runtime" / "logs").resolve())
+    assert policy.is_write_allowed((tmp_path / "thomas" / "agent" / "loop_part01.py").resolve())
     assert not policy.is_write_allowed((tmp_path / "README.md").resolve())
 
 
@@ -57,6 +66,19 @@ async def test_restricted_tool_blocks_out_of_scope_write(tmp_path: Path) -> None
 def test_extract_patch_targets_handles_git_prefixes() -> None:
     patch = "--- a/scripts/run-ui.ps1\n" "+++ b/scripts/run-ui.ps1\n" "@@ -1,1 +1,1 @@\n" "-old\n" "+new\n"
     assert _extract_patch_targets(patch) == ["scripts/run-ui.ps1"]
+
+
+def test_extract_repo_paths_from_traceback_text(tmp_path: Path) -> None:
+    text = (
+        "Traceback (most recent call last):\n"
+        f"  File \"{tmp_path / 'thomas' / 'agent' / 'loop.py'}\", line 324, in <module>\n"
+        f"  File \"{tmp_path / 'thomas' / 'server' / 'app.py'}\", line 52, in <module>\n"
+    )
+
+    assert _extract_repo_paths_from_text(text, tmp_path) == [
+        "thomas/agent/loop.py",
+        "thomas/server/app.py",
+    ]
 
 
 def test_bootdoctor_parser_accepts_rescue_startup_context() -> None:

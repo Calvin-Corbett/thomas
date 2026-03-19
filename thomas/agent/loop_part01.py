@@ -32,9 +32,29 @@ from typing import TYPE_CHECKING, Any
 from urllib.parse import urlparse
 
 from thomas.agent.response_tone import (
+    best_practice_default_hint,
+    best_practice_gate_hint,
+    live_test_default_hint,
     prompt_requests_code_output,
+    simplified_review_default_hint,
 )
+from thomas.agent.skills_runtime import (
+    format_runtime_skills_context,
+    resolve_runtime_skills,
+)
+from thomas.core.autonomy import autonomy_spec
+from thomas.core.config import load_config
+from thomas.core.events import AgentEvent, EventType
 from thomas.core.llm import LLMError
+from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
+from thomas.core.token_economy import (
+    build_token_economy_meta,
+    loop_context_budgets,
+    loop_iteration_prompt_caps,
+    loop_tool_spec_budgets,
+    normalize_token_economy_level,
+)
+from thomas.core.tokens import estimate_tokens, estimate_tools_tokens
 
 try:
     from thomas.agent.context_compaction import compact_conversation, should_compact
@@ -44,9 +64,33 @@ except ImportError:
     _HAS_COMPACTION = False
 
 # Import from new modules
+from thomas.agent.loop_core import AgentLoop as _AgentLoopBase
+from thomas.agent.loop_core import LoopState
+from thomas.agent.loop_planning import (
+    assume_and_proceed_nudge,
+    full_auto_nudge,
+    looks_like_clarifying_question,
+    routing_input_text,
+    sanitize_assistant_text,
+)
+from thomas.agent.loop_streaming import (
+    apply_memory_policy,
+    auto_capture_research,
+    build_token_report,
+    capture_profile_hints,
+    input_continuity_hint,
+    normalize_usage,
+    record_event,
+    retrieve_library,
+    retrieve_memory,
+    session_usage_snapshot,
+    usage_delta,
+    usage_from_event_payload,
+)
+from thomas.agent.loop_tools import execute_tools, parse_tool_args, select_tools
 
 if TYPE_CHECKING:
-    pass
+    from thomas.agent.routing import RouteDecision
 
 log = logging.getLogger(__name__)
 
@@ -63,6 +107,7 @@ async def _coerce_async_iterator(value: Any, *, source: str) -> AsyncIterator[An
             try:
                 resolved = await value
             except Exception as await_exc:
+                log.exception("Failed to resolve awaitable async iterator source %s", source)
                 raise TypeError(
                     f"{source} returned awaitable that failed to resolve: {type(await_exc).__name__}: {await_exc}"
                 ) from await_exc

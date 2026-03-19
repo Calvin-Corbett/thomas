@@ -44,6 +44,14 @@ Versioning: Semantic Versioning.
 - coverage: Widened `check_duplicate_filename_gate.py` scan scope from thomas/scripts/ to also cover extensions/, agents/, cli/, tests/, apps/, plugins/ — previously 530+ extension files were unmonitored
 - coverage: Widened `check_changelog_gate.py` to trigger on changes to extensions/, agents/, cli/, plugins/ — not just thomas/
 
+## [0.14.44] - 2026-03-19
+
+### Fixed
+- Hardened the startup recovery path in `scripts/agent_startup_router.py`, `scripts/run-ui.ps1`, `scripts/startup_recovery_watch.ps1`, `thomas/agent/loop_part01.py`, `thomas/bootdoctor/__main__.py`, `thomas/bootdoctor/runtime_helpers.py`, `thomas/memory/v2/fabric_part01.py`, and `thomas/server/app_part01.py` so boot-time recovery and fallback behavior satisfy the safety gates without widening broad exception handling.
+
+### Added
+- Added regression coverage in `tests/test_agent_startup_router.py`, `tests/test_bootdoctor_cli.py`, `tests/test_launcher_boot_recovery_contract.py`, and `tests/test_agent_loop_monolith_contract.py` for the boot recovery and startup hardening path.
+
 ## [0.14.43] - 2026-03-19
 
 ### Added
