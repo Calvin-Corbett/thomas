@@ -1,10 +1,38 @@
 from __future__ import annotations
 
+import json
 import logging
+import os
 import re
 import time
+import uuid
 from collections.abc import Sequence
 from dataclasses import dataclass
+from typing import Any
+
+from .contradiction_review import (
+    list_contradictions as list_contradictions_with_reviews,
+)
+from .contradiction_review import (
+    list_contradictions_for_review as list_contradictions_for_review_rows,
+)
+from .contradiction_review import (
+    review_contradiction as apply_contradiction_review,
+)
+from .contradiction_review import (
+    severity_route as contradiction_severity_route,
+)
+from .contradiction_review import (
+    upsert_review_state as upsert_contradiction_review_state,
+)
+from .contradictions import contradiction_score_for_fact
+from .db import SqliteDB
+from .profile_hints import extract_profile_hints
+from .schema import FACTS_FTS_TRIGGERS_SQL, FTS_TRIGGERS_SQL, INIT_SQL, SCHEMA_VERSION, facts_fts_sql, fts_sql
+from .scoring import SalienceInputs
+from .scoring import score as salience_score
+from .token import compact_lines, estimate_tokens, normalize_lines, redundancy_ratio, truncate_to_token_budget
+from .types import RetrievalItem, RetrievalResult
 
 _WORD_RE = re.compile(r"[A-Za-z0-9_]+")
 log = logging.getLogger(__name__)

@@ -11,16 +11,18 @@ def _read(relative_path: str) -> str:
 
 def test_run_ui_wires_visible_bootdoctor_rescue_and_watchdog() -> None:
     text = _read("scripts/run-ui.ps1")
+    assert "function Get-StartupFailureContext" in text
     assert "function Start-ThomasStartupRecoveryWatch" in text
     assert "function Stop-ThomasStartupRecoveryWatch" in text
     assert "function Open-BootDoctorRescue" in text
     assert '"-LaunchMode", $(if ($NoTray) { "direct" } else { "tray" })' in text
+    assert "-StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths" in text
     assert (
-        'Open-BootDoctorRescue -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port -LaunchMode "tray"'
+        'Open-BootDoctorRescue -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port -LaunchMode "tray" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths'
         in text
     )
     assert "Detached server failed to become healthy on port {0} (pid {1})." in text
-    assert 'Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct"' in text
+    assert 'Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths' in text
     assert "function Start-DetachedThomasServer" in text
 
 
@@ -30,6 +32,8 @@ def test_startup_recovery_watch_runs_bootdoctor_rescue_with_context() -> None:
     assert "rescue" in text
     assert "--startup-context" in text
     assert "attempted_launch_mode" in text
+    assert "startup_log_paths" in text
+    assert "stderr_tail" in text
     assert "bootdoctor.ps1" in text
 
 

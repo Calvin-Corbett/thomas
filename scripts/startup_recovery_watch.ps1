@@ -41,10 +41,34 @@ function Open-ThomasBrowser {
   try { Start-Process $LaunchUrl | Out-Null } catch { }
 }
 
+function Get-FileTailText {
+  param(
+    [string]$Path,
+    [int]$MaxLines = 200,
+    [int]$MaxChars = 16000
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+  if (-not (Test-Path $Path)) { return "" }
+
+  try {
+    $text = ((Get-Content -Path $Path -Tail ([Math]::Max(10, $MaxLines)) -ErrorAction Stop) -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return "" }
+    if ($text.Length -gt $MaxChars) {
+      return $text.Substring($text.Length - $MaxChars)
+    }
+    return $text
+  } catch {
+    return ""
+  }
+}
+
 function Write-StartupContext {
   param(
     [Parameter(Mandatory = $true)][string]$Reason,
-    [Parameter(Mandatory = $true)][string]$HealthStatus
+    [Parameter(Mandatory = $true)][string]$HealthStatus,
+    [string]$StdErrTail = "",
+    [string[]]$StartupLogPaths = @()
   )
 
   $diagDir = Join-Path $Root "runtime\boot_doctor"
@@ -61,7 +85,8 @@ function Write-StartupContext {
     startup_timeout_sec = [int]$StartupTimeoutSec
     recovery_timeout_sec = [int]$RecoveryTimeoutSec
     launch_url = $LaunchUrl
-    stderr_tail = ""
+    stderr_tail = [string]$StdErrTail
+    startup_log_paths = @($StartupLogPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
   }
   $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $path -Encoding UTF8
   return $path
@@ -97,7 +122,18 @@ if (Wait-ThomasHttpOnPort -P $Port -TimeoutSec $StartupTimeoutSec) {
 }
 
 $reason = "Startup watchdog: Thomas never became healthy on port $Port."
-$contextPath = Write-StartupContext -Reason $reason -HealthStatus "unhealthy"
+$startupLogPaths = @(
+  (Join-Path $Root "runtime\logs\server_stderr.log"),
+  (Join-Path $Root "runtime\logs\server_stdout.log")
+) | Where-Object { Test-Path $_ } | Select-Object -Unique
+$stderrTail = ""
+foreach ($logPath in $startupLogPaths) {
+  $stderrTail = Get-FileTailText -Path $logPath
+  if (-not [string]::IsNullOrWhiteSpace($stderrTail)) {
+    break
+  }
+}
+$contextPath = Write-StartupContext -Reason $reason -HealthStatus "unhealthy" -StdErrTail $stderrTail -StartupLogPaths $startupLogPaths
 $proc = $null
 try {
   $proc = Start-BootDoctorRescue -Reason $reason -ContextPath $contextPath

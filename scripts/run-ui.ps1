@@ -341,6 +341,46 @@ function Wait-ThomasHttpOnPort {
   return $false
 }
 
+function Get-FileTailText {
+  param(
+    [string]$Path,
+    [int]$MaxLines = 200,
+    [int]$MaxChars = 16000
+  )
+
+  if ([string]::IsNullOrWhiteSpace($Path)) { return "" }
+  if (-not (Test-Path $Path)) { return "" }
+
+  try {
+    $text = ((Get-Content -Path $Path -Tail ([Math]::Max(10, $MaxLines)) -ErrorAction Stop) -join "`n").Trim()
+    if ([string]::IsNullOrWhiteSpace($text)) { return "" }
+    if ($text.Length -gt $MaxChars) {
+      return $text.Substring($text.Length - $MaxChars)
+    }
+    return $text
+  } catch {
+    return ""
+  }
+}
+
+function Get-StartupFailureContext {
+  param([string[]]$LogPaths)
+
+  $existing = @($LogPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) -and (Test-Path $_) } | Select-Object -Unique)
+  $tail = ""
+  foreach ($logPath in $existing) {
+    $tail = Get-FileTailText -Path $logPath
+    if (-not [string]::IsNullOrWhiteSpace($tail)) {
+      break
+    }
+  }
+
+  return [pscustomobject]@{
+    LogPaths = $existing
+    StdErrTail = $tail
+  }
+}
+
 function Invoke-BootDoctor {
   param(
     [Parameter(Mandatory = $true)][string]$Reason,
@@ -435,6 +475,8 @@ function Open-BootDoctorRescue {
     [Parameter(Mandatory = $true)][string]$Reason,
     [int]$DiagPort = 8899,
     [string]$LaunchMode = "direct",
+    [string]$StdErrTail = "",
+    [string[]]$StartupLogPaths = @(),
     [int]$WaitSec = 90
   )
 
@@ -452,7 +494,8 @@ function Open-BootDoctorRescue {
     target_port = [int]$DiagPort
     current_health_status = $(if (Test-ThomasHttpOnPort $DiagPort) { "healthy" } else { "unhealthy" })
     ever_healthy_during_boot = $false
-    stderr_tail = ""
+    stderr_tail = [string]$StdErrTail
+    startup_log_paths = @($StartupLogPaths | Where-Object { -not [string]::IsNullOrWhiteSpace($_) })
   }
   $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $contextPath -Encoding UTF8
 
@@ -954,7 +997,11 @@ if (-not $NoTray) {
     $exitCode = Invoke-ThomasRuntime @("-m", "thomas.tray_agent", "--port", "$Port")
     if ($exitCode -ne 0) {
       Stop-ThomasStartupRecoveryWatch $startupWatchProc
-      $doctorResult = Open-BootDoctorRescue -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port -LaunchMode "tray"
+      $bootContext = Get-StartupFailureContext -LogPaths @(
+        (Join-Path $Root 'runtime\logs\server_stderr.log'),
+        (Join-Path $Root 'runtime\logs\server_stdout.log')
+      )
+      $doctorResult = Open-BootDoctorRescue -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port -LaunchMode "tray" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths
       if ($doctorResult -and $doctorResult.Recovered) {
         if (-not $NoBrowser) {
           try { Start-Process $LaunchUrl | Out-Null } catch { }
@@ -993,7 +1040,8 @@ if (-not $NoTray) {
     } else {
       "Detached server failed to launch on port {0}." -f $Port
     }
-    $doctorResult = Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct"
+    $bootContext = Get-StartupFailureContext -LogPaths @($launch.StderrLog, $launch.StdoutLog)
+    $doctorResult = Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths
     if ($doctorResult -and $doctorResult.Recovered) {
       if (-not $NoBrowser) {
         try { Start-Process $LaunchUrl | Out-Null } catch { }

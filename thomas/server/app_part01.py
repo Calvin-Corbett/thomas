@@ -14,22 +14,71 @@ Run:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import hashlib
+import hmac
+import inspect
+import ipaddress
 import json
 import logging
+import math
 import os
 import re
+import secrets
+import shutil
 import subprocess
+import sys
+import time
+from collections import OrderedDict, deque
+from dataclasses import replace
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
+from urllib.parse import urlparse
 
 from thomas import __version__ as THOMAS_VERSION
 from thomas.core.config import AppConfig, load_config
-from thomas.server.app_keys import (
-    APP_CONFIG,
-    APP_RUNTIME_GUARD_STATE,
+from thomas.models.discovery import handshake_models_async
+from thomas.models.switching import infer_profile_candidates, is_model_switch_request, resolve_model_switch_request
+from thomas.observability import file_audit as _file_audit
+from thomas.observability.task_ledger import (
+    TaskLedgerStore,
+    resolve_task_ledger_db_path,
 )
+from thomas.preferences.store import PreferencesStore, get_db_path
+from thomas.server.app_keys import (
+    APP_ACTION_AUDIT,
+    APP_APPROVALS_BROKER,
+    APP_BOOT_DURATION,
+    APP_BOOT_TIME,
+    APP_CHAT_AUTOPILOT_LAST_BY_GOAL,
+    APP_CHAT_AUTOPILOT_LAST_BY_GOAL_LOCK,
+    APP_CODEX_BRIDGE,
+    APP_CONFIG,
+    APP_CRASH_COUNT,
+    APP_DIAGNOSTICS,
+    APP_ENGINE_MANAGER,
+    APP_GUARDED_TOOL_RUNNER,
+    APP_GUARDRAILS_CTX,
+    APP_GUARDRAILS_ENABLED,
+    APP_MEMORY,
+    APP_MUTATING_ROUTE_POLICY_SNAPSHOT,
+    APP_RESTART_REQUESTED,
+    APP_RUN_STORE_ENABLED,
+    APP_RUN_STORE_MODULE,
+    APP_RUNTIME_GUARD_STATE,
+    APP_RUNTIME_GUARD_TASK,
+    APP_SECRETS,
+    APP_SESSION_ACTIVE_RUNS,
+    APP_SESSION_ACTIVE_RUNS_LOCK,
+    APP_SESSION_LOCKS,
+    APP_SESSION_LOCKS_LOCK,
+    APP_SESSIONS,
+    APP_SHUTDOWN_EVENT,
+    APP_TASK_LEDGER,
+    APP_TOOLS,
+)
+from thomas.server.secrets import SecretStore
 from thomas.server.tool_extensions import register_all_optional_tools
 from thomas.tools.code_search import register_code_search_tools
 from thomas.tools.diff import register_diff_tools
@@ -48,7 +97,7 @@ _BEARER_TOKEN_RE = re.compile(r"^Bearer\s+([^\s]+)\s*$", re.IGNORECASE)
 
 try:
     from thomas.server.routes.chat_aiohttp import AgentLoop as _DEFAULT_APP_AGENT_LOOP
-except Exception:  # pragma: no cover
+except (ImportError, ModuleNotFoundError, AttributeError):  # pragma: no cover
     from thomas.agent.loop import AgentLoop as _DEFAULT_APP_AGENT_LOOP
 
 AgentLoop = _DEFAULT_APP_AGENT_LOOP
@@ -413,7 +462,7 @@ def _build_memory(config: AppConfig):
         )
         engine.start()
         return engine
-    except Exception as e:
+    except (OSError, RuntimeError, TypeError, ValueError) as e:
         log.warning("Memory engine failed to start: %s", e)
         return None
 

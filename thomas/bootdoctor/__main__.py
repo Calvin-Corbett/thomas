@@ -8,8 +8,6 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
-import os
 import socket
 import sys
 import traceback
@@ -19,53 +17,23 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+from thomas.bootdoctor.runtime_helpers import (
+    BootDoctorPathPolicy,
+    RestrictedTool,
+    _extract_patch_targets,
+    _extract_repo_paths_from_text,
+    build_rescue_prompt,
+    build_restricted_tools,
+    load_startup_context,
+    read_report_excerpt,
+    rescue_reason,
+)
+
 from thomas.core.boot_doctor import (
     run_boot_doctor,
     write_boot_doctor_status,
 )
 from thomas.core.config import AppConfig, load_config
-from thomas.tools.base import Tool, ToolResult
-from thomas.tools.code_search import register_code_search_tools
-from thomas.tools.diff import register_diff_tools
-from thomas.tools.filesystem import register_filesystem_tools
-from thomas.tools.registry import ToolRegistry
-
-DEFAULT_READ_DIRS = (
-    "scripts",
-    "thomas/bootdoctor",
-    "thomas/cli",
-    "thomas/core",
-    "thomas/server",
-    "thomas/tray_agent",
-    "runtime/boot_doctor",
-)
-
-DEFAULT_WRITE_FILES = (
-    "scripts/run-ui.ps1",
-    "scripts/run-ui.cmd",
-    "scripts/start-tray-agent.ps1",
-    "scripts/run_boot_doctor_direct.py",
-    "thomas/__main__.py",
-    "thomas/bootdoctor/__main__.py",
-    "thomas/cli/main.py",
-    "thomas/core/boot_doctor.py",
-    "thomas/tray_agent/agent.py",
-)
-
-DEFAULT_WRITE_DIRS = (
-    "runtime/boot_doctor",
-    "thomas/bootdoctor",
-)
-
-
-def _is_within(path: Path, root: Path) -> bool:
-    try:
-        return os.path.commonpath(
-            [os.path.normcase(str(path.resolve())), os.path.normcase(str(root.resolve()))]
-        ) == os.path.normcase(str(root.resolve()))
-    except ValueError:
-        return False
-
 
 def _resolve_repo_root(raw_root: str) -> Path:
     if str(raw_root or "").strip():
@@ -142,7 +110,7 @@ def _load_config_safe(config_path: str) -> tuple[AppConfig, str]:
         path_obj = Path(config_path).expanduser().resolve() if str(config_path or "").strip() else None
         cfg = load_config(path_obj)
         return cfg, ""
-    except Exception as exc:
+    except (OSError, TypeError, ValueError) as exc:
         return AppConfig(), f"config load failed ({type(exc).__name__}: {exc}); using defaults"
 
 
@@ -168,7 +136,7 @@ def _run_report(
             allow_ai=bool(allow_ai),
             relaunch=bool(relaunch),
         )
-    except Exception as exc:
+    except (OSError, RuntimeError, TypeError, ValueError) as exc:
         fallback = report_path
         if fallback is None:
             stamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
@@ -181,164 +149,6 @@ def _run_report(
         )
         return fallback
 
-
-class BootDoctorPathPolicy:
-    """Allow-list policy for BootDoctor tool access."""
-
-    def __init__(self, root: Path):
-        self.root = root.resolve()
-        self.read_roots = [(self.root / rel).resolve() for rel in DEFAULT_READ_DIRS]
-        self.write_files = {(self.root / rel).resolve() for rel in DEFAULT_WRITE_FILES}
-        self.write_dirs = [(self.root / rel).resolve() for rel in DEFAULT_WRITE_DIRS]
-
-    def resolve(self, raw_path: str) -> Path:
-        path = Path(str(raw_path or "").strip()).expanduser()
-        if not path.is_absolute():
-            path = self.root / path
-        return path.resolve()
-
-    def is_read_allowed(self, path: Path) -> bool:
-        resolved = path.resolve()
-        if self.is_write_allowed(resolved):
-            return True
-        return any(_is_within(resolved, allowed_root) for allowed_root in self.read_roots)
-
-    def is_write_allowed(self, path: Path) -> bool:
-        resolved = path.resolve()
-        if any(os.path.normcase(str(resolved)) == os.path.normcase(str(item)) for item in self.write_files):
-            return True
-        return any(_is_within(resolved, allowed_dir) for allowed_dir in self.write_dirs)
-
-    def describe_write_scope(self) -> str:
-        entries = []
-        for path in sorted(self.write_files):
-            try:
-                entries.append(str(path.relative_to(self.root)).replace("\\", "/"))
-            except ValueError:
-                entries.append(str(path))
-        for path in sorted(self.write_dirs):
-            try:
-                entries.append(str(path.relative_to(self.root)).replace("\\", "/") + "/**")
-            except ValueError:
-                entries.append(str(path))
-        return ", ".join(entries)
-
-
-def _extract_patch_targets(patch: str) -> list[str]:
-    targets: list[str] = []
-    for raw_line in str(patch or "").splitlines():
-        line = raw_line.rstrip("\r\n")
-        if not line.startswith("+++ "):
-            continue
-        candidate = line[4:].split("\t", 1)[0].strip()
-        if candidate in {"/dev/null", "nul", "NUL"}:
-            continue
-        if candidate.startswith("b/"):
-            candidate = candidate[2:]
-        if candidate and candidate not in targets:
-            targets.append(candidate)
-    return targets
-
-
-class RestrictedTool(Tool):
-    """Thin wrapper that enforces BootDoctor path policy."""
-
-    def __init__(self, inner: Tool, policy: BootDoctorPathPolicy):
-        self._inner = inner
-        self._policy = policy
-        self.name = inner.name
-        self.category = inner.category
-        self.description = inner.description
-        self.parameters = inner.parameters
-
-    def _deny(self, message: str) -> ToolResult:
-        return ToolResult(ok=False, error=message)
-
-    def _check_read_path(self, raw_path: str, *, label: str) -> ToolResult | None:
-        candidate = self._policy.resolve(raw_path)
-        if not self._policy.is_read_allowed(candidate):
-            return self._deny(
-                f"BootDoctor blocked read outside boot scope ({label}={raw_path}). "
-                f"Allowed write scope: {self._policy.describe_write_scope()}"
-            )
-        return None
-
-    def _check_write_path(self, raw_path: str, *, label: str) -> ToolResult | None:
-        candidate = self._policy.resolve(raw_path)
-        if not self._policy.is_write_allowed(candidate):
-            return self._deny(
-                f"BootDoctor blocked write outside boot scope ({label}={raw_path}). "
-                f"Allowed write scope: {self._policy.describe_write_scope()}"
-            )
-        return None
-
-    def _validate(self, args: dict[str, Any]) -> ToolResult | None:
-        name = str(self.name or "").strip()
-        if name in {"fs.read_file"}:
-            return self._check_read_path(str(args.get("path", "")), label="path")
-        if name in {"fs.write_file"}:
-            return self._check_write_path(str(args.get("path", "")), label="path")
-        if name in {"diff.create", "diff.preview"}:
-            checker = self._check_write_path if name == "diff.create" else self._check_read_path
-            return checker(str(args.get("file", "")), label="file")
-        if name == "diff.apply_patch":
-            targets = _extract_patch_targets(str(args.get("patch", "")))
-            if not targets:
-                return self._deny("BootDoctor requires explicit patch targets in unified diff headers.")
-            for target in targets:
-                err = self._check_write_path(target, label="patch_target")
-                if err is not None:
-                    return err
-            return None
-        if name in {
-            "fs.list_dir",
-            "fs.search",
-            "code.search",
-            "code.find_definition",
-            "code.find_references",
-            "code.project_structure",
-        }:
-            raw = str(args.get("path", "")).strip()
-            if not raw:
-                raw = "scripts"
-                args["path"] = raw
-            return self._check_read_path(raw, label="path")
-        return None
-
-    async def execute(self, args: dict[str, Any]) -> ToolResult:
-        mutable = dict(args or {})
-        invalid = self._validate(mutable)
-        if invalid is not None:
-            return invalid
-        return await self._inner.execute(mutable)
-
-
-def _build_restricted_tools(root: Path) -> tuple[ToolRegistry, BootDoctorPathPolicy]:
-    base = ToolRegistry()
-    register_filesystem_tools(base, root)
-    register_code_search_tools(base, root)
-    register_diff_tools(base, root)
-
-    policy = BootDoctorPathPolicy(root)
-    restricted = ToolRegistry()
-    allowed = {
-        "fs.read_file",
-        "fs.write_file",
-        "fs.list_dir",
-        "fs.search",
-        "code.search",
-        "code.find_definition",
-        "code.find_references",
-        "code.project_structure",
-        "diff.create",
-        "diff.apply_patch",
-        "diff.preview",
-    }
-    for name in sorted(allowed):
-        tool = base.get(name)
-        if tool is not None:
-            restricted.register(RestrictedTool(tool, policy))
-    return restricted, policy
 
 
 def _build_bootdoctor_agent(
@@ -366,7 +176,7 @@ def _build_bootdoctor_agent(
         failover_cooldown_s=config.failover.cooldown_seconds,
         failover_on_auth_error=config.failover.fallback_on_auth_error,
     )
-    tools, policy = _build_restricted_tools(root)
+    tools, policy = build_restricted_tools(root)
 
     system_prompt = (
         "You are BootDoctor, a startup-recovery specialist for Thomas.\n"
@@ -374,9 +184,12 @@ def _build_bootdoctor_agent(
         "Hard rules:\n"
         "1) Only investigate startup and boot failures.\n"
         "2) Refuse unrelated requests.\n"
-        "3) Keep edits tightly scoped to boot files.\n"
+        "3) Keep edits tightly scoped to startup-critical files.\n"
         "4) Prefer diagnostics before edits.\n"
         "5) Avoid destructive actions.\n"
+        "6) Thomas uses monolith source loaders in some startup paths. If a traceback points at a stub "
+        "file like thomas/agent/loop.py or thomas/server/routes/chat_aiohttp.py, inspect and edit the "
+        "matching *_part*.py files instead of the stub when required.\n"
         f"Writable scope: {policy.describe_write_scope()}\n"
     )
     agent = AgentLoop(
@@ -390,76 +203,6 @@ def _build_bootdoctor_agent(
     )
     return agent, llm, policy
 
-
-def _load_startup_context(raw_path: str, root: Path) -> dict[str, Any]:
-    path = _parse_report_path(raw_path, root)
-    if path is None or not path.exists():
-        return {}
-    try:
-        payload = json.loads(path.read_text(encoding="utf-8"))
-    except Exception as exc:
-        return {"context_path": str(path), "parse_error": f"{type(exc).__name__}: {exc}"}
-    if isinstance(payload, dict):
-        payload.setdefault("context_path", str(path))
-        return payload
-    return {"context_path": str(path), "payload": payload}
-
-
-def _read_report_excerpt(path: Path | None, *, max_chars: int = 2400) -> str:
-    if path is None or not path.exists():
-        return ""
-    try:
-        raw = path.read_text(encoding="utf-8")
-    except Exception as exc:
-        return f"Could not read report: {type(exc).__name__}: {exc}"
-    raw = raw.strip()
-    if len(raw) > max_chars:
-        return raw[-max_chars:]
-    return raw
-
-
-def _rescue_reason(args: argparse.Namespace, context: dict[str, Any]) -> str:
-    explicit = str(args.reason or "").strip()
-    if explicit and explicit.lower() != "runtime not detected":
-        return explicit
-    for key in ("reason", "failure_reason", "message"):
-        value = str(context.get(key, "")).strip()
-        if value:
-            return value
-    return explicit or "runtime not detected"
-
-
-def _build_rescue_prompt(
-    *,
-    args: argparse.Namespace,
-    context: dict[str, Any],
-    report_excerpt: str,
-    attempt_number: int,
-    max_attempts: int,
-) -> str:
-    launch_mode = str(context.get("attempted_launch_mode") or context.get("launch_mode") or "unknown").strip()
-    stderr_tail = str(context.get("stderr_tail") or "").strip()
-    health_status = str(context.get("current_health_status") or "unhealthy").strip()
-    ever_healthy = bool(context.get("ever_healthy_during_boot") or context.get("ever_healthy"))
-    lines = [
-        "Thomas failed to become healthy during startup.",
-        f"Attempt: {attempt_number}/{max_attempts}",
-        f"Launch mode: {launch_mode}",
-        f"Port: {int(args.port)}",
-        f"Health status: {health_status}",
-        f"Ever healthy this boot: {str(ever_healthy).lower()}",
-        f"Failure reason: {_rescue_reason(args, context)}",
-        "",
-        "Work only inside the BootDoctor writable scope.",
-        "Diagnose the startup failure, apply one safe repair batch, then stop.",
-        "Focus on launcher scripts, boot doctor files, dependency repair, Thomas-owned port cleanup, and model/config validation needed for startup.",
-    ]
-    if stderr_tail:
-        lines.extend(["", "Recent stderr/stdout tail:", stderr_tail])
-    if report_excerpt:
-        lines.extend(["", "Current BootDoctor report excerpt:", report_excerpt])
-    lines.extend(["", "After your repair batch, I will rerun startup checks automatically."])
-    return "\n".join(lines).strip()
 
 
 async def _run_interactive_loop(
@@ -587,8 +330,8 @@ async def _run_chat(args: argparse.Namespace, *, config: AppConfig, root: Path) 
 
 
 async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path) -> int:
-    context = _load_startup_context(getattr(args, "startup_context", ""), root)
-    reason = _rescue_reason(args, context)
+    context = load_startup_context(getattr(args, "startup_context", ""), root)
+    reason = rescue_reason(args, context)
     max_attempts = max(1, int(getattr(args, "max_attempts", 3) or 3))
 
     print("[bootdoctor] Thomas did not start.")
@@ -653,7 +396,7 @@ async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path
 
     try:
         for attempt in range(1, max_attempts + 1):
-            report_excerpt = _read_report_excerpt(report)
+            report_excerpt = read_report_excerpt(report)
             write_boot_doctor_status(
                 root,
                 status="running",
@@ -664,10 +407,11 @@ async def _run_rescue(args: argparse.Namespace, *, config: AppConfig, root: Path
                 attempts={"current": attempt, "max": max_attempts},
                 extra={"report_path": str(report)},
             )
-            prompt = _build_rescue_prompt(
+            prompt = build_rescue_prompt(
                 args=args,
                 context=context,
                 report_excerpt=report_excerpt,
+                root=root,
                 attempt_number=attempt,
                 max_attempts=max_attempts,
             )
