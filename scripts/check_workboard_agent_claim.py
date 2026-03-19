@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import subprocess
 import sys
 from collections.abc import Sequence
@@ -21,7 +22,7 @@ try:
     from scripts import agent_identity
     from scripts import check_workboard_claims as claims_gate
     from scripts import workboard_claim as workboard_claim_tool
-except Exception:  # pragma: no cover
+except ImportError:  # pragma: no cover
     import agent_identity  # type: ignore
     import check_workboard_claims as claims_gate  # type: ignore
     import workboard_claim as workboard_claim_tool  # type: ignore
@@ -29,6 +30,11 @@ except Exception:  # pragma: no cover
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
+DEFAULT_STAGED_SCOPE_IGNORE: tuple[str, ...] = ("CHANGELOG.md", "pyproject.toml", "thomas/__init__.py")
+FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
+FALLBACK_REASON_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON"
+SCOPE_SOURCE_CLAIM = "workboard_claim"
+SCOPE_SOURCE_FALLBACK = "explicit_fallback"
 
 
 def _resolve_agent(explicit_agent: str | None) -> str | None:
@@ -82,7 +88,7 @@ def _staged_files() -> list[str]:
             text=True,
             check=False,
         )
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return []
     if proc.returncode != 0:
         return []
@@ -113,7 +119,7 @@ def _git_status_porcelain() -> list[str]:
             text=True,
             check=False,
         )
-    except Exception:
+    except (OSError, subprocess.SubprocessError):
         return []
     if proc.returncode != 0:
         return []
@@ -186,6 +192,32 @@ def _claimed_scope_dirty_paths(
     }
 
 
+def _fallback_scopes_from_env() -> tuple[str, ...]:
+    return tuple(_split_patterns([os.getenv(FALLBACK_SCOPE_ENV, "")]))
+
+
+def _fallback_reason_from_env() -> str:
+    return str(os.getenv(FALLBACK_REASON_ENV) or "").strip()
+
+
+def _fallback_conflicts(agent: str, claims: Sequence[claims_gate.Claim], scopes: Sequence[str]) -> list[str]:
+    normalized_agent = _norm(agent)
+    conflicts = sorted(
+        {
+            str(claim.agent).strip()
+            for claim in claims
+            if _norm(claim.agent) != normalized_agent
+            and any(
+                _scope_matches_path(scope, fallback_scope) or _scope_matches_path(fallback_scope, scope)
+                for scope in claim.scopes
+                for fallback_scope in scopes
+            )
+        },
+        key=str.lower,
+    )
+    return conflicts
+
+
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
@@ -209,23 +241,29 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--enforce-staged-scope",
         action="store_true",
-        help=("Require all staged files to be covered by the current agent's active " "claim scope."),
+        help=("Require all staged files to be covered by the current agent's active claim scope."),
+    )
+    parser.add_argument(
+        "--staged-scope-ignore",
+        action="append",
+        default=[],
+        help=("Ignore staged-scope path pattern(s) while enforcing staged scope (repeatable or comma-separated)."),
     )
     parser.add_argument(
         "--enforce-clean-claimed-scope",
         action="store_true",
-        help=("Require claimed scope files to be clean in the working tree " "(no unstaged edits in claimed paths)."),
+        help=("Require claimed scope files to be clean in the working tree (no unstaged edits in claimed paths)."),
     )
     parser.add_argument(
         "--enforce-untracked-claimed-scope",
         action="store_true",
-        help=("With --enforce-clean-claimed-scope, also fail on untracked files " "inside claimed scope."),
+        help=("With --enforce-clean-claimed-scope, also fail on untracked files inside claimed scope."),
     )
     parser.add_argument(
         "--claimed-scope-ignore",
         action="append",
         default=[],
-        help=("Ignore claimed-scope cleanliness path patterns (repeatable or " "comma-separated)."),
+        help=("Ignore claimed-scope cleanliness path patterns (repeatable or comma-separated)."),
     )
     parser.add_argument(
         "--enforce-parent-throughput",
@@ -257,7 +295,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--parent-max-suggestions",
         type=int,
         default=5,
-        help=("Maximum delegation suggestions to inspect when evaluating parent " "throughput (default: 5)."),
+        help=("Maximum delegation suggestions to inspect when evaluating parent throughput (default: 5)."),
     )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)
@@ -309,36 +347,14 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     normalized = _norm(agent)
     mine = [claim for claim in claims if _norm(claim.agent) == normalized]
-    if not mine:
-        message = (
-            f"no active workboard claim found for '{agent}'. "
-            "Run scripts/workboard_claim.py --claim before committing."
-        )
-        if args.json:
-            payload = {
-                "gate": "workboard_agent_claim",
-                "ok": False,
-                "agent": agent,
-                "active_claim_count": len(claims),
-                "matching_claim_count": 0,
-                "workboard": str(workboard_path),
-                "error": message,
-            }
-            print(json.dumps(payload, sort_keys=True))
-        else:
-            print("Workboard agent claim gate: FAIL")
-            print(f"- {message}")
-        return 1
-
     unresolved_owned = [
         issue for issue in issues if _norm(issue.owner) == normalized and _norm(issue.state) != "resolved"
     ]
     if unresolved_owned:
         issue_ids = [str(issue.issue_id).strip() for issue in unresolved_owned if str(issue.issue_id).strip()]
         issue_ids = sorted(set(issue_ids))
-        issue_list = ", ".join(issue_ids) if issue_ids else "unknown issue ids"
         message = (
-            f"agent '{agent}' owns unresolved workboard issue(s): {issue_list}. "
+            f"agent '{agent}' owns unresolved workboard issue(s): {', '.join(issue_ids) if issue_ids else 'unknown issue ids'}. "
             "Resolve or reassign them before committing."
         )
         if args.json:
@@ -359,6 +375,63 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- {message}")
         return 1
 
+    scope_source = SCOPE_SOURCE_CLAIM
+    fallback_reason = ""
+    if mine:
+        scopes = sorted({scope for claim in mine for scope in claim.scopes})
+    else:
+        fallback_scopes = list(_fallback_scopes_from_env())
+        fallback_reason = _fallback_reason_from_env()
+        if not fallback_scopes:
+            message = (
+                f"no active workboard claim found for '{agent}'. "
+                "Run scripts/workboard_claim.py --claim before committing."
+            )
+            if args.json:
+                payload = {
+                    "gate": "workboard_agent_claim",
+                    "ok": False,
+                    "agent": agent,
+                    "active_claim_count": len(claims),
+                    "matching_claim_count": 0,
+                    "workboard": str(workboard_path),
+                    "error": message,
+                    "scope_source": SCOPE_SOURCE_CLAIM,
+                }
+                print(json.dumps(payload, sort_keys=True))
+            else:
+                print("Workboard agent claim gate: FAIL")
+                print(f"- {message}")
+            return 1
+
+        conflicts = _fallback_conflicts(agent, claims, fallback_scopes)
+        if conflicts:
+            message = "explicit fallback scope overlaps active claim(s) owned by: " + ", ".join(conflicts)
+            if args.json:
+                payload = {
+                    "gate": "workboard_agent_claim",
+                    "ok": False,
+                    "agent": agent,
+                    "active_claim_count": len(claims),
+                    "matching_claim_count": 0,
+                    "unresolved_issue_count": 0,
+                    "unresolved_issue_ids": [],
+                    "scopes": fallback_scopes,
+                    "workboard": str(workboard_path),
+                    "error": message,
+                    "scope_source": SCOPE_SOURCE_FALLBACK,
+                    "fallback_reason": fallback_reason,
+                    "conflicting_agents": conflicts,
+                }
+                print(json.dumps(payload, sort_keys=True))
+            else:
+                print("Workboard agent claim gate: FAIL")
+                print(f"- {message}")
+            return 1
+
+        scopes = sorted(set(fallback_scopes), key=str.lower)
+        scope_source = SCOPE_SOURCE_FALLBACK
+
     parent_throughput: dict[str, object] = {
         "checked": bool(args.enforce_parent_throughput),
         "applied": False,
@@ -369,7 +442,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "min_ready_suggestions": max(1, int(args.parent_min_ready_suggestions or 1)),
         "generated_claim_commands": [],
     }
-    if args.enforce_parent_throughput:
+    if args.enforce_parent_throughput and mine:
         mine_parent_claims = [claim for claim in mine if _claim_role(claim) == "parent"]
         if mine_parent_claims:
             parent_throughput["applied"] = True
@@ -394,10 +467,12 @@ def run(argv: Sequence[str] | None = None) -> int:
                         "matching_claim_count": len(mine),
                         "unresolved_issue_count": 0,
                         "unresolved_issue_ids": [],
-                        "scopes": sorted({scope for claim in mine for scope in claim.scopes}),
+                        "scopes": scopes,
                         "workboard": str(workboard_path),
                         "error": message,
                         "parent_throughput": parent_throughput,
+                        "scope_source": scope_source,
+                        "fallback_reason": fallback_reason,
                     }
                     print(json.dumps(payload, sort_keys=True))
                 else:
@@ -441,10 +516,12 @@ def run(argv: Sequence[str] | None = None) -> int:
                         "matching_claim_count": len(mine),
                         "unresolved_issue_count": 0,
                         "unresolved_issue_ids": [],
-                        "scopes": sorted({scope for claim in mine for scope in claim.scopes}),
+                        "scopes": scopes,
                         "workboard": str(workboard_path),
                         "error": message,
                         "parent_throughput": parent_throughput,
+                        "scope_source": scope_source,
+                        "fallback_reason": fallback_reason,
                     }
                     print(json.dumps(payload, sort_keys=True))
                 else:
@@ -456,12 +533,15 @@ def run(argv: Sequence[str] | None = None) -> int:
                             print(f"  - {cmd}")
                 return 1
 
-    scopes = sorted({scope for claim in mine for scope in claim.scopes})
+    staged_scope_ignore = list(DEFAULT_STAGED_SCOPE_IGNORE)
+    staged_scope_ignore.extend(_split_patterns(args.staged_scope_ignore))
     staged_files: list[str] = []
     unclaimed_staged_files: list[str] = []
     if args.enforce_staged_scope:
         staged_files = _staged_files()
         for rel_path in staged_files:
+            if _is_ignored_path(rel_path, staged_scope_ignore):
+                continue
             if not any(_scope_matches_path(scope, rel_path) for scope in scopes):
                 unclaimed_staged_files.append(rel_path)
     if unclaimed_staged_files:
@@ -469,6 +549,11 @@ def run(argv: Sequence[str] | None = None) -> int:
             f"agent '{agent}' has staged files outside claimed scope. "
             "Update the WORKBOARD claim scope before committing."
         )
+        if scope_source == SCOPE_SOURCE_FALLBACK:
+            message = (
+                f"agent '{agent}' has staged files outside the explicit fallback scope. "
+                "Narrow the staged files or update the fallback scope before committing."
+            )
         if args.json:
             payload = {
                 "gate": "workboard_agent_claim",
@@ -485,6 +570,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                 "staged_file_count": len(staged_files),
                 "staged_files_outside_scope_count": len(unclaimed_staged_files),
                 "staged_files_outside_scope": unclaimed_staged_files,
+                "scope_source": scope_source,
+                "fallback_reason": fallback_reason,
             }
             print(json.dumps(payload, sort_keys=True))
         else:
@@ -497,6 +584,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             for path in unclaimed_staged_files:
                 print(f"  - {path}")
         return 1
+
     claimed_scope_ignore = _split_patterns(args.claimed_scope_ignore)
     claimed_scope_dirty = {"unstaged": [], "untracked": []}
     if args.enforce_clean_claimed_scope:
@@ -508,9 +596,12 @@ def run(argv: Sequence[str] | None = None) -> int:
     dirty_unstaged = list(claimed_scope_dirty.get("unstaged") or [])
     dirty_untracked = list(claimed_scope_dirty.get("untracked") or [])
     if dirty_unstaged or dirty_untracked:
-        message = (
-            f"agent '{agent}' has dirty files in claimed scope. " "Stage/commit or stash these files before committing."
-        )
+        message = f"agent '{agent}' has dirty files in claimed scope. Stage/commit or stash these files before committing."
+        if scope_source == SCOPE_SOURCE_FALLBACK:
+            message = (
+                f"agent '{agent}' has dirty files inside the explicit fallback scope. "
+                "Stage/commit or stash these files before committing."
+            )
         if args.json:
             payload = {
                 "gate": "workboard_agent_claim",
@@ -534,6 +625,8 @@ def run(argv: Sequence[str] | None = None) -> int:
                 "claimed_scope_unstaged_files": dirty_unstaged,
                 "claimed_scope_untracked_count": len(dirty_untracked),
                 "claimed_scope_untracked_files": dirty_untracked,
+                "scope_source": scope_source,
+                "fallback_reason": fallback_reason,
             }
             print(json.dumps(payload, sort_keys=True))
         else:
@@ -552,6 +645,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 for path in dirty_untracked:
                     print(f"  - {path}")
         return 1
+
     if args.json:
         payload = {
             "gate": "workboard_agent_claim",
@@ -575,12 +669,17 @@ def run(argv: Sequence[str] | None = None) -> int:
             "claimed_scope_untracked_files": [],
             "parent_throughput": parent_throughput,
             "workboard": str(workboard_path),
+            "scope_source": scope_source,
+            "fallback_reason": fallback_reason,
         }
         print(json.dumps(payload, sort_keys=True))
     else:
         print("Workboard agent claim gate: PASS")
         print(f"- agent: {agent}")
         print(f"- matching claims: {len(mine)}")
+        print(f"- scope source: {scope_source}")
+        if fallback_reason:
+            print(f"- fallback reason: {fallback_reason}")
         if bool(parent_throughput.get("applied")):
             print(
                 "- parent throughput: "

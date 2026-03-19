@@ -180,3 +180,38 @@ def test_changed_files_gate_allows_bulk_override_env(tmp_path: Path, capsys, mon
     assert payload["ok"] is True
     assert payload["bulk_override"] is True
     assert payload["changed_file_count"] == 3
+
+
+
+def test_changed_files_gate_accepts_explicit_fallback_scope(tmp_path: Path, capsys, monkeypatch) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=docs/note.md; task=docs lane",
+        active_tasks_block="- task_id=docs-lane; agent=Codex 3; scope=docs/note.md; summary=docs lane; status=active",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 2")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+
+    rc = mod.run(["--workboard", str(workboard), "--file", "thomas/cli/main.py", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["fallback_scope_count"] == 1
+    assert payload["owner_by_file"] == {"thomas/cli/main.py": "Codex 2"}
+
+
+def test_changed_files_gate_rejects_fallback_conflict_with_claimed_file(tmp_path: Path, capsys, monkeypatch) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=thomas/cli/main.py; task=main lane",
+        active_tasks_block="- task_id=main-lane; agent=Codex 3; scope=thomas/cli/main.py; summary=main lane; status=active",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 2")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+
+    rc = mod.run(["--workboard", str(workboard), "--file", "thomas/cli/main.py", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["fallback_conflict_count"] == 1
+    assert payload["fallback_conflicts"][0]["owners"] == ["Codex 3"]

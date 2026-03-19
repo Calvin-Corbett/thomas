@@ -25,6 +25,7 @@ Versioning: Semantic Versioning.
 - safety: New `_check_worktree_clean()` in `agent_preflight.py` — reports dirty worktree state at session start so agents know they're working in a dirty tree (Finding 11)
 
 ### Changed
+- tooling: `scripts/agent_commit.py` now emits machine-readable blocker payloads and supports audited explicit-scope fallback commits when no active claim exists, while the workboard ownership gates recognize that fallback without allowing overlap with another agent's claim. Selected commit paths are now realigned to `HEAD` in the live index instead of being re-added from the worktree, so unrelated staging state stays stable.
 - skills: Runtime skill discovery, CLI diagnostics, and REPL `/skill` now resolve Thomas-native roots (`<thomas_install_root>/skills`, `~/.thomas/skills`, `<cwd>/.thomas/skills`, `<cwd>/skills`) instead of `.codex` roots during normal operation.
 - safety: Placeholder file protection in `validate_agent_changes.py` promoted from warning to hard rejection — commits modifying episodic.py, episodic_store.py, or summarization.py are now BLOCKED (Finding 3)
 - safety: Monolith stub file protection in `validate_agent_changes.py` promoted from warning to hard rejection — commits modifying app.js or app.css build outputs are now BLOCKED (Finding 4)
@@ -45,6 +46,18 @@ Versioning: Semantic Versioning.
 - tooling: New `scripts/generate_health_dashboard.py` — generates a standalone HTML dashboard showing module health, file sizes, exception handler counts, hook coverage, and files needing attention
 - coverage: Widened `check_duplicate_filename_gate.py` scan scope from thomas/scripts/ to also cover extensions/, agents/, cli/, tests/, apps/, plugins/ — previously 530+ extension files were unmonitored
 - coverage: Widened `check_changelog_gate.py` to trigger on changes to extensions/, agents/, cli/, plugins/ — not just thomas/
+- portable: New `agent_safety.toml` — single config file defining all rules (protected files, forbidden patterns, circular imports, limits, etc.)
+- portable: New `scripts/agent_safety_config.py` — config loader with fallback TOML parser for Python 3.8+
+- portable: New `scripts/agent_safety_init.py` — scaffolds agent safety into any repo with one command
+- portable: Refactored 5 hooks to read from agent_safety.toml instead of hardcoded constants — Thomas unchanged, rules now portable
+
+## [0.14.47] - 2026-03-19
+
+### Changed
+- Hardened `scripts/agent_commit.py`, `scripts/check_workboard_agent_claim.py`, and `scripts/check_workboard_changed_files.py` so scoped local commits now support audited no-claim fallback scopes, emit machine-readable recovery hints, and realign selected live-index paths back to `HEAD` instead of re-adding them from the worktree.
+
+### Added
+- Expanded regression coverage in `tests/test_agent_commit.py`, `tests/test_check_workboard_agent_claim_gate.py`, `tests/test_check_workboard_changed_files_gate.py`, and `tests/test_commit_gate_split.py` for fallback scope approval, overlap rejection, JSON blocker payloads, and live-index realignment.
 
 ## [0.14.44] - 2026-03-19
 
