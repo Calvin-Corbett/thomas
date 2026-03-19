@@ -4,6 +4,7 @@ Tests for message persistence functionality.
 Tests segment file creation, recovery, log cleaning, and index operations.
 """
 
+import pickle
 import tempfile
 from pathlib import Path
 
@@ -265,3 +266,24 @@ async def test_persistence_many_messages(temp_dir):
     # Verify stats
     stats = await manager.get_stats()
     assert stats["total_size_bytes"] > 0
+
+
+@pytest.mark.asyncio
+async def test_segment_reader_rejects_unsafe_pickle_globals(temp_dir):
+    """Test segment reader rejects unexpected pickle globals."""
+    path = Path(temp_dir) / "unsafe.seg"
+
+    class _Exploit:
+        def __reduce__(self):
+            return (eval, ("1 + 1",))
+
+    payload = pickle.dumps(_Exploit())
+    with open(path, "wb") as handle:
+        handle.write((0).to_bytes(8, "big"))
+        handle.write(len(payload).to_bytes(4, "big"))
+        handle.write(payload)
+
+    reader = SegmentReader(path)
+
+    with pytest.raises(Exception):
+        await reader.load()

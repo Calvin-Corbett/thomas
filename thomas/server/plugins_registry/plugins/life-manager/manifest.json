@@ -1,0 +1,55 @@
+{
+  "id": "life-manager",
+  "plugin_id": "life-manager",
+  "title": "Life Manager",
+  "name": "Life Manager",
+  "display_name": "Life Manager",
+  "description": "Tasks, agenda, habits, and goals in one local-first Thomas plugin.",
+  "subtitle": "Tasks, agenda, habits, and goals in one local-first workspace.",
+  "version": "1.0.0",
+  "author": "Thomas",
+  "source": "Thomas Official",
+  "publisher_id": "thomas-official",
+  "publisher_name": "Thomas",
+  "kind": "desktop_plugin",
+  "section": "apps",
+  "mode_id": "life_manager",
+  "icon": "ph-list-checks",
+  "api_namespace": "life-manager",
+  "entrypoint": "hooks.py",
+  "surface": {
+    "entry_html": "web/index.html",
+    "title": "Life Manager",
+    "surface_mode": "immersive"
+  },
+  "capabilities": [
+    "life_manager.tasks",
+    "life_manager.agenda",
+    "life_manager.habits",
+    "life_manager.goals"
+  ],
+  "sha256": "fe8dc860b621964e6d11846349bee9cb3852ef614beeab5d8f71c4c05c3522fb",
+  "signature": "official-a55f7dd35717b2a3",
+  "size_bytes": 7187,
+  "verified": true,
+  "tags": [
+    "official",
+    "desktop",
+    "command_center",
+    "workspace",
+    "productivity",
+    "automation"
+  ],
+  "marketplace_type": "command_center",
+  "category": "productivity",
+  "categories": [
+    "productivity",
+    "automation"
+  ],
+  "requires": [
+    "life-manager-foundation"
+  ],
+  "left_nav_behavior": "workspace",
+  "default_nav_section": "command_centers",
+  "default_nav_order": 520
+}

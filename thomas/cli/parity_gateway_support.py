@@ -9,6 +9,7 @@ import subprocess
 import sys
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
@@ -80,7 +81,13 @@ def find_free_port(host: str, preferred: int, max_offset: int = 25) -> int | Non
     return None
 
 
-def resolve_bind_port(host: str, port: int, auto_port: bool) -> int:
+def resolve_bind_port(
+    host: str,
+    port: int,
+    auto_port: bool,
+    *,
+    announce: Callable[[str], None] | None = None,
+) -> int:
     selected = int(port)
     if port_in_use(host, selected):
         if not auto_port:
@@ -90,7 +97,8 @@ def resolve_bind_port(host: str, port: int, auto_port: bool) -> int:
         free_port = find_free_port(host, selected)
         if free_port is None:
             raise click.ClickException(f"No free port found in range {selected}..{selected + 25}.")
-        click.echo(f"Port {selected} is busy; auto-selecting {free_port}.")
+        if callable(announce):
+            announce(f"Port {selected} is busy; auto-selecting {free_port}.")
         selected = int(free_port)
     return selected
 

@@ -104,7 +104,7 @@ class DebugSession:
         )
         # Keep only last 1000 entries
         if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
-            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
+            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE :]
 
     def pop_frame(self) -> StackFrame | None:
         """Pop a frame from the call stack."""
@@ -115,7 +115,7 @@ class DebugSession:
             )
             # Keep only last 1000 entries
             if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
-                self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
+                self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE :]
             return frame
         return None
 
@@ -143,7 +143,7 @@ class DebugSession:
         self.execution_log.append({"timestamp": datetime.now().isoformat(), "action": "paused"})
         # Keep only last 1000 entries
         if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
-            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
+            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE :]
 
     def resume(self) -> None:
         """Resume execution."""
@@ -151,7 +151,7 @@ class DebugSession:
         self.execution_log.append({"timestamp": datetime.now().isoformat(), "action": "resumed"})
         # Keep only last 1000 entries
         if len(self.execution_log) > self._MAX_EXECUTION_LOG_SIZE:
-            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE:]
+            self.execution_log = self.execution_log[-self._MAX_EXECUTION_LOG_SIZE :]
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -263,7 +263,7 @@ class DebugToolkit:
         )
         # Keep only last 1000 entries
         if len(self.logs) > self._MAX_ALERT_HISTORY_SIZE:
-            self.logs = self.logs[-self._MAX_ALERT_HISTORY_SIZE:]
+            self.logs = self.logs[-self._MAX_ALERT_HISTORY_SIZE :]
 
     def get_logs(self, level: str | None = None) -> list[dict[str, Any]]:
         """Get debug logs."""

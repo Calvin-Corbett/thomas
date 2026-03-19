@@ -15,6 +15,14 @@ type MetricsPayload = {
   };
 };
 
+function hasRealData(metrics: MetricsPayload): boolean {
+  return (
+    metrics.github.totalAssetDownloads > 0 ||
+    metrics.web.trackedIntentLast30Days > 0 ||
+    metrics.github.latestReleaseTag !== null
+  );
+}
+
 export function MetricsStrip() {
   const [metrics, setMetrics] = useState<MetricsPayload | null>(null);
 
@@ -33,20 +41,26 @@ export function MetricsStrip() {
     };
   }, []);
 
+  if (!metrics || !hasRealData(metrics)) {
+    return null;
+  }
+
   return (
-    <section className="metrics-grid" aria-label="Thomas website metrics">
-      <article className="metric-card">
-        <p className="metric-label">Tracked Download Intents (30d)</p>
-        <p className="metric-value">{metrics?.web.trackedIntentLast30Days?.toLocaleString() ?? "..."}</p>
-      </article>
-      <article className="metric-card">
-        <p className="metric-label">GitHub Asset Downloads (All Time)</p>
-        <p className="metric-value">{metrics?.github.totalAssetDownloads?.toLocaleString() ?? "..."}</p>
-      </article>
-      <article className="metric-card">
-        <p className="metric-label">Latest Release</p>
-        <p className="metric-value">{metrics?.github.latestReleaseTag ?? "Not configured"}</p>
-      </article>
+    <section aria-label="Thomas website metrics">
+      <div className="metrics-grid">
+        <article className="metric-card">
+          <p className="metric-label">Download Intents (30d)</p>
+          <p className="metric-value">{metrics.web.trackedIntentLast30Days.toLocaleString()}</p>
+        </article>
+        <article className="metric-card">
+          <p className="metric-label">GitHub Downloads (All Time)</p>
+          <p className="metric-value">{metrics.github.totalAssetDownloads.toLocaleString()}</p>
+        </article>
+        <article className="metric-card">
+          <p className="metric-label">Latest Release</p>
+          <p className="metric-value">{metrics.github.latestReleaseTag ?? "Unavailable"}</p>
+        </article>
+      </div>
     </section>
   );
 }

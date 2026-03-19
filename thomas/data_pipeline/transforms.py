@@ -11,6 +11,7 @@ from collections.abc import Callable
 from datetime import date, datetime
 from typing import Any
 
+from thomas.core.safe_expression import SafeExpressionError, evaluate_safe_expression
 from thomas.data_pipeline._exceptions import TransformationError
 from thomas.data_pipeline._types import (
     DataType,
@@ -421,21 +422,21 @@ class ExpressionEvaluatorTransform(Transform):
     @staticmethod
     def _evaluate_expression(expr: str, data: dict[str, Any]) -> Any:
         """Safely evaluate expression with field values."""
-        # Create safe namespace with only field values
         namespace = {k: v for k, v in data.items() if isinstance(v, (int, float))}
-        namespace.update(
-            {
-                "abs": abs,
-                "round": round,
-                "min": min,
-                "max": max,
-                "sqrt": math.sqrt,
-            }
-        )
 
         try:
-            return eval(expr, {"__builtins__": {}}, namespace)
-        except Exception as e:
+            return evaluate_safe_expression(
+                expr,
+                names=namespace,
+                functions={
+                    "abs": abs,
+                    "round": round,
+                    "min": min,
+                    "max": max,
+                    "sqrt": math.sqrt,
+                },
+            )
+        except SafeExpressionError as e:
             raise ValueError(f"Expression error: {e}")
 
     def get_output_schema(self, input_schema: Schema) -> Schema:

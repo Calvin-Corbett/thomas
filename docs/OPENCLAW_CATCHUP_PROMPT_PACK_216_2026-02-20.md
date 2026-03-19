@@ -15,7 +15,7 @@ Goal of this pack: close capability gaps tracked in `docs/OPENCLAW_GAP_CHANGELOG
 ## Global Prefix To Paste In Every ChatGPT Tab
 
 ```text
-You are implementing features for Thomas at F:\DevHub\Thomas.
+You are implementing features for Thomas at <repo_root>.
 
 Hard constraints:
 1) Do not copy OpenClaw branding, command names, internal identifiers, or docs text.
@@ -39,7 +39,7 @@ Hard constraints:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -78,7 +78,7 @@ Return format:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -117,7 +117,7 @@ Return format:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -156,7 +156,7 @@ Return format:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -195,7 +195,7 @@ Return format:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -234,7 +234,7 @@ Return format:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -273,7 +273,7 @@ Return format:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -312,7 +312,7 @@ Return format:
 Batch: B01 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -351,7 +351,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -390,7 +390,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -429,7 +429,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -468,7 +468,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -507,7 +507,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -546,7 +546,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -585,7 +585,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -624,7 +624,7 @@ Return format:
 Batch: B02 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -663,7 +663,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -702,7 +702,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -741,7 +741,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -780,7 +780,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -819,7 +819,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -858,7 +858,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -897,7 +897,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -936,7 +936,7 @@ Return format:
 Batch: B03 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -975,7 +975,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -1014,7 +1014,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: browser
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/live_browser.py
@@ -1055,7 +1055,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1094,7 +1094,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1133,7 +1133,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1172,7 +1172,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1211,7 +1211,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1250,7 +1250,7 @@ Return format:
 Batch: B04 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1289,7 +1289,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1328,7 +1328,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1367,7 +1367,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1406,7 +1406,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1445,7 +1445,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1484,7 +1484,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1523,7 +1523,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1562,7 +1562,7 @@ Return format:
 Batch: B05 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1601,7 +1601,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1640,7 +1640,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1679,7 +1679,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1718,7 +1718,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1757,7 +1757,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1796,7 +1796,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1835,7 +1835,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1874,7 +1874,7 @@ Return format:
 Batch: B06 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1913,7 +1913,7 @@ Return format:
 Batch: B07 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1952,7 +1952,7 @@ Return format:
 Batch: B07 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -1991,7 +1991,7 @@ Return format:
 Batch: B07 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2030,7 +2030,7 @@ Return format:
 Batch: B07 | Lane: Browser and Nodes | Domain: nodes
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2071,7 +2071,7 @@ Return format:
 Batch: B07 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2110,7 +2110,7 @@ Return format:
 Batch: B07 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2149,7 +2149,7 @@ Return format:
 Batch: B07 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2188,7 +2188,7 @@ Return format:
 Batch: B07 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2227,7 +2227,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2266,7 +2266,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2305,7 +2305,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2344,7 +2344,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2383,7 +2383,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2422,7 +2422,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2461,7 +2461,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2500,7 +2500,7 @@ Return format:
 Batch: B08 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2539,7 +2539,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2578,7 +2578,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2617,7 +2617,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2656,7 +2656,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2695,7 +2695,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2734,7 +2734,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2773,7 +2773,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2812,7 +2812,7 @@ Return format:
 Batch: B09 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2851,7 +2851,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2890,7 +2890,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: messages
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_compat.py
@@ -2931,7 +2931,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -2970,7 +2970,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3009,7 +3009,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3048,7 +3048,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3087,7 +3087,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3126,7 +3126,7 @@ Return format:
 Batch: B10 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3165,7 +3165,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3204,7 +3204,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3243,7 +3243,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3282,7 +3282,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3321,7 +3321,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3360,7 +3360,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3399,7 +3399,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3438,7 +3438,7 @@ Return format:
 Batch: B11 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3477,7 +3477,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3516,7 +3516,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3555,7 +3555,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3594,7 +3594,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3633,7 +3633,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3672,7 +3672,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3711,7 +3711,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3750,7 +3750,7 @@ Return format:
 Batch: B12 | Lane: Messaging and Channels | Domain: channels
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/commands/channels.py
@@ -3791,7 +3791,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -3830,7 +3830,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -3869,7 +3869,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -3908,7 +3908,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -3947,7 +3947,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -3986,7 +3986,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4025,7 +4025,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4064,7 +4064,7 @@ Return format:
 Batch: B13 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4103,7 +4103,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4142,7 +4142,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4181,7 +4181,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4220,7 +4220,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4259,7 +4259,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4298,7 +4298,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4337,7 +4337,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4376,7 +4376,7 @@ Return format:
 Batch: B14 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4415,7 +4415,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4454,7 +4454,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4493,7 +4493,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4532,7 +4532,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4571,7 +4571,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4610,7 +4610,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4649,7 +4649,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4688,7 +4688,7 @@ Return format:
 Batch: B15 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4727,7 +4727,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4766,7 +4766,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4805,7 +4805,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4844,7 +4844,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: plugins
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/autonomy/plugin.py
@@ -4885,7 +4885,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -4924,7 +4924,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -4963,7 +4963,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5002,7 +5002,7 @@ Return format:
 Batch: B16 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5041,7 +5041,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5080,7 +5080,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5119,7 +5119,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5158,7 +5158,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5197,7 +5197,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5236,7 +5236,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5275,7 +5275,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5314,7 +5314,7 @@ Return format:
 Batch: B17 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5353,7 +5353,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5392,7 +5392,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5431,7 +5431,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5470,7 +5470,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5509,7 +5509,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5548,7 +5548,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5587,7 +5587,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5626,7 +5626,7 @@ Return format:
 Batch: B18 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5665,7 +5665,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5704,7 +5704,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5743,7 +5743,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5782,7 +5782,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5821,7 +5821,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5860,7 +5860,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5899,7 +5899,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5938,7 +5938,7 @@ Return format:
 Batch: B19 | Lane: Plugins and Gateway API | Domain: gateway
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/cli/parity_commands.py
@@ -5979,7 +5979,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: memory
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/v2/fabric.py
@@ -6018,7 +6018,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: memory
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/v2/fabric.py
@@ -6057,7 +6057,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: memory
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/v2/fabric.py
@@ -6096,7 +6096,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: memory
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/v2/fabric.py
@@ -6135,7 +6135,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: memory
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/v2/fabric.py
@@ -6174,7 +6174,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: memory
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/v2/fabric.py
@@ -6215,7 +6215,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: security
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/policy/config.py
@@ -6254,7 +6254,7 @@ Return format:
 Batch: B20 | Lane: Memory Security System Approvals | Domain: security
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/policy/config.py
@@ -6293,7 +6293,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: security
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/policy/config.py
@@ -6332,7 +6332,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: security
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/policy/config.py
@@ -6371,7 +6371,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: security
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/policy/config.py
@@ -6410,7 +6410,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: security
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/policy/config.py
@@ -6451,7 +6451,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: system
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/core/events.py
@@ -6490,7 +6490,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: system
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/core/events.py
@@ -6529,7 +6529,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: system
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/core/events.py
@@ -6568,7 +6568,7 @@ Return format:
 Batch: B21 | Lane: Memory Security System Approvals | Domain: system
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/core/events.py
@@ -6607,7 +6607,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: system
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/core/events.py
@@ -6646,7 +6646,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: system
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/core/events.py
@@ -6687,7 +6687,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: approvals
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/autonomy.py
@@ -6726,7 +6726,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: approvals
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/autonomy.py
@@ -6765,7 +6765,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: approvals
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/autonomy.py
@@ -6804,7 +6804,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: approvals
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/autonomy.py
@@ -6843,7 +6843,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: approvals
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/autonomy.py
@@ -6882,7 +6882,7 @@ Return format:
 Batch: B22 | Lane: Memory Security System Approvals | Domain: approvals
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - thomas/memory/autonomy.py
@@ -6923,7 +6923,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -6960,7 +6960,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -6997,7 +6997,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7034,7 +7034,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7071,7 +7071,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7108,7 +7108,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7145,7 +7145,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7182,7 +7182,7 @@ Return format:
 Batch: B23 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7219,7 +7219,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7256,7 +7256,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7293,7 +7293,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7330,7 +7330,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7367,7 +7367,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7406,7 +7406,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7443,7 +7443,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7480,7 +7480,7 @@ Return format:
 Batch: B24 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7517,7 +7517,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7554,7 +7554,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7591,7 +7591,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7628,7 +7628,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7665,7 +7665,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7702,7 +7702,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7739,7 +7739,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7776,7 +7776,7 @@ Return format:
 Batch: B25 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7813,7 +7813,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7850,7 +7850,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7887,7 +7887,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7924,7 +7924,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7961,7 +7961,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -7998,7 +7998,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8035,7 +8035,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8072,7 +8072,7 @@ Return format:
 Batch: B26 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8109,7 +8109,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8146,7 +8146,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8185,7 +8185,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8222,7 +8222,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8261,7 +8261,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8300,7 +8300,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8337,7 +8337,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8374,7 +8374,7 @@ Return format:
 Batch: B27 | Lane: Tests CI Hardening | Domain: hardening
 
 ```text
-Project root: F:\DevHub\Thomas
+Project root: <repo_root>
 
 Context to read first:
 - scripts/check_competitive_scope_gate.py
@@ -8408,4 +8408,6 @@ Return format:
 - Then exact test commands executed.
 - Then short risk list.
 ```
+
+
 

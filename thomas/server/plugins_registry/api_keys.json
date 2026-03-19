@@ -1,0 +1,9 @@
+{
+  "keys": {
+    "local-dev-install-key": {
+      "label": "Local Desktop Install Identity",
+      "active": true,
+      "created_at": "2026-03-17T16:25:43.937637+00:00"
+    }
+  }
+}

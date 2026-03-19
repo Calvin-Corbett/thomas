@@ -19,7 +19,6 @@ import logging
 import platform
 import time
 from dataclasses import dataclass, field
-from typing import List, Optional
 
 log = logging.getLogger(__name__)
 
@@ -27,12 +26,14 @@ log = logging.getLogger(__name__)
 # In-memory session state (no disk, no files, cleared on process exit)
 # ---------------------------------------------------------------------------
 
+
 @dataclass
 class _AuthSession:
     """Single in-memory auth session. No persistence."""
+
     granted_at: float
     expiry_s: float
-    actions_approved: List[str] = field(default_factory=list)
+    actions_approved: list[str] = field(default_factory=list)
 
     def is_valid(self) -> bool:
         return time.monotonic() < (self.granted_at + self.expiry_s)
@@ -52,7 +53,7 @@ class WindowsAuthGate:
 
     def __init__(self, session_expiry_s: int = 300) -> None:
         self._session_expiry_s = session_expiry_s
-        self._session: Optional[_AuthSession] = None
+        self._session: _AuthSession | None = None
 
     # ------------------------------------------------------------------
     # Public API
@@ -122,13 +123,10 @@ class WindowsAuthGate:
 
     def _show_windows_dialog(self, action_description: str, reason: str) -> bool:
         try:
-            import win32cred
             import win32api
+            import win32cred
         except ImportError:
-            log.error(
-                "WindowsAuthGate: pywin32 not installed. "
-                "Run: pip install pywin32"
-            )
+            log.error("WindowsAuthGate: pywin32 not installed. " "Run: pip install pywin32")
             return False
 
         target = f"THOMAS-AUTH:{action_description[:60]}"
@@ -152,13 +150,13 @@ class WindowsAuthGate:
 
         try:
             result, _username, _password, _saved = win32cred.CredUIPromptForCredentials(
-                target,          # TargetName
-                0,               # AuthError (0 = no prior error)
-                username,        # UserName
-                "",              # Password
-                False,           # Save
-                flags,           # Flags
-                message,         # MessageText
+                target,  # TargetName
+                0,  # AuthError (0 = no prior error)
+                username,  # UserName
+                "",  # Password
+                False,  # Save
+                flags,  # Flags
+                message,  # MessageText
             )
             # result == 0 means ERROR_SUCCESS (user confirmed)
             return result == 0
@@ -190,23 +188,21 @@ _SUSPICIOUS_PATTERNS = (
     r"(?:openai|anthropic|grok|deepmind)\s+(?:has\s+)?authoriz(?:ed|es)\s+you",
     r"i\s+am\s+(?:your\s+)?(?:developer|creator|owner)\s+.*override",
     r"maintenance\s+mode\s+.*disable\s+(?:all\s+)?(?:safety|guardrail|filter)",
-
     # System prompt extraction — must ask to reveal/paste the actual prompt
     r"(?:paste|print|output|reveal|show)\s+(?:me\s+)?(?:your\s+)?(?:full\s+)?system\s+prompt",
     r"(?:repeat|output)\s+(?:everything|all)\s+(?:above|before)\s+(?:this|verbatim)",
     r"what\s+(?:are\s+)?your\s+(?:exact\s+)?(?:hidden\s+)?instructions",
-
     # Guardrail bypass — explicit bypass language only
     r"(?:ignore|bypass|override|disable)\s+(?:all\s+)?(?:your\s+)?(?:safety|guardrail|filter|restriction)s?",
     r"(?:ignore|disregard)\s+(?:all\s+)?(?:previous|prior)\s+instructions?\s+and",
     r"pretend\s+(?:you\s+have\s+)?no\s+(?:restrictions?|rules?|guidelines?)",
-
     # Self-rewrite attacks — must target rules/identity specifically
     r"rewrite\s+(?:your\s+)?(?:core\s+)?(?:rules?|identity|soul|instructions?)",
     r"add\s+(?:a\s+)?(?:permanent|ironclad|unbreakable)\s+rule\s+(?:that\s+)?(?:you\s+)?(?:must|will|shall)",
 )
 
 import re as _re
+
 _SUSPICIOUS_RE = _re.compile(
     "|".join(_SUSPICIOUS_PATTERNS),
     _re.IGNORECASE | _re.DOTALL,
@@ -215,7 +211,7 @@ _SUSPICIOUS_RE = _re.compile(
 _NO_HUMAN_MODES = {"human", "allow", "deny"}
 
 
-def _normalize_no_human_mode(value: Optional[str]) -> str:
+def _normalize_no_human_mode(value: str | None) -> str:
     mode = str(value or "human").strip().lower()
     if mode in _NO_HUMAN_MODES:
         return mode
@@ -233,8 +229,8 @@ def check_prompt_suspicious(text: str) -> tuple[bool, str]:
 def gate_suspicious_prompt(
     text: str,
     action_description: str = "Proceed with flagged request",
-    precomputed: Optional[tuple] = None,
-    no_human_mode: Optional[str] = None,
+    precomputed: tuple | None = None,
+    no_human_mode: str | None = None,
 ) -> bool:
     """If the prompt looks suspicious, require Windows PIN before continuing.
 
@@ -285,7 +281,7 @@ def gate_suspicious_prompt(
 # Process-level singleton
 # ---------------------------------------------------------------------------
 
-_gate: Optional[WindowsAuthGate] = None
+_gate: WindowsAuthGate | None = None
 
 
 def get_auth_gate(session_expiry_s: int = 300) -> WindowsAuthGate:

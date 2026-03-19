@@ -13,10 +13,10 @@ Design goals:
 
 from __future__ import annotations
 
+import ipaddress
 import json
 import os
 import re
-import ipaddress
 import urllib.error
 import urllib.parse
 import urllib.request

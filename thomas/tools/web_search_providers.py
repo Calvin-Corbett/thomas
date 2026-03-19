@@ -192,6 +192,18 @@ def _get_cache_db_path() -> str:
     p = ws.get("cache_db_path")
     if p and str(p).strip():
         return str(p).strip()
+    env_db = str(os.environ.get("THOMAS_WEB_SEARCH_CACHE_DB_PATH") or "").strip()
+    if env_db:
+        return env_db
+    runtime_dir = str(os.environ.get("THOMAS_RUNTIME_DIR") or "").strip()
+    if runtime_dir:
+        return os.path.join(runtime_dir, "cache", "web_tools_cache.sqlite3")
+    try:
+        from thomas.core.config import resolve_thomas_data_dir
+
+        return str((resolve_thomas_data_dir() / "runtime" / "cache" / "web_tools_cache.sqlite3").resolve())
+    except Exception:
+        pass
     return "runtime/cache/web_tools_cache.sqlite3"
 
 

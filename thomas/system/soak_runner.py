@@ -6,6 +6,7 @@ import argparse
 import json
 import shlex
 import subprocess
+import sys
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -31,8 +32,9 @@ class SoakOptions:
 
 
 def _default_runner(command: str, timeout_seconds: float) -> subprocess.CompletedProcess[str]:
+    command = command.replace("{python}", sys.executable)
     return subprocess.run(
-        shlex.split(command),
+        shlex.split(command, posix=(sys.platform != "win32")),
         shell=False,
         capture_output=True,
         text=True,

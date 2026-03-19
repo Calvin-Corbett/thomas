@@ -9,8 +9,8 @@ import logging
 import os
 import re
 import time
-from pathlib import Path
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 from thomas.core.events import AgentEvent, EventType
@@ -55,6 +55,7 @@ _WRITE_TOOL_PATH_KEYS = (
     "auth_path",
     "auth_payload_path",
 )
+
 
 def _is_write_tool(name: str, file_audit_module: Any) -> bool:
     name_lower = str(name or "").lower()

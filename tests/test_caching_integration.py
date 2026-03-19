@@ -1,8 +1,11 @@
 """Integration tests for caching module."""
 
+import pickle
 import threading
 import time
 from datetime import timedelta
+
+import pytest
 
 from thomas.caching import (
     BatchWarmer,
@@ -241,6 +244,19 @@ class TestCacheWithSerialization:
         uncompressed = SerializerFactory.create("json")
         uncompressed_size = len(uncompressed.serialize(data))
         assert len(serialized) < uncompressed_size
+
+    def test_pickle_deserialization_blocks_unsafe_globals(self):
+        """Test pickle serializer rejects unsafe globals during load."""
+        serializer = SerializerFactory.create("pickle")
+
+        class _Exploit:
+            def __reduce__(self):
+                return (eval, ("1 + 1",))
+
+        payload = pickle.dumps(_Exploit())
+
+        with pytest.raises(Exception):
+            serializer.deserialize(payload)
 
 
 class TestTTLCacheWithActiveExpiration:

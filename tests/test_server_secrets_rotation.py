@@ -123,6 +123,25 @@ class TestSecretsRotationApi(AioHTTPTestCase):
         row = next((item for item in reminders if str(item.get("profile")) == "local"), {})
         self.assertEqual(int(row.get("rotation_days") or 0), 45)
 
+    async def test_secret_set_parses_false_string_persist(self):
+        resp = await self.client.post(
+            "/api/secrets/local",
+            json={"api_key": "sk-local", "persist": "false", "rotation_days": 45},
+        )
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertFalse(bool(body.get("persisted")))
+
+        list_resp = await self.client.get("/api/secrets")
+        self.assertEqual(list_resp.status, 200)
+        profiles = (await list_resp.json()).get("profiles") or []
+        row = next((item for item in profiles if str(item.get("name")) == "local"), {})
+        self.assertFalse(bool(row.get("persisted")))
+
+    async def test_secret_set_rejects_non_object_json(self):
+        resp = await self.client.post("/api/secrets/local", json=["bad"])
+        self.assertEqual(resp.status, 400)
+
     async def test_secret_set_rejects_invalid_rotation_days(self):
         resp = await self.client.post(
             "/api/secrets/local",
@@ -135,4 +154,3 @@ class TestSecretsRotationApi(AioHTTPTestCase):
 
 if __name__ == "__main__":
     unittest.main()
-

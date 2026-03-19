@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import ast
-import fnmatch
-import glob
 import json
 import math
 import os
@@ -14,7 +12,6 @@ from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from statistics import mean, pstdev
 from typing import Any
 
 from thomas.plugins.competitor_intel_store import load_registry, render_registry_markdown
@@ -34,7 +31,11 @@ DEFAULT_EXECUTION_POLICY = {
 
 CODE_EXTENSIONS = {
     ".py",
+    ".cjs",
     ".js",
+    ".mjs",
+    ".cts",
+    ".mts",
     ".ts",
     ".tsx",
     ".jsx",
@@ -60,6 +61,7 @@ CODE_EXTENSIONS = {
     ".css",
     ".scss",
     ".html",
+    ".htm",
     ".json",
     ".yaml",
     ".yml",
@@ -245,6 +247,26 @@ def _count_test_code(
     return {"files": files, "loc": loc}
 
 
+def _count_non_test_code(
+    root_paths: Iterable[Path],
+    *,
+    excluded_files: set[str] | None = None,
+) -> dict[str, int]:
+    files = 0
+    loc = 0
+    excluded = excluded_files if excluded_files is not None else set()
+    for path in _iter_files(root_paths, suffixes=CODE_EXTENSIONS):
+        try:
+            key = str(path.resolve())
+        except (ValueError, TypeError):
+            key = str(path)
+        if key in excluded:
+            continue
+        files += 1
+        loc += _count_non_empty_lines(path)
+    return {"files": files, "loc": loc}
+
+
 def _count_files(root_paths: Iterable[Path], suffixes: set[str]) -> int:
     return sum(1 for _ in _iter_files(root_paths, suffixes=suffixes))
 
@@ -271,14 +293,26 @@ def _count_empty_code_files(root_paths: Iterable[Path]) -> int:
     return empty
 
 
+_MONOLITH_PART_RE = re.compile(r"(?:^|[_-])part\d+$", re.IGNORECASE)
+
+
+def _is_python_compile_unit(path: Path) -> bool:
+    stem = str(path.stem or "").strip()
+    if _MONOLITH_PART_RE.search(stem):
+        return False
+    return True
+
+
 def _count_python_syntax_errors(root_paths: Iterable[Path]) -> int:
     failures = 0
     for path in _iter_files(root_paths, suffixes={".py"}):
+        if not _is_python_compile_unit(path):
+            continue
         try:
             # Use utf-8-sig so BOM-prefixed files are parsed correctly.
             text = path.read_text(encoding="utf-8-sig", errors="ignore")
             ast.parse(text)
-        except (OSError, FileNotFoundError):
+        except (SyntaxError, ValueError, OSError, FileNotFoundError):
             failures += 1
     return failures
 
@@ -882,5 +916,3 @@ def _assertion_ok(actual: Any, op: str, expected: Any) -> bool:
     if op_name == "lte":
         return actual_num <= expected_num
     return False
-
-

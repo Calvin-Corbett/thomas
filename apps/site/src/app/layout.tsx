@@ -11,7 +11,7 @@ const body = Manrope({ subsets: ["latin"], variable: "--font-body" });
 export const metadata: Metadata = {
   metadataBase: new URL(getCanonicalSiteUrl()),
   title: {
-    default: `${siteConfig.name} | Download`,
+    default: siteConfig.name,
     template: `%s | ${siteConfig.name}`,
   },
   description: siteConfig.description,

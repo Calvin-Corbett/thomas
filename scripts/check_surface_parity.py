@@ -15,6 +15,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_EVENT_SOURCES: Sequence[Path] = (
     ROOT / "thomas" / "server" / "routes" / "chat_aiohttp.py",
+    ROOT / "thomas" / "server" / "routes" / "chat_aiohttp_part01.py",
+    ROOT / "thomas" / "server" / "routes" / "chat_aiohttp_part02.py",
     ROOT / "thomas" / "server" / "routes" / "chat_stream_events.py",
     ROOT / "thomas" / "server" / "routes" / "chat_modes.py",
 )
@@ -22,6 +24,12 @@ WEB_CHAT = ROOT / "thomas" / "server" / "web" / "js" / "chat.js"
 WEB_APP = ROOT / "thomas" / "server" / "web" / "js" / "app.js"
 WEB_APP_PARTS_DIR = ROOT / "thomas" / "server" / "web" / "js" / "app_parts"
 CLI_MAIN = ROOT / "thomas" / "cli" / "main.py"
+CLI_EVENT_SOURCES: Sequence[Path] = (
+    CLI_MAIN,
+    ROOT / "thomas" / "cli" / "main_part01.py",
+    ROOT / "thomas" / "cli" / "main_part02.py",
+    ROOT / "thomas" / "cli" / "main_part03.py",
+)
 
 REQUIRED_WIRE_EVENTS: set[str] = {
     "route",
@@ -65,6 +73,14 @@ def _read_server_sources() -> str:
     if not sources:
         expected = ", ".join(str(path) for path in SERVER_EVENT_SOURCES)
         raise FileNotFoundError(f"No server event source found. Expected one of: {expected}")
+    return "\n".join(_read(path) for path in sources)
+
+
+def _read_cli_sources() -> str:
+    sources = [path for path in CLI_EVENT_SOURCES if path.exists()]
+    if not sources:
+        expected = ", ".join(str(path) for path in CLI_EVENT_SOURCES)
+        raise FileNotFoundError(f"No CLI event source found. Expected one of: {expected}")
     return "\n".join(_read(path) for path in sources)
 
 
@@ -186,7 +202,7 @@ def run() -> int:
 
     server_text = _read_server_sources()
     web_text = _read_web_sources()
-    cli_text = _read(CLI_MAIN)
+    cli_text = _read_cli_sources()
 
     server_events = _extract_server_wire_events(server_text)
     web_events = _extract_web_wire_handlers(web_text)

@@ -301,9 +301,25 @@ def _ensure_none_if_empty(lines: list[str], *, section_start: int, section_end: 
     lines.insert(section_end - len(bullet_idxs), NONE_ENTRY)
 
 
-def _validate_and_write(workboard_path: Path, original_text: str, new_text: str) -> tuple[bool, list[str]]:
+def _validate_and_write(
+    workboard_path: Path,
+    original_text: str,
+    new_text: str,
+    *,
+    require_claims_to_have_active_task: bool = True,
+) -> tuple[bool, list[str]]:
+    def _is_blocked_task_issue_violation(message: str) -> bool:
+        return str(message).strip().startswith(
+            "blocked task `"
+        ) and "must have an open/triaged entry in `## Issues / Blockers`" in str(message)
+
     workboard_path.write_text(new_text, encoding="utf-8")
-    violations = claims_gate.evaluate(workboard_path)
+    violations, _ = claims_gate.evaluate_claims(
+        workboard_path,
+        require_claims_to_have_active_task=require_claims_to_have_active_task,
+    )
+    if not require_claims_to_have_active_task:
+        violations = [item for item in violations if not _is_blocked_task_issue_violation(item)]
     if violations:
         workboard_path.write_text(original_text, encoding="utf-8")
         return False, violations

@@ -8,6 +8,13 @@
 
 Memory is episodic and global memory storage for agents. It's a critical state layer but prone to growing monoliths due to feature creep. Files in this module must be focused and well-structured.
 
+**IMPORTANT NOTICE:** Several files in this module are PLACEHOLDER STUBS and should NOT be modified:
+- `episodic.py` — Placeholder stub only
+- `episodic_store.py` — Placeholder stub only
+- `summarization.py` — Placeholder stub only
+
+See Rule 10 below for details on these placeholder files.
+
 Reference the master guardrails: `/Thomas/GUARDRAILS.md`
 
 ## Module Metadata
@@ -184,7 +191,69 @@ async def test_curator_cleanup():
     # Verify old memories were removed
 ```
 
-## Rule 9: Global State Management
+## Rule 9: Placeholder Files Are NOT For Feature Implementation
+
+**These files are STUBS and must NOT be developed into real features:**
+
+- `episodic.py` — Placeholder stub
+- `episodic_store.py` — Placeholder stub
+- `summarization.py` — Placeholder stub
+
+### Why They Exist
+
+These files exist to:
+1. Define expected interfaces and type hints
+2. Serve as integration points
+3. Prevent ImportError when modules are referenced
+
+### They Are NOT
+
+- Real implementations
+- Feature-complete code
+- Code that should be extended
+- Code that should be "finished"
+
+### What To Do If You Need This Functionality
+
+**Option 1: Create a NEW implementation file**
+```python
+# Create a new file with a real name:
+thomas/memory/episodic_implementation.py
+thomas/memory/episodic_retrieval.py
+thomas/memory/real_memory_store.py
+
+# Implement your feature fully
+# Add comprehensive tests
+# Update imports to use your new file
+```
+
+**Option 2: Implement in existing real files**
+
+Check if there's already a real implementation:
+- `episodic_embeddings.py` — Real embeddings logic
+- `episodic_retrieval.py` — Real retrieval logic
+- `store.py` — Real storage abstraction
+
+Extend those files instead.
+
+### Pre-Commit Safety Gate
+
+This is enforced by `/scripts/validate_agent_changes.py`:
+
+```
+⚠️  WARNING: Placeholder Files Modified
+You modified these placeholder stub file(s):
+  - thomas/memory/episodic.py
+
+These files are PLACEHOLDER STUBS. They are not real implementations.
+
+If you need to implement this functionality:
+1. Create a NEW file with a descriptive name
+2. Implement the full feature
+3. Update imports to use your new implementation
+```
+
+## Rule 10: Global State Management
 
 Memory module may maintain global state (the memory store). If so:
 
@@ -224,6 +293,7 @@ Before committing any memory/ changes:
 - [ ] Run `python -m pytest tests/test_architecture.py -x --tb=short -q`
 - [ ] Verify no new files exceed 800 lines
 - [ ] Check: did you extend curator.py, v2/fabric.py, autonomy.py, or store.py? Plan a split first
+- [ ] **DID NOT modify placeholder files** (episodic.py, episodic_store.py, summarization.py) — see Rule 9
 - [ ] All exception handlers are specific (no bare except)
 - [ ] Memory changes have test coverage
 - [ ] If schema changed: migrations exist and are tested

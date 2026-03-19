@@ -6,8 +6,9 @@ channel listing, bookmarks, saved searches, and index management.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import asdict
-from typing import Any, Callable, Dict
+from typing import Any
 
 from aiohttp import web
 
@@ -53,7 +54,7 @@ def register_search_routes(
             return False
         raise web.HTTPBadRequest(text=f"invalid boolean value for '{key}'")
 
-    async def _read_json(request: web.Request) -> Dict[str, Any]:
+    async def _read_json(request: web.Request) -> dict[str, Any]:
         try:
             data = await request.json()
         except Exception as exc:
@@ -76,7 +77,7 @@ def register_search_routes(
         since = _qp(request, "since")
         before = _qp(request, "before")
         has_tools = _qp_bool(request, "has_tools")
-        sort = ((_qp(request, "sort", "relevance") or "relevance").strip().lower())
+        sort = (_qp(request, "sort", "relevance") or "relevance").strip().lower()
         if sort not in {"relevance", "newest"}:
             raise web.HTTPBadRequest(text="query parameter 'sort' must be one of: relevance, newest")
         scope_raw = _qp(request, "scope", "all") or "all"

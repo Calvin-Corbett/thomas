@@ -1,12 +1,33 @@
-﻿## For AI Agents & Contributors
+# Thomas
 
-Before starting work, read these files in order:
+Thomas is an AI workspace that starts simple, then grows into memory, tools, and automation without forcing normal users to learn the whole system on day one.
 
-1. **[AGENTS.md](AGENTS.md)** — Contributor protocol, guardrails, versioning workflow
-2. **[PROJECT_INDEX.md](PROJECT_INDEX.md)** — Source of truth for runtime boot paths and active docs
-3. **[KNOWN_ISSUES.md](KNOWN_ISSUES.md)** — Common pitfalls and cross-session memory
-4. **[CHANGELOG.md](CHANGELOG.md)** — Current release notes and behavior changes
-5. **[docs/REPO_STRUCTURE_PROTOCOL.md](docs/REPO_STRUCTURE_PROTOCOL.md)** — Canonical repository layout and plan protocol
+Fresh install: run `run-ui.cmd`, open `http://127.0.0.1:8899`, and finish Easy Setup.
+
+## Everyday Use
+
+The normal-user contract is simple:
+
+- Chat: ask Thomas questions, plan work, and keep the main surface calm.
+- Tasks: turn requests into checklists, follow-ups, and next actions.
+- Memory: keep context between sessions only when you want it.
+- Integrations: connect providers and tools gradually instead of all at once.
+- Repair: use `status`, `quickstart`, `setup`, or `repair.cmd` when something drifts.
+
+## Grow Into Advanced Thomas Safely
+
+The deeper orchestration, workboards, swarms, and builder/operator surfaces are intentional. They exist so Thomas can expand without becoming fragile. Normal use should not require understanding those systems on day one.
+
+## For AI Agents & Contributors
+
+Start with the router, not the long doc chain:
+
+1. **Run** `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...`
+2. **Read** the returned lane card and only the docs it points to
+3. **Escalate** into the heavier lane only when the router says the task is risky, broad, shared, or multi-agent
+
+Canonical router doc: **[docs/ai/AGENT_ROUTER.md](docs/ai/AGENT_ROUTER.md)**.
+Long-form docs remain reference material, not default first-pass reading.
 
 Do NOT start building without checking the Inbox and existing code first. See [PROJECT_MANAGEMENT_RULES.md](PROJECT_MANAGEMENT_RULES.md).
 
@@ -25,13 +46,14 @@ If this is your first time running Thomas on this machine, do this first:
 1. Run `run-ui.cmd`
 2. Wait for first-launch bootstrap to finish (dependencies + starter profile)
 3. Open `http://127.0.0.1:8899` if it does not open automatically
-4. Complete the in-app Onboarding Wizard (recommended path + interview)
+4. Complete Easy Setup. Thomas verifies the connection before it unlocks chat, memory, and automation.
 
 Optional advanced/manual setup: run `setup.cmd`.
 If setup breaks, run `repair.cmd` (or use `Auto Repair` in the onboarding wizard).
 Installer build docs: `docs/WINDOWS_INSTALLER_GUIDE.md`.
 Troubleshooting and model setup details are in `ONBOARDING.md`.
 Security policy: `SECURITY.md`.
+GitHub publishing safety workflow: `docs/GITHUB_PUBLISH_SAFETY_WORKFLOW.md`.
 Gateway security runbook: `docs/ops/GATEWAY_SECURITY_RUNBOOK.md`.
 Retry guidance: `docs/ops/RETRY_POLICY.md`.
 Docker deploy: `docs/ops/DOCKER_DEPLOY.md`.
@@ -44,7 +66,6 @@ Production release checklist: copy `.env.thomas.production.example` -> `.env.tho
 5. Keep logs rotating via `THOMAS_LOG_FILE`, `THOMAS_LOG_MAX_BYTES`, and `THOMAS_LOG_BACKUP_COUNT`.
 6. Keep `THOMAS_ALLOW_REMOTE_PRODUCTION=1` only for explicitly approved remote deployments.
 
-# Feature 2 â€” Full-Repo RAG Index (Delight Edition)
 ## Documentation Index (Authoritative)
 
 - Canonical active-doc index: `PROJECT_INDEX.md`
@@ -192,7 +213,7 @@ so results are immediately actionable.
 ### Build (non-blocking)
 ```python
 from thomas.core.rag_index import get_rag_index
-get_rag_index().build(r"f:\DevHub\Thomas")
+get_rag_index().build(r"<repo_root>")
 ```
 
 ### Update after file write (non-blocking)

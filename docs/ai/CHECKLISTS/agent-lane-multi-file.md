@@ -1,0 +1,21 @@
+# Lane: multi-file
+
+- Use this lane for broad repo work, architecture changes, infra changes, or edits spanning multiple subsystems.
+- Full tracked-work behavior is expected unless the user explicitly keeps it lightweight.
+- Read:
+  - `docs/ai/AGENT_ROUTER.md`
+  - `AGENTS.md`
+  - `docs/REPO_STRUCTURE_PROTOCOL.md`
+  - `docs/AGENT_FILE_EDITING_RULES.md`
+  - `GUARDRAILS.md`
+- Required checks:
+  - run focused regression tests across changed subsystems
+  - run release hygiene checks
+  - update plan/workboard state when execution intent changes
+- Required proof:
+  - changed subsystems
+  - why the lane stayed in one implementation batch
+  - tests and gates run
+- Escalate to a heavier lane when:
+  - parallel lanes or delegation are required
+  - a UI-proof or release-critical flow is added

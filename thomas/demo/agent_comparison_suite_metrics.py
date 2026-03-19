@@ -6,27 +6,30 @@ from pathlib import Path
 from thomas.demo.agent_comparison_suite_shared import (
     DEFAULT_GATEWAY_PATTERNS,
     MetricSpec,
-    _collect_model_snapshot,
     _collect_git_version_info,
+    _collect_model_snapshot,
     _count_code,
+    _count_empty_code_files,
     _count_empty_files,
+    _count_files,
+    _count_immediate_dirs,
     _count_invalid_json_files,
     _count_large_code_files,
     _count_mobile_surface_dirs,
+    _count_non_test_code,
     _count_python_syntax_errors,
-    _count_files,
     _count_test_code,
     _count_text_occurrences,
     _is_number,
+    _parse_click_commands,
     _resolve,
     _run_command,
-    _parse_click_commands,
 )
 from thomas.demo.agent_comparison_suite_strict_checks import (
     _collect_benchmark_evidence,
     _collect_benchmark_summary,
-    _count_regex_hits,
     _compute_token_efficiency,
+    _count_regex_hits,
     _fallback_cost_probe,
     _fallback_performance_probe,
     _fallback_resilience_probe,
@@ -147,6 +150,7 @@ def _collect_agent_metrics(
         "files": int(tests_named["files"] + tests_dataset["files"]),
         "loc": int(tests_named["loc"] + tests_dataset["loc"]),
     }
+    code_without_tests = _count_non_test_code(source_roots, excluded_files=seen_test_files)
     browser = _count_code(browser_roots)
     plugins = _count_code(plugin_roots)
     gateway = _count_code(gateway_roots)
@@ -236,8 +240,12 @@ def _collect_agent_metrics(
     metrics["tests.dataset_files"] = int(tests_dataset["files"])
     metrics["tests.dataset_loc"] = int(tests_dataset["loc"])
     metrics["tests.loc_per_file"] = round((tests["loc"] / tests["files"]), 6) if tests["files"] > 0 else None
-    metrics["tests.to_code_file_ratio"] = round((tests["files"] / code["files"]), 6) if code["files"] > 0 else None
-    metrics["tests.to_code_loc_ratio"] = round((tests["loc"] / code["loc"]), 6) if code["loc"] > 0 else None
+    metrics["tests.to_code_file_ratio"] = (
+        round((tests["files"] / code_without_tests["files"]), 6) if code_without_tests["files"] > 0 else None
+    )
+    metrics["tests.to_code_loc_ratio"] = (
+        round((tests["loc"] / code_without_tests["loc"]), 6) if code_without_tests["loc"] > 0 else None
+    )
 
     metrics["code.python_files"] = int(python_files)
     metrics["code.non_python_files"] = int(max(0, int(code["files"]) - int(python_files)))
@@ -693,5 +701,3 @@ def _build_metric_specs(
     add("benchmark.failure_rate_mean", "reliability", "lower_is_better", "Mean task failure rate.")
 
     return specs
-
-

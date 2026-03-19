@@ -201,7 +201,7 @@ def evaluate_config(
     if secret_lookup is None:
         # Resolve server SecretStore lazily to avoid hard module-edge coupling.
         secret_store_module = import_module("thomas.server.secrets")
-        secret_store_cls = getattr(secret_store_module, "SecretStore")
+        secret_store_cls = secret_store_module.SecretStore
         secret_store = secret_store_cls(config.memory.root_path / ".thomas")
         secret_lookup = secret_store.get
 

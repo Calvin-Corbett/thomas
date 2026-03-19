@@ -1,10 +1,12 @@
 # GitHub Branch Protection Setup (No-Code)
 
-This repo includes a one-command script to apply production branch protection on GitHub.
+This repo supports both:
+- single-branch protection (`scripts/configure_github_branch_protection.py`)
+- release lanes (`dev` + `prod`) via `scripts/setup_github_release_lanes.py`
 
-Script:
-- `python scripts/configure_github_branch_protection.py`
-- `powershell -ExecutionPolicy Bypass -File scripts/apply_branch_protection.ps1` (prompts for token, then applies + verifies)
+Recommended for publishing:
+- Use release lanes and protect both branches.
+- Keep `dev` as default branch for daily work.
 
 What it enforces by default:
 - PR required (because direct pushes to protected branch are blocked by GitHub)
@@ -32,19 +34,19 @@ Recommended:
 $env:GH_TOKEN="PASTE_TOKEN_HERE"
 ```
 
-## 3) Preview before applying
+## 3) Preview before applying (single branch)
 
 ```powershell
 python scripts/configure_github_branch_protection.py --dry-run --json
 ```
 
-## 4) Apply protection
+## 4) Apply protection (single branch)
 
 ```powershell
 python scripts/configure_github_branch_protection.py --apply --json
 ```
 
-## 5) Verify protection
+## 5) Verify protection (single branch)
 
 ```powershell
 python scripts/configure_github_branch_protection.py --check --json
@@ -58,8 +60,26 @@ Expected check result:
 
 - You cannot fully block `git commit --no-verify` locally. Git allows client-side bypasses.
 - The hard enforcement point is GitHub branch protection + required CI checks for merge.
-- If you prefer a guided flow, run:
+- If you prefer a guided single-branch flow, run:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File scripts/apply_branch_protection.ps1
 ```
+
+## Recommended: Dev/Prod Release Lanes
+
+Create and protect both branches in one flow:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts/apply_release_lanes.ps1 -SetDefaultDev
+```
+
+or:
+
+```powershell
+python scripts/setup_github_release_lanes.py --apply --set-default-dev --json
+python scripts/setup_github_release_lanes.py --check --json
+```
+
+For full publishing workflow details, see:
+- `docs/GITHUB_PUBLISH_SAFETY_WORKFLOW.md`

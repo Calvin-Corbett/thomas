@@ -9,7 +9,7 @@ import math
 import random
 import time
 from dataclasses import dataclass
-from typing import Dict, Optional
+from typing import Optional
 
 from thomas.pathfinding._types import Obstacle, Path, PathResult
 
@@ -525,7 +525,7 @@ def probabilistic_roadmap(
                     samples.append((x, y))
                     break
 
-    roadmap: Dict[int, list[tuple[int, float]]] = {i: [] for i in range(len(samples))}
+    roadmap: dict[int, list[tuple[int, float]]] = {i: [] for i in range(len(samples))}
 
     for i in range(len(samples)):
         distances = [

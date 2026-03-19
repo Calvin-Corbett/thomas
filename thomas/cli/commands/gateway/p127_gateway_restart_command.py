@@ -21,9 +21,8 @@ import os
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import asdict, dataclass
-from ipaddress import ip_address
-from urllib.parse import urlparse
 from typing import Any
+from urllib.parse import urlparse
 
 DEFAULT_ROUTE_PATH = "/gateway/restart"
 
@@ -91,26 +90,10 @@ def _normalize_and_validate_server_url(raw: str) -> str:
     if not parsed.hostname:
         raise GatewayRestartCliError("invalid_server_url", "Server URL must include a hostname.")
 
-    host = parsed.hostname.lower()
-    if not _is_loopback_host(host):
-        raise GatewayRestartCliError(
-            "invalid_server_url",
-            "Admin command requires a loopback server URL (127.0.0.1, localhost, or ::1).",
-        )
-
     normalized = parsed._replace(fragment="", query="", path="").geturl().rstrip("/")
     if normalized.endswith("://"):
         raise GatewayRestartCliError("invalid_server_url", "Server URL is missing host information.")
     return normalized
-
-
-def _is_loopback_host(host: str) -> bool:
-    if host in {"127.0.0.1", "localhost", "::1"}:
-        return True
-    try:
-        return ip_address(host).is_loopback
-    except ValueError:
-        return False
 
 
 def _resolve_server_url(args: argparse.Namespace) -> str:

@@ -4,6 +4,10 @@ from tests.web_ui_source import read_app_js_source, read_layout_css_source
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 INDEX_HTML = REPO_ROOT / "thomas" / "server" / "web" / "index.html"
+VIRTUAL_OFFICE_HTML = REPO_ROOT / "thomas" / "server" / "web" / "virtual_office.html"
+VIRTUAL_OFFICE_STATIC_HTML = REPO_ROOT / "thomas" / "server" / "web" / "static" / "virtual_office.html"
+VIRTUAL_OFFICE_SCRIPT = REPO_ROOT / "thomas" / "server" / "web" / "virtual_office.script01.js"
+VIRTUAL_OFFICE_STATIC_SCRIPT = REPO_ROOT / "thomas" / "server" / "web" / "static" / "virtual_office.script01.js"
 
 
 def _read(path: Path) -> str:
@@ -14,7 +18,10 @@ def test_virtual_office_keyboard_and_a11y_controls_present() -> None:
     text = _read(INDEX_HTML)
     assert 'id="officeMinimapCanvas"' in text
     assert 'aria-label="Office minimap. Click or drag to pan the camera."' in text
-    assert 'aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning."' in text
+    assert (
+        'aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning."'
+        in text
+    )
     assert 'id="officeZoomOutBtn"' in text
     assert 'aria-label="Zoom out"' in text
     assert 'aria-label="Zoom in"' in text
@@ -155,3 +162,23 @@ def test_virtual_office_stream_and_reconcile_hooks_present() -> None:
     assert "function officeReconcileFromMissionPayload(payload, now = performance.now())" in js
     assert "function officeHandleMissionStreamLine(lineRaw)" in js
     assert "const url = '/api/mission/stream?interval=1.8';" in js
+
+
+def test_virtual_office_html_uses_single_combined_script() -> None:
+    for html_path in (VIRTUAL_OFFICE_HTML, VIRTUAL_OFFICE_STATIC_HTML):
+        text = _read(html_path)
+        assert 'src="virtual_office.script01.js"' in text
+        assert "virtual_office.script01_part01.js" not in text
+        assert "virtual_office.script01_part02.js" not in text
+
+
+def test_virtual_office_combined_script_exists_for_both_entry_points() -> None:
+    served_script = _read(VIRTUAL_OFFICE_SCRIPT)
+    packaged_script = _read(VIRTUAL_OFFICE_STATIC_SCRIPT)
+    assert "return [x, y];" in served_script
+    assert "class Camera" in served_script
+    assert "class OfficeRenderer" in served_script
+    assert "return [x, y];" in packaged_script
+    assert "class Camera" in packaged_script
+    assert "class OfficeRenderer" in packaged_script
+    assert served_script == packaged_script

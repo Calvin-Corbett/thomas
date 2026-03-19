@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import json
+import sys
 import traceback
 import uuid
 from collections.abc import Awaitable, Callable, Mapping
@@ -164,6 +166,7 @@ class AutonomyEngine:
         self.register_handler("video_generation", self._handle_video_generation)
         self.register_handler("speech_transcription", self._handle_speech_transcription)
         self.register_handler("speech_synthesis", self._handle_speech_synthesis)
+        self.register_handler("evolve_session", self._handle_evolve_session)
 
     # -------- core execution --------
     async def _run_job(self, job: Job) -> None:
@@ -378,6 +381,63 @@ class AutonomyEngine:
         if isinstance(compile_meta, dict):
             out["workflow_compile"] = compile_meta
         return out
+
+    async def _handle_evolve_session(self, job: Job) -> dict[str, Any]:
+        payload = self._as_dict(job.payload)
+        goal = str(payload.get("goal") or payload.get("prompt") or "").strip()
+        profile = str(payload.get("profile") or "").strip()
+        passes = self._to_int(payload.get("passes"), default=1, minimum=1, maximum=8)
+        timeout_seconds = self._to_int(payload.get("timeout_seconds"), default=1800, minimum=60, maximum=7200)
+        promote_on_pass = bool(payload.get("promote_on_pass"))
+
+        command = [
+            sys.executable,
+            "-m",
+            "thomas",
+            "evolve",
+            "run",
+            "--json",
+            "--passes",
+            str(passes),
+            "--timeout-seconds",
+            str(timeout_seconds),
+        ]
+        if goal:
+            command.extend(["--goal", goal])
+        if profile:
+            command.extend(["--profile", profile])
+        if promote_on_pass:
+            command.append("--promote-on-pass")
+
+        proc = await asyncio.create_subprocess_exec(
+            *command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout_seconds + 120)
+        except asyncio.TimeoutError as exc:
+            proc.kill()
+            await proc.communicate()
+            raise AutonomyError(f"evolve_session timed out after {timeout_seconds}s") from exc
+
+        stdout_text = stdout.decode("utf-8", errors="replace").strip()
+        stderr_text = stderr.decode("utf-8", errors="replace").strip()
+        if proc.returncode != 0:
+            raise AutonomyError(stderr_text or stdout_text or f"evolve_session exited with code {proc.returncode}")
+        try:
+            result = json.loads(stdout_text)
+        except json.JSONDecodeError as exc:
+            raise AutonomyError("evolve_session produced invalid JSON") from exc
+
+        session = self._as_dict(result.get("session"))
+        session_id = str(session.get("session_id") or "").strip()
+        status = str(session.get("status") or "").strip() or "completed"
+        changed_count = len(session.get("changed_files") or [])
+        noun = "file" if changed_count == 1 else "files"
+        msg = f"Evolve session {session_id or job.id} finished: {status} ({changed_count} changed {noun})."
+        self.store.add_message(session_id=job.session_id, level="info", text=msg)
+        return result
 
     def _media_client_for_job(self, job: Job) -> OpenAICompatMediaClient:
         payload = self._as_dict(job.payload)

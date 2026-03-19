@@ -24,12 +24,119 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
+
+# Episodic memory system
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from thomas.core.config import AppConfig
 from thomas.memory.compiler import BaseRebuilder, DeltaIngester
 from thomas.memory.embedder import Embedder
+
+_EPISODIC_FALLBACK_ACTIVE = False
+_EPISODIC_FALLBACK_REASON = ""
+
+
+def _legacy_memory_enabled() -> bool:
+    raw = os.environ.get("THOMAS_MEMORY_LEGACY_ENABLED")
+    if raw is None:
+        return False
+    return str(raw).strip().lower() in {"1", "true", "yes", "on"}
+
+
+try:
+    from thomas.memory.episodic import (
+        Episode,
+        EpisodeStore,
+        EpisodicMemory,
+        MemoryRetriever,
+        SimpleEmbedder,
+    )
+except (AttributeError, ImportError) as exc:
+    _EPISODIC_FALLBACK_ACTIVE = True
+    _EPISODIC_FALLBACK_REASON = f"{type(exc).__name__}: {exc}"
+
+    @dataclass
+    class Episode:
+        text: str
+        thread_id: str | None = None
+        metadata: dict[str, object] | None = None
+
+    class EpisodeStore:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            self.episodes: list[Episode] = []
+
+        def add(self, episode: Episode) -> None:
+            self.episodes.append(episode)
+
+        def search(
+            self,
+            query: str,
+            *,
+            thread_id: str | None = None,
+            limit: int = 5,
+        ) -> list[Episode]:
+            query_text = str(query or "").strip().lower()
+            if not query_text:
+                return []
+            tokens = [token for token in query_text.split() if token]
+            scored: list[tuple[int, int, Episode]] = []
+            for reverse_index, episode in enumerate(reversed(self.episodes)):
+                if thread_id and episode.thread_id != thread_id:
+                    continue
+                haystack = episode.text.lower()
+                score = 0
+                if query_text in haystack:
+                    score += len(query_text) + 10
+                score += sum(1 for token in tokens if token in haystack)
+                if score:
+                    scored.append((score, reverse_index, episode))
+            scored.sort(key=lambda item: (-item[0], item[1]))
+            return [episode for _, _, episode in scored[: max(1, limit)]]
+
+    class EpisodicMemory:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            self.store = EpisodeStore()
+
+        def add(self, episode: Episode) -> None:
+            self.store.add(episode)
+
+        def query(
+            self,
+            query: str,
+            *,
+            thread_id: str | None = None,
+            limit: int = 5,
+        ) -> list[Episode]:
+            return self.store.search(query, thread_id=thread_id, limit=limit)
+
+    class MemoryRetriever:
+        def __init__(self, memory: EpisodicMemory | None = None, *_args: object, **_kwargs: object) -> None:
+            self.memory = memory
+
+        def retrieve(
+            self,
+            query: str,
+            *,
+            thread_id: str | None = None,
+            limit: int = 5,
+            **_kwargs: object,
+        ) -> list[Episode]:
+            if self.memory is None:
+                return []
+            return self.memory.query(query, thread_id=thread_id, limit=limit)
+
+    class SimpleEmbedder:
+        def __init__(self, *_args: object, **_kwargs: object) -> None:
+            self.has_dense = False
+            self.dense_dim = 0
+
+        def embed(self, text: str) -> list[float]:
+            return [float(len(text))]
+
+
 from thomas.memory.graph import GraphStore
 from thomas.memory.retrieval import PackedContext, RetrievalPipeline
 from thomas.memory.store import (
@@ -42,16 +149,13 @@ from thomas.memory.store import (
     MetaDB,
 )
 
-# Episodic memory system
-from thomas.memory.episodic import (
-    EpisodicMemory,
-    Episode,
-    EpisodeStore,
-    MemoryRetriever,
-    SimpleEmbedder,
-)
-
 log = logging.getLogger(__name__)
+
+if _EPISODIC_FALLBACK_ACTIVE and _legacy_memory_enabled():
+    log.warning(
+        "Episodic memory module unavailable; using minimal fallback retriever: %s",
+        _EPISODIC_FALLBACK_REASON,
+    )
 
 
 class MemoryEngine:
@@ -66,17 +170,17 @@ class MemoryEngine:
         self._started = False
 
         # Components (initialized in start())
-        self._log_db: Optional[ImmortalLog] = None
-        self._meta_db: Optional[MetaDB] = None
-        self._blob_store: Optional[BlobStore] = None
-        self._base_derived: Optional[DerivedDB] = None
-        self._delta_derived: Optional[DerivedDB] = None
-        self._index_mgr: Optional[IndexManager] = None
-        self._embedder: Optional[Embedder] = None
-        self._graph: Optional[GraphStore] = None
-        self._ingester: Optional[DeltaIngester] = None
-        self._pipeline: Optional[RetrievalPipeline] = None
-        self._rebuilder: Optional[BaseRebuilder] = None
+        self._log_db: ImmortalLog | None = None
+        self._meta_db: MetaDB | None = None
+        self._blob_store: BlobStore | None = None
+        self._base_derived: DerivedDB | None = None
+        self._delta_derived: DerivedDB | None = None
+        self._index_mgr: IndexManager | None = None
+        self._embedder: Embedder | None = None
+        self._graph: GraphStore | None = None
+        self._ingester: DeltaIngester | None = None
+        self._pipeline: RetrievalPipeline | None = None
+        self._rebuilder: BaseRebuilder | None = None
 
     @property
     def started(self) -> bool:
@@ -110,9 +214,7 @@ class MemoryEngine:
         self._graph = GraphStore(self._delta_derived)
 
         # Delta ingester
-        self._ingester = DeltaIngester(
-            self._log_db, self._delta_derived, self._graph, self._embedder
-        )
+        self._ingester = DeltaIngester(self._log_db, self._delta_derived, self._graph, self._embedder)
 
         # Retrieval pipeline
         self._pipeline = RetrievalPipeline(
@@ -126,9 +228,7 @@ class MemoryEngine:
         )
 
         # Base rebuilder
-        self._rebuilder = BaseRebuilder(
-            self._log_db, self._index_mgr, self._embedder, self._paths
-        )
+        self._rebuilder = BaseRebuilder(self._log_db, self._index_mgr, self._embedder, self._paths)
 
         self._started = True
         log.info(
@@ -148,8 +248,8 @@ class MemoryEngine:
         thread: str,
         etype: str,
         text: str,
-        metadata: Optional[Dict[str, Any]] = None,
-        blob_id: Optional[str] = None,
+        metadata: dict[str, Any] | None = None,
+        blob_id: str | None = None,
     ) -> int:
         """Add an event to the immortal log. Returns event ID."""
         self._require_started()
@@ -157,7 +257,7 @@ class MemoryEngine:
             raise RuntimeError("Memory log database is not initialized")
         return self._log_db.add_event(thread, etype, text, metadata, blob_id)
 
-    def recent_events(self, thread: str, limit: int = 20) -> List[EventRow]:
+    def recent_events(self, thread: str, limit: int = 20) -> list[EventRow]:
         """Get recent events for a thread."""
         self._require_started()
         if self._log_db is None:
@@ -196,7 +296,7 @@ class MemoryEngine:
             raise RuntimeError("Metadata database is not initialized")
         self._meta_db.pin_rm(key)
 
-    def list_pins(self) -> List[Tuple[str, str, int]]:
+    def list_pins(self) -> list[tuple[str, str, int]]:
         """List all pins as (key, text, timestamp)."""
         self._require_started()
         if self._meta_db is None:
@@ -208,8 +308,8 @@ class MemoryEngine:
     def retrieve(
         self,
         query: str,
-        thread: Optional[str] = None,
-        budget: Optional[int] = None,
+        thread: str | None = None,
+        budget: int | None = None,
         mode: str = "auto",
     ) -> PackedContext:
         """Retrieve memory context for a query.
@@ -223,14 +323,14 @@ class MemoryEngine:
 
     # ----- Ingestion -----
 
-    def ingest_pending(self) -> Dict[str, Any]:
+    def ingest_pending(self) -> dict[str, Any]:
         """Ingest any new events since last ingestion."""
         self._require_started()
         if self._ingester is None:
             raise RuntimeError("Delta ingester is not initialized")
         return self._ingester.ingest_new()
 
-    def ingest_events(self, events: List[EventRow]) -> Dict[str, Any]:
+    def ingest_events(self, events: list[EventRow]) -> dict[str, Any]:
         """Ingest specific events into the delta index."""
         self._require_started()
         if self._ingester is None:
@@ -239,7 +339,7 @@ class MemoryEngine:
 
     # ----- Rebuild -----
 
-    def rebuild_base(self) -> Dict[str, Any]:
+    def rebuild_base(self) -> dict[str, Any]:
         """Rebuild base index from scratch (nightly operation)."""
         self._require_started()
         if self._rebuilder is None:
@@ -248,7 +348,7 @@ class MemoryEngine:
 
     # ----- Stats -----
 
-    def stats(self) -> Dict[str, Any]:
+    def stats(self) -> dict[str, Any]:
         """Get memory engine statistics."""
         self._require_started()
         if self._log_db is None or self._embedder is None:
@@ -260,14 +360,14 @@ class MemoryEngine:
             "root": str(self._paths.root),
         }
 
-    def recent_traces(self, thread: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+    def recent_traces(self, thread: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
         """Get recent retrieval traces for debugging and memory observability."""
         self._require_started()
         if self._meta_db is None:
             raise RuntimeError("Metadata database is not initialized")
         return self._meta_db.trace_recent(thread=thread, limit=limit)
 
-    def diagnostics(self, thread: Optional[str] = None, trace_limit: int = 8) -> Dict[str, Any]:
+    def diagnostics(self, thread: str | None = None, trace_limit: int = 8) -> dict[str, Any]:
         """Combined memory diagnostics payload for UI/API surfaces."""
         self._require_started()
         stats = self.stats()
@@ -275,10 +375,7 @@ class MemoryEngine:
         traces = self.recent_traces(thread=thread, limit=trace_limit)
         return {
             "stats": stats,
-            "pins": [
-                {"key": k, "text": t, "created_ts_utc": ts}
-                for k, t, ts in pins
-            ],
+            "pins": [{"key": k, "text": t, "created_ts_utc": ts} for k, t, ts in pins],
             "traces": traces,
         }
 

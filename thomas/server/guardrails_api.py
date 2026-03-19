@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from aiohttp import web
 from typing import Any
+
+from aiohttp import web
 
 from thomas.agent.approval import ApprovalBroker
 
@@ -65,7 +66,9 @@ def install_guardrails_routes(app: web.Application, approvals: ApprovalBroker) -
         session_id = data.get("session_id")
 
         if not run_id or not tool_call_id or decision is None:
-            return web.json_response({"ok": False, "error": "missing run_id/tool_call_id or invalid decision"}, status=400)
+            return web.json_response(
+                {"ok": False, "error": "missing run_id/tool_call_id or invalid decision"}, status=400
+            )
 
         ok = await approvals.resolve(
             run_id=run_id,

@@ -13,7 +13,7 @@ This document defines the required onboarding dialogue flow for Thomas.
 
 1. Connection path selection.
 2. Provider connection and live health check.
-3. User interview (6 core questions).
+3. User interview (7 core questions).
 4. Summary + apply.
 
 ## Dialogue Script
@@ -51,6 +51,7 @@ Questions:
 4. Memory policy: `Remember across sessions`, `Only current session`, `Disable memory`
 5. Response depth: `Concise`, `Balanced`, `Deep technical`
 6. Primary workflow: `Build features`, `Research`, `Ops + reliability`
+7. Workflow mode: `Guided workflow`, `Expert bypass`
 
 ### Step 4: Apply profile
 
@@ -66,6 +67,7 @@ Outputs:
 - `settings.tokenEconomyLevel`
 - `settings.showToolDetails`
 - `settings.preferredMode`
+- `settings.workflowMode`
 
 ## Configuration Mapping
 

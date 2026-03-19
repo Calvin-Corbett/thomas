@@ -7,7 +7,9 @@ Supports model profiles (local, cloud, embed) and per-section config.
 from __future__ import annotations
 
 import os
+import re
 import sys
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -101,6 +103,111 @@ else:
             tomllib = _tomllib_compat  # type: ignore[assignment]
 
 
+_PROFILE_SAFE_CHARS_RE = re.compile(r"[^A-Za-z0-9._-]+")
+
+
+def normalize_profile_name(profile: str | None) -> str:
+    """Normalize a profile name into a safe directory component."""
+    raw = str(profile or "").strip()
+    if not raw:
+        return ""
+    normalized = _PROFILE_SAFE_CHARS_RE.sub("-", raw).strip(" .-_")
+    if not normalized or normalized in {".", ".."}:
+        raise ValueError("Invalid profile name; use letters, numbers, dot, underscore, or dash.")
+    return normalized
+
+
+def _default_data_dir() -> Path:
+    """Return the OS-appropriate Thomas data directory."""
+    if os.name == "nt":
+        local_app_data = str(os.environ.get("LOCALAPPDATA") or "").strip()
+        base = Path(local_app_data).expanduser() if local_app_data else (Path.home() / "AppData" / "Local")
+        return (base / "Thomas").resolve()
+    if sys.platform == "darwin":
+        return (Path.home() / "Library" / "Application Support" / "Thomas").resolve()
+    xdg_data_home = str(os.environ.get("XDG_DATA_HOME") or "").strip()
+    base = Path(xdg_data_home).expanduser() if xdg_data_home else (Path.home() / ".local" / "share")
+    return (base / "thomas").resolve()
+
+
+def resolve_thomas_data_dir(
+    base_dir: str | Path | None = None,
+    profile: str | None = None,
+    *,
+    env: Mapping[str, str] | None = None,
+) -> Path:
+    """Resolve the active Thomas data dir, with optional profile suffix."""
+    env_map = env if env is not None else os.environ
+
+    raw_base = str(base_dir or "").strip()
+    if not raw_base:
+        raw_base = str(env_map.get("THOMAS_DATA_DIR") or "").strip()
+
+    base_path = Path(raw_base).expanduser().resolve() if raw_base else _default_data_dir()
+    raw_profile = profile if profile is not None else str(env_map.get("THOMAS_PROFILE") or "").strip()
+    normalized_profile = normalize_profile_name(raw_profile)
+    if normalized_profile:
+        return (base_path / normalized_profile).resolve()
+    return base_path
+
+
+def _is_subpath(path: Path, parent: Path) -> bool:
+    try:
+        path.resolve().relative_to(parent.resolve())
+        return True
+    except Exception:
+        return False
+
+
+def apply_runtime_data_env_defaults(
+    *,
+    base_dir: Path,
+    effective_dir: Path,
+    profile: str = "",
+    overwrite: bool = False,
+) -> dict[str, str]:
+    """Set runtime env defaults so stateful writes land under THOMAS_DATA_DIR."""
+    runtime_dir = effective_dir / "runtime"
+    logs_dir = effective_dir / "logs"
+    artifacts_dir = effective_dir / "artifacts"
+    downloads_dir = effective_dir / "downloads"
+    dot_dir = effective_dir / ".thomas"
+    json_dir = effective_dir / "json"
+    db_path = effective_dir / "thomas.db"
+
+    mapping: dict[str, str] = {
+        "THOMAS_DATA_DIR": str(base_dir),
+        "THOMAS_PROFILE": profile,
+        "THOMAS_HOME": str(effective_dir),
+        "THOMAS_STATE_DIR": str(effective_dir),
+        "THOMAS_RUNTIME_DIR": str(runtime_dir),
+        "THOMAS_LOG_FILE": str(logs_dir / "thomas.log"),
+        "THOMAS_CHAT_LOG_DIR": str(logs_dir / "chat"),
+        "THOMAS_DOWNLOAD_DIR": str(downloads_dir),
+        "THOMAS_BROWSER_DOWNLOAD_DIR": str(downloads_dir),
+        "THOMAS_ARTIFACT_DIR": str(artifacts_dir),
+        "THOMAS_ARTIFACTS_DIR": str(artifacts_dir),
+        "THOMAS_SANDBOX_RUNS_DIR": str(runtime_dir / "sandbox" / "runs"),
+        "THOMAS_SANDBOX_WHEELHOUSE_DIR": str(runtime_dir / "sandbox" / "wheelhouse_cache"),
+        "THOMAS_RUNS_DB_PATH": str(dot_dir / "runs.sqlite3"),
+        "THOMAS_TASK_LEDGER_DB_PATH": str(dot_dir / "task_ledger.sqlite3"),
+        "THOMAS_DB_PATH": str(db_path),
+        "THOMAS_SQLITE_PATH": str(db_path),
+        "THOMAS_DB_CONNECTIONS_FILE": str(effective_dir / "thomas_db_connections.json"),
+        "THOMAS_WEBHOOKS_FILE": str(json_dir / "thomas_webhooks.json"),
+        "THOMAS_WEBHOOK_RECEIPTS_FILE": str(json_dir / "thomas_webhook_receipts.json"),
+        "THOMAS_WEBHOOK_STATS_FILE": str(json_dir / "thomas_webhook_stats.json"),
+        "THOMAS_WEBHOOK_INBOX_FILE": str(json_dir / "thomas_webhook_inbox.jsonl"),
+        "THOMAS_WEB_SEARCH_CACHE_DB_PATH": str(runtime_dir / "cache" / "web_tools_cache.sqlite3"),
+        "THOMAS_STATE_FILE": str(effective_dir / "thomas_state.json"),
+        "THOMAS_DAILY_REPORT_DIR": str(effective_dir / "reports"),
+    }
+    for key, value in mapping.items():
+        if overwrite or not str(os.environ.get(key) or "").strip():
+            os.environ[key] = value
+    return mapping
+
+
 @dataclass
 class ModelConfig:
     """Configuration for a single LLM model profile."""
@@ -141,11 +248,7 @@ class ModelConfig:
             errors.append(f"models.{self.name}: chat_path should start with '/'")
         if self.models_path and not self.models_path.startswith("/"):
             errors.append(f"models.{self.name}: models_path should start with '/'")
-        if (
-            self.provider == "openai_compat"
-            and not self.base_url
-            and self.model != "dummy"
-        ):
+        if self.provider == "openai_compat" and not self.base_url and self.model != "dummy":
             errors.append(f"models.{self.name}: base_url is required for openai_compat provider")
         return errors
 
@@ -173,7 +276,9 @@ class EmbedConfig:
 class MemoryConfig:
     """Configuration for the memory engine."""
 
-    root: str = "./runtime"
+    root: str = ""
+    data_dir: str = ""
+    profile: str = ""
     context_budget: int = 12000  # Default; TOML may override (e.g., 4000 for smaller models)
     mode: str = "auto"
 
@@ -284,7 +389,7 @@ class AppConfig:
     quality: QualityConfig = field(default_factory=QualityConfig)
     keybindings: dict[str, str] = field(default_factory=dict)
     unknown_core_keys: list[str] = field(default_factory=list)
-    default_model: str = "local"
+    default_model: str = "codex"
     max_agent_iterations: int = 10
     environment: str = "development"  # "development" or "production"
 
@@ -373,6 +478,8 @@ def _env_override(data: dict[str, Any], prefix: str = "THOMAS") -> None:
       THOMAS_MODELS_LOCAL_BASE_URL=http://127.0.0.1:11434/v1
       THOMAS_MODELS_LOCAL_MODEL=qwen2.5-coder:7b-instruct-q4_K_M
 
+      THOMAS_DATA_DIR=C:/Users/alice/AppData/Local/Thomas
+      THOMAS_PROFILE=demo
       THOMAS_MEMORY_ROOT=./runtime
     """
     model_fields = set(getattr(ModelConfig, "__dataclass_fields__", {}).keys()) - {"name"}
@@ -592,7 +699,12 @@ def _collect_unknown_core_keys(data: dict[str, Any]) -> list[str]:
     return sorted(set(unknown))
 
 
-def load_config(path: Path | None = None) -> AppConfig:
+def load_config(
+    path: Path | None = None,
+    *,
+    data_dir: str | Path | None = None,
+    profile: str | None = None,
+) -> AppConfig:
     """Load configuration from TOML file with env var overrides.
 
     Search order:
@@ -624,8 +736,17 @@ def load_config(path: Path | None = None) -> AppConfig:
         if isinstance(mdata, dict):
             models[name] = _build_model_config(name, mdata)
 
-    # If no models defined, create a default local profile
+    # If no models defined, create a default codex profile (plus local fallback).
     if not models:
+        models["codex"] = ModelConfig(
+            name="codex",
+            provider="codex",
+            model="gpt-5.3-codex",
+            max_tokens=16384,
+            context_window=200000,
+            temperature=0.1,
+            reasoning_effort="medium",
+        )
         models["local"] = ModelConfig(
             name="local",
             base_url="http://127.0.0.1:11434/v1",
@@ -644,8 +765,34 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     # Build memory config
     mem_data = data.get("memory", {})
+    configured_data_dir = str(mem_data.get("data_dir", "") or "").strip()
+    configured_profile = str(mem_data.get("profile", "") or "").strip()
+    env_profile = str(os.environ.get("THOMAS_PROFILE") or "").strip()
+    effective_profile = profile if profile is not None else (env_profile or configured_profile or None)
+    normalized_profile = normalize_profile_name(effective_profile)
+    base_data_dir = resolve_thomas_data_dir(
+        data_dir if data_dir is not None else (configured_data_dir or None),
+        None,
+    )
+    effective_data_dir = resolve_thomas_data_dir(base_data_dir, normalized_profile or None)
+    raw_root = str(mem_data.get("root", "") or "").strip()
+    if raw_root:
+        root_candidate = Path(raw_root).expanduser()
+        if not root_candidate.is_absolute():
+            root_candidate = effective_data_dir / root_candidate
+        root_candidate = root_candidate.resolve()
+        # Preserve explicit user-provided root text for backward compatibility.
+        memory_root_value = raw_root
+    else:
+        root_candidate = effective_data_dir
+        if not _is_subpath(root_candidate, effective_data_dir):
+            root_candidate = (effective_data_dir / "runtime").resolve()
+        memory_root_value = str(root_candidate)
+
     memory = MemoryConfig(
-        root=mem_data.get("root", "./runtime"),
+        root=memory_root_value,
+        data_dir=str(base_data_dir),
+        profile=normalized_profile,
         context_budget=mem_data.get("context_budget", 12000),
         mode=mem_data.get("mode", "auto"),
     )
@@ -687,9 +834,10 @@ def load_config(path: Path | None = None) -> AppConfig:
 
     # Build journal config
     journal_data = data.get("journal", {})
+    default_journal_dir = str((effective_data_dir / "journal").resolve())
     journal = JournalConfig(
         enabled=bool(journal_data.get("enabled", True)),
-        dir=str(journal_data.get("dir", "./tasks") or "./tasks"),
+        dir=str(journal_data.get("dir", default_journal_dir) or default_journal_dir),
     )
 
     # Build quality config
@@ -726,9 +874,15 @@ def load_config(path: Path | None = None) -> AppConfig:
         quality=quality,
         keybindings=keybindings,
         unknown_core_keys=unknown_core_keys,
-        default_model=data.get("default_model", "local"),
+        default_model=data.get("default_model", "codex"),
         max_agent_iterations=data.get("max_agent_iterations", 10),
         environment=environment,
+    )
+
+    apply_runtime_data_env_defaults(
+        base_dir=base_data_dir,
+        effective_dir=effective_data_dir,
+        profile=normalized_profile,
     )
 
     # Apply production-mode safety overrides.

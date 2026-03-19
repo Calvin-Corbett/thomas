@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 import os
 import re
+import uuid
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from functools import lru_cache
@@ -49,8 +50,11 @@ from thomas.tools.registry import ToolRegistry
 try:
     from thomas.agent.context_compaction import (
         ContextCompactor,
+    )
+    from thomas.agent.context_compaction import (
         estimate_conversation_tokens as _compact_estimate_tokens,
     )
+
     _HAS_CONTEXT_COMPACTOR = True
 except ImportError:
     _HAS_CONTEXT_COMPACTOR = False
@@ -177,9 +181,14 @@ class AgentLoop:
         # Conversation intelligence tracker for multi-turn coherence
         self._conv_intel = ConversationIntelligence(max_turns=12)
         self._memory = memory
-        self._thread_id = thread_id or "default"
-        self._run_id = run_id or self._thread_id
-        self._session_id = session_id or self._thread_id
+        resolved_thread_id = str(thread_id or "").strip()
+        if not resolved_thread_id:
+            resolved_thread_id = f"thread:{uuid.uuid4().hex}"
+        self._thread_id = resolved_thread_id
+        resolved_session_id = str(session_id or "").strip()
+        self._session_id = resolved_session_id or self._thread_id
+        resolved_run_id = str(run_id or "").strip()
+        self._run_id = resolved_run_id or f"run:{uuid.uuid4().hex}"
         self._guarded_tool_runner = guarded_tool_runner
         self._action_audit = action_audit
         self._guardrails_event_cb = guardrails_event_cb
@@ -203,16 +212,17 @@ class AgentLoop:
         self._non_coder_profile = bool(non_coder_profile)
         self._profile_type = raw_profile_type
         self._review_depth = str(review_depth or "adaptive").strip().lower() or "adaptive"
-        # Set context window with bounds checking
-        context_window = llm.config.context_window
-        min_window = 1000
-        max_window = 200000
-        if context_window < min_window:
-            log.warning("Context window %d is below minimum %d. Clamping to minimum.", context_window, min_window)
-            self._context_window = min_window
-        elif context_window > max_window:
-            log.warning("Context window %d exceeds maximum %d. Clamping to maximum.", context_window, max_window)
-            self._context_window = max_window
+        # Respect provider/profile-declared context windows directly.
+        # Use a fallback only when config is invalid (<= 0).
+        context_window = int(getattr(llm.config, "context_window", 0) or 0)
+        if context_window <= 0:
+            fallback_window = max(int(getattr(llm.config, "max_tokens", 0) or 0) * 4, 4096)
+            log.warning(
+                "Invalid context window %d in model config; using fallback %d.",
+                context_window,
+                fallback_window,
+            )
+            self._context_window = fallback_window
         else:
             self._context_window = context_window
         self._router = IntentRouter()
@@ -260,8 +270,12 @@ class AgentLoop:
         import sys
 
         model_cfg = self.llm.config
+        route = str(route_path or "")
+        _low_intent_paths = {"casual_chat", "personal_context", "assistant_meta", "general"}
+        _editing_policy_paths = {"coding_task", "debug_audit"}
+        _project_instruction_paths = {"coding_task", "debug_audit", "research", "planning"}
         base_prompt = build_route_system_prompt(
-            route_path=str(route_path or ""),
+            route_path=route,
             cwd=os.getcwd(),
             platform=sys.platform,
             model_name=getattr(model_cfg, "name", "unknown"),
@@ -282,8 +296,7 @@ class AgentLoop:
         # For casual/low-intent routes, the autonomy directive ("execute tasks
         # autonomously…") confuses the LLM into agent-speak instead of
         # natural conversation.
-        _low_intent_paths = {"casual_chat", "personal_context", "assistant_meta", "general"}
-        if str(route_path or "") not in _low_intent_paths:
+        if route not in _low_intent_paths:
             autonomy_lv = self._autonomy_level
             autonomy_name = autonomy_level_name(autonomy_lv)
             autonomy_directive = autonomy_system_directive(autonomy_lv)
@@ -295,24 +308,25 @@ class AgentLoop:
                 + "\n--- End Autonomy Profile ---\n"
             )
 
-        # Editing policy: prefer diff.create over fs.write_file for edits
-        prompt = (
-            prompt.rstrip()
-            + "\n\n--- Editing Policy ---\n"
-            "When editing existing files, prefer diff.create (find-and-replace) over fs.write_file.\n"
-            "diff.create is safer: it only changes what's needed and shows exact before/after.\n"
-            "Only use fs.write_file for creating entirely new files.\n"
-            "--- End Editing Policy ---\n"
-        )
+        # Editing policy is only needed on routes that are likely to mutate files.
+        if route in _editing_policy_paths:
+            prompt = (
+                prompt.rstrip() + "\n\n--- Editing Policy ---\n"
+                "When editing existing files, prefer diff.create (find-and-replace) over fs.write_file.\n"
+                "diff.create is safer: it only changes what's needed and shows exact before/after.\n"
+                "Only use fs.write_file for creating entirely new files.\n"
+                "--- End Editing Policy ---\n"
+            )
 
-        # Per-project instructions (THOMAS.md)
-        try:
-            sandbox_root = Path(os.getcwd())
-            project_content = discover_project_instructions(sandbox_root)
-            if project_content:
-                prompt = prompt.rstrip() + "\n\n" + format_project_instructions(project_content)
-        except Exception:
-            pass  # Best-effort: project instructions are optional
+        # Per-project instructions (THOMAS.md) are only injected for execution routes.
+        if route in _project_instruction_paths:
+            try:
+                sandbox_root = Path(os.getcwd())
+                project_content = discover_project_instructions(sandbox_root)
+                if project_content:
+                    prompt = prompt.rstrip() + "\n\n" + format_project_instructions(project_content)
+            except Exception:
+                pass  # Best-effort: project instructions are optional
 
         if skills_context:
             prompt = prompt.rstrip() + "\n\n" + str(skills_context).strip()
@@ -380,11 +394,11 @@ class AgentLoop:
 
         messages = [system_msg] + trimmed
         state.token_estimate = estimate_messages_tokens(messages) + tools_tokens
-        # HARD SAFETY CAP: 28k tokens (for Tier 1 30k limit)
+        # Model-aware hard cap for safety and long-session budget control.
         # This is the final firewall. If we are over this, we MUST trim,
         # regardless of what the config or memory says.
-        HARD_CAP = 28000
-        while estimate_messages_tokens(messages) > HARD_CAP and len(messages) > 2:
+        hard_cap = max(1000, int(self._context_window))
+        while estimate_messages_tokens(messages) > hard_cap and len(messages) > 2:
             # Drop the oldest message (after system prompt)
             # We keep index 0 (system) and index -1 (latest user query/tool result) ideally,
             # but here we just pop from index 1 (oldest conversation history)
@@ -396,7 +410,7 @@ class AgentLoop:
     async def _auto_compact_if_needed(
         self,
         *,
-        hard_cap: int = 28000,
+        hard_cap: int | None = None,
         threshold: float = 0.75,
         preserve_recent: int = 6,
     ) -> dict[str, Any] | None:
@@ -410,19 +424,20 @@ class AgentLoop:
         if not _HAS_CONTEXT_COMPACTOR or self._context_compactor is None:
             return None
 
+        compact_cap = int(self._context_window) if (hard_cap is None or int(hard_cap) <= 0) else int(hard_cap)
         conv_tokens = _compact_estimate_tokens(self._conversation)
-        if conv_tokens < int(hard_cap * threshold):
+        if conv_tokens < int(compact_cap * threshold):
             return None
 
         log.info(
             "Auto-compaction triggered: conversation at %d tokens (%.0f%% of %d cap)",
             conv_tokens,
-            (conv_tokens / hard_cap) * 100,
-            hard_cap,
+            (conv_tokens / compact_cap) * 100,
+            compact_cap,
         )
 
         try:
-            target = int(hard_cap * 0.55)  # Compact to ~55% to give headroom
+            target = int(compact_cap * 0.55)  # Compact to ~55% to give headroom
             result = await self._context_compactor.compact(
                 self._conversation,
                 target_budget=target,
@@ -451,7 +466,7 @@ class AgentLoop:
         """
         if not _HAS_CONTEXT_COMPACTOR:
             conv_tokens = estimate_messages_tokens(self._conversation) if self._conversation else 0
-            hard_cap = 28000
+            hard_cap = max(1000, int(self._context_window))
             usage_ratio = conv_tokens / max(1, hard_cap)
             return {
                 "current_tokens": conv_tokens,

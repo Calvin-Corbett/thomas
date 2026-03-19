@@ -2,6 +2,7 @@
 
 Tables: workspaces, workspace_memberships, workspace_invites
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -9,7 +10,6 @@ import secrets
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Optional
 
 DEFAULT_WORKSPACE_ID = "00000000-0000-0000-0000-000000000001"
 DEFAULT_MEMBERSHIP_ID = "00000000-0000-0000-0000-000000000002"
@@ -44,7 +44,7 @@ def connect(db_path: Path) -> sqlite3.Connection:
     # Try WAL mode, but fall back to DELETE mode if it fails (e.g., on FUSE filesystems)
     try:
         con.execute("PRAGMA journal_mode=WAL")
-    except (sqlite3.OperationalError, sqlite3.DatabaseError) as e:
+    except (sqlite3.OperationalError, sqlite3.DatabaseError):
         # WAL mode not supported on this filesystem, use DELETE mode instead
         try:
             con.execute("PRAGMA journal_mode=DELETE")
@@ -99,8 +99,9 @@ def ensure_schema(con: sqlite3.Connection) -> None:
 
         # Ensure at least the default personal workspace exists
         try:
-            row = con.execute("SELECT workspace_id FROM workspaces WHERE workspace_id=?",
-                              (DEFAULT_WORKSPACE_ID,)).fetchone()
+            row = con.execute(
+                "SELECT workspace_id FROM workspaces WHERE workspace_id=?", (DEFAULT_WORKSPACE_ID,)
+            ).fetchone()
             if not row:
                 con.execute(
                     "INSERT INTO workspaces(workspace_id,name,owner_user_id,created_at) VALUES(?,?,?,?)",
@@ -116,6 +117,7 @@ def ensure_schema(con: sqlite3.Connection) -> None:
 
 
 # ── Workspace CRUD ────────────────────────────────────────────────────────────
+
 
 def list_workspaces_for_user(con: sqlite3.Connection, user_id: str) -> list[sqlite3.Row]:
     return con.execute(
@@ -144,20 +146,21 @@ def create_workspace(con: sqlite3.Connection, name: str, owner_user_id: str) -> 
     return con.execute("SELECT * FROM workspaces WHERE workspace_id=?", (ws_id,)).fetchone()
 
 
-def get_workspace(con: sqlite3.Connection, workspace_id: str) -> Optional[sqlite3.Row]:
+def get_workspace(con: sqlite3.Connection, workspace_id: str) -> sqlite3.Row | None:
     return con.execute("SELECT * FROM workspaces WHERE workspace_id=?", (workspace_id,)).fetchone()
 
 
 # ── Membership CRUD ───────────────────────────────────────────────────────────
 
-def get_membership(con: sqlite3.Connection, workspace_id: str, user_id: str) -> Optional[sqlite3.Row]:
+
+def get_membership(con: sqlite3.Connection, workspace_id: str, user_id: str) -> sqlite3.Row | None:
     return con.execute(
         "SELECT * FROM workspace_memberships WHERE workspace_id=? AND user_id=? AND is_active=1",
         (workspace_id, user_id),
     ).fetchone()
 
 
-def first_membership_for_user(con: sqlite3.Connection, user_id: str) -> Optional[sqlite3.Row]:
+def first_membership_for_user(con: sqlite3.Connection, user_id: str) -> sqlite3.Row | None:
     return con.execute(
         "SELECT * FROM workspace_memberships WHERE user_id=? AND is_active=1 ORDER BY created_at ASC LIMIT 1",
         (user_id,),
@@ -171,8 +174,9 @@ def list_members(con: sqlite3.Connection, workspace_id: str) -> list[sqlite3.Row
     ).fetchall()
 
 
-def upsert_membership(con: sqlite3.Connection, workspace_id: str, user_id: str,
-                      role: str, is_active: bool = True) -> sqlite3.Row:
+def upsert_membership(
+    con: sqlite3.Connection, workspace_id: str, user_id: str, role: str, is_active: bool = True
+) -> sqlite3.Row:
     existing = con.execute(
         "SELECT membership_id FROM workspace_memberships WHERE workspace_id=? AND user_id=?",
         (workspace_id, user_id),
@@ -208,15 +212,21 @@ def deactivate_member(con: sqlite3.Connection, workspace_id: str, user_id: str) 
 
 # ── Invites ───────────────────────────────────────────────────────────────────
 
-def create_invite(con: sqlite3.Connection, workspace_id: str, email: str,
-                  role: str, created_by: Optional[str], note: Optional[str]) -> tuple[sqlite3.Row, str]:
+
+def create_invite(
+    con: sqlite3.Connection, workspace_id: str, email: str, role: str, created_by: str | None, note: str | None
+) -> tuple[sqlite3.Row, str]:
     raw = secrets.token_urlsafe(32)
     token_hash = _hash_token(raw)
     inv_id = _new_id()
     now = _utcnow()
-    expires = (datetime.now(timezone.utc) + timedelta(days=7)).replace(tzinfo=None).isoformat(
-        sep=" ",
-        timespec="seconds",
+    expires = (
+        (datetime.now(timezone.utc) + timedelta(days=7))
+        .replace(tzinfo=None)
+        .isoformat(
+            sep=" ",
+            timespec="seconds",
+        )
     )
     con.execute(
         "INSERT INTO workspace_invites"
@@ -229,14 +239,12 @@ def create_invite(con: sqlite3.Connection, workspace_id: str, email: str,
     return row, raw
 
 
-def get_invite_by_token(con: sqlite3.Connection, raw_token: str) -> Optional[sqlite3.Row]:
+def get_invite_by_token(con: sqlite3.Connection, raw_token: str) -> sqlite3.Row | None:
     token_hash = _hash_token(raw_token)
-    return con.execute(
-        "SELECT * FROM workspace_invites WHERE token_hash=?", (token_hash,)
-    ).fetchone()
+    return con.execute("SELECT * FROM workspace_invites WHERE token_hash=?", (token_hash,)).fetchone()
 
 
-def accept_invite(con: sqlite3.Connection, invite_id: str, user_id: str) -> Optional[sqlite3.Row]:
+def accept_invite(con: sqlite3.Connection, invite_id: str, user_id: str) -> sqlite3.Row | None:
     now = _utcnow()
     con.execute("UPDATE workspace_invites SET accepted_at=? WHERE invite_id=?", (now, invite_id))
     con.commit()

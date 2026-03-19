@@ -2,15 +2,16 @@ import type { ReleaseChannel } from "@/lib/types";
 
 export const siteConfig = {
   name: "Thomas",
-  productLine: "Everything Assistant",
+  productLine: "Local-first execution system",
   description:
-    "Thomas is an everything assistant that helps you do real work on your computer: planning, writing, research, automation, troubleshooting, and coding.",
+    "Thomas is a local-first execution system for constrained computer tasks with approvals, reproducibility signals, and audit trails.",
   nav: [
     { href: "/", label: "Home" },
     { href: "/download", label: "Download" },
+    { href: "/roadmap", label: "Roadmap" },
     { href: "/updates", label: "Updates" },
     { href: "/journey", label: "Journey" },
-    { href: "/deep-dive", label: "Deep Dive" },
+    { href: "/deep-dive", label: "How It Works" },
     { href: "/support", label: "Support" },
   ],
   social: {

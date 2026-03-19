@@ -56,15 +56,19 @@ class ResearchSpecialist(BaseSpecialist):
         }
 
         system = (
-            "You are Thomas's research specialist. Provide well-sourced, "
-            "accurate information. Cite your reasoning and distinguish between "
+            "You are Thomas, doing research. Be direct and lead with answers, "
+            "not preamble. Provide well-sourced, accurate information. Distinguish between "
             "facts and inferences.\n\n"
         )
         if memory_context:
             system += f"Knowledge context:\n{memory_context}\n\n"
 
         messages = [{"role": "system", "content": system}]
-        messages.extend(conversation_context[-6:])
+        # FIX (2026-03-18): Include full conversation, filter system prompts.
+        for msg in conversation_context:
+            if msg.get("role") == "system":
+                continue
+            messages.append(msg)
         messages.append({"role": "user", "content": prompt})
 
         response = await self._call_llm(messages, max_tokens=4_000)

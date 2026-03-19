@@ -65,6 +65,7 @@ def main() -> int:
     parser.add_argument("--config", default="", help="Optional config path.")
     parser.add_argument("--no-ai", action="store_true", help="Disable AI summary in report.")
     parser.add_argument("--no-auto-repair", action="store_true", help="Disable automatic repair attempts.")
+    parser.add_argument("--relaunch", action="store_true", help="Leave a recovered Thomas server running after repair.")
     args = parser.parse_args()
 
     root = Path(args.root).expanduser()
@@ -92,6 +93,7 @@ def main() -> int:
             report_path=report_path,
             auto_repair=not bool(args.no_auto_repair),
             allow_ai=not bool(args.no_ai),
+            relaunch=bool(args.relaunch),
         )
         print(out)
         return 0

@@ -64,7 +64,11 @@ class SynthesisSpecialist(BaseSpecialist):
             system += f"Available context:\n{memory_context}\n\n"
 
         messages = [{"role": "system", "content": system}]
-        messages.extend(conversation_context[-12:])  # more context for synthesis
+        # FIX (2026-03-18): Include full conversation, filter system prompts.
+        for msg in conversation_context:
+            if msg.get("role") == "system":
+                continue
+            messages.append(msg)
         messages.append({"role": "user", "content": prompt})
 
         response = await self._call_llm(messages, max_tokens=6_000)

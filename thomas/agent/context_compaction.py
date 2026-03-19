@@ -356,11 +356,7 @@ class ContextCompactor:
             }
 
             # Replace compactable messages with the summary
-            new_messages = (
-                messages[:compactable_start]
-                + [summary_msg]
-                + messages[compactable_end:]
-            )
+            new_messages = messages[:compactable_start] + [summary_msg] + messages[compactable_end:]
 
             # Check if we're within budget now
             new_tokens = estimate_conversation_tokens(new_messages)
@@ -398,9 +394,7 @@ class ContextCompactor:
         )
         return result
 
-    def _segment_messages(
-        self, messages: list[dict[str, Any]]
-    ) -> list[list[dict[str, Any]]]:
+    def _segment_messages(self, messages: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
         """Group messages into segments for summarization.
 
         Keeps tool call/result pairs together to avoid orphaning.
@@ -435,9 +429,7 @@ class ContextCompactor:
 
         return segments
 
-    async def _summarize_segments_with_llm(
-        self, segments: list[list[dict[str, Any]]]
-    ) -> list[str]:
+    async def _summarize_segments_with_llm(self, segments: list[list[dict[str, Any]]]) -> list[str]:
         """Use the LLM to generate summaries for each segment."""
         summaries: list[str] = []
 
@@ -475,9 +467,7 @@ class ContextCompactor:
 
         return summaries
 
-    def _summarize_segments_heuristic(
-        self, segments: list[list[dict[str, Any]]]
-    ) -> list[str]:
+    def _summarize_segments_heuristic(self, segments: list[list[dict[str, Any]]]) -> list[str]:
         """Heuristic (non-LLM) summarization of message segments."""
         summaries: list[str] = []
         for segment in segments:
@@ -495,9 +485,7 @@ class ContextCompactor:
 
         import re
 
-        path_pattern = re.compile(
-            r'(?:[A-Za-z]:\\[^\s"\'<>|]+|/[^\s"\'<>|]{3,})'
-        )
+        path_pattern = re.compile(r'(?:[A-Za-z]:\\[^\s"\'<>|]+|/[^\s"\'<>|]{3,})')
 
         for msg in segment:
             role = msg.get("role", "")
@@ -557,29 +545,35 @@ class ContextCompactor:
 
         return "\n".join(parts)
 
-    def token_usage_info(
-        self, messages: list[dict[str, Any]], context_window: int = 28000
-    ) -> dict[str, Any]:
+    def token_usage_info(self, messages: list[dict[str, Any]], context_window: int | None = None) -> dict[str, Any]:
         """Return current token usage information for display.
 
         Args:
             messages: Current conversation messages.
             context_window: Total context window size.
+                If not provided or non-positive, context-limited decisions are
+                disabled.
 
         Returns:
             Dict with usage metrics for UI display.
         """
         current_tokens = estimate_conversation_tokens(messages)
-        usage_ratio = current_tokens / max(1, context_window)
+        context_window_int = int(context_window or 0)
+        usage_ratio = current_tokens / max(1, context_window_int) if context_window_int > 0 else 0.0
+        usage_pct = 0
+        if context_window_int > 0:
+            usage_pct = int(usage_ratio * 100)
+            if current_tokens > 0 and usage_ratio > 0 and usage_pct == 0:
+                usage_pct = 1
         return {
             "current_tokens": current_tokens,
-            "context_window": context_window,
+            "context_window": context_window_int,
             "usage_ratio": usage_ratio,
-            "usage_pct": int(usage_ratio * 100),
+            "usage_pct": usage_pct,
             "message_count": len(messages),
-            "should_compact": usage_ratio > 0.75,
+            "should_compact": usage_ratio > 0.75 if context_window_int > 0 else False,
             "display": _format_token_count(current_tokens),
-            "display_budget": _format_token_count(context_window),
+            "display_budget": _format_token_count(context_window_int),
         }
 
 
@@ -607,9 +601,7 @@ def _apply_heuristic_compaction(
     # Pass 1: Truncate tool results
     for i in range(compactable_end):
         msg = messages[i]
-        if msg.get("role") == "tool" or (
-            msg.get("role") == "assistant" and isinstance(msg.get("tool_calls"), list)
-        ):
+        if msg.get("role") == "tool" or (msg.get("role") == "assistant" and isinstance(msg.get("tool_calls"), list)):
             content = msg.get("content", "")
             if isinstance(content, str) and len(content) > 200:
                 messages[i] = {**msg, "content": _summarize_tool_result(content)}
@@ -651,8 +643,7 @@ def _apply_heuristic_compaction(
         marker = {
             "role": "system",
             "content": (
-                f"[{dropped} earlier messages trimmed to fit context window. "
-                f"Recent conversation preserved.]"
+                f"[{dropped} earlier messages trimmed to fit context window. " f"Recent conversation preserved.]"
             ),
         }
         insert_idx = 0

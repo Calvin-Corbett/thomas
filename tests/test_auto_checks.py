@@ -120,7 +120,7 @@ def test_run_continues_after_surface_parity_failure_with_continue(monkeypatch) -
     assert "Workboard claims gate" in seen
 
 
-def test_run_defaults_repo_hygiene_to_no_require_clean_worktree_locally(monkeypatch) -> None:
+def test_run_defaults_repo_hygiene_to_strict_locally(monkeypatch) -> None:
     seen: list[tuple[str, tuple[str, ...]]] = []
 
     def _fake_run_step(label: str, cmd: tuple[str, ...]) -> int:
@@ -135,7 +135,7 @@ def test_run_defaults_repo_hygiene_to_no_require_clean_worktree_locally(monkeypa
     rc = mod.run(["--skip-tests"])
     assert rc == 0
     repo_cmd = dict(seen)["Repo hygiene gate"]
-    assert "--no-require-clean-worktree" in repo_cmd
+    assert "--no-require-clean-worktree" not in repo_cmd
 
 
 def test_run_defaults_repo_hygiene_to_strict_in_ci(monkeypatch) -> None:

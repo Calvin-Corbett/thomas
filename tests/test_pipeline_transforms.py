@@ -8,7 +8,10 @@ sys.path.insert(0, "/sessions/zen-pensive-cannon/mnt/Thomas")
 
 from datetime import datetime
 
-from thomas.data_pipeline._types import DataType, Field, JoinSpec, Record, Schema
+import pytest
+
+from thomas.data_pipeline._exceptions import TransformationError
+from thomas.data_pipeline._types import DataType, Field, JoinSpec, JoinType, Record, Schema
 from thomas.data_pipeline.transforms import (
     DateTransform,
     DeduplicationTransform,
@@ -252,6 +255,14 @@ class TestExpressionEvaluatorTransform:
 
         assert result.get("sqrt_value") == 3.0
 
+    def test_disallows_unsafe_expression(self):
+        """Test unsafe expression rejection."""
+        record = Record(data={"value": 9})
+        transform = ExpressionEvaluatorTransform({"bad": "__import__('os').system('echo nope')"})
+
+        with pytest.raises(TransformationError):
+            transform.transform(record)
+
 
 class TestLookupJoinTransform:
     """Test lookup join transformation."""
@@ -275,7 +286,7 @@ class TestLookupJoinTransform:
         lookup_data = {"Alice": Record(data={"dept": "Engineering"})}
         record = Record(data={"name": "Bob", "salary": 100000})
 
-        join_spec = JoinSpec("name", "name")
+        join_spec = JoinSpec("name", "name", join_type=JoinType.LEFT)
         transform = LookupJoinTransform(lookup_data, "name", "name", join_spec)
 
         result = transform.transform(record)

@@ -304,12 +304,17 @@ def stream_replay(run_id: str) -> Iterator[dict[str, Any]]:
         )
         for row in cur:
             payload = _json_loads(row["payload_json"])
-            if "type" not in payload:
-                payload["type"] = row["event_type"]
-            payload["run_id"] = run_id
-            payload.setdefault("t_ms", row["t_ms"])
-            payload.setdefault("seq", row["seq"])
-            yield payload
+            replay_event: dict[str, Any]
+            if isinstance(payload, dict):
+                replay_event = dict(payload)
+            else:
+                replay_event = {"payload": payload}
+            if "type" not in replay_event:
+                replay_event["type"] = row["event_type"]
+            replay_event["run_id"] = run_id
+            replay_event.setdefault("t_ms", row["t_ms"])
+            replay_event.setdefault("seq", row["seq"])
+            yield replay_event
 
 
 class ThreadedRunWriter:
@@ -324,6 +329,7 @@ class ThreadedRunWriter:
         self._q: queue.Queue[tuple[int, int, str, str, str] | None] = queue.Queue()
         self._thr = threading.Thread(target=self._worker, name=f"RunWriter-{run_id[:8]}", daemon=True)
         self._started = False
+        self._closed = False
         self._exc: BaseException | None = None
         self._fallback_events = 0
         self._dropped_events = 0
@@ -331,6 +337,8 @@ class ThreadedRunWriter:
         self._meta_lock = threading.Lock()
 
     def start(self) -> None:
+        if self._closed:
+            raise RuntimeError("RunWriter is closed")
         if self._started:
             return
         self._started = True
@@ -338,6 +346,8 @@ class ThreadedRunWriter:
         self._thr.start()
 
     def record(self, obj: dict[str, Any]) -> None:
+        if self._closed:
+            raise RuntimeError("RunWriter is closed")
         if not self._started:
             self.start()
         event_type = str(obj.get("type", "unknown"))
@@ -358,6 +368,7 @@ class ThreadedRunWriter:
         return self._seq
 
     def close(self, timeout: float = 5.0, *, strict: bool = False) -> None:
+        self._closed = True
         if not self._started:
             _unregister_writer(self)
             return

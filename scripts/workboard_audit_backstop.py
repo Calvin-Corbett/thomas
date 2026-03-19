@@ -5,8 +5,8 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 try:
     from scripts import check_workboard_claims as claims_gate
@@ -38,7 +38,7 @@ def _canonical_line() -> str:
     )
 
 
-def _check(workboard_path: Path) -> tuple[bool, List[str]]:
+def _check(workboard_path: Path) -> tuple[bool, list[str]]:
     violations, _claims, _tasks, up_for_grabs, _issues = claims_gate.evaluate_board(workboard_path)
     if violations:
         return False, list(violations)
@@ -78,7 +78,7 @@ def _apply(workboard_path: Path) -> tuple[bool, str]:
     section_start, section_end = workboard_issue._find_up_for_grabs_section(lines)  # type: ignore[attr-defined]
     bullet_idxs = workboard_issue._bullet_indices(lines, section_start, section_end)  # type: ignore[attr-defined]
 
-    remove_idxs: List[int] = []
+    remove_idxs: list[int] = []
     found_idx: int | None = None
     for idx in bullet_idxs:
         entry, fields, err = workboard_issue._parse_up_for_grabs_line(idx + 1, lines[idx])  # type: ignore[attr-defined]
@@ -121,9 +121,7 @@ def _apply(workboard_path: Path) -> tuple[bool, str]:
 
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
-        description=(
-            "Ensure WORKBOARD keeps a recurring Up For Grabs task for 24h module-audit backstop work."
-        )
+        description=("Ensure WORKBOARD keeps a recurring Up For Grabs task for 24h module-audit backstop work.")
     )
     parser.add_argument(
         "--workboard",

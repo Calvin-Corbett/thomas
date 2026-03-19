@@ -17,7 +17,7 @@ try:
         get_hooks_registry,
         reset_global_registry,
     )
-except ModuleNotFoundError:
+except (ModuleNotFoundError, ImportError):
     # Compatibility fallback for partial checkouts where hooks_registry
     # has been removed/moved but core agent imports still need to work.
     class HooksRegistry:  # type: ignore[no-redef]
@@ -28,6 +28,7 @@ except ModuleNotFoundError:
 
     def reset_global_registry() -> None:  # type: ignore[no-redef]
         return None
+
 
 __all__ = [
     "AgentLoop",

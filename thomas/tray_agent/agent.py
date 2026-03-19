@@ -53,6 +53,14 @@ _LOG_FILE = _STATE_DIR / "tray_agent.log"
 _SERVER_LOG_FILE = _STATE_DIR / "server.log"
 
 
+def _get_repo_root() -> Path:
+    current = Path(__file__).resolve()
+    for parent in (current.parent, *current.parents):
+        if (parent / "pyproject.toml").exists() and (parent / "thomas").exists():
+            return parent
+    return Path.cwd()
+
+
 def _ensure_state_dir() -> Path:
     _STATE_DIR.mkdir(parents=True, exist_ok=True)
     return _STATE_DIR
@@ -123,14 +131,21 @@ def _get_task_name() -> str:
 
 
 def _get_exe_path() -> str:
-    """Get the path to the tray agent executable."""
-    # Use the current Python interpreter
+    """Get the path to the preferred Python interpreter for Thomas."""
+    repo_root = _get_repo_root()
+    candidates = [
+        repo_root / ".venv" / "Scripts" / "python.exe",
+        repo_root / ".venv" / "bin" / "python",
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
     return sys.executable
 
 
 def _get_script_path() -> str:
     """Get the path to the tray agent script."""
-    return str(Path(__file__).parent / "__main__.py")
+    return str((Path(__file__).parent / "__main__.py").resolve())
 
 
 def is_auto_start_enabled() -> bool:
@@ -154,7 +169,7 @@ def enable_auto_start() -> bool:
     try:
         exe = _get_exe_path()
         script = _get_script_path()
-        cwd = str(Path.cwd())
+        cwd = str(_get_repo_root())
 
         # Create task that runs at logon
         cmd = [
@@ -223,7 +238,7 @@ class ServerProcess:
 
             try:
                 exe = _get_exe_path()
-                cwd = str(Path.cwd())
+                cwd = str(_get_repo_root())
 
                 # Start server as hidden subprocess, logging to file
                 _ensure_state_dir()
@@ -583,7 +598,7 @@ class ThomasTrayAgent:
                     time.sleep(2)
                     if self.server._port_is_live():
                         log.info(
-                            "Port %d taken over by another instance; " "this tray agent is now stale — exiting.",
+                            "Port %d taken over by another instance; " "this tray agent is now stale â€” exiting.",
                             self.port,
                         )
                         self._stop_event.set()
@@ -591,12 +606,12 @@ class ThomasTrayAgent:
                             self._icon.stop()
                         return
 
-                    # Port is free and our process died — attempt restart.
+                    # Port is free and our process died â€” attempt restart.
                     log.warning("Server process died and port is free; restarting...")
                     time.sleep(RESTART_DELAY_S)
                     if self._stop_event.is_set():
                         return
-                    # Re-check once more — the user may have started a new
+                    # Re-check once more â€” the user may have started a new
                     # instance during the restart delay.
                     if self.server._port_is_live():
                         log.info("Port %d now in use by another process; exiting.", self.port)
@@ -609,7 +624,7 @@ class ThomasTrayAgent:
                     else:
                         self._notify("Thomas server restart failed (retrying)")
                 else:
-                    # Process alive but port not responding — could be
+                    # Process alive but port not responding â€” could be
                     # transient.  Log but don't restart yet.
                     log.warning("Server process alive but port %d not responding.", self.port)
 

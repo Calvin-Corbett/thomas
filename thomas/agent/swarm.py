@@ -1,5 +1,13 @@
-"""
-Swarm Mode â€” multi-agent task graph orchestrator (stdlib-only).
+“””
+Swarm Mode — IN-PROCESS async task graph orchestrator (stdlib-only).
+
+IMPORTANT FOR AI AGENTS:
+  This is NOT the same as scripts/workboard_swarm.py (which spawns terminal processes).
+  This module runs concurrent async tasks in a SINGLE Python process.
+  It is fully tested (5 test files) but NOT currently called from /api/chat.
+  The dispatch-first chat architecture uses the workboard pipeline instead.
+  See docs/CHAT_EXECUTION_MODEL.md for how chat dispatch works.
+  This module is kept for future in-process parallel execution needs.
 
 What this is
 - A small but *serious* multi-agent orchestrator designed to be integrated into Thomas.

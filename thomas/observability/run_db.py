@@ -5,6 +5,8 @@ import os
 import sqlite3
 from pathlib import Path
 
+from thomas.core.config import resolve_thomas_data_dir
+
 ENV_DB_PATH = "THOMAS_RUNS_DB_PATH"
 
 BASE_SCHEMA = """
@@ -50,7 +52,7 @@ def resolve_runs_db_path() -> Path:
     except ImportError:
         pass
 
-    return Path.home() / ".thomas" / "runs.sqlite3"
+    return resolve_thomas_data_dir() / ".thomas" / "runs.sqlite3"
 
 
 def connect(db_path: Path) -> sqlite3.Connection:

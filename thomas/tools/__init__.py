@@ -1,7 +1,7 @@
 """Tool base classes and registry for Thomas AI."""
 
-from .registry import ToolRegistry
 from .base import Tool, ToolResult, ToolSpec
+from .registry import ToolRegistry
 
 __all__ = [
     "Tool",

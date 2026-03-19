@@ -1,4 +1,4 @@
-﻿# Repo Structure Protocol
+# Repo Structure Protocol
 
 Last updated: 2026-03-01
 
@@ -30,15 +30,15 @@ If a plan is moved, keep a pointer file at the old path.
 
 ## 3) Agent Startup Checklist
 
-For every new task, read in this order:
-1. `AGENTS.md`
-2. `plans/thomas/WORKBOARD.md`
-3. `plans/thomas/README.md`
-4. Relevant plan under `plans/thomas/...`
-5. Supporting docs from `docs/` as needed
+For every new task:
+1. Run `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...`
+2. Read the returned lane card in `docs/ai/CHECKLISTS/`
+3. Check `plans/thomas/WORKBOARD.md` for awareness of active claims and blockers
+4. Load only the plans and reference docs that the lane points to
 
 If there is conflict:
 - `AGENTS.md` process rules win.
+- Lane cards define the default startup path.
 - Plan files define current execution intent.
 - Docs define stable contracts.
 

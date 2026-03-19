@@ -7,8 +7,9 @@ import json
 import logging
 import secrets
 import time
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from aiohttp import web
 
@@ -18,10 +19,10 @@ log = logging.getLogger(__name__)
 @dataclass(frozen=True)
 class ChatControlDeps:
     clamp_autonomy_level: Callable[..., int]
-    normalize_usage_payload: Callable[[Any], Dict[str, int]]
+    normalize_usage_payload: Callable[[Any], dict[str, int]]
 
 
-def _control_confirmation(ops: List[Dict[str, Any]], default_text: str) -> str:
+def _control_confirmation(ops: list[dict[str, Any]], default_text: str) -> str:
     summaries = [str(x.get("summary") or "").strip() for x in ops if str(x.get("summary") or "").strip()]
     if summaries:
         if len(summaries) == 1:
@@ -38,12 +39,12 @@ async def handle_ui_control_chat(
     *,
     cfg: Any,
     session: Any,
-    payload: Dict[str, Any],
+    payload: dict[str, Any],
     text: str,
     profile: str,
     mode: str,
     start_t: float,
-    token_economy_meta: Dict[str, Any],
+    token_economy_meta: dict[str, Any],
     switch_req: Any,
     control_req: Any,
     run_store_enabled: bool,
@@ -51,7 +52,7 @@ async def handle_ui_control_chat(
     start_run_writer: Callable[[str, str], Any],
     deps: ChatControlDeps,
 ) -> web.StreamResponse:
-    patch: Dict[str, Any] = dict(getattr(control_req, "patch", None) or {})
+    patch: dict[str, Any] = dict(getattr(control_req, "patch", None) or {})
     ops_payload = [dict(op) for op in list(getattr(control_req, "operations", None) or [])]
     payload_settings = payload.get("settings")
     current_settings = dict(payload_settings) if isinstance(payload_settings, dict) else {}
@@ -100,9 +101,9 @@ async def handle_ui_control_chat(
     if mode_for_run not in ("auto", "fast", "thinking"):
         mode_for_run = mode
 
-    enriched_ops_payload: List[Dict[str, Any]] = []
-    applied_ops_payload: List[Dict[str, Any]] = []
-    applied_patch: Dict[str, Any] = {}
+    enriched_ops_payload: list[dict[str, Any]] = []
+    applied_ops_payload: list[dict[str, Any]] = []
+    applied_patch: dict[str, Any] = {}
     control_confidence = 0.0
 
     for op in ops_payload:
@@ -195,7 +196,7 @@ async def handle_ui_control_chat(
     }
 
     model_changed = bool("activeProfile" in patch or "activeModelId" in patch)
-    runtime_model: Optional[Dict[str, Any]] = None
+    runtime_model: dict[str, Any] | None = None
     if model_changed:
         chat_auto_failover = bool(getattr(cfg.failover, "chat_auto_failover", False))
         failover_enabled_for_chat = bool(cfg.failover.enabled and chat_auto_failover)
@@ -242,7 +243,7 @@ async def handle_ui_control_chat(
         next_seq["value"] = value + 1
         return value
 
-    async def send(obj: Dict[str, Any]) -> None:
+    async def send(obj: dict[str, Any]) -> None:
         async with send_lock:
             out = dict(obj)
             out.setdefault("run_id", run_id)

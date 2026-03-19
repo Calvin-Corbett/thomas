@@ -12,12 +12,14 @@ import platform
 import sqlite3
 import sys
 import zipfile
+from collections.abc import Iterator
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any
 
 from aiohttp import web
 
+from thomas.core.config import resolve_thomas_data_dir
 from thomas.observability import run_store
 from thomas.observability.redaction import RedactionConfig, redact_obj
 
@@ -31,7 +33,7 @@ _STREAM_CHUNK = 500
 def resolve_db_path(config: Any) -> Path:
     root = _deep_get(config, ["memory", "root_path"])
     if not root:
-        root = str(Path.cwd())
+        root = str(resolve_thomas_data_dir())
     return (Path(root) / ".thomas" / "runs.sqlite3").resolve()
 
 
@@ -100,9 +102,9 @@ def _require_runs_access(request: web.Request) -> None:
 async def handle_list_runs(request: web.Request) -> web.Response:
     _require_runs_access(request)
     qp = request.rel_url.query
-    limit = int(qp.get("limit", "50"))
-    offset = int(qp.get("offset", "0"))
-    filters: Dict[str, Any] = {}
+    limit = _read_query_int(qp, "limit", default=50, min_value=1, max_value=500)
+    offset = _read_query_int(qp, "offset", default=0, min_value=0, max_value=100000)
+    filters: dict[str, Any] = {}
     for key in ("session_id", "profile", "mode", "ok", "q"):
         v = qp.get(key)
         if v not in (None, ""):
@@ -125,12 +127,13 @@ async def handle_replay_run(request: web.Request) -> web.StreamResponse:
     _require_runs_access(request)
     run_id = request.match_info["run_id"]
     _ensure_run_exists(request, run_id)
+    redaction_cfg = RedactionConfig.default()
 
     resp = web.StreamResponse(status=200, headers={"Content-Type": "application/x-ndjson; charset=utf-8"})
     await resp.prepare(request)
 
     for obj in run_store.stream_replay(run_id):
-        line = json.dumps(obj, ensure_ascii=False, separators=(",", ":")) + "\n"
+        line = json.dumps(redact_obj(obj, redaction_cfg), ensure_ascii=False, separators=(",", ":")) + "\n"
         await resp.write(line.encode("utf-8"))
 
     await resp.write_eof()
@@ -208,7 +211,7 @@ async def handle_replay_stream(request: web.Request) -> web.StreamResponse:
 
     idx = start
     streamed = 0
-    prev_t_ms: Optional[int] = None
+    prev_t_ms: int | None = None
     while True:
         if limit and streamed >= limit:
             break
@@ -249,14 +252,17 @@ async def handle_export_run(request: web.Request) -> web.Response:
     except KeyError:
         raise web.HTTPNotFound(text=f"run not found: {run_id}")
 
-    run_meta = data["run"]
-    events_iter = list(run_store.stream_replay(run_id))
+    redaction_cfg = RedactionConfig.default()
+    run_meta = redact_obj(data["run"], redaction_cfg)
+    events_iter = [redact_obj(event, redaction_cfg) for event in run_store.stream_replay(run_id)]
 
     debug_zip = io.BytesIO()
     with zipfile.ZipFile(debug_zip, "w", compression=zipfile.ZIP_DEFLATED) as zf:
         zf.writestr("run.json", json.dumps(run_meta, indent=2, ensure_ascii=False))
         zf.writestr("events.ndjson", "\n".join(json.dumps(e, ensure_ascii=False) for e in events_iter) + "\n")
-        zf.writestr("conversation.json", json.dumps(_reconstruct_conversation(events_iter), indent=2, ensure_ascii=False))
+        zf.writestr(
+            "conversation.json", json.dumps(_reconstruct_conversation(events_iter), indent=2, ensure_ascii=False)
+        )
         zf.writestr("config_summary.json", json.dumps(_config_summary(request, run_meta), indent=2, ensure_ascii=False))
         zf.writestr("README.txt", _export_readme(request, run_meta))
 
@@ -278,7 +284,7 @@ async def handle_export_run_json(request: web.Request) -> web.Response:
     max_events = max(0, _parse_int(request.query.get("max_events"), 20_000))
 
     total = _count_events(request, run_id)
-    events: List[Dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
     idx = 0
     remaining = min(total, max_events)
     while remaining > 0:
@@ -302,8 +308,8 @@ async def handle_export_run_json(request: web.Request) -> web.Response:
     return web.json_response(payload)
 
 
-def _reconstruct_conversation(events: List[Dict[str, Any]]) -> Dict[str, Any]:
-    messages: List[Dict[str, Any]] = []
+def _reconstruct_conversation(events: list[dict[str, Any]]) -> dict[str, Any]:
+    messages: list[dict[str, Any]] = []
     for e in events:
         role = e.get("role")
         text = e.get("text") or e.get("content") or e.get("message")
@@ -312,10 +318,10 @@ def _reconstruct_conversation(events: List[Dict[str, Any]]) -> Dict[str, Any]:
     return {"messages": messages, "note": "best-effort reconstruction from stored events (may be incomplete)"}
 
 
-def _config_summary(request: web.Request, run_meta: Dict[str, Any]) -> Dict[str, Any]:
+def _config_summary(request: web.Request, run_meta: dict[str, Any]) -> dict[str, Any]:
     cfg = request.app.get(RUNS_CONFIG_KEY)
     profiles = _deep_get(cfg, ["profiles"])
-    out: Dict[str, Any] = {
+    out: dict[str, Any] = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "thomas_version": run_meta.get("thomas_version"),
         "run": {"profile": run_meta.get("profile"), "mode": run_meta.get("mode"), "model_id": run_meta.get("model_id")},
@@ -333,7 +339,7 @@ def _config_summary(request: web.Request, run_meta: Dict[str, Any]) -> Dict[str,
     return out
 
 
-def _export_readme(request: web.Request, run_meta: Dict[str, Any]) -> str:
+def _export_readme(request: web.Request, run_meta: dict[str, Any]) -> str:
     host = request.host
     run_id = run_meta.get("run_id")
     return "\n".join(
@@ -403,7 +409,9 @@ def _decode_payload(raw: Any) -> Any:
         return {"_parse_error": True, "raw": str(raw)}
 
 
-def _fetch_events_page(request: web.Request, run_id: str, *, start: int, limit: int) -> Tuple[int, List[Dict[str, Any]]]:
+def _fetch_events_page(
+    request: web.Request, run_id: str, *, start: int, limit: int
+) -> tuple[int, list[dict[str, Any]]]:
     start = max(0, int(start))
     limit = _clamp_limit(limit)
     with _connect_db(request) as conn:
@@ -425,7 +433,7 @@ def _fetch_events_page(request: web.Request, run_id: str, *, start: int, limit: 
             total = int(total_row["n"] or 0)
         except Exception:
             total = 0
-    events: List[Dict[str, Any]] = []
+    events: list[dict[str, Any]] = []
     idx = start
     for row in rows:
         t_ms = row["t_ms"]
@@ -451,14 +459,14 @@ def _fetch_events_page(request: web.Request, run_id: str, *, start: int, limit: 
     return total, events
 
 
-def _event_at_index(request: web.Request, run_id: str, index: int) -> Optional[Dict[str, Any]]:
+def _event_at_index(request: web.Request, run_id: str, index: int) -> dict[str, Any] | None:
     _total, events = _fetch_events_page(request, run_id, start=max(0, index), limit=1)
     if not events:
         return None
     return events[0]
 
 
-def _run_meta_row(request: web.Request, run_id: str) -> Optional[Dict[str, Any]]:
+def _run_meta_row(request: web.Request, run_id: str) -> dict[str, Any] | None:
     with _connect_db(request) as conn:
         row = conn.execute(
             """
@@ -490,7 +498,7 @@ def _run_meta_row(request: web.Request, run_id: str) -> Optional[Dict[str, Any]]
     }
 
 
-def _redacted_event(event: Dict[str, Any], cfg: RedactionConfig) -> Dict[str, Any]:
+def _redacted_event(event: dict[str, Any], cfg: RedactionConfig) -> dict[str, Any]:
     return {
         "index": int(event.get("index") or 0),
         "seq": int(event.get("seq") or 0),
@@ -519,7 +527,27 @@ def _clamp_limit(limit: int) -> int:
     return min(_EVENT_PAGE_LIMIT_MAX, val)
 
 
-async def _read_json_body(request: web.Request) -> Dict[str, Any]:
+def _read_query_int(
+    query: Any,
+    key: str,
+    *,
+    default: int,
+    min_value: int,
+    max_value: int,
+) -> int:
+    raw = query.get(key)
+    if raw in (None, ""):
+        return int(default)
+    try:
+        value = int(raw)
+    except Exception as exc:
+        raise web.HTTPBadRequest(text=f"{key} must be an integer") from exc
+    if value < int(min_value) or value > int(max_value):
+        raise web.HTTPBadRequest(text=f"{key} must be between {int(min_value)} and {int(max_value)}")
+    return value
+
+
+async def _read_json_body(request: web.Request) -> dict[str, Any]:
     try:
         payload = await request.json()
     except Exception as e:
@@ -529,7 +557,7 @@ async def _read_json_body(request: web.Request) -> Dict[str, Any]:
     return payload
 
 
-def _deep_get(obj: Any, keys: List[str], default: Any = None) -> Any:
+def _deep_get(obj: Any, keys: list[str], default: Any = None) -> Any:
     cur = obj
     for k in keys:
         if cur is None:

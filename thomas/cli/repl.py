@@ -13,6 +13,8 @@ import re
 import sys
 import threading
 import time
+import uuid
+from collections import deque
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -46,6 +48,11 @@ from thomas.cli.repl_picker import PickerCompleter, PickerOption, picker_toolbar
 from thomas.cli.repl_plan import PlanModeHandler
 from thomas.cli.repl_project import instruction_file_path
 from thomas.cli.repl_runtime import ThomasREPLRuntimeMixin
+from thomas.cli.repl_settings import (
+    ReplRuntimeSettings,
+    load_repl_runtime_settings,
+    save_repl_runtime_settings,
+)
 from thomas.cli.repl_skills import list_all_skills
 from thomas.cli.repl_slash import (
     SlashArgOption,
@@ -56,8 +63,8 @@ from thomas.cli.repl_slash import (
 )
 from thomas.cli.repl_state import ReplUiState, is_valid_ui_transition
 from thomas.core.config import AppConfig
-from thomas.core.model_resolution import build_model_label
 from thomas.core.llm import LLMClient
+from thomas.core.model_resolution import build_model_label
 from thomas.tools.registry import ToolRegistry
 
 log = logging.getLogger(__name__)
@@ -80,13 +87,16 @@ _OVERLAY_EXIT_ACCEPT = "accept"
 _OVERLAY_EXIT_BACK = "back"
 _OVERLAY_EXIT_CLOSE = "close"
 _MASCOT_LINES = [
-    "┌────┐",
-    "│ ▪ ▪ │",
-    "└─┬──┬─┘",
-    "  │ ██ │",
-    "  │_▁▁_│",
-    "   ░  ░",
+    " ┌──────┐ ",
+    " │ ▪  ▪ │ ",
+    " └─┬──┬─┘ ",
+    "   │ ██ │ ",
+    "   │_▁▁_│ ",
+    "    ░  ░  ",
 ]
+# Fixed color for user panels — must NOT appear in _ACCENT_PALETTE.
+_USER_PANEL_STYLE = "bright_blue"
+
 _ACCENT_PALETTE: list[tuple[str, str]] = [
     ("bright_cyan", "#00bcd4"),
     ("bright_magenta", "#d946ef"),
@@ -95,6 +105,15 @@ _ACCENT_PALETTE: list[tuple[str, str]] = [
     ("bright_white", "#e5e7eb"),
     ("cyan", "#06b6d4"),
     ("magenta", "#c026d3"),
+    ("bright_red", "#ef4444"),
+    ("green", "#16a34a"),
+    ("yellow", "#eab308"),
+    ("red", "#dc2626"),
+    ("deep_pink2", "#ff0066"),
+    ("dark_orange", "#ff8c00"),
+    ("medium_purple1", "#af87ff"),
+    ("spring_green2", "#00d75f"),
+    ("turquoise2", "#00d7ff"),
 ]
 
 
@@ -102,10 +121,27 @@ def _is_known_slash_command(text: str) -> bool:
     return is_known_slash_command(text)
 
 
+def _should_open_slash_popup(text: str, cursor_position: int) -> bool:
+    """Return True when `/` should open the slash popup instead of inserting text."""
+    current = str(text or "")
+    if int(cursor_position) != len(current):
+        return False
+
+    stripped = current.strip()
+    if not stripped:
+        return True
+
+    # If the buffer is already a slash token/filter, treat repeated `/` as
+    # "reopen suggestions" instead of appending literal `//`.
+    if stripped.startswith("/") and " " not in stripped and "\n" not in stripped and stripped != "//":
+        return True
+    return False
+
+
 class InteractiveFlow:
     """Reusable overlay picker workflow used for slash and follow-up menus."""
 
-    def __init__(self, repl: "ThomasREPL") -> None:
+    def __init__(self, repl: ThomasREPL) -> None:
         self._repl = repl
 
     def _normalize_options(
@@ -189,17 +225,20 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         self.config = config
         self.tools = tools
         self._conversation: list[dict[str, Any]] = []
+        self._restored_conversation_count: int = 0
+        self._session_turns: int = 0
+        self._repl_session_id: str = self._new_repl_session_id()
+        self._chat_thread_id: str = self._new_chat_thread_id(self._repl_session_id)
+        self._chat_run_counter: int = 0
         resolved_profile = str(config.default_model)
         resolved_model_id = ""
         try:
             from thomas.core.model_resolution import resolve_effective_model
-            from thomas.preferences.store import get_db_path
 
             resolved_profile, resolved_model_id = resolve_effective_model(
                 config,
                 env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
                 user_id="default",
-                db_path=get_db_path(),
             )
             if resolved_profile in config.models:
                 config.default_model = resolved_profile
@@ -223,15 +262,26 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         self._history_path.parent.mkdir(parents=True, exist_ok=True)
         self._conversation_state_path = Path(config.memory.root_path) / "repl_conversation.json"
         self._conversation_state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._runtime_state_path = Path(config.memory.root_path) / ".thomas" / "cli" / "repl_runtime_state.json"
+        self._runtime_state_path.parent.mkdir(parents=True, exist_ok=True)
         self._runtime_context_window: int | None = None
         self._runtime_context_window_profile: str | None = None
         self._last_context_source: str | None = None
         self._mascot_style, self._accent_hex = self._new_session_theme()
-        self._activity_verbosity = str(os.environ.get("THOMAS_ACTIVITY_VERBOSITY", "normal") or "normal").strip().lower()
+        self._activity_verbosity = (
+            str(os.environ.get("THOMAS_ACTIVITY_VERBOSITY", "normal") or "normal").strip().lower()
+        )
         if self._activity_verbosity not in {"minimal", "normal", "debug"}:
             self._activity_verbosity = "normal"
-        self._activity_feed: list[str] = []
+        self._restore_runtime_settings()
+        self._activity_feed: deque[dict[str, Any]] = deque(maxlen=220)
+        self._activity_tool_index: dict[str, int] = {}
+        self._activity_tool_selected_id: str | None = None
+        self._expanded_tool_events: set[str] = set()
+        self._phase_starts: dict[str, float] = {}
+        self._logs: deque[str] = deque(maxlen=600)
         self._activity_panel_open = False
+        self._logs_panel_open = False
         self._help_panel_open = False
         self._panel_focus = "input"
         # Codex-style UX keeps slash/model interactions in-place by default.
@@ -337,6 +387,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             self._console.print(f"[dim]  {idx}. {path}[/dim]")
 
     def _restore_conversation_state(self) -> None:
+        self._restored_conversation_count = 0
         if not self._conversation_state_path.exists():
             return
         try:
@@ -358,6 +409,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             restored.append({"role": role, "content": content})
         if restored:
             self._conversation = restored
+            self._restored_conversation_count = len(restored)
 
     def _persist_conversation_state(self) -> None:
         try:
@@ -375,6 +427,29 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
                 encoding="utf-8",
             )
         except OSError:
+            return
+
+    def _restore_runtime_settings(self) -> None:
+        state = load_repl_runtime_settings(self._runtime_state_path)
+        self._autonomy_level = int(state.autonomy_level)
+        self._tools_policy = str(state.tools_policy)
+        self._show_system_logs = bool(state.show_system_logs)
+        if not str(os.environ.get("THOMAS_ACTIVITY_VERBOSITY", "")).strip():
+            self._activity_verbosity = str(state.activity_verbosity)
+
+    def _persist_runtime_settings(self) -> None:
+        try:
+            save_repl_runtime_settings(
+                self._runtime_state_path,
+                ReplRuntimeSettings(
+                    autonomy_level=int(self._autonomy_level),
+                    tools_policy=str(self._tools_policy),
+                    show_system_logs=bool(self._show_system_logs),
+                    activity_verbosity=str(self._activity_verbosity),
+                ),
+            )
+        except OSError as exc:
+            log.warning("Failed to persist REPL runtime settings: %s", exc)
             return
 
     def _build_session(self) -> PromptSession:
@@ -404,17 +479,20 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         @bindings.add("/")
         def _open_slash_picker(event: Any) -> None:
             buffer = event.current_buffer
-            if buffer.document.cursor_position != len(buffer.text or ""):
+            text = str(buffer.text or "")
+            if not _should_open_slash_popup(text, int(buffer.document.cursor_position)):
                 buffer.insert_text("/")
                 return
 
-            text = str(buffer.text or "")
-            if text:
+            normalized = text.strip()
+            if not normalized:
+                buffer.text = ""
                 buffer.insert_text("/")
-                return
+            elif normalized != text:
+                buffer.text = normalized
+                buffer.cursor_position = len(normalized)
 
             self._transition_ui_state(ReplUiState.SLASH_POPUP)
-            buffer.insert_text("/")
             buffer.start_completion(select_first=True)
 
         @bindings.add("c-space")
@@ -448,7 +526,9 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
 
         @bindings.add("tab")
         def _tab_autocomplete_slash_popup(event: Any) -> None:
-            if self._ui_state not in overlay_picker_states and (self._help_panel_open or self._activity_panel_open):
+            if self._ui_state not in overlay_picker_states and (
+                self._help_panel_open or self._activity_panel_open or self._logs_panel_open
+            ):
                 self._cycle_panel_focus()
                 return
             if self._ui_state not in overlay_picker_states:
@@ -482,17 +562,23 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             event.app.invalidate()
 
         @bindings.add("f3")
-        def _cycle_activity_verbosity(event: Any) -> None:
-            order = ["minimal", "normal", "debug"]
-            current = self._activity_verbosity if self._activity_verbosity in order else "normal"
-            self._activity_verbosity = order[(order.index(current) + 1) % len(order)]
-            self._record_activity(f"verbosity -> {self._activity_verbosity}", level="minimal")
+        def _toggle_logs_panel(event: Any) -> None:
+            self._logs_panel_open = not self._logs_panel_open
+            if self._logs_panel_open:
+                self._panel_focus = "logs"
+            elif self._panel_focus == "logs":
+                self._panel_focus = "input"
             self._render_panels()
             event.app.invalidate()
 
         @bindings.add("down")
         def _overlay_picker_next(event: Any) -> None:
             if self._ui_state not in overlay_picker_states:
+                if self._panel_focus == "activity" and self._activity_panel_open:
+                    self._cycle_activity_tool_selection(1)
+                    self._render_panels()
+                    event.app.invalidate()
+                    return
                 event.current_buffer.auto_down(count=1)
                 return
             buffer = event.current_buffer
@@ -504,6 +590,11 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         @bindings.add("up")
         def _overlay_picker_previous(event: Any) -> None:
             if self._ui_state not in overlay_picker_states:
+                if self._panel_focus == "activity" and self._activity_panel_open:
+                    self._cycle_activity_tool_selection(-1)
+                    self._render_panels()
+                    event.app.invalidate()
+                    return
                 event.current_buffer.auto_up(count=1)
                 return
             buffer = event.current_buffer
@@ -515,6 +606,10 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         @bindings.add("enter")
         def _overlay_picker_enter(event: Any) -> None:
             if self._ui_state not in overlay_picker_states:
+                if self._panel_focus == "activity" and self._activity_panel_open:
+                    self._toggle_activity_tool_expansion()
+                    self._render_panels()
+                    return
                 event.current_buffer.validate_and_handle()
                 return
             self._overlay_exit_action = _OVERLAY_EXIT_ACCEPT
@@ -703,19 +798,41 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
 
     def _composer_toolbar_hint(self) -> str:
         token_info = self._get_token_usage_display()
+        bg_info = self._background_toolbar_badge()
         panel_state: list[str] = []
         if self._help_panel_open:
             panel_state.append("Help")
         if self._activity_panel_open:
             panel_state.append(f"Activity:{self._activity_verbosity}")
+        if self._logs_panel_open:
+            panel_state.append("Logs")
         panels = f" [{'/'.join(panel_state)}]" if panel_state else ""
-        line = (
-            f"{self._status_badges()}{panels}  "
-            "F1 Help  F2 Activity  F3 Logs  Ctrl+Space Commands  Tab Focus"
-        )
+        line = f"{self._status_badges()}{panels}  " "F1 Help  F2 Activity  F3 Logs  Ctrl+Space Commands  Tab Focus"
+        if bg_info:
+            line = f"{line}  {bg_info}"
         if token_info:
             line = f"{line}  {token_info}"
         return self._truncate_to_terminal(line)
+
+    def _background_toolbar_badge(self) -> str:
+        tasks = self._bg_manager.list_tasks()
+        running = [task for task in tasks if task.status == "running"]
+        if not running:
+            return ""
+        now = time.time()
+        oldest_started = min(float(task.started_at or now) for task in running)
+        elapsed_seconds = max(0.0, now - oldest_started)
+        total = len(running)
+        return f"[bg:running {total} | {self._format_elapsed_short(elapsed_seconds)}]"
+
+    @staticmethod
+    def _format_elapsed_short(seconds: float) -> str:
+        total = max(0, int(seconds))
+        minutes, secs = divmod(total, 60)
+        hours, minutes = divmod(minutes, 60)
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        return f"{minutes:02d}:{secs:02d}"
 
     def _status_badges(self) -> str:
         return (
@@ -729,6 +846,24 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         style, hex_color = random.choice(_ACCENT_PALETTE)
         return style, hex_color
 
+    @staticmethod
+    def _new_repl_session_id() -> str:
+        return f"repl-{uuid.uuid4().hex[:12]}"
+
+    @staticmethod
+    def _new_chat_thread_id(session_id: str) -> str:
+        base = str(session_id or "").strip() or f"repl-{uuid.uuid4().hex[:12]}"
+        return f"{base}-chat"
+
+    def _rotate_chat_thread(self) -> None:
+        self._repl_session_id = self._new_repl_session_id()
+        self._chat_thread_id = self._new_chat_thread_id(self._repl_session_id)
+        self._chat_run_counter = 0
+
+    def _next_chat_run_id(self) -> str:
+        self._chat_run_counter += 1
+        return f"{self._repl_session_id}-turn-{self._chat_run_counter}"
+
     def _truncate_to_terminal(self, text: str) -> str:
         try:
             width = int(self._console.size.width or 120)
@@ -737,7 +872,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         width = max(20, width - 1)
         if len(text) <= width:
             return text
-        return text[: max(1, width - 1)] + "…"
+        return text[: max(1, width - 1)] + "..."
 
     def _activity_allows(self, level: str) -> bool:
         order = {"minimal": 0, "normal": 1, "debug": 2}
@@ -745,37 +880,391 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         current = order.get(str(self._activity_verbosity or "normal"), 1)
         return target <= current
 
-    def _record_activity(self, message: str, *, level: str = "normal") -> None:
-        if not self._activity_allows(level):
-            return
-        msg = str(message or "").strip()
-        if not msg:
+    def _activity_event_verbosity(self, event_type: str) -> str:
+        if event_type in {"phase_start", "phase_end"}:
+            return "minimal"
+        if event_type in {"tool_call", "tool_result"}:
+            return "normal"
+        if event_type == "memory_event":
+            return "debug"
+        if event_type == "warning":
+            return "debug"
+        if event_type == "error":
+            return "normal"
+        return "normal"
+
+    def _format_activity_time(self, duration_ms: Any) -> str:
+        if duration_ms is None:
+            return ""
+        try:
+            duration = float(duration_ms)
+        except (TypeError, ValueError):
+            return ""
+        if duration < 1000:
+            return f"{int(round(duration))}ms"
+        return f"{duration / 1000:.1f}s"
+
+    def _shorten(self, value: str, limit: int) -> str:
+        text = str(value or "").strip()
+        if not text:
+            return ""
+        if len(text) <= limit:
+            return text
+        return text[: max(3, limit - 3)] + "..."
+
+    def _append_log(self, message: str) -> None:
+        if not str(message or "").strip():
             return
         ts = datetime.now().strftime("%H:%M:%S")
-        line = f"{ts}  {msg}"
-        self._activity_feed.append(line)
-        if len(self._activity_feed) > 200:
-            self._activity_feed = self._activity_feed[-200:]
-        self._console.print(f"[{self._mascot_style}]•[/{self._mascot_style}] [dim]{line}[/dim]")
+        for idx, line in enumerate(str(message).splitlines() or [""]):
+            prefix = f"{ts} " if idx == 0 else "      "
+            self._logs.append(f"{prefix}{line}")
+
+        if self._logs_panel_open:
+            self._render_panels()
+
+    def _record_activity(self, payload: dict[str, Any] | str, *, level: str = "normal") -> None:
+        if isinstance(payload, str):
+            payload = {"type": "status", "message": payload, "level": level}
+
+        event_type = str(payload.get("type") or "status")
+        if not self._activity_allows(level):
+            return
+        if not self._activity_allows(self._activity_event_verbosity(event_type)):
+            return
+
+        if event_type in {"tool_call", "tool_result"}:
+            self._handle_tool_activity_event(payload)
+            return
+
+        if event_type in {"phase_start", "phase_end"}:
+            self._activity_feed.append(
+                {
+                    "type": event_type,
+                    "phase": str(payload.get("phase") or ""),
+                    "duration_ms": payload.get("duration_ms"),
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                    "id": str(payload.get("id") or ""),
+                }
+            )
+        elif event_type == "memory_event":
+            self._activity_feed.append(
+                {
+                    "type": "memory_event",
+                    "query": str(payload.get("query") or ""),
+                    "hits": payload.get("hits"),
+                    "score": payload.get("score"),
+                    "duration_ms": payload.get("duration_ms"),
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                }
+            )
+        elif event_type in {"warning", "error", "status"}:
+            message = str(payload.get("message") or "").strip()
+            if message:
+                self._activity_feed.append(
+                    {
+                        "type": event_type,
+                        "message": message,
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                    }
+                )
+        else:
+            message = str(payload.get("message") or "").strip()
+            if message:
+                self._activity_feed.append(
+                    {
+                        "type": "status",
+                        "message": message,
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                    }
+                )
+
+        self._rebuild_activity_tool_index()
         if self._activity_panel_open:
             self._render_panels()
+
+    def _rebuild_activity_tool_index(self) -> None:
+        self._activity_tool_index = {}
+        for idx, row in enumerate(self._activity_feed):
+            if str(row.get("type")) == "tool":
+                tool_id = str(row.get("tool_id") or "")
+                if tool_id:
+                    self._activity_tool_index[tool_id] = idx
+        if self._activity_tool_selected_id and self._activity_tool_selected_id not in self._activity_tool_index:
+            self._activity_tool_selected_id = None
+
+    def _tool_rows(self) -> list[tuple[int, dict[str, Any]]]:
+        rows: list[tuple[int, dict[str, Any]]] = []
+        for idx, row in enumerate(self._activity_feed):
+            if str(row.get("type")) == "tool":
+                rows.append((idx, row))
+        return rows
+
+    def _tool_row_order(self) -> list[str]:
+        rows = self._tool_rows()
+        rows.sort(key=lambda item: item[0])
+        return [str(item[1].get("tool_id") or "") for item in rows]
+
+    def _cycle_activity_tool_selection(self, direction: int) -> None:
+        tool_ids = self._tool_row_order()
+        if not tool_ids:
+            self._activity_tool_selected_id = None
+            return
+        if self._activity_tool_selected_id not in tool_ids:
+            self._activity_tool_selected_id = tool_ids[0]
+            return
+        idx = tool_ids.index(self._activity_tool_selected_id)
+        self._activity_tool_selected_id = tool_ids[(idx + direction) % len(tool_ids)]
+
+    def _toggle_activity_tool_expansion(self) -> None:
+        if not self._activity_tool_selected_id:
+            return
+        if self._activity_tool_selected_id in self._expanded_tool_events:
+            self._expanded_tool_events.remove(self._activity_tool_selected_id)
+        else:
+            self._expanded_tool_events.add(self._activity_tool_selected_id)
+
+    def _handle_tool_activity_event(self, payload: dict[str, Any]) -> None:
+        event_type = str(payload.get("type") or "")
+        tool_id = str(payload.get("tool_id") or "").strip()
+        if not tool_id:
+            return
+
+        name = str(payload.get("tool_name") or "")
+        short_label = str(payload.get("short_label") or "")
+        command = str(payload.get("command") or "")
+
+        if event_type == "tool_call":
+            for row in self._activity_feed:
+                if str(row.get("type")) == "tool" and str(row.get("tool_id") or "") == tool_id:
+                    row.update(
+                        {
+                            "tool_name": name or str(row.get("tool_name") or ""),
+                            "short_label": short_label or str(row.get("short_label") or ""),
+                            "command": command or str(row.get("command") or ""),
+                            "status": "running",
+                            "ok": None,
+                            "duration_ms": None,
+                            "bytes_out": None,
+                            "result_preview": "",
+                            "stderr": "",
+                            "time": datetime.now().strftime("%H:%M:%S"),
+                        }
+                    )
+                    self._rebuild_activity_tool_index()
+                    if self._activity_panel_open:
+                        self._render_panels()
+                    return
+            self._activity_feed.append(
+                {
+                    "type": "tool",
+                    "tool_id": tool_id,
+                    "tool_name": name,
+                    "short_label": short_label,
+                    "command": command,
+                    "status": "running",
+                    "ok": None,
+                    "duration_ms": None,
+                    "bytes_out": None,
+                    "result_preview": "",
+                    "stderr": "",
+                    "time": datetime.now().strftime("%H:%M:%S"),
+                }
+            )
+            if not self._activity_tool_selected_id:
+                self._activity_tool_selected_id = tool_id
+            self._rebuild_activity_tool_index()
+            if self._activity_panel_open:
+                self._render_panels()
+            return
+
+        if event_type == "tool_result":
+            updated = False
+            for row in self._activity_feed:
+                if str(row.get("type")) != "tool":
+                    continue
+                if str(row.get("tool_id") or "") != tool_id:
+                    continue
+                row.update(
+                    {
+                        "status": "ok" if bool(payload.get("ok", False)) else "error",
+                        "ok": bool(payload.get("ok", False)),
+                        "duration_ms": payload.get("duration_ms"),
+                        "bytes_out": payload.get("bytes_out"),
+                        "result_preview": str(payload.get("result_preview") or row.get("result_preview") or ""),
+                        "stderr": str(payload.get("stderr") or row.get("stderr") or ""),
+                        "tool_name": name or str(row.get("tool_name") or ""),
+                        "short_label": short_label or str(row.get("short_label") or ""),
+                        "command": command or str(row.get("command") or ""),
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                    }
+                )
+                updated = True
+            if not updated:
+                self._activity_feed.append(
+                    {
+                        "type": "tool",
+                        "tool_id": tool_id,
+                        "tool_name": name,
+                        "short_label": short_label,
+                        "command": command,
+                        "status": "ok" if bool(payload.get("ok", False)) else "error",
+                        "ok": bool(payload.get("ok", False)),
+                        "duration_ms": payload.get("duration_ms"),
+                        "bytes_out": payload.get("bytes_out"),
+                        "result_preview": str(payload.get("result_preview") or ""),
+                        "stderr": str(payload.get("stderr") or ""),
+                        "time": datetime.now().strftime("%H:%M:%S"),
+                    }
+                )
+            self._rebuild_activity_tool_index()
+            if self._activity_panel_open:
+                self._render_panels()
+            return
 
     def _render_help_panel(self) -> None:
         lines = [
             "F1  Toggle Help",
             "F2  Toggle Activity",
-            "F3  Cycle Logs (minimal/normal/debug)",
+            "F3  Toggle Logs",
             "Ctrl+Space  Commands",
             "Tab  Cycle panel focus",
             "Esc  Back in pickers",
         ]
         self._console.print(Panel("\n".join(lines), title="Help", border_style=self._mascot_style, expand=False))
 
+    def _render_activity_row(self, row: dict[str, Any], *, selected: bool) -> str:
+        event_type = str(row.get("type") or "")
+        ts = str(row.get("time") or "").strip()
+        if ts:
+            ts = f"{ts} "
+
+        if event_type == "phase_start":
+            phase = str(row.get("phase") or "phase").strip()
+            duration = self._format_activity_time(row.get("duration_ms"))
+            suffix = f" ({duration})" if duration else ""
+            label = f"{phase} start{suffix}"
+            if selected:
+                return f"{ts}[bold blue]{label}[/bold blue]"
+            return f"{ts}[dim blue]{label}[/dim blue]"
+
+        if event_type == "phase_end":
+            phase = str(row.get("phase") or "phase").strip()
+            duration = self._format_activity_time(row.get("duration_ms"))
+            suffix = f" ({duration})" if duration else ""
+            label = f"{phase} end{suffix}"
+            if selected:
+                return f"{ts}[bold blue]{label}[/bold blue]"
+            return f"{ts}[dim]{label}[/dim]"
+
+        if event_type == "memory_event":
+            if self._activity_verbosity == "minimal":
+                return ""
+            query = str(row.get("query") or "").strip()
+            score = row.get("score")
+            bits = []
+            if query:
+                bits.append(self._shorten(query, 40))
+            hits = row.get("hits")
+            if hits is not None:
+                bits.append(f"hits={hits}")
+            if score is not None:
+                bits.append(f"score={score}")
+            duration = self._format_activity_time(row.get("duration_ms"))
+            if duration:
+                bits.append(duration)
+            detail = f" ({', '.join(bits)})" if bits else ""
+            if selected:
+                return f"{ts}[bold magenta]memory{detail}[/bold magenta]"
+            return f"{ts}[magenta]memory{detail}[/magenta]"
+
+        if event_type == "warning":
+            if self._activity_verbosity != "debug":
+                return ""
+            message = str(row.get("message") or "").strip()
+            return f"{ts}[yellow]! {message}[/yellow]"
+
+        if event_type == "error":
+            message = str(row.get("message") or "").strip()
+            return f"{ts}[red]\u274c {message}[/red]"
+
+        if event_type == "tool":
+            tool_name = str(row.get("tool_name") or "tool")
+            short_label = str(row.get("short_label") or "").strip()
+            display = f"tool: {tool_name}"
+            if short_label:
+                display = f"{display} {self._shorten(short_label, 54)}"
+            duration = self._format_activity_time(row.get("duration_ms"))
+            if duration:
+                display = f"{display} ({duration})"
+            status = str(row.get("status") or "running")
+            if status == "ok":
+                icon = "\u2714"
+                color = "green"
+            elif status == "error":
+                icon = "\u274c"
+                color = "red"
+            else:
+                icon = "..."
+                color = "cyan"
+
+            line = f"{display} {icon}"
+            if self._activity_tool_selected_id == str(row.get("tool_id") or ""):
+                return f"{ts}[{color}]> {line}[/{color}]"
+            return f"{ts}[{color}]{line}[/{color}]"
+
+        message = str(row.get("message") or "").strip()
+        if not message:
+            return ""
+        return f"{ts}[dim]{message}[/dim]"
+
+    def _activity_tool_details(self, row: dict[str, Any]) -> list[str]:
+        lines: list[str] = []
+        command = str(row.get("command") or "").strip()
+        if command:
+            lines.append(f"  cmd: {self._shorten(command, 180)}")
+        preview = str(row.get("result_preview") or "").strip()
+        if preview:
+            lines.append(f"  output: {self._shorten(preview, 240)}")
+        stderr = str(row.get("stderr") or "").strip()
+        if stderr:
+            lines.append(f"  stderr: {self._shorten(stderr, 240)}")
+        bytes_out = row.get("bytes_out")
+        if bytes_out is not None:
+            lines.append(f"  bytes: {bytes_out}")
+        return [f"[dim]{line}[/dim]" for line in lines]
+
     def _render_activity_panel(self) -> None:
-        rows = self._activity_feed[-12:] if self._activity_feed else ["(no activity yet)"]
+        rows = list(self._activity_feed)[-12:]
+        content: list[str] = []
+        if not rows:
+            content.append("(no activity yet)")
+        else:
+            for row in rows:
+                selected = str(row.get("tool_id") or "") == str(self._activity_tool_selected_id or "")
+                line = self._render_activity_row(row, selected=selected)
+                if line:
+                    content.append(line)
+                if (
+                    selected
+                    and self._activity_verbosity == "debug"
+                    and str(row.get("tool_id") or "") in self._expanded_tool_events
+                    and row.get("type") == "tool"
+                ):
+                    content.extend(self._activity_tool_details(row))
         self._console.print(
-            Panel("\n".join(rows), title=f"Activity ({self._activity_verbosity})", border_style=self._mascot_style, expand=False)
+            Panel(
+                "\n".join(content),
+                title=f"Activity ({self._activity_verbosity})",
+                border_style=self._mascot_style,
+                expand=False,
+            )
         )
+
+    def _render_logs_panel(self) -> None:
+        rows = list(self._logs)
+        content = list(rows) if rows else ["(no logs yet)"]
+        self._console.print(Panel("\n".join(content), title="Logs", border_style=self._mascot_style, expand=False))
 
     def _render_panels(self) -> None:
         try:
@@ -786,6 +1275,8 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
                     self._render_help_panel()
                 if self._activity_panel_open:
                     self._render_activity_panel()
+                if self._logs_panel_open:
+                    self._render_logs_panel()
 
             run_in_terminal(_print_panels, render_cli_done=False)
         except Exception:
@@ -793,6 +1284,8 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
                 self._render_help_panel()
             if self._activity_panel_open:
                 self._render_activity_panel()
+            if self._logs_panel_open:
+                self._render_logs_panel()
 
     def _cycle_panel_focus(self) -> None:
         sequence = ["input"]
@@ -800,6 +1293,8 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             sequence.append("help")
         if self._activity_panel_open:
             sequence.append("activity")
+        if self._logs_panel_open:
+            sequence.append("logs")
         if len(sequence) <= 1:
             self._panel_focus = "input"
             return
@@ -808,23 +1303,27 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         except ValueError:
             idx = 0
         self._panel_focus = sequence[(idx + 1) % len(sequence)]
-        self._record_activity(f"focus -> {self._panel_focus}", level="debug")
 
     def _startup_header_lines(self, version: str) -> list[str]:
         model_label = str(self._current_model or "").strip()
-        details = [
-            f"THOMAS v{version}",
-            f"model: {model_label}",
-            f"autonomy: L{self._autonomy_level}",
-            f"tools: {self._tools_policy}",
+        info_pairs = [
+            ("model", model_label),
+            ("autonomy", f"L{self._autonomy_level}"),
+            ("tools", str(self._tools_policy)),
         ]
+        label_w = max(len(k) for k, _ in info_pairs)
+        raw_details: list[str] = [f"THOMAS v{version}"]
+        for key, val in info_pairs:
+            raw_details.append(f"{key:>{label_w}}: {val}")
+        # Offset details so title aligns with the eyes row (line 1)
+        details: list[str] = [""] + raw_details
         mascot = list(_MASCOT_LINES)
         pad = max(len(line) for line in mascot) + 2 if mascot else 2
         merged: list[str] = []
+        style = str(getattr(self, "_mascot_style", "") or "bright_cyan")
         for idx in range(max(len(mascot), len(details))):
             left = mascot[idx] if idx < len(mascot) else ""
             right = details[idx] if idx < len(details) else ""
-            style = str(getattr(self, "_mascot_style", "") or "bright_cyan")
             if right:
                 merged.append(f"[{style}]{left.ljust(pad)}[/{style}] {right}")
             else:
@@ -847,9 +1346,13 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             return
         role_key = (role or "").strip().lower()
         if role_key == "user":
-            self._console.print(Panel(Text(content), title=USER_PANEL_TITLE, border_style="bright_magenta", expand=True))
+            self._console.print(
+                Panel(Text(content), title=USER_PANEL_TITLE, border_style=_USER_PANEL_STYLE, expand=True)
+            )
         elif role_key == "assistant":
-            self._console.print(Panel(Text(content), title=ASSISTANT_PANEL_TITLE, border_style=self._mascot_style, expand=True))
+            self._console.print(
+                Panel(Text(content), title=ASSISTANT_PANEL_TITLE, border_style=self._mascot_style, expand=True)
+            )
         elif role_key == "system":
             self._console.print(f"[dim]SYSTEM: {content}[/dim]")
         else:
@@ -975,7 +1478,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
                 label=choice.label,
                 description=choice.description,
             )
-        for choice in sorted_choices
+            for choice in sorted_choices
         ]
         try:
             picked = await self._run_interactive_flow(
@@ -1125,10 +1628,11 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
     def _get_llm(self) -> LLMClient:
         if self._llm is None:
             model_config = self.config.get_model(self._current_model)
+            chat_auto_failover = bool(getattr(self.config.failover, "chat_auto_failover", False))
             self._llm = LLMClient(
                 model_config,
                 fallback_configs=self.config.failover_chain(self._current_model),
-                failover_enabled=self.config.failover.enabled,
+                failover_enabled=bool(self.config.failover.enabled and chat_auto_failover),
                 failover_cooldown_s=self.config.failover.cooldown_seconds,
                 failover_on_auth_error=self.config.failover.fallback_on_auth_error,
             )
@@ -1194,7 +1698,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
         version = _get_version()
         if self._should_show_mascot():
             self._console.print("\n".join(self._startup_header_lines(version)))
-            self._console.print(f"[{self._mascot_style}]────────────────────────────────────────[/{self._mascot_style}]")
+            self._console.print(f"[{self._mascot_style}]{'─' * 40}[/{self._mascot_style}]")
         else:
             self._console.print(f"[bold green]THOMAS[/bold green] v{version}")
             self._console.print(f"[dim]model: {self._resolved_model_label() or self._current_model}[/dim]")
@@ -1203,6 +1707,12 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             self._console.print(f"[dim]route: {self._last_route}[/dim]")
         if self._trace_file_reads:
             self._print_read_file_trace("Startup")
+        if self._restored_conversation_count > 0:
+            self._console.print(
+                "[dim]Resumed "
+                f"{self._restored_conversation_count} messages from previous REPL session. "
+                "Use /clear for a fresh start.[/dim]"
+            )
 
         # Connect to MCP servers at startup (best-effort)
         try:
@@ -1220,10 +1730,11 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
                 prompt_kwargs = {}
                 if "erase_when_done" in inspect.signature(self._session.prompt_async).parameters:
                     prompt_kwargs["erase_when_done"] = True
-                turns = len(self._conversation) // 2
                 user_input = await self._session.prompt_async(
                     self._get_prompt(),
-                    rprompt=HTML(f"<ansigray>{turns} turns</ansigray>") if turns > 0 else None,
+                    rprompt=HTML(f"<ansigray>{self._session_turns} turns</ansigray>")
+                    if self._session_turns > 0
+                    else None,
                     bottom_toolbar=(lambda: self._composer_toolbar_hint()),
                     **prompt_kwargs,
                 )
@@ -1257,6 +1768,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             self._append_transcript_turn("user", user_input)
 
             # Run agent
+            self._session_turns += 1
             self._print_read_file_trace("Turn")
             try:
                 await self._run_agent_turn(user_input)
@@ -1287,6 +1799,7 @@ class ThomasREPL(ThomasREPLRuntimeMixin, ThomasREPLAgentMixin):
             await self._llm.close()
         if self._memory:
             self._memory.close()
+        self._persist_runtime_settings()
         self._persist_conversation_state()
 
 

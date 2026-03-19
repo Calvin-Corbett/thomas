@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from pathlib import Path
 
 import click
@@ -90,8 +91,16 @@ def _help_topic(topic: str) -> click.Command:
     return _cmd
 
 
-for _topic_name in _HELP_TOPICS:
-    help_cmd.add_command(_help_topic(_topic_name))
+def ensure_help_topics(topic_names: Iterable[str]) -> None:
+    for topic in topic_names:
+        name = str(topic or "").strip()
+        if not name:
+            continue
+        if name not in help_cmd.commands:
+            help_cmd.add_command(_help_topic(name))
+
+
+ensure_help_topics(_HELP_TOPICS)
 
 
 @click.command(name="logs")
@@ -112,22 +121,18 @@ def logs_cmd(ctx: click.Context, lines: int) -> None:
 @click.argument("prompt")
 @click.option("-m", "--model", "model_name", default="", help="Model profile (forwards to `thomas chat`).")
 @click.option("--autonomy-level", type=click.IntRange(1, 4), default=3, show_default=True)
-@click.option("--token-economy", type=click.Choice(["cheap", "optimal", "max"], case_sensitive=False), default="")
 @click.pass_context
 def agent_cmd(
     ctx: click.Context,
     prompt: str,
     model_name: str,
     autonomy_level: int,
-    token_economy: str,
 ) -> None:
     """Run one agent turn (compat wrapper over `thomas chat`)."""
     args = ["chat", str(prompt)]
     if str(model_name or "").strip():
         args.extend(["--model", str(model_name).strip()])
     args.extend(["--autonomy-level", str(int(autonomy_level))])
-    if str(token_economy or "").strip():
-        args.extend(["--token-economy", str(token_economy).strip().lower()])
     rc = _forward_main_cli(ctx, args)
     if rc != 0:
         raise SystemExit(rc)

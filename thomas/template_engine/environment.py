@@ -6,7 +6,7 @@ import hashlib
 from abc import ABC, abstractmethod
 from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Union
+from typing import Any
 
 from ._exceptions import CircularIncludeError
 from ._types import Extension, TemplateConfig
@@ -42,7 +42,7 @@ class Loader(ABC):
 class FileSystemLoader(Loader):
     """Load templates from filesystem."""
 
-    def __init__(self, searchpath: Union[str, list[str]], encoding: str = "utf-8") -> None:
+    def __init__(self, searchpath: str | list[str], encoding: str = "utf-8") -> None:
         """
         Initialize filesystem loader.
 

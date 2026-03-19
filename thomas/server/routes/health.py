@@ -15,6 +15,7 @@ from typing import Any
 from aiohttp import web
 
 from thomas.core.config import AppConfig
+from thomas.server.app_keys import APP_CONFIG
 
 log = logging.getLogger(__name__)
 
@@ -41,7 +42,7 @@ async def api_health_ready(request: web.Request) -> web.Response:
         503 with {"status": "not_ready", "checks": {...}} if any fail
     """
     app: web.Application = request.app
-    cfg: AppConfig | None = app.get("app_config")
+    cfg: AppConfig | None = app.get("app_config") or app.get(APP_CONFIG)
 
     checks: dict[str, str] = {}
     all_ok = True

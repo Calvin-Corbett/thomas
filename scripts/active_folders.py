@@ -17,10 +17,13 @@ import sys
 import threading
 import time
 import uuid
+from collections.abc import Iterable, Sequence
 from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
+
+from thomas.core import agent_presence
 
 ROOT = Path(__file__).resolve().parent.parent
 STATE_DIR = ROOT / "runtime" / "coordination"
@@ -61,9 +64,8 @@ DEFAULT_REQUIRE_EXPLICIT_AGENT = _env_bool("THOMAS_ACTIVE_FOLDERS_REQUIRE_EXPLIC
 DEFAULT_GUARD_AUTO_CLAIM = _env_bool("THOMAS_ACTIVE_FOLDERS_GUARD_AUTO_CLAIM", True)
 DEFAULT_GUARD_AUTO_CLAIM_TTL_SECONDS = _env_int("THOMAS_ACTIVE_FOLDERS_GUARD_AUTO_CLAIM_TTL", 1800)
 DEFAULT_GUARD_AUTO_CLAIM_NOTE = (
-    (os.getenv("THOMAS_ACTIVE_FOLDERS_GUARD_AUTO_CLAIM_NOTE") or "").strip()
-    or "pre-commit staged auto-claim"
-)
+    os.getenv("THOMAS_ACTIVE_FOLDERS_GUARD_AUTO_CLAIM_NOTE") or ""
+).strip() or "pre-commit staged auto-claim"
 
 
 def _utc_now() -> datetime:
@@ -151,6 +153,32 @@ def _paths_overlap(a: str, b: str) -> bool:
     if a == "." or b == ".":
         return True
     return a.startswith(f"{b}/") or b.startswith(f"{a}/")
+
+
+def _presence_gate(
+    *,
+    purpose: str,
+    agent: str,
+    paths: Sequence[str],
+    allow_override: bool,
+    override_reason: str,
+) -> tuple[bool, str]:
+    try:
+        result = agent_presence.evaluate_soft_gate(
+            purpose=purpose,
+            repo_root=ROOT,
+            actor_agent=agent,
+            requested_scope=list(paths),
+            allow_override=allow_override,
+            override_reason=override_reason,
+        )
+    except ValueError as exc:
+        return False, str(exc)
+    except Exception as exc:
+        return False, f"presence gate failed: {exc}"
+    if bool(result.get("ok", False)):
+        return True, ""
+    return False, str(result.get("message") or "presence gate requires override")
 
 
 @contextmanager
@@ -300,6 +328,7 @@ def _new_claim(agent: str, paths: Sequence[str], ttl_seconds: int, note: str) ->
         "note": note,
         "hostname": socket.gethostname(),
         "pid": os.getpid(),
+        "session_id": agent_presence.current_session_id(),
         "started_at": _to_iso(now),
         "last_heartbeat_at": _to_iso(now),
         "expires_at": _to_iso(now + timedelta(seconds=max(1, ttl_seconds))),
@@ -426,6 +455,19 @@ def _staged_paths(excludes: Sequence[str]) -> list[str]:
 def _claim(args: argparse.Namespace) -> int:
     agent = _resolve_agent(args.agent)
     paths = _normalize_paths(args.path)
+    ok_presence, presence_message = _presence_gate(
+        purpose="active_folders_claim",
+        agent=agent,
+        paths=paths,
+        allow_override=bool(args.allow_presence_override),
+        override_reason=str(args.presence_override_reason or ""),
+    )
+    if not ok_presence:
+        if args.json:
+            print(json.dumps({"ok": False, "error": presence_message, "paths": paths}, indent=2))
+        else:
+            print(f"error: {presence_message}", file=sys.stderr)
+        return 2
     claim, conflicts = _create_claim(
         agent=agent,
         paths=paths,
@@ -442,6 +484,11 @@ def _claim(args: argparse.Namespace) -> int:
             _print_conflicts(conflicts)
         return 2
 
+    claim_rows = [claim]
+    if claim_rows:
+        agent_presence.heartbeat_session(
+            repo_root=ROOT, scope=paths, claim_status="folder-claim", folder_claims=claim_rows
+        )
     payload = {
         "ok": True,
         "agent_id": agent,
@@ -463,6 +510,7 @@ def _heartbeat(args: argparse.Namespace) -> int:
         print(json.dumps({"ok": False, "error": "claim_not_found", "claim_id": args.claim_id}, indent=2))
         return 1
 
+    agent_presence.heartbeat_session(repo_root=ROOT, claim_status="folder-claim")
     print(json.dumps({"ok": True, "claim_id": args.claim_id}, indent=2))
     return 0
 
@@ -545,16 +593,27 @@ def _guard_staged(args: argparse.Namespace) -> int:
     resolved_agent = _resolve_agent(args.agent)
     explicit_agent, explicit_source = _require_explicit_agent(args.agent)
     if args.require_explicit_agent and not explicit_agent:
-        message = (
-            "explicit agent id required for staged guard; set AGENT_ID/THOMAS_AGENT_ID "
-            "or pass --agent"
-        )
+        message = "explicit agent id required for staged guard; set AGENT_ID/THOMAS_AGENT_ID " "or pass --agent"
         if args.json:
             print(json.dumps({"ok": False, "error": message, "paths": paths}, indent=2))
         else:
             print(f"error: {message}", file=sys.stderr)
-            print("example (PowerShell): $env:AGENT_ID = \"codexc\"", file=sys.stderr)
-            print("example (PowerShell): $env:AGENT_ID = \"gemini\"", file=sys.stderr)
+            print('example (PowerShell): $env:AGENT_ID = "codexc"', file=sys.stderr)
+            print('example (PowerShell): $env:AGENT_ID = "gemini"', file=sys.stderr)
+        return 2
+
+    ok_presence, presence_message = _presence_gate(
+        purpose="active_folders_guard_staged",
+        agent=resolved_agent,
+        paths=paths,
+        allow_override=bool(args.allow_presence_override),
+        override_reason=str(args.presence_override_reason or ""),
+    )
+    if not ok_presence:
+        if args.json:
+            print(json.dumps({"ok": False, "error": presence_message, "paths": paths}, indent=2))
+        else:
+            print(f"error: {presence_message}", file=sys.stderr)
         return 2
 
     auto_claim_payload = {
@@ -639,6 +698,19 @@ def _guard_staged(args: argparse.Namespace) -> int:
 def _daemon(args: argparse.Namespace) -> int:
     agent = _resolve_agent(args.agent)
     paths = _normalize_paths(args.path)
+    ok_presence, presence_message = _presence_gate(
+        purpose="active_folders_daemon",
+        agent=agent,
+        paths=paths,
+        allow_override=bool(args.allow_presence_override),
+        override_reason=str(args.presence_override_reason or ""),
+    )
+    if not ok_presence:
+        if args.json:
+            print(json.dumps({"ok": False, "error": presence_message, "paths": paths}, indent=2))
+        else:
+            print(f"error: {presence_message}", file=sys.stderr)
+        return 2
 
     claim, conflicts = _create_claim(
         agent=agent,
@@ -690,6 +762,16 @@ def _run(args: argparse.Namespace) -> int:
 
     agent = _resolve_agent(args.agent)
     paths = _normalize_paths(args.path)
+    ok_presence, presence_message = _presence_gate(
+        purpose="active_folders_run",
+        agent=agent,
+        paths=paths,
+        allow_override=bool(args.allow_presence_override),
+        override_reason=str(args.presence_override_reason or ""),
+    )
+    if not ok_presence:
+        print(json.dumps({"ok": False, "error": presence_message, "paths": paths}, indent=2))
+        return 2
 
     claim, conflicts = _create_claim(
         agent=agent,
@@ -763,6 +845,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Allow claim even when overlapping claims exist.",
     )
     claim.add_argument("--json", action="store_true")
+    claim.add_argument("--allow-presence-override", action="store_true")
+    claim.add_argument("--presence-override-reason", default="")
     claim.set_defaults(func=_claim)
 
     heartbeat = sub.add_parser("heartbeat", help="Refresh an existing claim.")
@@ -855,6 +939,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Replace prior claims for this agent when auto-claiming staged paths.",
     )
     guard.add_argument("--json", action="store_true")
+    guard.add_argument("--allow-presence-override", action="store_true")
+    guard.add_argument("--presence-override-reason", default="")
     guard.set_defaults(func=_guard_staged)
 
     daemon = sub.add_parser("daemon", help="Run persistent heartbeat in foreground until stopped.")
@@ -871,6 +957,8 @@ def _build_parser() -> argparse.ArgumentParser:
     )
     daemon.add_argument("--allow-conflicts", action="store_true")
     daemon.add_argument("--json", action="store_true")
+    daemon.add_argument("--allow-presence-override", action="store_true")
+    daemon.add_argument("--presence-override-reason", default="")
     daemon.set_defaults(func=_daemon)
 
     run = sub.add_parser("run", help="Claim folders, run a command, heartbeat, then release.")
@@ -886,6 +974,8 @@ def _build_parser() -> argparse.ArgumentParser:
         help="Replace prior claims for this agent (default true).",
     )
     run.add_argument("--allow-conflicts", action="store_true")
+    run.add_argument("--allow-presence-override", action="store_true")
+    run.add_argument("--presence-override-reason", default="")
     run.add_argument("command", nargs=argparse.REMAINDER)
     run.set_defaults(func=_run)
 
@@ -916,5 +1006,3 @@ def main(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-
-

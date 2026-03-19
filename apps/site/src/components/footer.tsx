@@ -10,13 +10,18 @@ export function Footer() {
       <div className="footer-inner">
         <div>
           <p className="footer-title">Thomas</p>
-          <p className="footer-copy">One assistant to help you do anything on your computer.</p>
+          <p className="footer-copy">Local-first execution system for verified desktop workflows.</p>
+          <p className="footer-copy footer-warning">
+            Use this with explicit command approval and AI-safe auditable release metadata.
+          </p>
         </div>
         <div className="footer-links">
           <Link href="/download">Download</Link>
+          <Link href="/roadmap">Roadmap</Link>
           <Link href="/updates">Updates</Link>
           <Link href="/journey">Journey</Link>
           <Link href="/deep-dive">Deep Dive</Link>
+          <Link href="/support">Support</Link>
           {repoUrl ? (
             <a href={repoUrl} target="_blank" rel="noreferrer">
               GitHub (Advanced)

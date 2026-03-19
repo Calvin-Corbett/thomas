@@ -8,9 +8,9 @@ import json
 import os
 import subprocess
 import sys
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
 
 try:
     from scripts import agent_identity
@@ -19,6 +19,7 @@ except Exception:  # pragma: no cover
     import agent_identity  # type: ignore
     import workboard_claim as claim_tool  # type: ignore
 
+from thomas.core import agent_presence
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
@@ -31,6 +32,15 @@ DEFAULT_DISPATCH_MAX_SUGGESTIONS = getattr(claim_tool, "DEFAULT_DISPATCH_MAX_SUG
 CLAIM_ROLE_VALUES = tuple(getattr(claim_tool, "CLAIM_ROLE_VALUES", ("solo", "parent", "worker")))
 DEFAULT_TASK_MANAGER_LOOP_INTERVAL_SECONDS = 30.0
 DEFAULT_WORKER_LOOP_POLL_SECONDS = 15.0
+
+
+def _presence_repo_root(workboard_path: Path) -> Path:
+    candidate = workboard_path.resolve()
+    try:
+        candidate.relative_to(ROOT)
+    except Exception:
+        return candidate.parent
+    return ROOT
 
 
 def _agent_key(value: str | None) -> str:
@@ -150,9 +160,13 @@ def _spawn_worker_loop(
             creation_flags |= subprocess.DETACHED_PROCESS
         close_fds = False
     try:
+        env = dict(os.environ)
+        for key in agent_presence.SESSION_ENV_KEYS:
+            env.pop(str(key), None)
         process = subprocess.Popen(
             command,
             cwd=str(ROOT),
+            env=env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -203,9 +217,13 @@ def _spawn_task_manager_loop(
             creation_flags |= subprocess.DETACHED_PROCESS
         close_fds = False
     try:
+        env = dict(os.environ)
+        for key in agent_presence.SESSION_ENV_KEYS:
+            env.pop(str(key), None)
         process = subprocess.Popen(
             command,
             cwd=str(ROOT),
+            env=env,
             stdin=subprocess.DEVNULL,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.DEVNULL,
@@ -231,7 +249,8 @@ def _normalize_scope_name(value: str | None) -> str:
 
 
 def _normalize_dispatch_target_workers(value: int | None) -> int:
-    return max(DEFAULT_MIN_AUTO_DISPATCH_TARGET_WORKERS, int(value or DEFAULT_AUTO_DISPATCH_TARGET_WORKERS))
+    candidate = DEFAULT_AUTO_DISPATCH_TARGET_WORKERS if value is None else int(value)
+    return max(DEFAULT_MIN_AUTO_DISPATCH_TARGET_WORKERS, candidate)
 
 
 def _is_worker_claim(role: str | None, parent: str | None) -> bool:
@@ -285,6 +304,8 @@ def _claim_task_manager_position(
     *,
     workboard_path: Path,
     task_manager_agent: str,
+    allow_dirty: bool = False,
+    dirty_reason: str = "",
 ) -> tuple[bool, str]:
     claim_scope = _default_task_manager_scope(workboard_path)
     ok, message = claim_tool.claim(
@@ -295,6 +316,10 @@ def _claim_task_manager_position(
         name=task_manager_agent,
         role="solo",
         parent="none",
+        allow_dirty=bool(allow_dirty),
+        dirty_reason=str(dirty_reason or ""),
+        allow_presence_override=False,
+        presence_override_reason="",
     )
     if not ok:
         return False, str(message)
@@ -356,9 +381,7 @@ def _start_worker_loop(
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(
-        description="Create a WIP claim for the current agent and print env exports."
-    )
+    parser = argparse.ArgumentParser(description="Create a WIP claim for the current agent and print env exports.")
     parser.add_argument(
         "--workboard",
         default=str(DEFAULT_WORKBOARD),
@@ -505,6 +528,31 @@ def run(argv: Sequence[str] | None = None) -> int:
             "start a persistent `workboard_task_manager.py --monitor --cycles 0` loop."
         ),
     )
+    parser.add_argument(
+        "--allow-dirty-claim",
+        action="store_true",
+        help=(
+            "Allow bootstrap claim to proceed even when the repo worktree is dirty. " "Requires --dirty-claim-reason."
+        ),
+    )
+    parser.add_argument(
+        "--dirty-claim-reason",
+        default="",
+        help="Required reason (>=12 chars) when --allow-dirty-claim is used.",
+    )
+    parser.add_argument(
+        "--allow-presence-override",
+        action="store_true",
+        help=(
+            "Allow bootstrap claim to proceed when the repo presence monitor detects other active or unregistered agents. "
+            "Requires --presence-override-reason."
+        ),
+    )
+    parser.add_argument(
+        "--presence-override-reason",
+        default="",
+        help="Required reason (>=12 chars) when --allow-presence-override is used.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     args = parser.parse_args(argv)
 
@@ -551,6 +599,8 @@ def run(argv: Sequence[str] | None = None) -> int:
         ok_claim_manager, claim_manager_message = _claim_task_manager_position(
             workboard_path=workboard_path,
             task_manager_agent=task_manager_agent,
+            allow_dirty=bool(args.allow_dirty_claim),
+            dirty_reason=str(args.dirty_claim_reason or ""),
         )
         if ok_claim_manager:
             task_manager_bootstrapped = True
@@ -560,7 +610,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print("- starting persistent task-manager loop:")
                 print(
                     f"  - command: python scripts/workboard_task_manager.py --monitor --apply --cycles 0 "
-                    f"--interval-seconds 30 --task-manager-agent \"{task_manager_agent}\""
+                    f'--interval-seconds 30 --task-manager-agent "{task_manager_agent}"'
                 )
                 ok_loop, loop_payload, loop_error = _spawn_task_manager_loop(
                     workboard_path=workboard_path,
@@ -594,6 +644,10 @@ def run(argv: Sequence[str] | None = None) -> int:
         name=claim_name,
         role=role,
         parent=args.parent,
+        allow_dirty=bool(args.allow_dirty_claim),
+        dirty_reason=str(args.dirty_claim_reason or ""),
+        allow_presence_override=bool(args.allow_presence_override),
+        presence_override_reason=str(args.presence_override_reason or ""),
     )
     if not ok:
         if args.json:
@@ -611,11 +665,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- {message}")
         return 1
 
-    do_dispatch = (
-        _to_bool(args.auto_dispatch)
-        and role == "parent"
-        and not _is_task_manager_agent(agent)
-    )
+    do_dispatch = _to_bool(args.auto_dispatch) and role == "parent" and not _is_task_manager_agent(agent)
 
     dispatch_target_workers = _normalize_dispatch_target_workers(args.dispatch_target_workers)
     start_worker_loops = bool(args.start_worker_loops)
@@ -688,7 +738,24 @@ def run(argv: Sequence[str] | None = None) -> int:
             if worker_loop_failures and isinstance(dispatch_result, dict):
                 dispatch_result["worker_loop_failures"] = worker_loop_failures
 
-    ps_cmd = f'$env:AGENT_ID="{agent}"; $env:THOMAS_AGENT_ID="{agent}"'
+    presence_repo_root = _presence_repo_root(workboard_path)
+    session = agent_presence.register_session(
+        repo_root=presence_repo_root,
+        agent_id=agent,
+        display_name=claim_name or agent,
+        launcher="agent_bootstrap_claim",
+        task_summary=task,
+        scope=args.scope,
+        claim_status="claimed",
+        origin="bootstrap_claim",
+    )
+    session_id = str(session.get("session_id") or "")
+    exports = agent_presence.session_env_exports(session_id)
+    ps_cmd = (
+        f'$env:AGENT_ID="{agent}"; $env:THOMAS_AGENT_ID="{agent}"; '
+        f'$env:AGENT_SESSION_ID="{exports.get("AGENT_SESSION_ID", "")}"; '
+        f'$env:THOMAS_AGENT_SESSION_ID="{exports.get("THOMAS_AGENT_SESSION_ID", "")}"'
+    )
     if args.json:
         payload = {
             "ok": True,
@@ -715,6 +782,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             "spawned_worker_loops": started_worker_loops,
             "workboard": str(workboard_path),
             "claim_result": message,
+            "session_id": session_id,
             "powershell_export": ps_cmd,
         }
         if args.debug:
@@ -741,7 +809,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if _is_worker_claim(role, args.parent) and _to_bool(args.run_worker_loop) and not _is_task_manager_agent(agent):
         print("- starting persistent worker loop:")
-        print("  - command: python scripts/workboard_worker.py --agent \"...\" --cycles 0 --poll-seconds 15")
+        print('  - command: python scripts/workboard_worker.py --agent "..." --cycles 0 --poll-seconds 15')
         ok_loop, loop_error, loop_rc = _start_worker_loop(
             workboard_path=workboard_path,
             agent=agent,
@@ -757,7 +825,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         print("- starting persistent task-manager loop:")
         print(
             f"  - command: python scripts/workboard_task_manager.py --monitor --apply --cycles 0 "
-            f"--interval-seconds 30 --task-manager-agent \"{task_manager_agent}\""
+            f'--interval-seconds 30 --task-manager-agent "{task_manager_agent}"'
         )
         ok_loop, loop_payload, loop_error = _spawn_task_manager_loop(
             workboard_path=workboard_path,

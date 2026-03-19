@@ -157,8 +157,18 @@ def register_chat_routes(
         fast_mode = _as_bool(payload.get("fast_mode"))
         memory_enabled_for_turn = True
         memory_retrieval_scope = "thread"
+        memory_include_thread_pref: bool | None = None
         memory_include_global_pref: bool | None = None
         memory_include_profile_pref: bool | None = None
+        memory_pins_only_pref: bool | None = None
+        memory_max_results_pref: int | None = None
+        memory_decay_half_life_hours_pref: float | None = None
+        memory_auto_compact_enabled_pref: bool | None = None
+        memory_auto_compact_episode_threshold_pref: int | None = None
+        memory_auto_compact_min_interval_hours_pref: float | None = None
+        memory_auto_optimize_enabled_pref: bool | None = None
+        memory_auto_optimize_waste_threshold_pref: float | None = None
+        memory_auto_optimize_min_interval_hours_pref: float | None = None
 
         def _resolve_default_model_pair() -> tuple[str, str]:
             try:
@@ -229,6 +239,28 @@ def register_chat_routes(
             resolved_profile_type = "adaptive"
             non_coder_profile = False
             resolved_review_depth = "adaptive"
+            # Fast mode keeps latency-focused tuning lightweight, but must still
+            # enforce persisted safety/privacy/tool policies.
+            try:
+                prefs_store = PreferencesStore(get_db_path())
+                runtime_prefs = prefs_store.get(user_id="default", thread_id=sid)
+                try:
+                    with prefs_store._lock, prefs_store._connect() as prefs_conn:
+                        runtime_prefs_saved = (
+                            prefs_conn.execute(
+                                "SELECT 1 FROM preferences WHERE user_id = ?",
+                                ("default",),
+                            ).fetchone()
+                            is not None
+                        )
+                except Exception:
+                    runtime_prefs_saved = False
+            except Exception:
+                runtime_prefs = None
+                runtime_prefs_saved = False
+            advanced_prefs = getattr(runtime_prefs, "advanced", None)
+            advanced_privacy = getattr(advanced_prefs, "privacy", None)
+            advanced_tools = getattr(advanced_prefs, "tools", None)
         else:
             try:
                 prefs_store = PreferencesStore(get_db_path())
@@ -282,11 +314,36 @@ def register_chat_routes(
             memory_prefs = getattr(runtime_prefs, "memory", None)
             thread_memory_enabled = getattr(memory_prefs, "thread_enabled", None)
             if thread_memory_enabled is None:
-                memory_enabled_for_turn = bool(getattr(memory_prefs, "enabled_global", True))
+                # FIX (2026-03-18): Default to True when no preference exists.
+                # Previously, missing/malformed prefs could silently kill memory
+                # on new sessions or after page refresh. Memory should ALWAYS
+                # be on unless the user explicitly disables it.
+                _global_mem = getattr(memory_prefs, "enabled_global", None)
+                memory_enabled_for_turn = bool(_global_mem) if _global_mem is not None else True
             else:
                 memory_enabled_for_turn = bool(thread_memory_enabled)
+            memory_include_thread_pref = bool(getattr(advanced_memory, "include_thread_memory", True))
             memory_include_global_pref = bool(getattr(advanced_memory, "include_global_memory", True))
             memory_include_profile_pref = bool(getattr(advanced_memory, "include_profile_memory", True))
+            memory_pins_only_pref = bool(getattr(advanced_memory, "pins_only", False))
+            memory_max_results_pref = int(getattr(advanced_memory, "retrieval_top_k", 8) or 8)
+            memory_decay_half_life_hours_pref = float(
+                getattr(advanced_memory, "decay_half_life_hours", 240.0) or 240.0
+            )
+            memory_auto_compact_enabled_pref = bool(getattr(advanced_memory, "auto_compact_enabled", True))
+            memory_auto_compact_episode_threshold_pref = int(
+                getattr(advanced_memory, "auto_compact_episode_threshold", 2000) or 2000
+            )
+            memory_auto_compact_min_interval_hours_pref = float(
+                getattr(advanced_memory, "auto_compact_min_interval_hours", 24.0) or 24.0
+            )
+            memory_auto_optimize_enabled_pref = bool(getattr(advanced_memory, "auto_optimize_enabled", True))
+            memory_auto_optimize_waste_threshold_pref = float(
+                getattr(advanced_memory, "auto_optimize_waste_threshold", 0.22) or 0.22
+            )
+            memory_auto_optimize_min_interval_hours_pref = float(
+                getattr(advanced_memory, "auto_optimize_min_interval_hours", 12.0) or 12.0
+            )
 
         async def _apply_usage_budget(used_tokens: int) -> dict[str, Any] | None:
             if advanced_cost is None:
@@ -590,6 +647,98 @@ def register_chat_routes(
         )
         if quick_reply is not None:
             return quick_reply
+
+        # ── Dispatch-first architecture ──────────────────────────────
+        # Check if this message should be dispatched to the workboard task
+        # manager pipeline instead of running inline. Thomas acknowledges
+        # instantly and the task manager handles the actual work.
+        # See docs/CHAT_EXECUTION_MODEL.md for the full picture.
+        try:
+            from thomas.agent.dispatch import should_dispatch
+            from thomas.agent.chat_dispatcher import dispatch_async
+            from thomas.server.routes.task_events import watch_task
+
+            dispatch_decision = should_dispatch(text)
+            # Allow callers to force inline execution (e.g. for testing)
+            force_inline = _as_bool(payload.get("force_inline"))
+            if dispatch_decision.action == "dispatch" and not force_inline:
+                async with session_lock:
+                    # Record the user message in conversation history
+                    if not isinstance(session.conversation, list):
+                        session.conversation = []
+                    session.conversation.append({"role": "user", "content": text})
+
+                    # Set up streaming response for the fast acknowledgment
+                    dispatch_resp = web.StreamResponse(
+                        status=200,
+                        headers={
+                            "Content-Type": "application/x-ndjson; charset=utf-8",
+                            "Cache-Control": "no-cache",
+                        },
+                    )
+                    await dispatch_resp.prepare(request)
+                    dispatch_run_id = secrets.token_urlsafe(10)
+
+                    async def dispatch_send(obj: dict[str, Any]) -> None:
+                        out = dict(obj)
+                        out.setdefault("run_id", dispatch_run_id)
+                        line = json.dumps(out, ensure_ascii=False)
+                        try:
+                            await dispatch_resp.write(line.encode("utf-8") + b"\n")
+                        except (ConnectionResetError, BrokenPipeError, OSError):
+                            pass
+
+                    # Stream a fast Thomas-style acknowledgment
+                    ack_text = "On it."
+                    await dispatch_send({"type": "text", "text": ack_text})
+                    session.conversation.append({"role": "assistant", "content": ack_text})
+
+                    # Dispatch to workboard (runs in thread pool, non-blocking)
+                    dispatch_result = await dispatch_async(
+                        text,
+                        sid,
+                        emit_event=dispatch_send,
+                    )
+
+                    if dispatch_result.ok:
+                        await dispatch_send({
+                            "type": "task_dispatched",
+                            "task_id": dispatch_result.task_id,
+                            "text": f"Task {dispatch_result.task_id} dispatched.",
+                        })
+                        # Start background watcher for task progress events
+                        asyncio.create_task(
+                            watch_task(
+                                dispatch_result.task_id,
+                                emit_event=dispatch_send,
+                            )
+                        )
+                    else:
+                        # Dispatch failed — fall through to inline execution
+                        log.warning(
+                            "Chat dispatch failed, falling through to inline: %s",
+                            dispatch_result.error,
+                        )
+                        await dispatch_send({
+                            "type": "status",
+                            "text": "Handling directly...",
+                        })
+                        # Don't return — let it fall through to the normal agent loop below
+
+                    if dispatch_result.ok:
+                        await dispatch_send({"type": "done"})
+                        try:
+                            await dispatch_resp.write_eof()
+                        except Exception:
+                            pass
+                        return dispatch_resp
+
+        except ImportError:
+            # dispatch module not available — fall through to normal agent loop
+            log.debug("Dispatch modules not available, using inline agent loop")
+        except Exception as dispatch_exc:
+            log.warning("Dispatch routing failed, falling through to inline: %s", dispatch_exc)
+
         # Attach docs as plain text blocks.
         if isinstance(docs, list) and docs:
             blocks: list[str] = []
@@ -611,13 +760,16 @@ def register_chat_routes(
             text = (text.rstrip() + f"\n\n[Pinned context]\n{pinned_context}").strip()
         prompt: Any = text
         if isinstance(images, list) and images:
-            img0 = images[0]
-            if isinstance(img0, dict) and img0.get("data_url"):
-                data_url = str(img0["data_url"])
-                prompt = [
-                    {"type": "text", "text": text},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ]
+            # Support multiple images per message (feature parity with Claude/ChatGPT).
+            # Previously only images[0] was used. Now all images are sent.
+            image_parts: list[dict[str, Any]] = []
+            for img in images:
+                if isinstance(img, dict) and img.get("data_url"):
+                    image_parts.append(
+                        {"type": "image_url", "image_url": {"url": str(img["data_url"])}}
+                    )
+            if image_parts:
+                prompt = [{"type": "text", "text": text}] + image_parts
         # Build per-request model config (allow overriding the model id without mutating global config).
         model_cfg = deps.model_cfg_with_secrets(profile)
         if session.model_id:
@@ -743,7 +895,7 @@ def register_chat_routes(
             ]
             raw_allowed_paths = str(getattr(advanced_tools, "allowed_paths", "") or "").strip()
             allowed_paths = [
-                s.strip().replace("/", "\\").lower()
+                s.strip()
                 for s in raw_allowed_paths.replace("\r", "\n").replace("\n", ",").split(",")
                 if s.strip()
             ]
@@ -765,12 +917,62 @@ def register_chat_routes(
                 def __init__(self, base: ToolRegistry):
                     self._base = base
 
+                @staticmethod
+                def _canonical_policy_path(raw: Any) -> tuple[str, bool]:
+                    text = str(raw or "").strip()
+                    if not text:
+                        return "", False
+                    normalized = text.replace("\\", "/")
+                    drive_match = re.match(r"^[a-zA-Z]:", normalized)
+                    drive = str(drive_match.group(0) or "").lower() if drive_match else ""
+                    if drive:
+                        normalized = normalized[len(drive) :]
+                    is_absolute = bool(drive) or normalized.startswith("/")
+                    parts: list[str] = []
+                    for segment in normalized.split("/"):
+                        seg = str(segment or "").strip()
+                        if not seg or seg == ".":
+                            continue
+                        if seg == "..":
+                            if parts and parts[-1] != "..":
+                                parts.pop()
+                            elif not is_absolute:
+                                parts.append("..")
+                            continue
+                        parts.append(seg.lower())
+                    prefix = f"{drive}/" if drive else ("/" if is_absolute else "")
+                    return prefix + "/".join(parts), is_absolute
+
+                @classmethod
+                def _matches_allowed_path(cls, path_value: Any, allowlist: list[str]) -> bool:
+                    candidate, candidate_abs = cls._canonical_policy_path(path_value)
+                    if not candidate:
+                        return False
+                    for raw_allowed in allowlist:
+                        allowed, allowed_abs = cls._canonical_policy_path(raw_allowed)
+                        if not allowed:
+                            continue
+                        # Keep absolute/relative policy scopes separate to avoid accidental matches.
+                        if allowed_abs != candidate_abs:
+                            continue
+                        if candidate == allowed or candidate.startswith(f"{allowed}/"):
+                            return True
+                    return False
+
                 async def execute(self, name: str, args: dict[str, Any]):
                     n = str(name or "").strip().lower()
-                    for prefix in ("functions.", "tools."):
+                    for prefix in ("functions.", "function.", "tool.", "tools.", "mcp.", "mcp__"):
                         if n.startswith(prefix):
                             n = n[len(prefix) :]
                             break
+                    try:
+                        resolved_tool = self._base.get(str(name or ""))
+                        resolved_name = str(getattr(resolved_tool, "name", "") or "").strip().lower()
+                        if resolved_name:
+                            n = resolved_name
+                    except Exception:
+                        pass
+
                     if n == "shell.exec":
                         if require_command_approval:
                             from thomas.tools.base import ToolResult
@@ -783,9 +985,10 @@ def register_chat_routes(
 
                                 return ToolResult(ok=False, error="blocked_commands policy denied shell command")
                     if allowed_paths and n.startswith("fs."):
-                        path_text = str((args or {}).get("path") or "").strip().replace("/", "\\").lower()
-                        is_allowed = any(allowed in path_text for allowed in allowed_paths)
-                        if path_text.startswith("..") or not is_allowed:
+                        canonical_path, _ = self._canonical_policy_path((args or {}).get("path"))
+                        is_parent_escape = canonical_path == ".." or canonical_path.startswith("../")
+                        is_allowed = self._matches_allowed_path((args or {}).get("path"), allowed_paths)
+                        if is_parent_escape or not is_allowed:
                             from thomas.tools.base import ToolResult
 
                             return ToolResult(ok=False, error="allowed_paths policy denied filesystem access")
@@ -954,8 +1157,18 @@ def register_chat_routes(
                 tools,
                 **agent_base_kwargs,
             )
+        agent._memory_include_thread_pref = memory_include_thread_pref
         agent._memory_include_global_pref = memory_include_global_pref
         agent._memory_include_profile_pref = memory_include_profile_pref
+        agent._memory_pins_only_pref = memory_pins_only_pref
+        agent._memory_max_results_pref = memory_max_results_pref
+        agent._memory_decay_half_life_hours_pref = memory_decay_half_life_hours_pref
+        agent._memory_auto_compact_enabled_pref = memory_auto_compact_enabled_pref
+        agent._memory_auto_compact_episode_threshold_pref = memory_auto_compact_episode_threshold_pref
+        agent._memory_auto_compact_min_interval_hours_pref = memory_auto_compact_min_interval_hours_pref
+        agent._memory_auto_optimize_enabled_pref = memory_auto_optimize_enabled_pref
+        agent._memory_auto_optimize_waste_threshold_pref = memory_auto_optimize_waste_threshold_pref
+        agent._memory_auto_optimize_min_interval_hours_pref = memory_auto_optimize_min_interval_hours_pref
         journal: Any | None = None
         try:
             if start_seed_events:

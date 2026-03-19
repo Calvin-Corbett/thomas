@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import secrets
 import hashlib
 import re
+import secrets
 from datetime import datetime, timedelta
-from typing import Optional
 
-from sqlalchemy import String, DateTime, Boolean, UniqueConstraint, Index, Text
+from sqlalchemy import Boolean, DateTime, Index, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 try:
@@ -18,7 +17,6 @@ except Exception as e:  # pragma: no cover
     ) from e
 
 from .rbac import WorkspaceRole
-
 
 _INVITE_TOKEN_RE = re.compile(r"^[A-Za-z0-9_-]{16,255}$")
 
@@ -58,12 +56,10 @@ class Workspace(Base):
 
     workspace_id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_new_id)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
-    owner_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    owner_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
 
-    __table_args__ = (
-        Index("ix_workspaces_owner_user_id", "owner_user_id"),
-    )
+    __table_args__ = (Index("ix_workspaces_owner_user_id", "owner_user_id"),)
 
 
 class WorkspaceMembership(Base):
@@ -92,18 +88,18 @@ class WorkspaceInvite(Base):
 
     token_hash: Mapped[str] = mapped_column(String(64), nullable=False, unique=True, index=True)
 
-    created_by_user_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    created_by_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_utcnow, nullable=False)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, default=lambda: _utcnow() + timedelta(days=7), nullable=False)
-
-    accepted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
-
-    note: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
-
-    __table_args__ = (
-        Index("ix_workspace_invites_workspace_status", "workspace_id", "revoked_at", "accepted_at"),
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime, default=lambda: _utcnow() + timedelta(days=7), nullable=False
     )
+
+    accepted_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+    __table_args__ = (Index("ix_workspace_invites_workspace_status", "workspace_id", "revoked_at", "accepted_at"),)
 
     @staticmethod
     def new_token_pair() -> tuple[str, str]:

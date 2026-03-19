@@ -4,9 +4,10 @@ thomas/core/persistence.py
 Persistence engine for Thomas.
 
 Saves and loads full runtime state across sessions so new-chat memory loss
-is eliminated.  State is written to `./thomas_state.json` on every turn and
-a human-readable daily summary is appended to
-`./thomas_daily_report_YYYY-MM-DD.md`.
+is eliminated. State is written under the active Thomas data directory on
+every turn (for example `%LOCALAPPDATA%\\Thomas\\<profile>\\thomas_state.json`
+on Windows with profiles), and a human-readable daily summary is appended
+under the same data root.
 
 Usage (from loop.py or server startup):
     from thomas.core.persistence import PersistenceEngine
@@ -28,11 +29,21 @@ from typing import Any
 
 log = logging.getLogger(__name__)
 
+
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
-_DEFAULT_STATE_FILE = Path("thomas_state.json")
-_DEFAULT_REPORT_DIR = Path(".")  # reports land next to state file
+def _default_data_root() -> Path:
+    try:
+        from thomas.core.config import resolve_thomas_data_dir
+
+        return resolve_thomas_data_dir()
+    except Exception:
+        return (Path.home() / ".thomas").resolve()
+
+
+_DEFAULT_STATE_FILE = Path(os.environ.get("THOMAS_STATE_FILE") or (_default_data_root() / "thomas_state.json"))
+_DEFAULT_REPORT_DIR = Path(os.environ.get("THOMAS_DAILY_REPORT_DIR") or (_default_data_root() / "reports"))
 
 
 # ---------------------------------------------------------------------------
@@ -109,6 +120,10 @@ class PersistenceEngine:
         self.state_file = Path(state_file or _DEFAULT_STATE_FILE)
         self.report_dir = Path(report_dir or _DEFAULT_REPORT_DIR)
         self.auto_save = auto_save
+        self.data_dir = self.state_file.parent
+        self.runtime_dir = self.data_dir
+        self.storage_dir = self.data_dir
+        self.base_dir = self.data_dir
 
         self._lock = threading.Lock()
         self._last_report_date: str | None = None

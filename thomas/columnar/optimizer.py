@@ -387,6 +387,7 @@ class ExpressionCompiler:
             return lambda values: max((v for v in values if v is not None), default=None)
 
         elif agg_func == "avg":
+
             def _avg(values: list[Any]) -> Any:
                 non_null = [v for v in values if v is not None]
                 if not non_null:

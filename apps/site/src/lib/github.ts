@@ -27,20 +27,26 @@ export async function fetchReleases(limit = 20): Promise<GitHubRelease[]> {
     headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;
   }
 
-  const res = await fetch(
-    `${GITHUB_API_BASE}/repos/${parts.owner}/${parts.repo}/releases?per_page=${Math.min(limit, 100)}`,
-    {
-      headers,
-      next: { revalidate: 300 },
-    },
-  );
+  try {
+    const res = await fetch(
+      `${GITHUB_API_BASE}/repos/${parts.owner}/${parts.repo}/releases?per_page=${Math.min(limit, 100)}`,
+      {
+        headers,
+        next: { revalidate: 300 },
+      },
+    );
+    if (!res.ok) {
+      return [];
+    }
 
-  if (!res.ok) {
+    const data = (await res.json()) as GitHubRelease[];
+    if (!Array.isArray(data)) {
+      return [];
+    }
+    return data.filter((release) => release && !release.draft);
+  } catch {
     return [];
   }
-
-  const data = (await res.json()) as GitHubRelease[];
-  return data.filter((release) => !release.draft);
 }
 
 export function selectReleaseByChannel(releases: GitHubRelease[], channel: ReleaseChannel): GitHubRelease | null {

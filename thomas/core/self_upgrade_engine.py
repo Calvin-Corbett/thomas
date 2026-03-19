@@ -10,9 +10,10 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any
 
 from thomas.core.code_issue_engine import CodeIssueEngine, get_code_issue_engine
 from thomas.core.persistence import get_persistence
@@ -79,18 +80,20 @@ class SelfUpgradeEngine:
     def __init__(
         self,
         *,
-        idle_threshold_s: Optional[float] = None,
-        poll_interval_s: Optional[float] = None,
-        cycle_interval_s: Optional[float] = None,
-        max_cycles_per_session: Optional[int] = None,
-        issue_engine: Optional[CodeIssueEngine] = None,
-        notify_fn: Optional[Callable[[str], None]] = None,
-        log_path: Optional[Path] = None,
+        idle_threshold_s: float | None = None,
+        poll_interval_s: float | None = None,
+        cycle_interval_s: float | None = None,
+        max_cycles_per_session: int | None = None,
+        issue_engine: CodeIssueEngine | None = None,
+        notify_fn: Callable[[str], None] | None = None,
+        log_path: Path | None = None,
     ) -> None:
         self._idle_threshold_s = float(
             _DEFAULT_IDLE_THRESHOLD_S if idle_threshold_s is None else max(0.0, float(idle_threshold_s))
         )
-        self._poll_interval_s = float(_DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s)))
+        self._poll_interval_s = float(
+            _DEFAULT_POLL_INTERVAL_S if poll_interval_s is None else max(1.0, float(poll_interval_s))
+        )
         self._cycle_interval_s = float(
             _DEFAULT_CYCLE_INTERVAL_S if cycle_interval_s is None else max(1.0, float(cycle_interval_s))
         )
@@ -102,22 +105,22 @@ class SelfUpgradeEngine:
         self._log_path = Path(log_path or (STATE_DIR / "self_upgrade_engine.jsonl"))
 
         self._running = False
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
         self._active_cycle = False
         self._lock = threading.Lock()
         self._last_user_ts = time.monotonic()
         self._last_cycle_ts = 0.0
         self._cycle_count = 0
-        self._last_report: Dict[str, Any] = {}
-        self._last_error: Optional[str] = None
-        self._last_error_at: Optional[str] = None
+        self._last_report: dict[str, Any] = {}
+        self._last_error: str | None = None
+        self._last_error_at: str | None = None
         self._enabled = _env_bool("THOMAS_SELF_UPGRADE_ENGINE_ENABLED", True)
 
     def start(
         self,
         *,
-        notify_fn: Optional[Callable[[str], None]] = None,
-        issue_engine: Optional[CodeIssueEngine] = None,
+        notify_fn: Callable[[str], None] | None = None,
+        issue_engine: CodeIssueEngine | None = None,
     ) -> None:
         if notify_fn is not None:
             self._notify_fn = notify_fn
@@ -139,7 +142,7 @@ class SelfUpgradeEngine:
     def is_idle(self) -> bool:
         return (time.monotonic() - self._last_user_ts) >= self._idle_threshold_s
 
-    def status_snapshot(self) -> Dict[str, Any]:
+    def status_snapshot(self) -> dict[str, Any]:
         with self._lock:
             return {
                 "running": bool(self._running),
@@ -162,7 +165,7 @@ class SelfUpgradeEngine:
             f"opportunities={snap['last_opportunity_count']}"
         )
 
-    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> Dict[str, Any]:
+    def run_cycle_once(self, *, reason: str = "manual", force: bool = False) -> dict[str, Any]:
         if not force:
             if not self._enabled:
                 return {"ok": False, "reason": "engine_disabled"}
@@ -216,7 +219,7 @@ class SelfUpgradeEngine:
             with self._lock:
                 self._active_cycle = False
 
-    def _run_cycle_checked(self, *, reason: str) -> Dict[str, Any]:
+    def _run_cycle_checked(self, *, reason: str) -> dict[str, Any]:
         started = time.monotonic()
         try:
             report = self._run_cycle(reason=reason)
@@ -225,7 +228,7 @@ class SelfUpgradeEngine:
         except Exception as exc:  # pragma: no cover - defensive path
             return self._error_report(reason=reason, exc=exc, started=started)
 
-    def _run_cycle(self, *, reason: str) -> Dict[str, Any]:
+    def _run_cycle(self, *, reason: str) -> dict[str, Any]:
         started = time.monotonic()
         issue_engine = self._issue_engine or get_code_issue_engine()
         issue_report = issue_engine.run_cycle_once(reason="self_upgrade", force=True)
@@ -279,7 +282,7 @@ class SelfUpgradeEngine:
 
         return report
 
-    def _error_report(self, *, reason: str, exc: BaseException, started: float) -> Dict[str, Any]:
+    def _error_report(self, *, reason: str, exc: BaseException, started: float) -> dict[str, Any]:
         with self._lock:
             self._cycle_count += 1
             cycle_id = int(self._cycle_count)
@@ -310,7 +313,7 @@ class SelfUpgradeEngine:
         self._last_error = None
         self._last_error_at = None
 
-    def _run_json_module_check(self, module: str) -> Dict[str, Any]:
+    def _run_json_module_check(self, module: str) -> dict[str, Any]:
         cmd = [sys.executable, "-m", module, "--json"]
         try:
             proc = subprocess.run(
@@ -348,12 +351,12 @@ class SelfUpgradeEngine:
 
     def _collect_opportunities(
         self,
-        issue_report: Dict[str, Any],
-        ui_report: Dict[str, Any],
-        config_report: Dict[str, Any],
-        contract_report: Dict[str, Any],
-    ) -> List[Dict[str, Any]]:
-        opportunities: List[Dict[str, Any]] = []
+        issue_report: dict[str, Any],
+        ui_report: dict[str, Any],
+        config_report: dict[str, Any],
+        contract_report: dict[str, Any],
+    ) -> list[dict[str, Any]]:
+        opportunities: list[dict[str, Any]] = []
 
         unresolved_count = int(issue_report.get("unresolved_count") or 0)
         if unresolved_count > 0:
@@ -409,7 +412,7 @@ class SelfUpgradeEngine:
 
         return opportunities
 
-    def _run_ui_workflow_check(self) -> Dict[str, Any]:
+    def _run_ui_workflow_check(self) -> dict[str, Any]:
         try:
             engine = get_ui_workflow_engine()
             report = engine.run_cycle_once(reason="self_upgrade", force=True)
@@ -424,7 +427,7 @@ class SelfUpgradeEngine:
             }
         return {"ok": False, "score": 0, "warning_count": 0, "warnings": []}
 
-    def _sync_upgrade_goals(self, opportunities: List[Dict[str, Any]]) -> set[str]:
+    def _sync_upgrade_goals(self, opportunities: list[dict[str, Any]]) -> set[str]:
         persistence = get_persistence()
         desired_ids: set[str] = set()
 
@@ -458,7 +461,7 @@ class SelfUpgradeEngine:
         digest = hashlib.sha1(blob).hexdigest()[:12]
         return f"{_GOAL_PREFIX}{kind}:{digest}"
 
-    def _write_cycle_log(self, report: Dict[str, Any]) -> None:
+    def _write_cycle_log(self, report: dict[str, Any]) -> None:
         try:
             self._log_path.parent.mkdir(parents=True, exist_ok=True)
             with self._log_path.open("a", encoding="utf-8") as handle:
@@ -467,7 +470,7 @@ class SelfUpgradeEngine:
             log.debug("SelfUpgradeEngine failed to write log: %s", exc)
 
 
-_engine: Optional[SelfUpgradeEngine] = None
+_engine: SelfUpgradeEngine | None = None
 _engine_lock = threading.Lock()
 
 

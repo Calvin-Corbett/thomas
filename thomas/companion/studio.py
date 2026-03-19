@@ -10,7 +10,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any
 
 from .contracts import ModuleContract
-from .kernel import CompanionKernel, KERNEL_VERSION
+from .kernel import KERNEL_VERSION, CompanionKernel
 from .policy.validator import collect_command_invocation_paths
 
 
@@ -109,8 +109,7 @@ class BundleStudio:
         if not module_id:
             raise ValueError("module.id is required")
         module_payload["entrypoint"] = (
-            str(module_payload.get("entrypoint") or "").strip()
-            or f"modules/{module_id}/ui/screen.json"
+            str(module_payload.get("entrypoint") or "").strip() or f"modules/{module_id}/ui/screen.json"
         )
         slots = module_payload.get("slots")
         if not isinstance(slots, list) or not slots:
@@ -118,12 +117,8 @@ class BundleStudio:
         perms = module_payload.get("permissions")
         if not isinstance(perms, list) or not perms:
             module_payload["permissions"] = ["ui.render", "storage.read"]
-        module_payload["ui_schema_version"] = (
-            str(module_payload.get("ui_schema_version") or "").strip() or "0.1.0"
-        )
-        module_payload["display_name"] = (
-            str(module_payload.get("display_name") or "").strip() or module_id
-        )
+        module_payload["ui_schema_version"] = str(module_payload.get("ui_schema_version") or "").strip() or "0.1.0"
+        module_payload["display_name"] = str(module_payload.get("display_name") or "").strip() or module_id
         module_payload["description"] = str(module_payload.get("description") or "").strip()
         return module_payload
 
@@ -145,9 +140,7 @@ class BundleStudio:
         else:
             stamp = _now_iso().replace(":", "").replace("-", "").replace("+", "_")
             bundle_dir = (
-                self.kernel.paths.bundles_dir
-                / "studio"
-                / f"{_slug(module.module_id)}-{_slug(module.version)}-{stamp}"
+                self.kernel.paths.bundles_dir / "studio" / f"{_slug(module.module_id)}-{_slug(module.version)}-{stamp}"
             ).resolve()
 
         if bundle_dir.exists():
@@ -185,9 +178,7 @@ class BundleStudio:
                 if not _safe_rel(rel):
                     raise ValueError(f"unsafe extra_files path: {rel}")
                 if not rel.startswith(module_prefix):
-                    raise ValueError(
-                        f"extra_files path must stay within module namespace '{module_prefix}': {rel}"
-                    )
+                    raise ValueError(f"extra_files path must stay within module namespace '{module_prefix}': {rel}")
                 dst = payload_root / rel
                 dst.parent.mkdir(parents=True, exist_ok=True)
                 content = item.get("content")
@@ -215,15 +206,9 @@ class BundleStudio:
         created_at = _now_iso()
         manifest_without_sig: dict[str, Any] = {
             "schema_version": 1,
-            "bundle_id": (
-                str(payload.get("bundle_id") or "").strip()
-                or f"{module.module_id}-{module.version}"
-            ),
+            "bundle_id": (str(payload.get("bundle_id") or "").strip() or f"{module.module_id}-{module.version}"),
             "created_at": created_at,
-            "min_kernel_version": (
-                str(payload.get("min_kernel_version") or "").strip()
-                or KERNEL_VERSION
-            ),
+            "min_kernel_version": (str(payload.get("min_kernel_version") or "").strip() or KERNEL_VERSION),
             "module": module.to_dict(),
             "files": file_rows,
             "release_notes": str(payload.get("release_notes") or "").strip(),

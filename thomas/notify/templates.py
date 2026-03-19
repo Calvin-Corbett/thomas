@@ -323,18 +323,19 @@ class TemplateManager:
         Raises:
             TemplateException: If template already exists
         """
-        try:
-            self.engine.get_template(template_id)
+        if template_id in self.engine.template_versions:
             raise TemplateException(
                 f"Template {template_id} already exists",
                 template_id=template_id,
             )
-        except TemplateException as e:
-            if "already exists" in str(e):
-                raise
 
         if variables is None:
-            variables = self.engine.extract_variables(template_id)
+            pattern = r"\{\{(\w+)\}\}"
+            variables = {
+                match.group(1)
+                for match in re.finditer(pattern, f"{subject} {body}")
+                if not match.group(1).startswith("#")
+            }
 
         template = Template(
             template_id=template_id,

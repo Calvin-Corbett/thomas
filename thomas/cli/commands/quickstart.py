@@ -16,6 +16,8 @@ try:
 except ImportError:
     from thomas._vendor import click_shim as click  # type: ignore
 
+from thomas.cli.product_shell import print_section_heading
+
 logger = logging.getLogger(__name__)
 
 
@@ -26,7 +28,7 @@ def _detect_ollama_models() -> list:
         with urllib.request.urlopen(req, timeout=3) as resp:
             data = json.loads(resp.read())
             return [m["name"] for m in data.get("models", [])]
-    except ImportError:
+    except Exception:
         return []
 
 
@@ -51,7 +53,7 @@ root = "./runtime"
 style = "balanced"
 """
     path = Path("thomas.toml")
-    path.write_text(content)
+    path.write_text(content, encoding="utf-8")
     return path
 
 
@@ -61,31 +63,28 @@ def run_quickstart() -> str | None:
     Returns:
         Path to config file, or None if cancelled
     """
-    click.echo(click.style("\n  Thomas Quick Start", fg="cyan", bold=True))
-    click.echo(click.style("  " + "─" * 25, fg="cyan"))
+    print_section_heading("Thomas Quick Start")
+    click.echo("  Start simple. Thomas can grow into deeper automation later.")
 
-    # Check existing config
     if Path("thomas.toml").exists():
-        click.echo(click.style("  ✓ Config already exists!", fg="green"))
+        click.echo(click.style("  OK: Config already exists.", fg="green"))
         return "thomas.toml"
 
-    # Try local Ollama first
     models = _detect_ollama_models()
     if models:
-        click.echo(click.style(f"  ✓ Found Ollama with {len(models)} model(s)", fg="green"))
+        click.echo(click.style(f"  OK: Found Ollama with {len(models)} model(s).", fg="green"))
         model = models[0]
         click.echo(f"  Using: {model}")
         path = _write_minimal_config("http://localhost:11434/v1", "", model, "ollama")
-        click.echo(click.style(f"  ✓ Config saved: {path}", fg="green"))
-        click.echo(click.style('\n  Run: thomas chat "hello"', fg="yellow"))
+        click.echo(click.style(f"  OK: Config saved: {path}", fg="green"))
+        click.echo(click.style('\n  Next: thomas chat "hello"', fg="yellow"))
         return str(path)
 
-    # No local models — ask for API key
     click.echo("  No local models found. Let's set up a cloud provider.")
     click.echo("")
     click.echo("  1. OpenAI (GPT-4o)")
     click.echo("  2. Anthropic (Claude)")
-    click.echo("  3. Groq (Llama — fast & free tier)")
+    click.echo("  3. Groq (Llama - fast and free-tier friendly)")
 
     choice = click.prompt("  Provider", type=int, default=1)
 
@@ -102,8 +101,8 @@ def run_quickstart() -> str | None:
         return None
 
     path = _write_minimal_config(base_url, api_key, model, provider)
-    click.echo(click.style(f"\n  ✓ Config saved: {path}", fg="green"))
-    click.echo(click.style('  Run: thomas chat "hello"', fg="yellow"))
+    click.echo(click.style(f"\n  OK: Config saved: {path}", fg="green"))
+    click.echo(click.style('  Next: thomas chat "hello"', fg="yellow"))
     click.echo("")
     return str(path)
 
@@ -113,5 +112,5 @@ def register_quickstart_commands(cli: click.Group) -> None:
 
     @cli.command("quickstart")
     def quickstart_cmd():
-        """Express setup — get chatting in 30 seconds."""
+        """Express setup - get chatting in 30 seconds."""
         run_quickstart()

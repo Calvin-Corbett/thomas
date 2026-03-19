@@ -4,11 +4,9 @@ Provides API gateway functionality with request routing, rate limiting,
 and authentication middleware for managing API traffic.
 """
 
-import hashlib
 import logging
 import os
 import secrets
-import warnings
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
@@ -128,13 +126,20 @@ class AuthMiddleware:
 
     def __init__(self):
         self.tokens: dict[str, AuthToken] = {}
-        self.secret_key: str = os.environ.get("THOMAS_SECRET_KEY", "")
-        if not self.secret_key:
-            warnings.warn(
-                "THOMAS_SECRET_KEY not set — using random key. Set this env var for production.",
-                stacklevel=2,
-            )
-            self.secret_key = secrets.token_hex(32)
+        self._secret_key: str | None = None
+
+    def _ensure_secret_key(self) -> str:
+        """Resolve gateway secret only when auth functionality is exercised.
+
+        This keeps module import free of warnings/side effects while still
+        providing an ephemeral secret when env configuration is absent.
+        """
+
+        if self._secret_key:
+            return self._secret_key
+        configured = os.environ.get("THOMAS_SECRET_KEY", "").strip()
+        self._secret_key = configured or secrets.token_hex(32)
+        return self._secret_key
 
     def register_token(self, token: AuthToken) -> None:
         """Register an authentication token."""
@@ -149,6 +154,7 @@ class AuthMiddleware:
 
     def verify_token(self, token: str, required_scope: list[str] | None = None) -> bool:
         """Verify an authentication token."""
+        self._ensure_secret_key()
         if token not in self.tokens:
             return False
 
@@ -164,6 +170,7 @@ class AuthMiddleware:
 
     def generate_token(self, client_id: str, scope: list[str], ttl_hours: int = 24) -> str:
         """Generate a new authentication token."""
+        self._ensure_secret_key()
         token = secrets.token_hex(32)
 
         expires_at = datetime.now() + timedelta(hours=ttl_hours)

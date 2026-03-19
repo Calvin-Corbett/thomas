@@ -40,6 +40,19 @@ Use this skill for any website UI change where tiny alignment/regression mistake
 - Verify no horizontal overflow.
 - For tiny mount/alignment work, use a dedicated lab page (if present) and tune by numeric offsets, then re-check in real footer/page context.
 
+## Common-Practice Logic Mode
+
+Before handoff, explicitly pressure-test the UI against common product practice and keep iterating until every answer is yes.
+
+- Does this overpower the primary workflow or content?
+- Does secondary UI stay hidden, collapsed, or visually quiet when it is idle?
+- Would a normal chat/product app put this control here by default, or am I making system state louder than the user's main job?
+- Does every persistent panel above the main content earn its height on every screen size?
+- If the surface is stale, empty, or already complete, does it get out of the way?
+- Can a first-time user tell what matters most within three seconds?
+
+For chat surfaces, the conversation must stay primary. Status/task chrome should be compact by default and only expand when there is an active blocker, active work, or a clear user benefit.
+
 ## Required handoff summary
 
 - list exact files changed

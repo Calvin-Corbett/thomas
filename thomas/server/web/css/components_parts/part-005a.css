@@ -58,7 +58,7 @@
     to { transform: rotate(360deg); }
 }
 
-/* ── Drag & Drop Overlay ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Drag & Drop Overlay ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .composer-drop-overlay {
     display: none;
     position: absolute;
@@ -80,7 +80,7 @@
     color: var(--accent-primary, #58a6ff);
 }
 
-/* ── Slash Command Palette ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Slash Command Palette ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .slash-palette {
     display: none;
     position: absolute;
@@ -122,7 +122,7 @@
     font-size: 12px;
 }
 
-/* ── Chat Search Bar ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Chat Search Bar ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .chat-search-bar {
     display: none;
     padding: 6px 12px;
@@ -164,7 +164,7 @@
     min-width: 60px;
     text-align: center;
 }
-/* Task continuity panel hidden — replaced by inline thinking dropdown in chat bubbles */
+/* Task continuity panel hidden ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â replaced by inline thinking dropdown in chat bubbles */
 .task-continuity-panel {
     display: none !important;
 }
@@ -208,12 +208,37 @@
     border-color: rgba(245, 132, 132, 0.58);
     background: rgba(188, 75, 75, 0.34);
 }
-.task-continuity-refresh {
+.task-continuity-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+.task-continuity-refresh,
+.task-continuity-toggle {
     width: 28px;
     height: 28px;
     border-radius: 10px;
     border: 1px solid var(--border-light);
     background: rgba(18, 24, 38, 0.48);
+}
+.task-continuity-panel.is-collapsed {
+    gap: 6px;
+    padding: 8px 10px;
+}
+.task-continuity-panel.is-collapsed .task-continuity-blockers,
+.task-continuity-panel.is-collapsed .task-continuity-progress,
+.task-continuity-panel.is-collapsed .task-continuity-events,
+.task-continuity-panel.is-collapsed .task-continuity-meta,
+.task-continuity-panel.is-collapsed .task-continuity-runtime {
+    display: none;
+}
+.task-continuity-panel.is-collapsed .task-continuity-goal {
+    font-size: 12px;
+    color: var(--text-secondary);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 .task-continuity-goal,
 .task-continuity-progress {
@@ -267,13 +292,348 @@
     font-size: 11px;
     color: var(--text-muted);
 }
+
+.task-continuity-runtime {
+    display: flex;
+    flex-direction: column;
+    gap: 7px;
+    padding: 9px 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 180, 226, 0.18);
+    background: rgba(7, 13, 24, 0.46);
+}
+.task-continuity-runtime-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-width: 0;
+}
+.task-continuity-runtime-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 62px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(147, 159, 184, 0.34);
+    background: rgba(100, 112, 138, 0.22);
+    color: #dce9f7;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+.task-continuity-runtime-pill.state-live {
+    border-color: rgba(102, 225, 180, 0.34);
+    background: rgba(26, 60, 47, 0.56);
+    color: #b8f1d8;
+}
+.task-continuity-runtime-pill.state-quiet,
+.task-continuity-runtime-pill.state-starting {
+    border-color: rgba(167, 201, 246, 0.32);
+    background: rgba(13, 21, 36, 0.7);
+    color: #dbe9ff;
+}
+.task-continuity-runtime-pill.state-stalled {
+    border-color: rgba(255, 140, 140, 0.48);
+    background: rgba(69, 27, 27, 0.68);
+    color: #ffc0c0;
+}
+.task-continuity-runtime-pill.state-idle {
+    border-color: rgba(147, 159, 184, 0.28);
+    background: rgba(75, 84, 104, 0.18);
+    color: var(--text-muted);
+}
+.task-continuity-runtime-label {
+    min-width: 0;
+    font-size: 12px;
+    color: #ecf5ff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.task-continuity-runtime-rail {
+    position: relative;
+    height: 8px;
+    border-radius: 999px;
+    overflow: hidden;
+    background: rgba(255, 255, 255, 0.06);
+}
+.task-continuity-runtime-rail > span {
+    display: block;
+    height: 100%;
+    width: 0;
+    border-radius: inherit;
+    background: linear-gradient(90deg, #58a6ff, #6dd7b8);
+    transition: width 180ms ease;
+}
+.task-continuity-runtime-rail.is-indeterminate > span {
+    width: 34%;
+    animation: taskContinuitySweep 1.55s ease-in-out infinite;
+}
+@keyframes taskContinuitySweep {
+    0% { transform: translateX(-120%); }
+    100% { transform: translateX(320%); }
+}
+.task-continuity-runtime-meta {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    font-size: 11px;
+    color: var(--text-muted);
+}
+.task-continuity-runtime-list {
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    display: grid;
+    gap: 5px;
+}
+.task-continuity-runtime-list li {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding: 6px 8px;
+    border-radius: 10px;
+    background: rgba(255, 255, 255, 0.03);
+}
+.task-continuity-runtime-list strong {
+    font-size: 11px;
+    color: #eef6ff;
+}
+.task-continuity-runtime-list span {
+    font-size: 10px;
+    color: var(--text-muted);
+}
+.chat-agent-presence {
+    display: none !important;
+    position: fixed;
+    left: calc(var(--sidebar-visible-width, 0px) + 18px);
+    bottom: calc(var(--composer-offset, 176px) - 64px);
+    z-index: 28;
+    opacity: 0;
+    transform: translateY(18px) scale(0.92);
+    pointer-events: none;
+    transition: opacity 180ms ease, transform 220ms ease;
+}
+.chat-agent-presence.is-hidden {
+    opacity: 0;
+}
+.chat-agent-presence.is-active {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+    cursor: pointer;
+}
+.chat-agent-presence.is-arriving .chat-agent-presence-bot-wrap {
+    animation:
+        chatAgentPresenceDrop 680ms cubic-bezier(0.2, 0.82, 0.22, 1.08),
+        chatAgentPresencePatrol 5.8s ease-in-out 700ms infinite;
+}
+.chat-agent-presence.is-arriving .chat-agent-presence-teleporter {
+    animation: chatAgentPresencePortal 820ms ease-out;
+}
+.chat-agent-presence.is-exiting {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.86);
+    pointer-events: none;
+}
+.chat-agent-presence:focus-visible .chat-agent-presence-shell,
+.chat-agent-presence:hover .chat-agent-presence-shell {
+    border-color: rgba(132, 190, 255, 0.44);
+    transform: translateY(-1px);
+    box-shadow: 0 18px 34px rgba(7, 16, 30, 0.32);
+}
+.chat-agent-presence-shell {
+    display: inline-flex;
+    align-items: flex-end;
+    gap: 14px;
+    min-width: 0;
+    max-width: min(340px, calc(100vw - 28px));
+    padding: 6px 10px 8px;
+    border-radius: 18px;
+    border: 1px solid rgba(166, 198, 244, 0.18);
+    background: linear-gradient(180deg, rgba(8, 14, 25, 0.82), rgba(7, 13, 24, 0.66));
+    backdrop-filter: blur(8px);
+    box-shadow: 0 16px 30px rgba(3, 9, 18, 0.24);
+    transition: border-color 180ms ease, box-shadow 220ms ease, transform 220ms ease;
+}
+.chat-agent-presence-stage {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-end;
+    min-width: 58px;
+    padding: 0 6px 6px;
+}
+.chat-agent-presence-name {
+    position: relative;
+    z-index: 3;
+    max-width: 118px;
+    margin-bottom: 4px;
+    padding: 2px 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(166, 198, 244, 0.18);
+    background: rgba(13, 21, 36, 0.92);
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #eef6ff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-agent-presence-teleporter {
+    position: absolute;
+    left: 50%;
+    bottom: 0;
+    width: 52px;
+    height: 20px;
+    transform: translateX(-50%);
+    opacity: 0.88;
+    pointer-events: none;
+}
+.chat-agent-presence-ring,
+.chat-agent-presence-core {
+    position: absolute;
+    inset: 0;
+}
+.chat-agent-presence-ring {
+    border-radius: 50%;
+    border: 1px solid rgba(88, 166, 255, 0.42);
+    box-shadow: 0 0 16px rgba(88, 166, 255, 0.28);
+}
+.chat-agent-presence-ring.ring-inner {
+    inset: 4px;
+    border-color: rgba(109, 215, 184, 0.5);
+}
+.chat-agent-presence-core {
+    left: 50%;
+    top: 50%;
+    width: 16px;
+    height: 16px;
+    inset: auto;
+    transform: translate(-50%, -50%);
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.92), rgba(88, 166, 255, 0.1) 72%, rgba(88, 166, 255, 0) 100%);
+    filter: blur(0.5px);
+}
+.chat-agent-presence-bot-wrap {
+    position: relative;
+    z-index: 2;
+    display: inline-flex;
+    align-items: flex-end;
+    justify-content: center;
+    min-width: 42px;
+    min-height: 38px;
+    animation: chatAgentPresencePatrol 5.8s ease-in-out infinite;
+}
+@keyframes chatAgentPresencePatrol {
+    0%, 100% { transform: translateX(-2px); }
+    24% { transform: translateX(5px); }
+    54% { transform: translateX(0); }
+    78% { transform: translateX(-5px); }
+}
+@keyframes chatAgentPresenceDrop {
+    0% { transform: translateY(-36px) scale(0.72); }
+    62% { transform: translateY(4px) scale(1.04); }
+    100% { transform: translateY(0) scale(1); }
+}
+@keyframes chatAgentPresencePortal {
+    0% { opacity: 0; transform: translateX(-50%) scale(0.42); }
+    35% { opacity: 1; }
+    100% { opacity: 0.88; transform: translateX(-50%) scale(1); }
+}
+.chat-agent-presence-count {
+    position: absolute;
+    top: 18px;
+    right: -4px;
+    z-index: 4;
+    min-width: 18px;
+    height: 18px;
+    padding: 0 5px;
+    border-radius: 999px;
+    border: 1px solid rgba(109, 215, 184, 0.42);
+    background: rgba(20, 61, 48, 0.9);
+    font-size: 10px;
+    font-weight: 700;
+    line-height: 18px;
+    text-align: center;
+    color: #d6fff0;
+}
+.chat-agent-presence-copy {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    padding-bottom: 4px;
+}
+.chat-agent-presence-copy strong {
+    font-size: 12px;
+    color: #eef6ff;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-agent-presence-copy span {
+    font-size: 10px;
+    color: var(--text-muted);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.chat-agent-presence-pulse {
+    position: absolute;
+    right: -2px;
+    bottom: 10px;
+    width: 8px;
+    height: 8px;
+    border-radius: 999px;
+    background: #58a6ff;
+    box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.34);
+    animation: chatAgentPresencePulse 1.45s ease-in-out infinite;
+}
+.chat-agent-presence[data-state="live"] .chat-agent-presence-pulse {
+    background: #6dd7b8;
+}
+.chat-agent-presence[data-state="stalled"] .chat-agent-presence-pulse {
+    background: #ff9e9e;
+}
+.chat-agent-presence[data-state="quiet"] .chat-agent-presence-pulse,
+.chat-agent-presence[data-state="starting"] .chat-agent-presence-pulse {
+    background: #58a6ff;
+}
+@keyframes chatAgentPresencePulse {
+    0% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0.34); }
+    70% { box-shadow: 0 0 0 10px rgba(88, 166, 255, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(88, 166, 255, 0); }
+}
+@media (max-width: 760px) {
+    .chat-agent-presence {
+        left: 10px;
+        right: 10px;
+        bottom: calc(var(--composer-offset, 176px) - 70px);
+    }
+    .chat-agent-presence-shell {
+        width: calc(100vw - 20px);
+        min-width: 0;
+        gap: 10px;
+        padding-right: 12px;
+    }
+    .chat-agent-presence-name {
+        max-width: 90px;
+    }
+}
 .message-row.search-highlight .message-content {
     outline: 2px solid var(--accent-primary, #58a6ff);
     outline-offset: 2px;
     border-radius: var(--radius-sm);
 }
 
-/* ── Pin Indicator ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Pin Indicator ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .message-row.pinned::before {
     content: '';
     position: absolute;
@@ -285,7 +645,7 @@
     border-radius: 2px;
 }
 
-/* ── Typing Indicator (3 dots) ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Typing Indicator (3 dots) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .typing-indicator {
     display: inline-flex;
     gap: 4px;
@@ -306,18 +666,18 @@
     30%           { opacity: 1;   transform: translateY(-4px); }
 }
 
-/* ── Streaming Cursor — disabled ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Streaming Cursor ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â disabled ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .streaming-cursor::after {
     content: none;
 }
 
-/* ── Chat Robot Status (replaces typing + thinking + tool indicators) ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Chat Robot Status (replaces typing + thinking + tool indicators) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .chat-robot-status {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    padding: 6px 0;
-    min-height: 30px;
+    gap: 12px;
+    padding: 8px 0;
+    min-height: 36px;
     width: 100%;
     flex-wrap: wrap; /* allow thinking-details to drop to next line */
 }
@@ -330,39 +690,44 @@
     --agent-secondary: #5aaeff;
     --agent-trim: #0d1117;
     position: relative;
-    width: 24px;
-    height: 22px;
+    width: 31px;
+    height: 29px;
     image-rendering: pixelated;
     flex-shrink: 0;
     filter: drop-shadow(0 2px 5px rgba(88, 166, 255, 0.3));
     transform-origin: bottom center;
 }
 
-.chat-robot-agent .office-agent-head {
+.chat-robot-agent .office-agent-head,
+.chat-robot-agent .agent-head {
     position: absolute;
     top: 0;
-    left: 6px;
-    width: 12px;
-    height: 7px;
+    left: 8px;
+    width: 16px;
+    height: 9px;
     border: 1px solid var(--agent-trim);
     background: var(--agent-primary);
 }
-.chat-robot-agent .office-agent-eye {
+.chat-robot-agent .office-agent-eye,
+.chat-robot-agent .agent-eye {
     position: absolute;
-    top: 2px;
+    top: 3px;
     width: 2px;
     height: 2px;
     background: #0b1726;
 }
-.chat-robot-agent .office-agent-eye-left { left: 2px; }
-.chat-robot-agent .office-agent-eye-right { left: 7px; }
+.chat-robot-agent .office-agent-eye-left,
+.chat-robot-agent .agent-eye-left { left: 3px; }
+.chat-robot-agent .office-agent-eye-right,
+.chat-robot-agent .agent-eye-right { left: 10px; }
 
-.chat-robot-agent .office-agent-body {
+.chat-robot-agent .office-agent-body,
+.chat-robot-agent .agent-body {
     position: absolute;
-    top: 8px;
-    left: 5px;
-    width: 14px;
-    height: 8px;
+    top: 10px;
+    left: 6px;
+    width: 18px;
+    height: 10px;
     border: 1px solid var(--agent-trim);
     background: linear-gradient(
         to bottom,
@@ -373,16 +738,19 @@
     );
 }
 
-.chat-robot-agent .office-agent-leg {
+.chat-robot-agent .office-agent-leg,
+.chat-robot-agent .agent-leg {
     position: absolute;
-    top: 17px;
-    width: 4px;
-    height: 5px;
+    top: 21px;
+    width: 5px;
+    height: 7px;
     border: 1px solid var(--agent-trim);
     background: var(--agent-secondary);
 }
-.chat-robot-agent .office-agent-leg-left { left: 7px; }
-.chat-robot-agent .office-agent-leg-right { left: 13px; }
+.chat-robot-agent .office-agent-leg-left,
+.chat-robot-agent .agent-leg-left { left: 9px; }
+.chat-robot-agent .office-agent-leg-right,
+.chat-robot-agent .agent-leg-right { left: 17px; }
 
 /* Text wrap for saying + timer */
 .chat-robot-text-wrap {
@@ -392,7 +760,7 @@
     min-width: 0;
 }
 .chat-robot-saying {
-    font-size: 12.5px;
+    font-size: 13px;
     color: var(--text-secondary);
     font-style: italic;
     transition: opacity 0.2s ease;
@@ -402,34 +770,34 @@
     opacity: 0;
 }
 .chat-robot-timer {
-    font-size: 10px;
+    font-size: 11px;
     color: var(--text-muted);
     font-variant-numeric: tabular-nums;
     opacity: 0.7;
 }
 
-/* ── Chat Robot Portal (reuses dino runner portal rings) ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Chat Robot Portal (reuses dino runner portal rings) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .chat-robot-portal-wrap {
     position: relative;
-    width: 24px;
-    height: 22px;
+    width: 31px;
+    height: 29px;
     flex-shrink: 0;
 }
 .chat-robot-text-wrap {
     min-width: 0;
-    width: calc(100% - 34px);
+    width: calc(100% - 44px);
 }
 .chat-robot-agent-step {
     position: absolute;
     left: 0;
     top: 0;
-    width: 24px;
-    height: 22px;
+    width: 31px;
+    height: 29px;
 }
 .chat-robot-portal {
     position: absolute;
-    width: 30px;
-    height: 30px;
+    width: 38px;
+    height: 38px;
     top: 50%;
     left: 50%;
     transform: translate(-50%, -50%) scale(0);
@@ -495,7 +863,7 @@
     100% { transform: translateX(0); }
 }
 
-/* ── Thinking Dropdown (inline in robot status) ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Thinking Dropdown (inline in robot status) ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .chat-robot-saying-row {
     display: inline-flex;
     align-items: center;
@@ -505,8 +873,8 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     padding: 0;
     margin: 0;
     border: none;
@@ -531,7 +899,7 @@
     overflow: hidden;
     transition: max-height 0.3s ease, opacity 0.2s ease;
     opacity: 0;
-    padding-left: 34px; /* align with text, past the robot icon */
+    padding-left: 44px; /* align with text, past the robot icon */
 }
 .chat-robot-thinking-details.expanded {
     max-height: 200px;
@@ -564,7 +932,7 @@
     font-size: 11px;
 }
 
-/* ── Post-stream "Thought for X.Xs" Summary ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Post-stream "Thought for X.Xs" Summary ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .thinking-summary {
     margin-bottom: 8px;
     border-bottom: 1px solid var(--border-light);
@@ -629,11 +997,11 @@
     font-size: 11px;
 }
 
-/* ── Landed robot portal-out wrapper ── */
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Landed robot portal-out wrapper ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ */
 .chat-robot-dock {
     position: fixed;
-    width: 20px;
-    height: 18px;
+    width: 31px;
+    height: 29px;
     z-index: 120;
     pointer-events: none;
 }
@@ -653,10 +1021,10 @@
     display: inline-block;
 }
 .chat-robot-landed-exit .chat-robot-portal {
-    width: 26px;
-    height: 26px;
-    left: -3px;
-    top: 9px;
+    width: 38px;
+    height: 38px;
+    left: 50%;
+    top: 50%;
 }
 .chat-robot-landed-exit .chat-robot-landed {
     animation: chatRobotDiveIntoPortal 0.42s cubic-bezier(0.22, 0.8, 0.24, 1) 0.16s forwards !important;
@@ -667,15 +1035,15 @@
     100% { transform: translateX(-10px) translateY(-2px) scale(0.25); opacity: 0; }
 }
 
-/* ── Robot Activity Animations ──
-   Design principles at 24×22px:
+/* ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ Robot Activity Animations ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬ÃƒÂ¢Ã¢â‚¬ÂÃ¢â€šÂ¬
+   Design principles at 24ÃƒÆ’Ã¢â‚¬â€22px:
    - Smooth, continuous motion (no sudden jumps)
-   - Subtle transforms only (±3px translate, ±4deg rotate max)
+   - Subtle transforms only (Ãƒâ€šÃ‚Â±3px translate, Ãƒâ€šÃ‚Â±4deg rotate max)
    - GPU-accelerated (transform + opacity only)
    - Each animation tells a micro-story
 */
 
-/* 1. Fishing — holds a rod, gets a tug, reels slightly */
+/* 1. Fishing ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â holds a rod, gets a tug, reels slightly */
 .chat-robot-anim-fishing {
     animation: chatRobotFishing 5s ease-in-out infinite;
 }
@@ -717,7 +1085,7 @@
     60%      { transform: rotate(-4deg); }
 }
 
-/* 2. Bouncing — classic character idle hop, squash & stretch */
+/* 2. Bouncing ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â classic character idle hop, squash & stretch */
 .chat-robot-anim-bouncing {
     animation: chatRobotBouncing 1.8s cubic-bezier(0.36, 0, 0.66, 1) infinite;
 }
@@ -727,7 +1095,7 @@
     15%      { transform: translateY(1px) scaleX(1.08) scaleY(0.88); }
     /* Launch up */
     35%      { transform: translateY(-6px) scaleX(0.94) scaleY(1.08); }
-    /* Apex — hang time */
+    /* Apex ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â hang time */
     45%      { transform: translateY(-6px) scaleX(0.97) scaleY(1.04); }
     /* Fall */
     62%      { transform: translateY(0) scaleX(1.06) scaleY(0.9); }
@@ -737,7 +1105,7 @@
     90%, 100% { transform: translateY(0) scaleX(1) scaleY(1); }
 }
 
-/* 3. Looking around — curious peek left, then right, with head tilt */
+/* 3. Looking around ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â curious peek left, then right, with head tilt */
 .chat-robot-anim-looking {
     animation: chatRobotLooking 4s ease-in-out infinite;
 }
@@ -745,7 +1113,7 @@
     0%, 100% { transform: translateX(0) rotate(0deg); }
     /* Look left slowly */
     12%      { transform: translateX(-2px) rotate(-4deg); }
-    /* Hold — stare at something */
+    /* Hold ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â stare at something */
     25%      { transform: translateX(-2px) rotate(-3deg); }
     /* Back to center */
     38%      { transform: translateX(0) rotate(0deg); }
@@ -753,14 +1121,14 @@
     45%      { transform: translateX(0) rotate(0deg); }
     /* Look right */
     58%      { transform: translateX(2px) rotate(4deg); }
-    /* Hold — spotted something? */
+    /* Hold ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â spotted something? */
     70%      { transform: translateX(2px) rotate(3deg); }
     /* Snap back (startled) */
     80%      { transform: translateX(0) rotate(-1deg); }
     90%      { transform: translateX(0) rotate(0deg); }
 }
 
-/* 4. Napping — settles down, gentle breathing, floating zzz */
+/* 4. Napping ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â settles down, gentle breathing, floating zzz */
 .chat-robot-anim-napping {
     animation: chatRobotNapping 4s ease-in-out infinite;
 }
@@ -791,7 +1159,7 @@
     100%     { opacity: 0; transform: translateY(-14px) translateX(5px) scale(0.3); }
 }
 
-/* 5. Waving — friendly wave (lean + arm motion via body tilt) */
+/* 5. Waving ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â friendly wave (lean + arm motion via body tilt) */
 .chat-robot-anim-waving {
     animation: chatRobotWaving 2.4s ease-in-out infinite;
 }

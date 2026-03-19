@@ -1,4 +1,4 @@
-"""Task journal — writes human-readable markdown task files.
+"""Task journal - writes human-readable markdown task files.
 
 Each non-trivial agent run creates a file in the journal directory (default: ./tasks/).
 The file records the original request, routing plan, tool calls, and final result.
@@ -6,8 +6,8 @@ Any agent or human reading the file gets full context to continue the work.
 
 Design:
 - Append-only during the task (crash-safe: each write opens, appends, closes).
-- Stdlib only — no SQLite, no threads, no external deps.
-- Idempotent finalize — safe to call multiple times.
+- Stdlib only - no SQLite, no threads, no external deps.
+- Idempotent finalize - safe to call multiple times.
 """
 
 from __future__ import annotations
@@ -16,7 +16,7 @@ import logging
 import re
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 log = logging.getLogger(__name__)
 
@@ -27,9 +27,32 @@ _SKIP_ROUTES = frozenset({"casual", "personal", "meta"})
 _MIN_PROMPT_LEN = 10
 
 
-def _slugify(text: str, max_len: int = 50) -> str:
+def _prompt_text(prompt: Any) -> str:
+    """Flatten multimodal prompt payloads into a readable text summary."""
+    if isinstance(prompt, str):
+        return prompt
+    if isinstance(prompt, list):
+        parts: list[str] = []
+        for item in prompt:
+            if isinstance(item, dict):
+                kind = str(item.get("type") or "").strip().lower()
+                if kind == "text":
+                    text = str(item.get("text") or "").strip()
+                    if text:
+                        parts.append(text)
+                elif kind == "image_url":
+                    parts.append("[Attached image]")
+            elif isinstance(item, str):
+                text = item.strip()
+                if text:
+                    parts.append(text)
+        return "\n".join(parts).strip()
+    return str(prompt or "")
+
+
+def _slugify(text: Any, max_len: int = 50) -> str:
     """Turn prompt text into a filesystem-safe slug."""
-    text = text.lower().strip()
+    text = _prompt_text(text).lower().strip()
     text = re.sub(r"[^a-z0-9\s-]", "", text)
     text = re.sub(r"[\s-]+", "-", text).strip("-")
     return text[:max_len].rstrip("-") or "task"
@@ -42,9 +65,9 @@ class TaskJournal:
         self,
         journal_dir: Path,
         run_id: str,
-        prompt: str,
-        route: Dict[str, Any],
-        model_info: Dict[str, Any],
+        prompt: Any,
+        route: dict[str, Any],
+        model_info: dict[str, Any],
     ) -> None:
         self._finalized = False
         self._iteration_count = 0
@@ -53,13 +76,14 @@ class TaskJournal:
         date_str = datetime.now().strftime("%Y-%m-%d")
         time_str = datetime.now().strftime("%H:%M")
         short_id = run_id[:6]
-        slug = _slugify(prompt)
+        prompt_text = _prompt_text(prompt)
+        slug = _slugify(prompt_text)
         filename = f"{date_str}_{short_id}_{slug}.md"
 
         self.path = journal_dir / filename
 
         # Build the title from the first ~80 chars of the prompt.
-        title = prompt.strip()
+        title = prompt_text.strip()
         if len(title) > 80:
             title = title[:77] + "..."
 
@@ -76,7 +100,7 @@ class TaskJournal:
             f"> **Created:** {date_str} {time_str} | **Status:** in_progress | **Run:** {run_id}\n"
             f"\n"
             f"## Original Request\n"
-            f'"{prompt.strip()}"\n'
+            f'"{prompt_text.strip()}"\n'
             f"\n"
             f"## Plan\n"
             f"- Route: {route_path} (confidence: {confidence:.2f})\n"
@@ -92,23 +116,19 @@ class TaskJournal:
         except OSError as e:
             log.warning("Failed to create task journal %s: %s", self.path, e)
 
-    def log_iteration(
-        self, iteration: int, token_estimate: int = 0
-    ) -> None:
+    def log_iteration(self, iteration: int, token_estimate: int = 0) -> None:
         """Append a timestamped iteration start line."""
         self._iteration_count = iteration
         ts = datetime.now().strftime("%H:%M")
         line = f"- [{ts}] Iteration {iteration} (~{token_estimate:,} context tokens)\n"
         self._append(line)
 
-    def log_tool_result(
-        self, tool_name: str, ok: bool, duration_ms: float
-    ) -> None:
+    def log_tool_result(self, tool_name: str, ok: bool, duration_ms: float) -> None:
         """Append a tool result line."""
         self._tool_count += 1
         status = "ok" if ok else "FAILED"
         ts = datetime.now().strftime("%H:%M")
-        line = f"  - [{ts}] {tool_name} → {status} ({duration_ms:.0f}ms)\n"
+        line = f"  - [{ts}] {tool_name} -> {status} ({duration_ms:.0f}ms)\n"
         self._append(line)
 
     def finalize(
@@ -117,7 +137,7 @@ class TaskJournal:
         iterations: int,
         tool_calls: int,
         total_tokens: int = 0,
-        error: Optional[str] = None,
+        error: str | None = None,
     ) -> None:
         """Write the result section and update the status in the header."""
         if self._finalized:
@@ -159,8 +179,8 @@ class TaskJournal:
 
 
 def should_create_journal(
-    prompt: str,
-    route: Dict[str, Any],
+    prompt: Any,
+    route: dict[str, Any],
     enabled: bool = True,
 ) -> bool:
     """Decide whether a journal should be created for this request."""
@@ -168,14 +188,14 @@ def should_create_journal(
 
 
 def journal_skip_reason(
-    prompt: str,
-    route: Dict[str, Any],
+    prompt: Any,
+    route: dict[str, Any],
     enabled: bool = True,
-) -> Optional[str]:
+) -> str | None:
     """Return skip reason when journal creation is blocked, otherwise None."""
     if not enabled:
         return "journal_disabled"
-    if len(prompt.strip()) < _MIN_PROMPT_LEN:
+    if len(_prompt_text(prompt).strip()) < _MIN_PROMPT_LEN:
         return "prompt_too_short"
     route_path = str(route.get("path", "")).strip().lower()
     if route_path in _SKIP_ROUTES:

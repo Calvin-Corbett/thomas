@@ -3,7 +3,13 @@ from __future__ import annotations
 import argparse
 import json
 
+import pytest
 import scripts.active_folders as mod
+
+
+@pytest.fixture(autouse=True)
+def _presence_gate_ok(monkeypatch) -> None:
+    monkeypatch.setattr(mod, "_presence_gate", lambda **_: (True, ""))
 
 
 def _guard_args(**overrides) -> argparse.Namespace:
@@ -17,6 +23,8 @@ def _guard_args(**overrides) -> argparse.Namespace:
         "auto_claim_note": "auto-claim-test",
         "replace_agent": True,
         "json": True,
+        "allow_presence_override": False,
+        "presence_override_reason": "",
     }
     base.update(overrides)
     return argparse.Namespace(**base)
@@ -99,3 +107,27 @@ def test_guard_staged_respects_require_explicit_agent(monkeypatch, capsys) -> No
     assert rc == 2
     assert payload["ok"] is False
     assert "explicit agent id required" in payload["error"]
+
+
+def test_claim_presence_gate_requires_override(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(mod, "_resolve_agent", lambda _agent: "codex-auto")
+    monkeypatch.setattr(mod, "_presence_gate", lambda **_: (False, "presence gate requires override"))
+
+    rc = mod._claim(
+        argparse.Namespace(
+            agent=None,
+            path=["thomas/server/routes"],
+            ttl=60,
+            note="",
+            replace_agent=True,
+            allow_conflicts=False,
+            json=True,
+            allow_presence_override=False,
+            presence_override_reason="",
+        )
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert payload["ok"] is False
+    assert payload["error"] == "presence gate requires override"

@@ -1,9 +1,11 @@
 import asyncio
 import unittest
 from dataclasses import dataclass
-from typing import Any, Dict, List
+from typing import Any
 
 from thomas.agent.loop import AgentLoop
+from thomas.agent.loop_streaming import apply_memory_policy, validate_memory_relevance
+from thomas.agent.routing import RouteDecision
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.events import EventType
 from thomas.core.llm import StreamEvent, TokenUsage
@@ -18,16 +20,14 @@ class _Ctx:
 class DummyMemory:
     def __init__(self) -> None:
         self.started = True
-        self.retrieve_calls: List[Dict[str, Any]] = []
-        self.events: List[Dict[str, str]] = []
-        self.pins: Dict[str, str] = {}
+        self.retrieve_calls: list[dict[str, Any]] = []
+        self.events: list[dict[str, str]] = []
+        self.pins: dict[str, str] = {}
         self.ingest_calls = 0
-        self.thread_policies: Dict[str, Dict[str, Any]] = {}
+        self.thread_policies: dict[str, dict[str, Any]] = {}
 
     def retrieve(self, query: str, thread: str, budget: int, mode: str) -> _Ctx:  # noqa: D401
-        self.retrieve_calls.append(
-            {"query": query, "thread": thread, "budget": budget, "mode": mode}
-        )
+        self.retrieve_calls.append({"query": query, "thread": thread, "budget": budget, "mode": mode})
         return _Ctx(text="remembered context")
 
     def add_event(self, thread: str, etype: str, text: str) -> int:
@@ -37,17 +37,17 @@ class DummyMemory:
     def pin(self, key: str, text: str) -> None:
         self.pins[key] = text
 
-    def ingest_pending(self) -> Dict[str, int]:
+    def ingest_pending(self) -> dict[str, int]:
         self.ingest_calls += 1
         return {"indexed": 0}
 
-    def set_thread_memory_policy(self, thread_id: str, **patch: Any) -> Dict[str, Any]:
+    def set_thread_memory_policy(self, thread_id: str, **patch: Any) -> dict[str, Any]:
         current = dict(self.thread_policies.get(thread_id, {}))
         current.update(patch)
         self.thread_policies[thread_id] = current
         return current
 
-    def thread_memory_policy(self, thread_id: str) -> Dict[str, Any]:
+    def thread_memory_policy(self, thread_id: str) -> dict[str, Any]:
         return dict(self.thread_policies.get(thread_id, {}))
 
 
@@ -145,8 +145,85 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
 
         policy = memory.thread_memory_policy("t1")
         self.assertTrue(policy.get("enabled"))
-        self.assertFalse(policy.get("include_global"))
+        self.assertTrue(policy.get("include_global"))
         self.assertTrue(policy.get("include_profile"))
+
+    def test_memory_policy_pref_overrides_apply_to_thread_settings(self) -> None:
+        agent, memory = self._build_agent()
+        agent._memory_include_thread_pref = False
+        agent._memory_include_global_pref = True
+        agent._memory_include_profile_pref = False
+        agent._memory_pins_only_pref = True
+        agent._memory_max_pack_tokens_pref = 1400
+        agent._memory_max_results_pref = 3
+        agent._memory_decay_half_life_hours_pref = 6.0
+        agent._memory_auto_compact_enabled_pref = False
+        agent._memory_auto_compact_episode_threshold_pref = 12
+        agent._memory_auto_compact_min_interval_hours_pref = 0.5
+        agent._memory_auto_optimize_enabled_pref = True
+        agent._memory_auto_optimize_waste_threshold_pref = 0.33
+        agent._memory_auto_optimize_min_interval_hours_pref = 1.25
+
+        route = RouteDecision(
+            path="general",
+            confidence=1.0,
+            reasons=["test"],
+            mode="auto",
+            tools_policy="auto",
+            include_purpose=False,
+            memory_include_global=False,
+            memory_include_profile=True,
+            memory_budget_tokens=800,
+        )
+        apply_memory_policy(agent, route)
+
+        policy = memory.thread_memory_policy("t1")
+        self.assertTrue(policy.get("enabled"))
+        self.assertFalse(policy.get("include_thread"))
+        self.assertTrue(policy.get("include_global"))
+        self.assertFalse(policy.get("include_profile"))
+        self.assertTrue(policy.get("pins_only"))
+        self.assertEqual(int(policy.get("max_pack_tokens") or 0), 1400)
+        self.assertEqual(int(policy.get("max_results") or 0), 3)
+        self.assertAlmostEqual(float(policy.get("decay_half_life_hours") or 0.0), 6.0, places=6)
+        self.assertFalse(bool(policy.get("auto_compact_enabled")))
+        self.assertEqual(int(policy.get("auto_compact_episode_threshold") or 0), 12)
+        self.assertAlmostEqual(float(policy.get("auto_compact_min_interval_hours") or 0.0), 0.5, places=6)
+        self.assertTrue(bool(policy.get("auto_optimize_enabled")))
+        self.assertAlmostEqual(float(policy.get("auto_optimize_waste_threshold") or 0.0), 0.33, places=6)
+        self.assertAlmostEqual(float(policy.get("auto_optimize_min_interval_hours") or 0.0), 1.25, places=6)
+
+    def test_validate_memory_relevance_prefers_query_term_coverage(self) -> None:
+        strong = validate_memory_relevance(
+            "deployment target cloudflare workers",
+            "Durable memory: deployment target is Cloudflare Workers.",
+        )
+        weak = validate_memory_relevance(
+            "deployment target cloudflare workers",
+            "Durable memory: favorite pizza toppings are mushrooms and olives.",
+        )
+
+        self.assertGreater(strong, 0.5)
+        self.assertEqual(weak, 0.0)
+
+    def test_agent_loop_generates_unique_fallback_ids_when_not_provided(self) -> None:
+        cfg = AppConfig(
+            models={"local": ModelConfig(name="local", model="dummy")},
+            default_model="local",
+        )
+        tools = ToolRegistry()
+
+        first = AgentLoop(cfg, DummyLLM(), tools, conversation=[], memory=DummyMemory())
+        second = AgentLoop(cfg, DummyLLM(), tools, conversation=[], memory=DummyMemory())
+
+        self.assertTrue(first._thread_id.startswith("thread:"))
+        self.assertTrue(second._thread_id.startswith("thread:"))
+        self.assertNotEqual(first._thread_id, second._thread_id)
+        self.assertEqual(first._session_id, first._thread_id)
+        self.assertEqual(second._session_id, second._thread_id)
+        self.assertTrue(first._run_id.startswith("run:"))
+        self.assertTrue(second._run_id.startswith("run:"))
+        self.assertNotEqual(first._run_id, second._run_id)
 
     def test_usage_is_scoped_to_single_run_not_session_cumulative(self) -> None:
         cfg = AppConfig(
@@ -174,6 +251,7 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertEqual(int(usage1.get("prompt_tokens", 0)), 220)
         self.assertEqual(int(usage1.get("completion_tokens", 0)), 80)
         self.assertEqual(int(usage1.get("total_tokens", 0)), 300)
+        self.assertEqual(int(report1.get("total_tokens", 0)), 300)
 
         # Session usage grows across turns, but per-run reporting must not.
         self.assertEqual(int(llm.session_usage.total_tokens), 600)

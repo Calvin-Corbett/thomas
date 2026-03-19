@@ -10,6 +10,7 @@ from collections.abc import Callable
 from typing import Any
 
 from aiohttp import web
+
 from thomas.server.app_keys import APP_APPROVALS_BROKER
 
 from .mission_runtime_views import (
@@ -127,6 +128,10 @@ def build_mission_control_routes(
                 last_evt = _latest_run_event(run_store_mod, run_id)
                 status, room, summary = _run_state_room_and_summary(run, last_evt)
                 updated_at = str(run.get("ended_at") or run.get("started_at") or _utc_iso_now())
+                created_at = _coerce_iso(run.get("created_at") or run.get("started_at"))
+                started_at = _coerce_iso(run.get("started_at")) if run.get("started_at") else created_at
+                ended_at = _coerce_iso(run.get("ended_at")) if run.get("ended_at") else ""
+                session_id = str(run.get("session_id") or "").strip()
                 mode = str(run.get("mode") or "").strip()
                 profile_name = str(run.get("profile") or "").strip()
                 model_id = str(run.get("model_id") or "").strip()
@@ -140,6 +145,10 @@ def build_mission_control_routes(
                         "status": status,
                         "summary": summary,
                         "updated_at": updated_at,
+                        "created_at": created_at,
+                        "started_at": started_at,
+                        "ended_at": ended_at,
+                        "session_id": session_id,
                         "run_id": run_id,
                         "mode": mode,
                         "profile": profile_name,
@@ -182,6 +191,8 @@ def build_mission_control_routes(
                 room, summary = _job_room_and_summary(job)
                 status = str(getattr(job, "status", "") or "").strip().lower() or "unknown"
                 updated_at = _coerce_iso(getattr(job, "updated_at", None) or getattr(job, "created_at", None))
+                created_at = _coerce_iso(getattr(job, "created_at", None))
+                session_id = str(getattr(job, "session_id", "") or "")
                 kind = str(getattr(job, "kind", "") or "").strip()
                 name = _mission_job_display_name(job)
                 payload_obj = getattr(job, "payload", None)
@@ -209,6 +220,8 @@ def build_mission_control_routes(
                         "status": status,
                         "summary": summary,
                         "updated_at": updated_at,
+                        "created_at": created_at,
+                        "session_id": session_id,
                         "job_id": job_id,
                         "job_kind": kind,
                         "parent_id": str(getattr(job, "parent_id", "") or ""),

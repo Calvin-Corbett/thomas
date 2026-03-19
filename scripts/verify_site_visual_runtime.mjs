@@ -191,18 +191,17 @@ function parseMetricNumber(value) {
 }
 
 function evaluateAssertions(metrics) {
-  const footerTop = parseMetricNumber(metrics.footer_top);
-  const bandTop = parseMetricNumber(metrics.band_top);
-  const bandHeight = parseMetricNumber(metrics.band_height);
   const viewportWidth = parseMetricNumber(metrics.viewport_width);
   const rootScrollWidth = parseMetricNumber(metrics.root_scroll_width);
   const consoleErrorCount = parseMetricNumber(metrics.console_error_count);
   const brokenImageCount = parseMetricNumber(metrics.broken_image_count);
+  const footerLinkCount = parseMetricNumber(metrics.footer_link_count);
   const routeMatrix = Array.isArray(metrics.route_matrix) ? metrics.route_matrix : [];
   const hasNav = metrics.has_nav === true;
   const hasMain = metrics.has_main === true;
   const hasFooter = metrics.has_footer === true;
-  const riders = Array.isArray(metrics.riders) ? metrics.riders : [];
+  const footerWarningTextPresent = metrics.footer_warning_text_present === true;
+  const heroPrimaryCtaPresent = metrics.hero_primary_cta_present === true;
 
   const coreLayoutPresent =
     routeMatrix.length > 0
@@ -219,80 +218,7 @@ function evaluateAssertions(metrics) {
     routeMatrix.length > 0
       ? routeMatrix.every((route) => parseMetricNumber(route.broken_image_count) === 0)
       : brokenImageCount !== null && brokenImageCount === 0;
-  const bandOnFooterBorder =
-    footerTop !== null && bandTop !== null && Math.abs(bandTop - footerTop) <= 3;
-  const noBandStripHeight = bandHeight !== null && Math.round(bandHeight) === 0;
-  const ridersMountedOnBack =
-    riders.length > 0 &&
-    riders.every((rider) => {
-      const saddleTop = parseMetricNumber(rider.saddle_top);
-      const saddleBottom = parseMetricNumber(rider.saddle_bottom);
-      const robotBodyTop = parseMetricNumber(rider.robot_body_top);
-      if (saddleTop === null || saddleBottom === null || robotBodyTop === null) {
-        return false;
-      }
-      // Rider torso should start at or just below saddle height so it reads
-      // as seated on the dino back, not floating above it.
-      return robotBodyTop >= saddleTop - 2 && robotBodyTop <= saddleBottom + 4;
-    });
-  const ridersSeatContactStable =
-    riders.length > 0 &&
-    riders.every((rider) => {
-      const saddleTop = parseMetricNumber(rider.saddle_top);
-      const robotBodyBottom = parseMetricNumber(rider.robot_body_bottom);
-      if (saddleTop === null || robotBodyBottom === null) {
-        return false;
-      }
-      const bottomOffset = robotBodyBottom - saddleTop;
-      // Rider body should sit near saddle top, not float high or hang down
-      // like it's walking beside the dino.
-      return bottomOffset >= -6 && bottomOffset <= 16;
-    });
-  const ridersCenteredOnSaddle =
-    riders.length > 0 &&
-    riders.every((rider) => {
-      const saddleLeft = parseMetricNumber(rider.saddle_left);
-      const saddleRight = parseMetricNumber(rider.saddle_right);
-      const robotBodyLeft = parseMetricNumber(rider.robot_body_left);
-      const robotBodyRight = parseMetricNumber(rider.robot_body_right);
-      const robotBodyCenterX = parseMetricNumber(rider.robot_body_center_x);
-      if (
-        saddleLeft === null ||
-        saddleRight === null ||
-        robotBodyLeft === null ||
-        robotBodyRight === null ||
-        robotBodyCenterX === null
-      ) {
-        return false;
-      }
-      const saddleCenterX = saddleLeft + (saddleRight - saddleLeft) / 2;
-      const centered = Math.abs(robotBodyCenterX - saddleCenterX) <= 4;
-      const overlapsSaddle =
-        robotBodyRight >= saddleLeft + 1 && robotBodyLeft <= saddleRight - 1;
-      return centered && overlapsSaddle;
-    });
-  const ridersRobotClearlyVisible =
-    riders.length > 0 &&
-    riders.every((rider) => {
-      const trackTop = parseMetricNumber(rider.track_top);
-      const trackBottom = parseMetricNumber(rider.track_bottom);
-      const robotTop = parseMetricNumber(rider.robot_top);
-      const robotBottom = parseMetricNumber(rider.robot_bottom);
-      const robotWidth = parseMetricNumber(rider.robot_width);
-      const robotHeight = parseMetricNumber(rider.robot_height);
-      if (
-        trackTop === null ||
-        trackBottom === null ||
-        robotTop === null ||
-        robotBottom === null ||
-        robotWidth === null ||
-        robotHeight === null
-      ) {
-        return false;
-      }
-      const intersectsTrack = robotBottom > trackTop + 1 && robotTop < trackBottom - 1;
-      return robotWidth >= 12 && robotHeight >= 10 && intersectsTrack;
-    });
+  const footerNavigationPresent = footerLinkCount !== null && footerLinkCount >= 4;
   const noHorizontalDragOverflow =
     routeMatrix.length > 0
       ? routeMatrix.every((route) => {
@@ -337,12 +263,9 @@ function evaluateAssertions(metrics) {
     no_broken_images: noBrokenImages,
     nav_persistent_all_routes: navPersistentAllRoutes,
     unknown_route_theme_integrity: unknownRouteThemeIntegrity,
-    band_on_footer_border: bandOnFooterBorder,
-    no_band_strip_height: noBandStripHeight,
-    riders_mounted_on_back: ridersMountedOnBack,
-    riders_seat_contact_stable: ridersSeatContactStable,
-    riders_centered_on_saddle: ridersCenteredOnSaddle,
-    riders_robot_clearly_visible: ridersRobotClearlyVisible,
+    footer_warning_text_present: footerWarningTextPresent,
+    footer_navigation_present: footerNavigationPresent,
+    hero_primary_cta_present: heroPrimaryCtaPresent,
     no_horizontal_drag_overflow: noHorizontalDragOverflow,
   };
 }
@@ -449,6 +372,8 @@ async function main() {
       "/download",
       "/updates",
       "/journey",
+      "/infinite",
+      "/deep-dive",
       "/support",
       "/__ui-route-smoke__",
     ];
@@ -542,51 +467,13 @@ async function main() {
         });
         homeMetrics = await page.evaluate(() => {
           const footer = document.querySelector(".footer-shell");
-          const band = document.querySelector(".dino-riders-band");
-          const allTracks = Array.from(document.querySelectorAll(".dino-rider-track"));
-          const visibleTracks = allTracks.filter((track) => {
-            const rect = track.getBoundingClientRect();
-            return rect.right > 10 && rect.left < window.innerWidth - 10;
-          });
-          const tracks = (visibleTracks.length > 0 ? visibleTracks : allTracks).slice(0, 4);
-          const riders = tracks.map((track) => {
-            const saddle = track.querySelector(".trex-saddle");
-            // Measure the actual robot sprite, not just the wrapper container.
-            const robot =
-              track.querySelector(".dino-rider-robot") ?? track.querySelector(".dino-rider-robot-wrap");
-            const robotBody = track.querySelector(".dino-rider-robot .agent-body");
-            const trackRect = track.getBoundingClientRect();
-            const saddleRect = saddle?.getBoundingClientRect();
-            const robotRect = robot?.getBoundingClientRect();
-            const robotBodyRect = robotBody?.getBoundingClientRect();
-            const robotCenterX = robotRect ? robotRect.left + robotRect.width / 2 : null;
-            const robotBodyCenterX = robotBodyRect ? robotBodyRect.left + robotBodyRect.width / 2 : null;
-            return {
-              track_top: Math.round(trackRect.top),
-              track_bottom: Math.round(trackRect.bottom),
-              saddle_top: saddleRect ? Math.round(saddleRect.top) : null,
-              saddle_bottom: saddleRect ? Math.round(saddleRect.bottom) : null,
-              saddle_left: saddleRect ? Math.round(saddleRect.left) : null,
-              saddle_right: saddleRect ? Math.round(saddleRect.right) : null,
-              robot_top: robotRect ? Math.round(robotRect.top) : null,
-              robot_bottom: robotRect ? Math.round(robotRect.bottom) : null,
-              robot_left: robotRect ? Math.round(robotRect.left) : null,
-              robot_right: robotRect ? Math.round(robotRect.right) : null,
-              robot_center_x: robotCenterX !== null ? Math.round(robotCenterX) : null,
-              robot_width: robotRect ? Math.round(robotRect.width) : null,
-              robot_height: robotRect ? Math.round(robotRect.height) : null,
-              robot_body_top: robotBodyRect ? Math.round(robotBodyRect.top) : null,
-              robot_body_bottom: robotBodyRect ? Math.round(robotBodyRect.bottom) : null,
-              robot_body_left: robotBodyRect ? Math.round(robotBodyRect.left) : null,
-              robot_body_right: robotBodyRect ? Math.round(robotBodyRect.right) : null,
-              robot_body_center_x: robotBodyCenterX !== null ? Math.round(robotBodyCenterX) : null,
-              robot_body_width: robotBodyRect ? Math.round(robotBodyRect.width) : null,
-              robot_body_height: robotBodyRect ? Math.round(robotBodyRect.height) : null,
-            };
-          });
+          const warningText = Array.from(document.querySelectorAll(".footer-warning"))
+            .map((el) => (el.textContent || "").toLowerCase())
+            .join(" ");
+          const footerLinks = Array.from(document.querySelectorAll(".footer-links a"));
+          const heroPrimaryCta = document.querySelector(".home-hero .cta-primary");
 
           const footerRect = footer?.getBoundingClientRect();
-          const bandRect = band?.getBoundingClientRect();
           return {
             viewport_width: Math.round(window.innerWidth),
             root_scroll_width: Math.round(
@@ -596,9 +483,9 @@ async function main() {
               ),
             ),
             footer_top: footerRect ? Math.round(footerRect.top) : null,
-            band_top: bandRect ? Math.round(bandRect.top) : null,
-            band_height: bandRect ? Math.round(bandRect.height) : null,
-            riders,
+            footer_warning_text_present: warningText.includes("ai"),
+            footer_link_count: footerLinks.length,
+            hero_primary_cta_present: Boolean(heroPrimaryCta),
           };
         });
       }
@@ -630,9 +517,9 @@ async function main() {
         parseMetricNumber(homeMetrics.root_scroll_width) ?? 0,
       ),
       footer_top: homeMetrics.footer_top,
-      band_top: homeMetrics.band_top,
-      band_height: homeMetrics.band_height,
-      riders: homeMetrics.riders,
+      footer_warning_text_present: homeMetrics.footer_warning_text_present,
+      footer_link_count: homeMetrics.footer_link_count,
+      hero_primary_cta_present: homeMetrics.hero_primary_cta_present,
       route_matrix: routeMatrix,
     };
     metrics.console_error_count = consoleErrors.length + pageErrors.length;

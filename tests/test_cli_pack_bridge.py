@@ -242,3 +242,40 @@ def test_browser_pack_modules_run_via_main_not_noop() -> None:
         )
         assert payload["mode"] == "main", module_name
         assert "no callable main" not in str(payload.get("message", "")).lower()
+
+
+def test_gateway_uninstall_pack_module_runs_click_entrypoint(tmp_path: Path) -> None:
+    payload = invoke_pack_module(
+        "thomas.cli.commands.gateway.p129_gateway_uninstall_command",
+        ["--state-dir", str(tmp_path), "--dry-run", "--json"],
+        prog_name="test::gateway-uninstall",
+        strict_missing_main=True,
+    )
+    assert payload["ok"] is True
+    assert payload["mode"] == "click"
+    assert payload["entrypoint"] == "uninstall"
+
+
+def test_gateway_proxy_run_missing_main_is_not_noop_success(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.syspath_prepend(str(tmp_path))
+    package_name = _write_pack_package(
+        tmp_path,
+        f"pkg_{uuid.uuid4().hex}",
+        {
+            "p001_gateway_missing_entrypoint": '"""Placeholder module with no entrypoint."""',
+        },
+    )
+    group = click.Group("gateway")
+    added = register_pack_proxy_commands(
+        group,
+        package=package_name,
+        family_hint="gateway",
+    )
+    assert added == 1
+
+    result = CliRunner().invoke(group, ["missing-entrypoint", "--run", "--json"])
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["mode"] == "noop"
+    assert payload["error_code"] == "entrypoint_missing"

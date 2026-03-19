@@ -8,6 +8,7 @@ import click
 from click.testing import CliRunner
 
 import thomas.cli.agents_runtime as agents_runtime
+import thomas.cli.parity_commands as parity_commands
 from thomas.cli.parity_commands import register_parity_commands
 from thomas.cli.parity_compat import register_compat_commands
 
@@ -577,3 +578,26 @@ def test_memory_run_mode_real_backends_execute(tmp_path: Path) -> None:
     compact_payload = json.loads(compact.output)
     _assert_memory_payload(compact_payload, action="compact", mode="run", ok=True, executed=True)
     assert "global" in compact_payload
+
+
+def test_gateway_run_json_suppresses_auto_port_banner(tmp_path: Path, monkeypatch) -> None:
+    root, runner, cfg = _parity_cli_context(tmp_path)
+
+    def _fake_resolve_bind_port(host: str, port: int, auto_port: bool, *, announce=None) -> int:
+        assert callable(announce) is False
+        return int(port) + 1
+
+    monkeypatch.setattr(parity_commands, "_resolve_bind_port", _fake_resolve_bind_port)
+    monkeypatch.setattr(parity_commands, "_load_gateway_state", lambda config: {})
+    monkeypatch.setattr(parity_commands, "_is_pid_running", lambda pid: int(pid) == 4242)
+    monkeypatch.setattr(parity_commands, "_gateway_spawn", lambda **_kwargs: SimpleNamespace(pid=4242))
+    monkeypatch.setattr(parity_commands, "_probe_gateway", lambda host, port, token="": {"healthy": True})
+    monkeypatch.setattr(parity_commands, "_save_gateway_state", lambda config, payload: None)
+    monkeypatch.setattr(parity_commands.time, "sleep", lambda _seconds: None)
+
+    res = runner.invoke(root, ["gateway", "run", "--json"], obj={"config": cfg, "config_path": ""})
+    assert res.exit_code == 0, res.output
+    payload = json.loads(res.output)
+    assert payload["ok"] is True
+    assert payload["port"] == 8900
+    assert "auto-selecting" not in res.output

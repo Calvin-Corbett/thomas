@@ -225,12 +225,12 @@ class PanoramaStitcher:
 
         for y in range(3, h - 3):
             for x in range(3, w - 3):
-                center = gray[y, x]
-                circle_vals = gray[y + circle_offsets[:, 0], x + circle_offsets[:, 1]]
+                center = int(gray[y, x])
+                circle_vals = gray[y + circle_offsets[:, 0], x + circle_offsets[:, 1]].astype(np.int16, copy=False)
 
                 # Count pixels significantly brighter/darker
-                bright = np.sum(circle_vals > center + threshold)
-                dark = np.sum(circle_vals < center - threshold)
+                bright = np.sum(circle_vals > center + int(threshold))
+                dark = np.sum(circle_vals < center - int(threshold))
 
                 # Simplified FAST criterion (count-based, not contiguous arc).
                 if bright >= 9 or dark >= 9:

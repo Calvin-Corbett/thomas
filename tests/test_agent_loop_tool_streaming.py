@@ -85,14 +85,9 @@ def test_agent_loop_streams_tool_results_as_completed() -> None:
         return events
 
     events = asyncio.run(run_once())
-    tool_results = [
-        ev for ev in events if ev.type == EventType.TOOL_RESULT
-    ]
+    tool_results = [ev for ev in events if ev.type == EventType.TOOL_RESULT]
     assert len(tool_results) == 2
-    delays = [
-        float(json.loads(ev.data.get("result", "{}")).get("delay", 0.0))
-        for ev in tool_results
-    ]
+    delays = [float(json.loads(ev.data.get("result", "{}")).get("delay", 0.0)) for ev in tool_results]
     assert delays[0] < delays[1]
 
 

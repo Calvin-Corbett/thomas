@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import contextlib
+from collections.abc import Callable
 from datetime import datetime, timezone
 from typing import Any
 
@@ -13,10 +14,19 @@ from thomas.server.app_keys import APP_APPROVALS_BROKER
 
 def _resolve_approvals_broker(app: web.Application):
     broker = app.get(APP_APPROVALS_BROKER)
-    if broker is None:
-        broker = app.get("approvals")
+    if broker is not None:
+        return broker
+
+    state = getattr(app, "_state", None)
+    if isinstance(state, dict):
+        broker = state.get("approvals")
         if broker is not None:
-            app[APP_APPROVALS_BROKER] = broker
+            state[APP_APPROVALS_BROKER] = broker
+            return broker
+
+    broker = app.get("approvals")
+    if broker is not None:
+        app[APP_APPROVALS_BROKER] = broker
     return broker
 
 
@@ -44,10 +54,38 @@ def _parse_decision(payload: dict[str, Any], *, default: bool | None = None) -> 
     return default
 
 
+def _parse_bool(value: Any, *, default: bool | None = None) -> bool | None:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        v = value.strip().lower()
+        if v in ("1", "true", "yes", "on"):
+            return True
+        if v in ("0", "false", "no", "off"):
+            return False
+    return default
+
+
+async def _read_json_object(request: web.Request) -> dict[str, Any]:
+    try:
+        payload = await request.json()
+    except Exception as exc:
+        raise web.HTTPBadRequest(text=f"invalid json: {type(exc).__name__}: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise web.HTTPBadRequest(text="json body must be an object")
+    return payload
+
+
 def build_mission_approvals_handlers(
     app: web.Application,
     _mission_require_store: Any,
     _mission_wakeup_engine: Any,
+    *,
+    require_api_access: Callable[[web.Request], None],
 ) -> tuple:
     """Build approval workflow route handlers.
 
@@ -61,19 +99,17 @@ def build_mission_approvals_handlers(
     """
 
     async def api_mission_autonomy_approval_decide(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Approve or deny an autonomy task approval request."""
         store = await _mission_require_store()
         approval_id = str(request.match_info.get("approval_id") or "").strip()
         if not approval_id:
             raise web.HTTPBadRequest(text="missing approval_id")
-        try:
-            payload = await request.json()
-            if not isinstance(payload, dict):
-                payload = {}
-        except ValueError:
-            payload = {}
+        payload = await _read_json_object(request)
 
-        approve = _parse_decision(payload, default=False)
+        approve = _parse_decision(payload, default=None)
+        if approve is None:
+            raise web.HTTPBadRequest(text="missing decision")
         actor = str(payload.get("actor") or "mission_control").strip() or "mission_control"
         reason = str(payload.get("reason") or "").strip() or None
         try:
@@ -111,24 +147,22 @@ def build_mission_approvals_handlers(
         )
 
     async def api_mission_guardrails_approval_resolve(request: web.Request) -> web.Response:
+        require_api_access(request)
         """Resolve a guardrails approval by approving or denying a tool call."""
         broker = _resolve_approvals_broker(app)
         if broker is None:
             raise web.HTTPNotFound(text="guardrails approvals are not available")
-        try:
-            payload = await request.json()
-            if not isinstance(payload, dict):
-                payload = {}
-        except ValueError:
-            payload = {}
+        payload = await _read_json_object(request)
 
         run_id = str(payload.get("run_id") or "").strip()
         tool_call_id = str(payload.get("tool_call_id") or "").strip()
         if not run_id or not tool_call_id:
             raise web.HTTPBadRequest(text="missing run_id or tool_call_id")
 
-        approve = bool(_parse_decision(payload, default=False))
-        allow_session_tool = bool(payload.get("allow_session_tool"))
+        approve = _parse_decision(payload, default=None)
+        if approve is None:
+            raise web.HTTPBadRequest(text="missing decision")
+        allow_session_tool = bool(_parse_bool(payload.get("allow_session_tool"), default=False))
         tool_name = str(payload.get("tool_name") or "").strip() or None
         session_id = str(payload.get("session_id") or "").strip() or None
         resolve_fn = getattr(broker, "resolve", None)

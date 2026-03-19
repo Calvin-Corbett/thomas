@@ -28,12 +28,16 @@ Thomas is intended to reach **Level 5: Autopoietic** — meaning it can improve 
 - **Versioning discipline.** Any user-visible or behavioral change requires a version bump and a `CHANGELOG.md` entry.
 - **Safety for risky change.** For changes that can break the system, follow the Doppelganger Protocol (blue/green).
 
-## Execution Model (Current Reality)
+## Execution Model (Dispatch-First)
 
-- **Default**: Thomas executes tools directly and immediately (`shell.exec`, `fs.*`, `git.*`, `code.*`, `diff.*`, `browser`).
-- **Swarm mode**: ONLY when the task explicitly requires parallel sub-agents, coordination across multiple independent workstreams, or the user says "use swarm" / "multi-agent."
-- **Current trigger**: if `"swarm"` appears in the task or the user explicitly requests multi-agent execution.
-- **Never** default to swarm for single-thread tasks, however complex. Direct execution is always faster.
+- **Thomas is the chat layer.** He replies fast and dispatches work. He does NOT do heavy lifting inline.
+- **Casual messages** (greetings, thanks, filler): Thomas replies directly, personality-first, no tools.
+- **Actionable messages** (everything else): Thomas immediately acknowledges ("On it."), then dispatches to the workboard task manager pipeline. The task manager breaks work down and assigns workers.
+- **Fallback**: If dispatch fails, Thomas falls back to inline execution via the agent loop.
+- **In-process swarm** (`thomas/agent/swarm.py`): Available for future use. NOT the default.
+- **Workboard swarm** (`scripts/workboard_swarm.py`): Spawns multi-terminal agent processes. Used by the task manager for heavy parallel work.
+
+See `docs/CHAT_EXECUTION_MODEL.md` for the complete architecture.
 
 **Core modules** (active, `thomas/core/`):
 

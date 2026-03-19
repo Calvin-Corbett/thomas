@@ -2,14 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import inspect
 import logging
 import os
-import asyncio
 import re
-import inspect
-from collections.abc import AsyncIterator
 import time
+from collections.abc import AsyncIterator
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -70,8 +70,6 @@ def _env_flag(name: str, default: bool = False) -> bool:
     if raw is None:
         return default
     return str(raw).strip().lower() in {"1", "true", "yes", "on"}
-
-
 
 
 def _chat_autopilot_should_auto_start(text_raw: Any) -> bool:

@@ -3,7 +3,15 @@ from __future__ import annotations
 import json
 from types import SimpleNamespace
 
+import pytest
 import scripts.push_guarded as mod
+
+
+@pytest.fixture(autouse=True)
+def _presence_gate_ok(monkeypatch) -> None:
+    monkeypatch.setattr(
+        mod.agent_presence, "evaluate_soft_gate", lambda **_: {"ok": True, "warnings": [], "conflicts": []}
+    )
 
 
 def test_fails_when_skip_reason_missing_for_dirty_worktree(monkeypatch, capsys) -> None:
@@ -93,3 +101,18 @@ def test_fails_for_broad_skip_token(monkeypatch, capsys) -> None:
 
     assert rc == 1
     assert "broad skip token is not allowed" in out
+
+
+def test_fails_when_presence_gate_requires_override(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(mod, "_git_status_porcelain", lambda _repo: [])
+    monkeypatch.setattr(
+        mod.agent_presence,
+        "evaluate_soft_gate",
+        lambda **_: {"ok": False, "message": "presence gate requires override"},
+    )
+
+    rc = mod.run(["--dry-run"])
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "presence gate requires override" in out

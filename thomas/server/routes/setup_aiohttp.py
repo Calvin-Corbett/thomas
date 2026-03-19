@@ -108,6 +108,15 @@ def _clamp_int(value: Any, default: int, *, min_value: int, max_value: int) -> i
     return max(int(min_value), min(int(max_value), int(parsed)))
 
 
+async def _read_optional_object_payload(request: web.Request, read_json: ReadJsonFn) -> dict[str, Any]:
+    if not request.can_read_body:
+        return {}
+    payload = await read_json(request)
+    if not isinstance(payload, dict):
+        raise web.HTTPBadRequest(text="json body must be an object")
+    return payload
+
+
 def register_setup_routes(
     app: web.Application,
     *,
@@ -251,16 +260,7 @@ def register_setup_routes(
         if request.method.upper() != "POST":
             raise web.HTTPMethodNotAllowed(method=request.method, allowed_methods=["POST"])
 
-        payload: dict[str, Any] = {}
-        if request.can_read_body:
-            try:
-                payload_raw = await read_json(request)
-                if isinstance(payload_raw, dict):
-                    payload = payload_raw
-            except web.HTTPUnsupportedMediaType:
-                payload = {}
-            except web.HTTPBadRequest:
-                payload = {}
+        payload = await _read_optional_object_payload(request, read_json)
 
         auto_install = _as_bool(payload.get("auto_install_tools"), True)
         skip_install = _as_bool(payload.get("skip_install"), False)
@@ -477,14 +477,7 @@ def register_setup_routes(
     async def api_local_sync(request: web.Request) -> web.Response:
         """Pull/verify a local model set and report per-model verification status."""
         require_api_access(request)
-        payload: dict[str, Any] = {}
-        if request.can_read_body:
-            try:
-                incoming = await read_json(request)
-                if isinstance(incoming, dict):
-                    payload = incoming
-            except Exception:
-                payload = {}
+        payload = await _read_optional_object_payload(request, read_json)
 
         cfg: AppConfig = request.app[APP_CONFIG]
         profile = str(payload.get("profile") or "local").strip() or "local"
@@ -531,18 +524,11 @@ def register_setup_routes(
     async def api_local_background_control(request: web.Request) -> web.Response:
         """Update local background runtime settings and optionally run a cycle."""
         require_api_access(request)
-        payload: dict[str, Any] = {}
-        if request.can_read_body:
-            try:
-                incoming = await read_json(request)
-                if isinstance(incoming, dict):
-                    payload = incoming
-            except Exception:
-                payload = {}
+        payload = await _read_optional_object_payload(request, read_json)
 
         runtime_patch: dict[str, Any] = {}
         if "enabled" in payload:
-            runtime_patch["local_background_agents_enabled"] = bool(payload.get("enabled"))
+            runtime_patch["local_background_agents_enabled"] = _as_bool(payload.get("enabled"), False)
         if "min_gpu_headroom_pct" in payload:
             runtime_patch["local_background_min_gpu_headroom_pct"] = _clamp_int(
                 payload.get("min_gpu_headroom_pct"),

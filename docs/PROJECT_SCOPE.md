@@ -18,7 +18,7 @@ Scope for this program is not considered complete unless the win gates below are
 
 - Baseline system: OpenClaw.
 - Pinned baseline artifact: `demo/baselines/openclaw.current.json`.
-- Current pinned released baseline commit: `d17a1f3` (captured 2026-02-19).
+- Current pinned OpenClaw baseline commit: `fa6c0e1b` (captured 2026-03-06 from `origin/main`).
 - Baseline revision policy: the exact OpenClaw commit/tag used for head-to-head runs must be recorded in release notes and benchmark artifacts.
 - Baseline environment parity: same hardware tier, same provider tier, same task corpus, same timeout budgets.
 - Baseline refresh cadence: monthly or when OpenClaw releases a major capability update.

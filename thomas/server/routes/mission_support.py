@@ -51,6 +51,7 @@ _MISSION_ALLOWED_JOB_KINDS = {
     "video_generation",
     "speech_transcription",
     "speech_synthesis",
+    "evolve_session",
 }
 _MISSION_ALLOWED_RISK_CLASSES = {"low", "medium", "high", "critical"}
 _MISSION_TERMINAL_JOB_STATUSES = {"succeeded", "failed", "cancelled", "dead"}

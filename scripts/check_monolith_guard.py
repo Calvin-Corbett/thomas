@@ -8,22 +8,35 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
 import subprocess
 from collections.abc import Iterable
 from datetime import date
+from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
 DEFAULT_HARD_LIMITS: dict[str, int] = {
     "py": 1200,
     "js": 1200,
+    "mjs": 1200,
+    "cjs": 1200,
+    "jsx": 1200,
     "ts": 1200,
+    "tsx": 1200,
     "css": 1600,
     "html": 1000,
 }
 
-DEFAULT_SCAN_ROOTS: list[str] = ["thomas"]
+DEFAULT_SCAN_ROOTS: list[str] = ["."]
 DEFAULT_BASELINE = "docs/monolith_guard_baseline.json"
+_FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),)
+_ALLOWED_PART_FILE_PATTERNS: tuple[str, ...] = ()
+_FORBIDDEN_LOADER_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"(?m)^\s*def\s+_load_monolith_parts\s*\("),
+    re.compile(r"(?m)_load_monolith_parts\s*=\s*"),
+    re.compile(r"(?m)_load_monolith_parts\s*\("),
+)
 
 SKIP_DIR_NAMES = {
     ".git",
@@ -32,11 +45,19 @@ SKIP_DIR_NAMES = {
     ".pytest_cache",
     ".ruff_cache",
     "__pycache__",
+    ".next",
+    ".open-next",
+    ".nuxt",
+    "build",
+    "coverage",
+    "dist",
+    "generated",
     "runtime",
     "Inbox",
     "output",
     "pack",
     "patches",
+    "node_modules",
     "tasks",
     ".inbox_extract_20260210_234207",
     ".feature_backups",
@@ -56,6 +77,25 @@ def _parse_iso_date(text: str) -> date | None:
 def _line_count(path: Path) -> int:
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
         return sum(1 for _ in fh)
+
+
+def _looks_like_legacy_monolith_file(path: Path) -> bool:
+    return any(pattern.search(path.name) for pattern in _FORBIDDEN_PART_FILE_PATTERNS)
+
+
+def _is_allowed_split_file(path: Path, rel: str) -> bool:
+    rel_norm = rel.replace("\\", "/")
+    return any(fnmatch(rel_norm, pattern) for pattern in _ALLOWED_PART_FILE_PATTERNS)
+
+
+def _contains_legacy_monolith_loader(path: Path) -> bool:
+    if path.suffix.lower() != ".py":
+        return False
+    if path.name == "check_monolith_guard.py":
+        return False
+    with path.open("r", encoding="utf-8", errors="ignore") as fh:
+        sample = fh.read()
+    return any(pattern.search(sample) is not None for pattern in _FORBIDDEN_LOADER_PATTERNS)
 
 
 def _normalize_rel_path(path: str) -> str:
@@ -79,9 +119,9 @@ def _iter_candidate_files(
         if not base.exists() or not base.is_dir():
             continue
         for path in base.rglob("*"):
-            if not path.is_file():
-                continue
             if _is_skipped(path):
+                continue
+            if not path.is_file():
                 continue
             ext = path.suffix.lower().lstrip(".")
             if ext not in hard_limits:
@@ -134,6 +174,25 @@ def _git_staged_files(repo_root: Path) -> set[str]:
     out: set[str] = set()
     for line in proc.stdout.splitlines():
         rel = _normalize_rel_path(line)
+        if rel:
+            out.add(rel)
+    return out
+
+
+def _git_tracked_files(repo_root: Path) -> set[str] | None:
+    proc = subprocess.run(
+        ["git", "ls-files", "-z"],
+        cwd=repo_root,
+        capture_output=True,
+        text=False,
+    )
+    if proc.returncode != 0:
+        return None
+    out: set[str] = set()
+    for raw in proc.stdout.split(b"\x00"):
+        if not raw:
+            continue
+        rel = _normalize_rel_path(raw.decode("utf-8", errors="ignore"))
         if rel:
             out.add(rel)
     return out
@@ -229,6 +288,7 @@ def run_guard(
     scoped_files: set[str] | None = None
     prior_line_cache: dict[str, int | None] = {}
     growth_lookup_error = ""
+    tracked_files = _git_tracked_files(repo_root)
     if staged_only and not normalized_base_ref:
         if _git_ref_exists(repo_root, "HEAD"):
             normalized_base_ref = "HEAD"
@@ -253,11 +313,39 @@ def run_guard(
 
     for path, ext in _iter_candidate_files(repo_root, scan_roots, hard_limits):
         rel = path.relative_to(repo_root).as_posix()
+        if tracked_files is not None and rel not in tracked_files:
+            continue
         if scoped_files is not None and rel not in scoped_files:
             continue
+        legacy_part_file = _looks_like_legacy_monolith_file(path)
+        if legacy_part_file and not _is_allowed_split_file(path, rel):
+            violations.append(
+                {
+                    "path": rel,
+                    "ext": ext,
+                    "lines": _line_count(path),
+                    "hard_limit": int(hard_limits.get(ext, 0) or 0),
+                    "reason": "unauthorized split file uses legacy .partNN.ext pattern outside allowlist",
+                }
+            )
+            continue
+        legacy_loader_file = _contains_legacy_monolith_loader(path)
         lines = _line_count(path)
         hard = int(hard_limits.get(ext, 0) or 0)
         measured.append({"path": rel, "lines": lines, "ext": ext, "hard_limit": hard})
+
+        if legacy_loader_file:
+            violations.append(
+                {
+                    "path": rel,
+                    "ext": ext,
+                    "lines": lines,
+                    "hard_limit": hard,
+                    "reason": "legacy monolith loader scaffold pattern detected",
+                }
+            )
+            continue
+
         over_hard_limit = lines > hard
         over_soft_limit = soft_limit > 0 and lines > soft_limit
         changed_scope = scoped_files if scoped_files is not None else changed_files

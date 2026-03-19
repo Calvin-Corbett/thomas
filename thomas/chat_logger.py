@@ -39,7 +39,18 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _LOG_DIR_ENV = "THOMAS_CHAT_LOG_DIR"
-_DEFAULT_LOG_DIR = ".thomas/chat_logs"
+
+
+def _default_log_dir() -> Path:
+    try:
+        from thomas.core.config import resolve_thomas_data_dir
+
+        return (resolve_thomas_data_dir() / "logs" / "chat").resolve()
+    except Exception:
+        return (Path.home() / ".thomas" / "chat_logs").resolve()
+
+
+_DEFAULT_LOG_DIR = _default_log_dir()
 
 
 class ChatEventKind(str, Enum):
@@ -109,6 +120,8 @@ class ChatLogger:
             self._log_dir = Path(log_dir)
         elif os.environ.get(_LOG_DIR_ENV):
             self._log_dir = Path(os.environ[_LOG_DIR_ENV])
+        elif self._log_dir is None:
+            self._log_dir = _DEFAULT_LOG_DIR
         if self._log_dir:
             self._log_dir.mkdir(parents=True, exist_ok=True)
 

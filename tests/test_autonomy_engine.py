@@ -1,13 +1,13 @@
+import asyncio
 import os
 import tempfile
 import unittest
-import asyncio
 from datetime import datetime, timezone
 
-from thomas.autonomy.store import AutonomyStore
 from thomas.autonomy.engine import AutonomyEngine
 from thomas.autonomy.policy import AutonomyPolicy
 from thomas.autonomy.scheduler import EngineTiming
+from thomas.autonomy.store import AutonomyStore
 
 
 class TestAutonomyEngine(unittest.IsolatedAsyncioTestCase):

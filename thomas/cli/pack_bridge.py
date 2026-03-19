@@ -363,6 +363,9 @@ def register_pack_proxy_commands(
     excluded = {str(x).strip() for x in (exclude_modules or []) if str(x).strip()}
     allowed = {str(x).strip() for x in (allowlisted_modules or []) if str(x).strip()}
     used = set(str(name).strip() for name in group.commands.keys())
+    strict_for_family = bool(
+        strict_run_missing_entrypoint or str(family_hint or "").strip().lower() in {"browser", "gateway"}
+    )
     added = 0
 
     for path in _iter_pack_files(package):
@@ -390,7 +393,7 @@ def register_pack_proxy_commands(
                 command_name=command_name,
                 module_name=module_name,
                 prompt_id=prompt_id,
-                strict_run_missing_entrypoint=strict_run_missing_entrypoint,
+                strict_run_missing_entrypoint=strict_for_family,
             )
         )
         used.add(command_name)

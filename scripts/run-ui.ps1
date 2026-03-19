@@ -6,14 +6,33 @@ param(
   [switch]$NoBrowser,
   [switch]$NoInstall,
   [switch]$NoTray,
+  [switch]$Tray,
   [switch]$Headless,
-  [switch]$NoMonolithWatch
+  [switch]$NoMonolithWatch,
+  [string]$DeepLink = "",
+  [Parameter(ValueFromRemainingArguments = $true)][string[]]$RemainingArgs
 )
 
 $ErrorActionPreference = "Stop"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
+
+if ($Tray) {
+  $NoTray = $false
+} elseif (-not $PSBoundParameters.ContainsKey('NoTray')) {
+  $NoTray = $true
+}
+
+if ([string]::IsNullOrWhiteSpace($DeepLink) -and $RemainingArgs) {
+  foreach ($candidate in $RemainingArgs) {
+    $text = [string]$candidate
+    if ($text -like 'thomas://*') {
+      $DeepLink = $text
+      break
+    }
+  }
+}
 
 function Invoke-NativeCore {
   param(
@@ -110,6 +129,51 @@ function Test-WingetAvailable {
   return -not [string]::IsNullOrWhiteSpace($winget)
 }
 
+function Ensure-ThomasProtocolRegistration {
+  try {
+    $scriptPath = (Resolve-Path (Join-Path $Root "scripts\run-ui.ps1")).Path
+    $powershellExe = Get-CommandPathAny @("powershell.exe", "powershell")
+    if ([string]::IsNullOrWhiteSpace($scriptPath) -or [string]::IsNullOrWhiteSpace($powershellExe)) {
+      return
+    }
+
+    $protocolKey = 'HKCU:\Software\Classes\thomas'
+    $defaultIconKey = Join-Path $protocolKey 'DefaultIcon'
+    $commandKey = Join-Path $protocolKey 'shell\open\command'
+    $commandValue = ('"{0}" -NoProfile -ExecutionPolicy Bypass -File "{1}" -DeepLink "%1"' -f $powershellExe, $scriptPath)
+
+    New-Item -Path $protocolKey -Force | Out-Null
+    New-Item -Path $defaultIconKey -Force | Out-Null
+    New-Item -Path $commandKey -Force | Out-Null
+    Set-Item -Path $protocolKey -Value 'URL:Thomas Protocol'
+    Set-ItemProperty -Path $protocolKey -Name 'URL Protocol' -Value ''
+    Set-Item -Path $defaultIconKey -Value ('"{0}",0' -f $powershellExe)
+    Set-Item -Path $commandKey -Value $commandValue
+  } catch {
+    Write-Host ('[thomas] WARNING: could not register thomas:// protocol handler ({0})' -f $_.Exception.Message)
+  }
+}
+
+function Get-ThomasLaunchUrl {
+  param(
+    [Parameter(Mandatory = $true)][string]$BaseUrl,
+    [string]$RequestedDeepLink
+  )
+
+  $base = [string]$BaseUrl
+  $deepLink = [string]$RequestedDeepLink
+  if ([string]::IsNullOrWhiteSpace($deepLink)) {
+    return $base
+  }
+
+  $separator = '?'
+  if ($base.Contains('?')) {
+    $separator = '&'
+  }
+  $encodedDeepLink = [System.Uri]::EscapeDataString($deepLink)
+  return ("{0}{1}nav=marketplace&thomas_deep_link={2}" -f $base, $separator, $encodedDeepLink)
+}
+
 function Install-WithWinget {
   param(
     [Parameter(Mandatory = $true)][string]$PackageId,
@@ -185,6 +249,16 @@ function Ensure-SystemPython {
   return $null
 }
 
+function Test-VenvValid {
+  param([string]$VenvRoot)
+
+  $cfg = Join-Path $VenvRoot "pyvenv.cfg"
+  $py = Join-Path $VenvRoot "Scripts\\python.exe"
+  return ((Test-Path $cfg) -and (Test-Path $py))
+}
+
+Ensure-ThomasProtocolRegistration
+
 $SysPy = Ensure-SystemPython
 if (-not $SysPy) {
   Write-Host "[thomas] ERROR: Python not found in PATH."
@@ -192,15 +266,22 @@ if (-not $SysPy) {
   exit 2
 }
 
-$VenvPy = Join-Path $Root ".venv\\Scripts\\python.exe"
-if (-not (Test-Path $VenvPy)) {
+$VenvRoot = Join-Path $Root ".venv"
+$VenvPy = Join-Path $VenvRoot "Scripts\\python.exe"
+if (-not (Test-VenvValid $VenvRoot)) {
+  if (Test-Path $VenvRoot) {
+    Write-Host "[thomas] Existing .venv is incomplete. Recreating it..."
+    Remove-Item -Recurse -Force $VenvRoot -ErrorAction Stop
+  }
+
   Write-Host "[thomas] Creating venv in .venv..."
   if ($SysPy.Kind -eq "py") {
     & $SysPy.Path -3 -m venv .venv
   } else {
     & $SysPy.Path -m venv .venv
   }
-  if (-not (Test-Path $VenvPy)) {
+
+  if (-not (Test-VenvValid $VenvRoot)) {
     Write-Host "[thomas] ERROR: venv creation failed."
     exit 2
   }
@@ -212,18 +293,16 @@ function Ensure-Installed {
   # Install only if missing deps (keeps repeat runs fast).
   $probe = Invoke-NativeQuiet $VenvPy @("-c", "import aiohttp, httpx")
   if ($probe -ne 0) {
-    Write-Host "[thomas] Installing dependencies (editable) ..."
-    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "--upgrade", "pip")
-    if ($code -ne 0) { throw "[thomas] pip upgrade failed (exit $code)" }
-    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]")
+    Write-Host "[thomas] Installing runtime dependencies (editable) ..."
+    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]", "--disable-pip-version-check")
     if ($code -ne 0) { throw "[thomas] pip install failed (exit $code)" }
     return
   }
 
-  # Ensure the package entrypoints are present (optional but convenient).
-  $show = Invoke-NativeQuiet $VenvPy @("-m", "pip", "show", "thomas")
+  # Ensure the editable package is present.
+  $show = Invoke-NativeQuiet $VenvPy @("-m", "pip", "show", "thomas-ai")
   if ($show -ne 0) {
-    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]")
+    $code = Invoke-Native $VenvPy @("-m", "pip", "install", "-e", ".[server]", "--disable-pip-version-check")
     if ($code -ne 0) { throw "[thomas] pip install failed (exit $code)" }
   }
 }
@@ -265,7 +344,8 @@ function Wait-ThomasHttpOnPort {
 function Invoke-BootDoctor {
   param(
     [Parameter(Mandatory = $true)][string]$Reason,
-    [int]$DiagPort = 8899
+    [int]$DiagPort = 8899,
+    [switch]$Relaunch
   )
 
   Write-Host ""
@@ -281,13 +361,21 @@ function Invoke-BootDoctor {
   $succeeded = $false
 
   try {
-    $cliExit = Invoke-Native $VenvPy @("-m", "thomas.bootdoctor", "report", "--force", "--port", "$DiagPort", "--reason", $Reason, "--report", $report)
+    $bootArgs = @("-m", "thomas.bootdoctor", "report", "--force", "--port", "$DiagPort", "--reason", $Reason, "--report", $report)
+    if ($Relaunch) {
+      $bootArgs += "--relaunch"
+    }
+    $cliExit = Invoke-Native $VenvPy $bootArgs
     if ($cliExit -eq 0) {
       $succeeded = $true
     } else {
       Write-Host ("[thomas] bootdoctor report runner failed (exit {0}); trying direct core fallback..." -f $cliExit)
       if (Test-Path $runner) {
-        $directExit = Invoke-Native $VenvPy @($runner, "--root", $Root, "--port", "$DiagPort", "--reason", $Reason, "--report", $report)
+        $directArgs = @($runner, "--root", $Root, "--port", "$DiagPort", "--reason", $Reason, "--report", $report)
+        if ($Relaunch) {
+          $directArgs += "--relaunch"
+        }
+        $directExit = Invoke-Native $VenvPy $directArgs
         if ($directExit -eq 0) {
           $succeeded = $true
         }
@@ -321,8 +409,86 @@ function Invoke-BootDoctor {
     Set-Content -Path $report -Value $failure -Encoding UTF8
   }
 
+  if ($Relaunch -and $succeeded) {
+    $recovered = Wait-ThomasHttpOnPort -P $DiagPort -Attempts 34 -DelayMs 300
+    if ($recovered) {
+      Write-Host ("[thomas] Boot Doctor recovered Thomas on port {0}." -f $DiagPort)
+    } else {
+      Write-Host ("[thomas] Boot Doctor finished but Thomas is still not healthy on port {0}." -f $DiagPort)
+    }
+  }
+
   Write-Host ("[thomas] Boot Doctor report: {0}" -f $report)
-  try { Start-Process notepad.exe $report | Out-Null } catch { }
+  if (-not $recovered) {
+    try { Start-Process notepad.exe $report | Out-Null } catch { }
+  }
+
+  return [pscustomobject]@{
+    ReportPath = $report
+    Succeeded = $succeeded
+    Recovered = $recovered
+  }
+}
+
+function Open-BootDoctorRescue {
+  param(
+    [Parameter(Mandatory = $true)][string]$Reason,
+    [int]$DiagPort = 8899,
+    [string]$LaunchMode = "direct",
+    [int]$WaitSec = 90
+  )
+
+  Write-Host ""
+  Write-Host ("[thomas] Boot Doctor rescue: {0}" -f $Reason)
+
+  $diagDir = Join-Path $Root "runtime\boot_doctor"
+  New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+  $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
+  $contextPath = Join-Path $diagDir ("startup_context_{0}.json" -f $stamp)
+  $payload = [ordered]@{
+    created_at_utc = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ")
+    reason = $Reason
+    attempted_launch_mode = $LaunchMode
+    target_port = [int]$DiagPort
+    current_health_status = $(if (Test-ThomasHttpOnPort $DiagPort) { "healthy" } else { "unhealthy" })
+    ever_healthy_during_boot = $false
+    stderr_tail = ""
+  }
+  $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $contextPath -Encoding UTF8
+
+  $bootDoctorScript = Join-Path $Root "scripts\bootdoctor.ps1"
+  if (-not (Test-Path $bootDoctorScript)) {
+    Write-Host ("[thomas] WARNING: Boot Doctor launcher missing: {0}" -f $bootDoctorScript)
+    return [pscustomobject]@{ Recovered = $false; ContextPath = $contextPath; Process = $null }
+  }
+
+  $proc = $null
+  try {
+    $proc = Start-Process -FilePath "powershell.exe" -ArgumentList @(
+      "-NoProfile",
+      "-ExecutionPolicy", "Bypass",
+      "-File", $bootDoctorScript,
+      "rescue",
+      "--force",
+      "--port", "$DiagPort",
+      "--reason", $Reason,
+      "--startup-context", $contextPath,
+      "--relaunch"
+    ) -WorkingDirectory $Root -PassThru
+  } catch {
+    Write-Host ("[thomas] WARNING: unable to launch Boot Doctor rescue window: {0}" -f $_.Exception.Message)
+  }
+
+  $recovered = Wait-ThomasHttpOnPort -P $DiagPort -Attempts ([Math]::Max(20, $WaitSec * 2)) -DelayMs 500
+  if ($recovered) {
+    Write-Host ("[thomas] Boot Doctor rescue recovered Thomas on port {0}." -f $DiagPort)
+  }
+
+  return [pscustomobject]@{
+    Recovered = $recovered
+    ContextPath = $contextPath
+    Process = $proc
+  }
 }
 
 function Get-ThomasListenersOnPort([int]$P) {
@@ -569,7 +735,7 @@ if (Uses-OllamaLocal) {
 }
 Show-DefaultModelWarning
 
-# ── ALWAYS start fresh ──────────────────────────────────────────────
+# Ã¢â€â‚¬Ã¢â€â‚¬ ALWAYS start fresh Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬Ã¢â€â‚¬
 # Kill ALL existing Thomas servers and tray agents so we always run the
 # current version from this working tree.  The old "reuse" logic caused
 # stale servers to persist after code updates.
@@ -631,24 +797,29 @@ try {
 if (-not $startingVersion) { $startingVersion = "unknown" }
 
 $Url = "http://$BindHost`:$Port/"
+$LaunchUrl = Get-ThomasLaunchUrl -BaseUrl $Url -RequestedDeepLink $DeepLink
 Write-Host ""
 Write-Host ("[thomas] Starting Thomas v{0}" -f $startingVersion)
 Write-Host "[thomas] UI: $Url"
-Write-Host "[thomas] If this stays on \"ready\" but won't answer, check thomas.toml model endpoints."
+if (-not [string]::IsNullOrWhiteSpace($DeepLink)) {
+  Write-Host "[thomas] Pending install link detected. Thomas will open Marketplace and finish the plugin install."
+}
+Write-Host "[thomas] If this stays on 'ready' but won't answer, check thomas.toml model endpoints."
 Write-Host ""
 
 function Start-MonolithWatch {
   if ($NoMonolithWatch) { return $null }
 
   $raw = [string]$env:THOMAS_MONOLITH_WATCH
-  if ($raw) {
-    $flag = $raw.Trim().ToLowerInvariant()
-    if ($flag -in @("0", "false", "no", "off")) {
-      return $null
-    }
+  if (-not $raw) {
+    return $null
+  }
+  $flag = $raw.Trim().ToLowerInvariant()
+  if ($flag -notin @("1", "true", "yes", "on")) {
+    return $null
   }
 
-  Write-Host "[thomas] Live monolith guard watcher: enabled (use -NoMonolithWatch to disable)."
+  Write-Host "[thomas] Live monolith guard watcher: enabled (set THOMAS_MONOLITH_WATCH=0 to disable)."
   try {
     $proc = Start-Process `
       -FilePath $VenvPy `
@@ -672,6 +843,93 @@ function Stop-MonolithWatch {
   } catch { }
 }
 
+function Start-ThomasStartupRecoveryWatch {
+  $watchScript = Join-Path $Root "scripts\startup_recovery_watch.ps1"
+  if (-not (Test-Path $watchScript)) {
+    Write-Host ("[thomas] WARNING: startup recovery watcher missing: {0}" -f $watchScript)
+    return $null
+  }
+
+  $watchArgs = @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", $watchScript,
+    "-Root", $Root,
+    "-Port", "$Port",
+    "-LaunchUrl", $LaunchUrl,
+    "-LaunchMode", $(if ($NoTray) { "direct" } else { "tray" })
+  )
+  if ($NoBrowser) {
+    $watchArgs += "-NoBrowser"
+  }
+
+  try {
+    return Start-Process `
+      -FilePath "powershell.exe" `
+      -ArgumentList $watchArgs `
+      -WorkingDirectory $Root `
+      -WindowStyle Hidden `
+      -PassThru
+  } catch {
+    Write-Host ("[thomas] WARNING: unable to start startup recovery watcher: {0}" -f $_.Exception.Message)
+    return $null
+  }
+}
+
+function Stop-ThomasStartupRecoveryWatch {
+  param($WatchProc)
+  if ($null -eq $WatchProc) { return }
+  try {
+    if (-not $WatchProc.HasExited) {
+      Stop-Process -Id $WatchProc.Id -Force -ErrorAction SilentlyContinue
+    }
+  } catch { }
+}
+
+function Invoke-ThomasRuntime {
+  param([Parameter(Mandatory = $true)][string[]]$Args)
+
+  & $VenvPy @Args
+  $exitCode = $LASTEXITCODE
+  if ($null -eq $exitCode) {
+    return 0
+  }
+  return [int]$exitCode
+}
+
+function Start-DetachedThomasServer {
+  param(
+    [Parameter(Mandatory = $true)][string]$BindAddress,
+    [Parameter(Mandatory = $true)][int]$ServerPort
+  )
+
+  $logDir = Join-Path $Root 'runtime\logs'
+  New-Item -ItemType Directory -Force -Path $logDir | Out-Null
+  $stdoutLog = Join-Path $logDir 'server_stdout.log'
+  $stderrLog = Join-Path $logDir 'server_stderr.log'
+
+  try {
+    $proc = Start-Process `
+      -FilePath $VenvPy `
+      -ArgumentList @('-m', 'thomas.server', '--host', $BindAddress, '--port', "$ServerPort") `
+      -WorkingDirectory $Root `
+      -RedirectStandardOutput $stdoutLog `
+      -RedirectStandardError $stderrLog `
+      -PassThru
+  } catch {
+    Write-Host ("[thomas] ERROR: failed to launch detached server: {0}" -f $_.Exception.Message)
+    return [pscustomobject]@{ Process = $null; StdoutLog = $stdoutLog; StderrLog = $stderrLog; Healthy = $false }
+  }
+
+  $healthy = Wait-ThomasHttpOnPort -P $ServerPort -Attempts 70 -DelayMs 500
+  return [pscustomobject]@{
+    Process = $proc
+    StdoutLog = $stdoutLog
+    StderrLog = $stderrLog
+    Healthy = $healthy
+  }
+}
+
 # ---------------------------------------------------------------------------
 # Mode selection: Tray Agent (default) or direct server
 # ---------------------------------------------------------------------------
@@ -689,39 +947,60 @@ if (-not $NoTray) {
     Invoke-Native $VenvPy @("-m", "pip", "install", "pystray", "pillow", "win10toast", "--quiet") | Out-Null
   }
 
-  if (-not $NoBrowser) {
-    # Open browser after a short delay (tray agent starts server in background)
-    Start-Sleep -Milliseconds 1500
-    try { Start-Process $Url | Out-Null } catch { }
-  }
-
+  $startupWatchProc = Start-ThomasStartupRecoveryWatch
   $watchProc = Start-MonolithWatch
   try {
     # Run tray agent (which starts and manages the server)
-    $exitCode = Invoke-Native $VenvPy @("-m", "thomas.tray_agent", "--port", "$Port")
+    $exitCode = Invoke-ThomasRuntime @("-m", "thomas.tray_agent", "--port", "$Port")
     if ($exitCode -ne 0) {
-      Invoke-BootDoctor -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port
+      Stop-ThomasStartupRecoveryWatch $startupWatchProc
+      $doctorResult = Open-BootDoctorRescue -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port -LaunchMode "tray"
+      if ($doctorResult -and $doctorResult.Recovered) {
+        if (-not $NoBrowser) {
+          try { Start-Process $LaunchUrl | Out-Null } catch { }
+        }
+        exit 0
+      }
       exit $exitCode
     }
   } finally {
+    Stop-ThomasStartupRecoveryWatch $startupWatchProc
     Stop-MonolithWatch $watchProc
   }
 } else {
-  # -NoTray: Run server directly (original behavior)
+  # -NoTray: Run server directly as a detached process and gate success on health.
   Write-Host "[thomas] Starting server directly (no tray icon)..."
   Write-Host ""
 
-  if (-not $NoBrowser) {
-    try { Start-Process $Url | Out-Null } catch { }
-  }
-
   $watchProc = Start-MonolithWatch
   try {
-    $exitCode = Invoke-Native $VenvPy @("-m", "thomas.server", "--host", "$BindHost", "--port", "$Port")
-    if ($exitCode -ne 0) {
-      Invoke-BootDoctor -Reason ("Server exited with code {0}" -f $exitCode) -DiagPort $Port
-      exit $exitCode
+    $launch = Start-DetachedThomasServer -BindAddress $BindHost -ServerPort $Port
+    if ($launch -and $launch.Healthy) {
+      if (-not $NoBrowser) {
+        try { Start-Process $LaunchUrl | Out-Null } catch { }
+      }
+      exit 0
     }
+
+    $serverPid = $null
+    if ($launch -and $launch.Process) {
+      $serverPid = $launch.Process.Id
+      try { Stop-Process -Id $serverPid -Force -ErrorAction SilentlyContinue } catch { }
+    }
+
+    $reason = if ($serverPid) {
+      "Detached server failed to become healthy on port {0} (pid {1})." -f $Port, $serverPid
+    } else {
+      "Detached server failed to launch on port {0}." -f $Port
+    }
+    $doctorResult = Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct"
+    if ($doctorResult -and $doctorResult.Recovered) {
+      if (-not $NoBrowser) {
+        try { Start-Process $LaunchUrl | Out-Null } catch { }
+      }
+      exit 0
+    }
+    exit 1
   } finally {
     Stop-MonolithWatch $watchProc
   }

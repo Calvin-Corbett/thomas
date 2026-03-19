@@ -13,6 +13,8 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+from thomas.core import agent_presence
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_AUTO_SKIP_HOOK = "thomas-repo-clean-worktree-gate"
 AGENT_ENV_KEYS: tuple[str, ...] = (
@@ -109,6 +111,16 @@ def run(argv: Sequence[str] | None = None) -> int:
         help=f"Auto-add {DEFAULT_AUTO_SKIP_HOOK} when git worktree is dirty (default: enabled).",
     )
     parser.add_argument("--dry-run", action="store_true", help="Print resolved push plan without executing push.")
+    parser.add_argument(
+        "--allow-presence-override",
+        action="store_true",
+        help="Allow push when the repo presence monitor detects other active or unregistered agents.",
+    )
+    parser.add_argument(
+        "--presence-override-reason",
+        default="",
+        help="Required reason (>=12 chars) when --allow-presence-override is used.",
+    )
     parser.add_argument("--json", action="store_true", help="Emit machine-readable JSON.")
     parser.add_argument("push_args", nargs=argparse.REMAINDER, help="Args forwarded to git push.")
     args = parser.parse_args(argv)
@@ -161,8 +173,46 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 1
 
     reason = ""
-    agent = ""
+    agent = str(_resolve_agent(args.agent) or "").strip()
     env = dict(os.environ)
+    try:
+        presence_gate = agent_presence.evaluate_soft_gate(
+            purpose="guarded_push",
+            repo_root=repo_root,
+            actor_agent=agent,
+            allow_override=bool(args.allow_presence_override),
+            override_reason=str(args.presence_override_reason or ""),
+        )
+    except ValueError as exc:
+        message = str(exc)
+        payload = {"mode": "guarded_push", "ok": False, "exit_code": 1, "error": message}
+        if args.json:
+            _print_json(payload)
+        else:
+            print(f"Guarded push FAILED: {message}")
+        return 1
+    except Exception as exc:
+        message = f"presence gate failed: {exc}"
+        payload = {"mode": "guarded_push", "ok": False, "exit_code": 1, "error": message}
+        if args.json:
+            _print_json(payload)
+        else:
+            print(f"Guarded push FAILED: {message}")
+        return 1
+    if not bool(presence_gate.get("ok", False)):
+        message = str(presence_gate.get("message") or "presence gate requires override")
+        payload = {
+            "mode": "guarded_push",
+            "ok": False,
+            "exit_code": 1,
+            "error": message,
+            "presence_gate": presence_gate,
+        }
+        if args.json:
+            _print_json(payload)
+        else:
+            print(f"Guarded push FAILED: {message}")
+        return 1
     if skip_hooks:
         try:
             reason = _validate_reason(args.reason or os.getenv("THOMAS_SKIP_REASON", ""))
@@ -174,7 +224,6 @@ def run(argv: Sequence[str] | None = None) -> int:
             else:
                 print(f"Guarded push FAILED: {message}")
             return 1
-        agent = str(_resolve_agent(args.agent) or "").strip()
         if not agent:
             message = "agent id is required when SKIP is used"
             payload = {"mode": "guarded_push", "ok": False, "exit_code": 1, "error": message}
@@ -199,6 +248,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "agent": agent,
         "reason": reason,
         "dry_run": bool(args.dry_run),
+        "presence_gate": presence_gate,
     }
 
     if args.dry_run:

@@ -82,6 +82,44 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
         open_ids = {int(r["id"]) for r in (open_data.get("contradictions") or [])}
         self.assertNotIn(cid, open_ids)
 
+    async def test_contradiction_resolve_rejects_non_object_json_without_mutating(self):
+        pin1 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "Calvin"})
+        self.assertEqual(pin1.status, 200)
+        pin2 = await self.client.post("/api/memory/pins", json={"key": "user.name", "text": "Kevin"})
+        self.assertEqual(pin2.status, 200)
+
+        list_resp = await self.client.get("/api/memory/contradictions?only_open=1&limit=20")
+        self.assertEqual(list_resp.status, 200)
+        rows = (await list_resp.json()).get("contradictions") or []
+        cid = int(rows[0]["id"])
+
+        bad_resp = await self.client.post(f"/api/memory/contradictions/{cid}/resolve", json=["bad"])
+        self.assertEqual(bad_resp.status, 400)
+
+        after_resp = await self.client.get("/api/memory/contradictions?only_open=1&limit=20")
+        self.assertEqual(after_resp.status, 200)
+        after_ids = {int(r["id"]) for r in ((await after_resp.json()).get("contradictions") or [])}
+        self.assertIn(cid, after_ids)
+
+    async def test_contradiction_review_parses_false_string_as_dismiss(self):
+        pin1 = await self.client.post("/api/memory/pins", json={"key": "user.city", "text": "Miami"})
+        self.assertEqual(pin1.status, 200)
+        pin2 = await self.client.post("/api/memory/pins", json={"key": "user.city", "text": "Orlando"})
+        self.assertEqual(pin2.status, 200)
+
+        list_resp = await self.client.get("/api/memory/contradictions/review?status=pending&limit=20")
+        self.assertEqual(list_resp.status, 200)
+        rows = (await list_resp.json()).get("contradictions") or []
+        cid = int(rows[0]["id"])
+
+        decide_resp = await self.client.post(
+            f"/api/memory/contradictions/{cid}/review",
+            json={"approve": "false", "actor": "test"},
+        )
+        self.assertEqual(decide_resp.status, 200)
+        decide_data = await decide_resp.json()
+        self.assertEqual(str(decide_data.get("decision") or ""), "dismiss")
+
     async def test_curator_approval_queue_routes(self):
         list_resp = await self.client.get("/api/memory/curator/approvals?status=pending&limit=20")
         self.assertEqual(list_resp.status, 200)
@@ -136,6 +174,23 @@ class TestServerMemoryContradictionsAPI(AioHTTPTestCase):
             headers={"Content-Type": "text/plain"},
         )
         self.assertEqual(resp.status, 415)
+
+    async def test_memory_query_params_reject_invalid_limits(self):
+        bad_memory = await self.client.get("/api/memory?trace_limit=oops")
+        self.assertEqual(bad_memory.status, 400)
+        self.assertIn("invalid trace_limit", await bad_memory.text())
+
+        bad_contradictions = await self.client.get("/api/memory/contradictions?limit=oops")
+        self.assertEqual(bad_contradictions.status, 400)
+        self.assertIn("invalid limit", await bad_contradictions.text())
+
+        bad_review = await self.client.get("/api/memory/contradictions/review?limit=oops")
+        self.assertEqual(bad_review.status, 400)
+        self.assertIn("invalid limit", await bad_review.text())
+
+        bad_curator = await self.client.get("/api/memory/curator/approvals?limit=oops")
+        self.assertEqual(bad_curator.status, 400)
+        self.assertIn("invalid limit", await bad_curator.text())
 
 
 if __name__ == "__main__":

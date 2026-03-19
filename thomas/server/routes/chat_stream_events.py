@@ -1,4 +1,4 @@
-﻿"""Streaming event loop helpers for /api/chat."""
+"""Streaming event loop helpers for /api/chat."""
 
 from __future__ import annotations
 
@@ -652,4 +652,3 @@ async def stream_agent_events(
         )
 
     return journal
-

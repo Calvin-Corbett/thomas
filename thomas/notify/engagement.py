@@ -230,10 +230,6 @@ class OptimalSendTimePredictor:
         hour = open_time.hour
         self.user_open_patterns[user_id].append(hour)
 
-        # Keep only last 30 days
-        if len(self.user_open_patterns[user_id]) > 30:
-            self.user_open_patterns[user_id] = self.user_open_patterns[user_id][-30:]
-
     def get_optimal_send_hour(self, user_id: str) -> int | None:
         """Get optimal send hour for user.
 

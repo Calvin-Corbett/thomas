@@ -8,6 +8,12 @@ repos:
 
   - repo: local
     hooks:
+      - id: thomas-agent-safety-validation
+        name: Thomas Agent Safety Validation
+        entry: python scripts/validate_agent_changes.py
+        language: system
+        pass_filenames: false
+
       - id: thomas-active-folder-guard
         name: Thomas Active Folder Guard
         entry: python scripts/active_folders.py guard-staged --auto-claim-staged --require-explicit-agent
@@ -23,6 +29,24 @@ repos:
       - id: thomas-plan-structure-gate
         name: Thomas Plan Structure Gate
         entry: python scripts/check_plan_structure_gate.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-core-overhead-guard
+        name: Thomas Core Overhead Guard
+        entry: python scripts/check_core_overhead_guard.py
+        language: system
+        pass_filenames: true
+
+      - id: thomas-worktree-rules-gate
+        name: Thomas Worktree Rules Gate
+        entry: python scripts/check_worktree_rules_gate.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-worktree-branch-guard
+        name: Thomas Worktree Branch Guard
+        entry: python scripts/check_worktree_branch_guard.py
         language: system
         pass_filenames: false
 
@@ -74,9 +98,27 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-monolith-filename-pattern-gate
+        name: Thomas Monolith filename pattern gate
+        entry: python scripts/check_monolith_filename_guard.py --staged-only
+        language: system
+        pass_filenames: false
+
+      - id: thomas-protected-deletion-guard
+        name: Thomas Protected Deletion Guard
+        entry: python scripts/check_deletions.py --staged-only
+        language: system
+        pass_filenames: false
+
+      - id: thomas-feature-registry-gate
+        name: Thomas Feature Registry Gate
+        entry: python scripts/check_feature_registry.py
+        language: system
+        pass_filenames: false
+
       - id: thomas-repo-hygiene-gate
         name: Thomas Repo Hygiene Gate
-        entry: python scripts/check_repo_hygiene.py --no-require-clean-worktree
+        entry: python scripts/check_repo_hygiene.py
         language: system
         pass_filenames: false
 

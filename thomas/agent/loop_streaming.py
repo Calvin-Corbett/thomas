@@ -10,7 +10,7 @@ Provides:
 
 from __future__ import annotations
 
-import asyncio
+import inspect
 import logging
 import os
 import re
@@ -29,6 +29,33 @@ if TYPE_CHECKING:
 
 log = logging.getLogger(__name__)
 
+_MEMORY_POLICY_WARNED_SET: set[int] = set()
+_MEMORY_RELEVANCE_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "do",
+    "for",
+    "how",
+    "i",
+    "is",
+    "it",
+    "me",
+    "my",
+    "of",
+    "or",
+    "the",
+    "to",
+    "what",
+    "when",
+    "where",
+    "who",
+    "why",
+    "you",
+    "your",
+}
+
 
 def _context_preserve_mode(agent: AgentLoop) -> str:
     """Read the current context-preserve behavior for memory policy."""
@@ -43,9 +70,17 @@ def _should_preserve_context(agent: AgentLoop) -> bool:
     return mode in {"continuous", "persistent", "high_context", "chatty"}
 
 
+def _memory_relevance_tokens(text: str) -> set[str]:
+    return {
+        tok
+        for tok in re.findall(r"\b\w+\b", str(text or "").lower())
+        if len(tok) >= 2 and tok not in _MEMORY_RELEVANCE_STOPWORDS
+    }
+
+
 def validate_memory_relevance(query: str, memory_text: str) -> float:
     """
-    Check relevance between query and retrieved memory using token overlap.
+    Check relevance between query and retrieved memory using query-term coverage.
 
     Returns a relevance score from 0.0 to 1.0.
     If score < 0.1, the memory is likely irrelevant and should be discarded.
@@ -53,22 +88,23 @@ def validate_memory_relevance(query: str, memory_text: str) -> float:
     if not query or not memory_text:
         return 0.0
 
-    # Normalize: lowercase and extract word tokens
-    query_tokens = set(re.findall(r"\b\w+\b", query.lower()))
-    memory_tokens = set(re.findall(r"\b\w+\b", memory_text.lower()))
+    normalized_query = " ".join(str(query or "").lower().split())
+    normalized_memory = " ".join(str(memory_text or "").lower().split())
+    if normalized_query and normalized_query in normalized_memory:
+        return 1.0
 
+    query_tokens = _memory_relevance_tokens(query)
+    memory_tokens = _memory_relevance_tokens(memory_text)
     if not query_tokens or not memory_tokens:
         return 0.0
 
-    # Calculate Jaccard similarity (intersection over union)
     intersection = len(query_tokens & memory_tokens)
-    union = len(query_tokens | memory_tokens)
-
-    if union == 0:
+    if intersection <= 0:
         return 0.0
 
-    relevance_score = intersection / union
-    return relevance_score
+    coverage = intersection / len(query_tokens)
+    density = intersection / len(memory_tokens)
+    return max(coverage, min(1.0, coverage + (density * 0.25)))
 
 
 def retrieve_memory(
@@ -112,7 +148,9 @@ def retrieve_memory(
 
         if retrieval_thread.is_alive():
             log.warning("Memory retrieval timed out after 10s")
-            return "[Memory unavailable — responding without prior context]"
+            # FIX (2026-03-18): Return empty instead of a message that gets
+            # injected into the prompt and confuses the model.
+            return ""
 
         if exception_container[0]:
             raise exception_container[0]
@@ -123,26 +161,28 @@ def retrieve_memory(
 
         # Check if memory was actually retrieved
         if not retrieved_text or not retrieved_text.strip():
-            log.warning("Memory retrieval returned empty text (%.1f ms)", elapsed_ms)
-            return "[Memory unavailable — responding without prior context]"
+            log.debug("Memory retrieval returned empty text (%.1f ms)", elapsed_ms)
+            # FIX (2026-03-18): Return empty string instead of a misleading
+            # "[Memory unavailable]" message. That message was getting injected
+            # into the system prompt and confusing the model. Empty string = no
+            # memory context, which is the honest state.
+            return ""
 
-        # Validate relevance of retrieved memory
+        # FIX (2026-03-18): Removed the strict relevance threshold (was 0.1).
+        # The old check used simple token overlap, which failed badly for
+        # topic-switch scenarios (user talking about donuts but memory has
+        # code context). The LLM is far better at deciding what's relevant
+        # from memory than a token-overlap heuristic. Always include
+        # retrieved memory and let the model sort it out.
         relevance = validate_memory_relevance(prompt, retrieved_text)
-        if relevance < 0.1:
-            log.warning(
-                "Retrieved memory has low relevance (score=%.2f, %.1f ms); discarding",
-                relevance,
-                elapsed_ms,
-            )
-            return "[Memory unavailable — responding without prior context]"
-
-        log.debug("Memory retrieved successfully (score=%.2f, %.1f ms)", relevance, elapsed_ms)
+        log.debug("Memory retrieved (relevance=%.2f, %.1f ms)", relevance, elapsed_ms)
         return retrieved_text
 
-    except Exception as e:  # REVIEWED: log-and-continue — optional feature, fallback to warning message
+    except Exception as e:  # REVIEWED: log-and-continue — optional feature, fallback to empty
         elapsed_ms = (time.time() - start_time) * 1000
         log.warning("Memory retrieval failed after %.1f ms: %s", elapsed_ms, e)
-        return "[Memory unavailable — responding without prior context]"
+        # FIX (2026-03-18): Return empty, not a confusing message.
+        return ""
 
 
 def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
@@ -154,42 +194,122 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
     if not callable(setter):
         return
 
+    include_thread = True
     include_global = bool(route.memory_include_global)
     include_profile = bool(route.memory_include_profile)
+
+    pref_include_thread = getattr(agent, "_memory_include_thread_pref", None)
+    if pref_include_thread is not None:
+        include_thread = bool(pref_include_thread)
     pref_include_global = getattr(agent, "_memory_include_global_pref", None)
     if pref_include_global is not None:
         include_global = bool(pref_include_global)
     pref_include_profile = getattr(agent, "_memory_include_profile_pref", None)
     if pref_include_profile is not None:
         include_profile = bool(pref_include_profile)
-    budget_tokens = max(300, int(route.memory_budget_tokens))
+
+    pref_pins_only = getattr(agent, "_memory_pins_only_pref", None)
+    pins_only = bool(pref_pins_only) if pref_pins_only is not None else False
+    pref_max_pack_tokens = getattr(agent, "_memory_max_pack_tokens_pref", None)
+    pref_max_results = getattr(agent, "_memory_max_results_pref", None)
+    pref_decay_half_life_hours = getattr(agent, "_memory_decay_half_life_hours_pref", None)
+    pref_auto_compact_enabled = getattr(agent, "_memory_auto_compact_enabled_pref", None)
+    pref_auto_compact_episode_threshold = getattr(agent, "_memory_auto_compact_episode_threshold_pref", None)
+    pref_auto_compact_min_interval_hours = getattr(agent, "_memory_auto_compact_min_interval_hours_pref", None)
+    pref_auto_optimize_enabled = getattr(agent, "_memory_auto_optimize_enabled_pref", None)
+    pref_auto_optimize_waste_threshold = getattr(agent, "_memory_auto_optimize_waste_threshold_pref", None)
+    pref_auto_optimize_min_interval_hours = getattr(agent, "_memory_auto_optimize_min_interval_hours_pref", None)
+
+    budget_tokens = max(300, int(pref_max_pack_tokens or route.memory_budget_tokens))
     path = str(getattr(route, "path", "") or "")
     if _should_preserve_context(agent) and path in {"casual_chat", "personal_context", "assistant_meta", "general"}:
         include_global = True
         budget_tokens = max(budget_tokens, 1500)
 
+    desired_policy: dict[str, Any] = {
+        "enabled": True,
+        "include_thread": include_thread,
+        "include_global": include_global,
+        "include_profile": include_profile,
+        "pins_only": pins_only,
+        "max_pack_tokens": budget_tokens,
+    }
+    if pref_max_results is not None:
+        desired_policy["max_results"] = int(pref_max_results)
+    if pref_decay_half_life_hours is not None:
+        desired_policy["decay_half_life_hours"] = float(pref_decay_half_life_hours)
+    if pref_auto_compact_enabled is not None:
+        desired_policy["auto_compact_enabled"] = bool(pref_auto_compact_enabled)
+    if pref_auto_compact_episode_threshold is not None:
+        desired_policy["auto_compact_episode_threshold"] = int(pref_auto_compact_episode_threshold)
+    if pref_auto_compact_min_interval_hours is not None:
+        desired_policy["auto_compact_min_interval_hours"] = float(pref_auto_compact_min_interval_hours)
+    if pref_auto_optimize_enabled is not None:
+        desired_policy["auto_optimize_enabled"] = bool(pref_auto_optimize_enabled)
+    if pref_auto_optimize_waste_threshold is not None:
+        desired_policy["auto_optimize_waste_threshold"] = float(pref_auto_optimize_waste_threshold)
+    if pref_auto_optimize_min_interval_hours is not None:
+        desired_policy["auto_optimize_min_interval_hours"] = float(pref_auto_optimize_min_interval_hours)
+
     getter = getattr(agent._memory, "thread_memory_policy", None)
     if callable(getter):
         try:
             current = getter(agent._thread_id)
-            if isinstance(current, dict):
-                if (
-                    current.get("include_global") == include_global
-                    and current.get("include_profile") == include_profile
-                ):
-                    return
-        except Exception:  # REVIEWED: log-and-continue — policy getter optional
+            if isinstance(current, dict) and all(current.get(key) == value for key, value in desired_policy.items()):
+                return
+        except Exception:
             pass
 
+    warning_issued = bool(getattr(agent, "_memory_policy_warning_issued", False))
+    warning_key = id(setter)
     try:
-        setter(
-            agent._thread_id,
-            include_global=include_global,
-            include_profile=include_profile,
-            budget_tokens=budget_tokens,
-        )
-    except Exception as e:  # REVIEWED: log-and-continue — policy setter optional
-        log.warning("Memory policy set failed: %s", e)
+        signature = inspect.signature(setter)
+    except (TypeError, ValueError):
+        signature = None
+
+    def _accepts_kwarg(name: str, signature: inspect.Signature | None) -> bool:
+        if signature is None:
+            return False
+        if any(p.kind == inspect.Parameter.VAR_KEYWORD for p in signature.parameters.values()):
+            return True
+        return name in signature.parameters
+
+    policy_kwargs: dict[str, Any] = {}
+    for key, value in desired_policy.items():
+        target_key = key
+        if (
+            key == "max_pack_tokens"
+            and not _accepts_kwarg("max_pack_tokens", signature)
+            and _accepts_kwarg("budget_tokens", signature)
+        ):
+            target_key = "budget_tokens"
+        if _accepts_kwarg(target_key, signature):
+            policy_kwargs[target_key] = value
+
+    try:
+        setter(agent._thread_id, **policy_kwargs)
+        return
+    except Exception as e:
+        if isinstance(e, TypeError) and "budget_tokens" in str(e) and "budget_tokens" in policy_kwargs:
+            fallback_kwargs = dict(policy_kwargs)
+            fallback_kwargs.pop("budget_tokens", None)
+            fallback_kwargs["max_pack_tokens"] = budget_tokens
+            try:
+                setter(agent._thread_id, **fallback_kwargs)
+                return
+            except Exception as fallback_err:
+                if not warning_issued and warning_key not in _MEMORY_POLICY_WARNED_SET:
+                    _MEMORY_POLICY_WARNED_SET.add(warning_key)
+                    warning_issued = True
+                    agent._memory_policy_warning_issued = True
+                    log.warning("Memory policy set failed: %s", fallback_err)
+                return
+
+        if not warning_issued and warning_key not in _MEMORY_POLICY_WARNED_SET:
+            _MEMORY_POLICY_WARNED_SET.add(warning_key)
+            warning_issued = True
+            agent._memory_policy_warning_issued = True
+            log.warning("Memory policy set failed: %s", e)
 
 
 def retrieve_library(agent: AgentLoop, prompt: str, route: RouteDecision) -> str:
@@ -231,9 +351,18 @@ _LIBRARY_CAPTURE_ROUTES = frozenset({"research", "planning", "debug_audit", "cod
 _LIBRARY_CAPTURE_MIN_CHARS = {"research": 80, "planning": 200, "debug_audit": 200, "coding_task": 300}
 
 
-def auto_capture_research(agent: AgentLoop, *, route: RouteDecision, query: str, answer: str) -> None:
+def auto_capture_research(
+    agent: AgentLoop,
+    *,
+    route: RouteDecision,
+    query: str,
+    answer: str,
+    job_type: str | None = None,
+) -> None:
     """Persist research-heavy answers into the external library."""
     if not agent._library_auto_capture:
+        return
+    if str(job_type or "").strip().lower() == "benchmark":
         return
     rpath = str(route.path or "")
     if rpath not in _LIBRARY_CAPTURE_ROUTES:

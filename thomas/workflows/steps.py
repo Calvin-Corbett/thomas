@@ -20,6 +20,8 @@ import asyncio
 import logging
 from typing import Any
 
+from thomas.core.safe_expression import SafeExpressionError, evaluate_safe_expression
+
 from .models import StepConfig, StepResult, StepStatus, StepType, Workflow, WorkflowRun
 
 logger = logging.getLogger(__name__)
@@ -230,14 +232,12 @@ class ConditionExecutor:
         - ${var} > value
         - ${var} in [a, b, c]
         """
-        # Simple evaluation (in production, use safer expression evaluator)
         try:
-            # Replace variables
             expr = condition
             for var_name, var_value in variables.items():
                 expr = expr.replace(f"${{{var_name}}}", repr(var_value))
-            return eval(expr, {"__builtins__": {}})
-        except Exception as e:
+            return bool(evaluate_safe_expression(expr))
+        except (SafeExpressionError, Exception) as e:
             logger.warning(f"Condition evaluation failed: {e}")
             return False
 

@@ -232,6 +232,9 @@ class DeliveryManager:
         for status in self.delivery_status.values():
             metrics[status.value] += 1
 
+        # Backward compatibility: older dashboards treated queued work as "sending".
+        metrics[DeliveryStatus.SENDING.value] += metrics[DeliveryStatus.QUEUED.value]
+
         return metrics
 
     def is_in_bounce_list(self, notification_id: str) -> bool:

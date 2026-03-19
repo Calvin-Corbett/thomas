@@ -1,8 +1,10 @@
 """Tests for thomas.server.routes.runs (time-travel debugger API)."""
 
+import io
 import json
 import tempfile
 import unittest
+import zipfile
 
 from aiohttp.test_utils import AioHTTPTestCase
 
@@ -13,33 +15,44 @@ from thomas.server.app import create_app
 
 def _seed_run(run_id="test_run_1", session_id="sess_1"):
     """Insert a run + 3 events using the production run_store API."""
-    run_store.create_run({
-        "run_id": run_id,
-        "session_id": session_id,
-        "started_at": "2026-01-15T12:00:00+00:00",
-        "profile": "default",
-        "model_id": "gpt-4o",
-        "mode": "chat",
-        "thomas_version": "0.42.0",
-    })
+    run_store.create_run(
+        {
+            "run_id": run_id,
+            "session_id": session_id,
+            "started_at": "2026-01-15T12:00:00+00:00",
+            "profile": "default",
+            "model_id": "gpt-4o",
+            "mode": "chat",
+            "thomas_version": "0.42.0",
+        }
+    )
     run_store.append_event(
-        run_id, "prompt",
+        run_id,
+        "prompt",
         {"text": "hello", "role": "user"},
-        t_ms=0, seq=0,
+        t_ms=0,
+        seq=0,
     )
     run_store.append_event(
-        run_id, "assistant",
+        run_id,
+        "assistant",
         {"text": "hi there", "role": "assistant"},
-        t_ms=100, seq=1,
+        t_ms=100,
+        seq=1,
     )
     run_store.append_event(
-        run_id, "tool.call",
+        run_id,
+        "tool.call",
         {"name": "search", "arguments": "{}"},
-        t_ms=200, seq=2,
+        t_ms=200,
+        seq=2,
     )
     run_store.finalize_run(
-        run_id, ok=True, error=None,
-        iterations=1, tool_calls=1,
+        run_id,
+        ok=True,
+        error=None,
+        iterations=1,
+        tool_calls=1,
         usage={"prompt_tokens": 10, "completion_tokens": 5},
     )
 
@@ -91,6 +104,10 @@ class TestRunsRoutesLocal(AioHTTPTestCase):
         self.assertTrue(body["runs"][0]["ok"])
 
     # ── GET /api/runs?session_id=... (filter) ──
+
+    async def test_list_runs_rejects_negative_limit(self):
+        resp = await self.client.get("/api/runs?limit=-1")
+        self.assertEqual(resp.status, 400)
 
     async def test_list_runs_filter_session(self):
         _seed_run("run_a", "sess_A")
@@ -215,6 +232,20 @@ class TestRunsRoutesLocal(AioHTTPTestCase):
         disp = resp.headers.get("Content-Disposition", "")
         self.assertIn("test_run_1", disp)
 
+    async def test_export_zip_redacts_sensitive_fields(self):
+        run_store.create_run({"run_id": "redact_zip", "started_at": "2026-01-15T12:00:00+00:00"})
+        run_store.append_event("redact_zip", "tool.call", {"authorization": "Bearer sk-secret123"}, t_ms=0, seq=0)
+        run_store.append_event("redact_zip", "tool.output", {"api_key": "sk-SHOULD_NOT_LEAK"}, t_ms=1, seq=1)
+        resp = await self.client.get("/api/runs/redact_zip/export")
+        self.assertEqual(resp.status, 200)
+        body = await resp.read()
+        with zipfile.ZipFile(io.BytesIO(body)) as zf:
+            export_blob = (zf.read("events.ndjson") + zf.read("run.json") + zf.read("conversation.json")).decode(
+                "utf-8"
+            )
+        self.assertNotIn("sk-secret123", export_blob)
+        self.assertNotIn("sk-SHOULD_NOT_LEAK", export_blob)
+
     # ── GET /api/runs/{run_id}/replay (NDJSON stream) ──
 
     async def test_replay_ndjson_stream(self):
@@ -224,23 +255,37 @@ class TestRunsRoutesLocal(AioHTTPTestCase):
         ct = resp.headers.get("Content-Type", "")
         self.assertIn("ndjson", ct)
 
+    async def test_replay_ndjson_stream_redacts_sensitive_fields(self):
+        run_store.create_run({"run_id": "redact_replay", "started_at": "2026-01-15T12:00:00+00:00"})
+        run_store.append_event("redact_replay", "tool.call", {"authorization": "Bearer sk-secret123"}, t_ms=0, seq=0)
+        resp = await self.client.get("/api/runs/redact_replay/replay")
+        self.assertEqual(resp.status, 200)
+        text = await resp.text()
+        self.assertNotIn("sk-secret123", text)
+
     # ── Redaction ──
 
     async def test_events_redaction(self):
         """Sensitive fields in event payloads must be redacted."""
-        run_store.create_run({
-            "run_id": "redact_run",
-            "started_at": "2026-01-15T12:00:00+00:00",
-        })
-        run_store.append_event(
-            "redact_run", "tool.call",
-            {"name": "api_call", "authorization": "Bearer sk-secret123"},
-            t_ms=0, seq=0,
+        run_store.create_run(
+            {
+                "run_id": "redact_run",
+                "started_at": "2026-01-15T12:00:00+00:00",
+            }
         )
         run_store.append_event(
-            "redact_run", "tool.output",
+            "redact_run",
+            "tool.call",
+            {"name": "api_call", "authorization": "Bearer sk-secret123"},
+            t_ms=0,
+            seq=0,
+        )
+        run_store.append_event(
+            "redact_run",
+            "tool.output",
             {"result": "ok", "api_key": "sk-SHOULD_NOT_LEAK"},
-            t_ms=10, seq=1,
+            t_ms=10,
+            seq=1,
         )
         resp = await self.client.get("/api/runs/redact_run/events")
         self.assertEqual(resp.status, 200)

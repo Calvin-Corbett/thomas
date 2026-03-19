@@ -71,7 +71,12 @@ def register_mission_routes(
         api_mission_job_cancel,
         api_mission_job_run_now,
         api_mission_job_requeue,
-    ) = build_mission_task_handlers(app, _mission_require_store, _mission_wakeup_engine)
+    ) = build_mission_task_handlers(
+        app,
+        _mission_require_store,
+        _mission_wakeup_engine,
+        require_api_access=require_api_access,
+    )
 
     (
         api_mission_autopilot_bootstrap,
@@ -83,12 +88,18 @@ def register_mission_routes(
         _mission_bootstrap_autonomy,
         _mission_require_store,
         _mission_wakeup_engine,
+        require_api_access=require_api_access,
     )
 
     (
         api_mission_autonomy_approval_decide,
         api_mission_guardrails_approval_resolve,
-    ) = build_mission_approvals_handlers(app, _mission_require_store, _mission_wakeup_engine)
+    ) = build_mission_approvals_handlers(
+        app,
+        _mission_require_store,
+        _mission_wakeup_engine,
+        require_api_access=require_api_access,
+    )
 
     (
         api_mission_content_hub,

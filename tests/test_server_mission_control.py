@@ -7,6 +7,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
+from thomas.server.app_keys import APP_APPROVALS_BROKER
 
 
 def _parse_ndjson(blob: str):
@@ -76,6 +77,9 @@ class TestServerMissionControl(AioHTTPTestCase):
         first = run_agents[0]
         self.assertIn(str(first.get("room") or ""), room_ids)
         self.assertTrue(str(first.get("run_id") or "").strip())
+        self.assertEqual(str(first.get("session_id") or ""), sid)
+        self.assertTrue(str(first.get("created_at") or "").strip())
+        self.assertTrue(str(first.get("started_at") or "").strip())
 
     async def test_mission_control_includes_topology_and_approvals(self):
         resp = await self.client.get("/api/mission/control")
@@ -294,6 +298,44 @@ class TestServerMissionControl(AioHTTPTestCase):
         )
         self.assertEqual(guardrails.status, 404)
 
+    async def test_mission_job_create_rejects_non_object_json_without_bootstrap(self):
+        resp = await self.client.post("/api/mission/jobs", json=["bad"])
+        self.assertEqual(resp.status, 400)
+
+        jobs_resp = await self.client.get("/api/mission/jobs?limit=10")
+        self.assertEqual(jobs_resp.status, 200)
+        jobs_payload = await jobs_resp.json()
+        self.assertIs(jobs_payload.get("unavailable"), True)
+
+    async def test_mission_job_create_parses_requires_approval_string_false(self):
+        resp = await self.client.post(
+            "/api/mission/jobs",
+            json={"kind": "workflow_task", "goal": "Ship v1", "requires_approval": "false"},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        job = payload.get("job") or {}
+        self.assertFalse(bool(job.get("requires_approval")))
+
+    async def test_mission_autopilot_objective_rejects_non_object_json_without_bootstrap(self):
+        resp = await self.client.post("/api/mission/autopilot/objectives", json=["bad"])
+        self.assertEqual(resp.status, 400)
+
+        list_resp = await self.client.get("/api/mission/autopilot/objectives?active_only=0&limit=10")
+        self.assertEqual(list_resp.status, 200)
+        list_payload = await list_resp.json()
+        self.assertIs(list_payload.get("unavailable"), True)
+
+    async def test_mission_autopilot_objective_parses_requires_approval_string_false(self):
+        resp = await self.client.post(
+            "/api/mission/autopilot/objectives",
+            json={"goal": "Keep triage moving", "requires_approval": "false"},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        job = payload.get("job") or {}
+        self.assertFalse(bool(job.get("requires_approval")))
+
     async def test_mission_guardrails_approval_resolve_succeeds_with_broker(self):
         class _Broker:
             def __init__(self) -> None:
@@ -324,9 +366,9 @@ class TestServerMissionControl(AioHTTPTestCase):
         broker = _Broker()
         app_state = getattr(self.app, "_state", None)
         if isinstance(app_state, dict):
-            app_state["approvals"] = broker
+            app_state[APP_APPROVALS_BROKER] = broker
         else:
-            self.app["approvals"] = broker
+            self.app[APP_APPROVALS_BROKER] = broker
 
         resp = await self.client.post(
             "/api/mission/approvals/guardrails/resolve",
@@ -359,6 +401,57 @@ class TestServerMissionControl(AioHTTPTestCase):
                 "session_id": "sess-9",
             },
         )
+
+    async def test_mission_guardrails_approval_resolve_rejects_non_object_json(self):
+        class _Broker:
+            def __init__(self) -> None:
+                self.calls = []
+
+            async def resolve(self, **kwargs):
+                self.calls.append(kwargs)
+                return True
+
+        broker = _Broker()
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state[APP_APPROVALS_BROKER] = broker
+        else:
+            self.app[APP_APPROVALS_BROKER] = broker
+
+        resp = await self.client.post("/api/mission/approvals/guardrails/resolve", json=["bad"])
+        self.assertEqual(resp.status, 400)
+        self.assertEqual(broker.calls, [])
+
+    async def test_mission_guardrails_approval_resolve_parses_string_false_for_allow_session_tool(self):
+        class _Broker:
+            def __init__(self) -> None:
+                self.calls = []
+
+            async def resolve(self, **kwargs):
+                self.calls.append(kwargs)
+                return True
+
+        broker = _Broker()
+        app_state = getattr(self.app, "_state", None)
+        if isinstance(app_state, dict):
+            app_state[APP_APPROVALS_BROKER] = broker
+        else:
+            self.app[APP_APPROVALS_BROKER] = broker
+
+        resp = await self.client.post(
+            "/api/mission/approvals/guardrails/resolve",
+            json={
+                "run_id": "run-7",
+                "tool_call_id": "call-3",
+                "approve": True,
+                "allow_session_tool": "false",
+            },
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertIs(payload.get("allow_session_tool"), False)
+        self.assertEqual(len(broker.calls), 1)
+        self.assertIs(broker.calls[0]["allow_session_tool"], False)
 
     async def test_mission_alert_notify_noop_when_channels_missing(self):
         resp = await self.client.post(
@@ -401,10 +494,11 @@ class TestServerMissionControl(AioHTTPTestCase):
         resp = await self.client.get("/mission")
         self.assertEqual(resp.status, 200)
         text = await resp.text()
+        self.assertIn("<title>Thomas Mission Control</title>", text)
         self.assertIn("Mission Control", text)
-        self.assertIn("Open Office", text)
-        self.assertIn("Show Idle", text)
-        self.assertIn("Agent Activity", text)
+        self.assertIn('id="missions-list"', text)
+        self.assertIn('id="approvals-list"', text)
+        self.assertIn('id="agents-grid"', text)
 
     async def test_mission_stream_returns_snapshot_payload(self):
         resp = await self.client.get("/api/mission/stream?max_updates=1&interval=0.01")
@@ -663,7 +757,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertIs(cancel_payload.get("ok"), True)
         self.assertEqual(str(cancel_payload.get("action") or ""), "cancel")
 
-    async def test_mission_approval_routes_require_token_and_return_not_found_when_unavailable(self):
+    async def test_mission_approval_routes_require_token_and_surface_missing_resources(self):
         no_auth_autonomy = await self.client.post(
             "/api/mission/approvals/autonomy/approval-123/decision",
             json={"approve": True},
@@ -690,7 +784,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
             json={"run_id": "run-1", "tool_call_id": "call-1", "approve": True},
         )
         self.assertEqual(with_auth_guardrails.status, 404)
-        self.assertIn("guardrails approvals are not available", await with_auth_guardrails.text())
+        self.assertIn("pending approval not found", await with_auth_guardrails.text())
 
     async def test_mission_autonomy_approval_decision_succeeds_with_seeded_store(self):
         from thomas.autonomy.store import AutonomyStore

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from collections.abc import Callable
 from typing import Any
@@ -18,6 +19,9 @@ from thomas.server.secrets import SecretStore
 
 RequireAccessFn = Callable[[web.Request], None]
 ModelCfgFn = Callable[[str], Any]
+
+_RUNTIME_MODE_PROD_ENV = frozenset({"prod", "production", "release", "live"})
+_RUNTIME_MODE_PROD_BRANCH = frozenset({"prod", "production", "release", "stable"})
 
 
 def _appkey_identity(key: Any) -> str:
@@ -85,6 +89,7 @@ def _runtime_guard_payload(app: web.Application) -> dict[str, Any]:
             "checked_at_utc": "",
             "reasons": [],
             "alert_message": "",
+            "git_branch": "",
             "pid": None,
             "lock_pid": None,
             "lock_port": None,
@@ -92,6 +97,9 @@ def _runtime_guard_payload(app: web.Application) -> dict[str, Any]:
 
     status = state.get("status") if isinstance(state.get("status"), dict) else {}
     current = state.get("current") if isinstance(state.get("current"), dict) else {}
+    current_source = current.get("source") if isinstance(current.get("source"), dict) else {}
+    boot = state.get("boot") if isinstance(state.get("boot"), dict) else {}
+    boot_source = boot.get("source") if isinstance(boot.get("source"), dict) else {}
     lock = current.get("lock") if isinstance(current.get("lock"), dict) else {}
     return {
         "enabled": bool(state.get("enabled", True)),
@@ -100,10 +108,60 @@ def _runtime_guard_payload(app: web.Application) -> dict[str, Any]:
         "checked_at_utc": str(status.get("checked_at_utc") or ""),
         "reasons": list(status.get("reasons") or []),
         "alert_message": str(status.get("alert_message") or ""),
+        "git_branch": str(current_source.get("git_branch") or boot_source.get("git_branch") or ""),
         "pid": current.get("pid"),
         "lock_pid": lock.get("pid"),
         "lock_port": lock.get("port"),
     }
+
+
+def _runtime_mode_payload(app: web.Application) -> dict[str, str]:
+    runtime_guard = _runtime_guard_payload(app)
+    git_branch = str(runtime_guard.get("git_branch") or "").strip()
+    env_raw = str(os.environ.get("THOMAS_ENV") or os.environ.get("PYTHON_ENV") or os.environ.get("ENV") or "").strip()
+    env_norm = env_raw.lower()
+    branch_norm = git_branch.lower()
+
+    label = "DEV"
+    source = "default"
+    if env_norm in _RUNTIME_MODE_PROD_ENV:
+        label = "PROD"
+        source = "env"
+    elif branch_norm in _RUNTIME_MODE_PROD_BRANCH:
+        label = "PROD"
+        source = "git_branch"
+    elif env_norm:
+        source = "env"
+    elif branch_norm:
+        source = "git_branch"
+
+    return {
+        "label": label,
+        "source": source,
+        "env": env_raw,
+        "git_branch": git_branch,
+    }
+
+
+def _resolve_default_model(cfg: AppConfig) -> tuple[str, str]:
+    try:
+        from thomas.core.model_resolution import resolve_effective_model
+        from thomas.preferences.store import get_db_path
+
+        resolved_profile, resolved_model_id = resolve_effective_model(
+            cfg,
+            env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip(),
+            user_id="default",
+            db_path=get_db_path(),
+        )
+        if resolved_profile in cfg.models:
+            return resolved_profile, str(resolved_model_id or "")
+    except Exception:
+        pass
+    fallback = str(cfg.default_model or "").strip()
+    if fallback not in cfg.models and cfg.models:
+        fallback = next(iter(cfg.models))
+    return fallback, ""
 
 
 def register_models_routes(
@@ -115,6 +173,7 @@ def register_models_routes(
     async def api_models(request: web.Request) -> web.Response:
         require_api_access(request)
         cfg: AppConfig = _resolve_runtime_config(request.app)
+        resolved_default, _resolved_default_model_id = _resolve_default_model(cfg)
         secrets: SecretStore = _resolve_app_value(request.app, APP_SECRETS, required=True)
         profiles = []
         for name, m in cfg.models.items():
@@ -132,7 +191,7 @@ def register_models_routes(
                 profile_info["reasoning_effort"] = m.reasoning_effort
             profiles.append(profile_info)
         return web.json_response(
-            {"default": cfg.default_model, "profiles": profiles},
+            {"default": resolved_default or cfg.default_model, "profiles": profiles},
             dumps=lambda x: json.dumps(x, ensure_ascii=False),
         )
 
@@ -223,6 +282,7 @@ def register_models_routes(
             {
                 "version": THOMAS_VERSION,
                 "runtime_guard": _runtime_guard_payload(request.app),
+                "runtime_mode": _runtime_mode_payload(request.app),
             }
         )
 

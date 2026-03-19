@@ -49,6 +49,7 @@ CORE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Monolith split filename gate", (PY, "scripts/check_monolith_filename_guard.py")),
     ("Monolith guard gate", (PY, "scripts/check_monolith_guard.py")),
     ("Repo hygiene gate", (PY, "scripts/check_repo_hygiene.py")),
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
@@ -203,8 +204,8 @@ def _ensure_breakglass_metadata(*, skip_gates: bool, skip_tests: bool) -> tuple[
 
 
 def _default_require_clean_worktree() -> bool:
-    # In CI, keep strict worktree enforcement; local multi-agent runs default to relaxed.
-    return _truthy_env("CI")
+    # Keep dirty-worktree enforcement strict by default for both local and CI runs.
+    return True
 
 
 def _resolved_gate_steps(require_clean_worktree: bool) -> tuple[tuple[str, tuple[str, ...]], ...]:
@@ -269,7 +270,7 @@ def run(argv: Iterable[str] | None = None) -> int:
         dest="require_clean_worktree",
         action=argparse.BooleanOptionalAction,
         default=None,
-        help=("Override repo-hygiene dirty-worktree enforcement. Defaults to enabled in CI and disabled locally."),
+        help=("Override repo-hygiene dirty-worktree enforcement. Defaults to enabled locally and in CI."),
     )
     parser.add_argument(
         "--continue-on-fail",

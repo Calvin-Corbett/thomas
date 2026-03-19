@@ -469,9 +469,7 @@ class PolicyComplianceService:
                 add_violation(
                     code="bundle.entrypoint.invalid_payload_type",
                     severity="block",
-                    message=(
-                        "module entrypoint payload must be a JSON object or array for companion rendering."
-                    ),
+                    message=("module entrypoint payload must be a JSON object or array for companion rendering."),
                     path="manifest.module.entrypoint",
                     remediation="Use a JSON object or array as the module entrypoint payload.",
                 )

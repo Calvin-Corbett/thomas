@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Awaitable, Callable
+from collections.abc import Awaitable, Callable
+from typing import Any
 
 from aiohttp import web
 
@@ -18,6 +19,49 @@ def _resolve_app_memory(app: web.Application) -> Any:
     return app.get("memory")
 
 
+def _parse_bool(value: Any, *, default: bool | None = None) -> bool | None:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, (int, float)):
+        return bool(value)
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"1", "true", "yes", "on"}:
+            return True
+        if normalized in {"0", "false", "no", "off"}:
+            return False
+    return default
+
+
+def _parse_query_int(
+    request: web.Request,
+    name: str,
+    *,
+    default: int,
+    min_value: int,
+    max_value: int,
+) -> int:
+    raw = request.query.get(name)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        value = int(str(raw).strip())
+    except (TypeError, ValueError) as exc:
+        raise web.HTTPBadRequest(text=f"invalid {name}") from exc
+    if value < min_value or value > max_value:
+        raise web.HTTPBadRequest(text=f"invalid {name}")
+    return value
+
+
+async def _read_object_payload(request: web.Request, read_json: ReadJsonFn) -> dict[str, Any]:
+    payload = await read_json(request)
+    if not isinstance(payload, dict):
+        raise web.HTTPBadRequest(text="json body must be an object")
+    return payload
+
+
 def register_memory_routes(
     app: web.Application,
     *,
@@ -31,11 +75,7 @@ def register_memory_routes(
             return web.json_response({"enabled": False, "error": "memory engine unavailable"})
 
         sid = str(request.query.get("session_id") or "").strip() or None
-        try:
-            trace_limit = int(request.query.get("trace_limit", "8"))
-        except Exception:
-            trace_limit = 8
-        trace_limit = max(1, min(50, trace_limit))
+        trace_limit = _parse_query_int(request, "trace_limit", default=8, min_value=1, max_value=50)
 
         try:
             data = mem.diagnostics(thread=sid, trace_limit=trace_limit)
@@ -56,7 +96,7 @@ def register_memory_routes(
         if mem is None:
             return web.json_response({"ok": False, "error": "memory engine unavailable"}, status=503)
 
-        payload = await read_json(request)
+        payload = await _read_object_payload(request, read_json)
         key = str(payload.get("key") or "").strip()
         text = str(payload.get("text") or "").strip()
         if not key:
@@ -90,11 +130,7 @@ def register_memory_routes(
 
         raw_only_open = str(request.query.get("only_open", "1")).strip().lower()
         only_open = raw_only_open not in ("0", "false", "no", "off")
-        try:
-            limit = int(request.query.get("limit", "50"))
-        except Exception:
-            limit = 50
-        limit = max(1, min(500, limit))
+        limit = _parse_query_int(request, "limit", default=50, min_value=1, max_value=500)
 
         list_fn = getattr(mem, "list_contradictions", None)
         if not callable(list_fn):
@@ -139,13 +175,13 @@ def register_memory_routes(
         if cid <= 0:
             raise web.HTTPBadRequest(text="invalid contradiction id")
 
+        payload = await _read_object_payload(request, read_json)
         resolved = True
-        try:
-            payload = await read_json(request)
-        except web.HTTPBadRequest:
-            payload = {}
-        if isinstance(payload, dict) and "resolved" in payload:
-            resolved = bool(payload.get("resolved"))
+        if "resolved" in payload:
+            parsed_resolved = _parse_bool(payload.get("resolved"), default=None)
+            if parsed_resolved is None:
+                raise web.HTTPBadRequest(text="resolved must be a boolean")
+            resolved = parsed_resolved
 
         resolve_fn = getattr(mem, "resolve_contradiction", None)
         if not callable(resolve_fn):
@@ -176,11 +212,7 @@ def register_memory_routes(
                 {"ok": False, "error": "memory engine unavailable"},
                 status=503,
             )
-        try:
-            limit = int(request.query.get("limit", "50"))
-        except Exception:
-            limit = 50
-        limit = max(1, min(500, limit))
+        limit = _parse_query_int(request, "limit", default=50, min_value=1, max_value=500)
         status = str(request.query.get("status") or "").strip() or None
         severity = str(request.query.get("severity") or "").strip() or None
         route = str(request.query.get("route") or "").strip() or None
@@ -225,13 +257,19 @@ def register_memory_routes(
         if cid <= 0:
             raise web.HTTPBadRequest(text="invalid contradiction id")
 
-        payload = await read_json(request)
+        payload = await _read_object_payload(request, read_json)
         decision = str(payload.get("decision") or "").strip().lower()
         if not decision:
             if "approve" in payload:
-                decision = "approve" if bool(payload.get("approve")) else "dismiss"
+                approve = _parse_bool(payload.get("approve"), default=None)
+                if approve is None:
+                    raise web.HTTPBadRequest(text="approve must be a boolean")
+                decision = "approve" if approve else "dismiss"
             elif "resolved" in payload:
-                decision = "approve" if bool(payload.get("resolved")) else "reopen"
+                resolved = _parse_bool(payload.get("resolved"), default=None)
+                if resolved is None:
+                    raise web.HTTPBadRequest(text="resolved must be a boolean")
+                decision = "approve" if resolved else "reopen"
         if not decision:
             raise web.HTTPBadRequest(text="missing review decision")
         actor = str(payload.get("actor") or "api").strip() or "api"
@@ -279,11 +317,7 @@ def register_memory_routes(
                 status=503,
             )
         status = str(request.query.get("status") or "pending").strip()
-        try:
-            limit = int(request.query.get("limit", "100"))
-        except Exception:
-            limit = 100
-        limit = max(1, min(1000, limit))
+        limit = _parse_query_int(request, "limit", default=100, min_value=1, max_value=1000)
         list_fn = getattr(mem, "list_curator_approvals", None)
         if not callable(list_fn):
             return web.json_response(
@@ -321,10 +355,12 @@ def register_memory_routes(
         if aid <= 0:
             raise web.HTTPBadRequest(text="invalid approval id")
 
-        payload = await read_json(request)
+        payload = await _read_object_payload(request, read_json)
         if "approve" not in payload:
             raise web.HTTPBadRequest(text="missing approve flag")
-        approve = bool(payload.get("approve"))
+        approve = _parse_bool(payload.get("approve"), default=None)
+        if approve is None:
+            raise web.HTTPBadRequest(text="approve must be a boolean")
         actor = str(payload.get("actor") or "api").strip() or "api"
         reason = str(payload.get("reason") or "").strip()
 

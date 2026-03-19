@@ -4,17 +4,16 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
+from thomas.cli.commands.nodes import p037_nodes_registry_model as cli_mod
 from thomas.nodes.p037_nodes_registry_model import (
     ENV_REGISTRY_JSON,
     NodesRegistryConfigError,
-    NodesRegistryInputError,
     NodesRegistryExternalError,
-    load_nodes_registry,
+    NodesRegistryInputError,
     filter_nodes,
+    load_nodes_registry,
     run_nodes_registry_model,
 )
-from thomas.cli.commands.nodes import p037_nodes_registry_model as cli_mod
-
 
 runner = CliRunner()
 

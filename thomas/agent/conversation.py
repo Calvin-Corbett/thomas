@@ -119,11 +119,9 @@ class ConversationIntelligence:
             return text
 
         # Only add context for actually ambiguous messages
-        is_ambiguous = (
-            (len(text) < 40 and len(self._turns) >= 2) or  # Very short + conversation ongoing
-            (self.is_followup(text)) or  # Detected as follow-up
-            (_PRONOUN_RE.search(text) and len(text) < 120)  # Has pronouns and short
-        )
+        has_followup_connector = bool(_FOLLOWUP_STARTERS.match(text))
+        has_pronoun_reference = bool(_PRONOUN_RE.search(text) and len(text) < 120)
+        is_ambiguous = bool(has_followup_connector or has_pronoun_reference)
 
         if not is_ambiguous:
             return text
@@ -296,7 +294,7 @@ class ConversationIntelligence:
         for pattern in filler_prefixes:
             match = re.match(pattern, cleaned, re.I)
             if match:
-                cleaned = cleaned[match.end():].strip()
+                cleaned = cleaned[match.end() :].strip()
                 break
 
         # Use first clause as topic

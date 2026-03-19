@@ -10,6 +10,8 @@ from abc import ABC, abstractmethod
 from types import SimpleNamespace
 from typing import Any
 
+from thomas.core.safe_pickle import safe_pickle_loads
+
 from ._exceptions import SerializationError
 
 logger = logging.getLogger(__name__)
@@ -139,7 +141,7 @@ class PickleSerializer(Serializer):
             SerializationError: If deserialization fails.
         """
         try:
-            value = pickle.loads(data)
+            value = safe_pickle_loads(data)
         except Exception as e:
             raise SerializationError(f"Pickle deserialization failed: {e}", e)
 

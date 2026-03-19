@@ -2,17 +2,20 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+import subprocess
+import sys
 import time
 from pathlib import Path
 from typing import Any
 
-from prompt_toolkit.formatted_text import HTML
 from rich.panel import Panel
 from rich.text import Text
 
+from thomas.cli.repl_compact import handle_compact_command
 from thomas.cli.repl_project import instruction_file_path
 from thomas.cli.repl_skills import expand_skill, list_all_skills
 from thomas.cli.repl_slash import (
@@ -384,6 +387,75 @@ class ThomasREPLRuntimeMixin:
             self._persist_repl_runtime_settings()
             self._print_system_event(f"autonomy set to L{level} ({autonomy_level_name(level)})", important=True)
 
+        elif command == "/evolve":
+            raw_sub = str(arg or "").strip()
+            lowered = raw_sub.lower()
+            action = "run"
+            goal = ""
+            if lowered == "status":
+                action = "status"
+            elif lowered == "promote":
+                action = "promote"
+            elif lowered.startswith("run"):
+                goal = raw_sub[3:].strip()
+            else:
+                goal = raw_sub
+
+            command_args = [sys.executable, "-m", "thomas", "evolve", action, "--json"]
+            if action == "run" and goal:
+                command_args.extend(["--goal", goal])
+            self._console.print(f"[dim]Launching evolve {action}...[/dim]")
+            try:
+                completed = await asyncio.to_thread(
+                    subprocess.run,
+                    command_args,
+                    cwd=str(self.config.tools.sandbox_path),
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                )
+            except Exception as e:
+                self._console.print(f"[red]Evolve command failed to start: {e}[/red]")
+                return False, True
+
+            stdout_text = str(completed.stdout or "").strip()
+            stderr_text = str(completed.stderr or "").strip()
+            if completed.returncode != 0:
+                self._console.print(
+                    f"[red]Evolve command failed: {stderr_text or stdout_text or completed.returncode}[/red]"
+                )
+                return False, True
+            try:
+                payload = json.loads(stdout_text) if stdout_text else {}
+            except json.JSONDecodeError:
+                self._console.print(f"[yellow]{stdout_text or 'Evolve command completed.'}[/yellow]")
+                return False, True
+
+            if action == "status":
+                charter = payload.get("charter") or {}
+                latest = payload.get("latest_session") or {}
+                if charter:
+                    self._console.print(f"[dim]Evolve objective: {charter.get('objective', '')}[/dim]")
+                if latest:
+                    self._console.print(
+                        f"[dim]Latest evolve session: {latest.get('session_id', '')} "
+                        f"status={latest.get('status', '')} promotable={latest.get('promotable', False)}[/dim]"
+                    )
+                elif not charter:
+                    self._console.print("[dim]Evolve mode is not initialized here yet.[/dim]")
+                return False, True
+
+            session = payload.get("session") or {}
+            session_id = str(session.get("session_id") or "").strip() or "(unknown)"
+            status = str(session.get("status") or "").strip() or action
+            changed = len(session.get("changed_files") or [])
+            self._console.print(
+                f"[dim]Evolve session {session_id}: status={status}, changed_files={changed}, "
+                f"promotable={bool(session.get('promotable'))}[/dim]"
+            )
+            return False, True
+
         elif command == "/status":
             route = str(self._last_route)
             user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
@@ -563,9 +635,7 @@ class ThomasREPLRuntimeMixin:
                     seen.add(marker)
                     todos.append((f"pin:{key_s}", text_s))
 
-            for candidate in (
-                Path(self.config.memory.root_path) / "thomas_state.json",
-            ):
+            for candidate in (Path(self.config.memory.root_path) / "thomas_state.json",):
                 if not candidate.exists():
                     continue
                 try:
@@ -1013,6 +1083,7 @@ class ThomasREPLRuntimeMixin:
 
     def _active_context_limit(self) -> int:
         """Return a best-effort context window size for the current model."""
+
         def _coerce_context_window(value: object) -> int:
             try:
                 window = int(value)
@@ -1102,103 +1173,4 @@ class ThomasREPLRuntimeMixin:
 
     async def _handle_compact_command(self) -> None:
         """Handle the /compact slash command."""
-        from thomas.agent.context_compaction import (
-            ContextCompactor,
-            estimate_conversation_tokens,
-        )
-
-        conv_tokens = estimate_conversation_tokens(self._conversation)
-        hard_cap = self._active_context_limit()
-        pct = int((conv_tokens / max(1, hard_cap)) * 100)
-        msg_count = len(self._conversation)
-
-        # Show current token usage
-        self._console.print("[bold]Context Budget[/bold]")
-        self._console.print(
-            f"  Tokens: [cyan]{conv_tokens:,}[/cyan] / {hard_cap:,} "
-            f"([{'red' if pct > 85 else 'yellow' if pct > 60 else 'green'}]{pct}%[/])"
-        )
-        self._console.print(f"  Messages: {msg_count}")
-
-        # Show message breakdown
-        user_turns = sum(1 for m in self._conversation if m.get("role") == "user")
-        asst_turns = sum(1 for m in self._conversation if m.get("role") == "assistant")
-        tool_msgs = sum(1 for m in self._conversation if m.get("role") == "tool")
-        system_msgs = sum(1 for m in self._conversation if m.get("role") == "system")
-        self._console.print(
-            f"  Breakdown: {user_turns} user, {asst_turns} assistant, " f"{tool_msgs} tool, {system_msgs} system"
-        )
-
-        if conv_tokens < int(hard_cap * 0.50):
-            self._console.print("\n[dim]Context usage is low. No compaction needed yet.[/dim]")
-            return
-
-        # Ask user if they want to compact
-        self._console.print("\n[dim]Compaction will summarize older turns to free token budget.[/dim]")
-        try:
-            confirm = await self._session.prompt_async(
-                HTML("<prompt>Compact now?</prompt> <ansigray>(y/n)</ansigray> > "),
-            )
-        except (KeyboardInterrupt, EOFError):
-            return
-
-        if str(confirm or "").strip().lower() not in ("y", "yes"):
-            self._console.print("[dim]Compaction cancelled.[/dim]")
-            return
-
-        # Perform compaction
-        llm = self._get_llm()
-        compactor = ContextCompactor(
-            llm=llm,
-            max_summary_tokens=400,
-            segment_size=8,
-        )
-
-        from rich.live import Live as _Lv
-        from rich.spinner import Spinner as _Sp
-
-        spinner = _Lv(
-            _Sp("dots", text=Text(" compacting context...", style="dim")),
-            console=self._console,
-            transient=True,
-        )
-        spinner.start()
-
-        try:
-            result = await compactor.compact(
-                self._conversation,
-                target_budget=int(hard_cap * 0.55),
-                preserve_recent=6,
-                use_llm=True,
-            )
-        except Exception as e:
-            spinner.stop()
-            self._console.print(f"[red]Compaction failed: {e}[/red]")
-            return
-
-        spinner.stop()
-
-        # Show results
-        self._console.print("\n[bold]Compaction Complete[/bold]")
-        self._console.print(
-            f"  Tokens: {result.original_tokens:,} -> "
-            f"[green]{result.compacted_tokens:,}[/green] "
-            f"(saved {result.tokens_saved:,})"
-        )
-        self._console.print(f"  Messages: {result.original_message_count} -> " f"{result.compacted_message_count}")
-        if result.segments_summarized > 0:
-            self._console.print(f"  Segments summarized: {result.segments_summarized}")
-        self._console.print(f"  Time: {result.elapsed_ms:.0f}ms")
-
-        if result.summary_text:
-            summary_preview = result.summary_text
-            if len(summary_preview) > 500:
-                summary_preview = summary_preview[:500] + "..."
-            self._console.print(
-                Panel(
-                    summary_preview,
-                    title="Summary of compacted context",
-                    border_style="dim",
-                    expand=True,
-                )
-            )
+        await handle_compact_command(self)

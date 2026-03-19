@@ -217,72 +217,111 @@ def check_and_auto_update(*, silent: bool = True) -> str | None:
         return None
 
 
+def _run_update_flow(*, check_only: bool, force: bool) -> None:
+    """Execute the user-facing update flow for both root and subcommands."""
+    current = _get_current_version()
+    click.echo(f"  Current version: {current}")
+
+    if _is_dev_install() and not force:
+        click.echo(
+            click.style(
+                "  Dev/editable install detected - auto-update skipped.\n"
+                "  Use --force to override, or pull from git instead:\n"
+                "    git pull && pip install -e .",
+                fg="yellow",
+            )
+        )
+        return
+
+    click.echo("  Checking PyPI for updates...")
+    latest = _fetch_latest_version(timeout=10.0)
+
+    if not latest:
+        click.echo(click.style("  Could not reach PyPI.", fg="red"))
+        return
+
+    click.echo(f"  Latest version:  {latest}")
+
+    if not _is_newer(latest, current):
+        click.echo(click.style("  Already up to date!", fg="green"))
+        state = _load_state()
+        state["last_check_ts"] = time.time()
+        state["up_to_date"] = True
+        _save_state(state)
+        return
+
+    if check_only:
+        click.echo(
+            click.style(f"  Update available: {current} -> {latest}\n  Run 'thomas update' to install.", fg="yellow")
+        )
+        return
+
+    click.echo(f"  Updating {current} -> {latest}...")
+    ok, msg = _run_pip_upgrade()
+
+    if ok:
+        click.echo(click.style(f"  Updated to {latest}!", fg="green"))
+        click.echo("  Restart Thomas to use the new version.")
+    else:
+        click.echo(click.style(f"  Update failed: {msg}", fg="red"))
+
+    state = _load_state()
+    state["last_check_ts"] = time.time()
+    state["last_update_ts"] = time.time()
+    state["last_update_ok"] = ok
+    state["updated_from"] = current
+    state["updated_to"] = latest if ok else ""
+    _save_state(state)
+
+
 def register_update_commands(cli_group: click.Group) -> None:
     """Register the update command with the CLI."""
 
-    @cli_group.command("update")
+    @cli_group.group("update", invoke_without_command=True)
     @click.option("--check", "check_only", is_flag=True, help="Check for updates without installing")
     @click.option("--force", is_flag=True, help="Force update even in dev mode")
-    def update_cmd(check_only: bool, force: bool) -> None:
+    @click.pass_context
+    def update_cmd(ctx: click.Context, check_only: bool, force: bool) -> None:
         """Check for and install Thomas updates."""
+        if ctx.invoked_subcommand is not None:
+            return
+        _run_update_flow(check_only=bool(check_only), force=bool(force))
+
+    @update_cmd.command("check")
+    @click.option("--force", is_flag=True, help="Force update checks even in dev mode")
+    def update_check_cmd(force: bool) -> None:
+        """Check for updates without installing them."""
+        _run_update_flow(check_only=True, force=bool(force))
+
+    @update_cmd.command("apply")
+    @click.option("--force", is_flag=True, help="Force update even in dev mode")
+    def update_apply_cmd(force: bool) -> None:
+        """Download and install the latest Thomas release."""
+        _run_update_flow(check_only=False, force=bool(force))
+
+    @update_cmd.command("status")
+    @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+    def update_status_cmd(as_json: bool) -> None:
+        """Show cached update-check status without contacting PyPI."""
         current = _get_current_version()
-        click.echo(f"  Current version: {current}")
-
-        if _is_dev_install() and not force:
-            click.echo(
-                click.style(
-                    "  Dev/editable install detected — auto-update skipped.\n"
-                    "  Use --force to override, or pull from git instead:\n"
-                    "    git pull && pip install -e .",
-                    fg="yellow",
-                )
-            )
-            return
-
-        click.echo("  Checking PyPI for updates...")
-        latest = _fetch_latest_version(timeout=10.0)
-
-        if not latest:
-            click.echo(click.style("  Could not reach PyPI.", fg="red"))
-            return
-
-        click.echo(f"  Latest version:  {latest}")
-
-        if not _is_newer(latest, current):
-            click.echo(click.style("  Already up to date!", fg="green"))
-            # Update state
-            state = _load_state()
-            state["last_check_ts"] = time.time()
-            state["up_to_date"] = True
-            _save_state(state)
-            return
-
-        if check_only:
-            click.echo(
-                click.style(
-                    f"  Update available: {current} → {latest}\n" f"  Run 'thomas update' to install.",
-                    fg="yellow",
-                )
-            )
-            return
-
-        click.echo(f"  Updating {current} → {latest}...")
-        ok, msg = _run_pip_upgrade()
-
-        if ok:
-            click.echo(click.style(f"  Updated to {latest}!", fg="green"))
-            click.echo("  Restart Thomas to use the new version.")
-        else:
-            click.echo(click.style(f"  Update failed: {msg}", fg="red"))
-
-        # Save state
         state = _load_state()
-        state["last_check_ts"] = time.time()
-        state["last_update_ts"] = time.time()
-        state["last_update_ok"] = ok
-        state["updated_from"] = current
-        state["updated_to"] = latest if ok else ""
-        _save_state(state)
+        payload = {
+            "version": current,
+            "dev_install": _is_dev_install(),
+            "last_check_ts": state.get("last_check_ts"),
+            "last_update_ts": state.get("last_update_ts"),
+            "last_update_ok": state.get("last_update_ok"),
+            "updated_from": state.get("updated_from"),
+            "updated_to": state.get("updated_to"),
+            "up_to_date": state.get("up_to_date"),
+        }
+        if as_json:
+            click.echo(json.dumps(payload, indent=2))
+            return
+        click.echo(f"  Thomas v{current}")
+        click.echo(f"  Up to date: {payload['up_to_date']}")
+        click.echo(f"  Last check: {payload['last_check_ts']}")
+        click.echo(f"  Last update: {payload['last_update_ts']}")
 
     @cli_group.command("version")
     @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")

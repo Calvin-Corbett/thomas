@@ -73,9 +73,7 @@ async def _run_execute_tools(loop: _LoopStub, tool_calls: list[dict[str, Any]]) 
 def test_execute_tools_level_4_passes_no_human_mode_allow() -> None:
     runner = _SpyRunner()
     loop = _LoopStub(autonomy_level=4, runner=runner)
-    events = asyncio.run(
-        _run_execute_tools(loop, [{"id": "t1", "name": "dummy.echo", "arguments": "{}"}])
-    )
+    events = asyncio.run(_run_execute_tools(loop, [{"id": "t1", "name": "dummy.echo", "arguments": "{}"}]))
 
     assert runner.no_human_mode_inputs == ["allow"]
     assert len(events) == 1
@@ -85,9 +83,7 @@ def test_execute_tools_level_4_passes_no_human_mode_allow() -> None:
 def test_execute_tools_level_3_does_not_override_no_human_mode() -> None:
     runner = _SpyRunner()
     loop = _LoopStub(autonomy_level=3, runner=runner)
-    events = asyncio.run(
-        _run_execute_tools(loop, [{"id": "t1", "name": "dummy.echo", "arguments": "{}"}])
-    )
+    events = asyncio.run(_run_execute_tools(loop, [{"id": "t1", "name": "dummy.echo", "arguments": "{}"}]))
 
     assert runner.no_human_mode_inputs == [None]
     assert len(events) == 1

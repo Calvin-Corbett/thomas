@@ -7,10 +7,10 @@ retries, error classification, token tracking, and tool call parsing.
 from __future__ import annotations
 
 import asyncio
+import inspect
 import json
 import logging
 import re
-import inspect
 import time
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
