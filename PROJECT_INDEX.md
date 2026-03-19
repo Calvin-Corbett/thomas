@@ -2,7 +2,9 @@
 
 > **For AI agents.** Read this FIRST before exploring code. Update this file when
 > you change boot paths, add entry points, move key files, or alter the process model.
-> Last updated: 2026-03-01.
+> **This is the single master reference for the entire project. Do not create
+> parallel index/summary docs — update this one.**
+> Last updated: 2026-03-18.
 
 ---
 
@@ -136,10 +138,16 @@ UI button "Restart Server" -> `POST /api/server/restart` -> sets `app["_shutdown
 
 ### Product Surfaces
 
-- `thomas/server/web/**` — primary web chat/composition/runtime UI delivered by the local Thomas server.
-- `apps/site` — public marketing site and installer/download portal (Next.js).
-- `apps/shared` — cross-platform companion/shared scaffold contracts.
-- `apps/android`, `apps/ios`, `apps/macos` — companion app scaffolds for future/parallel client implementations.
+This repo ships multiple deliverables in the same workspace. Use this map before choosing files:
+
+| Surface | Path | What it is | Primary workflow |
+|---|---|---|---|
+| Core Thomas Runtime | `thomas/`, `thomas/server/web/**` | Local desktop-first product runtime (server, CLI, REPL, chat UI) | Python runtime + server tests + architecture checks |
+| Marketing Website | `apps/site/**` | Public Next.js website used for product presence and install path | `apps/site` workflow + `ui-precision-guard` when editing UI |
+| Shared SDK Contracts | `apps/shared/**` | Shared types and transport contracts for client surfaces | Keep stable for Android/iOS/macOS clients |
+| Android Client | `apps/android/**` | Mobile companion client implementation and release track | Client workflow + mobile release rules |
+| iOS Client | `apps/ios/**` | Mobile companion client implementation and release track | Client workflow + mobile release rules |
+| macOS Client | `apps/macos/**` | Companion desktop client implementation and release track | Client workflow + desktop release rules |
 
 ---
 
@@ -289,6 +297,106 @@ See `AGENTS.md` → "Changelog & Versioning" for the full changelog protocol.
 
 ---
 
+## Product Vision (from Calvin, 2026-03-18)
+
+Thomas is **the everything assistant.** Key identity points:
+
+- **User-nameable.** The product is Thomas but users name their assistant whatever they want.
+- **Robot mascots are constitutional.** The pixel-robot characters ARE the brand identity.
+- **Security is priority #1.** Password-gated internet access, multi-stage auth levels, OS-level credential gates. See `thomas/security/STATUS.md`.
+- **Memory is priority #2.** The most advanced personal memory system — cross-session, detailed, AI-researched architecture combining episodic, semantic, graph, and profile approaches. Does not fully work yet. See `thomas/memory/STATUS.md`.
+- **Preferences tied to memory.** Background AI model (cloud or local, user's choice) processes conversations into a preference profile. See `thomas/preferences/STATUS.md`.
+- **CLI targets feature parity with Claude Code / Codex.** Secondary to web UI but should have flavor.
+- **Marketplace is how you add anything.** Plugins, channels, tools, memory modules — all installable. Auto-syncs from website. Thomas can also code missing integrations himself.
+
+---
+
+## Real Line Count (verified 2026-03-18 via wc -l)
+
+**Do NOT guess line counts. Use these numbers or recount.**
+
+| What | Lines |
+|------|-------|
+| Python (excluding runtime/doppelganger clone) | 996,100 |
+| JS/TS/HTML/CSS (excluding doppelganger) | 475,185 |
+| **Grand Total** | **1,471,285** |
+
+| Python breakdown | Lines |
+|-----------------|-------|
+| `thomas/` — 36 production modules | ~258,000 |
+| `thomas/` — 146 domain modules (not imported, marketplace-bound) | ~506,000 |
+| `tests/` | 171,495 |
+| `scripts/` | 39,390 |
+| Everything else | ~21,000 |
+
+`runtime/doppelganger/green/` contains a full repo clone (962k lines) for blue/green deploy. Excluded from counts to avoid double-counting.
+
+To recount:
+```bash
+find . -type f -name "*.py" ! -path "*__pycache__*" ! -path "*.venv*" \
+  ! -path "*.git/*" ! -path "*/doppelganger/*" -exec cat {} + | wc -l
+```
+
+---
+
+## Domain Modules (146 modules, ~506k lines — marketplace-bound)
+
+**~122 modules contain REAL algorithms** (PageRank, blockchain consensus, FFT,
+regex engines, DSL compilers, etc.) — verified by import tests and code audit
+2026-03-18. They are NOT stubs. They are NOT imported by production code.
+
+Per Calvin (2026-03-18): all domain modules become marketplace extensions.
+Each needs tool wrapping, a manifest, and testing before shipping.
+
+Every module under `thomas/` has a `STATUS.md`. Run `python scripts/build_module_registry.py`
+to regenerate `MODULE_REGISTRY.md` for a full overview.
+
+Full audit details: `docs/DOMAIN_MODULES_AUDIT.md`
+
+---
+
+## Pre-Public Cleanup Required
+
+538 occurrences of a competitor name across 51 files must be scrubbed before
+the repo goes public. Full plan: `docs/PRE_PUBLIC_CLEANUP.md`
+
+Key items to delete: `thomas_vs_openclaw_subcommands.json`,
+`Thomas_vs_OpenClaw_Comparison.docx`, `thomas/openclaw_compat/` directory,
+`library/entries/competitive-research/` competitive entries.
+
+---
+
+## Junk Files (safe to delete)
+
+Root temp files from debugging sessions (~8.8 MB total):
+`.tmp_arch.out`, `.tmp_arch_after.out`, `.tmp_arch_modules_block.txt`,
+`.tmp_collect.out`, `.tmp_collect_after_phase2d.out`, `.tmp_collect_after_phase2e.out`,
+`.tmp_collect_after_phase2f.out`, `.tmp_debug_plugins.py`, `.tmp_debug_plugins2.py`,
+`.tmp_gen_arch_modules.py`, `.tmp_insert_modules.py`, `.tmp_split_test_part*.py`,
+`.tmp_split_workboard_part04.py`, `.tmp/` directory, `.tmp_mission_check/`
+
+Other: `blobs/` (empty), `dist/` (empty), `server_startup_log.txt` (old log),
+`module_analysis.csv` (old, has competitor refs), `.meta_unreferenced_docs.txt` (old)
+
+---
+
+## What Has NOT Been Verified (honesty note, 2026-03-18)
+
+The STATUS.md files in each module say "functional" based on code reading and
+import tests. **The following have NOT been runtime-tested:**
+
+- Server boot (`thomas serve`) — not started
+- REPL (`thomas chat`) — not started
+- Any tool execution — not tested
+- Chat loop producing a response — not tested
+- Memory store/retrieve end-to-end — not tested
+- Marketplace plugin install through UI — not tested
+
+174/178 modules import successfully. The 4 failures are missing pip packages
+(httpx, aiohttp, pydantic), not code errors.
+
+---
+
 ## Keeping This File Updated
 
 **Agents: update this file when you:**
@@ -300,5 +408,8 @@ See `AGENTS.md` → "Changelog & Versioning" for the full changelog protocol.
 - Add new middleware or change middleware order
 - Add new monolith files or break up existing ones
 - Discover a gotcha that cost you significant debugging time
+- Find something that contradicts what this file says
+
+**DO NOT create parallel index documents. Update THIS file.**
 
 **Format:** Keep it scannable. Tables > prose. Code blocks for paths/commands. No fluff.

@@ -4,6 +4,33 @@ thomas/core/testing_suite.py
 Autonomous Research & Testing Suite — runs background quality cycles when
 Thomas is idle and tracks four score dimensions.
 
+MODULE STATUS: scaffold (assessed 2026-03-18)
+─────────────────────────────────────────────
+This module EXISTS and RUNS but its scores are NOT reliable indicators of
+system health. Three of four dimensions are smoke tests or placeholders.
+The composite score (currently ~77.8) should NOT be treated as a real
+quality metric. See thomas/core/STATUS.md for the full honest breakdown.
+
+What's real:
+  - The background loop, idle detection, budget gating, and report
+    generation infrastructure all work correctly.
+  - prompt_injection_resistance: tests 10 hardcoded probes. Real but narrow.
+  - persistence_survival: trivial round-trip. Real but trivially simple.
+
+What's NOT real:
+  - autonomy_accuracy: NOT RUNNING. No executor_fn wired. Always returns 50.
+  - cost_efficiency: CIRCULAR. Checks if previous cycles scored >50.
+    Docstring admits "Real token tracking = future work."
+  - _auto_improve(): emits hardcoded suggestion strings, not real changes.
+  - The composite score includes "50 = I didn't try" which is misleading.
+
+What this SHOULD become (full vision):
+  1. Dynamic prompt injection probes from a maintained library, not 10 strings.
+  2. Real executor wired to autonomy_accuracy with graded multi-step goals.
+  3. Actual token-cost tracking via cost_tracker.py / tokens.py integration.
+  4. Persistence edge cases: concurrent writes, corrupt DB, large payloads.
+  5. Composite only reported when all dimensions are genuinely measured.
+
 Score dimensions (0–100 each):
   1. prompt_injection_resistance — resists known jailbreak/extraction prompts
   2. autonomy_accuracy           — completes simple goals without hand-holding
@@ -110,6 +137,11 @@ def _test_prompt_injection(_executor_fn: Optional[Callable]) -> Tuple[float, str
     """
     Verify known jailbreak probes are caught by check_prompt_suspicious.
     Score: (caught / total) * 100.
+
+    STATUS: real but narrow (2026-03-18).
+    Tests 10 hardcoded strings. Not adversarial, not dynamic, no encoding
+    attacks, no indirect injection, no multi-turn probes. Catches 8/10 = 80.
+    VISION: pull from a maintained probe library with severity weighting.
     """
     try:
         from thomas.tools.windows_auth import check_prompt_suspicious
@@ -138,7 +170,15 @@ def _test_prompt_injection(_executor_fn: Optional[Callable]) -> Tuple[float, str
 
 
 def _test_persistence_survival() -> Tuple[float, str]:
-    """Round-trip a fact through persistence. Score 100=pass, 0=fail."""
+    """Round-trip a fact through persistence. Score 100=pass, 0=fail.
+
+    STATUS: real but trivial (2026-03-18).
+    Writes one value, reads it back. Proves the persistence layer boots.
+    Does NOT test: concurrent writes, large values, corrupt DB recovery,
+    cross-session continuity, or restart survival.
+    VISION: test edge cases listed above. Current test is necessary but
+    not sufficient — keep it, add more.
+    """
     try:
         from thomas.core.persistence import get_persistence
         pe = get_persistence()
@@ -154,7 +194,16 @@ def _test_persistence_survival() -> Tuple[float, str]:
 
 
 def _test_autonomy_accuracy(executor_fn: Optional[Callable]) -> Tuple[float, str]:
-    """Submit a simple goal and check for non-empty result. 100=pass, 50=skip, 0=fail."""
+    """Submit a simple goal and check for non-empty result. 100=pass, 50=skip, 0=fail.
+
+    STATUS: NOT RUNNING (2026-03-18).
+    No executor_fn is wired in at server startup. This function ALWAYS
+    returns 50.0 ("skipped"). The score of 50 has NEVER reflected real
+    autonomy testing. It is included in the composite, making the composite
+    misleading.
+    VISION: wire a real executor, define 5-10 graded goals (file ops,
+    search, multi-step reasoning), score on correctness not just non-empty.
+    """
     if executor_fn is None:
         return 50.0, "No executor — skipped."
     try:
@@ -176,7 +225,17 @@ def _test_autonomy_accuracy(executor_fn: Optional[Callable]) -> Tuple[float, str
 
 
 def _test_cost_efficiency(history: List[CycleResult]) -> Tuple[float, str]:
-    """Proxy: success rate of recent cycles. Real token tracking = future work."""
+    """Proxy: success rate of recent cycles. Real token tracking = future work.
+
+    STATUS: PLACEHOLDER / CIRCULAR (2026-03-18).
+    Checks what % of recent cycles scored composite >50. Since the other
+    tests produce stable scores (80, 50, 100), this almost always returns
+    100. It does NOT measure actual token cost, API spend, or output
+    quality per token. The "est $X.XXX" in notes is based on a hardcoded
+    constant (APPROX_COST_PER_CYCLE_USD=0.02), not real API billing.
+    VISION: integrate with cost_tracker.py and tokens.py to measure real
+    token consumption per cycle. Compare against a baseline. Flag regressions.
+    """
     if not history:
         return 80.0, "No history — baseline 80."
     recent = history[-5:]
