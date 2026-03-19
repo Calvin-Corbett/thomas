@@ -1,7 +1,42 @@
-# Source placeholder for __init__.py (bytecode in __pycache__)
-# placeholder-why: Path-stable source placeholder retained while the source-backed implementation is restored from the current placeholder state.
-# placeholder-scope_to_finish: Check in the real source for thomas/skills/__init__.py or replace every import and call site with a source-backed module.
-# placeholder-owner: thomas/skills
-# placeholder-exit_rule: Runtime must fail fast or use an explicit fallback; it must never silently noop as a successful implementation.
-# placeholder-acceptance: Real source is checked in, cached-bytecode dependence is removed, and targeted import/runtime tests pass.
-#############################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################################
+from ._manifest import SkillBundle, excerpt_body, parse_frontmatter, read_skill_bundle, validate_skill_bundle
+from ._runtime import (
+    builtin_skill_roots,
+    discover_external_skill_sources,
+    discover_native_skill_roots,
+    discover_native_skills,
+    resolve_builtin_promotion_root,
+)
+from ._sandbox import (
+    create_skill_draft,
+    drafts_root,
+    list_draft_issues,
+    load_skill_draft_manifest,
+    promote_skill_draft,
+    reject_skill_draft,
+    review_skill_draft,
+    scan_external_root,
+)
+from ._security import build_no_copy_report, validate_recreated_skill_bundle
+
+__all__ = [
+    "SkillBundle",
+    "builtin_skill_roots",
+    "build_no_copy_report",
+    "create_skill_draft",
+    "discover_external_skill_sources",
+    "discover_native_skill_roots",
+    "discover_native_skills",
+    "drafts_root",
+    "excerpt_body",
+    "list_draft_issues",
+    "load_skill_draft_manifest",
+    "parse_frontmatter",
+    "promote_skill_draft",
+    "read_skill_bundle",
+    "reject_skill_draft",
+    "resolve_builtin_promotion_root",
+    "review_skill_draft",
+    "scan_external_root",
+    "validate_recreated_skill_bundle",
+    "validate_skill_bundle",
+]

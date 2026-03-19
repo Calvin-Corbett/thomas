@@ -4,7 +4,7 @@ These rules are hard requirements for **all** agents (Thomas + external agents) 
 
 ## Required Skill
 
-For UI edits, use `ui-precision-guard` (`.codex/skills/ui-precision-guard/SKILL.md`).
+For UI edits, use `ui-precision-guard` (`skills/ui-precision-guard/SKILL.md`).
 This is mandatory for small alignment, spacing, animation, footer/header, and layout fixes.
 
 ## Mandatory Visual-Proof Gate

@@ -16,6 +16,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from thomas.skills import discover_native_skill_roots, discover_native_skills, excerpt_body, read_skill_bundle
+
 from .skills_policy import (
     classify_skill_risk,
     evaluate_skill_trust,
@@ -217,32 +219,17 @@ def load_pinned_skill_names(config: Any) -> list[str]:
     return _ordered_unique(pinned)
 
 
+
 def discover_skill_roots(
     config: Any,
     *,
     cwd: Path | None = None,
     include_roots: Sequence[str | Path] | None = None,
 ) -> list[Path]:
-    roots: list[Path] = []
-    root_cwd = Path(cwd) if cwd is not None else Path.cwd()
-
-    codex_home = str(os.environ.get("CODEX_HOME") or "").strip()
-    if codex_home:
-        roots.append(Path(codex_home).expanduser() / "skills")
-    roots.append(Path.home() / ".codex" / "skills")
-    roots.append(_memory_root_path(config) / ".codex" / "skills")
-    roots.append(root_cwd / ".codex" / "skills")
-    roots.append(root_cwd / "skills")
-
-    extra_roots_env = str(os.environ.get("THOMAS_SKILLS_EXTRA_DIRS") or "").strip()
-    if extra_roots_env:
-        for chunk in extra_roots_env.split(os.pathsep):
-            path_text = str(chunk or "").strip()
-            if path_text:
-                roots.append(Path(path_text).expanduser())
-
+    _ = config
+    roots = [path for path, _origin in discover_native_skill_roots(cwd=cwd)]
     for extra in include_roots or []:
-        path_text = str(extra or "").strip()
+        path_text = str(extra or '').strip()
         if path_text:
             roots.append(Path(path_text).expanduser())
 
@@ -323,6 +310,7 @@ class RuntimeSkillSelection:
         }
 
 
+
 def discover_runtime_skills(
     config: Any,
     *,
@@ -330,63 +318,70 @@ def discover_runtime_skills(
     include_roots: Sequence[str | Path] | None = None,
     max_excerpt_chars: int = 1_100,
 ) -> tuple[list[RuntimeSkill], list[str]]:
-    roots = discover_skill_roots(config, cwd=cwd, include_roots=include_roots)
+    _ = config
     rows: list[RuntimeSkill] = []
     seen: set[str] = set()
-    for root in roots:
+    bundles, roots = discover_native_skills(cwd=cwd)
+
+    def _append_bundle(bundle: Any, root_label: str) -> None:
+        parent_path = str(bundle.path)
+        key = parent_path.lower()
+        if key in seen:
+            return
+        seen.add(key)
+        excerpt = excerpt_body(str(bundle.body or ''), max_chars=max(350, int(max_excerpt_chars)))
+        skill_sha = ''
         try:
-            skill_files = list(root.rglob("SKILL.md"))
+            skill_sha = _sha256_file(Path(bundle.skill_file))
+        except Exception:
+            skill_sha = ''
+        risk_level, risk_tags = classify_skill_risk(bundle.name, bundle.description, excerpt)
+        skill_tokens = _keyword_tokens('\n'.join([bundle.name, bundle.description, excerpt[:450]]))
+        rows.append(
+            RuntimeSkill(
+                name=str(bundle.name),
+                path=parent_path,
+                skill_file=str(bundle.skill_file),
+                source_root=str(root_label),
+                description=str(bundle.description),
+                excerpt=excerpt,
+                skill_sha256=skill_sha,
+                risk_level=risk_level,
+                risk_tags=risk_tags,
+                keyword_tokens=skill_tokens,
+            )
+        )
+
+    for bundle in bundles:
+        _append_bundle(bundle, bundle.source_root)
+
+    extra_roots: list[str] = []
+    root_keys = {str(root).lower() for root in roots}
+    for extra in include_roots or []:
+        path_text = str(extra or '').strip()
+        if not path_text:
+            continue
+        extra_root = Path(path_text).expanduser()
+        try:
+            resolved_root = extra_root.resolve()
+        except Exception:
+            resolved_root = extra_root
+        root_key = str(resolved_root).lower()
+        if root_key in root_keys or not resolved_root.exists() or not resolved_root.is_dir():
+            continue
+        root_keys.add(root_key)
+        extra_roots.append(str(resolved_root))
+        try:
+            skill_files = list(resolved_root.rglob('SKILL.md'))
         except Exception:
             skill_files = []
         for skill_md in skill_files:
-            parent = skill_md.parent
-            name = str(parent.name or "").strip()
-            if not name:
-                continue
-            try:
-                parent_path = str(parent.resolve())
-                skill_file = str(skill_md.resolve())
-            except Exception:
-                parent_path = str(parent)
-                skill_file = str(skill_md)
-            key = parent_path.lower()
-            if key in seen:
-                continue
-            seen.add(key)
-            description = _read_skill_description(skill_md)
-            excerpt = _read_skill_excerpt(skill_md, max_chars=max(350, int(max_excerpt_chars)))
-            skill_sha = ""
-            try:
-                skill_sha = _sha256_file(skill_md)
-            except Exception:
-                skill_sha = ""
-            risk_level, risk_tags = classify_skill_risk(name, description, excerpt)
-            skill_tokens = _keyword_tokens(
-                "\n".join(
-                    [
-                        name,
-                        description,
-                        excerpt[:450],
-                    ]
-                )
-            )
-            rows.append(
-                RuntimeSkill(
-                    name=name,
-                    path=parent_path,
-                    skill_file=skill_file,
-                    source_root=str(root),
-                    description=description,
-                    excerpt=excerpt,
-                    skill_sha256=skill_sha,
-                    risk_level=risk_level,
-                    risk_tags=risk_tags,
-                    keyword_tokens=skill_tokens,
-                )
-            )
+            bundle = read_skill_bundle(skill_md.parent, source_root=resolved_root, origin='extra')
+            if bundle is not None:
+                _append_bundle(bundle, str(resolved_root))
 
-    rows.sort(key=lambda item: (item.name.lower(), item.path.lower()))
-    return rows, [str(root) for root in roots]
+    rows.sort(key=lambda item: item.name.lower())
+    return rows, roots + extra_roots
 
 
 def _skill_name_aliases(name: str) -> list[str]:

@@ -15,6 +15,7 @@ from typing import Any
 import click
 
 from thomas.core.config import AppConfig
+from thomas.skills import discover_native_skill_roots, discover_native_skills, read_skill_bundle
 
 
 def utc_iso() -> str:
@@ -163,32 +164,18 @@ def skill_row_key(name: str, path: str) -> str:
     return f"{normalize_skill_name(name)}::{str(path or '').strip().lower()}"
 
 
+
 def read_skill_description(skill_md: Path) -> str:
-    try:
-        lines = skill_md.read_text(encoding="utf-8", errors="replace").splitlines()
-    except (OSError, FileNotFoundError):
-        return ""
-    for line in lines:
-        text = str(line or "").strip()
-        if not text:
-            continue
-        if text.startswith("#"):
-            continue
-        return text[:240]
-    return ""
+    bundle = read_skill_bundle(skill_md.parent, source_root=skill_md.parent.parent, origin='native')
+    if bundle is None:
+        return ''
+    return str(bundle.description or '')
 
 
-def discover_skill_roots(config: AppConfig, *, include_root: str = "") -> list[Path]:
-    roots: list[Path] = []
-
-    codex_home = str(os.environ.get("CODEX_HOME") or "").strip()
-    if codex_home:
-        roots.append(Path(codex_home).expanduser() / "skills")
-    roots.append(Path.home() / ".codex" / "skills")
-    roots.append(config.memory.root_path / ".codex" / "skills")
-    roots.append(Path.cwd() / ".codex" / "skills")
-    roots.append(Path.cwd() / "skills")
-    include_root_text = str(include_root or "").strip()
+def discover_skill_roots(config: AppConfig, *, include_root: str = '') -> list[Path]:
+    _ = config
+    roots = [path for path, _origin in discover_native_skill_roots(cwd=Path.cwd())]
+    include_root_text = str(include_root or '').strip()
     if include_root_text:
         roots.append(Path(include_root_text).expanduser())
 
@@ -208,36 +195,63 @@ def discover_skill_roots(config: AppConfig, *, include_root: str = "") -> list[P
     return unique
 
 
-def discover_skills(config: AppConfig, *, include_root: str = "") -> tuple[list[dict[str, Any]], list[str]]:
+def discover_skills(config: AppConfig, *, include_root: str = '') -> tuple[list[dict[str, Any]], list[str]]:
+    _ = config
     rows: list[dict[str, Any]] = []
-    roots = discover_skill_roots(config, include_root=include_root)
     seen_paths: set[str] = set()
+    bundles, roots = discover_native_skills(cwd=Path.cwd())
 
-    for root in roots:
+    for bundle in bundles:
+        path_text = str(bundle.path)
+        path_key = path_text.lower()
+        if path_key in seen_paths:
+            continue
+        seen_paths.add(path_key)
+        rows.append(
+            {
+                'name': bundle.name,
+                'path': path_text,
+                'skill_file': str(bundle.skill_file),
+                'source_root': str(bundle.source_root),
+                'description': str(bundle.description or ''),
+                'origin': str(bundle.origin or ''),
+            }
+        )
+
+    include_root_text = str(include_root or '').strip()
+    if include_root_text:
+        extra_root = Path(include_root_text).expanduser()
         try:
-            files = list(root.rglob("SKILL.md"))
+            resolved = extra_root.resolve()
         except (OSError, FileNotFoundError):
-            files = []
-        for skill_md in files:
-            parent = skill_md.parent
-            name = parent.name.strip()
-            if not name:
-                continue
-            path_text = str(parent.resolve())
-            path_key = path_text.lower()
-            if path_key in seen_paths:
-                continue
-            seen_paths.add(path_key)
-            rows.append(
-                {
-                    "name": name,
-                    "path": path_text,
-                    "skill_file": str(skill_md.resolve()),
-                    "source_root": str(root),
-                    "description": read_skill_description(skill_md),
-                }
-            )
-    rows.sort(key=lambda row: (str(row.get("name") or "").lower(), str(row.get("path") or "").lower()))
+            resolved = extra_root
+        if resolved.exists() and resolved.is_dir() and str(resolved) not in roots:
+            roots.append(str(resolved))
+            try:
+                skill_files = list(resolved.rglob('SKILL.md'))
+            except (OSError, FileNotFoundError):
+                skill_files = []
+            for skill_md in skill_files:
+                bundle = read_skill_bundle(skill_md.parent, source_root=resolved, origin='extra')
+                if bundle is None:
+                    continue
+                path_text = str(bundle.path)
+                path_key = path_text.lower()
+                if path_key in seen_paths:
+                    continue
+                seen_paths.add(path_key)
+                rows.append(
+                    {
+                        'name': bundle.name,
+                        'path': path_text,
+                        'skill_file': str(bundle.skill_file),
+                        'source_root': str(bundle.source_root),
+                        'description': str(bundle.description or ''),
+                        'origin': str(bundle.origin or ''),
+                    }
+                )
+
+    rows.sort(key=lambda row: str(row.get('name') or '').lower())
     return rows, [str(root) for root in roots]
 
 

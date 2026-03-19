@@ -43,13 +43,22 @@ from thomas.cli.parity_support import (
     skills_sync_state as _skills_sync_state,
 )
 from thomas.core.config import AppConfig
+from thomas.skills import (
+    create_skill_draft,
+    list_draft_issues,
+    load_skill_draft_manifest,
+    promote_skill_draft,
+    reject_skill_draft,
+    review_skill_draft,
+    scan_external_root,
+)
 
 
 @click.group(name="skills", invoke_without_command=True)
 @click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
 @click.pass_context
 def skills(ctx: click.Context, as_json: bool) -> None:
-    """Manage local Codex/Thomas skills registry and diagnostics."""
+    """Manage Thomas-native skills registry, drafts, and diagnostics."""
     if ctx.invoked_subcommand is not None:
         return
     config: AppConfig = ctx.obj["config"]
@@ -269,6 +278,7 @@ def skills_check(ctx: click.Context, as_json: bool) -> None:
     rows = [dict(row) for row in (state.get("skills") or []) if isinstance(row, dict)]
     conflicts = _skill_conflicts(rows)
     issues: list[dict[str, Any]] = []
+    issues.extend(list_draft_issues(config))
     for row in rows:
         file_path = Path(str(row.get("skill_file") or ""))
         if not file_path.exists():
@@ -304,6 +314,89 @@ def skills_check(ctx: click.Context, as_json: bool) -> None:
                 click.echo(f"- {issue.get('code')}: {issue.get('name')}")
     if not payload["ok"]:
         raise SystemExit(1)
+
+
+
+@skills.command("scan-external")
+@click.option("--root", "scan_root", required=True, help="Explicit local path to inspect for external skills.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+def skills_scan_external(scan_root: str, as_json: bool) -> None:
+    payload = scan_external_root(scan_root)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"External scan: {payload['count']} candidate skill(s) under {payload['root']}")
+    for row in payload.get('skills') or []:
+        click.echo(f"- {row.get('name')} | kind={row.get('kind')} | path={row.get('path')}")
+
+
+@skills.command("distill")
+@click.option("--source", required=True, help="Explicit local path to distill into a Thomas-native skill draft.")
+@click.option("--name", default="", help="Optional Thomas-native skill name override.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_distill(ctx: click.Context, source: str, name: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    payload = create_skill_draft(config, source=source, name=name)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Created draft {payload.get('draft_id')} for {((payload.get('generated') or {}).get('skill_name') or '')}")
+
+
+@skills.command("review")
+@click.argument("draft_id")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_review(ctx: click.Context, draft_id: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    payload = review_skill_draft(config, draft_id=draft_id)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Reviewed draft: {draft_id}")
+
+
+@skills.command("promote")
+@click.argument("draft_id")
+@click.option("--target", type=click.Choice(["user", "builtin"]), default="user", show_default=True)
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_promote(ctx: click.Context, draft_id: str, target: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    payload = promote_skill_draft(config, draft_id=draft_id, target=target, cwd=Path.cwd())
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Promotion {payload.get('status')}: {draft_id}")
+
+
+@skills.command("reject")
+@click.argument("draft_id")
+@click.option("--reason", default="", help="Optional rejection note.")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_reject(ctx: click.Context, draft_id: str, reason: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    payload = reject_skill_draft(config, draft_id=draft_id, reason=reason)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Rejected draft: {draft_id}")
+
+
+@skills.command("draft")
+@click.argument("draft_id")
+@click.option("--json", "as_json", is_flag=True, help="Output machine-readable JSON.")
+@click.pass_context
+def skills_draft(ctx: click.Context, draft_id: str, as_json: bool) -> None:
+    config: AppConfig = ctx.obj["config"]
+    payload = load_skill_draft_manifest(config, draft_id)
+    if as_json:
+        click.echo(json.dumps(payload, ensure_ascii=False, indent=2))
+        return
+    click.echo(f"Draft: {draft_id} | status={payload.get('status')}")
+    click.echo(f"Manifest: {payload.get('manifest_path')}")
 
 
 @skills.command("resolve")

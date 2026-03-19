@@ -892,7 +892,7 @@ class ThomasREPLRuntimeMixin:
             skills = list_all_skills()
             if not arg:
                 if not skills:
-                    self._console.print("[dim]No skills available. Add .md files to ~/.thomas/skills/[/dim]")
+                    self._console.print("[dim]No skills available. Add Thomas-native bundles under skills/, .thomas/skills/, or ~/.thomas/skills/[/dim]")
                 else:
                     self._console.print(f"[dim]Available skills ({len(skills)}):[/dim]")
                     for name, skill in sorted(skills.items()):

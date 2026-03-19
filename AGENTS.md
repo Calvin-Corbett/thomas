@@ -65,10 +65,16 @@ When you add/remove modules or change dependencies â€” update `_architectur
 new context window) rely on it to understand what changed and why. Sloppy changelog = lost
 context = repeated mistakes.
 
+## Agent Commit Path (Required for Agents)
+
+- When scoped implementation work is complete, agents must use `python scripts/agent_commit.py --message "<msg>"` instead of raw `git commit`.
+- `agent_commit.py` isolates claimed files in a temporary git index, runs local staged-file and ownership gates, and leaves unrelated repo dirt untouched.
+- Repo-wide debt checks now belong to `python scripts/check_merge_readiness.py` and the pre-push/CI path, not the local agent commit path.
+- If no commit is created, report the explicit blocker class from `agent_commit.py`: `local_gate_failed`, `broken_repo_tool`, `claim_scope_mismatch`, `branch_race`, or `no_claimed_changes`.
+
 ## Before You Commit
-Run `python -m pytest tests/test_architecture.py -x --tb=short -q`.
-It checks dependency direction, file sizes, forbidden patterns, extension
-isolation, module coverage, test coverage, health annotations, and cycles.
+For repo-wide merge/release readiness, run `python scripts/check_merge_readiness.py`.
+It checks repo hygiene, release hygiene, architecture fitness, and the workboard audit backstop.
 
 ## Before You Delete Code
 Never bulk-delete. For EVERY file or function you want to remove:
@@ -187,8 +193,8 @@ If a task mentions website/site/homepage/domain/Spline or the user asks for web 
 1. Start in `apps/site` immediately.
 2. Read `apps/site/README_DEV.md` first for current URLs and workflow.
 3. Run website commands from `apps/site` (`npm run dev`, `npm run typecheck`, deploy scripts).
-4. Apply skill `ui-precision-guard` at `.codex/skills/ui-precision-guard/SKILL.md` for any UI edit.
-5. For `thomas/server/web/**` UI files, use the repo-local `.codex/skills/ui-precision-guard` workflow and satisfy its `Common-Practice Logic Mode` checklist before handoff.
+4. Apply skill `ui-precision-guard` at `skills/ui-precision-guard/SKILL.md` for any UI edit.
+5. For `thomas/server/web/**` UI files, use the repo-local `skills/ui-precision-guard` workflow and satisfy its `Common-Practice Logic Mode` checklist before handoff.
 
 ## Runtime Skills (Model-Agnostic)
 Thomas resolves runtime skills at the orchestrator layer before model calls.
@@ -200,12 +206,10 @@ Selection order is:
 3. Relevance-ranked skills from discovered roots
 
 Discovery roots:
-- `$CODEX_HOME/skills`
-- `~/.codex/skills`
-- `<memory_root>/.codex/skills`
-- `<cwd>/.codex/skills`
+- `<thomas_install_root>/skills`
+- `~/.thomas/skills`
+- `<cwd>/.thomas/skills`
 - `<cwd>/skills`
-- Optional: `THOMAS_SKILLS_EXTRA_DIRS` (`os.pathsep`-separated)
 
 ## Hard Gate: Website Visual Proof (All Agents)
 This rule applies to Thomas and any external/competing agent editing this repo.
