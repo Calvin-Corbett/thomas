@@ -408,3 +408,44 @@ def test_gate_parent_throughput_json_fail_payload(tmp_path: Path, monkeypatch, c
     assert parent_payload.get("applied") is True
     assert int(parent_payload.get("ready_suggestion_count") or 0) == 1
     assert int(parent_payload.get("required_worker_count") or 0) == 1
+
+
+
+def test_gate_accepts_explicit_fallback_scope_without_claim(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 1; scope=docs/note.md; task=docs lane",
+        active_tasks_block="- task_id=docs-lane; agent=Codex 1; scope=docs/note.md; summary=docs lane; status=active",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 2")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON", "user approved scoped fallback")
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["thomas/cli/main.py"])
+
+    rc = mod.run(["--workboard", str(workboard), "--enforce-staged-scope", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["scope_source"] == "explicit_fallback"
+    assert payload["matching_claim_count"] == 0
+    assert payload["scopes"] == ["thomas/cli/main.py"]
+
+
+def test_gate_rejects_explicit_fallback_overlap(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 1; scope=thomas/cli/main.py; task=main lane",
+        active_tasks_block="- task_id=main-lane; agent=Codex 1; scope=thomas/cli/main.py; summary=main lane; status=active",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 2")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON", "user approved scoped fallback")
+
+    rc = mod.run(["--workboard", str(workboard), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["scope_source"] == "explicit_fallback"
+    assert "overlaps active claim" in payload["error"]
