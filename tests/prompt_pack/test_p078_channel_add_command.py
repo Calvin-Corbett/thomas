@@ -5,14 +5,14 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from thomas.channels.p078_channel_add_command import (
+import thomas.marketplace.channels.p078_channel_add_command as channel_add_mod
+from thomas.cli.commands.channel_ops.p078_channel_add_command import register as register_cli
+from thomas.marketplace.channels.p078_channel_add_command import (
     ChannelAddConfigError,
     ChannelAddExternalError,
     ChannelAddRequest,
     add_channel,
 )
-import thomas.channels.p078_channel_add_command as channel_add_mod
-from thomas.cli.commands.channel_ops.p078_channel_add_command import register as register_cli
 
 
 def _read_json(path: Path) -> dict:

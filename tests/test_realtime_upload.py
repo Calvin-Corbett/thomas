@@ -1,11 +1,12 @@
 import unittest
+
 import aiohttp
 from aiohttp import web
-from aiohttp.test_utils import TestServer, TestClient
+from aiohttp.test_utils import TestClient, TestServer
 
-from thomas.realtime.routes import setup_realtime_routes
-from thomas.realtime.config import RealtimeConfig
-from thomas.realtime import keys
+from thomas.marketplace.realtime import keys
+from thomas.marketplace.realtime.config import RealtimeConfig
+from thomas.marketplace.realtime.routes import setup_realtime_routes
 
 
 def _require_bearer_token(request: web.Request) -> None:

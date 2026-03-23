@@ -10,9 +10,9 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.travel._exceptions import BookingError
-from thomas.travel._types import Activity, Airport, Currency, Flight, Itinerary, Trip
-from thomas.travel.itinerary import (
+from thomas.marketplace.travel._exceptions import BookingError
+from thomas.marketplace.travel._types import Activity, Airport, Currency, Flight, Itinerary, Trip
+from thomas.marketplace.travel.itinerary import (
     BudgetTracker,
     ConflictDetector,
     DayPlanner,

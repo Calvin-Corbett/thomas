@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Desktop Operator</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <main class="shell">
+    <section class="hero">
+      <p class="eyebrow">Thomas Native Capability</p>
+      <h1>Desktop Operator</h1>
+      <p class="lede">Approved, window-bound desktop control for real apps. CapCut is the first polished workflow.</p>
+    </section>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Status</h2>
+        <button id="refreshBtn" type="button">Refresh</button>
+      </div>
+      <div id="statusCard" class="status-card">Loading…</div>
+    </section>
+    <section class="grid">
+      <article class="card">
+        <h3>Scope</h3>
+        <p>One approved target window at a time. Accessibility first, OCR fallback, coordinates last.</p>
+      </article>
+      <article class="card">
+        <h3>Safety</h3>
+        <p>Blocked by default outside the bound window. No global shortcuts. Session expires automatically.</p>
+      </article>
+      <article class="card">
+        <h3>Workflow</h3>
+        <p>List windows, bind a session, capture state, act inside the client rect, then end the session.</p>
+      </article>
+    </section>
+  </main>
+  <script src="./app.js"></script>
+</body>
+</html>

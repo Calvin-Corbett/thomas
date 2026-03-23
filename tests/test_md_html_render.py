@@ -2,9 +2,9 @@
 Tests for HTML rendering.
 """
 
-from thomas.markdown._types import Document, RenderConfig
-from thomas.markdown.html_renderer import HTMLRenderer
-from thomas.markdown.parser import Parser
+from thomas.marketplace.markdown._types import Document, RenderConfig
+from thomas.marketplace.markdown.html_renderer import HTMLRenderer
+from thomas.marketplace.markdown.parser import Parser
 
 
 class TestHeadingRendering:
@@ -249,7 +249,7 @@ class TestHtmlPassthrough:
     def test_html_unsafe_disabled(self) -> None:
         """Test HTML is escaped when unsafe disabled."""
         doc = Document()
-        from thomas.markdown._types import HTMLBlock
+        from thomas.marketplace.markdown._types import HTMLBlock
 
         html_block = HTMLBlock("<div>content</div>")
         doc.children.append(html_block)
@@ -262,7 +262,7 @@ class TestHtmlPassthrough:
     def test_html_unsafe_enabled(self) -> None:
         """Test raw HTML passes through when unsafe enabled."""
         doc = Document()
-        from thomas.markdown._types import HTMLBlock
+        from thomas.marketplace.markdown._types import HTMLBlock
 
         html_block = HTMLBlock("<div>content</div>")
         doc.children.append(html_block)

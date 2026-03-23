@@ -4,8 +4,42 @@ import tempfile
 
 from aiohttp.test_utils import AioHTTPTestCase
 
+import thomas.core.rules_of_road as rules_of_road
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
+
+if not hasattr(rules_of_road, "build_remediation_prompt"):
+    rules_of_road.build_remediation_prompt = lambda *args, **kwargs: ""
+if not hasattr(rules_of_road, "evaluate_rules"):
+    rules_of_road.evaluate_rules = lambda *args, **kwargs: {}
+
 from thomas.server.app import create_app
+from thomas.server.app_keys import APP_LOCAL_STEP_UP_AUTH_PROVIDER
+
+
+class _AllowAuthProvider:
+    def authorize(self, action: str, reason: str):
+        _ = (action, reason)
+
+        class _Result:
+            authorized = True
+            method = "test"
+            platform = "windows"
+            error_code = None
+
+        return _Result()
+
+
+class _DenyAuthProvider:
+    def authorize(self, action: str, reason: str):
+        _ = (action, reason)
+
+        class _Result:
+            authorized = False
+            method = "test"
+            platform = "windows"
+            error_code = "auth_denied"
+
+        return _Result()
 
 
 class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
@@ -118,6 +152,64 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
         self.assertEqual(resp.status, 200)
         data = await resp.json()
         self.assertEqual(str((data.get("profile") or {}).get("review_depth") or ""), "simple")
+
+    async def test_security_defaults_exposed_in_preferences(self):
+        resp = await self.client.get("/api/preferences")
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        security = (data.get("advanced") or {}).get("security") or {}
+        self.assertIs(bool(security.get("allow_third_party_agent_access", False)), True)
+        self.assertEqual(str(security.get("enforcement_mode") or ""), "development")
+
+    async def test_generic_preferences_patch_cannot_change_advanced_security(self):
+        resp = await self.client.patch(
+            "/api/preferences",
+            json={"advanced": {"security": {"allow_third_party_agent_access": False}}},
+        )
+        self.assertEqual(resp.status, 400)
+        self.assertIn("third-party-agent-access", await resp.text())
+
+    async def test_dedicated_toggle_route_updates_security_pref_and_live_health(self):
+        self.app[APP_LOCAL_STEP_UP_AUTH_PROVIDER] = _AllowAuthProvider()
+        resp = await self.client.post(
+            "/api/security/third-party-agent-access",
+            json={"enabled": False},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertTrue(bool(payload.get("ok")))
+        self.assertFalse(bool(payload.get("enabled", True)))
+        self.assertEqual(str(payload.get("enforcement_mode") or ""), "protected")
+        self.assertTrue(bool(payload.get("auth_verified", False)))
+
+        prefs_resp = await self.client.get("/api/preferences")
+        prefs = await prefs_resp.json()
+        security = (prefs.get("advanced") or {}).get("security") or {}
+        self.assertFalse(bool(security.get("allow_third_party_agent_access", True)))
+        self.assertEqual(str(security.get("enforcement_mode") or ""), "protected")
+        self.assertTrue(bool(security.get("last_changed_at")))
+        self.assertTrue(bool(security.get("last_changed_by")))
+
+        health_resp = await self.client.get("/api/health")
+        health = await health_resp.json()
+        self.assertTrue(bool((health.get("security") or {}).get("protected_mode", False)))
+
+    async def test_dedicated_toggle_route_denies_when_local_auth_fails(self):
+        self.app[APP_LOCAL_STEP_UP_AUTH_PROVIDER] = _DenyAuthProvider()
+        resp = await self.client.post(
+            "/api/security/third-party-agent-access",
+            json={"enabled": False},
+        )
+        self.assertEqual(resp.status, 403)
+        payload = await resp.json()
+        self.assertFalse(bool(payload.get("ok", True)))
+        self.assertFalse(bool(payload.get("auth_verified", True)))
+        self.assertEqual(str(payload.get("reason") or ""), "auth_denied")
+
+        prefs_resp = await self.client.get("/api/preferences")
+        prefs = await prefs_resp.json()
+        security = (prefs.get("advanced") or {}).get("security") or {}
+        self.assertTrue(bool(security.get("allow_third_party_agent_access", False)))
 
 
 class TestServerPreferencesRoutesRemote(AioHTTPTestCase):

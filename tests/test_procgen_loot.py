@@ -4,8 +4,8 @@ Tests for loot and item generation.
 
 import pytest
 
-from thomas.procgen._exceptions import InvalidConfigError
-from thomas.procgen.loot import (
+from thomas.marketplace.procgen._exceptions import InvalidConfigError
+from thomas.marketplace.procgen.loot import (
     Item,
     ItemModifier,
     ItemRarity,

@@ -4,9 +4,9 @@ Tests for schema definition and parsing.
 
 import pytest
 
-from thomas.validation._exceptions import CircularReferenceError, SchemaError
-from thomas.validation._types import SchemaDefinition
-from thomas.validation.schema import Schema, SchemaCompiler, SchemaParser, SchemaRegistry
+from thomas.marketplace.validation._exceptions import CircularReferenceError, SchemaError
+from thomas.marketplace.validation._types import SchemaDefinition
+from thomas.marketplace.validation.schema import Schema, SchemaCompiler, SchemaParser, SchemaRegistry
 
 
 class TestSchemaParser:

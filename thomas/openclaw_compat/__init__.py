@@ -1,31 +1,3 @@
-"""OpenClaw compatibility layer for API translation.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.openclaw_compat."""
 
-Provides backward compatibility with OpenClaw v1/v2 APIs,
-version mapping, and protocol translation.
-"""
-
-from .core import (
-    APIRequest,
-    APIResponse,
-    APIVersion,
-    CompatibilityLayer,
-    CompatibilityTranslator,
-    OpenClawOperation,
-    OpenClawV1Translator,
-    OpenClawV2Translator,
-    VersionMappingRegistry,
-)
-
-__all__ = [
-    "APIVersion",
-    "OpenClawOperation",
-    "APIRequest",
-    "APIResponse",
-    "CompatibilityTranslator",
-    "OpenClawV1Translator",
-    "OpenClawV2Translator",
-    "VersionMappingRegistry",
-    "CompatibilityLayer",
-]
-
-__version__ = "1.0.0"
+from thomas.marketplace.openclaw_compat import *  # noqa: F401,F403

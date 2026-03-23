@@ -5,9 +5,9 @@ from pathlib import Path
 
 import pytest
 
-from thomas.kvstore._exceptions import CorruptionError
-from thomas.kvstore._types import WriteOp
-from thomas.kvstore.wal import WAL
+from thomas.marketplace.kvstore._exceptions import CorruptionError
+from thomas.marketplace.kvstore._types import WriteOp
+from thomas.marketplace.kvstore.wal import WAL
 
 
 class TestWALBasics:

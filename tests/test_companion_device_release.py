@@ -5,11 +5,11 @@ import hmac
 import json
 from pathlib import Path
 
-from thomas.companion.audit import CompanionAuditLog
-from thomas.companion.devices import DeviceRegistry
-from thomas.companion.kernel import CompanionKernel
-from thomas.companion.releases import ReleaseRegistry
-from thomas.companion.update import BundleVerifier
+from thomas.marketplace.companion.audit import CompanionAuditLog
+from thomas.marketplace.companion.devices import DeviceRegistry
+from thomas.marketplace.companion.kernel import CompanionKernel
+from thomas.marketplace.companion.releases import ReleaseRegistry
+from thomas.marketplace.companion.update import BundleVerifier
 
 
 def _write_bundle(tmp_path: Path, *, secret: str, version: str) -> Path:

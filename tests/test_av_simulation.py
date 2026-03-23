@@ -1,11 +1,11 @@
 """Tests for simulation module."""
 
-from thomas.autonomous_vehicles._types import (
+from thomas.marketplace.autonomous_vehicles._types import (
     ControlCommand,
     Vector2D,
     VehicleState,
 )
-from thomas.autonomous_vehicles.simulation import (
+from thomas.marketplace.autonomous_vehicles.simulation import (
     CollisionDetector,
     DynamicBicycleModel,
     IntelligentDriverModel,

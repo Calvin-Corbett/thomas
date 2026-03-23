@@ -2,10 +2,10 @@
 
 import unittest
 
-from thomas.logging_framework._types import LogLevel, LogQuery
-from thomas.logging_framework.handlers import MemoryHandler
-from thomas.logging_framework.logger import Logger
-from thomas.logging_framework.search import (
+from thomas.marketplace.logging_framework._types import LogLevel, LogQuery
+from thomas.marketplace.logging_framework.handlers import MemoryHandler
+from thomas.marketplace.logging_framework.logger import Logger
+from thomas.marketplace.logging_framework.search import (
     FacetedSearch,
     FieldIndexer,
     InvertedIndex,
@@ -96,7 +96,7 @@ class TestFieldIndexer(unittest.TestCase):
 
     def test_index_by_logger(self) -> None:
         """Test indexing by logger name."""
-        from thomas.logging_framework.logger import get_logger
+        from thomas.marketplace.logging_framework.logger import get_logger
 
         Logger._loggers.clear()
 
@@ -385,7 +385,7 @@ class TestLogQuery(unittest.TestCase):
 
     def test_query_by_logger_name(self) -> None:
         """Test logger name filtering in query."""
-        from thomas.logging_framework.logger import get_logger
+        from thomas.marketplace.logging_framework.logger import get_logger
 
         Logger._loggers.clear()
 

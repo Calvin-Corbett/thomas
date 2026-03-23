@@ -1,4 +1,4 @@
-﻿# Thomas Workboard (Active)
+# Thomas Workboard (Active)
 
 Last updated: 2026-03-01
 
@@ -30,11 +30,11 @@ Last updated: 2026-03-01
 
 - task_id=HOOKS-001; agent=claude; scope=thomas/cli; summary=Claude Code-style hooks system and REPL formatting; status=in_progress
 
-- task_id=audit-24h-backstop; agent=codex; scope=thomas/memory,thomas/realtime,thomas/server/routes,tests; summary=[WIP] Stabilize OpenClaw parity trust gaps (memory, realtime, plugin hosting); status=in_progress; name=Codex; role=solo; parent=none
+- task_id=openclaw-parity-stabilization; agent=codex; scope=thomas/memory,thomas/realtime,thomas/server/routes,tests; summary=[WIP] Stabilize OpenClaw parity trust gaps (memory, realtime, plugin hosting); status=in_progress; name=Codex; role=solo; parent=none
 ## Up For Grabs
 
 
-- none
+- task_id=audit-24h-backstop; scope=thomas; summary=ensure every major module is audited in last 24h and fix findings; reported_by=workboard-bot
 ## Issues / Blockers
 
 - none
@@ -50,6 +50,8 @@ Last updated: 2026-03-01
 - `plans/thomas/roadmap/WEEKLY_DEEP_DIVE_PLAN.md`
 - `plans/thomas/launch/LAUNCH_V1_PLAN.md`
 - `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
+- `plans/thomas/V3_CHAT_SPEC.md`
+- `plans/thomas/verification/AGENT_VERIFICATION_PROTOCOL_PLAN.md`
 
 ## Agent Message Traffic
 

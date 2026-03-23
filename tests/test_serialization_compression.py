@@ -7,8 +7,8 @@ roundtrip, and adaptive compression.
 
 import pytest
 
-from thomas.serialization import SerializationError
-from thomas.serialization.compression import (
+from thomas.marketplace.serialization import SerializationError
+from thomas.marketplace.serialization.compression import (
     CompressionAlgorithm,
     LZ77Compressor,
     compress,

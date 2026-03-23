@@ -1,21 +1,3 @@
-"""Content Delivery Network with edge caching, purge, and origin shield."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.cdn."""
 
-from thomas.cdn.core import (
-    CDN,
-    CacheEntry,
-    CacheStrategy,
-    CompressionType,
-    EdgeCache,
-    EdgeLocation,
-)
-from thomas.cdn.tools import register_cdn_tools
-
-__all__ = [
-    "CDN",
-    "EdgeCache",
-    "EdgeLocation",
-    "CacheEntry",
-    "CacheStrategy",
-    "CompressionType",
-    "register_cdn_tools",
-]
+from thomas.marketplace.cdn import *  # noqa: F401,F403

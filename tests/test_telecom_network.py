@@ -4,14 +4,14 @@ Tests for network architecture and management module.
 
 import pytest
 
-from thomas.telecom._types import (
+from thomas.marketplace.telecom._types import (
     BaseStation,
     Cell,
     Frequency,
     Protocol,
     Subscriber,
 )
-from thomas.telecom.network import (
+from thomas.marketplace.telecom.network import (
     BackhaulPlanner,
     CellTowerOptimizer,
     FrequencyPlanner,

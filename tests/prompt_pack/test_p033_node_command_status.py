@@ -4,14 +4,14 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from thomas.nodes.p033_node_command_status import (
+from thomas.cli.commands.nodes.p033_node_command_status import cli as status_cli
+from thomas.marketplace.nodes.p033_node_command_status import (
     NodeCommandStatusConfigError,
     NodeCommandStatusInvalidInputError,
     NodeCommandStatusNotFoundError,
     NodeCommandStatusRequest,
     get_node_command_status,
 )
-from thomas.cli.commands.nodes.p033_node_command_status import cli as status_cli
 
 
 def test_node_command_status_success_from_state_file(tmp_path: Path) -> None:
@@ -49,7 +49,9 @@ def test_node_command_status_include_output(tmp_path: Path) -> None:
     record = {"command_id": command_id, "state": "succeeded", "stdout": "ok", "stderr": "", "exit_code": 0}
     (tmp_path / f"{command_id}.json").write_text(json.dumps(record), encoding="utf-8")
 
-    resp = get_node_command_status(NodeCommandStatusRequest(command_id=command_id, include_output=True, state_dir=tmp_path))
+    resp = get_node_command_status(
+        NodeCommandStatusRequest(command_id=command_id, include_output=True, state_dir=tmp_path)
+    )
     assert resp.state == "succeeded"
     assert resp.done is True
     assert resp.success is True

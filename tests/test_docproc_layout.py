@@ -1,7 +1,7 @@
 """Tests for document layout analysis module."""
 
-from thomas.doc_processing._types import BoundingBox, Page, TextBlock, TextBlockType
-from thomas.doc_processing.layout import (
+from thomas.marketplace.doc_processing._types import BoundingBox, Page, TextBlock, TextBlockType
+from thomas.marketplace.doc_processing.layout import (
     ColumnDetector,
     LayoutAnalyzer,
     MarginDetector,

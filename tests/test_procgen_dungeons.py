@@ -4,9 +4,9 @@ Tests for dungeon generation.
 
 import pytest
 
-from thomas.procgen._exceptions import InvalidConfigError
-from thomas.procgen._types import Room, RoomType, Tile
-from thomas.procgen.dungeons import (
+from thomas.marketplace.procgen._exceptions import InvalidConfigError
+from thomas.marketplace.procgen._types import Room, RoomType, Tile
+from thomas.marketplace.procgen.dungeons import (
     BSPDungeonGenerator,
     CellularDungeonGenerator,
     DungeonGenerator,

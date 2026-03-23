@@ -17,7 +17,12 @@ def test_evaluate_test_suite_contract_marks_catalog_checks_passed() -> None:
         "id": "c1",
         "version": 1,
         "catalog_checks": [
-            {"id": "core.001", "category": "coverage_and_correctness", "title": "x", "implementation_state": "implemented"},
+            {
+                "id": "core.001",
+                "category": "coverage_and_correctness",
+                "title": "x",
+                "implementation_state": "implemented",
+            },
             {"id": "agentic.001", "category": "agentic_native", "title": "y", "implementation_state": "implemented"},
         ],
     }

@@ -4,9 +4,9 @@ Tests for energy system optimization.
 
 import pytest
 
-from thomas.energy._exceptions import NoFeasibleSolutionError
-from thomas.energy._types import EnergySource, Load, PowerPlant, StorageUnit
-from thomas.energy.optimization import (
+from thomas.marketplace.energy._exceptions import NoFeasibleSolutionError
+from thomas.marketplace.energy._types import EnergySource, Load, PowerPlant, StorageUnit
+from thomas.marketplace.energy.optimization import (
     EconomicDispatch,
     LoadShiftingOptimizer,
     MicrogridOptimizer,

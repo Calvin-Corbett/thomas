@@ -12,7 +12,7 @@ from aiohttp import web
 
 from thomas.core.autonomy import clamp_autonomy_level
 from thomas.core.config import AppConfig
-from thomas.observability.task_ledger import derive_active_goal
+from thomas.marketplace.observability.task_ledger import derive_active_goal
 from thomas.server.app_keys import (
     APP_CONFIG,
     APP_SESSIONS,

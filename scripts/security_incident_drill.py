@@ -1,16 +1,15 @@
-﻿"""Run a lightweight incident response drill and emit machine-readable report."""
+"""Run a lightweight incident response drill and emit machine-readable report."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
-from thomas.security.incident_drill import run_security_incident_drill
+from thomas.marketplace.security.incident_drill import run_security_incident_drill
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run a security incident response drill.")
     parser.add_argument("--repo-root", default=".", help="Repository root path.")
     parser.add_argument("--scenario", default="web_api", help="Drill scenario id.")

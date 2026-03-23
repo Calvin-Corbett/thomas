@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from thomas.nodes.p031_node_command_install import (
+from thomas.marketplace.nodes.p031_node_command_install import (
     NodeInstallConfigError,
     NodeInstallInputError,
     NodeInstallRequest,

@@ -2,7 +2,7 @@
 Tests for Markdown lexer (block-level tokenization).
 """
 
-from thomas.markdown.lexer import BlockType, Lexer
+from thomas.marketplace.markdown.lexer import BlockType, Lexer
 
 
 class TestHeadings:

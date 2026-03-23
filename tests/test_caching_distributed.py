@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.caching import ConsistentHashRing, SlotBasedRouter
+from thomas.marketplace.caching import ConsistentHashRing, SlotBasedRouter
 
 
 class TestConsistentHashRing:

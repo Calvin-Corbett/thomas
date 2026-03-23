@@ -4,16 +4,16 @@ import math
 
 import pytest
 
-from thomas.visualization._exceptions import InvalidDataError
-from thomas.visualization._types import (
+from thomas.marketplace.visualization._exceptions import InvalidDataError
+from thomas.marketplace.visualization._types import (
     Color,
     DataPoint,
     Figure,
     Fill,
     Series,
 )
-from thomas.visualization.line_chart import LineChart
-from thomas.visualization.scales import LinearScale
+from thomas.marketplace.visualization.line_chart import LineChart
+from thomas.marketplace.visualization.scales import LinearScale
 
 
 class TestLineChart:

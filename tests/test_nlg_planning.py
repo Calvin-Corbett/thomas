@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.nlg._exceptions import ContentSelectionError, DocumentPlanningError
-from thomas.nlg._types import Sentence
-from thomas.nlg.planning import DocumentPlanner
+from thomas.marketplace.nlg._exceptions import ContentSelectionError, DocumentPlanningError
+from thomas.marketplace.nlg._types import Sentence
+from thomas.marketplace.nlg.planning import DocumentPlanner
 
 
 class TestContentSelection:

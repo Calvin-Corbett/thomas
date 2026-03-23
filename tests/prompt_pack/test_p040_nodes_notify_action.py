@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from thomas.nodes.p040_nodes_notify_action import (
+from thomas.marketplace.nodes.p040_nodes_notify_action import (
     NodeNotifyResult,
     NodesNotifyActionConfigError,
     NodesNotifyActionInput,
@@ -93,7 +93,7 @@ def test_notify_action_notifier_exception_is_deterministic_result():
 def test_cli_json_success(monkeypatch, capsys):
     # Import inside the test so monkeypatching affects the module-level import.
     from thomas.cli.commands.nodes import p040_nodes_notify_action as cli
-    from thomas.nodes.p040_nodes_notify_action import NodesNotifyActionOutput
+    from thomas.marketplace.nodes.p040_nodes_notify_action import NodesNotifyActionOutput
 
     def fake_notify_action(inp, *, notifier=None, config=None):
         return NodesNotifyActionOutput(

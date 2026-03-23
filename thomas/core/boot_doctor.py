@@ -12,6 +12,8 @@ import socket
 import subprocess
 import sys
 import time
+import urllib.error
+import urllib.request
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
 from pathlib import Path
@@ -79,6 +81,75 @@ def _write_json_atomic(path: Path, payload: dict[str, Any]) -> Path:
     return path
 
 
+BOOT_DOCTOR_RECOMMENDED_ACTIONS = {
+    "healthy": ["view_report", "dismiss_notice"],
+    "degraded": ["view_report", "retry_repair", "restart", "open_rescue", "dismiss_notice"],
+    "fatal": ["view_report", "retry_repair", "restart", "open_rescue"],
+}
+
+BOOT_DOCTOR_PROBE_SPECS = (
+    {"id": "root", "path": "/", "class": "core"},
+    {"id": "health", "path": "/api/health", "class": "core"},
+    {"id": "models", "path": "/api/models", "class": "important"},
+    {"id": "recovery_notice", "path": "/api/bootdoctor/recovery_notice", "class": "important"},
+)
+
+
+def _normalize_bootdoctor_severity(severity: str | None) -> str:
+    value = str(severity or "").strip().lower()
+    if value in {"healthy", "degraded", "fatal"}:
+        return value
+    return "degraded"
+
+
+def _default_bootdoctor_actions(severity: str | None, *, report_available: bool = False) -> list[str]:
+    normalized = _normalize_bootdoctor_severity(severity)
+    actions = list(BOOT_DOCTOR_RECOMMENDED_ACTIONS.get(normalized, BOOT_DOCTOR_RECOMMENDED_ACTIONS["degraded"]))
+    if not report_available:
+        actions = [item for item in actions if item != "view_report"]
+    return actions
+
+
+def _bootdoctor_status_message(*, severity: str, recovered: bool) -> str:
+    if severity == "healthy":
+        return "Boot Doctor verified a healthy startup state."
+    if severity == "fatal":
+        return "Boot Doctor finished, but Thomas still has a fatal startup issue."
+    if recovered:
+        return "Thomas launched in a degraded state while Boot Doctor investigates."
+    return "Boot Doctor detected a degraded startup state."
+
+
+def _bootdoctor_notice_message(
+    *,
+    reason: str,
+    repairs: list[str],
+    recovered: bool,
+    severity: str,
+    ai_summary: str,
+    report_path: str,
+) -> str:
+    if severity == "fatal":
+        opening = "Boot Doctor found a startup issue that still blocks a fully healthy Thomas launch."
+    elif recovered:
+        opening = "Boot Doctor kept Thomas available in a degraded state while it investigates startup issues."
+    else:
+        opening = "Boot Doctor found a startup issue and is still investigating."
+
+    lines = [opening, f"Failure: {str(reason or '').strip() or 'startup failure'}."]
+    trimmed_repairs = [str(item).strip() for item in repairs if str(item).strip()][:4]
+    if trimmed_repairs:
+        lines.append("Changes made: " + "; ".join(trimmed_repairs) + ".")
+    else:
+        lines.append("Changes made: diagnostics only; no safe automatic repair was available.")
+    compact = str(ai_summary or "").strip().replace("\r", " ").replace("\n", " ")
+    if compact:
+        lines.append(f"Boot Doctor summary: {compact}")
+    if report_path:
+        lines.append(f"Report: {report_path}")
+    return "\n\n".join(lines)
+
+
 def write_boot_doctor_status(
     root: Path,
     *,
@@ -89,21 +160,58 @@ def write_boot_doctor_status(
     port: int | None = None,
     attempts: dict[str, Any] | None = None,
     extra: dict[str, Any] | None = None,
+    severity: str | None = None,
+    recovered: bool | None = None,
+    blocking: bool | None = None,
+    report_path: str | Path | None = None,
+    repairs: list[str] | None = None,
+    ai_summary: str = "",
+    recommended_actions: list[str] | None = None,
+    probe_results: list[dict[str, Any]] | None = None,
 ) -> Path:
+    normalized_severity = _normalize_bootdoctor_severity(severity)
+    report_value = str(report_path).strip() if report_path else ""
     payload: dict[str, Any] = {
         "status": str(status or "unknown").strip() or "unknown",
         "phase": str(phase or "unknown").strip() or "unknown",
         "message": str(message or "").strip(),
         "reason": str(reason or "").strip(),
+        "severity": normalized_severity,
+        "recovered": bool(recovered) if recovered is not None else normalized_severity != "fatal",
+        "blocking": bool(blocking) if blocking is not None else normalized_severity == "fatal",
+        "repairs": [str(item).strip() for item in list(repairs or []) if str(item).strip()],
+        "ai_summary": str(ai_summary or "").strip(),
+        "recommended_actions": list(
+            recommended_actions or _default_bootdoctor_actions(normalized_severity, report_available=bool(report_value))
+        ),
+        "probe_results": list(probe_results or []),
         "updated_at_utc": _now_utc_iso(),
     }
     if port is not None:
         payload["port"] = int(port)
+    if report_value:
+        payload["report_path"] = report_value
     if attempts:
         payload["attempts"] = dict(attempts)
     if extra:
         payload.update(dict(extra))
     return _write_json_atomic(boot_doctor_status_path(root), payload)
+
+
+def read_boot_doctor_status(root: Path, *, consume: bool = False) -> dict[str, Any] | None:
+    path = boot_doctor_status_path(root)
+    if not path.exists():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return None
+    if consume:
+        try:
+            path.unlink(missing_ok=True)
+        except Exception:
+            pass
+    return payload if isinstance(payload, dict) else None
 
 
 def clear_boot_doctor_status(root: Path) -> None:
@@ -117,47 +225,42 @@ def write_boot_recovery_notice(
     root: Path,
     *,
     reason: str,
-    report_path: Path,
+    report_path: Path | str,
     repairs: list[str],
     recovered: bool,
     offline_fallback_reason: str = "",
     ai_summary: str = "",
+    severity: str | None = None,
+    blocking: bool | None = None,
+    phase: str = "report_complete",
+    recommended_actions: list[str] | None = None,
+    probe_results: list[dict[str, Any]] | None = None,
 ) -> Path:
-    trimmed_repairs = [str(item).strip() for item in repairs if str(item).strip()][:3]
-    if recovered:
-        opening = (
-            "Boot Doctor caught a startup failure before Thomas finished loading and brought the server back online."
-        )
-    else:
-        opening = (
-            "Boot Doctor caught a startup failure, but Thomas still needs attention before the app is fully healthy."
-        )
-
-    if trimmed_repairs:
-        changed = "Changes made: " + "; ".join(trimmed_repairs) + "."
-    else:
-        changed = "Changes made: diagnostics only; no safe automatic repair was available."
-
+    normalized_severity = _normalize_bootdoctor_severity(severity)
+    report_value = str(report_path).strip() if report_path else ""
     attention = str(offline_fallback_reason or "").strip()
-    if not attention and not recovered:
-        attention = "Thomas still needs a manual boot review."
-
-    lines = [opening, f"Failure: {str(reason or '').strip() or 'startup failure' }.", changed]
-    if attention:
-        lines.append(f"Needs attention: {attention}.")
-    if ai_summary:
-        compact = str(ai_summary).strip().replace("\r", " ").replace("\n", " ")
-        if compact:
-            lines.append(f"Boot Doctor summary: {compact}")
-    lines.append(f"Report: {report_path}")
-
     payload = {
-        "message": "\n\n".join(lines),
+        "message": _bootdoctor_notice_message(
+            reason=str(reason or "").strip(),
+            repairs=list(repairs or []),
+            recovered=bool(recovered),
+            severity=normalized_severity,
+            ai_summary=ai_summary or attention,
+            report_path=report_value,
+        ),
         "reason": str(reason or "").strip(),
         "recovered": bool(recovered),
-        "repairs": trimmed_repairs,
+        "severity": normalized_severity,
+        "blocking": bool(blocking) if blocking is not None else normalized_severity == "fatal",
+        "phase": str(phase or "report_complete").strip() or "report_complete",
+        "repairs": [str(item).strip() for item in list(repairs or []) if str(item).strip()][:4],
         "needs_attention": attention,
-        "report_path": str(report_path),
+        "report_path": report_value,
+        "ai_summary": str(ai_summary or "").strip(),
+        "recommended_actions": list(
+            recommended_actions or _default_bootdoctor_actions(normalized_severity, report_available=bool(report_value))
+        ),
+        "probe_results": list(probe_results or []),
         "updated_at_utc": _now_utc_iso(),
     }
     return _write_json_atomic(boot_doctor_notice_path(root), payload)
@@ -179,6 +282,95 @@ def read_boot_recovery_notice(root: Path, *, consume: bool = False) -> dict[str,
     if isinstance(payload, dict):
         return payload
     return None
+
+
+def clear_boot_recovery_notice(root: Path) -> None:
+    try:
+        boot_doctor_notice_path(root).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def reconcile_boot_doctor_runtime_state(
+    root: Path,
+    *,
+    port: int,
+    host: str = "127.0.0.1",
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None]:
+    root = Path(root).resolve()
+    status_payload = read_boot_doctor_status(root, consume=False)
+    notice_payload = read_boot_recovery_notice(root, consume=False)
+    if not status_payload and not notice_payload:
+        return None, None
+
+    runtime_state = probe_boot_runtime(int(port), host=str(host or "127.0.0.1"))
+    severity = str(runtime_state.get("severity") or "fatal")
+    if severity == "fatal":
+        return status_payload, notice_payload
+
+    existing = status_payload or notice_payload or {}
+    existing_port = int(existing.get("port") or port)
+    existing_severity = str(existing.get("severity") or "").strip().lower()
+    existing_phase = str(existing.get("phase") or "").strip().lower()
+    if (
+        status_payload
+        and existing_port == int(port)
+        and existing_severity == severity
+        and existing_phase == "runtime_reconciled"
+        and not bool(status_payload.get("blocking", False))
+    ):
+        return status_payload, notice_payload
+
+    report_path = str(
+        (status_payload or {}).get("report_path") or (notice_payload or {}).get("report_path") or ""
+    ).strip()
+    repairs = list((status_payload or {}).get("repairs") or (notice_payload or {}).get("repairs") or [])
+    reason = str(
+        (status_payload or {}).get("reason") or (notice_payload or {}).get("reason") or "Boot Doctor recovered startup."
+    ).strip()
+    ai_summary = str(
+        (status_payload or {}).get("ai_summary")
+        or (notice_payload or {}).get("ai_summary")
+        or (notice_payload or {}).get("needs_attention")
+        or ""
+    ).strip()
+    actions = _default_bootdoctor_actions(severity, report_available=bool(report_path))
+    message = (
+        "Thomas is healthy again."
+        if severity == "healthy"
+        else "Thomas is available again, but some startup checks are still degraded."
+    )
+
+    write_boot_doctor_status(
+        root,
+        status="recovered",
+        phase="runtime_reconciled",
+        message=message,
+        reason=reason,
+        port=int(port),
+        severity=severity,
+        recovered=True,
+        blocking=False,
+        report_path=report_path,
+        repairs=repairs,
+        ai_summary=ai_summary,
+        recommended_actions=actions,
+        probe_results=list(runtime_state.get("probe_results") or []),
+    )
+    write_boot_recovery_notice(
+        root,
+        reason=reason,
+        report_path=report_path,
+        repairs=repairs,
+        recovered=True,
+        ai_summary=ai_summary,
+        severity=severity,
+        blocking=False,
+        phase="runtime_reconciled",
+        recommended_actions=actions,
+        probe_results=list(runtime_state.get("probe_results") or []),
+    )
+    return read_boot_doctor_status(root, consume=False), read_boot_recovery_notice(root, consume=False)
 
 
 def _is_within(path: Path, root: Path) -> bool:
@@ -239,19 +431,91 @@ def _is_port_listening(host: str, port: int, timeout: float = 0.4) -> bool:
     try:
         with socket.create_connection((host, int(port)), timeout=timeout):
             return True
+    except KeyboardInterrupt:
+        return False
     except OSError:
         return False
 
 
-def _thomas_http_healthy(port: int) -> bool:
-    try:
-        import urllib.request
+def _bootdoctor_sleep(seconds: float) -> None:
+    deadline = time.monotonic() + max(0.0, float(seconds or 0.0))
+    while True:
+        remaining = deadline - time.monotonic()
+        if remaining <= 0:
+            return
+        try:
+            time.sleep(min(remaining, 0.25))
+        except KeyboardInterrupt:
+            continue
 
-        with urllib.request.urlopen(f"http://127.0.0.1:{int(port)}/api/models", timeout=2.0) as resp:
+
+def _http_probe_result(
+    host: str, port: int, *, probe_id: str, path: str, probe_class: str, timeout: float = 1.5
+) -> dict[str, Any]:
+    url = f"http://{host}:{int(port)}{path}"
+    try:
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
             status = int(getattr(resp, "status", 0) or 0)
-            return 200 <= status < 500
-    except Exception:
-        return False
+        ok = 200 <= status < 400
+        detail = f"HTTP {status} at {path}"
+    except urllib.error.HTTPError as exc:
+        status = int(getattr(exc, "code", 0) or 0)
+        ok = status not in {0, 500, 502, 503, 504}
+        detail = f"HTTP {status} at {path}"
+    except Exception as exc:
+        status = 0
+        ok = False
+        detail = f"{type(exc).__name__}: {exc}"
+    return {
+        "id": probe_id,
+        "class": probe_class,
+        "path": path,
+        "ok": bool(ok),
+        "status": int(status),
+        "detail": detail,
+    }
+
+
+def probe_boot_runtime(port: int, host: str = "127.0.0.1") -> dict[str, Any]:
+    listening = _is_port_listening(host, int(port))
+    probe_results: list[dict[str, Any]] = []
+    if listening:
+        for spec in BOOT_DOCTOR_PROBE_SPECS:
+            probe_results.append(
+                _http_probe_result(
+                    host,
+                    int(port),
+                    probe_id=str(spec["id"]),
+                    path=str(spec["path"]),
+                    probe_class=str(spec["class"]),
+                )
+            )
+    else:
+        for spec in BOOT_DOCTOR_PROBE_SPECS:
+            probe_results.append(
+                {
+                    "id": str(spec["id"]),
+                    "class": str(spec["class"]),
+                    "path": str(spec["path"]),
+                    "ok": False,
+                    "status": 0,
+                    "detail": "port not listening",
+                }
+            )
+
+    fatal = (not listening) or any((not item.get("ok")) and item.get("class") == "core" for item in probe_results)
+    degraded = any((not item.get("ok")) and item.get("class") != "core" for item in probe_results)
+    severity = "fatal" if fatal else "degraded" if degraded else "healthy"
+    return {
+        "ready": severity != "fatal",
+        "severity": severity,
+        "listening": bool(listening),
+        "probe_results": probe_results,
+    }
+
+
+def _thomas_http_healthy(port: int) -> bool:
+    return bool(probe_boot_runtime(int(port)).get("ready"))
 
 
 def _listening_pids_windows(port: int) -> list[int]:
@@ -355,6 +619,100 @@ def _run_cmd(cmd: list[str], *, cwd: Path, timeout_s: float = 60.0) -> tuple[boo
     if len(detail) > 2000:
         detail = detail[:2000] + "\n... (truncated)"
     return ok, detail
+
+
+class _BootDoctorProcessHandle:
+    def __init__(self, pid: int, proc: subprocess.Popen[str] | None = None):
+        self.pid = int(pid)
+        self._proc = proc
+
+    def poll(self) -> int | None:
+        if self._proc is not None:
+            return self._proc.poll()
+        return None if _pid_is_running(self.pid) else 1
+
+
+def _pid_is_running(pid: int) -> bool:
+    try:
+        import psutil  # type: ignore
+
+        return psutil.pid_exists(int(pid))
+    except Exception:
+        pass
+
+    if os.name == "nt":
+        out = subprocess.run(
+            ["tasklist", "/FI", f"PID eq {int(pid)}", "/FO", "CSV", "/NH"],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        text = str(out.stdout or "").strip()
+        return bool(text) and not text.startswith("INFO:")
+
+    try:
+        os.kill(int(pid), 0)
+    except OSError:
+        return False
+    return True
+
+
+def _ps_single_quote(value: str) -> str:
+    return "'" + str(value).replace("'", "''") + "'"
+
+
+def _spawn_thomas_server(
+    *,
+    py_exe: Path,
+    root: Path,
+    host: str,
+    port: int,
+    stdout: Any,
+    detached: bool = False,
+) -> _BootDoctorProcessHandle:
+    if detached and os.name == "nt":
+        stdout_path = Path(getattr(stdout, "name", "")).resolve()
+        stderr_path = stdout_path.with_name(stdout_path.stem + ".stderr" + stdout_path.suffix)
+        script = (
+            "$p = Start-Process "
+            f"-FilePath {_ps_single_quote(str(py_exe))} "
+            f"-ArgumentList @('-m','thomas.server','--host',{_ps_single_quote(str(host))},'--port',{_ps_single_quote(str(int(port)))}) "
+            f"-WorkingDirectory {_ps_single_quote(str(root))} "
+            f"-RedirectStandardOutput {_ps_single_quote(str(stdout_path))} "
+            f"-RedirectStandardError {_ps_single_quote(str(stderr_path))} "
+            "-PassThru; "
+            "[Console]::Out.Write($p.Id)"
+        )
+        launched = subprocess.run(
+            ["powershell", "-NoProfile", "-Command", script],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        pid_text = str(launched.stdout or "").strip()
+        if int(launched.returncode or 0) == 0 and pid_text.isdigit():
+            return _BootDoctorProcessHandle(int(pid_text))
+
+    kwargs: dict[str, Any] = {
+        "cwd": str(root),
+        "stdout": stdout,
+        "stderr": subprocess.STDOUT,
+        "text": True,
+    }
+    if detached:
+        if os.name == "nt":
+            creationflags = int(getattr(subprocess, "CREATE_NEW_PROCESS_GROUP", 0))
+            creationflags |= int(getattr(subprocess, "DETACHED_PROCESS", 0))
+            if creationflags:
+                kwargs["creationflags"] = creationflags
+            kwargs["close_fds"] = True
+        else:
+            kwargs["start_new_session"] = True
+    proc = subprocess.Popen(
+        [str(py_exe), "-m", "thomas.server", "--host", str(host), "--port", str(int(port))],
+        **kwargs,
+    )
+    return _BootDoctorProcessHandle(int(proc.pid), proc=proc)
 
 
 def _best_model_profile(config: AppConfig) -> str | None:
@@ -569,7 +927,7 @@ def run_boot_doctor(
                 result.repairs.append(f"Stopped stale Thomas listener PID(s): {', '.join(str(x) for x in killed)}")
             if skipped:
                 result.repairs.append("Skipped non-Thomas or protected PID(s): " + ", ".join(str(x) for x in skipped))
-            time.sleep(0.7)
+            _bootdoctor_sleep(0.7)
 
     dep_ok, dep_detail = _run_cmd([str(py_exe), "-c", "import aiohttp, httpx"], cwd=root, timeout_s=20.0)
     result.add("server_deps", "ok" if dep_ok else "warn", dep_detail)
@@ -585,16 +943,17 @@ def run_boot_doctor(
     if not healthy_after and auto_repair:
         probe_log = report_dir / f"probe_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
         with probe_log.open("w", encoding="utf-8") as fh:
-            proc = subprocess.Popen(
-                [str(py_exe), "-m", "thomas.server", "--host", str(relaunch_host), "--port", str(int(port))],
-                cwd=str(root),
+            proc = _spawn_thomas_server(
+                py_exe=py_exe,
+                root=root,
+                host=str(relaunch_host),
+                port=int(port),
                 stdout=fh,
-                stderr=subprocess.STDOUT,
-                text=True,
+                detached=False,
             )
             started = False
             keep_running = False
-            deadline = time.monotonic() + 10.0
+            deadline = time.monotonic() + (8.0 if relaunch else 70.0)
             while time.monotonic() < deadline:
                 if _thomas_http_healthy(int(port)):
                     started = True
@@ -603,17 +962,131 @@ def run_boot_doctor(
                     break
                 if proc.poll() is not None:
                     break
-                time.sleep(0.25)
+                _bootdoctor_sleep(0.25)
 
             if started and keep_running:
                 result.repairs.append(f"Startup recovery launch: server left running on {relaunch_host}:{int(port)}.")
+            elif started:
+                result.repairs.append("Startup probe: server became healthy in diagnostic launch.")
+                if proc.poll() is None:
+                    _kill_pid(proc.pid)
+            elif relaunch and proc.poll() is None:
+                result.repairs.append(
+                    f"Startup recovery launch is still initializing on {relaunch_host}:{int(port)}; leaving the repaired server running for continued startup."
+                )
             else:
                 if proc.poll() is None:
                     _kill_pid(proc.pid)
-                if started:
-                    result.repairs.append("Startup probe: server became healthy in diagnostic launch.")
+                exit_code = proc.poll()
+                probe_text = ""
+                try:
+                    probe_text = probe_log.read_text(encoding="utf-8", errors="replace")
+                except Exception:
+                    probe_text = ""
+                probe_lower = probe_text.lower()
+                known_repairs: list[str] = []
+
+                if "unable to locate monolith_source_loader.py" in probe_lower:
+                    main_path = (root / "thomas" / "server" / "__main__.py").resolve()
+                    main_text = main_path.read_text(encoding="utf-8", errors="replace")
+                    main_old = (
+                        "        from thomas.server.app import serve\n\n"
+                        "        serve(config, host=str(args.host), port=int(args.port))\n"
+                    )
+                    main_new = (
+                        "        from thomas.server.app_lifecycle import serve\n\n"
+                        "        serve(config, host=str(args.host), port=int(args.port))\n"
+                    )
+                    if main_old in main_text:
+                        main_path.write_text(main_text.replace(main_old, main_new, 1), encoding="utf-8")
+                        known_repairs.append("server_main_import")
+                        result.repairs.append(
+                            "Known startup repair: patched thomas.server.__main__ to use app_lifecycle.serve."
+                        )
+
+                tool_path = (root / "thomas" / "server" / "tool_extensions.py").resolve()
+                tool_text = tool_path.read_text(encoding="utf-8", errors="replace")
+                tool_old = (
+                    "def _try_import(module_path: str, func_name: str):\n"
+                    "    try:\n"
+                    "        mod = __import__(module_path, fromlist=[func_name])\n"
+                    "        return getattr(mod, func_name)\n"
+                    "    except (ImportError, ModuleNotFoundError, AttributeError):\n"
+                    "        return None\n"
+                )
+                tool_new = tool_old + (
+                    "    except Exception as exc:\n"
+                    '        _log.debug("Skipping optional tool module %s.%s: %s", module_path, func_name, exc)\n'
+                    "        return None\n"
+                )
+                if tool_old in tool_text:
+                    tool_path.write_text(tool_text.replace(tool_old, tool_new, 1), encoding="utf-8")
+                    known_repairs.append("optional_tool_guard")
+                    result.repairs.append(
+                        "Known startup repair: widened optional tool import fallback to skip broken modules."
+                    )
+
+                shim_path = (root / "thomas" / "groupchat" / "__init__.py").resolve()
+                shim_text = (
+                    '"""Compatibility shim for optional groupchat surface.\n\n'
+                    "This package currently has no concrete local implementation. Keep imports safe so\n"
+                    "optional tool/module discovery can skip it without crashing startup.\n"
+                    '"""\n\n'
+                    "from __future__ import annotations\n\n"
+                    "__all__: list[str] = []\n"
+                )
+                current_shim = shim_path.read_text(encoding="utf-8", errors="replace") if shim_path.exists() else ""
+                if current_shim != shim_text:
+                    shim_path.write_text(shim_text, encoding="utf-8")
+                    known_repairs.append("groupchat_shim")
+                    result.repairs.append(
+                        "Known startup repair: replaced crashing thomas.groupchat re-export with a safe shim."
+                    )
+
+                if known_repairs:
+                    retry_log = report_dir / f"probe_repaired_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+                    with retry_log.open("w", encoding="utf-8") as retry_fh:
+                        retry_proc = _spawn_thomas_server(
+                            py_exe=py_exe,
+                            root=root,
+                            host=str(relaunch_host),
+                            port=int(port),
+                            stdout=retry_fh,
+                            detached=bool(relaunch),
+                        )
+                        retry_started = False
+                        retry_keep_running = False
+                        retry_deadline = time.monotonic() + (8.0 if relaunch else 70.0)
+                        while time.monotonic() < retry_deadline:
+                            if _thomas_http_healthy(int(port)):
+                                retry_started = True
+                                if relaunch and retry_proc.poll() is None:
+                                    retry_keep_running = True
+                                break
+                            if retry_proc.poll() is not None:
+                                break
+                            _bootdoctor_sleep(0.25)
+
+                        if retry_started and retry_keep_running:
+                            result.repairs.append(
+                                f"Startup recovery launch after known repair left server running on {relaunch_host}:{int(port)}."
+                            )
+                        elif retry_started:
+                            result.repairs.append("Startup probe became healthy after known startup repair.")
+                            if retry_proc.poll() is None:
+                                _kill_pid(retry_proc.pid)
+                        elif relaunch and retry_proc.poll() is None:
+                            result.repairs.append(
+                                f"Startup recovery launch after known repair is still initializing on {relaunch_host}:{int(port)}; leaving the repaired server running for continued startup."
+                            )
+                        else:
+                            if retry_proc.poll() is None:
+                                _kill_pid(retry_proc.pid)
+                            retry_exit = retry_proc.poll()
+                            result.repairs.append(
+                                f"Startup probe still failed after known startup repair (exit={retry_exit if retry_exit is not None else 'running'}). Log: {retry_log}"
+                            )
                 else:
-                    exit_code = proc.poll()
                     result.repairs.append(
                         f"Startup probe failed (exit={exit_code if exit_code is not None else 'running'}). Log: {probe_log}"
                     )
@@ -641,17 +1114,25 @@ def run_boot_doctor(
 
     report_path = Path(report_path)
     _write_report(report_path, result)
-    recovered = _thomas_http_healthy(int(port))
+    runtime_state = probe_boot_runtime(int(port), host=str(relaunch_host or "127.0.0.1"))
+    severity = str(runtime_state.get("severity") or "fatal")
+    recovered = severity != "fatal"
+    actions = _default_bootdoctor_actions(severity, report_available=True)
     write_boot_doctor_status(
         root,
         status=("recovered" if recovered else "attention"),
         phase="report_complete",
-        message=(
-            "Thomas is healthy again." if recovered else "Boot Doctor finished, but Thomas still needs attention."
-        ),
+        message=_bootdoctor_status_message(severity=severity, recovered=recovered),
         reason=result.reason,
         port=int(port),
-        extra={"report_path": str(report_path)},
+        severity=severity,
+        recovered=recovered,
+        blocking=severity == "fatal",
+        report_path=report_path,
+        repairs=result.repairs,
+        ai_summary=result.ai_summary or result.offline_fallback_reason,
+        recommended_actions=actions,
+        probe_results=list(runtime_state.get("probe_results") or []),
     )
     write_boot_recovery_notice(
         root,
@@ -661,5 +1142,10 @@ def run_boot_doctor(
         recovered=recovered,
         offline_fallback_reason=result.offline_fallback_reason,
         ai_summary=result.ai_summary,
+        severity=severity,
+        blocking=severity == "fatal",
+        phase="report_complete",
+        recommended_actions=actions,
+        probe_results=list(runtime_state.get("probe_results") or []),
     )
     return report_path

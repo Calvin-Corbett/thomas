@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import io
@@ -6,18 +6,19 @@ import json
 import os
 
 import pytest
+
 pytest.importorskip("PIL")
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from thomas.intake.api import router
 from thomas.intake._internal.config import IntakeStorageConfig
 from thomas.intake._internal.store import IntakeStore
+from thomas.intake.api import router
 
 
 @pytest.fixture()
-def client(tmp_path: "pytest.PathLike[str]") -> TestClient:
+def client(tmp_path: pytest.PathLike[str]) -> TestClient:
     # isolate store to temp dir for tests
     os.environ["THOMAS_STATE_DIR"] = str(tmp_path)
     app = FastAPI()
@@ -84,10 +85,18 @@ def test_multipart_image_intake(client: TestClient) -> None:
 
 def test_idempotency_dedupe(client: TestClient) -> None:
     headers = {"Idempotency-Key": "abc123"}
-    r1 = client.post("/api/intake/clipboard", headers=headers, json={"source": "clipboard", "content_type": "text/plain", "text": "X"})
+    r1 = client.post(
+        "/api/intake/clipboard",
+        headers=headers,
+        json={"source": "clipboard", "content_type": "text/plain", "text": "X"},
+    )
     assert r1.status_code == 200
     d1 = r1.json()
-    r2 = client.post("/api/intake/clipboard", headers=headers, json={"source": "clipboard", "content_type": "text/plain", "text": "X"})
+    r2 = client.post(
+        "/api/intake/clipboard",
+        headers=headers,
+        json={"source": "clipboard", "content_type": "text/plain", "text": "X"},
+    )
     assert r2.status_code == 200
     d2 = r2.json()
     assert d2["deduped"] is True
@@ -115,5 +124,3 @@ def test_list_and_get_item(client: TestClient) -> None:
     gi = client.get(f"/api/intake/items/{item_id}")
     assert gi.status_code == 200
     assert gi.json()["item_id"] == item_id
-
-

@@ -5,8 +5,8 @@ Tests for columnar I/O formats: Parquet, CSV, JSON, Arrow.
 import os
 import tempfile
 
-from thomas.columnar._types import ColumnType, Field, Schema
-from thomas.columnar.io_formats import (
+from thomas.marketplace.columnar._types import ColumnType, Field, Schema
+from thomas.marketplace.columnar.io_formats import (
     ArrowIPCReader,
     ArrowIPCWriter,
     CSVReader,

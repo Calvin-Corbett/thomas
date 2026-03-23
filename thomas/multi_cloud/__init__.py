@@ -1,29 +1,3 @@
-"""Multi-cloud management for AWS, Azure, GCP, and Alibaba.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.multi_cloud."""
 
-Provides cloud provider abstraction, multi-region resource
-provisioning, cost optimization, and failover management.
-"""
-
-from .core import (
-    AWSConnector,
-    CloudConnector,
-    CloudProvider,
-    CloudRegion,
-    CostMetrics,
-    MultiCloudManager,
-    ResourceConfig,
-    ResourceType,
-)
-
-__all__ = [
-    "CloudProvider",
-    "ResourceType",
-    "CloudRegion",
-    "ResourceConfig",
-    "CostMetrics",
-    "CloudConnector",
-    "AWSConnector",
-    "MultiCloudManager",
-]
-
-__version__ = "1.0.0"
+from thomas.marketplace.multi_cloud import *  # noqa: F401,F403

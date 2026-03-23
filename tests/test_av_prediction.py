@@ -2,13 +2,13 @@
 
 import numpy as np
 
-from thomas.autonomous_vehicles._types import (
+from thomas.marketplace.autonomous_vehicles._types import (
     ManeuverType,
     Obstacle,
     ObstacleType,
     Vector2D,
 )
-from thomas.autonomous_vehicles.prediction import (
+from thomas.marketplace.autonomous_vehicles.prediction import (
     ConstantAccelerationModel,
     ConstantVelocityModel,
     InteractionAwarePredictor,

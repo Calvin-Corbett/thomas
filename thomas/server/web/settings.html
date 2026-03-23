@@ -923,6 +923,96 @@
             </div>
           </div>
 
+          <div class="settings-group">
+            <div class="group-title">Isolated Desktop Mode</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="isolatedDesktopStatusBadge">
+                <span class="status-indicator"></span>
+                <span id="isolatedDesktopStatusText">Not Enabled</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Enable Isolated Desktop Mode</div>
+                <div class="setting-description">Run desktop workflows in a dedicated worker instead of your live mouse session.</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="isolatedDesktopEnabled" data-setting="isolatedDesktopEnabled" aria-label="Toggle isolated desktop mode" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Worker VM Source</div>
+                <div class="setting-description">Tell Thomas whether to use an existing worker VM or create one from a template disk.</div>
+              </div>
+              <div class="setting-control">
+                <select id="isolatedDesktopVmSource" class="dropdown-select">
+                  <option value="unconfigured">Select a source</option>
+                  <option value="existing_vm">Use existing VM</option>
+                  <option value="template_disk">Create from template disk</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Worker VM Name</div>
+                <div class="setting-description">The Hyper-V VM Thomas will attach to or create.</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="isolatedDesktopVmName" class="text-input" placeholder="Bobs_Chromebook-desktop-vm" />
+              </div>
+            </div>
+            <div class="setting-item" id="isolatedDesktopTemplateItem">
+              <div class="setting-label">
+                <div class="setting-name">Template Disk Path</div>
+                <div class="setting-description">Path to a template VHDX Thomas can clone into a worker VM.</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="isolatedDesktopTemplateVhdx" class="text-input" placeholder="C:\VMs\ThomasWorkerTemplate.vhdx" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Remote Trust Mode</div>
+                <div class="setting-description">How often Thomas should ask before using a remote worker fallback.</div>
+              </div>
+              <div class="setting-control">
+                <select id="isolatedDesktopTrustMode" class="dropdown-select">
+                  <option value="ask_every_time">Ask Every Time</option>
+                  <option value="remembered">Remember Choice</option>
+                  <option value="always_allow">Always Allow</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Current State</div>
+                <div class="setting-description" id="isolatedDesktopNextAction">Enable isolated desktop mode in Thomas settings.</div>
+              </div>
+              <div class="setting-control">
+                <div class="setting-description" id="isolatedDesktopNote">No worker VM source configured yet.</div>
+              </div>
+            </div>
+            <div class="button-group desktop-mode-actions">
+              <button class="btn btn-primary" id="saveIsolatedDesktopButton" onclick="saveIsolatedDesktopSettings()">
+                <i class="ph ph-floppy-disk"></i>
+                Save Desktop Settings
+              </button>
+              <button class="btn btn-secondary" id="installHostServiceButton" onclick="installIsolatedDesktopMode()">
+                <i class="ph ph-shield-check"></i>
+                Install Host Service
+              </button>
+              <button class="btn btn-secondary" id="openViewerButton" onclick="openIsolatedDesktopViewer()">
+                <i class="ph ph-desktop"></i>
+                Open Viewer
+              </button>
+              <button class="btn btn-secondary" id="refreshDesktopStatusButton" onclick="refreshIsolatedDesktopStatus()">
+                <i class="ph ph-arrow-clockwise"></i>
+                Refresh Status
+              </button>
+            </div>
+          </div>
+
           <div class="button-group">
             <button class="btn btn-primary" onclick="saveSection('advanced')">
               <i class="ph ph-check"></i>

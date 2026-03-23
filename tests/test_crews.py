@@ -10,23 +10,23 @@ Tests cover:
 
 import unittest
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Callable
-
+from typing import Any
 
 # Note: These imports assume the modules exist or will be created
 try:
-    from thomas.crews.types import AgentRole, TaskStatus
-    from thomas.crews.agent import CrewAgent
-    from thomas.crews.task import Task
-    from thomas.crews.crew import Crew
-    from thomas.crews.self_correction import SelfCorrection
-    from thomas.crews.delegation import Delegation
+    from thomas.marketplace.crews.agent import CrewAgent
+    from thomas.marketplace.crews.crew import Crew
+    from thomas.marketplace.crews.delegation import Delegation
+    from thomas.marketplace.crews.self_correction import SelfCorrection
+    from thomas.marketplace.crews.task import Task
+    from thomas.marketplace.crews.types import AgentRole, TaskStatus
 except ImportError:
     # Fallback: define minimal mock classes
     from enum import Enum
 
     class AgentRole(str, Enum):
         """Agent roles in crew."""
+
         LEADER = "leader"
         WORKER = "worker"
         SPECIALIST = "specialist"
@@ -34,6 +34,7 @@ except ImportError:
 
     class TaskStatus(str, Enum):
         """Task execution status."""
+
         PENDING = "pending"
         IN_PROGRESS = "in_progress"
         COMPLETED = "completed"
@@ -41,15 +42,15 @@ except ImportError:
 
     class CrewAgent:
         """Individual agent in a crew."""
-        def __init__(self, name: str, role: AgentRole = AgentRole.WORKER,
-                     capabilities: List[str] = None):
+
+        def __init__(self, name: str, role: AgentRole = AgentRole.WORKER, capabilities: list[str] = None):
             self.name = name
             self.role = role
             self.capabilities = capabilities or []
             self.status = "idle"
             self.tasks_completed = 0
 
-        def execute_task(self, task: "Task") -> Dict[str, Any]:
+        def execute_task(self, task: "Task") -> dict[str, Any]:
             """Execute a task."""
             self.status = "working"
             result = {"agent": self.name, "task": task.name, "result": "completed"}
@@ -65,9 +66,10 @@ except ImportError:
 
     class Task:
         """Task for agents to execute."""
-        def __init__(self, name: str, description: str = "",
-                     required_capabilities: List[str] = None,
-                     priority: int = 1):
+
+        def __init__(
+            self, name: str, description: str = "", required_capabilities: list[str] = None, priority: int = 1
+        ):
             self.name = name
             self.description = description
             self.required_capabilities = required_capabilities or []
@@ -80,7 +82,7 @@ except ImportError:
             """Assign task to agent."""
             self.assigned_agent = agent
 
-        def execute(self) -> Dict[str, Any]:
+        def execute(self) -> dict[str, Any]:
             """Execute the task."""
             if not self.assigned_agent:
                 raise ValueError("Task not assigned to agent")
@@ -92,7 +94,8 @@ except ImportError:
 
     class Crew:
         """Collection of agents working together."""
-        def __init__(self, agents: List[CrewAgent], name: str = "default"):
+
+        def __init__(self, agents: list[CrewAgent], name: str = "default"):
             self.agents = agents
             self.name = name
             self.tasks = []
@@ -110,7 +113,7 @@ except ImportError:
                         task.assign_to(agent)
                         break
 
-        def execute_sequential(self) -> List[Dict[str, Any]]:
+        def execute_sequential(self) -> list[dict[str, Any]]:
             """Execute all tasks sequentially."""
             self.assign_tasks()
             results = []
@@ -119,31 +122,27 @@ except ImportError:
                 if task.assigned_agent:
                     result = task.execute()
                     results.append(result)
-                    self.execution_log.append({
-                        "task": task.name,
-                        "agent": task.assigned_agent.name,
-                        "status": "completed"
-                    })
+                    self.execution_log.append(
+                        {"task": task.name, "agent": task.assigned_agent.name, "status": "completed"}
+                    )
                 else:
-                    self.execution_log.append({
-                        "task": task.name,
-                        "status": "unassigned"
-                    })
+                    self.execution_log.append({"task": task.name, "status": "unassigned"})
 
             return results
 
     class SelfCorrection:
         """Self-correction mechanism for error handling."""
+
         def __init__(self, max_iterations: int = 3):
             self.max_iterations = max_iterations
             self.iteration = 0
             self.errors = []
 
-        def evaluate(self, result: Dict[str, Any]) -> bool:
+        def evaluate(self, result: dict[str, Any]) -> bool:
             """Evaluate if result is acceptable."""
             return result.get("status") == "success" or result.get("result") is not None
 
-        def correct(self, result: Dict[str, Any], error: str) -> Dict[str, Any]:
+        def correct(self, result: dict[str, Any], error: str) -> dict[str, Any]:
             """Attempt to correct error."""
             self.iteration += 1
             self.errors.append(error)
@@ -156,20 +155,18 @@ except ImportError:
 
     class Delegation:
         """Delegation mechanism for task handoff."""
+
         def __init__(self):
             self.delegations = []
 
         def delegate(self, task: Task, from_agent: CrewAgent, to_agent: CrewAgent) -> None:
             """Delegate task from one agent to another."""
-            self.delegations.append({
-                "task": task.name,
-                "from": from_agent.name,
-                "to": to_agent.name,
-                "timestamp": datetime.now()
-            })
+            self.delegations.append(
+                {"task": task.name, "from": from_agent.name, "to": to_agent.name, "timestamp": datetime.now()}
+            )
             task.assign_to(to_agent)
 
-        def get_delegation_history(self) -> List[Dict]:
+        def get_delegation_history(self) -> list[dict]:
             """Get all delegation history."""
             return self.delegations
 
@@ -316,7 +313,7 @@ class TestCrew(unittest.TestCase):
         self.agents = [
             CrewAgent("Alice", capabilities=["analysis", "writing"]),
             CrewAgent("Bob", capabilities=["coding", "testing"]),
-            CrewAgent("Charlie", capabilities=["design", "architecture"])
+            CrewAgent("Charlie", capabilities=["design", "architecture"]),
         ]
         self.crew = Crew(self.agents, name="Development Team")
 

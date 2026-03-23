@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.cv import core, segmentation
-from thomas.cv._exceptions import InvalidParameterError
+from thomas.marketplace.cv import core, segmentation
+from thomas.marketplace.cv._exceptions import InvalidParameterError
 
 
 class TestOtsuThreshold:

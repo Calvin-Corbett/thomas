@@ -410,7 +410,6 @@ def test_gate_parent_throughput_json_fail_payload(tmp_path: Path, monkeypatch, c
     assert int(parent_payload.get("required_worker_count") or 0) == 1
 
 
-
 def test_gate_accepts_explicit_fallback_scope_without_claim(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,

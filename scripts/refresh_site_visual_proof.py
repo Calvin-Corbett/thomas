@@ -7,9 +7,10 @@ import json
 import shutil
 import subprocess
 import sys
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from PIL import Image, ImageChops
 
@@ -267,9 +268,7 @@ def _apply_pixel_diff_gate(
     metrics["pixel_diff_footer_focus_ratio"] = float(comparisons["footer_focus"]["diff_ratio"])
     metrics["pixel_diff_max_ratio"] = float(max_ratio)
     metrics["pixel_diff_size_mismatch_count"] = int(size_mismatch_count)
-    assertions["pixel_diff_within_threshold"] = (
-        max_ratio <= float(threshold_ratio) and size_mismatch_count == 0
-    )
+    assertions["pixel_diff_within_threshold"] = max_ratio <= float(threshold_ratio) and size_mismatch_count == 0
 
     runtime_report["pixel_diff"] = {
         "threshold_ratio": float(threshold_ratio),

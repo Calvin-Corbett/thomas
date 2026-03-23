@@ -7,10 +7,10 @@ pytestmark = pytest.mark.xfail(
 """Tests for thomas.sandbox module."""
 import unittest
 
-from thomas.sandbox.executor import SubprocessExecutor
-from thomas.sandbox.manager import SandboxManager
-from thomas.sandbox.restricted import RestrictedExecutor
-from thomas.sandbox.types import CodeLanguage, SandboxConfig, SandboxType
+from thomas.marketplace.sandbox.executor import SubprocessExecutor
+from thomas.marketplace.sandbox.manager import SandboxManager
+from thomas.marketplace.sandbox.restricted import RestrictedExecutor
+from thomas.marketplace.sandbox.types import CodeLanguage, SandboxConfig, SandboxType
 
 
 class TestSubprocessExecutor(unittest.TestCase):

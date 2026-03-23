@@ -2,12 +2,12 @@
 Tests for columnar storage: column chunks, row groups, and file operations.
 """
 
-from thomas.columnar._types import (
+from thomas.marketplace.columnar._types import (
     ColumnType,
     Field,
     Schema,
 )
-from thomas.columnar.storage import (
+from thomas.marketplace.columnar.storage import (
     ColumnarFileReader,
     ColumnarFileWriter,
     ColumnChunkReader,

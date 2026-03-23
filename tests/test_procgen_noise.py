@@ -4,8 +4,8 @@ Tests for noise generation functions.
 
 import pytest
 
-from thomas.procgen._exceptions import InvalidConfigError
-from thomas.procgen.noise import (
+from thomas.marketplace.procgen._exceptions import InvalidConfigError
+from thomas.marketplace.procgen.noise import (
     PerlinNoise,
     SimplexNoise,
     WorleyNoise,

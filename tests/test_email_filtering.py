@@ -4,8 +4,8 @@ Tests for email filtering functionality.
 Tests filter rules, Sieve-like syntax parsing, and Bayesian spam filtering.
 """
 
-from thomas.email_protocol._types import EmailAddress, EmailMessage
-from thomas.email_protocol.filtering import (
+from thomas.marketplace.email_protocol._types import EmailAddress, EmailMessage
+from thomas.marketplace.email_protocol.filtering import (
     BayesianSpamFilter,
     FilterAction,
     FilterEngine,

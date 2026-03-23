@@ -11,7 +11,14 @@ from typing import Any
 from aiohttp import web
 from pydantic import ValidationError
 
-from thomas.observability.event_recorder import record_event
+try:
+    from thomas.observability.event_recorder import record_event
+except Exception:  # pragma: no cover - optional observability dependency
+
+    def record_event(*_args, **_kwargs):
+        return None
+
+
 from thomas.preferences.store import PreferencesPatch, PreferencesResponse, PreferencesStore, get_db_path
 
 RequireAccessFn = Callable[[web.Request], None]
@@ -108,6 +115,12 @@ def register_preferences_routes(
 
         if not isinstance(payload, dict):
             raise web.HTTPBadRequest(text="payload must be a JSON object")
+
+        advanced_payload = payload.get("advanced")
+        if isinstance(advanced_payload, dict) and "security" in advanced_payload:
+            raise web.HTTPBadRequest(
+                text="advanced.security must be changed via /api/security/third-party-agent-access"
+            )
 
         try:
             patch = PreferencesPatch(**payload)

@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.music import chords
-from thomas.music._exceptions import InvalidChordError
-from thomas.music._types import Accidental, ChordQuality, Note, NoteName, Pitch
+from thomas.marketplace.music import chords
+from thomas.marketplace.music._exceptions import InvalidChordError
+from thomas.marketplace.music._types import Accidental, ChordQuality, Note, NoteName, Pitch
 
 
 class TestChordConstruction:

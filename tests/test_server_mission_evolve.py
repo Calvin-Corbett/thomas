@@ -5,7 +5,7 @@ import unittest
 
 from aiohttp import web
 
-from thomas.autonomy.store import AutonomyStore
+from thomas.marketplace.autonomy.store import AutonomyStore
 from thomas.server.routes.mission_tasks import build_mission_task_handlers
 
 

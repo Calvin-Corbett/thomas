@@ -5,9 +5,9 @@ Tests for voice pitch detection module.
 import numpy as np
 import pytest
 
-from thomas.voice._exceptions import PitchDetectionError
-from thomas.voice._types import AudioSample, PitchContour
-from thomas.voice.pitch import PitchDetector
+from thomas.marketplace.voice._exceptions import PitchDetectionError
+from thomas.marketplace.voice._types import AudioSample, PitchContour
+from thomas.marketplace.voice.pitch import PitchDetector
 
 
 class TestPitchDetector:

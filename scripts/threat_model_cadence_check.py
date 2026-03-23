@@ -6,8 +6,8 @@ import argparse
 import json
 from pathlib import Path
 
-from thomas.security.incident_drill import _validate_scoped_path
-from thomas.security.threat_model_cadence import evaluate_threat_model_cadence
+from thomas.marketplace.security.incident_drill import _validate_scoped_path
+from thomas.marketplace.security.threat_model_cadence import evaluate_threat_model_cadence
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
 

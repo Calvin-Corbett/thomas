@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from thomas.social_platform import FeedEngine, Post
+from thomas.marketplace.social_platform import FeedEngine, Post
 
 
 class TestFeedEngine:
@@ -28,7 +28,7 @@ class TestFeedEngine:
 
         # Add reactions to create engagement
         for _ in range(engagement):
-            from thomas.social_platform import Reaction, ReactionType
+            from thomas.marketplace.social_platform import Reaction, ReactionType
 
             reaction = Reaction(user_id=uuid4(), reaction_type=ReactionType.LIKE)
             post.reactions.append(reaction)
@@ -194,7 +194,7 @@ class TestFeedEngine:
 
     def test_feed_impressions_tracking(self) -> None:
         """Test tracking feed impressions."""
-        from thomas.social_platform import FeedItem
+        from thomas.marketplace.social_platform import FeedItem
 
         post = self._create_post()
         feed_item = FeedItem(post=post)
@@ -214,7 +214,7 @@ class TestFeedEngine:
 
     def test_get_post_not_found(self) -> None:
         """Test retrieving non-existent post."""
-        from thomas.social_platform import PostNotFoundError
+        from thomas.marketplace.social_platform import PostNotFoundError
 
         with pytest.raises(PostNotFoundError):
             self.engine.get_post(uuid4())

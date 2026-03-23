@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from thomas.companion.contracts import ModuleContract, UpdateBundleManifest
+from thomas.marketplace.companion.contracts import ModuleContract, UpdateBundleManifest
 
 
 def test_module_contract_parses_valid_payload() -> None:

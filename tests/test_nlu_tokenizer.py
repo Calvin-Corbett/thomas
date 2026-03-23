@@ -4,7 +4,7 @@ Tests for tokenizer module.
 
 import unittest
 
-from thomas.nlu.tokenizer import BPETokenizer, CharacterNGramExtractor, Tokenizer
+from thomas.marketplace.nlu.tokenizer import BPETokenizer, CharacterNGramExtractor, Tokenizer
 
 
 class TestTokenizer(unittest.TestCase):
@@ -149,7 +149,7 @@ class TestBPETokenizer(unittest.TestCase):
 
     def test_bpe_untrained_error(self) -> None:
         """Test error when using untrained BPE."""
-        from thomas.nlu._exceptions import TokenizationError
+        from thomas.marketplace.nlu._exceptions import TokenizationError
 
         with self.assertRaises(TokenizationError):
             self.bpe.tokenize("test")

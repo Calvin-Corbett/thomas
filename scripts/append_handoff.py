@@ -17,15 +17,11 @@ DEFAULT_LOG = ROOT / "docs" / "ops" / "agent_handoff_log.md"
 
 def _git_info() -> tuple[str, str]:
     try:
-        head = subprocess.check_output(
-            ["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True
-        ).strip()
+        head = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], cwd=ROOT, text=True).strip()
     except Exception:
         head = "unknown"
     try:
-        branch = subprocess.check_output(
-            ["git", "branch", "--show-current"], cwd=ROOT, text=True
-        ).strip()
+        branch = subprocess.check_output(["git", "branch", "--show-current"], cwd=ROOT, text=True).strip()
     except Exception:
         branch = "unknown"
     return head, branch

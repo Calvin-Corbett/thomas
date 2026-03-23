@@ -9,18 +9,18 @@ from datetime import datetime, timezone
 
 import pytest
 
-from thomas.email_protocol._exceptions import (
+from thomas.marketplace.email_protocol._exceptions import (
     IMAPAuthenticationError,
     IMAPError,
     IMAPProtocolError,
 )
-from thomas.email_protocol._types import (
+from thomas.marketplace.email_protocol._types import (
     EmailAddress,
     EmailMessage,
     Flag,
     SearchCriteria,
 )
-from thomas.email_protocol.imap import (
+from thomas.marketplace.email_protocol.imap import (
     IMAPClient,
     IMAPResponse,
     IMAPState,

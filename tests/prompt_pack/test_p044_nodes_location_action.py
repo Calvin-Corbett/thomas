@@ -5,12 +5,12 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from thomas.nodes.p044_nodes_location_action import (
+from thomas.cli.commands.nodes import p044_nodes_location_action as cli_mod
+from thomas.marketplace.nodes.p044_nodes_location_action import (
     NodesLocationActionError,
     NodesLocationActionInput,
     get_node_location,
 )
-from thomas.cli.commands.nodes import p044_nodes_location_action as cli_mod
 
 
 class StubInvoker:
@@ -89,6 +89,7 @@ def test_location_action_rejects_out_of_range_lat_lon():
     class BadPayloadInvoker:
         async def node_invoke(self, node: str, command: str, params, *, timeout_ms=None, idempotency_key=None):
             return {"lat": 999, "lon": 0, "timestamp": 1700000000000}
+
     with pytest.raises(NodesLocationActionError) as ei:
         asyncio.run(get_node_location(NodesLocationActionInput(node="node-1"), invoker=BadPayloadInvoker()))
     assert ei.value.code == "invalid_response"

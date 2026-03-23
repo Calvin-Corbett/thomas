@@ -2,8 +2,8 @@
 Tests for power grid simulation and control.
 """
 
-from thomas.energy._types import BusState, BusType, BusVoltage, EnergySource, Grid, Load, PowerPlant
-from thomas.energy.grid import (
+from thomas.marketplace.energy._types import BusState, BusType, BusVoltage, EnergySource, Grid, Load, PowerPlant
+from thomas.marketplace.energy.grid import (
     FrequencyRegulator,
     GridController,
     PowerFlowSolver,

@@ -1,5 +1,6 @@
 import unittest
-from thomas.realtime.protocol import parse_json_message, ProtocolError
+
+from thomas.marketplace.realtime.protocol import ProtocolError, parse_json_message
 
 
 class TestProtocol(unittest.TestCase):
@@ -11,4 +12,4 @@ class TestProtocol(unittest.TestCase):
 
     def test_parse_invalid(self):
         with self.assertRaises(ProtocolError):
-            parse_json_message('[]')
+            parse_json_message("[]")

@@ -1,9 +1,15 @@
 
     // State and Helpers
     const PREFERENCES_API = '/api/preferences';
+    const DESKTOP_STATUS_API = '/api/onboarding/desktop/status';
+    const DESKTOP_INSTALL_API = '/api/onboarding/desktop/install';
+    const DESKTOP_TRUST_API = '/api/onboarding/desktop/trust';
+    const DESKTOP_VM_SOURCE_API = '/api/onboarding/desktop/vm-source';
+    const DESKTOP_VIEWER_API = '/api/onboarding/desktop/open-viewer';
     const settings = {};
     let currentSection = 'general';
     let pendingConfirmAction = null;
+    let isolatedDesktopState = null;
 
     function defaultLegacySettings() {
       return {
@@ -299,10 +305,12 @@
         const data = await response.json();
         Object.assign(settings, buildLegacySettings(data));
         populateForm();
+        await refreshIsolatedDesktopStatus();
       } catch (error) {
         console.error('Error loading settings:', error);
         Object.assign(settings, buildLegacySettings({}));
         populateForm();
+        await refreshIsolatedDesktopStatus();
         showToast('Failed to load settings', 'error');
       }
     }
@@ -440,6 +448,9 @@
 
         // Find matching settings and switch to relevant section
         const sections = {
+          'isolated desktop': 'advanced',
+          'desktop mode': 'advanced',
+          'vm': 'advanced',
           'agent name': 'general',
           'theme': 'general',
           'language': 'general',
@@ -516,6 +527,7 @@
         const data = await response.json();
         Object.assign(settings, buildLegacySettings(data));
         populateForm();
+        await refreshIsolatedDesktopStatus();
         showToast('Settings saved successfully', 'success');
       } catch (error) {
         console.error('Error saving settings:', error);
@@ -748,3 +760,104 @@
       setTimeout(() => toast.remove(), 5000);
     }
   
+
+
+    async function refreshIsolatedDesktopStatus() {
+      try {
+        const response = await fetch(DESKTOP_STATUS_API);
+        if (!response.ok) throw new Error('Failed to load isolated desktop status');
+        const payload = await response.json();
+        isolatedDesktopState = payload.isolated_desktop || null;
+        renderIsolatedDesktopState();
+      } catch (error) {
+        console.error('Error loading isolated desktop status:', error);
+        showToast('Failed to load isolated desktop status', 'error');
+      }
+    }
+
+    function renderIsolatedDesktopState() {
+      const state = isolatedDesktopState || {};
+      setToggle('isolatedDesktopEnabled', !!state.enabled);
+      setSelectValue('isolatedDesktopTrustMode', state.trust_mode || 'ask_every_time');
+      const localVm = state.local_vm || {};
+      setSelectValue('isolatedDesktopVmSource', localVm.source_type || 'unconfigured');
+      setInputValue('isolatedDesktopVmName', localVm.vm_name || '');
+      setInputValue('isolatedDesktopTemplateVhdx', localVm.template_vhdx || '');
+      const badge = document.getElementById('isolatedDesktopStatusBadge');
+      const statusText = document.getElementById('isolatedDesktopStatusText');
+      const nextAction = document.getElementById('isolatedDesktopNextAction');
+      const note = document.getElementById('isolatedDesktopNote');
+      const templateItem = document.getElementById('isolatedDesktopTemplateItem');
+      const installBtn = document.getElementById('installHostServiceButton');
+      const viewerBtn = document.getElementById('openViewerButton');
+      if (badge) {
+        badge.classList.remove('status-connected', 'status-disconnected', 'status-pending');
+        const installationState = String(state.installation_state || 'not_enabled');
+        if (installationState === 'local_vm_ready') badge.classList.add('status-connected');
+        else if (installationState === 'host_service_installing') badge.classList.add('status-pending');
+        else badge.classList.add('status-disconnected');
+      }
+      if (statusText) statusText.textContent = String(state.installation_state || 'not_enabled').replaceAll('_', ' ');
+      if (nextAction) nextAction.textContent = state.next_action || 'Select an existing worker VM or a template disk.';
+      if (note) note.textContent = state.note || 'Configure a worker VM source so Thomas can provision or attach the isolated desktop worker.';
+      if (templateItem) templateItem.style.display = (localVm.source_type || 'unconfigured') === 'template_disk' ? 'flex' : 'none';
+      if (installBtn) installBtn.disabled = !state.enabled;
+      if (viewerBtn) viewerBtn.disabled = !(state.viewer && state.viewer.available);
+    }
+
+    async function saveIsolatedDesktopSettings() {
+      const enabled = document.getElementById('isolatedDesktopEnabled').classList.contains('on');
+      const trustMode = document.getElementById('isolatedDesktopTrustMode').value;
+      const sourceType = document.getElementById('isolatedDesktopVmSource').value;
+      const vmName = document.getElementById('isolatedDesktopVmName').value.trim();
+      const templateVhdx = document.getElementById('isolatedDesktopTemplateVhdx').value.trim();
+      try {
+        await fetch('/api/onboarding/desktop/opt-in', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled, hidden_by_default: true }),
+        });
+        await fetch(DESKTOP_TRUST_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ trust_mode: trustMode }),
+        });
+        await fetch(DESKTOP_VM_SOURCE_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ source_type: sourceType, vm_name: vmName, template_vhdx: templateVhdx }),
+        });
+        await refreshIsolatedDesktopStatus();
+        showToast('Isolated desktop settings saved', 'success');
+      } catch (error) {
+        console.error('Error saving isolated desktop settings:', error);
+        showToast('Failed to save isolated desktop settings', 'error');
+      }
+    }
+
+    async function installIsolatedDesktopMode() {
+      try {
+        const response = await fetch(DESKTOP_INSTALL_API, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ enabled: true, hidden_by_default: true }),
+        });
+        if (!response.ok) throw new Error('Failed to launch isolated desktop install');
+        await refreshIsolatedDesktopStatus();
+        showToast('Host service install launched', 'success');
+      } catch (error) {
+        console.error('Error launching isolated desktop install:', error);
+        showToast('Failed to launch isolated desktop install', 'error');
+      }
+    }
+
+    async function openIsolatedDesktopViewer() {
+      try {
+        const response = await fetch(DESKTOP_VIEWER_API, { method: 'POST' });
+        if (!response.ok) throw new Error('Failed to open isolated desktop viewer');
+        showToast('Viewer launch requested', 'success');
+      } catch (error) {
+        console.error('Error opening isolated desktop viewer:', error);
+        showToast('Failed to open isolated desktop viewer', 'error');
+      }
+    }

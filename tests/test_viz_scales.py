@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from thomas.visualization._exceptions import InvalidScaleError
-from thomas.visualization.scales import (
+from thomas.marketplace.visualization._exceptions import InvalidScaleError
+from thomas.marketplace.visualization.scales import (
     CategoricalScale,
     LinearScale,
     LogarithmicScale,

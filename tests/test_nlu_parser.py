@@ -4,9 +4,9 @@ Tests for dependency parsing module.
 
 import unittest
 
-from thomas.nlu._exceptions import ParsingError
-from thomas.nlu._types import Dependency, ParseTree, POSTag, Sentence, Span, Token
-from thomas.nlu.parser import DependencyParser, ParserState
+from thomas.marketplace.nlu._exceptions import ParsingError
+from thomas.marketplace.nlu._types import Dependency, ParseTree, POSTag, Sentence, Span, Token
+from thomas.marketplace.nlu.parser import DependencyParser, ParserState
 
 
 class TestParserState(unittest.TestCase):

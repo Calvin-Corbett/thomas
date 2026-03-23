@@ -1,79 +1,19 @@
-"""
-Thomas Channel Adapter Framework
+"""Backward-compatible bridge for the moved channels package."""
 
-A universal messaging channel system that allows Thomas to connect to any
-messaging platform through a unified interface. Provides centralized
-management of channel adapters, message routing, and delivery queuing.
+from __future__ import annotations
 
-This module exports the main public API:
-- ChannelAdapter: Abstract base class for implementing channel integrations
-- ChannelConfig: Configuration for a channel instance
-- UnifiedMessage: Standard message format across all channels
-- DeliveryReceipt: Confirmation of message delivery
-- ChannelHealth: Health status of a channel
-- ChannelRegistry: Central registry and lifecycle management
-- DeliveryQueue: Reliable message queue with retry logic
-- DeliveryPolicy: Delivery retry configuration
-- DeadLetterEntry: Failed message record
-- ChannelRouter: Message routing between Thomas and channels
-- ChannelAdapterError: Base exception for channel operations
-- ChannelAdapterErrorCode: Standard error codes
+from pathlib import Path
+from pkgutil import extend_path
 
-Example:
-    >>> from thomas.channels import ChannelRegistry, ChannelRouter
-    >>> registry = ChannelRegistry()
-    >>> router = ChannelRouter()
-    >>> # Register custom adapters
-    >>> registry.register_adapter('slack', SlackChannelAdapter)
-    >>> config = ChannelConfig(
-    ...     channel_id='slack-prod',
-    ...     channel_type='slack',
-    ...     credentials={'token': '...'}
-    ... )
-    >>> adapter = await registry.connect_channel(config)
-"""
+__path__ = extend_path(__path__, __name__)
+_MARKETPLACE_DIR = Path(__file__).resolve().parents[1] / "marketplace" / "channels"
+_MARKETPLACE_PATH = str(_MARKETPLACE_DIR)
+if _MARKETPLACE_DIR.exists() and _MARKETPLACE_PATH not in __path__:
+    __path__.append(_MARKETPLACE_PATH)
 
-from ._base import (
-    ChannelAdapter,
-    ChannelAdapterError,
-    ChannelAdapterErrorCode,
-    ChannelConfig,
-    ChannelHealth,
-    DeliveryReceipt,
-    UnifiedMessage,
-)
-from ._delivery import (
-    DeadLetterEntry,
-    DeliveryPolicy,
-    DeliveryQueue,
-)
-from ._registry import (
-    ChannelRegistry,
-    get_registry,
-)
-from ._router import ChannelRouter
+from thomas.marketplace.channels import *  # noqa: F401,F403
 
-__all__ = [
-    # Base classes and data structures
-    "ChannelAdapter",
-    "ChannelConfig",
-    "ChannelHealth",
-    "UnifiedMessage",
-    "DeliveryReceipt",
-    # Exceptions and error codes
-    "ChannelAdapterError",
-    "ChannelAdapterErrorCode",
-    # Registry
-    "ChannelRegistry",
-    "get_registry",
-    # Delivery
-    "DeliveryQueue",
-    "DeliveryPolicy",
-    "DeadLetterEntry",
-    # Router
-    "ChannelRouter",
-]
-
-__version__ = "1.0.0"
-__author__ = "Thomas Framework"
-__license__ = "MIT"
+del Path
+del extend_path
+del _MARKETPLACE_DIR
+del _MARKETPLACE_PATH

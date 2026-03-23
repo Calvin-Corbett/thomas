@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.project_mgmt._types import DependencyType, Task
-from thomas.project_mgmt.scheduling import ScheduleManager
+from thomas.marketplace.project_mgmt._types import DependencyType, Task
+from thomas.marketplace.project_mgmt.scheduling import ScheduleManager
 
 
 class TestScheduleManager:
@@ -60,7 +60,7 @@ class TestScheduleManager:
     ) -> None:
         """Test critical path calculation."""
         # Add dependencies
-        from thomas.project_mgmt._types import Dependency
+        from thomas.marketplace.project_mgmt._types import Dependency
 
         dep1 = Dependency(
             id="dep-1",
@@ -139,7 +139,7 @@ class TestScheduleManager:
         sample_tasks: dict,
     ) -> None:
         """Test schedule compression analysis."""
-        from thomas.project_mgmt._types import Dependency
+        from thomas.marketplace.project_mgmt._types import Dependency
 
         dep = Dependency(
             id="dep-1",
@@ -185,7 +185,7 @@ class TestScheduleManager:
         sample_tasks: dict,
     ) -> None:
         """Test finding tasks with no predecessors."""
-        from thomas.project_mgmt._types import Dependency
+        from thomas.marketplace.project_mgmt._types import Dependency
 
         dep = Dependency(
             id="dep-1",
@@ -206,7 +206,7 @@ class TestScheduleManager:
         sample_tasks: dict,
     ) -> None:
         """Test finding tasks with no successors."""
-        from thomas.project_mgmt._types import Dependency
+        from thomas.marketplace.project_mgmt._types import Dependency
 
         dep = Dependency(
             id="dep-1",

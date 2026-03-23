@@ -1,12 +1,12 @@
-import json
 import io
+import json
 from types import SimpleNamespace
 from unittest import mock
-
-import pytest
 from urllib import error as urlerror
 
-from thomas.channels.p090_channel_webhook_bridge_adapter import (
+import pytest
+
+from thomas.marketplace.channels.p090_channel_webhook_bridge_adapter import (
     WebhookBridgeAdapterError,
     WebhookBridgeSendRequest,
     send_via_webhook_bridge,
@@ -146,9 +146,13 @@ def test_cli_run_send_json_success(capsys):
 
 def test_cli_run_send_error_outputs_json(capsys):
     from thomas.cli.commands.channel_ops import p090_channel_webhook_bridge_adapter as cli_mod
-    from thomas.channels.p090_channel_webhook_bridge_adapter import WebhookBridgeAdapterError
+    from thomas.marketplace.channels.p090_channel_webhook_bridge_adapter import WebhookBridgeAdapterError
 
-    with mock.patch.object(cli_mod, "send_via_webhook_bridge", side_effect=WebhookBridgeAdapterError(code="missing_config", message="no url")):
+    with mock.patch.object(
+        cli_mod,
+        "send_via_webhook_bridge",
+        side_effect=WebhookBridgeAdapterError(code="missing_config", message="no url"),
+    ):
         code = cli_mod._run_send(
             url=None,
             text="hello",

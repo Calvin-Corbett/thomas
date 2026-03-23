@@ -18,12 +18,12 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from thomas.db_internals._exceptions import (
+from thomas.marketplace.db_internals._exceptions import (
     DuplicateKeyException,
     KeyNotFoundException,
 )
-from thomas.db_internals._types import Index
-from thomas.db_internals.btree import BPlusTree, BTreeKey, BTreeNode
+from thomas.marketplace.db_internals._types import Index
+from thomas.marketplace.db_internals.btree import BPlusTree, BTreeKey, BTreeNode
 
 
 class TestBTreeKeyBasic:

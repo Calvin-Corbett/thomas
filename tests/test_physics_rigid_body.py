@@ -4,8 +4,8 @@ Tests for rigid body physics.
 
 import pytest
 
-from thomas.physics._types import RigidBodyType, Vec3
-from thomas.physics.rigid_body import RigidBody
+from thomas.marketplace.physics._types import RigidBodyType, Vec3
+from thomas.marketplace.physics.rigid_body import RigidBody
 
 
 class TestRigidBodyCreation:

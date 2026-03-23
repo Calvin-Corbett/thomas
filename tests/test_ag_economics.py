@@ -9,7 +9,7 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.agriculture.economics import (
+from thomas.marketplace.agriculture.economics import (
     BreakEvenAnalysis,
     CropInsuranceAnalysis,
     EnterpriseBudget,

@@ -4,8 +4,8 @@ Tests for data partitioning: range, hash, list, and composite partitioning.
 
 import pytest
 
-from thomas.columnar._types import Statistics
-from thomas.columnar.partitioning import (
+from thomas.marketplace.columnar._types import Statistics
+from thomas.marketplace.columnar.partitioning import (
     CompositePartitioner,
     HashPartitioner,
     ListPartitioner,

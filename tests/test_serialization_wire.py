@@ -9,12 +9,12 @@ from io import BytesIO
 
 import pytest
 
-from thomas.serialization import (
+from thomas.marketplace.serialization import (
     CompressionType,
     DeserializationError,
     SerializationFormat,
 )
-from thomas.serialization.wire_format import (
+from thomas.marketplace.serialization.wire_format import (
     FramedStreamReader,
     FramedStreamWriter,
     WireFormatter,

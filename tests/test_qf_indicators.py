@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from thomas.quantfin import indicators
+from thomas.marketplace.quantfin import indicators
 
 
 class TestMovingAverages:

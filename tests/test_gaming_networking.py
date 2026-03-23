@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.gaming_platform._exceptions import NetworkingError
-from thomas.gaming_platform.networking import (
+from thomas.marketplace.gaming_platform._exceptions import NetworkingError
+from thomas.marketplace.gaming_platform.networking import (
     ClientConnection,
     ClientState,
     EntitySnapshot,

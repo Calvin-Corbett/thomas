@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.hr_platform._exceptions import PerformanceReviewError
-from thomas.hr_platform._types import CompetencyLevel, Employee, ReviewCycle
-from thomas.hr_platform.performance import PerformanceManager, ReviewCycleManager
+from thomas.marketplace.hr_platform._exceptions import PerformanceReviewError
+from thomas.marketplace.hr_platform._types import CompetencyLevel, Employee, ReviewCycle
+from thomas.marketplace.hr_platform.performance import PerformanceManager, ReviewCycleManager
 
 
 class TestPerformanceManager:

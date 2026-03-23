@@ -2,8 +2,8 @@
 Tests for particle system.
 """
 
-from thomas.physics._types import Vec3
-from thomas.physics.particles import Particle, ParticleEmitter, ParticleSystem
+from thomas.marketplace.physics._types import Vec3
+from thomas.marketplace.physics.particles import Particle, ParticleEmitter, ParticleSystem
 
 
 class TestParticle:

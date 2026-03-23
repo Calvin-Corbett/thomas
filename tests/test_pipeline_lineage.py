@@ -7,7 +7,7 @@ import sys
 sys.path.insert(0, "/sessions/zen-pensive-cannon/mnt/Thomas")
 
 
-from thomas.data_pipeline.lineage import (
+from thomas.marketplace.data_pipeline.lineage import (
     ColumnLineage,
     DataCatalog,
     DatasetMetadata,

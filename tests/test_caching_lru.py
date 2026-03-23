@@ -4,7 +4,7 @@ import threading
 import time
 from datetime import timedelta
 
-from thomas.caching import CacheConfig, LRUCache, TTLConfig
+from thomas.marketplace.caching import CacheConfig, LRUCache, TTLConfig
 
 
 class TestLRUBasicOps:

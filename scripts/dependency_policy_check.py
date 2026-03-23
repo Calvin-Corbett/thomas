@@ -1,16 +1,15 @@
-﻿"""Run dependency policy checks against pyproject dependencies."""
+"""Run dependency policy checks against pyproject dependencies."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
-from thomas.security.dependency_policy import evaluate_dependency_policy
+from thomas.marketplace.security.dependency_policy import evaluate_dependency_policy
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Check dependency policy constraints.")
     parser.add_argument("--pyproject", default="pyproject.toml", help="Path to pyproject.toml.")
     parser.add_argument("--json", dest="as_json", action="store_true", help="Emit machine-readable JSON output.")

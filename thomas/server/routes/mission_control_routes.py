@@ -11,6 +11,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.desktop_operator import manager as desktop_operator_manager
 from thomas.server.app_keys import APP_APPROVALS_BROKER
 
 from .mission_runtime_views import (
@@ -95,6 +96,114 @@ def build_mission_control_routes(
 
         out["pending_total"] = int(len(out["autonomy"]) + len(out["guardrails"]))
         return out
+
+    def _desktop_operator_snapshot_payload() -> (
+        tuple[dict[str, Any] | None, dict[str, Any] | None, list[dict[str, Any]]]
+    ):
+        try:
+            snapshot = desktop_operator_manager.get_global_desktop_operator_manager().status_snapshot()
+        except Exception:
+            return None, None, []
+        if not isinstance(snapshot, dict) or not snapshot:
+            return None, None, []
+
+        host_posture = snapshot.get("host_posture") if isinstance(snapshot.get("host_posture"), dict) else {}
+        active_session = snapshot.get("active_session") if isinstance(snapshot.get("active_session"), dict) else {}
+        session = active_session.get("session") if isinstance(active_session.get("session"), dict) else {}
+        window = active_session.get("window") if isinstance(active_session.get("window"), dict) else {}
+        viewer = snapshot.get("viewer") if isinstance(snapshot.get("viewer"), dict) else {}
+        if not viewer and isinstance(host_posture.get("viewer"), dict):
+            viewer = dict(host_posture.get("viewer") or {})
+        workflow_profiles = (
+            snapshot.get("workflow_profiles") if isinstance(snapshot.get("workflow_profiles"), list) else []
+        )
+        first_profile = workflow_profiles[0] if workflow_profiles and isinstance(workflow_profiles[0], dict) else {}
+        vm = snapshot.get("vm") if isinstance(snapshot.get("vm"), dict) else {}
+
+        workflow_profile = str(session.get("workflow_profile") or first_profile.get("workflow_profile") or "").strip()
+        adapter_name = str(session.get("adapter_name") or first_profile.get("adapter_name") or "").strip()
+        session_state = str(session.get("session_state") or ("running" if snapshot.get("running") else "idle")).strip()
+        risk_level = str(session.get("risk_level") or "low").strip() or "low"
+        magic_ready = bool(session.get("magic_ready", host_posture.get("magic_ready", False)))
+        installation_state = (
+            str(host_posture.get("installation_state") or snapshot.get("installation_state") or "not_enabled").strip()
+            or "not_enabled"
+        )
+        trust_mode = (
+            str(host_posture.get("trust_mode") or snapshot.get("trust_mode") or "ask_every_time").strip()
+            or "ask_every_time"
+        )
+        session_target = (
+            str(host_posture.get("session_target") or snapshot.get("session_target") or "local_vm").strip()
+            or "local_vm"
+        )
+        vm_id = str(vm.get("vm_id") or "").strip()
+        running = bool(snapshot.get("running"))
+
+        review_states = {"paused_for_approval", "blocked_by_policy", "verification_failed", "needs_rebind", "blocked"}
+        if session_state in review_states:
+            room = "review"
+            status = "blocked"
+        elif running:
+            room = "tools"
+            status = "running"
+        else:
+            room = "inbox"
+            status = "queued"
+
+        summary_bits = [
+            str(session.get("pending_approval_reason") or "").strip(),
+            str(host_posture.get("note") or "").strip(),
+            str(host_posture.get("next_action") or "").strip(),
+            str(snapshot.get("last_error") or "").strip(),
+        ]
+        summary = next((bit for bit in summary_bits if bit), "Desktop operator ready.")
+
+        agent = {
+            "id": "desktop:operator",
+            "source": "desktop_operator",
+            "kind": "service",
+            "module_id": "desktop.operator",
+            "name": "Desktop Operator",
+            "room": room,
+            "status": status,
+            "summary": summary,
+            "updated_at": _utc_iso_now(),
+            "service_id": str(snapshot.get("service_id") or "desktop.operator"),
+            "workflow_profile": workflow_profile,
+            "adapter_name": adapter_name,
+            "vm_id": vm_id,
+            "session_state": session_state,
+            "risk_level": risk_level,
+            "magic_ready": magic_ready,
+            "viewer_available": bool(viewer.get("available")),
+            "viewer_mode": str(viewer.get("mode") or "").strip(),
+            "viewer_command": str(viewer.get("command") or "").strip(),
+            "viewer_url": str(viewer.get("url") or "").strip(),
+            "viewer_takeover_supported": bool(viewer.get("takeover_supported")),
+            "installation_state": installation_state,
+            "trust_mode": trust_mode,
+            "session_target": session_target,
+            "running": running,
+        }
+        if window:
+            agent["window_title"] = str(window.get("title") or "").strip()
+            agent["window_monitor_id"] = str(window.get("monitor_id") or "").strip()
+
+        events: list[dict[str, Any]] = []
+        if summary:
+            events.append(
+                {
+                    "id": f"evt:desktop:operator:{installation_state}:{session_state or 'idle'}",
+                    "source": "desktop_operator",
+                    "agent_id": "desktop:operator",
+                    "run_id": "",
+                    "ts": _utc_iso_now(),
+                    "type": "status",
+                    "text": _trim_summary(summary, 160),
+                }
+            )
+        return snapshot, agent, events
 
     def _build_mission_control_payload() -> dict[str, Any]:
         rooms = [
@@ -298,6 +407,12 @@ def build_mission_control_routes(
                     }
                 )
 
+        desktop_snapshot, desktop_agent, desktop_events = _desktop_operator_snapshot_payload()
+        if desktop_agent is not None:
+            agents.append(desktop_agent)
+        if desktop_events:
+            events.extend(desktop_events)
+
         room_rank = {
             "planning": 0,
             "tools": 1,
@@ -334,6 +449,7 @@ def build_mission_control_routes(
             "ok": True,
             "generated_at": _utc_iso_now(),
             "rooms": rooms,
+            "desktop_operator": desktop_snapshot or {},
             "engine": {
                 "run_store_enabled": bool(run_store_enabled),
                 "autonomy_enabled": bool(autonomy_enabled),

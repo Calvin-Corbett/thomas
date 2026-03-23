@@ -7,9 +7,9 @@ from datetime import timedelta
 
 import pytest
 
-from thomas.monitoring._exceptions import StorageError
-from thomas.monitoring._types import Label, Metric, MetricSample, MetricType
-from thomas.monitoring.storage import Chunk, DownsamplePolicy, TimeSeriesDB
+from thomas.marketplace.monitoring._exceptions import StorageError
+from thomas.marketplace.monitoring._types import Label, Metric, MetricSample, MetricType
+from thomas.marketplace.monitoring.storage import Chunk, DownsamplePolicy, TimeSeriesDB
 
 
 class TestChunk:

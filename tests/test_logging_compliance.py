@@ -3,7 +3,7 @@
 import unittest
 from datetime import datetime, timedelta
 
-from thomas.logging_framework.compliance import (
+from thomas.marketplace.logging_framework.compliance import (
     AuditLogger,
     ComplianceReporter,
     GDPRCompliance,
@@ -11,8 +11,8 @@ from thomas.logging_framework.compliance import (
     PIIDetector,
     RetentionEnforcer,
 )
-from thomas.logging_framework.handlers import MemoryHandler
-from thomas.logging_framework.logger import Logger
+from thomas.marketplace.logging_framework.handlers import MemoryHandler
+from thomas.marketplace.logging_framework.logger import Logger
 
 
 class TestRetentionEnforcer(unittest.TestCase):

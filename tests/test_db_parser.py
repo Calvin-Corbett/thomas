@@ -17,8 +17,8 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from thomas.db_internals._exceptions import ParseException, SyntaxException
-from thomas.db_internals.query_parser import (
+from thomas.marketplace.db_internals._exceptions import ParseException, SyntaxException
+from thomas.marketplace.db_internals.query_parser import (
     Parser,
     Tokenizer,
     TokenType,

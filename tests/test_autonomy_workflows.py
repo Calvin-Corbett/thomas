@@ -1,7 +1,7 @@
 import os
 import unittest
 
-from thomas.autonomy.workflows import WorkflowRunner
+from thomas.marketplace.autonomy.workflows import WorkflowRunner
 
 
 class _ChainParallelAdapter:

@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.nlg.data_to_text import DataToTextError, DataToTextGenerator
+from thomas.marketplace.nlg.data_to_text import DataToTextError, DataToTextGenerator
 
 
 class TestStatisticalSummary:

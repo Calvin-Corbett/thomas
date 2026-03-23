@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from thomas.autonomy.nl_workflow_compiler import compile_nl_workflow_payload
+from thomas.marketplace.autonomy.nl_workflow_compiler import compile_nl_workflow_payload
 
 
 def test_compile_infers_parallel_workers_from_nl_text() -> None:
@@ -42,4 +42,3 @@ def test_compile_routing_without_routes_falls_back_to_chain() -> None:
     assert payload.get("steps")
     assert isinstance(meta, dict)
     assert "workflow(chain_fallback)" in (meta.get("changes") or [])
-

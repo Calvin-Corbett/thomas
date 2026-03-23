@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.legal._exceptions import InsufficientFundsError
-from thomas.legal._types import BillingStatus
-from thomas.legal.billing import BillingManager, TimeTracker
+from thomas.marketplace.legal._exceptions import InsufficientFundsError
+from thomas.marketplace.legal._types import BillingStatus
+from thomas.marketplace.legal.billing import BillingManager, TimeTracker
 
 
 class TestTimeTracker:

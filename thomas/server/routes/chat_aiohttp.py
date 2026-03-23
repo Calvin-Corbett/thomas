@@ -1,37 +1,17 @@
-"""Runtime composition generated from source fragments."""
+"""Compatibility shim for aiohttp chat route registration."""
 
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-_CURRENT_FILE = Path(__file__).resolve()
-for _parent in (_CURRENT_FILE.parent, *_CURRENT_FILE.parents):
-    _loader_marker = _parent / "scripts" / "monolith_source_loader.py"
-    if _loader_marker.exists():
-        if str(_parent) not in sys.path:
-            sys.path.insert(0, str(_parent))
-        break
-else:
-    raise RuntimeError("Unable to locate monolith_source_loader.py in repository root")
+from thomas.agent.loop import AgentLoop
 
-from scripts.monolith_source_loader import load_monolith_source
+from .chat_aiohttp_handlers import extract_missing_inputs, register_chat_routes
+from .chat_aiohttp_helpers import ChatRouteDeps, _resolve_app_value, _resolve_runtime_config
 
-load_monolith_source(
-    base_path=Path(__file__),
-    part_files=(
-        "chat_aiohttp_part01.py",
-        "chat_aiohttp_part02.py",
-        "chat_aiohttp_part03.py",
-    ),
-    namespace=globals(),
-)
-
-
-del _CURRENT_FILE
-
-del _loader_marker
-
-del _parent
-
-del load_monolith_source
-
-del sys
+__all__ = [
+    "AgentLoop",
+    "ChatRouteDeps",
+    "_resolve_app_value",
+    "_resolve_runtime_config",
+    "extract_missing_inputs",
+    "register_chat_routes",
+]

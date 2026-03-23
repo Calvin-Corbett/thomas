@@ -1,27 +1,3 @@
-"""Data quality checks: null rates, uniqueness, ranges, freshness."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.data_quality."""
 
-from thomas.data_quality.core import (
-    Check,
-    CheckResult,
-    CheckType,
-    FreshnessRule,
-    NullRateRule,
-    QualityMonitor,
-    QualityRule,
-    RangeRule,
-    UniquenessRule,
-)
-from thomas.data_quality.tools import register_data_quality_tools
-
-__all__ = [
-    "QualityMonitor",
-    "Check",
-    "CheckResult",
-    "CheckType",
-    "QualityRule",
-    "NullRateRule",
-    "UniquenessRule",
-    "RangeRule",
-    "FreshnessRule",
-    "register_data_quality_tools",
-]
+from thomas.marketplace.data_quality import *  # noqa: F401,F403

@@ -1,12 +1,12 @@
 """Tests for safety module."""
 
-from thomas.autonomous_vehicles._types import (
+from thomas.marketplace.autonomous_vehicles._types import (
     Obstacle,
     ObstacleType,
     Vector2D,
     VehicleState,
 )
-from thomas.autonomous_vehicles.safety import (
+from thomas.marketplace.autonomous_vehicles.safety import (
     FaultDetector,
     ODDCondition,
     OperationalDesignDomainChecker,

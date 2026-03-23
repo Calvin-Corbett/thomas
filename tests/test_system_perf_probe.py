@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from thomas.system.perf_profiler import PerfOptions, run_perf_probe
 
@@ -6,7 +6,6 @@ from thomas.system.perf_profiler import PerfOptions, run_perf_probe
 class _Result:
     def __init__(self, code: int) -> None:
         self.returncode = code
-
 
 
 def test_perf_probe_reports_percentiles_and_success_rate() -> None:

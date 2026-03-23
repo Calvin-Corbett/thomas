@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 
-from thomas.nodes.p043_nodes_screen_capture_action import (
+from thomas.marketplace.nodes.p043_nodes_screen_capture_action import (
     NodesScreenCaptureConfigError,
     NodesScreenCaptureExternalError,
     NodesScreenCaptureInputError,
@@ -13,7 +13,6 @@ from thomas.nodes.p043_nodes_screen_capture_action import (
     parse_nodes_screen_capture_request,
     run_nodes_screen_capture,
 )
-
 
 # A tiny 1x1 PNG (transparent) to keep tests lightweight.
 _PNG_1X1 = base64.b64decode(
@@ -167,6 +166,7 @@ def test_build_transport_from_config_requires_base_url() -> None:
 
 def test_cli_json_failure_missing_node_id(capsys) -> None:
     from thomas.cli.commands.nodes import p043_nodes_screen_capture_action as cli_mod
+
     rc = cli_mod.cli_main(["--json"])
     assert rc == 2
     out = capsys.readouterr().out.strip()
@@ -178,7 +178,7 @@ def test_cli_json_failure_missing_node_id(capsys) -> None:
 
 def test_cli_json_success(monkeypatch, capsys) -> None:
     from thomas.cli.commands.nodes import p043_nodes_screen_capture_action as cli_mod
-    from thomas.nodes.p043_nodes_screen_capture_action import NodesScreenCaptureResult
+    from thomas.marketplace.nodes.p043_nodes_screen_capture_action import NodesScreenCaptureResult
 
     def _fake_run(req, config=None, transport=None):
         return NodesScreenCaptureResult(

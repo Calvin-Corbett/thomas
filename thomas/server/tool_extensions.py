@@ -157,6 +157,9 @@ def _try_import(module_path: str, func_name: str):
         return getattr(mod, func_name)
     except (ImportError, ModuleNotFoundError, AttributeError):
         return None
+    except Exception as exc:
+        _log.debug("Skipping optional tool module %s.%s: %s", module_path, func_name, exc)
+        return None
 
 
 def register_all_optional_tools(registry) -> int:

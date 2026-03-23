@@ -11,26 +11,22 @@ from __future__ import annotations
 
 import argparse
 import subprocess
-import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, List, Sequence, Set
-
 
 ROOT = Path(__file__).resolve().parent.parent
 ROOT_DIRNAME = ROOT.name
 
-MODEL_SURFACE_EXACT: Set[str] = {
+MODEL_SURFACE_EXACT: set[str] = {
     "thomas.toml",
     "thomas/core/llm.py",
     "thomas/core/config.py",
     "thomas/server/web/models.json",
     "thomas/models/protocol.py",
 }
-MODEL_SURFACE_PREFIXES: Sequence[str] = (
-    "thomas/models/",
-)
+MODEL_SURFACE_PREFIXES: Sequence[str] = ("thomas/models/",)
 
-REQUIRED_CHANGED_EXACT: Set[str] = {
+REQUIRED_CHANGED_EXACT: set[str] = {
     "CHANGELOG.md",
     "docs/MODEL_ONBOARDING_LOG.md",
 }
@@ -43,7 +39,7 @@ REQUIRED_TEST_FILES: Sequence[str] = (
 )
 
 
-def _git_changed_files(base: str | None, head: str | None) -> List[str]:
+def _git_changed_files(base: str | None, head: str | None) -> list[str]:
     if head is None:
         head = "HEAD"
 
@@ -108,7 +104,7 @@ def _normalize_path(path: str) -> str:
         p = p[2:]
     prefix = ROOT_DIRNAME + "/"
     if p.startswith(prefix):
-        p = p[len(prefix):]
+        p = p[len(prefix) :]
     return p
 
 
@@ -118,7 +114,7 @@ def _is_model_surface(path: str) -> bool:
     return any(path.startswith(prefix) for prefix in MODEL_SURFACE_PREFIXES)
 
 
-def _ensure_paths_exist(paths: Iterable[str]) -> List[str]:
+def _ensure_paths_exist(paths: Iterable[str]) -> list[str]:
     missing = []
     for rel in paths:
         if not (ROOT / rel).exists():
@@ -138,7 +134,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
 
-    changed: List[str]
+    changed: list[str]
     if args.changed_file:
         changed = [_normalize_path(x) for x in args.changed_file if str(x).strip()]
     else:

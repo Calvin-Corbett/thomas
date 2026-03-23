@@ -9,7 +9,7 @@ import zipfile
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
-from thomas.observability import run_store
+from thomas.marketplace.observability import run_store
 from thomas.server.app import create_app
 
 

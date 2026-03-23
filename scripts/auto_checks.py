@@ -64,7 +64,9 @@ GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
 )
 
-TEST_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (("Full test suite", (PY, "-m", "pytest", "-q", "tests")),)
+TEST_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
+    ("Thomas step-up test protocol", (PY, "scripts/test_stepup_protocol.py")),
+)
 
 OPTIONAL_MODULES: tuple[tuple[str, str], ...] = (
     ("PIL", "Pillow"),

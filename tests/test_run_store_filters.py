@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from thomas.observability import run_store
+from thomas.marketplace.observability import run_store
 
 
 def _seed_runs() -> tuple[str, str]:

@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.webhooks._exceptions import SignatureVerificationError
-from thomas.webhooks._types import Secret
-from thomas.webhooks.security import (
+from thomas.marketplace.webhooks._exceptions import SignatureVerificationError
+from thomas.marketplace.webhooks._types import Secret
+from thomas.marketplace.webhooks.security import (
     IPAllowlist,
     RequestValidator,
     SecretRotator,

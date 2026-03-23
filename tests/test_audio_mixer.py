@@ -4,8 +4,8 @@ Tests for audio mixer functionality.
 
 import numpy as np
 
-from thomas.audio_engine._types import PanLaw
-from thomas.audio_engine.mixer import Mixer, MixerAutomation, VUMeter
+from thomas.marketplace.audio_engine._types import PanLaw
+from thomas.marketplace.audio_engine.mixer import Mixer, MixerAutomation, VUMeter
 
 
 class TestMixer:

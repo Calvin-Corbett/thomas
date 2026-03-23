@@ -1,21 +1,3 @@
-"""LLM chain/pipeline system with prompt chains, memory, and tools."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.chain."""
 
-from thomas.chain.core import (
-    ChainMemory,
-    ChainRegistry,
-    ChainStep,
-    ChainType,
-    LLMChain,
-    PromptTemplate,
-)
-from thomas.chain.tools import register_chain_tools
-
-__all__ = [
-    "LLMChain",
-    "ChainStep",
-    "ChainMemory",
-    "PromptTemplate",
-    "ChainRegistry",
-    "ChainType",
-    "register_chain_tools",
-]
+from thomas.marketplace.chain import *  # noqa: F401,F403

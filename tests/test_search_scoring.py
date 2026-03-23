@@ -1,6 +1,6 @@
 """Tests for scoring models."""
 
-from thomas.search_engine import (
+from thomas.marketplace.search_engine import (
     BM25,
     TFIDF,
     FieldBoost,

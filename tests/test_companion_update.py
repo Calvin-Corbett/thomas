@@ -5,8 +5,8 @@ import hmac
 import json
 from pathlib import Path
 
-from thomas.companion.kernel import CompanionKernel
-from thomas.companion.update import BundleVerifier, UpdateApplier
+from thomas.marketplace.companion.kernel import CompanionKernel
+from thomas.marketplace.companion.update import BundleVerifier, UpdateApplier
 
 
 def _write_bundle(tmp_path: Path, *, secret: str) -> Path:

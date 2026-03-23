@@ -5,9 +5,9 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from thomas.logging_framework._types import LogLevel, RotationPolicy
-from thomas.logging_framework.formatters import JSONFormatter
-from thomas.logging_framework.handlers import (
+from thomas.marketplace.logging_framework._types import LogLevel, RotationPolicy
+from thomas.marketplace.logging_framework.formatters import JSONFormatter
+from thomas.marketplace.logging_framework.handlers import (
     AsyncHandler,
     ConsoleHandler,
     FileHandler,
@@ -17,7 +17,7 @@ from thomas.logging_framework.handlers import (
     RotatingFileHandler,
     TimedRotatingFileHandler,
 )
-from thomas.logging_framework.logger import Logger
+from thomas.marketplace.logging_framework.logger import Logger
 
 
 class TestConsoleHandler(unittest.TestCase):
@@ -333,7 +333,7 @@ class TestHandlerFiltering(unittest.TestCase):
 
     def test_handler_level_filter(self) -> None:
         """Test handler filters by level."""
-        from thomas.logging_framework.filters import LevelFilter
+        from thomas.marketplace.logging_framework.filters import LevelFilter
 
         handler = MemoryHandler()
         handler.add_filter(LevelFilter(min_level=LogLevel.WARNING))

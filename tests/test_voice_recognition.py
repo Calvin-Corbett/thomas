@@ -5,9 +5,9 @@ Tests for voice speech recognition module.
 import numpy as np
 import pytest
 
-from thomas.voice._exceptions import RecognitionError
-from thomas.voice._types import AudioSample, TranscriptionResult
-from thomas.voice.recognition import (
+from thomas.marketplace.voice._exceptions import RecognitionError
+from thomas.marketplace.voice._types import AudioSample, TranscriptionResult
+from thomas.marketplace.voice.recognition import (
     BeamSearchDecoder,
     BigramLanguageModel,
     DynamicTimeWarping,

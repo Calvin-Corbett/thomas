@@ -30,7 +30,10 @@ DEFAULT_HARD_LIMITS: dict[str, int] = {
 
 DEFAULT_SCAN_ROOTS: list[str] = ["."]
 DEFAULT_BASELINE = "docs/monolith_guard_baseline.json"
-_FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),)
+_FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),
+    re.compile(r"_part\d+\.\w+$", re.IGNORECASE),
+)
 _ALLOWED_PART_FILE_PATTERNS: tuple[str, ...] = ()
 _FORBIDDEN_LOADER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?m)^\s*def\s+_load_monolith_parts\s*\("),

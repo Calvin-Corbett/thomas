@@ -3,7 +3,9 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from thomas.nodes.p042_nodes_camera_action import (
+import thomas.marketplace.nodes.p042_nodes_camera_action as nodes_mod
+from thomas.cli.commands.nodes import p042_nodes_camera_action as cli_mod
+from thomas.marketplace.nodes.p042_nodes_camera_action import (
     HttpResponse,
     NodesCameraActionError,
     NodesCameraActionErrorCode,
@@ -11,8 +13,6 @@ from thomas.nodes.p042_nodes_camera_action import (
     execute_nodes_camera_action,
     parse_nodes_camera_action_request,
 )
-from thomas.cli.commands.nodes import p042_nodes_camera_action as cli_mod
-import thomas.nodes.p042_nodes_camera_action as nodes_mod
 
 
 def test_parse_rejects_missing_node_id():
@@ -44,7 +44,9 @@ def test_execute_success_capture():
             json_data={"artifact_url": "http://cdn.local/photo.jpg", "echo": payload},
         )
 
-    req = NodesCameraActionRequest(node_id="node-1", action="capture", camera=0, options={"format": "jpeg"}, timeout_s=5.0)
+    req = NodesCameraActionRequest(
+        node_id="node-1", action="capture", camera=0, options={"format": "jpeg"}, timeout_s=5.0
+    )
     resp = execute_nodes_camera_action(req, base_url="http://nodes.local", http_post=fake_post)
     assert resp.ok is True
     assert resp.node_id == "node-1"

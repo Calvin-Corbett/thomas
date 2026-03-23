@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from thomas.channels.p096_channel_integration_into_existing_channels_module import (
+from thomas.marketplace.channels.p096_channel_integration_into_existing_channels_module import (
     ChannelIntegrationRequest,
     ExternalFailureError,
     InvalidInputError,
@@ -82,9 +82,7 @@ def test_integrate_channel_missing_token(tmp_path: Path) -> None:
 
 def test_integrate_channel_external_failure_wrapped(tmp_path: Path) -> None:
     config_path = tmp_path / "thomas.json"
-    config_path.write_text(
-        json.dumps({"channels": {"telegram": {"token": "token_123", "chat_id": "42"}}}) + "\n"
-    )
+    config_path.write_text(json.dumps({"channels": {"telegram": {"token": "token_123", "chat_id": "42"}}}) + "\n")
 
     with pytest.raises(ExternalFailureError) as exc:
         integrate_channel(
@@ -109,15 +107,14 @@ def test_cli_integrate_channel_json_success(tmp_path: Path) -> None:
         from thomas.cli.commands.channel_ops.p096_channel_integration_into_existing_channels_module import (
             register as register_p096,
         )
+
         register_p096(channels_app)
     except Exception:
         # If already registered, Typer may raise. Proceed.
         pass
 
     config_path = tmp_path / "thomas.json"
-    config_path.write_text(
-        json.dumps({"channels": {"telegram": {"token": "token_123", "chat_id": "42"}}}) + "\n"
-    )
+    config_path.write_text(json.dumps({"channels": {"telegram": {"token": "token_123", "chat_id": "42"}}}) + "\n")
 
     runner = CliRunner()
     res = runner.invoke(

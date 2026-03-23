@@ -212,7 +212,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         return 1
 
     try:
-        from thomas.server.app import serve
+        from thomas.server.app_lifecycle import serve
 
         serve(config, host=str(args.host), port=int(args.port))
     except ModuleNotFoundError as exc:

@@ -1,7 +1,8 @@
-﻿import json
+import json
 from pathlib import Path
 
 import pytest
+
 pytest.importorskip("jsonschema")
 from typer.testing import CliRunner
 
@@ -24,9 +25,7 @@ def test_validate_plugin_config_success_inline_schema_and_config() -> None:
     }
     config = {"api_key": "secret"}
 
-    result = validate_plugin_config(
-        PluginConfigValidationRequest(schema=schema, config=config, plugin="dummy")
-    )
+    result = validate_plugin_config(PluginConfigValidationRequest(schema=schema, config=config, plugin="dummy"))
 
     assert result.valid is True
     assert result.issues == []
@@ -44,9 +43,7 @@ def test_validate_plugin_config_failure_schema_mismatch() -> None:
     # Wrong type.
     config = {"api_key": 123}
 
-    result = validate_plugin_config(
-        PluginConfigValidationRequest(schema=schema, config=config, plugin="dummy")
-    )
+    result = validate_plugin_config(PluginConfigValidationRequest(schema=schema, config=config, plugin="dummy"))
 
     assert result.valid is False
     assert len(result.issues) >= 1
@@ -61,9 +58,7 @@ def test_validate_plugin_config_missing_file_is_deterministic_error(tmp_path: Pa
     missing = tmp_path / "does_not_exist.json"
 
     with pytest.raises(PluginConfigSchemaValidatorError) as excinfo:
-        validate_plugin_config(
-            PluginConfigValidationRequest(schema=schema, config_path=missing, plugin="dummy")
-        )
+        validate_plugin_config(PluginConfigValidationRequest(schema=schema, config_path=missing, plugin="dummy"))
 
     err = excinfo.value
     assert err.code == "CONFIG_NOT_FOUND"
@@ -170,5 +165,3 @@ def test_cli_json_output_missing_schema_is_fatal_exit_code_1(tmp_path: Path) -> 
     payload = json.loads(res.stdout)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "SCHEMA_NOT_PROVIDED"
-
-

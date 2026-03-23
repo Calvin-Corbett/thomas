@@ -1,16 +1,16 @@
 import json
-from pathlib import Path
 import os
+from pathlib import Path
+
 import pytest
 
-from thomas.channels.p079_channel_remove_command import (
+from thomas.cli.commands.channel_ops.p079_channel_remove_command import run_channel_remove
+from thomas.marketplace.channels.p079_channel_remove_command import (
     ChannelRemoveError,
     ChannelRemoveErrorCode,
     ChannelRemoveRequest,
     remove_channel,
 )
-
-from thomas.cli.commands.channel_ops.p079_channel_remove_command import run_channel_remove
 
 
 def _write_json(path: Path, data: dict) -> None:

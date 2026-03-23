@@ -1,13 +1,3 @@
-"""Thomas Autonomy Engine.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.autonomy."""
 
-Production-grade job queue + scheduler + approvals + audit trail for autonomous background work.
-
-Design goals:
-- Safe-by-default (feature-flagged, policy-controlled, human approvals for risky actions)
-- Migration-safe persistence (SQLite with schema versioning)
-- Works on Windows (stdlib + aiohttp only)
-"""
-
-from .plugin import install_autonomy
-
-__all__ = ["install_autonomy"]
+from thomas.marketplace.autonomy import *  # noqa: F401,F403

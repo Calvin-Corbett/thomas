@@ -3,14 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from thomas.nodes.p028_node_host_state_store import (
+from thomas.cli.commands.nodes.p028_node_host_state_store import cli_main
+from thomas.marketplace.nodes.p028_node_host_state_store import (
     NodeHostStateStore,
     NodeHostStateStoreConfigError,
     NodeHostStateStoreExternalFailureError,
     NodeHostStateStoreInvalidInputError,
     resolve_host_state_store_dir,
 )
-from thomas.cli.commands.nodes.p028_node_host_state_store import cli_main
 
 
 def test_put_get_round_trip(tmp_path: Path) -> None:

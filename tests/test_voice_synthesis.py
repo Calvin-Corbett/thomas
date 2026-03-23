@@ -5,9 +5,9 @@ Tests for voice synthesis module.
 import numpy as np
 import pytest
 
-from thomas.voice._exceptions import SynthesisError
-from thomas.voice._types import AudioSample, FormantFrequencies
-from thomas.voice.synthesis import (
+from thomas.marketplace.voice._exceptions import SynthesisError
+from thomas.marketplace.voice._types import AudioSample, FormantFrequencies
+from thomas.marketplace.voice.synthesis import (
     DiphoneConcatenator,
     FormantSynthesizer,
     ProsodyModifier,

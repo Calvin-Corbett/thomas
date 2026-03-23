@@ -4,7 +4,7 @@ import random
 
 import pytest
 
-from thomas.kvstore.skiplist import SkipList
+from thomas.marketplace.kvstore.skiplist import SkipList
 
 
 class TestSkipListBasics:

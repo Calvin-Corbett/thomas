@@ -2,7 +2,7 @@
 Tests for Markdown linting.
 """
 
-from thomas.markdown.linting import (
+from thomas.marketplace.markdown.linting import (
     HeadingConsistencyChecker,
     LinkValidator,
     Linter,
@@ -10,7 +10,7 @@ from thomas.markdown.linting import (
     ListConsistencyChecker,
     SeverityLevel,
 )
-from thomas.markdown.parser import Parser
+from thomas.marketplace.markdown.parser import Parser
 
 
 class TestTrailingWhitespace:

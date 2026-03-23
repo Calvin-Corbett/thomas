@@ -2,12 +2,12 @@ import asyncio
 import json
 import sys
 import threading
+from collections.abc import Awaitable, Callable
 from pathlib import Path
-from typing import Any, Awaitable, Callable, Dict, Optional, Tuple
+from typing import Any
 
 import pytest
 from aiohttp import web
-
 
 # When this test file is executed in isolation, pytest may choose a rootdir that
 # does not include the project root on sys.path. Ensure imports resolve.
@@ -33,7 +33,7 @@ async def _start_server(app: web.Application) -> tuple[str, Callable[[], Awaitab
     return f"http://127.0.0.1:{port}", _cleanup
 
 
-def _start_server_in_thread(app: web.Application) -> Tuple[str, Callable[[], None]]:
+def _start_server_in_thread(app: web.Application) -> tuple[str, Callable[[], None]]:
     """Start an aiohttp server in a background thread for sync tests.
 
     This avoids calling asyncio.run() from within pytest-asyncio event loops.
@@ -41,7 +41,7 @@ def _start_server_in_thread(app: web.Application) -> Tuple[str, Callable[[], Non
 
     loop = asyncio.new_event_loop()
     ready = threading.Event()
-    state: Dict[str, Any] = {}
+    state: dict[str, Any] = {}
 
     def _run() -> None:
         asyncio.set_event_loop(loop)
@@ -81,9 +81,9 @@ def _start_server_in_thread(app: web.Application) -> Tuple[str, Callable[[], Non
 
 @pytest.mark.asyncio
 async def test_push_payload_success() -> None:
-    from thomas.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
+    from thomas.marketplace.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
 
-    received: Dict[str, Any] = {}
+    received: dict[str, Any] = {}
 
     async def handler(request: web.Request) -> web.Response:
         body = await request.json()
@@ -111,7 +111,7 @@ async def test_push_payload_success() -> None:
 
 @pytest.mark.asyncio
 async def test_push_payload_remote_error_captured() -> None:
-    from thomas.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
+    from thomas.marketplace.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
 
     async def handler(request: web.Request) -> web.Response:
         return web.Response(status=500, text="boom")
@@ -137,7 +137,7 @@ async def test_push_payload_remote_error_captured() -> None:
 
 @pytest.mark.asyncio
 async def test_node_id_resolution_via_node_map() -> None:
-    from thomas.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
+    from thomas.marketplace.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
 
     async def handler(request: web.Request) -> web.Response:
         body = await request.json()
@@ -162,7 +162,7 @@ async def test_node_id_resolution_via_node_map() -> None:
 
 @pytest.mark.asyncio
 async def test_full_url_with_non_root_path_is_not_appended() -> None:
-    from thomas.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
+    from thomas.marketplace.nodes.p041_nodes_push_payload import NodesPushPayloadRequest, push_payload_to_nodes
 
     async def handler(request: web.Request) -> web.Response:
         return web.json_response({"path": request.path})
@@ -183,7 +183,11 @@ async def test_full_url_with_non_root_path_is_not_appended() -> None:
 
 
 def test_push_payload_invalid_payload_raises() -> None:
-    from thomas.nodes.p041_nodes_push_payload import NodesPushPayloadError, NodesPushPayloadRequest, push_payload_to_nodes_sync
+    from thomas.marketplace.nodes.p041_nodes_push_payload import (
+        NodesPushPayloadError,
+        NodesPushPayloadRequest,
+        push_payload_to_nodes_sync,
+    )
 
     req = NodesPushPayloadRequest(nodes=["http://example.invalid"], payload={"bad": {1, 2, 3}})
     with pytest.raises(NodesPushPayloadError) as ei:
@@ -193,7 +197,11 @@ def test_push_payload_invalid_payload_raises() -> None:
 
 @pytest.mark.asyncio
 async def test_push_payload_missing_node_map_raises() -> None:
-    from thomas.nodes.p041_nodes_push_payload import NodesPushPayloadError, NodesPushPayloadRequest, push_payload_to_nodes
+    from thomas.marketplace.nodes.p041_nodes_push_payload import (
+        NodesPushPayloadError,
+        NodesPushPayloadRequest,
+        push_payload_to_nodes,
+    )
 
     req = NodesPushPayloadRequest(nodes=["node-1"], payload={"x": 1})
     with pytest.raises(NodesPushPayloadError) as ei:
@@ -213,13 +221,15 @@ def test_cli_json_success(capsys: pytest.CaptureFixture[str]) -> None:
     try:
         from thomas.cli.commands.nodes.p041_nodes_push_payload import run
 
-        rc = run([
-            "--node",
-            base_url,
-            "--payload",
-            '{"hello":"world"}',
-            "--json",
-        ])
+        rc = run(
+            [
+                "--node",
+                base_url,
+                "--payload",
+                '{"hello":"world"}',
+                "--json",
+            ]
+        )
         assert rc == 0
 
         out = capsys.readouterr().out.strip()
@@ -235,13 +245,15 @@ def test_cli_json_success(capsys: pytest.CaptureFixture[str]) -> None:
 def test_cli_json_invalid_payload(capsys: pytest.CaptureFixture[str]) -> None:
     from thomas.cli.commands.nodes.p041_nodes_push_payload import run
 
-    rc = run([
-        "--node",
-        "http://example.invalid",
-        "--payload",
-        "not-json",
-        "--json",
-    ])
+    rc = run(
+        [
+            "--node",
+            "http://example.invalid",
+            "--payload",
+            "not-json",
+            "--json",
+        ]
+    )
     assert rc == 2
 
     out = capsys.readouterr().out.strip()
@@ -260,13 +272,15 @@ def test_cli_exit_code_1_on_remote_failure() -> None:
     try:
         from thomas.cli.commands.nodes.p041_nodes_push_payload import run
 
-        rc = run([
-            "--node",
-            base_url,
-            "--payload",
-            '{"x":1}',
-            "--json",
-        ])
+        rc = run(
+            [
+                "--node",
+                base_url,
+                "--payload",
+                '{"x":1}',
+                "--json",
+            ]
+        )
         assert rc == 1
     finally:
         stop()

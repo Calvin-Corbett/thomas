@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.music import theory
-from thomas.music._types import Accidental, IntervalQuality, Note, NoteName, Pitch, ScaleType
+from thomas.marketplace.music import theory
+from thomas.marketplace.music._types import Accidental, IntervalQuality, Note, NoteName, Pitch, ScaleType
 
 
 class TestIntervalCalculation:

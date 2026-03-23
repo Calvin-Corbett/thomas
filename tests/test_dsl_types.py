@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.dsl import (
+from thomas.marketplace.dsl import (
     BinaryOp,
     FunctionType,
     Identifier,
@@ -172,7 +172,7 @@ class TestUnification:
 
     def test_unify_incompatible_types(self) -> None:
         """Test unifying incompatible types."""
-        from thomas.dsl import UnificationError
+        from thomas.marketplace.dsl import UnificationError
 
         unifier = Unifier()
         t1 = SimpleType("int")
@@ -182,7 +182,7 @@ class TestUnification:
 
     def test_unify_occurs_check(self) -> None:
         """Test occurs check prevents infinite types."""
-        from thomas.dsl import UnificationError
+        from thomas.marketplace.dsl import UnificationError
 
         unifier = Unifier()
         var = TypeVariable("a")
@@ -219,7 +219,7 @@ class TestUnification:
 
     def test_unify_different_arity(self) -> None:
         """Test unifying functions with different arity."""
-        from thomas.dsl import UnificationError
+        from thomas.marketplace.dsl import UnificationError
 
         unifier = Unifier()
         t1 = FunctionType([SimpleType("int"), SimpleType("int")], SimpleType("int"))
@@ -230,7 +230,7 @@ class TestUnification:
 
     def test_unify_list_element_types(self) -> None:
         """Test unifying list element types."""
-        from thomas.dsl import UnificationError
+        from thomas.marketplace.dsl import UnificationError
 
         unifier = Unifier()
         t1 = ListType(SimpleType("int"))

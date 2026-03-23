@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.food_tech._types import (
+from thomas.marketplace.food_tech._types import (
     CookingStep,
     FoodCategory,
     Ingredient,
@@ -14,7 +14,7 @@ from thomas.food_tech._types import (
     NutritionFacts,
     Recipe,
 )
-from thomas.food_tech.nutrition import (
+from thomas.marketplace.food_tech.nutrition import (
     ActivityLevel,
     MacroProfile,
     NutritionAnalyzer,

@@ -1,17 +1,3 @@
-"""Data catalog with schema discovery, lineage, and tags."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.data_catalog."""
 
-from thomas.data_catalog.core import (
-    Column,
-    DataCatalog,
-    DataLineage,
-    Dataset,
-)
-from thomas.data_catalog.tools import register_data_catalog_tools
-
-__all__ = [
-    "DataCatalog",
-    "Dataset",
-    "Column",
-    "DataLineage",
-    "register_data_catalog_tools",
-]
+from thomas.marketplace.data_catalog import *  # noqa: F401,F403

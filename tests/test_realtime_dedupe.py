@@ -1,5 +1,6 @@
 import unittest
-from thomas.realtime.stt_dedupe import STTDedupeWindow
+
+from thomas.marketplace.realtime.stt_dedupe import STTDedupeWindow
 
 
 class TestSTTDedupe(unittest.TestCase):

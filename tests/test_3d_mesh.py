@@ -10,8 +10,8 @@ Tests:
 - Mesh simplification
 """
 
-from thomas.graphics3d import mesh
-from thomas.graphics3d._types import UV, Vec3, Vertex
+from thomas.marketplace.graphics3d import mesh
+from thomas.marketplace.graphics3d._types import UV, Vec3, Vertex
 
 
 class TestMeshGeneration:

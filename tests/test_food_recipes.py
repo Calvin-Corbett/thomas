@@ -6,18 +6,18 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.food_tech._exceptions import (
+from thomas.marketplace.food_tech._exceptions import (
     InvalidRecipeError,
     RecipeNotFoundError,
     RecipeParsingError,
 )
-from thomas.food_tech._types import (
+from thomas.marketplace.food_tech._types import (
     CookingStep,
     FoodCategory,
     Ingredient,
     Recipe,
 )
-from thomas.food_tech.recipes import IngredientParser, RecipeManager
+from thomas.marketplace.food_tech.recipes import IngredientParser, RecipeManager
 
 
 class TestRecipeManager:

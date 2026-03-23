@@ -1,4 +1,4 @@
-﻿# Thomas Plan Workspace (active)
+# Thomas Plan Workspace (active)
 
 - `plans/thomas/WORKBOARD.md` — active execution board.
 - `plans/thomas/tasks/codex-2-task/PLAN.md`
@@ -20,3 +20,5 @@
 - `plans/thomas/roadmap/WEEKLY_DEEP_DIVE_PLAN.md`
 - `plans/thomas/launch/LAUNCH_V1_PLAN.md`
 - `plans/thomas/onboarding/THOMAS_ONBOARDING_UX_PLAN.md`
+- `plans/thomas/V3_CHAT_SPEC.md`
+- `plans/thomas/verification/AGENT_VERIFICATION_PROTOCOL_PLAN.md`

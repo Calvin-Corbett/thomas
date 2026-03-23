@@ -2,12 +2,12 @@
 
 from datetime import datetime
 
-from thomas.webhooks._types import (
+from thomas.marketplace.webhooks._types import (
     Delivery,
     DeliveryAttempt,
     DeliveryStatus,
 )
-from thomas.webhooks.monitoring import (
+from thomas.marketplace.webhooks.monitoring import (
     AlertingManager,
     DeliveryMetrics,
     EventVolumeMeter,

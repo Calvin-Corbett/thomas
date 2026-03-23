@@ -2,8 +2,8 @@
 Tests for Markdown inline parser.
 """
 
-from thomas.markdown._types import Code, Emphasis, Image, LineBreak, Link, SoftBreak, Strong, Text
-from thomas.markdown.inline_parser import InlineParser
+from thomas.marketplace.markdown._types import Code, Emphasis, Image, LineBreak, Link, SoftBreak, Strong, Text
+from thomas.marketplace.markdown.inline_parser import InlineParser
 
 
 class TestPlainText:

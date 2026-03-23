@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-import thomas.asset_studio.comfy_service as comfy_service
+import thomas.marketplace.asset_studio.comfy_service as comfy_service
 
 
 @pytest.mark.asyncio

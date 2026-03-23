@@ -9,7 +9,7 @@ import asyncio
 
 import pytest
 
-from thomas.message_queue import (
+from thomas.marketplace.message_queue import (
     Broker,
     DeadLetterConfig,
     DeadLetterQueue,

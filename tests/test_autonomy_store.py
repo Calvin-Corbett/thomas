@@ -1,10 +1,10 @@
 import os
 import tempfile
 import unittest
-from datetime import datetime, timezone, timedelta
+from datetime import datetime, timezone
 
-from thomas.autonomy.store import AutonomyStore
-from thomas.autonomy.scheduler import compute_next_run
+from thomas.marketplace.autonomy.scheduler import compute_next_run
+from thomas.marketplace.autonomy.store import AutonomyStore
 
 
 class TestAutonomyStore(unittest.TestCase):

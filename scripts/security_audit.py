@@ -6,9 +6,8 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
-from thomas.security.security_audit import run_security_audit
+from thomas.marketplace.security.security_audit import run_security_audit
 
 
 def _render_text(payload: dict) -> str:
@@ -24,11 +23,13 @@ def _render_text(payload: dict) -> str:
     return "\n".join(lines)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run aggregated Thomas security audit.")
     parser.add_argument("--repo-root", default=".", help="Repository root path.")
     parser.add_argument("--threat-max-age-days", type=int, default=30, help="Maximum threat model age in days.")
-    parser.add_argument("--min-extension-pass-rate", type=float, default=0.95, help="Minimum extension certification pass rate.")
+    parser.add_argument(
+        "--min-extension-pass-rate", type=float, default=0.95, help="Minimum extension certification pass rate."
+    )
     parser.add_argument("--include-incident-drill", action="store_true", help="Run the incident drill artifact checks.")
     parser.add_argument("--json", dest="as_json", action="store_true", help="Emit machine-readable JSON.")
     parser.add_argument("--strict", action="store_true", help="Exit non-zero on failing checks.")

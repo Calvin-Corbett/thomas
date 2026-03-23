@@ -1,6 +1,6 @@
 """Tests for text analysis pipeline."""
 
-from thomas.search_engine.analyzer import (
+from thomas.marketplace.search_engine.analyzer import (
     Analyzer,
     AnalyzerFactory,
     EdgeNGramFilter,

@@ -4,7 +4,11 @@ from argparse import Namespace
 
 import pytest
 
-from thomas.nodes.p034_node_command_restart import NodeRestartError, NodeRestartRequest, restart_node_host_service
+from thomas.marketplace.nodes.p034_node_command_restart import (
+    NodeRestartError,
+    NodeRestartRequest,
+    restart_node_host_service,
+)
 
 
 def _write_node_config(tmp_path, payload):
@@ -26,9 +30,7 @@ def test_restart_success_systemd(monkeypatch, tmp_path):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    res = restart_node_host_service(
-        NodeRestartRequest(state_dir=tmp_path, timeout_s=5.0, manager="systemd")
-    )
+    res = restart_node_host_service(NodeRestartRequest(state_dir=tmp_path, timeout_s=5.0, manager="systemd"))
 
     assert res.ok is True
     assert res.service_name == "thomas-node"
@@ -82,7 +84,9 @@ def test_cli_json_success(monkeypatch, tmp_path, capsys):
 
     monkeypatch.setattr(subprocess, "run", fake_run)
 
-    args = Namespace(json=True, state_dir=tmp_path, manager="systemd", timeout_s=5.0, config_path=None, service_name=None)
+    args = Namespace(
+        json=True, state_dir=tmp_path, manager="systemd", timeout_s=5.0, config_path=None, service_name=None
+    )
     code = cli.run(args)
     out = capsys.readouterr().out
 
@@ -98,7 +102,9 @@ def test_cli_json_success(monkeypatch, tmp_path, capsys):
 def test_cli_json_failure_missing_config(tmp_path, capsys):
     from thomas.cli.commands.nodes import p034_node_command_restart as cli
 
-    args = Namespace(json=True, state_dir=tmp_path, manager="systemd", timeout_s=5.0, config_path=None, service_name=None)
+    args = Namespace(
+        json=True, state_dir=tmp_path, manager="systemd", timeout_s=5.0, config_path=None, service_name=None
+    )
     code = cli.run(args)
     out = capsys.readouterr().out
 

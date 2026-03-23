@@ -10,7 +10,7 @@ from aiohttp.client_exceptions import WSServerHandshakeError
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, ModelConfig, ServerConfig
-from thomas.observability.run_db import connect, ensure_schema
+from thomas.marketplace.observability.run_db import connect, ensure_schema
 from thomas.server.app import create_app
 
 

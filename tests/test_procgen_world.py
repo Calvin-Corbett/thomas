@@ -4,9 +4,9 @@ Tests for world generation.
 
 import pytest
 
-from thomas.procgen._exceptions import InvalidConfigError
-from thomas.procgen._types import TerrainType, WorldConfig
-from thomas.procgen.world import (
+from thomas.marketplace.procgen._exceptions import InvalidConfigError
+from thomas.marketplace.procgen._types import TerrainType, WorldConfig
+from thomas.marketplace.procgen.world import (
     Continent,
     PoliticalRegion,
     TradeRoute,
@@ -198,7 +198,7 @@ class TestWorldGenerator:
 
     def test_flood_fill_land(self):
         """Test flood fill for continent detection."""
-        from thomas.procgen._types import TerrainType, Tile
+        from thomas.marketplace.procgen._types import TerrainType, Tile
 
         config = WorldConfig(width=64, height=64, seed=42)
         gen = WorldGenerator(config=config)

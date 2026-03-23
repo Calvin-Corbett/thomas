@@ -6,8 +6,8 @@ import math
 
 import pytest
 
-from thomas.cad import geometry2d
-from thomas.cad._types import Circle, Line, Point2D, Polygon, Vector2D
+from thomas.marketplace.cad import geometry2d
+from thomas.marketplace.cad._types import Circle, Line, Point2D, Polygon, Vector2D
 
 
 class TestPointAndVector:

@@ -1,21 +1,3 @@
-"""ETL monitoring module for job tracking, SLA alerts, and data freshness."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.etl_monitor."""
 
-from thomas.etl_monitor.core import (
-    DataFreshness,
-    ETLJob,
-    JobMetrics,
-    JobStatus,
-    MonitoringStore,
-    SLAPolicy,
-)
-from thomas.etl_monitor.tools import register_etl_monitor_tools
-
-__all__ = [
-    "JobStatus",
-    "JobMetrics",
-    "SLAPolicy",
-    "ETLJob",
-    "DataFreshness",
-    "MonitoringStore",
-    "register_etl_monitor_tools",
-]
+from thomas.marketplace.etl_monitor import *  # noqa: F401,F403

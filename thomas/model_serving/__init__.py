@@ -1,25 +1,3 @@
-"""Model serving module for ML model registry, inference, and deployment."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.model_serving."""
 
-from thomas.model_serving.core import (
-    ABTestController,
-    AutoScaler,
-    CanaryDeployment,
-    InferenceEngine,
-    InferenceResult,
-    ModelRegistry,
-    ModelStatus,
-    ModelVersion,
-)
-from thomas.model_serving.tools import register_model_serving_tools
-
-__all__ = [
-    "ModelStatus",
-    "ModelVersion",
-    "InferenceResult",
-    "ModelRegistry",
-    "InferenceEngine",
-    "ABTestController",
-    "AutoScaler",
-    "CanaryDeployment",
-    "register_model_serving_tools",
-]
+from thomas.marketplace.model_serving import *  # noqa: F401,F403

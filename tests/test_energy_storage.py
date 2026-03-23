@@ -4,8 +4,8 @@ Tests for energy storage systems.
 
 import pytest
 
-from thomas.energy._exceptions import StorageDepletedError
-from thomas.energy.storage import (
+from thomas.marketplace.energy._exceptions import StorageDepletedError
+from thomas.marketplace.energy.storage import (
     BatteryUnit,
     FlywheelStorage,
     PumpedHydro,

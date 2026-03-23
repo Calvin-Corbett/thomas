@@ -5,7 +5,7 @@ from datetime import timedelta
 
 import pytest
 
-from thomas.caching import CacheConfig, LFUCache
+from thomas.marketplace.caching import CacheConfig, LFUCache
 
 
 class TestLFUBasicOps:

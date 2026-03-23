@@ -10,6 +10,7 @@
   - `GUARDRAILS.md`
 - Required checks:
   - run focused regression tests across changed subsystems
+  - run `python scripts/test_stepup_protocol.py` and carry it through the large shard stage
   - run release hygiene checks
   - update plan/workboard state when execution intent changes
 - Required proof:

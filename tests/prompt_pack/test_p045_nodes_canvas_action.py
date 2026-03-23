@@ -5,14 +5,13 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from thomas.nodes.p045_nodes_canvas_action import (
+from thomas.marketplace.nodes.p045_nodes_canvas_action import (
     CanvasActionConfigError,
     CanvasActionInputError,
     FileCanvasStateStore,
     NodesCanvasActionRequest,
     run_nodes_canvas_action,
 )
-
 
 runner = CliRunner()
 cli_mod = importlib.import_module("thomas.cli.commands.nodes.p045_nodes_canvas_action")

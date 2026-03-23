@@ -4,11 +4,11 @@ Integration tests for complete physics simulation scenarios.
 
 import math
 
-from thomas.physics._types import PhysicsConfig, RigidBodyType, Vec3
-from thomas.physics.cloth import ClothMesh
-from thomas.physics.constraints import DistanceConstraint
-from thomas.physics.rigid_body import RigidBody
-from thomas.physics.world import PhysicsWorld
+from thomas.marketplace.physics._types import PhysicsConfig, RigidBodyType, Vec3
+from thomas.marketplace.physics.cloth import ClothMesh
+from thomas.marketplace.physics.constraints import DistanceConstraint
+from thomas.marketplace.physics.rigid_body import RigidBody
+from thomas.marketplace.physics.world import PhysicsWorld
 
 
 class TestFreeFall:

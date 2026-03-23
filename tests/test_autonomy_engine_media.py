@@ -5,11 +5,11 @@ import unittest
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 
-from thomas.autonomy.engine import AutonomyEngine
-from thomas.autonomy.policy import AutonomyPolicy
-from thomas.autonomy.scheduler import EngineTiming
-from thomas.autonomy.store import AutonomyStore
 from thomas.core.config import ModelConfig
+from thomas.marketplace.autonomy.engine import AutonomyEngine
+from thomas.marketplace.autonomy.policy import AutonomyPolicy
+from thomas.marketplace.autonomy.scheduler import EngineTiming
+from thomas.marketplace.autonomy.store import AutonomyStore
 
 
 class TestAutonomyEngineMedia(unittest.IsolatedAsyncioTestCase):
@@ -51,7 +51,7 @@ class TestAutonomyEngineMedia(unittest.IsolatedAsyncioTestCase):
             await asyncio.sleep(0.05)
         return self.store.get_job(job_id).status
 
-    @patch("thomas.autonomy.engine.OpenAICompatMediaClient")
+    @patch("thomas.marketplace.autonomy.engine.OpenAICompatMediaClient")
     async def test_video_generation_job_succeeds(self, mock_client_cls):
         fake_client = AsyncMock()
         fake_client.generate_video = AsyncMock(
@@ -78,12 +78,10 @@ class TestAutonomyEngineMedia(unittest.IsolatedAsyncioTestCase):
         result = self.store.get_job(job.id).result or {}
         self.assertEqual(result.get("video_id"), "vid_123")
 
-    @patch("thomas.autonomy.engine.OpenAICompatMediaClient")
+    @patch("thomas.marketplace.autonomy.engine.OpenAICompatMediaClient")
     async def test_speech_transcription_job_succeeds(self, mock_client_cls):
         fake_client = AsyncMock()
-        fake_client.transcribe_audio = AsyncMock(
-            return_value={"text": "hello from audio transcript"}
-        )
+        fake_client.transcribe_audio = AsyncMock(return_value={"text": "hello from audio transcript"})
         fake_client.aclose = AsyncMock()
         mock_client_cls.return_value = fake_client
 
@@ -101,13 +99,11 @@ class TestAutonomyEngineMedia(unittest.IsolatedAsyncioTestCase):
         result = self.store.get_job(job.id).result or {}
         self.assertIn("hello from audio transcript", str(result.get("text") or ""))
 
-    @patch("thomas.autonomy.engine.OpenAICompatMediaClient")
+    @patch("thomas.marketplace.autonomy.engine.OpenAICompatMediaClient")
     async def test_speech_synthesis_job_succeeds(self, mock_client_cls):
         out_path = os.path.join(self.tmpdir.name, "artifacts", "speech.mp3")
         fake_client = AsyncMock()
-        fake_client.synthesize_speech = AsyncMock(
-            return_value={"output_path": out_path, "size_bytes": 4096}
-        )
+        fake_client.synthesize_speech = AsyncMock(return_value={"output_path": out_path, "size_bytes": 4096})
         fake_client.aclose = AsyncMock()
         mock_client_cls.return_value = fake_client
 
@@ -124,4 +120,3 @@ class TestAutonomyEngineMedia(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(status, "succeeded")
         result = self.store.get_job(job.id).result or {}
         self.assertEqual(result.get("output_path"), out_path)
-

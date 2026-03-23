@@ -4,8 +4,8 @@ Tests for curve operations.
 
 import pytest
 
-from thomas.cad._types import Point2D, Point3D
-from thomas.cad.curves import (
+from thomas.marketplace.cad._types import Point2D, Point3D
+from thomas.marketplace.cad.curves import (
     BezierCurve2D,
     BezierCurve3D,
     BSplineCurve2D,

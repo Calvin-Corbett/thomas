@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from thomas.social_platform import SocialGraphAnalyzer
+from thomas.marketplace.social_platform import SocialGraphAnalyzer
 
 
 class TestSocialGraphAnalyzer:

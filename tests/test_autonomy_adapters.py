@@ -4,7 +4,7 @@ import unittest
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from thomas.autonomy.adapters import ChatAdapter, ChatAdapterConfig
+from thomas.marketplace.autonomy.adapters import ChatAdapter, ChatAdapterConfig
 
 
 class TestAutonomyChatAdapter(AioHTTPTestCase):
@@ -18,9 +18,9 @@ class TestAutonomyChatAdapter(AioHTTPTestCase):
             text = str((payload or {}).get("text") or "")
 
             if "fenced_json_case" in text:
-                body_text = "```json\n{\"ok\": true, \"mode\": \"fenced\"}\n```"
+                body_text = '```json\n{"ok": true, "mode": "fenced"}\n```'
             else:
-                body_text = "{\"ok\": true, \"mode\": \"plain\"}"
+                body_text = '{"ok": true, "mode": "plain"}'
 
             resp = web.StreamResponse(
                 status=200,

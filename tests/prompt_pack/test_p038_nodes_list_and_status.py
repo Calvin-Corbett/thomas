@@ -6,7 +6,7 @@ import threading
 
 import pytest
 
-from thomas.nodes.p038_nodes_list_and_status import (
+from thomas.marketplace.nodes.p038_nodes_list_and_status import (
     NodesConfigError,
     NodesExternalFailureError,
     NodesInvalidInputError,
@@ -33,7 +33,7 @@ def tcp_server(host: str = "127.0.0.1"):
         while not stop.is_set():
             try:
                 conn, _ = sock.accept()
-            except socket.timeout:
+            except TimeoutError:
                 continue
             except OSError:
                 break

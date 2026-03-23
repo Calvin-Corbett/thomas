@@ -2,8 +2,8 @@
 Tests for navigation mesh pathfinding algorithms.
 """
 
-from thomas.pathfinding import NavigationMesh, NavMeshPolygon, Obstacle
-from thomas.pathfinding.navmesh import (
+from thomas.marketplace.pathfinding import NavigationMesh, NavMeshPolygon, Obstacle
+from thomas.marketplace.pathfinding.navmesh import (
     build_navmesh,
     closest_point_on_navmesh,
     expand_navmesh_for_agent,

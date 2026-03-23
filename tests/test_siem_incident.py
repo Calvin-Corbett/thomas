@@ -4,14 +4,14 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.siem._types import (
+from thomas.marketplace.siem._types import (
     Alert,
     EventCategory,
     EventSeverity,
     Incident,
     SecurityEvent,
 )
-from thomas.siem.incident import (
+from thomas.marketplace.siem.incident import (
     ImpactAssessor,
     IncidentClassifier,
     IncidentGrouper,
@@ -390,7 +390,7 @@ class TestIncidentManager:
         """Test manager rejects incident creation without alerts."""
         manager = IncidentManager()
 
-        from thomas.siem._exceptions import IncidentCreationException
+        from thomas.marketplace.siem._exceptions import IncidentCreationException
 
         with pytest.raises(IncidentCreationException):
             manager.create_incident_from_alerts([])

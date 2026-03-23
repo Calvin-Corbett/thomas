@@ -17,7 +17,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from thomas.db_internals.wal import (
+from thomas.marketplace.db_internals.wal import (
     CheckpointManager,
     RecoveryManager,
     WriteAheadLog,

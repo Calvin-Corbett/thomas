@@ -7,12 +7,12 @@ migration functions, and version negotiation.
 
 import pytest
 
-from thomas.serialization import (
+from thomas.marketplace.serialization import (
     FieldDescriptor,
     MessageDescriptor,
     SchemaVersion,
 )
-from thomas.serialization.schema_evolution import (
+from thomas.marketplace.serialization.schema_evolution import (
     FieldMigration,
     IncompatibleSchemaError,
     MigrationRegistry,

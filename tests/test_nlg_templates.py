@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.nlg._types import SemanticFrame, Slot
-from thomas.nlg.templates import TemplateEngine, TemplateError
+from thomas.marketplace.nlg._types import SemanticFrame, Slot
+from thomas.marketplace.nlg.templates import TemplateEngine, TemplateError
 
 
 class TestTemplateRegistration:

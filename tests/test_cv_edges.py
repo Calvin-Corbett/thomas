@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.cv import core, edges
-from thomas.cv._exceptions import InvalidParameterError
-from thomas.cv._types import Contour
+from thomas.marketplace.cv import core, edges
+from thomas.marketplace.cv._exceptions import InvalidParameterError
+from thomas.marketplace.cv._types import Contour
 
 
 class TestCannyEdgeDetector:

@@ -4,7 +4,7 @@ Tests for audio filters.
 
 import numpy as np
 
-from thomas.audio_engine.filters import BiquadFilter, CrossoverFilter, FilterCascade, ParametricEQ
+from thomas.marketplace.audio_engine.filters import BiquadFilter, CrossoverFilter, FilterCascade, ParametricEQ
 
 
 class TestBiquadFilter:

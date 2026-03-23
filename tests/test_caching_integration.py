@@ -7,7 +7,7 @@ from datetime import timedelta
 
 import pytest
 
-from thomas.caching import (
+from thomas.marketplace.caching import (
     BatchWarmer,
     CacheConfig,
     CacheWarmer,

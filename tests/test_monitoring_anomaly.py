@@ -4,8 +4,8 @@ Tests for anomaly detection module.
 
 from datetime import datetime
 
-from thomas.monitoring._types import MetricSample
-from thomas.monitoring.anomaly import Anomaly, AnomalyDetector
+from thomas.marketplace.monitoring._types import MetricSample
+from thomas.marketplace.monitoring.anomaly import Anomaly, AnomalyDetector
 
 
 class TestAnomalyDetector:

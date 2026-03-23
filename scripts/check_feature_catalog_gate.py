@@ -7,15 +7,12 @@ their documented feature index.
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
-from typing import List, Set
-
 
 ROOT = Path(__file__).resolve().parent.parent
 CATALOG = ROOT / "docs" / "FEATURE_CATALOG.md"
 
-REQUIRED_HEADERS: List[str] = [
+REQUIRED_HEADERS: list[str] = [
     "# Thomas Feature Catalog",
     "## Interfaces",
     "## Agent And Execution",
@@ -26,7 +23,7 @@ REQUIRED_HEADERS: List[str] = [
     "## Server, Security, And Operations",
 ]
 
-REQUIRED_FEATURE_IDS: Set[str] = {
+REQUIRED_FEATURE_IDS: set[str] = {
     "ui.web_chat",
     "ui.repl_cli",
     "ui.live_browser_smoke",

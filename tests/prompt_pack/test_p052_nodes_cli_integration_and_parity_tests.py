@@ -9,7 +9,7 @@ from aiohttp import web
 from typer.testing import CliRunner
 
 from thomas.cli.commands.nodes.p052_nodes_cli_integration_and_parity_tests import app as nodes_cli_app
-from thomas.nodes.p052_nodes_cli_integration_and_parity_tests import (
+from thomas.marketplace.nodes.p052_nodes_cli_integration_and_parity_tests import (
     NodesCliIntegrationError,
     NodesCliRequest,
     fetch_nodes,

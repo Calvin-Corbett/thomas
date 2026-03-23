@@ -4,13 +4,12 @@ from pathlib import Path
 import pytest
 from typer.testing import CliRunner
 
-from thomas.nodes.p050_nodes_token_rotate_and_revoke import (
-    NodesTokenError,
-    rotate_node_token,
-    revoke_node_token,
-)
-
 import thomas.cli.commands.nodes.p050_nodes_token_rotate_and_revoke as cli_mod
+from thomas.marketplace.nodes.p050_nodes_token_rotate_and_revoke import (
+    NodesTokenError,
+    revoke_node_token,
+    rotate_node_token,
+)
 
 
 def test_rotate_creates_store_and_token(tmp_path: Path) -> None:

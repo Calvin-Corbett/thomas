@@ -4,8 +4,8 @@ Tests for Boolean operations.
 
 import pytest
 
-from thomas.cad._types import Point2D, Polygon
-from thomas.cad.boolean_ops import (
+from thomas.marketplace.cad._types import Point2D, Polygon
+from thomas.marketplace.cad.boolean_ops import (
     BooleanOp,
     CSGNode,
     minkowski_sum,
@@ -321,7 +321,7 @@ class TestBooleanErrors:
 
     def test_minkowski_sum_degenerate(self) -> None:
         """Test Minkowski sum with degenerate polygon."""
-        from thomas.cad._exceptions import BooleanOperationError
+        from thomas.marketplace.cad._exceptions import BooleanOperationError
 
         poly1 = Polygon([Point2D(0, 0)])
         poly2 = Polygon([Point2D(1, 1)])

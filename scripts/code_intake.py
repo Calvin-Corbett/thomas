@@ -8,8 +8,9 @@ import json
 import shutil
 import subprocess
 import sys
+from collections.abc import Iterable
 from pathlib import Path, PurePosixPath
-from typing import Any, Iterable, Optional
+from typing import Any
 
 QUEUE_NAMES = ("incoming", "staged", "applied", "rejected")
 DEFAULT_BLOCKLIST = ["openclaw", "clawbot"]
@@ -24,7 +25,7 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[1]
 
 
-def _intake_root(repo: Path, root_arg: Optional[str]) -> Path:
+def _intake_root(repo: Path, root_arg: str | None) -> Path:
     if root_arg:
         return Path(root_arg).expanduser().resolve()
     return repo / "code_intake"
@@ -170,7 +171,7 @@ def _default_manifest_template() -> dict[str, Any]:
     }
 
 
-def _find_drop(root: Path, drop_id: str, queue_hint: Optional[str] = None) -> tuple[str, Path]:
+def _find_drop(root: Path, drop_id: str, queue_hint: str | None = None) -> tuple[str, Path]:
     if queue_hint:
         p = _queue_dir(root, queue_hint) / drop_id
         if p.exists():
@@ -306,11 +307,15 @@ def _validate_manifest(manifest_path: Path, repo: Path, run_git_apply_check: boo
             )
         else:
             has_pack = (artifact_path / "pack").exists() or (drop_dir / "pack").exists()
-            has_applier = (artifact_path / "apply_feature_pack.py").exists() or (drop_dir / "apply_feature_pack.py").exists()
+            has_applier = (artifact_path / "apply_feature_pack.py").exists() or (
+                drop_dir / "apply_feature_pack.py"
+            ).exists()
             if not has_pack:
                 warnings.append({"code": "missing_pack_dir", "message": "feature_pack has no pack/ directory"})
             if not has_applier:
-                warnings.append({"code": "missing_apply_script", "message": "feature_pack has no apply_feature_pack.py"})
+                warnings.append(
+                    {"code": "missing_apply_script", "message": "feature_pack has no apply_feature_pack.py"}
+                )
 
     if artifact_path and artifact_path.exists() and art_type == "file_bundle":
         warnings.append(
@@ -720,7 +725,7 @@ def _build_parser() -> argparse.ArgumentParser:
     return ap
 
 
-def main(argv: Optional[list[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     ap = _build_parser()
     args = ap.parse_args(argv)
 

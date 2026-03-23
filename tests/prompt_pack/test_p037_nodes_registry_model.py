@@ -5,7 +5,7 @@ import pytest
 from typer.testing import CliRunner
 
 from thomas.cli.commands.nodes import p037_nodes_registry_model as cli_mod
-from thomas.nodes.p037_nodes_registry_model import (
+from thomas.marketplace.nodes.p037_nodes_registry_model import (
     ENV_REGISTRY_JSON,
     NodesRegistryConfigError,
     NodesRegistryExternalError,
@@ -134,7 +134,7 @@ def test_load_nodes_registry_loads_from_public_http_url(monkeypatch: pytest.Monk
         return FakeResponse()
 
     monkeypatch.setattr(
-        "thomas.nodes.p037_nodes_registry_model.urllib.request.urlopen",
+        "thomas.marketplace.nodes.p037_nodes_registry_model.urllib.request.urlopen",
         fake_urlopen,
     )
 

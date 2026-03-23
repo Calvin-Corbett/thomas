@@ -115,7 +115,9 @@ def register_mission_routes(
     async def mission_page(_request: web.Request) -> web.StreamResponse:
         return await _serve_mission_page(web_dir)
 
-    app.router.add_get("/mission", mission_page)
+    existing_paths = {str(getattr(resource, "canonical", "") or "") for resource in app.router.resources()}
+    if "/mission" not in existing_paths:
+        app.router.add_get("/mission", mission_page)
     app.router.add_get("/api/mission/control", api_mission_control)
     app.router.add_get("/api/mission/content-hub", api_mission_content_hub)
     app.router.add_get("/api/mission/stream", api_mission_stream)

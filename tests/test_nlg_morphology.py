@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.nlg._exceptions import MorphologyError
-from thomas.nlg._types import Aspect, MorphologicalForm, Number, Person, Tense
-from thomas.nlg.morphology import MorphologyEngine
+from thomas.marketplace.nlg._exceptions import MorphologyError
+from thomas.marketplace.nlg._types import Aspect, MorphologicalForm, Number, Person, Tense
+from thomas.marketplace.nlg.morphology import MorphologyEngine
 
 
 class TestPluralization:

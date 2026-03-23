@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from thomas.channels.p092_channel_failure_taxonomy import (
+from thomas.marketplace.channels.p092_channel_failure_taxonomy import (
     ChannelFailureTaxonomyError,
     FailureCategory,
     FailureTaxonomyRequest,

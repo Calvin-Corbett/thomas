@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.project_mgmt._types import Task
-from thomas.project_mgmt.budget import BudgetManager
+from thomas.marketplace.project_mgmt._types import Task
+from thomas.marketplace.project_mgmt.budget import BudgetManager
 
 
 class TestBudgetManager:

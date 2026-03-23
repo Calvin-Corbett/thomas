@@ -10,9 +10,9 @@ from datetime import datetime
 
 import pytest
 
-from thomas.data_pipeline._exceptions import TransformationError
-from thomas.data_pipeline._types import DataType, Field, JoinSpec, JoinType, Record, Schema
-from thomas.data_pipeline.transforms import (
+from thomas.marketplace.data_pipeline._exceptions import TransformationError
+from thomas.marketplace.data_pipeline._types import DataType, Field, JoinSpec, JoinType, Record, Schema
+from thomas.marketplace.data_pipeline.transforms import (
     DateTransform,
     DeduplicationTransform,
     ExpressionEvaluatorTransform,

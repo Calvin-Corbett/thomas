@@ -6,8 +6,8 @@ Tests plain, dictionary, RLE, and delta encoding schemes.
 
 from typing import Any
 
-from thomas.columnar._types import ColumnType
-from thomas.columnar.encoding import (
+from thomas.marketplace.columnar._types import ColumnType
+from thomas.marketplace.columnar.encoding import (
     decode_dictionary,
     decode_plain,
     encode_delta,

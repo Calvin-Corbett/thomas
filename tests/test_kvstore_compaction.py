@@ -3,9 +3,9 @@
 import tempfile
 from pathlib import Path
 
-from thomas.kvstore.compaction import Compactor, LeveledCompactor, SizeTieredCompactor
-from thomas.kvstore.manifest import Manifest
-from thomas.kvstore.sstable import SSTableWriter
+from thomas.marketplace.kvstore.compaction import Compactor, LeveledCompactor, SizeTieredCompactor
+from thomas.marketplace.kvstore.manifest import Manifest
+from thomas.marketplace.kvstore.sstable import SSTableWriter
 
 
 class TestCompactorBasics:
@@ -88,7 +88,7 @@ class TestL0Compaction:
 
             # Read output file
             output_path = Path(tmpdir) / output
-            from thomas.kvstore.sstable import SSTable
+            from thomas.marketplace.kvstore.sstable import SSTable
 
             sstable = SSTable(str(output_path))
 
@@ -115,7 +115,7 @@ class TestL0Compaction:
 
             # Read output - tombstone should be gone
             output_path = Path(tmpdir) / output
-            from thomas.kvstore.sstable import SSTable
+            from thomas.marketplace.kvstore.sstable import SSTable
 
             sstable = SSTable(str(output_path))
 
@@ -210,7 +210,7 @@ class TestCompactionMerge:
             compactor._merge_sstables(input_files, output_path)
 
             # Verify output
-            from thomas.kvstore.sstable import SSTable
+            from thomas.marketplace.kvstore.sstable import SSTable
 
             sstable = SSTable(str(output_path))
 

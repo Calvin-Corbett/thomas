@@ -1,23 +1,3 @@
-"""Entity Component System for managing game entities and systems."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.ecs."""
 
-from thomas.ecs.core import (
-    Component,
-    Entity,
-    SimpleMovementSystem,
-    SimpleRenderSystem,
-    System,
-    SystemExecution,
-    World,
-)
-from thomas.ecs.tools import register_ecs_tools
-
-__all__ = [
-    "Component",
-    "Entity",
-    "System",
-    "World",
-    "SystemExecution",
-    "SimpleMovementSystem",
-    "SimpleRenderSystem",
-    "register_ecs_tools",
-]
+from thomas.marketplace.ecs import *  # noqa: F401,F403

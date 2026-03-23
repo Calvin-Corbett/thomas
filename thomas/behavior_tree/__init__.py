@@ -1,33 +1,3 @@
-"""Behavior Tree AI system with selector, sequence, and decorator nodes."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.behavior_tree."""
 
-from thomas.behavior_tree.core import (
-    Action,
-    BehaviorNode,
-    BehaviorTree,
-    Condition,
-    Decorator,
-    ExecutionContext,
-    Inverter,
-    NodeStatus,
-    Parallel,
-    Repeater,
-    Selector,
-    Sequence,
-)
-from thomas.behavior_tree.tools import register_behavior_tree_tools
-
-__all__ = [
-    "BehaviorTree",
-    "BehaviorNode",
-    "Selector",
-    "Sequence",
-    "Parallel",
-    "Decorator",
-    "Inverter",
-    "Repeater",
-    "Condition",
-    "Action",
-    "ExecutionContext",
-    "NodeStatus",
-    "register_behavior_tree_tools",
-]
+from thomas.marketplace.behavior_tree import *  # noqa: F401,F403

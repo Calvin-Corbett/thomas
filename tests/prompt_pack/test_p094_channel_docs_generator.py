@@ -5,14 +5,14 @@ import json
 
 import pytest
 
-from thomas.channels.p094_channel_docs_generator import (
+from thomas.cli.commands.channel_ops import p094_channel_docs_generator as cli_op
+from thomas.marketplace.channels.p094_channel_docs_generator import (
     ChannelDocsGeneratorError,
     ChannelDocsRequest,
     generate_channel_docs,
     render_markdown,
     to_machine_readable,
 )
-from thomas.cli.commands.channel_ops import p094_channel_docs_generator as cli_op
 
 
 def _required_env_keys() -> list[str]:

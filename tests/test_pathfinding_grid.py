@@ -2,8 +2,8 @@
 Tests for grid-based pathfinding algorithms.
 """
 
-from thomas.pathfinding import Grid2D
-from thomas.pathfinding.grid_search import (
+from thomas.marketplace.pathfinding import Grid2D
+from thomas.marketplace.pathfinding.grid_search import (
     grid_search_astar,
     jump_point_search,
     theta_star,

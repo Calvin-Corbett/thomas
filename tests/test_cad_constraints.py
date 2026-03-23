@@ -4,8 +4,8 @@ Tests for constraint solver.
 
 import pytest
 
-from thomas.cad._types import Line, Point2D
-from thomas.cad.constraints import (
+from thomas.marketplace.cad._types import Line, Point2D
+from thomas.marketplace.cad.constraints import (
     ConstraintAnalyzer,
     ConstraintSolver,
     ConstraintType,
@@ -66,7 +66,7 @@ class TestConstraintSolver:
 
     def test_duplicate_variable_error(self) -> None:
         """Test error on duplicate variable."""
-        from thomas.cad._exceptions import ConstraintError
+        from thomas.marketplace.cad._exceptions import ConstraintError
 
         solver = ConstraintSolver()
         solver.add_variable("x")

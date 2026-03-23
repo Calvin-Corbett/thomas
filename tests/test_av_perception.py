@@ -3,17 +3,17 @@
 import numpy as np
 import pytest
 
-from thomas.autonomous_vehicles._exceptions import (
+from thomas.marketplace.autonomous_vehicles._exceptions import (
     SensorDropoutException,
 )
-from thomas.autonomous_vehicles._types import (
+from thomas.marketplace.autonomous_vehicles._types import (
     CameraFrame,
     LidarPoint,
     RadarReturn,
     SensorData,
     Vector2D,
 )
-from thomas.autonomous_vehicles.perception import (
+from thomas.marketplace.autonomous_vehicles.perception import (
     LaneDetector,
     OccupancyGrid,
     PerceptionPipeline,

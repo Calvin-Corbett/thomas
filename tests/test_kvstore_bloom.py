@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.kvstore.bloom_filter import BloomFilter
+from thomas.marketplace.kvstore.bloom_filter import BloomFilter
 
 
 class TestBloomFilterBasics:

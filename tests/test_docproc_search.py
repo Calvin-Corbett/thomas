@@ -1,6 +1,6 @@
 """Tests for document search and indexing module."""
 
-from thomas.doc_processing.search import (
+from thomas.marketplace.doc_processing.search import (
     BM25Ranker,
     DocumentSearcher,
     DocumentSimilarity,

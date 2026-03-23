@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.smart_home._exceptions import EnergyError
-from thomas.smart_home.energy_mgmt import EnergyManager, TariffPeriod
+from thomas.marketplace.smart_home._exceptions import EnergyError
+from thomas.marketplace.smart_home.energy_mgmt import EnergyManager, TariffPeriod
 
 
 class TestEnergyManager:

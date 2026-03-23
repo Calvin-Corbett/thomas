@@ -5,7 +5,7 @@ Tests for denoising module.
 import numpy as np
 import pytest
 
-from thomas.image_proc import Denoiser, DenoisingConfig, Image, NoiseModel
+from thomas.marketplace.image_proc import Denoiser, DenoisingConfig, Image, NoiseModel
 
 
 class TestDenoising:

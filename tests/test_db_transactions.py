@@ -17,11 +17,11 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from thomas.db_internals._exceptions import (
+from thomas.marketplace.db_internals._exceptions import (
     TransactionException,
 )
-from thomas.db_internals._types import LockMode
-from thomas.db_internals.transactions import LockManager, TransactionManager
+from thomas.marketplace.db_internals._types import LockMode
+from thomas.marketplace.db_internals.transactions import LockManager, TransactionManager
 
 
 class TestLockManagerBasic:

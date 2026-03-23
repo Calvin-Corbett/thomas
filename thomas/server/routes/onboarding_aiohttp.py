@@ -1,17 +1,52 @@
-"""aiohttp route registration for onboarding telemetry and outcome gates."""
+"""aiohttp route registration for onboarding telemetry, outcomes, and isolated desktop setup."""
 
 from __future__ import annotations
 
 import logging
 import time
+from collections.abc import Callable
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import Any
 
 from aiohttp import web
+
+from thomas.desktop_operator.host_service import get_global_desktop_host_service
+from thomas.preferences.store import PreferencesPatch, PreferencesStore, get_db_path
 
 RequireAccessFn = Callable[[web.Request], None]
 
 log = logging.getLogger(__name__)
+
+
+def _prefs_store() -> PreferencesStore:
+    return PreferencesStore(db_path=get_db_path())
+
+
+def _user_id(request: web.Request) -> str:
+    raw = str(request.headers.get("X-User-Id") or "").strip()
+    return raw or "default"
+
+
+def _patch_desktop_preferences(request: web.Request, posture: dict[str, Any], *, enabled: bool) -> None:
+    store = _prefs_store()
+    user_id = _user_id(request)
+    patch = PreferencesPatch(
+        advanced={
+            "runtime": {
+                "isolated_desktop_enabled": bool(enabled),
+                "isolated_desktop_trust_mode": str(posture.get("trust_mode") or "ask_every_time"),
+                "isolated_desktop_hidden_by_default": True,
+            }
+        },
+        onboarding={
+            "isolated_desktop_enabled": bool(enabled),
+            "isolated_desktop_installation_state": str(posture.get("installation_state") or "not_enabled"),
+            "isolated_desktop_next_action": str(posture.get("next_action") or ""),
+            "isolated_desktop_reboot_required": bool(posture.get("reboot_required")),
+            "isolated_desktop_relogin_required": bool(posture.get("relogin_required")),
+        },
+    )
+    store.patch(patch=patch, user_id=user_id, thread_id=None)
 
 
 def register_onboarding_routes(
@@ -20,7 +55,6 @@ def register_onboarding_routes(
     require_api_access: RequireAccessFn,
 ) -> None:
     async def api_onboarding_telemetry(request: web.Request) -> web.Response:
-        """Receive onboarding telemetry events."""
         require_api_access(request)
         body = await request.json() if request.can_read_body else {}
         event_name = str(body.get("event") or "").strip() or "unknown"
@@ -32,7 +66,7 @@ def register_onboarding_routes(
         if onboarding_session_id and "onboarding_session_id" not in payload:
             payload["onboarding_session_id"] = onboarding_session_id
 
-        t_ms: Optional[int] = None
+        t_ms: int | None = None
         elapsed_raw = payload.get("elapsed_ms", body.get("elapsed_ms"))
         try:
             elapsed = int(elapsed_raw)
@@ -65,11 +99,10 @@ def register_onboarding_routes(
         return web.json_response({"ok": True})
 
     async def api_onboarding_outcomes(request: web.Request) -> web.Response:
-        """Return onboarding outcome metrics."""
         require_api_access(request)
         try:
-            from thomas.observability.onboarding_outcomes import get_outcomes_report
-            from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
+            from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report, get_outcomes_report
+
             days = max(1, int(request.query.get("days", "7") or 7))
             db_path = str(request.query.get("db") or "").strip()
             if db_path:
@@ -81,12 +114,10 @@ def register_onboarding_routes(
         return web.json_response(report)
 
     async def api_onboarding_outcomes_gate(request: web.Request) -> web.Response:
-        """Return onboarding outcomes gate status."""
         require_api_access(request)
         try:
-            from thomas.observability.onboarding_outcomes_gate import get_gate_status
-            from thomas.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
             from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
+            from thomas.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate, get_gate_status
 
             days = max(1, int(request.query.get("days", "7") or 7))
             min_events = int(request.query.get("min_events_for_quality_thresholds", "20") or 20)
@@ -125,6 +156,68 @@ def register_onboarding_routes(
             status = {"ok": False, "error": str(exc)}
         return web.json_response(status)
 
+    async def api_onboarding_desktop_status(request: web.Request) -> web.Response:
+        require_api_access(request)
+        posture = get_global_desktop_host_service().status().to_dict()
+        return web.json_response({"ok": True, "isolated_desktop": posture})
+
+    async def api_onboarding_desktop_opt_in(request: web.Request) -> web.Response:
+        require_api_access(request)
+        body = await request.json() if request.can_read_body else {}
+        enabled = bool(body.get("enabled", True))
+        hidden_by_default = bool(body.get("hidden_by_default", True))
+        service = get_global_desktop_host_service()
+        posture = service.request_opt_in(hidden_by_default=hidden_by_default) if enabled else service.disable()
+        payload = posture.to_dict()
+        _patch_desktop_preferences(request, payload, enabled=enabled)
+        return web.json_response({"ok": True, "isolated_desktop": payload})
+
+    async def api_onboarding_desktop_trust(request: web.Request) -> web.Response:
+        require_api_access(request)
+        body = await request.json() if request.can_read_body else {}
+        trust_mode = str(body.get("trust_mode") or "ask_every_time").strip()
+        posture = get_global_desktop_host_service().set_remote_trust_mode(trust_mode)
+        payload = posture.to_dict()
+        _patch_desktop_preferences(request, payload, enabled=bool(payload.get("enabled")))
+        return web.json_response({"ok": True, "isolated_desktop": payload})
+
+    async def api_onboarding_desktop_vm_source(request: web.Request) -> web.Response:
+        require_api_access(request)
+        body = await request.json() if request.can_read_body else {}
+        service = get_global_desktop_host_service()
+        posture = service.configure_local_vm_source(
+            source_type=str(body.get("source_type") or "unconfigured"),
+            vm_name=str(body.get("vm_name") or ""),
+            template_vhdx=str(body.get("template_vhdx") or ""),
+            switch_name=str(body.get("switch_name") or ""),
+        )
+        payload = posture.to_dict()
+        _patch_desktop_preferences(request, payload, enabled=bool(payload.get("enabled")))
+        return web.json_response({"ok": True, "isolated_desktop": payload})
+
+    async def api_onboarding_desktop_install(request: web.Request) -> web.Response:
+        require_api_access(request)
+        body = await request.json() if request.can_read_body else {}
+        enabled = bool(body.get("enabled", True))
+        service = get_global_desktop_host_service()
+        if enabled:
+            service.request_opt_in(hidden_by_default=bool(body.get("hidden_by_default", True)))
+        launch = service.launch_host_service_install()
+        payload = dict(launch.get("posture") or service.status().to_dict())
+        _patch_desktop_preferences(request, payload, enabled=enabled)
+        return web.json_response({"ok": True, "install_launch": launch, "isolated_desktop": payload})
+
+    async def api_onboarding_desktop_open_viewer(request: web.Request) -> web.Response:
+        require_api_access(request)
+        launch = get_global_desktop_host_service().launch_viewer()
+        return web.json_response({"ok": True, "viewer_launch": launch})
+
     app.router.add_post("/api/onboarding/telemetry", api_onboarding_telemetry)
     app.router.add_get("/api/onboarding/outcomes", api_onboarding_outcomes)
     app.router.add_get("/api/onboarding/outcomes/gate", api_onboarding_outcomes_gate)
+    app.router.add_get("/api/onboarding/desktop/status", api_onboarding_desktop_status)
+    app.router.add_post("/api/onboarding/desktop/opt-in", api_onboarding_desktop_opt_in)
+    app.router.add_post("/api/onboarding/desktop/trust", api_onboarding_desktop_trust)
+    app.router.add_post("/api/onboarding/desktop/vm-source", api_onboarding_desktop_vm_source)
+    app.router.add_post("/api/onboarding/desktop/install", api_onboarding_desktop_install)
+    app.router.add_post("/api/onboarding/desktop/open-viewer", api_onboarding_desktop_open_viewer)

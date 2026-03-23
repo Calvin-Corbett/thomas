@@ -1,17 +1,16 @@
-﻿"""Generate onboarding outcomes report from run/event telemetry."""
+"""Generate onboarding outcomes report from run/event telemetry."""
 
 from __future__ import annotations
 
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
-from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
-from thomas.observability.run_db import resolve_runs_db_path
+from thomas.marketplace.observability.onboarding_outcomes import build_onboarding_outcome_report
+from thomas.marketplace.observability.run_db import resolve_runs_db_path
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Build onboarding funnel outcome report from telemetry events.")
     parser.add_argument("--days", type=int, default=7, help="Window size in days (default: 7).")
     parser.add_argument("--db", default="", help="Optional runs DB path override.")

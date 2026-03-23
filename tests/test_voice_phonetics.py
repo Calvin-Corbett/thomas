@@ -4,9 +4,9 @@ Tests for voice phonetics module.
 
 import pytest
 
-from thomas.voice._exceptions import PhoneticsError
-from thomas.voice._types import PhonemeType, StressLevel
-from thomas.voice.phonetics import (
+from thomas.marketplace.voice._exceptions import PhoneticsError
+from thomas.marketplace.voice._types import PhonemeType, StressLevel
+from thomas.marketplace.voice.phonetics import (
     PhonemeSet,
     PhoneticsProcessor,
 )

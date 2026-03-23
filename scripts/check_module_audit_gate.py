@@ -5,22 +5,21 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, List, Sequence, Set
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from thomas.observability.module_audit import (
+from thomas.marketplace.observability.module_audit import (
     MAJOR_MODULES,
     load_registry,
     normalize_path,
     sha256_file,
     touched_modules,
 )
-
 
 ROOT = Path(__file__).resolve().parent.parent
 ROOT_DIRNAME = ROOT.name
@@ -32,11 +31,11 @@ def _normalize_path(path: str) -> str:
     p = normalize_path(path)
     prefix = ROOT_DIRNAME + "/"
     if p.startswith(prefix):
-        p = p[len(prefix):]
+        p = p[len(prefix) :]
     return p
 
 
-def _git_changed_files(base: str | None, head: str | None) -> List[str]:
+def _git_changed_files(base: str | None, head: str | None) -> list[str]:
     if head is None:
         head = "HEAD"
     if base and base.strip("0"):
@@ -44,7 +43,7 @@ def _git_changed_files(base: str | None, head: str | None) -> List[str]:
     else:
         range_expr = f"{head}~1...{head}"
 
-    def _run(cmd: List[str]) -> List[str]:
+    def _run(cmd: list[str]) -> list[str]:
         proc = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True)
         if proc.returncode != 0:
             return []
@@ -55,7 +54,7 @@ def _git_changed_files(base: str | None, head: str | None) -> List[str]:
                 out.append(p)
         return out
 
-    changed: Set[str] = set(_run(["git", "diff", "--name-only", range_expr]))
+    changed: set[str] = set(_run(["git", "diff", "--name-only", range_expr]))
     if not changed:
         changed.update(_run(["git", "diff", "--name-only", head]))
 
@@ -87,13 +86,9 @@ def _age_days(raw_iso: str) -> float | None:
     return max(0.0, (now - dt).total_seconds() / 86400.0)
 
 
-def _module_files(changed: Iterable[str], module: str) -> List[str]:
+def _module_files(changed: Iterable[str], module: str) -> list[str]:
     prefix = f"thomas/{module}/"
-    out = [
-        _normalize_path(path)
-        for path in changed
-        if _normalize_path(path).startswith(prefix)
-    ]
+    out = [_normalize_path(path) for path in changed if _normalize_path(path).startswith(prefix)]
     return sorted(set(out), key=str.lower)
 
 
@@ -160,11 +155,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         status = str(row.get("status") or "").strip().lower()
         audited_at = str(row.get("audited_at") or "").strip()
         signature = str(row.get("signature") or "").strip()
-        files_touched = {
-            _normalize_path(item)
-            for item in (row.get("files_touched") or [])
-            if _normalize_path(item)
-        }
+        files_touched = {_normalize_path(item) for item in (row.get("files_touched") or []) if _normalize_path(item)}
         file_hashes = {
             _normalize_path(key): str(value or "").strip().lower()
             for key, value in dict(row.get("file_hashes") or {}).items()
@@ -206,9 +197,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             expected_hash = str(file_hashes.get(path) or "").strip().lower()
             if not expected_hash:
                 failed = True
-                print(
-                    f"\nAudit entry for module={module} missing file hash for changed file: {path}"
-                )
+                print(f"\nAudit entry for module={module} missing file hash for changed file: {path}")
                 continue
             actual_hash = _file_hash_for_gate(path)
             if expected_hash != actual_hash:
@@ -226,4 +215,3 @@ def run(argv: Sequence[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(run())
-

@@ -1,0 +1,50 @@
+{
+  "id": "desktop-operator",
+  "plugin_id": "desktop-operator",
+  "name": "Desktop Operator",
+  "display_name": "Desktop Operator",
+  "version": "3.1.0",
+  "category": "operations",
+  "categories": [
+    "operations",
+    "desktop",
+    "automation"
+  ],
+  "target": "desktop",
+  "mode": "desktop_operator",
+  "mode_id": "desktop_operator",
+  "entrypoint": "hooks.py",
+  "publisher_id": "thomas-official",
+  "publisher_name": "Thomas",
+  "kind": "desktop_plugin",
+  "marketplace_type": "command_center",
+  "description": "Secure desktop sessions for allowlisted apps with local-VM isolation, quiet guardrails, verification, and recovery.",
+  "subtitle": "Browser, file dialog, and CapCut workflows with balanced approvals and redacted replay.",
+  "icon": "ph-desktop",
+  "api_namespace": "desktop.operator",
+  "capabilities": [
+    "desktop.operator",
+    "desktop.capture",
+    "desktop.accessibility",
+    "desktop.input",
+    "desktop.verify"
+  ],
+  "tags": [
+    "desktop",
+    "automation",
+    "command_center",
+    "workspace",
+    "official"
+  ],
+  "requires": [],
+  "left_nav_behavior": "workspace",
+  "default_nav_section": "command_centers",
+  "default_nav_order": 560,
+  "surface": {
+    "entry_html": "web/index.html",
+    "title": "Desktop Operator",
+    "surface_mode": "immersive"
+  },
+  "sha256": "",
+  "signature": "bundled"
+}

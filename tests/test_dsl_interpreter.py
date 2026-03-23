@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.dsl import Interpreter, Lexer, Parser
+from thomas.marketplace.dsl import Interpreter, Lexer, Parser
 
 
 class TestInterpreter:
@@ -355,7 +355,7 @@ class TestInterpreterEdgeCases:
 
     def test_eval_undefined_variable(self) -> None:
         """Test undefined variable."""
-        from thomas.dsl import UndefinedVariable
+        from thomas.marketplace.dsl import UndefinedVariable
 
         with pytest.raises(UndefinedVariable):
             self._eval("undefined_var")

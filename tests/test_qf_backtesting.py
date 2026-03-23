@@ -5,8 +5,8 @@ from datetime import datetime, timedelta
 import numpy as np
 import pytest
 
-from thomas.quantfin._types import OHLCV, Asset, OrderSide
-from thomas.quantfin.backtesting import (
+from thomas.marketplace.quantfin._types import OHLCV, Asset, OrderSide
+from thomas.marketplace.quantfin.backtesting import (
     BacktestConfig,
     BacktestEngine,
     WalkForwardOptimizer,

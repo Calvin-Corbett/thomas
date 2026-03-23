@@ -35,7 +35,7 @@ class _FakeHTTPResponse:
 def test_contract_tests_success(monkeypatch):
     _install_fake_telegram_module(monkeypatch)
 
-    from thomas.channels.p095_channel_provider_contract_tests import (
+    from thomas.marketplace.channels.p095_channel_provider_contract_tests import (
         ProviderContractTestRequest,
         run_channel_provider_contract_tests,
     )
@@ -66,15 +66,13 @@ def test_contract_tests_success(monkeypatch):
 def test_contract_tests_missing_config_is_deterministic(monkeypatch):
     _install_fake_telegram_module(monkeypatch)
 
-    from thomas.channels.p095_channel_provider_contract_tests import (
+    from thomas.marketplace.channels.p095_channel_provider_contract_tests import (
         ERROR_MISSING_CONFIG,
         ProviderContractTestRequest,
         run_channel_provider_contract_tests,
     )
 
-    report = run_channel_provider_contract_tests(
-        ProviderContractTestRequest(provider="telegram", config={})
-    )
+    report = run_channel_provider_contract_tests(ProviderContractTestRequest(provider="telegram", config={}))
 
     assert report.ok is False
     assert report.errors
@@ -84,7 +82,7 @@ def test_contract_tests_missing_config_is_deterministic(monkeypatch):
 def test_contract_tests_external_failure_is_deterministic(monkeypatch):
     _install_fake_telegram_module(monkeypatch)
 
-    from thomas.channels.p095_channel_provider_contract_tests import (
+    from thomas.marketplace.channels.p095_channel_provider_contract_tests import (
         ERROR_EXTERNAL_FAILURE,
         ProviderContractTestRequest,
         run_channel_provider_contract_tests,

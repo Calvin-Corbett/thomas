@@ -15,7 +15,7 @@ from datetime import datetime, timedelta
 from decimal import Decimal
 from uuid import uuid4
 
-from thomas.supply_chain import SKU, BillOfMaterials, BOMComponent, ProductionOrder, ProductionPlanner
+from thomas.marketplace.supply_chain import SKU, BillOfMaterials, BOMComponent, ProductionOrder, ProductionPlanner
 
 
 class TestMRPExplosion:
@@ -165,7 +165,7 @@ class TestBottleneckAnalysis:
 
     def test_bottleneck_identification(self) -> None:
         """Test bottleneck identification."""
-        from thomas.supply_chain.production import CapacityRequirement
+        from thomas.marketplace.supply_chain.production import CapacityRequirement
 
         requirements = [
             CapacityRequirement(
@@ -198,7 +198,7 @@ class TestBottleneckAnalysis:
 
     def test_bottleneck_mitigation_actions(self) -> None:
         """Test bottleneck mitigation action recommendations."""
-        from thomas.supply_chain.production import CapacityRequirement
+        from thomas.marketplace.supply_chain.production import CapacityRequirement
 
         requirements = [
             CapacityRequirement(
@@ -325,7 +325,7 @@ class TestMaterialAvailability:
         po = ProductionOrder(id=uuid4(), order_number="PO001", product_id=uuid4(), quantity=Decimal("100"))
 
         # Add materials to production order
-        from thomas.supply_chain._types import MaterialRequirement
+        from thomas.marketplace.supply_chain._types import MaterialRequirement
 
         po.required_materials = [
             MaterialRequirement(id=uuid4(), sku=sku1, quantity_required=Decimal("2"), warehouse_id=uuid4()),
@@ -347,7 +347,7 @@ class TestMaterialAvailability:
 
         po = ProductionOrder(id=uuid4(), order_number="PO001", product_id=uuid4(), quantity=Decimal("100"))
 
-        from thomas.supply_chain._types import MaterialRequirement
+        from thomas.marketplace.supply_chain._types import MaterialRequirement
 
         po.required_materials = [
             MaterialRequirement(id=uuid4(), sku=sku1, quantity_required=Decimal("3"), warehouse_id=uuid4())

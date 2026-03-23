@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.climate import modeling
-from thomas.climate._exceptions import InvalidParameterError, ModelError
+from thomas.marketplace.climate import modeling
+from thomas.marketplace.climate._exceptions import InvalidParameterError, ModelError
 
 
 class TestEnergyBalance:

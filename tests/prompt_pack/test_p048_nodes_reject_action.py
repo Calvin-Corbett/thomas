@@ -4,8 +4,12 @@ from pathlib import Path
 import pytest
 from click.testing import CliRunner
 
-from thomas.nodes.p048_nodes_reject_action import NodesRejectActionError, NodesRejectActionInput, reject_node_action
 from thomas.cli.commands.nodes.p048_nodes_reject_action import click_command
+from thomas.marketplace.nodes.p048_nodes_reject_action import (
+    NodesRejectActionError,
+    NodesRejectActionInput,
+    reject_node_action,
+)
 
 
 def _write_store(tmp_path: Path, actions: dict) -> Path:

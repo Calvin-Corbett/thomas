@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.dsl import VM, BinaryOp, Compiler, DSLConfig, Literal, OpCode
+from thomas.marketplace.dsl import VM, BinaryOp, Compiler, DSLConfig, Literal, OpCode
 
 
 class TestVM:
@@ -66,7 +66,7 @@ class TestVM:
 
     def test_vm_negation(self) -> None:
         """Test NEG instruction."""
-        from thomas.dsl import UnaryOp
+        from thomas.marketplace.dsl import UnaryOp
 
         ast = UnaryOp("-", Literal(42))
         result = self._compile_and_execute(ast)
@@ -128,7 +128,7 @@ class TestVM:
 
     def test_vm_bitwise_not(self) -> None:
         """Test BIT_NOT instruction."""
-        from thomas.dsl import UnaryOp
+        from thomas.marketplace.dsl import UnaryOp
 
         ast = UnaryOp("~", Literal(0))
         result = self._compile_and_execute(ast)
@@ -160,7 +160,7 @@ class TestVM:
 
     def test_vm_logical_not(self) -> None:
         """Test NOT instruction."""
-        from thomas.dsl import UnaryOp
+        from thomas.marketplace.dsl import UnaryOp
 
         ast = UnaryOp("!", Literal(False))
         result = self._compile_and_execute(ast)
@@ -185,7 +185,7 @@ class TestVM:
 
     def test_vm_call_frame(self) -> None:
         """Test call frame creation."""
-        from thomas.dsl import CallFrame, CodeObject
+        from thomas.marketplace.dsl import CallFrame, CodeObject
 
         code = CodeObject(name="test")
         frame = CallFrame(code)

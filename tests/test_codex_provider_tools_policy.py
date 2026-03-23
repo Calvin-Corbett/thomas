@@ -3,9 +3,9 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from thomas.codex.bridge import CodexBridgeError
-from thomas.codex.provider import CodexProvider
 from thomas.core.config import ModelConfig
+from thomas.marketplace.codex.bridge import CodexBridgeError
+from thomas.marketplace.codex.provider import CodexProvider
 
 
 class _DummyBridge:

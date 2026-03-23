@@ -7,7 +7,7 @@ routing patterns, and graceful shutdown.
 
 import pytest
 
-from thomas.message_queue import (
+from thomas.marketplace.message_queue import (
     Broker,
     Message,
     QueueConfig,

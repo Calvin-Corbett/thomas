@@ -1,5 +1,4 @@
-“””
-Swarm Mode — IN-PROCESS async task graph orchestrator (stdlib-only).
+"""Mode — IN-PROCESS async task graph orchestrator (stdlib-only).
 
 IMPORTANT FOR AI AGENTS:
   This is NOT the same as scripts/workboard_swarm.py (which spawns terminal processes).

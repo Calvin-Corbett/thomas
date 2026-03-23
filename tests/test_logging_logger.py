@@ -3,10 +3,10 @@
 import threading
 import unittest
 
-from thomas.logging_framework._types import CorrelationId, LogLevel, TraceContext
-from thomas.logging_framework.filters import LevelFilter
-from thomas.logging_framework.handlers import MemoryHandler
-from thomas.logging_framework.logger import Logger, get_logger, root_logger
+from thomas.marketplace.logging_framework._types import CorrelationId, LogLevel, TraceContext
+from thomas.marketplace.logging_framework.filters import LevelFilter
+from thomas.marketplace.logging_framework.handlers import MemoryHandler
+from thomas.marketplace.logging_framework.logger import Logger, get_logger, root_logger
 
 
 class TestLogger(unittest.TestCase):

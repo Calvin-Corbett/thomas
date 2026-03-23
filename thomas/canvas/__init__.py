@@ -1,31 +1,3 @@
-"""2D drawing canvas with shapes, layers, and transforms."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.canvas."""
 
-from thomas.canvas.core import (
-    BoundingBox,
-    Canvas,
-    Circle,
-    Color,
-    Layer,
-    Point,
-    Polygon,
-    Rectangle,
-    Shape,
-    ShapeType,
-    Transform,
-)
-from thomas.canvas.tools import register_canvas_tools
-
-__all__ = [
-    "Canvas",
-    "Layer",
-    "Shape",
-    "Rectangle",
-    "Circle",
-    "Polygon",
-    "Point",
-    "Color",
-    "Transform",
-    "BoundingBox",
-    "ShapeType",
-    "register_canvas_tools",
-]
+from thomas.marketplace.canvas import *  # noqa: F401,F403

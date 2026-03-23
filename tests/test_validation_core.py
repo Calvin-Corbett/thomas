@@ -4,11 +4,11 @@ Tests for core validation engine.
 
 import pytest
 
-from thomas.validation._types import (
+from thomas.marketplace.validation._types import (
     SchemaDefinition,
     ValidatorConfig,
 )
-from thomas.validation.core import Validator
+from thomas.marketplace.validation.core import Validator
 
 
 class TestBasicValidation:
@@ -300,7 +300,7 @@ class TestCustomRules:
 
     def test_custom_rule_validation(self) -> None:
         """Test custom validation rule."""
-        from thomas.validation._types import FieldRule
+        from thomas.marketplace.validation._types import FieldRule
 
         schema = SchemaDefinition(
             type="object",

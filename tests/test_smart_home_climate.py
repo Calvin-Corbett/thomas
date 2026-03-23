@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.smart_home._exceptions import ClimateError
-from thomas.smart_home.climate import ThermostatScheduler
+from thomas.marketplace.smart_home._exceptions import ClimateError
+from thomas.marketplace.smart_home.climate import ThermostatScheduler
 
 
 class TestThermostatScheduler:

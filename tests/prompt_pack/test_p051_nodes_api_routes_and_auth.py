@@ -9,7 +9,7 @@ from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
 from thomas.cli.commands.nodes import p051_nodes_api_routes_and_auth as cli_mod
-from thomas.nodes import p051_nodes_api_routes_and_auth as nodes_api
+from thomas.marketplace.nodes import p051_nodes_api_routes_and_auth as nodes_api
 
 
 def test_nodes_api_list_success_and_schema() -> None:

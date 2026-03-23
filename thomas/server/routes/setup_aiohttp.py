@@ -20,6 +20,7 @@ except ImportError:
 from aiohttp import web
 
 from thomas.core.config import AppConfig
+from thomas.desktop_operator.host_service import get_global_desktop_host_service
 from thomas.models.local_recommendations import (
     build_local_runtime_plan,
     detect_local_hardware_profile,
@@ -181,6 +182,10 @@ def register_setup_routes(
             )
 
         hardware = detect_local_hardware_profile()
+        try:
+            isolated_desktop = get_global_desktop_host_service().status().to_dict()
+        except Exception:
+            isolated_desktop = {"installation_state": "not_enabled"}
         local_plan = build_local_runtime_plan(
             hardware=hardware,
             local_profile_exists=bool(local_profile_exists),
@@ -244,6 +249,7 @@ def register_setup_routes(
                     "cloud_key_count": int(cloud_key_count),
                 },
                 "hardware": hardware,
+                "isolated_desktop": isolated_desktop,
                 "local_plan": local_plan,
                 "quick_start": {
                     "recommended_path": recommended_path,

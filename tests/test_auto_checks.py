@@ -17,6 +17,10 @@ def test_gate_steps_include_surface_parity() -> None:
     )
 
 
+def test_test_steps_use_stepup_protocol() -> None:
+    assert mod.TEST_STEPS == (("Thomas step-up test protocol", (mod.PY, "scripts/test_stepup_protocol.py")),)
+
+
 def test_run_includes_surface_parity_gate_when_not_quick(monkeypatch) -> None:
     seen: list[tuple[str, tuple[str, ...]]] = []
 

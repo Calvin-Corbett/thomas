@@ -1,0 +1,125 @@
+:root {
+  --bg: #0d1218;
+  --panel: #151d26;
+  --panel-2: #1b2733;
+  --line: rgba(255,255,255,0.08);
+  --text: #f6f7fb;
+  --muted: #a9b5c5;
+  --accent: #6fd0ff;
+  --accent-2: #9affd8;
+}
+
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  font-family: "Segoe UI", "IBM Plex Sans", sans-serif;
+  background:
+    radial-gradient(circle at top left, rgba(111,208,255,0.12), transparent 35%),
+    linear-gradient(180deg, #091017 0%, var(--bg) 100%);
+  color: var(--text);
+}
+.shell {
+  width: min(1100px, calc(100vw - 32px));
+  margin: 0 auto;
+  padding: 40px 0 56px;
+}
+.hero {
+  padding: 28px 28px 12px;
+}
+.eyebrow {
+  margin: 0 0 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+  font-size: 12px;
+}
+h1 {
+  margin: 0;
+  font-size: clamp(40px, 7vw, 72px);
+  line-height: 0.95;
+}
+.lede {
+  max-width: 760px;
+  color: var(--muted);
+  font-size: 18px;
+  line-height: 1.6;
+}
+.panel, .card {
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0.01));
+  border: 1px solid var(--line);
+  border-radius: 22px;
+  backdrop-filter: blur(12px);
+}
+.panel {
+  margin: 8px 28px 24px;
+  padding: 20px;
+}
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+.panel-head h2 {
+  margin: 0;
+  font-size: 20px;
+}
+button {
+  border: 0;
+  border-radius: 999px;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, var(--accent), #7aa2ff);
+  color: #08131d;
+  font-weight: 700;
+  cursor: pointer;
+}
+.status-card {
+  margin-top: 18px;
+  min-height: 120px;
+  border-radius: 18px;
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  padding: 18px;
+  color: var(--muted);
+}
+.grid {
+  display: grid;
+  gap: 18px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  padding: 0 28px;
+}
+.card {
+  padding: 20px;
+}
+.card h3 {
+  margin: 0 0 10px;
+}
+.card p {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.6;
+}
+.status-pill {
+  display: inline-block;
+  padding: 6px 10px;
+  border-radius: 999px;
+  margin-bottom: 12px;
+  background: rgba(111,208,255,0.14);
+  color: var(--accent);
+  font-size: 12px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.meta {
+  display: grid;
+  gap: 10px;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+}
+.meta strong {
+  display: block;
+  color: var(--text);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 4px;
+}

@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.hr_platform._exceptions import HRException
-from thomas.hr_platform._types import Employee, EmploymentStatus
-from thomas.hr_platform.analytics import (
+from thomas.marketplace.hr_platform._exceptions import HRException
+from thomas.marketplace.hr_platform._types import Employee, EmploymentStatus
+from thomas.marketplace.hr_platform.analytics import (
     CompensationAnalytics,
     DiversityMetrics,
     EngagementMetrics,

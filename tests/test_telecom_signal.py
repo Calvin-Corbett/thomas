@@ -6,7 +6,7 @@ import math
 
 import pytest
 
-from thomas.telecom.signal import (
+from thomas.marketplace.telecom.signal import (
     AntennaPattern,
     Beamformer,
     PathLossModel,

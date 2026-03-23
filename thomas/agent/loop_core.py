@@ -62,8 +62,8 @@ except ImportError:
 if TYPE_CHECKING:
     from thomas.agent.guarded_tools import GuardedToolRunner
     from thomas.core.llm import LLMClient
+    from thomas.marketplace.policy.policy import PolicyEngine
     from thomas.memory import MemoryEngine
-    from thomas.policy.policy import PolicyEngine
 
 log = logging.getLogger(__name__)
 

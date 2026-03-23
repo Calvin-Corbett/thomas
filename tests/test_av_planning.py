@@ -1,13 +1,13 @@
 """Tests for planning module."""
 
-from thomas.autonomous_vehicles._types import (
+from thomas.marketplace.autonomous_vehicles._types import (
     Obstacle,
     ObstacleType,
     PlannerConfig,
     Vector2D,
     VehicleState,
 )
-from thomas.autonomous_vehicles.planning import (
+from thomas.marketplace.autonomous_vehicles.planning import (
     GlobalPlanner,
     LaneChangePlanner,
     LatticeTrajectoryGenerator,

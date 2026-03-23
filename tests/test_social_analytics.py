@@ -3,7 +3,7 @@
 from datetime import datetime, timedelta
 from uuid import uuid4
 
-from thomas.social_platform import AnalyticsEngine
+from thomas.marketplace.social_platform import AnalyticsEngine
 
 
 class TestAnalyticsEngine:

@@ -3,7 +3,7 @@ import sys
 
 import pytest
 
-from thomas.nodes.p032_node_command_run import (
+from thomas.marketplace.nodes.p032_node_command_run import (
     LocalSubprocessBackend,
     NodeCommandRunException,
     NodeCommandRunRequest,

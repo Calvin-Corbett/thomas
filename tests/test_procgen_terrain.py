@@ -4,14 +4,14 @@ Tests for terrain generation.
 
 import pytest
 
-from thomas.procgen._exceptions import InvalidConfigError
-from thomas.procgen._types import (
+from thomas.marketplace.procgen._exceptions import InvalidConfigError
+from thomas.marketplace.procgen._types import (
     BiomeType,
     HeightMap,
     NoiseConfig,
     TerrainType,
 )
-from thomas.procgen.terrain import (
+from thomas.marketplace.procgen.terrain import (
     BiomeAssigner,
     CoastlineGenerator,
     RiverGenerator,

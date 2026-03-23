@@ -1,11 +1,11 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
-from thomas.observability.run_db import connect, ensure_schema
+from thomas.marketplace.observability.onboarding_outcomes import build_onboarding_outcome_report
+from thomas.marketplace.observability.run_db import connect, ensure_schema
 
 
 def _seed_event(

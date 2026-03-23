@@ -5,8 +5,8 @@ Tests for voice feature extraction module.
 import numpy as np
 import pytest
 
-from thomas.voice._types import AudioSample
-from thomas.voice.features import FeatureExtractor
+from thomas.marketplace.voice._types import AudioSample
+from thomas.marketplace.voice.features import FeatureExtractor
 
 
 class TestFeatureExtractor:
@@ -164,7 +164,7 @@ class TestFeatureExtractor:
         """Test frame power calculation."""
         frame_data = np.sin(2 * np.pi * 440 * np.linspace(0, 1, 512))
 
-        from thomas.voice._types import SpeechFrame
+        from thomas.marketplace.voice._types import SpeechFrame
 
         frame = SpeechFrame(
             frame_data=frame_data,

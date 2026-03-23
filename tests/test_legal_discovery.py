@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.legal.discovery import DiscoveryManager, HoldStatus, ReviewCoding
+from thomas.marketplace.legal.discovery import DiscoveryManager, HoldStatus, ReviewCoding
 
 
 class TestDiscoveryManager:

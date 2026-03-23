@@ -1,9 +1,9 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.observability.focus_scorecard import build_focus_scorecard
-from thomas.observability.run_db import connect, ensure_schema
+from thomas.marketplace.observability.focus_scorecard import build_focus_scorecard
+from thomas.marketplace.observability.run_db import connect, ensure_schema
 
 
 def _seed_event(db: Path, *, run_id: str, event_type: str, payload_json: str) -> None:

@@ -1,7 +1,7 @@
 """Tests for animation system."""
 
-from thomas.gaming_platform._types import AnimationClip, Sprite
-from thomas.gaming_platform.animation import (
+from thomas.marketplace.gaming_platform._types import AnimationClip, Sprite
+from thomas.marketplace.gaming_platform.animation import (
     AnimationEngine,
     AnimationStateMachine,
     Easing,
@@ -9,7 +9,7 @@ from thomas.gaming_platform.animation import (
     PropertyTween,
     SpriteAnimator,
 )
-from thomas.gaming_platform.ecs import EntityComponentSystem
+from thomas.marketplace.gaming_platform.ecs import EntityComponentSystem
 
 
 class TestEasing:

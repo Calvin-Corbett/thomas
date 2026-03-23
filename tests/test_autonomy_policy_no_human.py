@@ -2,7 +2,7 @@ import os
 import tempfile
 import unittest
 
-from thomas.autonomy.policy import AutonomyPolicy
+from thomas.marketplace.autonomy.policy import AutonomyPolicy
 
 
 class TestAutonomyPolicyNoHuman(unittest.TestCase):

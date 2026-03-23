@@ -10,15 +10,13 @@ from __future__ import annotations
 import json
 import re
 from pathlib import Path
-from typing import Dict, List
-
 
 ROOT = Path(__file__).resolve().parent.parent
 SCOPE_DOC = ROOT / "docs" / "PROJECT_SCOPE.md"
 BASELINE_DOC = ROOT / "demo" / "baselines" / "openclaw.current.json"
 
 
-REQUIRED_SECTIONS: List[str] = [
+REQUIRED_SECTIONS: list[str] = [
     "## Consumer Mission (Permanent)",
     "## Competitive Program (Release-Bound)",
     "## OpenClaw Baseline Lock",
@@ -27,7 +25,7 @@ REQUIRED_SECTIONS: List[str] = [
     "## Evidence Policy",
 ]
 
-REQUIRED_PATTERNS: Dict[str, str] = {
+REQUIRED_PATTERNS: dict[str, str] = {
     "Consumer value first": r"consumer value first",
     "Competitive is not sole purpose": r"not the sole product purpose",
     "Release-bound baseline wording": r"currently released OpenClaw baseline",

@@ -6,8 +6,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.telecom._types import CallRecord, Subscriber
-from thomas.telecom.billing import (
+from thomas.marketplace.telecom._types import CallRecord, Subscriber
+from thomas.marketplace.telecom.billing import (
     BillingEngine,
     CDRMediation,
     InterconnectSettlement,

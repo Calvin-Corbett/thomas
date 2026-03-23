@@ -1,6 +1,6 @@
 """Tests for webhook delivery functionality."""
 
-from thomas.webhooks._types import (
+from thomas.marketplace.webhooks._types import (
     Delivery,
     DeliveryStatus,
     Endpoint,
@@ -8,7 +8,7 @@ from thomas.webhooks._types import (
     Subscription,
     WebhookEvent,
 )
-from thomas.webhooks.delivery import DeliveryEnvelope, DeliveryManager, DeliveryQueue
+from thomas.marketplace.webhooks.delivery import DeliveryEnvelope, DeliveryManager, DeliveryQueue
 
 
 class TestDeliveryQueue:

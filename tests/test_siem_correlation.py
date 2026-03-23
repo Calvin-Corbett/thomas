@@ -2,13 +2,13 @@
 
 from datetime import datetime, timedelta
 
-from thomas.siem._types import (
+from thomas.marketplace.siem._types import (
     EventCategory,
     EventSeverity,
     Rule,
     SecurityEvent,
 )
-from thomas.siem.correlation import (
+from thomas.marketplace.siem.correlation import (
     CooccurrenceAnalyzer,
     CorrelationEngine,
     CorrelationState,

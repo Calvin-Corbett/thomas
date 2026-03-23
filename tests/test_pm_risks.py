@@ -2,12 +2,12 @@
 
 import pytest
 
-from thomas.project_mgmt._types import (
+from thomas.marketplace.project_mgmt._types import (
     RiskCategory,
     RiskStatus,
     Task,
 )
-from thomas.project_mgmt.risks import RiskManager
+from thomas.marketplace.project_mgmt.risks import RiskManager
 
 
 class TestRiskManager:

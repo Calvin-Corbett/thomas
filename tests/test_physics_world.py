@@ -4,9 +4,9 @@ Tests for physics world and simulation.
 
 import pytest
 
-from thomas.physics._types import AABB, PhysicsConfig, Ray, RigidBodyType, Vec3
-from thomas.physics.rigid_body import RigidBody
-from thomas.physics.world import PhysicsWorld
+from thomas.marketplace.physics._types import AABB, PhysicsConfig, Ray, RigidBodyType, Vec3
+from thomas.marketplace.physics.rigid_body import RigidBody
+from thomas.marketplace.physics.world import PhysicsWorld
 
 
 class TestPhysicsWorldCreation:

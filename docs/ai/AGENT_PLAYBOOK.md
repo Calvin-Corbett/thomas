@@ -58,6 +58,7 @@ python scripts/check_deletions.py --staged-only
 
 ```bash
 pytest --collect-only -q
+python scripts/test_stepup_protocol.py
 python scripts/check_monolith_guard.py
 python scripts/check_feature_registry.py
 python scripts/check_release_hygiene.py

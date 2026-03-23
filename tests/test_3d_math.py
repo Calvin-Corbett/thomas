@@ -14,9 +14,9 @@ import math
 
 import pytest
 
-from thomas.graphics3d import math3d
-from thomas.graphics3d._exceptions import MathError
-from thomas.graphics3d._types import Mat4, Quaternion, Vec2, Vec3, Vec4
+from thomas.marketplace.graphics3d import math3d
+from thomas.marketplace.graphics3d._exceptions import MathError
+from thomas.marketplace.graphics3d._types import Mat4, Quaternion, Vec2, Vec3, Vec4
 
 
 class TestVec2:
@@ -320,7 +320,7 @@ class TestRayIntersection:
 
     def test_ray_aabb_intersection(self) -> None:
         """Test ray-AABB intersection."""
-        from thomas.graphics3d._types import AABB
+        from thomas.marketplace.graphics3d._types import AABB
 
         aabb = AABB(Vec3(-1, -1, -1), Vec3(1, 1, 1))
         hit, dist = math3d.ray_intersect_aabb(Vec3(0, 0, -5), Vec3(0, 0, 1), aabb)
@@ -350,7 +350,7 @@ class TestAABB:
 
     def test_aabb_contains_point(self) -> None:
         """Test point-in-AABB test."""
-        from thomas.graphics3d._types import AABB
+        from thomas.marketplace.graphics3d._types import AABB
 
         aabb = AABB(Vec3(-1, -1, -1), Vec3(1, 1, 1))
         assert aabb.contains_point(Vec3(0, 0, 0))

@@ -10,9 +10,9 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.travel._exceptions import InsufficientPointsError, LoyaltyError
-from thomas.travel._types import Loyalty, LoyaltyTier
-from thomas.travel.loyalty import (
+from thomas.marketplace.travel._exceptions import InsufficientPointsError, LoyaltyError
+from thomas.marketplace.travel._types import Loyalty, LoyaltyTier
+from thomas.marketplace.travel.loyalty import (
     EliteBenefitsManager,
     LoyaltyAnalytics,
     PartnerEarningBurning,

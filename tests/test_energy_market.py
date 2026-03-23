@@ -2,8 +2,8 @@
 Tests for energy market operations and pricing.
 """
 
-from thomas.energy._types import EnergySource
-from thomas.energy.market import (
+from thomas.marketplace.energy._types import EnergySource
+from thomas.marketplace.energy.market import (
     BidStack,
     DemandBid,
     EnergyMarket,
@@ -204,7 +204,7 @@ class TestPricingEngine:
 
     def test_time_of_use_rates(self):
         """Test TOU rate adjustment."""
-        from thomas.energy._types import TariffSchedule, TariffType
+        from thomas.marketplace.energy._types import TariffSchedule, TariffType
 
         engine = PricingEngine()
 
@@ -277,7 +277,7 @@ class TestEnergyMarket:
 
     def test_demand_response_registration(self):
         """Test DR program registration."""
-        from thomas.energy._types import DemandResponse
+        from thomas.marketplace.energy._types import DemandResponse
 
         market = EnergyMarket()
 
@@ -297,7 +297,7 @@ class TestEnergyMarket:
 
     def test_demand_response_activation(self):
         """Test DR activation."""
-        from thomas.energy._types import DemandResponse
+        from thomas.marketplace.energy._types import DemandResponse
 
         market = EnergyMarket()
 

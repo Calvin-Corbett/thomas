@@ -4,7 +4,7 @@ Tests for audio analysis.
 
 import numpy as np
 
-from thomas.audio_engine.analysis import (
+from thomas.marketplace.audio_engine.analysis import (
     BeatDetector,
     LoudnessAnalyzer,
     OnsetDetector,

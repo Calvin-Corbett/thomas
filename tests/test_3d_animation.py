@@ -9,8 +9,8 @@ Tests:
 - Morph targets
 """
 
-from thomas.graphics3d import animation
-from thomas.graphics3d._types import Vec3, Vertex
+from thomas.marketplace.graphics3d import animation
+from thomas.marketplace.graphics3d._types import Vec3, Vertex
 
 
 class TestKeyframe:

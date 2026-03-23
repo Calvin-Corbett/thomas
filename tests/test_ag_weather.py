@@ -8,8 +8,8 @@ pytestmark = pytest.mark.xfail(
 
 from datetime import date
 
-from thomas.agriculture._types import Weather
-from thomas.agriculture.weather import (
+from thomas.marketplace.agriculture._types import Weather
+from thomas.marketplace.agriculture.weather import (
     ChillHourAccumulation,
     DroughtMonitoring,
     FrostProbabilityEstimator,

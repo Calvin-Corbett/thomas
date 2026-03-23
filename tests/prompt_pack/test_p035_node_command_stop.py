@@ -4,7 +4,7 @@ import pytest
 
 
 def test_stop_invalid_input_empty_node_id():
-    from thomas.nodes.p035_node_command_stop import (
+    from thomas.marketplace.nodes.p035_node_command_stop import (
         NodeCommandStopInput,
         NodeCommandStopInvalidInputError,
         node_command_stop,
@@ -18,7 +18,7 @@ def test_stop_invalid_input_empty_node_id():
 
 
 def test_stop_missing_config_path_is_deterministic(tmp_path):
-    from thomas.nodes.p035_node_command_stop import (
+    from thomas.marketplace.nodes.p035_node_command_stop import (
         NodeCommandStopConfigError,
         NodeCommandStopInput,
         node_command_stop,
@@ -36,7 +36,7 @@ def test_stop_missing_config_path_is_deterministic(tmp_path):
 
 
 def test_stop_external_failure_is_wrapped_deterministically():
-    from thomas.nodes.p035_node_command_stop import (
+    from thomas.marketplace.nodes.p035_node_command_stop import (
         NodeCommandStopExternalError,
         NodeCommandStopInput,
         node_command_stop,
@@ -54,7 +54,7 @@ def test_stop_external_failure_is_wrapped_deterministically():
 
 
 def test_stop_backend_reported_failure_is_deterministic():
-    from thomas.nodes.p035_node_command_stop import (
+    from thomas.marketplace.nodes.p035_node_command_stop import (
         NodeCommandStopExternalError,
         NodeCommandStopInput,
         node_command_stop,
@@ -69,7 +69,7 @@ def test_stop_backend_reported_failure_is_deterministic():
 
 
 def test_stop_success_returns_contract():
-    from thomas.nodes.p035_node_command_stop import NodeCommandStopInput, node_command_stop
+    from thomas.marketplace.nodes.p035_node_command_stop import NodeCommandStopInput, node_command_stop
 
     out = node_command_stop(NodeCommandStopInput(node_id="node-1"), backend=lambda *_a, **_k: True)
     assert out.ok is True
@@ -79,7 +79,7 @@ def test_stop_success_returns_contract():
 
 
 def test_stop_signature_adaptation_accepts_node_param():
-    from thomas.nodes.p035_node_command_stop import NodeCommandStopInput, node_command_stop
+    from thomas.marketplace.nodes.p035_node_command_stop import NodeCommandStopInput, node_command_stop
 
     captured = {}
 
@@ -99,7 +99,7 @@ def test_cli_json_output_success(monkeypatch):
     from click.testing import CliRunner
 
     import thomas.cli.commands.nodes.p035_node_command_stop as cli_mod
-    from thomas.nodes.p035_node_command_stop import NodeCommandStopOutput
+    from thomas.marketplace.nodes.p035_node_command_stop import NodeCommandStopOutput
 
     runner = CliRunner()
 
@@ -120,7 +120,7 @@ def test_cli_json_output_failure(monkeypatch):
     from click.testing import CliRunner
 
     import thomas.cli.commands.nodes.p035_node_command_stop as cli_mod
-    from thomas.nodes.p035_node_command_stop import NodeCommandStopInvalidInputError
+    from thomas.marketplace.nodes.p035_node_command_stop import NodeCommandStopInvalidInputError
 
     runner = CliRunner()
 

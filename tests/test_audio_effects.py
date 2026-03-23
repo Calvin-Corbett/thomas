@@ -4,7 +4,16 @@ Tests for audio effects.
 
 import numpy as np
 
-from thomas.audio_engine.effects import Chorus, Compressor, Delay, Distortion, Flanger, Limiter, Reverb, Tremolo
+from thomas.marketplace.audio_engine.effects import (
+    Chorus,
+    Compressor,
+    Delay,
+    Distortion,
+    Flanger,
+    Limiter,
+    Reverb,
+    Tremolo,
+)
 
 
 class TestDelay:
