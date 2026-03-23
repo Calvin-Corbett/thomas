@@ -4,7 +4,9 @@ import pytest
 import typer
 from typer.testing import CliRunner
 
-from thomas.channels.p089_channel_throttling_policy import (
+import thomas.cli.commands.channel_ops as channel_ops_pkg
+from thomas.cli.commands.channel_ops import p089_channel_throttling_policy as cli_op
+from thomas.marketplace.channels.p089_channel_throttling_policy import (
     ChannelThrottleError,
     ChannelThrottlePolicy,
     InMemoryThrottleStateStore,
@@ -13,9 +15,6 @@ from thomas.channels.p089_channel_throttling_policy import (
     ThrottlePolicyConfig,
     parse_throttle_policy_config,
 )
-
-from thomas.cli.commands.channel_ops import p089_channel_throttling_policy as cli_op
-import thomas.cli.commands.channel_ops as channel_ops_pkg
 
 
 def test_token_bucket_allows_burst_then_throttles_and_recovers() -> None:

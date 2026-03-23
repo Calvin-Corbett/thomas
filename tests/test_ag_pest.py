@@ -7,7 +7,7 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.agriculture.pest import (
+from thomas.marketplace.agriculture.pest import (
     EconomicThresholdCalculator,
     IPMDecisionFramework,
     PestIdentification,

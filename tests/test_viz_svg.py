@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.visualization._exceptions import RenderError
-from thomas.visualization._types import Color, Stroke
-from thomas.visualization.svg_renderer import SVGElement, SVGRenderer
+from thomas.marketplace.visualization._exceptions import RenderError
+from thomas.marketplace.visualization._types import Color, Stroke
+from thomas.marketplace.visualization.svg_renderer import SVGElement, SVGRenderer
 
 
 class TestSVGElement:

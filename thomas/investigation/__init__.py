@@ -1,3 +1,3 @@
-"""Investigation engine — background document analysis and evidence patterns."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.investigation."""
 
-from __future__ import annotations
+from thomas.marketplace.investigation import *  # noqa: F401,F403

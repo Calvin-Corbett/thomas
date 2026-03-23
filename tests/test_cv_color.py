@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.cv import color, core
-from thomas.cv._exceptions import InvalidParameterError
-from thomas.cv._types import ColorSpace
+from thomas.marketplace.cv import color, core
+from thomas.marketplace.cv._exceptions import InvalidParameterError
+from thomas.marketplace.cv._types import ColorSpace
 
 
 class TestGrayscaleConversion:

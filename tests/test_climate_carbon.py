@@ -4,8 +4,8 @@ import math
 
 import pytest
 
-from thomas.climate import carbon
-from thomas.climate._exceptions import ClimateDataError, InvalidParameterError
+from thomas.marketplace.climate import carbon
+from thomas.marketplace.climate._exceptions import ClimateDataError, InvalidParameterError
 
 
 class TestCarbonBudget:

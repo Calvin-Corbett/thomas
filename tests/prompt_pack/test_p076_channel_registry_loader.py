@@ -3,20 +3,20 @@ from pathlib import Path
 
 import pytest
 
-from thomas.channels.p076_channel_registry_loader import (
+from thomas.marketplace.channels.p076_channel_registry_loader import (
     ChannelRegistryLoadRequest,
     ChannelRegistryNotFoundError,
     ChannelRegistryParseError,
     ChannelRegistryValidationError,
-    load_channel_registry,
     channel_registry_load_result_schema,
+    load_channel_registry,
 )
 
 
 def test_load_registry_yaml_success(tmp_path: Path) -> None:
     registry = tmp_path / "channels.yaml"
     registry.write_text(
-        '''
+        """
 version: 1
 channels:
   - name: alerts
@@ -27,7 +27,7 @@ channels:
   - name: audit
     kind: webhook
     url: https://example.test/hook
-'''.lstrip(),
+""".lstrip(),
         encoding="utf-8",
     )
 
@@ -50,14 +50,14 @@ channels:
 def test_shorthand_mapping_allows_metadata_keys(tmp_path: Path) -> None:
     registry = tmp_path / "channels.yaml"
     registry.write_text(
-        '''
+        """
 version: 1
 schema: 1
 alerts:
   kind: telegram
   token: ${BOT_TOKEN}
   chat_id: ${CHAT_ID}
-'''.lstrip(),
+""".lstrip(),
         encoding="utf-8",
     )
 
@@ -95,14 +95,14 @@ def test_load_registry_invalid_yaml_raises_parse_error(tmp_path: Path) -> None:
 def test_load_registry_missing_env_var_raises_validation_error(tmp_path: Path) -> None:
     registry = tmp_path / "channels.yaml"
     registry.write_text(
-        '''
+        """
 channels:
   - name: alerts
     kind: telegram
     config:
       token: ${MISSING_TOKEN}
       chat_id: 1
-'''.lstrip(),
+""".lstrip(),
         encoding="utf-8",
     )
 

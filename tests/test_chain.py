@@ -10,18 +10,18 @@ Tests cover:
 """
 
 import unittest
-from typing import Any, Dict, List, Callable, Optional
-
+from collections.abc import Callable
+from typing import Any
 
 # Note: These imports assume the modules exist or will be created
 try:
-    from thomas.chain.types import Input, Output
-    from thomas.chain.runnable import Runnable, RunnableLambda
-    from thomas.chain.pipeline import RunnableSequence
-    from thomas.chain.transform import RunnableParallel
-    from thomas.chain.branch import RunnableBranch
-    from thomas.chain.retry import RetryRunner
-    from thomas.chain.builder import ChainBuilder
+    from thomas.marketplace.chain.branch import RunnableBranch
+    from thomas.marketplace.chain.builder import ChainBuilder
+    from thomas.marketplace.chain.pipeline import RunnableSequence
+    from thomas.marketplace.chain.retry import RetryRunner
+    from thomas.marketplace.chain.runnable import Runnable, RunnableLambda
+    from thomas.marketplace.chain.transform import RunnableParallel
+    from thomas.marketplace.chain.types import Input, Output
 except ImportError:
     # Fallback: define minimal mock classes
     Input = Any
@@ -29,6 +29,7 @@ except ImportError:
 
     class Runnable:
         """Base runnable interface."""
+
         def invoke(self, input: Input) -> Output:
             raise NotImplementedError
 
@@ -38,6 +39,7 @@ except ImportError:
 
     class RunnableLambda(Runnable):
         """Wrap a function as runnable."""
+
         def __init__(self, func: Callable):
             self.func = func
 
@@ -46,7 +48,8 @@ except ImportError:
 
     class RunnableSequence(Runnable):
         """Chain multiple runnables in sequence."""
-        def __init__(self, runnables: List[Runnable]):
+
+        def __init__(self, runnables: list[Runnable]):
             self.runnables = runnables
 
         def invoke(self, input: Input) -> Output:
@@ -57,7 +60,8 @@ except ImportError:
 
     class RunnableParallel(Runnable):
         """Run multiple runnables in parallel."""
-        def __init__(self, runnables: Dict[str, Runnable]):
+
+        def __init__(self, runnables: dict[str, Runnable]):
             self.runnables = runnables
 
         def invoke(self, input: Input) -> Output:
@@ -68,6 +72,7 @@ except ImportError:
 
     class RunnableBranch(Runnable):
         """Conditional execution based on predicate."""
+
         def __init__(self, condition: Callable, true_runnable: Runnable, false_runnable: Runnable):
             self.condition = condition
             self.true_runnable = true_runnable
@@ -81,6 +86,7 @@ except ImportError:
 
     class RetryRunner(Runnable):
         """Runnable with retry logic."""
+
         def __init__(self, runnable: Runnable, max_retries: int = 3):
             self.runnable = runnable
             self.max_retries = max_retries
@@ -98,6 +104,7 @@ except ImportError:
 
     class ChainBuilder:
         """Fluent API for building chains."""
+
         def __init__(self):
             self.runnables = []
 
@@ -162,12 +169,9 @@ class TestRunnableLambda(unittest.TestCase):
 
     def test_lambda_transformation(self):
         """Test complex transformation lambda."""
+
         def transform(data):
-            return {
-                "original": data,
-                "doubled": data * 2,
-                "squared": data ** 2
-            }
+            return {"original": data, "doubled": data * 2, "squared": data**2}
 
         runnable = RunnableLambda(transform)
         result = runnable.invoke(5)
@@ -270,8 +274,8 @@ class TestRunnableParallel(unittest.TestCase):
         """Test parallel execution of three tasks."""
         tasks = {
             "double": RunnableLambda(lambda x: x * 2),
-            "square": RunnableLambda(lambda x: x ** 2),
-            "negated": RunnableLambda(lambda x: -x)
+            "square": RunnableLambda(lambda x: x**2),
+            "negated": RunnableLambda(lambda x: -x),
         }
 
         parallel = RunnableParallel(tasks)
@@ -286,7 +290,7 @@ class TestRunnableParallel(unittest.TestCase):
         tasks = {
             "keys": RunnableLambda(lambda d: list(d.keys())),
             "values": RunnableLambda(lambda d: list(d.values())),
-            "size": RunnableLambda(lambda d: len(d))
+            "size": RunnableLambda(lambda d: len(d)),
         }
 
         parallel = RunnableParallel(tasks)
@@ -300,7 +304,7 @@ class TestRunnableParallel(unittest.TestCase):
         tasks = {
             "upper": RunnableLambda(lambda s: s.upper()),
             "lower": RunnableLambda(lambda s: s.lower()),
-            "length": RunnableLambda(lambda s: len(s))
+            "length": RunnableLambda(lambda s: len(s)),
         }
 
         parallel = RunnableParallel(tasks)
@@ -312,10 +316,7 @@ class TestRunnableParallel(unittest.TestCase):
 
     def test_parallel_error_in_one_task(self):
         """Test that one task's error doesn't prevent others."""
-        tasks = {
-            "working": RunnableLambda(lambda x: x * 2),
-            "broken": RunnableLambda(lambda x: x / 0)
-        }
+        tasks = {"working": RunnableLambda(lambda x: x * 2), "broken": RunnableLambda(lambda x: x / 0)}
 
         parallel = RunnableParallel(tasks)
 
@@ -388,11 +389,7 @@ class TestRunnableBranch(unittest.TestCase):
 
     def test_branch_chaining(self):
         """Test chaining branches with sequence."""
-        b1 = RunnableBranch(
-            lambda x: x > 0,
-            RunnableLambda(lambda x: x * 2),
-            RunnableLambda(lambda x: -x)
-        )
+        b1 = RunnableBranch(lambda x: x > 0, RunnableLambda(lambda x: x * 2), RunnableLambda(lambda x: -x))
         b2 = RunnableLambda(lambda x: x + 100)
 
         chain = b1 | b2
@@ -435,9 +432,7 @@ class TestRetryRunner(unittest.TestCase):
         retry_runner = RetryRunner(runnable, max_retries=2)
 
         branch = RunnableBranch(
-            lambda d: d["value"] > 5,
-            RunnableLambda(lambda d: "success"),
-            RunnableLambda(lambda d: "failed")
+            lambda d: d["value"] > 5, RunnableLambda(lambda d: "success"), RunnableLambda(lambda d: "failed")
         )
 
         chain = retry_runner | branch
@@ -492,11 +487,9 @@ class TestChainBuilder(unittest.TestCase):
 
     def test_builder_fluent_interface(self):
         """Test fluent interface chaining."""
-        chain = (ChainBuilder()
-                 .add_lambda(lambda x: x + 1)
-                 .add_lambda(lambda x: x * 2)
-                 .add_lambda(lambda x: x - 3)
-                 .build())
+        chain = (
+            ChainBuilder().add_lambda(lambda x: x + 1).add_lambda(lambda x: x * 2).add_lambda(lambda x: x - 3).build()
+        )
 
         result = chain.invoke(5)
 

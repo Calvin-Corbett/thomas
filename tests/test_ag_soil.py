@@ -9,8 +9,8 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.agriculture._types import Soil, SoilTexture
-from thomas.agriculture.soil import (
+from thomas.marketplace.agriculture._types import Soil, SoilTexture
+from thomas.marketplace.agriculture.soil import (
     CationExchangeCapacity,
     OrganicMatterDecomposition,
     SoilHealthScore,

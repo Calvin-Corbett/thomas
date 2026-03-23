@@ -5,7 +5,7 @@ Tests for energy forecasting models.
 import math
 from datetime import datetime, timedelta
 
-from thomas.energy.forecasting import (
+from thomas.marketplace.energy.forecasting import (
     LoadForecaster,
     PriceForecaster,
     SolarForecaster,

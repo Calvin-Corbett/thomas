@@ -4,8 +4,8 @@ Tests for sampling-based motion planning algorithms (RRT, PRM).
 
 import math
 
-from thomas.pathfinding import Obstacle
-from thomas.pathfinding.rrt import (
+from thomas.marketplace.pathfinding import Obstacle
+from thomas.marketplace.pathfinding.rrt import (
     informed_rrt_star,
     probabilistic_roadmap,
     rrt,

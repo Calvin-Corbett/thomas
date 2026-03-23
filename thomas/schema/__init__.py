@@ -1,27 +1,3 @@
-"""Schema management with validation, migration, and versioning.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.schema."""
 
-Provides schema definition, validation, migration tracking,
-version management, and diffing capabilities.
-"""
-
-from .core import (
-    DataType,
-    Field,
-    Schema,
-    SchemaDiff,
-    SchemaMigration,
-    SchemaMigrationManager,
-    SchemaRegistry,
-)
-
-__all__ = [
-    "DataType",
-    "Field",
-    "Schema",
-    "SchemaMigration",
-    "SchemaMigrationManager",
-    "SchemaRegistry",
-    "SchemaDiff",
-]
-
-__version__ = "1.0.0"
+from thomas.marketplace.schema import *  # noqa: F401,F403

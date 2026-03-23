@@ -7,10 +7,10 @@ import argparse
 import json
 import math
 from collections import defaultdict
+from collections.abc import Iterable, Mapping, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Sequence
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONTRACT_PATH = ROOT / "demo" / "baselines" / "agent_test_suite_full_coverage.contract.json"
@@ -198,7 +198,9 @@ def compute_track_family_scores(rows: Sequence[Mapping[str, Any]]) -> dict[str, 
     evaluation = _clamp((quality_score * 0.45) + (success_score * 0.35) + (evidence_score * 0.1) + (token_score * 0.1))
     safety = _clamp((success_score * 0.6) + (quality_score * 0.3) + (evidence_score * 0.1))
     task_quality = _clamp((quality_score * 0.7) + (success_score * 0.3))
-    reliability = _clamp((success_score * 0.75) + (quality_score * 0.15) + (token_score * 0.1) - latency_penalty - variance_penalty)
+    reliability = _clamp(
+        (success_score * 0.75) + (quality_score * 0.15) + (token_score * 0.1) - latency_penalty - variance_penalty
+    )
     human_quality = _clamp((quality_score * 0.6) + (evidence_score * 0.4))
     release_decisioning = _clamp(min(evaluation, safety, task_quality, reliability))
 

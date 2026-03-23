@@ -1,7 +1,7 @@
 """Tests for music.analysis module."""
 
-from thomas.music import analysis, theory
-from thomas.music._types import Note, ScaleType
+from thomas.marketplace.music import analysis, theory
+from thomas.marketplace.music._types import Note, ScaleType
 
 
 class TestPitchClassSets:

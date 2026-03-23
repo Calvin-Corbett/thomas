@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import base64
 import json
@@ -113,6 +113,7 @@ def _invoke_cli(args: list[str]) -> tuple[int, str]:
     # Prefer in-process Typer invocation if available (fast, stable).
     try:
         from typer.testing import CliRunner  # type: ignore
+
         from thomas.cli.main import app as cli_app  # type: ignore
 
         runner = CliRunner()
@@ -165,5 +166,3 @@ def test_cli_json_failure(tmp_path: Path) -> None:
     payload = json.loads(stdout)
     assert payload["ok"] is False
     assert payload["error"]["code"] == "ARTIFACT_NOT_FOUND"
-
-

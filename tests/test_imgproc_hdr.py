@@ -5,7 +5,7 @@ Tests for HDR imaging module.
 import numpy as np
 import pytest
 
-from thomas.image_proc import ExposureInfo, HDRProcessor, Image, ToneMap
+from thomas.marketplace.image_proc import ExposureInfo, HDRProcessor, Image, ToneMap
 
 
 class TestHDRProcessor:

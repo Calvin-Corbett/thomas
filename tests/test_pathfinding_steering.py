@@ -4,7 +4,7 @@ Tests for steering behaviors and movement simulation.
 
 import math
 
-from thomas.pathfinding.steering import (
+from thomas.marketplace.pathfinding.steering import (
     Boid,
     arrive,
     evade,

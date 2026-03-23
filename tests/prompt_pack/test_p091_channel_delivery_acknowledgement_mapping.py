@@ -3,16 +3,16 @@ from pathlib import Path
 
 import pytest
 
-from thomas.channels.p091_channel_delivery_acknowledgement_mapping import (
+from thomas.cli.commands.channel_ops.p091_channel_delivery_acknowledgement_mapping import (
+    run_delivery_ack_mapping,
+)
+from thomas.marketplace.channels.p091_channel_delivery_acknowledgement_mapping import (
     ChannelDeliveryAckMappingRequest,
     ConfigInvalidError,
     ConfigNotFoundError,
     InvalidInputError,
     build_channel_delivery_ack_mapping,
     build_mapping_from_channels,
-)
-from thomas.cli.commands.channel_ops.p091_channel_delivery_acknowledgement_mapping import (
-    run_delivery_ack_mapping,
 )
 
 

@@ -253,10 +253,22 @@ python scripts/doc.py --full
 
 ## Auto Checks
 
-Run one command for syntax/lint + gates + full tests:
+Run one command for syntax/lint + gates + the step-up test protocol:
 
 ```bash
 python scripts/auto_checks.py
+```
+
+Run the repo-wide pytest ladder directly:
+
+```bash
+python scripts/test_stepup_protocol.py
+```
+
+Add the final monolithic suite only after those stages are green:
+
+```bash
+python scripts/test_stepup_protocol.py --max-stage full
 ```
 
 Run only fast static checks locally:

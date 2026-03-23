@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from thomas.message_queue import Message
-from thomas.message_queue.persistence import (
+from thomas.marketplace.message_queue import Message
+from thomas.marketplace.message_queue.persistence import (
     PersistenceManager,
     SegmentReader,
     SegmentWriter,

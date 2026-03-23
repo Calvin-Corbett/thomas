@@ -3,7 +3,7 @@ from pathlib import Path
 
 import pytest
 
-from thomas.nodes.p029_node_host_lifecycle_service import (
+from thomas.marketplace.nodes.p029_node_host_lifecycle_service import (
     NodeHostInstallRequest,
     NodeHostLifecycleService,
     NodeHostServiceError,

@@ -5,8 +5,8 @@ import tempfile
 
 import pytest
 
-from thomas.music import midi
-from thomas.music._types import MidiEvent, MidiTrack, Tempo
+from thomas.marketplace.music import midi
+from thomas.marketplace.music._types import MidiEvent, MidiTrack, Tempo
 
 
 class TestVariableIntegerEncoding:

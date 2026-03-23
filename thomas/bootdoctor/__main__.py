@@ -11,29 +11,25 @@ import asyncio
 import socket
 import sys
 import traceback
-import urllib.error
-import urllib.request
 from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 from thomas.bootdoctor.runtime_helpers import (
     BootDoctorPathPolicy,
-    RestrictedTool,
-    _extract_patch_targets,
-    _extract_repo_paths_from_text,
     build_rescue_prompt,
     build_restricted_tools,
     load_startup_context,
     read_report_excerpt,
     rescue_reason,
 )
-
 from thomas.core.boot_doctor import (
+    probe_boot_runtime,
     run_boot_doctor,
     write_boot_doctor_status,
 )
 from thomas.core.config import AppConfig, load_config
+
 
 def _resolve_repo_root(raw_root: str) -> Path:
     if str(raw_root or "").strip():
@@ -84,13 +80,12 @@ def _write_fallback_report(path: Path, *, reason: str, port: int, error: BaseExc
     path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
 
 
+def _runtime_state(host: str, port: int) -> dict[str, Any]:
+    return probe_boot_runtime(int(port), host=str(host or "127.0.0.1"))
+
+
 def _runtime_healthy(host: str, port: int) -> bool:
-    try:
-        with urllib.request.urlopen(f"http://{host}:{int(port)}/api/models", timeout=1.5) as response:
-            status = int(getattr(response, "status", 0) or 0)
-            return 200 <= status < 500
-    except (urllib.error.URLError, OSError, ValueError):
-        return False
+    return str(_runtime_state(host, port).get("severity") or "fatal") != "fatal"
 
 
 def _port_listening(host: str, port: int) -> bool:
@@ -102,7 +97,8 @@ def _port_listening(host: str, port: int) -> bool:
 
 
 def _runtime_detected(host: str, port: int) -> bool:
-    return _runtime_healthy(host, port) or _port_listening(host, port)
+    state = _runtime_state(host, port)
+    return bool(state.get("listening")) or bool(state.get("ready"))
 
 
 def _load_config_safe(config_path: str) -> tuple[AppConfig, str]:
@@ -148,7 +144,6 @@ def _run_report(
             error=exc,
         )
         return fallback
-
 
 
 def _build_bootdoctor_agent(
@@ -202,7 +197,6 @@ def _build_bootdoctor_agent(
         max_parallel_tools=2,
     )
     return agent, llm, policy
-
 
 
 async def _run_interactive_loop(

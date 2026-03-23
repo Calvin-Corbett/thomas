@@ -4,15 +4,14 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "scripts"))
 
 import compare_openclaw_baseline as compare
-
 
 DEFAULT_BASELINE = compare.DEFAULT_BASELINE
 
@@ -111,10 +110,7 @@ def run(argv: list[str] | None = None) -> int:
             print(f"  openclaw commit: {payload['openclaw_commit']}")
             print("  failing metrics:")
             for row in payload["failures"]:
-                print(
-                    f"    - {row.get('metric')}: "
-                    f"Thomas={row.get('thomas')} OpenClaw={row.get('openclaw')}"
-                )
+                print(f"    - {row.get('metric')}: " f"Thomas={row.get('thomas')} OpenClaw={row.get('openclaw')}")
 
     return 0 if payload["ok"] else 1
 

@@ -10,9 +10,9 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.travel._exceptions import HotelNotAvailableError
-from thomas.travel._types import Hotel, HotelBookingStatus
-from thomas.travel.hotels import (
+from thomas.marketplace.travel._exceptions import HotelNotAvailableError
+from thomas.marketplace.travel._types import Hotel, HotelBookingStatus
+from thomas.marketplace.travel.hotels import (
     HotelBookingEngine,
     OverbookingManager,
     RatePricingEngine,

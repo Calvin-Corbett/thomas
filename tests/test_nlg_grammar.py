@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.nlg._exceptions import GrammarError
-from thomas.nlg._types import GrammarRule, Phrase, SyntaxTree, Word
-from thomas.nlg.grammar import GrammarEngine
+from thomas.marketplace.nlg._exceptions import GrammarError
+from thomas.marketplace.nlg._types import GrammarRule, Phrase, SyntaxTree, Word
+from thomas.marketplace.nlg.grammar import GrammarEngine
 
 
 class TestGrammarRuleApplication:
@@ -229,7 +229,7 @@ class TestLinearization:
         tree = SyntaxTree(label="N", word=word)
 
         # Manually set surface form since we're not doing full realization
-        from thomas.nlg._types import MorphologicalForm, SurfaceForm
+        from thomas.marketplace.nlg._types import MorphologicalForm, SurfaceForm
 
         morph = MorphologicalForm(base="cat")
         tree.surface = SurfaceForm(form="cat", lemma="cat", morphology=morph)

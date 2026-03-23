@@ -1,6 +1,6 @@
 """Tests for control module."""
 
-from thomas.autonomous_vehicles._types import (
+from thomas.marketplace.autonomous_vehicles._types import (
     ControlCommand,
     Obstacle,
     ObstacleType,
@@ -8,7 +8,7 @@ from thomas.autonomous_vehicles._types import (
     VehicleState,
     Waypoint,
 )
-from thomas.autonomous_vehicles.control import (
+from thomas.marketplace.autonomous_vehicles.control import (
     AdaptiveCruiseControl,
     EmergencyBraking,
     LongitudinalController,

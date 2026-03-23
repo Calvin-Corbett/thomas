@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.hr_platform._exceptions import RecruitmentError
-from thomas.hr_platform._types import Position
-from thomas.hr_platform.recruitment import (
+from thomas.marketplace.hr_platform._exceptions import RecruitmentError
+from thomas.marketplace.hr_platform._types import Position
+from thomas.marketplace.hr_platform.recruitment import (
     RecruitmentManager,
     RecruitmentPipeline,
     ResumeParser,

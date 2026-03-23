@@ -3,7 +3,7 @@ import json
 import pytest
 from click.testing import CliRunner
 
-from thomas.channels.p087_channel_auth_validation_helper import (
+from thomas.marketplace.channels.p087_channel_auth_validation_helper import (
     ChannelAuthValidationRequest,
     ChannelAuthValidationResult,
     ChannelIdentity,
@@ -16,7 +16,7 @@ from thomas.channels.p087_channel_auth_validation_helper import (
 
 def test_success_telegram_http(monkeypatch):
     # Patch HTTP call to keep test offline/deterministic.
-    from thomas.channels import p087_channel_auth_validation_helper as mod
+    from thomas.marketplace.channels import p087_channel_auth_validation_helper as mod
 
     def fake_http_get_json(*, url: str, timeout_s: float):
         assert "api.telegram.org" in url
@@ -35,7 +35,7 @@ def test_success_telegram_http(monkeypatch):
 
 
 def test_alias_tg(monkeypatch):
-    from thomas.channels import p087_channel_auth_validation_helper as mod
+    from thomas.marketplace.channels import p087_channel_auth_validation_helper as mod
 
     monkeypatch.setattr(mod, "_http_get_json", lambda **kwargs: {"ok": True, "result": {"id": 1}})
     res = validate_channel_auth(ChannelAuthValidationRequest(channel="tg", token="x"))
@@ -44,7 +44,7 @@ def test_alias_tg(monkeypatch):
 
 
 def test_missing_config(monkeypatch):
-    from thomas.channels import p087_channel_auth_validation_helper as mod
+    from thomas.marketplace.channels import p087_channel_auth_validation_helper as mod
 
     for k in mod._expected_env_vars("telegram"):
         monkeypatch.delenv(k, raising=False)
@@ -58,7 +58,7 @@ def test_missing_config(monkeypatch):
 
 
 def test_env_token_resolution(monkeypatch):
-    from thomas.channels import p087_channel_auth_validation_helper as mod
+    from thomas.marketplace.channels import p087_channel_auth_validation_helper as mod
 
     monkeypatch.setenv("THOMAS_TELEGRAM_BOT_TOKEN", "ENV_TOKEN")
     monkeypatch.setattr(mod, "_http_get_json", lambda **kwargs: {"ok": True, "result": {"id": 7}})
@@ -83,7 +83,7 @@ def test_invalid_timeout():
 
 
 def test_external_failure(monkeypatch):
-    from thomas.channels import p087_channel_auth_validation_helper as mod
+    from thomas.marketplace.channels import p087_channel_auth_validation_helper as mod
 
     def boom(*, url: str, timeout_s: float):
         raise RuntimeError("kaboom")
@@ -122,7 +122,7 @@ def test_cli_json_success(monkeypatch):
 
 def test_cli_json_failure(monkeypatch):
     from thomas.cli.commands.channel_ops import p087_channel_auth_validation_helper as cli_mod
-    from thomas.channels.p087_channel_auth_validation_helper import MissingChannelAuthConfigError
+    from thomas.marketplace.channels.p087_channel_auth_validation_helper import MissingChannelAuthConfigError
 
     def fake_validate(req):
         raise MissingChannelAuthConfigError("no token", channel="telegram")

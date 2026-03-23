@@ -1,6 +1,6 @@
 """Integration tests for complete search pipeline."""
 
-from thomas.search_engine import (
+from thomas.marketplace.search_engine import (
     BooleanQuery,
     CompletionSuggester,
     DidYouMeanSuggester,

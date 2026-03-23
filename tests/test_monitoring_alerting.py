@@ -4,8 +4,8 @@ Tests for alerting module.
 
 from datetime import datetime, timedelta
 
-from thomas.monitoring._types import AlertRule, AlertState
-from thomas.monitoring.alerting import (
+from thomas.marketplace.monitoring._types import AlertRule, AlertState
+from thomas.marketplace.monitoring.alerting import (
     AlertGroup,
     AlertGroupKey,
     AlertManager,
@@ -162,7 +162,7 @@ class TestAlertGroup:
 
     def test_add_alert_to_group(self) -> None:
         """Test adding alert to group."""
-        from thomas.monitoring._types import Alert
+        from thomas.marketplace.monitoring._types import Alert
 
         key = AlertGroupKey({"severity": "critical"})
         group = AlertGroup(key=key)
@@ -180,7 +180,7 @@ class TestAlertGroup:
 
     def test_remove_alert_from_group(self) -> None:
         """Test removing alert from group."""
-        from thomas.monitoring._types import Alert
+        from thomas.marketplace.monitoring._types import Alert
 
         key = AlertGroupKey({})
         group = AlertGroup(key=key)

@@ -1,27 +1,3 @@
-"""Secrets management with vault, encryption, rotation, and access control.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.secrets."""
 
-Provides encrypted secret storage, rotation policies,
-access control, and audit logging.
-"""
-
-from .core import (
-    AccessLevel,
-    AccessPolicy,
-    AuditEntry,
-    Secret,
-    SecretEncryption,
-    SecretType,
-    SecretVault,
-)
-
-__all__ = [
-    "SecretType",
-    "AccessLevel",
-    "Secret",
-    "AccessPolicy",
-    "AuditEntry",
-    "SecretEncryption",
-    "SecretVault",
-]
-
-__version__ = "1.0.0"
+from thomas.marketplace.secrets import *  # noqa: F401,F403

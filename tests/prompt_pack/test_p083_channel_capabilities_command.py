@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from thomas.channels.p083_channel_capabilities_command import (
+from thomas.marketplace.channels.p083_channel_capabilities_command import (
     ChannelCapabilitiesCommandError,
     ChannelCapabilitiesRequest,
     get_channel_capabilities,

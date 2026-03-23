@@ -2,10 +2,10 @@
 
 import unittest
 
-from thomas.logging_framework._types import LogLevel
-from thomas.logging_framework.handlers import MemoryHandler
-from thomas.logging_framework.logger import Logger
-from thomas.logging_framework.pipeline import (
+from thomas.marketplace.logging_framework._types import LogLevel
+from thomas.marketplace.logging_framework.handlers import MemoryHandler
+from thomas.marketplace.logging_framework.logger import Logger
+from thomas.marketplace.logging_framework.pipeline import (
     EnrichmentProcessor,
     LogPipeline,
     PipelineConfig,
@@ -169,7 +169,7 @@ class TestRouter(unittest.TestCase):
 
     def test_routing_by_logger_name(self) -> None:
         """Test routing based on logger name."""
-        from thomas.logging_framework.logger import get_logger
+        from thomas.marketplace.logging_framework.logger import get_logger
 
         Logger._loggers.clear()
 
@@ -328,12 +328,12 @@ class TestPipelineIntegration(unittest.TestCase):
 
     def test_pipeline_with_custom_stage(self) -> None:
         """Test pipeline with custom processing stage."""
-        from thomas.logging_framework.pipeline import PipelineStage
+        from thomas.marketplace.logging_framework.pipeline import PipelineStage
 
         class CustomStage(PipelineStage):
             def process(self, record):
                 record.fields["custom"] = __import__(
-                    "thomas.logging_framework._types", fromlist=["StructuredField"]
+                    "thomas.marketplace.logging_framework._types", fromlist=["StructuredField"]
                 ).StructuredField(name="custom", value="processed")
                 return record
 

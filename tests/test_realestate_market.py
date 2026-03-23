@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.real_estate._exceptions import InsufficientDataError
-from thomas.real_estate._types import MarketStats
-from thomas.real_estate.market import (
+from thomas.marketplace.real_estate._exceptions import InsufficientDataError
+from thomas.marketplace.real_estate._types import MarketStats
+from thomas.marketplace.real_estate.market import (
     InventoryAnalysis,
     MarketForecast,
     MarketIndicators,

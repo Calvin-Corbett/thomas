@@ -8,13 +8,13 @@ sys.path.insert(0, "/sessions/zen-pensive-cannon/mnt/Thomas")
 
 from datetime import datetime, timedelta
 
-from thomas.data_pipeline._types import (
+from thomas.marketplace.data_pipeline._types import (
     Record,
     TriggerType,
     WindowSpec,
     WindowType,
 )
-from thomas.data_pipeline.streaming import (
+from thomas.marketplace.data_pipeline.streaming import (
     ExactlyOnceProcessor,
     MicroBatchProcessor,
     StatefulProcessor,

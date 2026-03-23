@@ -5,12 +5,10 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
-from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
-from thomas.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
-from thomas.observability.run_db import resolve_runs_db_path
-
+from thomas.marketplace.observability.onboarding_outcomes import build_onboarding_outcome_report
+from thomas.marketplace.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
+from thomas.marketplace.observability.run_db import resolve_runs_db_path
 
 _LOW_SAMPLE_WARNING_PREFIX = "insufficient onboarding telemetry sample"
 
@@ -19,7 +17,7 @@ def _is_low_sample_warning(message: str) -> bool:
     return str(message or "").strip().lower().startswith(_LOW_SAMPLE_WARNING_PREFIX)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description=(
             "Validate onboarding outcomes telemetry contract and enforce KPI thresholds "
@@ -74,7 +72,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ok = bool(gate.get("ok", False))
     warnings = list(gate.get("warnings") or [])
     errors = list(gate.get("errors") or [])
-    ignored_warnings = [msg for msg in warnings if bool(args.ignore_low_sample_warning) and _is_low_sample_warning(str(msg))]
+    ignored_warnings = [
+        msg for msg in warnings if bool(args.ignore_low_sample_warning) and _is_low_sample_warning(str(msg))
+    ]
     effective_strict_warnings = [msg for msg in warnings if msg not in ignored_warnings]
     if bool(args.strict) and effective_strict_warnings:
         ok = False

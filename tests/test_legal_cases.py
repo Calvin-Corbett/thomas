@@ -5,15 +5,15 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.legal._exceptions import InvalidCaseStateError
-from thomas.legal._types import (
+from thomas.marketplace.legal._exceptions import InvalidCaseStateError
+from thomas.marketplace.legal._types import (
     CaseOutcome,
     CaseStatus,
     CaseType,
     Jurisdiction,
     Statute,
 )
-from thomas.legal.cases import CaseManager
+from thomas.marketplace.legal.cases import CaseManager
 
 
 class TestCaseManager:

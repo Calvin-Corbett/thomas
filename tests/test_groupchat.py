@@ -7,11 +7,11 @@ pytestmark = pytest.mark.xfail(
 """Tests for thomas.groupchat module."""
 import unittest
 
-from thomas.groupchat.chat import GroupChat
-from thomas.groupchat.manager import GroupChatManager
-from thomas.groupchat.participant import ChatParticipant, UserParticipant
-from thomas.groupchat.selector import SelectionHistory, SpeakerSelector
-from thomas.groupchat.types import GroupChatConfig, GroupMessage, SpeakerSelectionMode
+from thomas.marketplace.groupchat.chat import GroupChat
+from thomas.marketplace.groupchat.manager import GroupChatManager
+from thomas.marketplace.groupchat.participant import ChatParticipant, UserParticipant
+from thomas.marketplace.groupchat.selector import SelectionHistory, SpeakerSelector
+from thomas.marketplace.groupchat.types import GroupChatConfig, GroupMessage, SpeakerSelectionMode
 
 
 class TestParticipant(unittest.TestCase):

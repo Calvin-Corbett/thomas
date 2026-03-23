@@ -2,13 +2,13 @@
 
 import pytest
 
-from thomas.webhooks._exceptions import (
+from thomas.marketplace.webhooks._exceptions import (
     EndpointNotFound,
     InvalidWebhookURL,
     SubscriptionNotFound,
 )
-from thomas.webhooks._types import Filter
-from thomas.webhooks.registry import WebhookRegistry
+from thomas.marketplace.webhooks._types import Filter
+from thomas.marketplace.webhooks.registry import WebhookRegistry
 
 
 class TestEventTypeManagement:

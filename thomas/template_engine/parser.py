@@ -40,6 +40,11 @@ class Parser:
         self.name = name
         self.current_token = tokens[0] if tokens else None
 
+    def _set_pos(self, pos: int) -> None:
+        """Rewind parser position and keep current_token in sync."""
+        self.pos = pos
+        self.current_token = self.tokens[pos] if 0 <= pos < len(self.tokens) else None
+
     def parse(self) -> Template:
         """
         Parse tokens into template AST.
@@ -51,7 +56,11 @@ class Parser:
         while not self._at_end():
             if self._check(TokenType.EOF):
                 break
+            old_pos = self.pos
             node = self._parse_node()
+            if self.pos == old_pos:
+                lineno = self.current_token.lineno if self.current_token is not None else 0
+                raise TemplateSyntaxError(f"Unexpected token: {self.current_token}", lineno)
             if node:
                 body.append(node)
         return Template(body=body)
@@ -207,13 +216,13 @@ class Parser:
                 self._consume(TokenType.BLOCK_END)
                 orelse = self._parse_until([TokenType.ENDFOR])
             else:
-                self.pos = saved_pos
+                self._set_pos(saved_pos)
 
-        # Consume endfor
-        if self._check(TokenType.BLOCK_START):
-            self._consume(TokenType.BLOCK_START)
-            self._consume(TokenType.ENDFOR)
-            self._consume(TokenType.BLOCK_END)
+        if not self._check(TokenType.BLOCK_START):
+            raise TemplateSyntaxError("Expected endfor", lineno)
+        self._consume(TokenType.BLOCK_START)
+        self._consume(TokenType.ENDFOR)
+        self._consume(TokenType.BLOCK_END)
 
         return ForLoop(target=target, iter=iter_expr, body=body, orelse=orelse, lineno=lineno)
 
@@ -243,7 +252,7 @@ class Parser:
                 body = self._parse_until([TokenType.ELIF, TokenType.ELSE, TokenType.ENDIF])
                 tests.append((condition, body))
             else:
-                self.pos = saved_pos
+                self._set_pos(saved_pos)
                 break
 
         # Parse else block
@@ -257,14 +266,15 @@ class Parser:
                 body = self._parse_until([TokenType.ENDIF])
                 tests.append((None, body))
             else:
-                self.pos = saved_pos
+                self._set_pos(saved_pos)
 
-        # Consume endif
-        if self._check(TokenType.BLOCK_START):
-            self._consume(TokenType.BLOCK_START)
-            if self._check(TokenType.ENDIF):
-                self._consume(TokenType.ENDIF)
-                self._consume(TokenType.BLOCK_END)
+        if not self._check(TokenType.BLOCK_START):
+            raise TemplateSyntaxError("Expected endif", lineno)
+        self._consume(TokenType.BLOCK_START)
+        if not self._check(TokenType.ENDIF):
+            raise TemplateSyntaxError("Expected endif", lineno)
+        self._consume(TokenType.ENDIF)
+        self._consume(TokenType.BLOCK_END)
 
         return IfBlock(tests=tests, lineno=lineno)
 
@@ -277,10 +287,11 @@ class Parser:
 
         body = self._parse_until([TokenType.ENDBLOCK])
 
-        if self._check(TokenType.BLOCK_START):
-            self._consume(TokenType.BLOCK_START)
-            self._consume(TokenType.ENDBLOCK)
-            self._consume(TokenType.BLOCK_END)
+        if not self._check(TokenType.BLOCK_START):
+            raise TemplateSyntaxError("Expected endblock", lineno)
+        self._consume(TokenType.BLOCK_START)
+        self._consume(TokenType.ENDBLOCK)
+        self._consume(TokenType.BLOCK_END)
 
         return Block(name=block_name, body=body, lineno=lineno)
 
@@ -419,9 +430,9 @@ class Parser:
                 saved_pos = self.pos
                 self._advance()  # skip BLOCK_START
                 if self._check(*end_tokens):
-                    self.pos = saved_pos
+                    self._set_pos(saved_pos)
                     break
-                self.pos = saved_pos
+                self._set_pos(saved_pos)
 
             # Try to parse a node
             old_pos = self.pos
@@ -541,7 +552,7 @@ class Parser:
         saved_pos = self.pos
         self._advance()
         result = self._check(TokenType.ASSIGN)
-        self.pos = saved_pos
+        self._set_pos(saved_pos)
         return result
 
     def _reconstruct_tokens(self, start: int, end: int) -> str:

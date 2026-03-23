@@ -2,7 +2,7 @@
 
 import numpy as np
 
-from thomas.quantfin.portfolio import (
+from thomas.marketplace.quantfin.portfolio import (
     calculate_alpha,
     calculate_beta,
     calculate_expected_return,

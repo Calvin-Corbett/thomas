@@ -1,10 +1,10 @@
 """Tests for SIEM automated response module."""
 
-from thomas.siem._types import (
+from thomas.marketplace.siem._types import (
     EventSeverity,
     Incident,
 )
-from thomas.siem.response import (
+from thomas.marketplace.siem.response import (
     ActionExecutor,
     ActionType,
     ApprovalStatus,

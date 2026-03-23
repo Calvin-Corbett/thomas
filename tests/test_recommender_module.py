@@ -4,10 +4,10 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.recommender._types import InteractionType, Rating, Recommendation
-from thomas.recommender.pipeline import RecommendationPipeline
-from thomas.recommender.session_based import SessionBasedRecommender
-from thomas.recommender.similarity import (
+from thomas.marketplace.recommender._types import InteractionType, Rating, Recommendation
+from thomas.marketplace.recommender.pipeline import RecommendationPipeline
+from thomas.marketplace.recommender.session_based import SessionBasedRecommender
+from thomas.marketplace.recommender.similarity import (
     SimilarityComputer,
     cosine_similarity,
     euclidean_similarity,

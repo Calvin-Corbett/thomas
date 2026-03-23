@@ -5,8 +5,8 @@ Tests for compression module.
 import numpy as np
 import pytest
 
-from thomas.image_proc import Image
-from thomas.image_proc.compression import CompressionCodec
+from thomas.marketplace.image_proc import Image
+from thomas.marketplace.image_proc.compression import CompressionCodec
 
 
 class TestCompressionCodec:

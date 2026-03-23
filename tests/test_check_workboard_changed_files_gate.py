@@ -182,7 +182,6 @@ def test_changed_files_gate_allows_bulk_override_env(tmp_path: Path, capsys, mon
     assert payload["changed_file_count"] == 3
 
 
-
 def test_changed_files_gate_accepts_explicit_fallback_scope(tmp_path: Path, capsys, monkeypatch) -> None:
     workboard = _write_workboard(
         tmp_path,

@@ -9,8 +9,8 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.agriculture._types import CropFamily, CropVariety, GrowthStage
-from thomas.agriculture.crops import (
+from thomas.marketplace.agriculture._types import CropFamily, CropVariety, GrowthStage
+from thomas.marketplace.agriculture.crops import (
     CompanionPlanting,
     CropDatabase,
     CropRotationPlanner,

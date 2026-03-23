@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.smart_home._exceptions import LightingError
-from thomas.smart_home.lighting import HSLColor, LightingController, RGBColor
+from thomas.marketplace.smart_home._exceptions import LightingError
+from thomas.marketplace.smart_home.lighting import HSLColor, LightingController, RGBColor
 
 
 class TestLightingController:

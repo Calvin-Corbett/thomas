@@ -5,9 +5,9 @@ Tests for voice speaker recognition module.
 import numpy as np
 import pytest
 
-from thomas.voice._exceptions import SpeakerError
-from thomas.voice._types import AudioSample
-from thomas.voice.speaker import SpeakerRecognizer
+from thomas.marketplace.voice._exceptions import SpeakerError
+from thomas.marketplace.voice._types import AudioSample
+from thomas.marketplace.voice.speaker import SpeakerRecognizer
 
 
 class TestSpeakerRecognizer:

@@ -1,10 +1,10 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import os
 import time
 from pathlib import Path
 
-from thomas.security.threat_model_cadence import evaluate_threat_model_cadence
+from thomas.marketplace.security.threat_model_cadence import evaluate_threat_model_cadence
 
 
 def test_threat_model_cadence_flags_stale_file(tmp_path: Path) -> None:

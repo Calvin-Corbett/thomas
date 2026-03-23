@@ -13,30 +13,31 @@ Tests cover:
 import tempfile
 import unittest
 from pathlib import Path
-from typing import Dict, List, Optional, Any
 
 # Note: These imports assume the modules exist or will be created
 try:
-    from thomas.prompts.types import Message, MessageRole
-    from thomas.prompts.base import BasePromptTemplate
-    from thomas.prompts.string_template import StringPromptTemplate
-    from thomas.prompts.chat_template import ChatPromptTemplate
-    from thomas.prompts.few_shot import FewShotPromptTemplate
-    from thomas.prompts.composition import PipelinePromptTemplate
-    from thomas.prompts.optimizer import TokenCounter
-    from thomas.prompts.version import PromptStore
+    from thomas.marketplace.prompts.base import BasePromptTemplate
+    from thomas.marketplace.prompts.chat_template import ChatPromptTemplate
+    from thomas.marketplace.prompts.composition import PipelinePromptTemplate
+    from thomas.marketplace.prompts.few_shot import FewShotPromptTemplate
+    from thomas.marketplace.prompts.optimizer import TokenCounter
+    from thomas.marketplace.prompts.string_template import StringPromptTemplate
+    from thomas.marketplace.prompts.types import Message, MessageRole
+    from thomas.marketplace.prompts.version import PromptStore
 except ImportError:
     # Fallback: define minimal mock classes
     from enum import Enum
 
     class MessageRole(str, Enum):
         """Message roles in conversation."""
+
         USER = "user"
         ASSISTANT = "assistant"
         SYSTEM = "system"
 
     class Message:
         """Basic message type."""
+
         def __init__(self, role: MessageRole, content: str, metadata: dict = None):
             self.role = role
             self.content = content
@@ -47,28 +48,31 @@ except ImportError:
 
     class BasePromptTemplate:
         """Base prompt template stub."""
+
         def format(self, **kwargs) -> str:
             raise NotImplementedError
 
-        def format_messages(self, **kwargs) -> List[Message]:
+        def format_messages(self, **kwargs) -> list[Message]:
             raise NotImplementedError
 
     class StringPromptTemplate(BasePromptTemplate):
         """Simple string template."""
-        def __init__(self, template: str, input_variables: List[str] = None):
+
+        def __init__(self, template: str, input_variables: list[str] = None):
             self.template = template
             self.input_variables = input_variables or []
 
         def format(self, **kwargs) -> str:
             return self.template.format(**kwargs)
 
-        def format_messages(self, **kwargs) -> List[Message]:
+        def format_messages(self, **kwargs) -> list[Message]:
             content = self.format(**kwargs)
             return [Message(MessageRole.USER, content)]
 
     class ChatPromptTemplate(BasePromptTemplate):
         """Chat-style prompt template."""
-        def __init__(self, messages: List[Dict[str, str]], input_variables: List[str] = None):
+
+        def __init__(self, messages: list[dict[str, str]], input_variables: list[str] = None):
             self.messages = messages
             self.input_variables = input_variables or []
 
@@ -80,7 +84,7 @@ except ImportError:
                 result.append(f"{role}: {content}")
             return "\n".join(result)
 
-        def format_messages(self, **kwargs) -> List[Message]:
+        def format_messages(self, **kwargs) -> list[Message]:
             messages = []
             for msg in self.messages:
                 role_str = msg.get("role", "user")
@@ -91,7 +95,8 @@ except ImportError:
 
     class FewShotPromptTemplate(BasePromptTemplate):
         """Few-shot learning prompt template."""
-        def __init__(self, examples: List[Dict], template: str, input_variables: List[str] = None):
+
+        def __init__(self, examples: list[dict], template: str, input_variables: list[str] = None):
             self.examples = examples
             self.template = template
             self.input_variables = input_variables or []
@@ -100,13 +105,14 @@ except ImportError:
             examples_str = "\n\n".join(str(ex) for ex in self.examples)
             return f"{examples_str}\n\n{self.template.format(**kwargs)}"
 
-        def format_messages(self, **kwargs) -> List[Message]:
+        def format_messages(self, **kwargs) -> list[Message]:
             content = self.format(**kwargs)
             return [Message(MessageRole.USER, content)]
 
     class PipelinePromptTemplate(BasePromptTemplate):
         """Composite prompt template."""
-        def __init__(self, templates: List[BasePromptTemplate], final_prompt: str):
+
+        def __init__(self, templates: list[BasePromptTemplate], final_prompt: str):
             self.templates = templates
             self.final_prompt = final_prompt
 
@@ -122,12 +128,13 @@ except ImportError:
                 # If final_prompt doesn't have format placeholders, just append
                 return "\n".join(parts) + "\n" + self.final_prompt
 
-        def format_messages(self, **kwargs) -> List[Message]:
+        def format_messages(self, **kwargs) -> list[Message]:
             content = self.format(**kwargs)
             return [Message(MessageRole.USER, content)]
 
     class TokenCounter:
         """Token counter utility."""
+
         def __init__(self, model: str = "gpt-3.5-turbo"):
             self.model = model
 
@@ -135,7 +142,7 @@ except ImportError:
             """Estimate token count (roughly 1 token per 4 chars)."""
             return len(text) // 4
 
-        def count_messages_tokens(self, messages: List[Message]) -> int:
+        def count_messages_tokens(self, messages: list[Message]) -> int:
             """Count tokens in messages."""
             total = 0
             for msg in messages:
@@ -144,6 +151,7 @@ except ImportError:
 
     class PromptStore:
         """Persistent prompt storage."""
+
         def __init__(self, path: str = None):
             self.path = Path(path) if path else None
             self.prompts = {}
@@ -152,11 +160,11 @@ except ImportError:
             """Save a prompt template."""
             self.prompts[name] = template
 
-        def load_prompt(self, name: str) -> Optional[BasePromptTemplate]:
+        def load_prompt(self, name: str) -> BasePromptTemplate | None:
             """Load a prompt template."""
             return self.prompts.get(name)
 
-        def list_prompts(self) -> List[str]:
+        def list_prompts(self) -> list[str]:
             """List all saved prompts."""
             return list(self.prompts.keys())
 
@@ -213,9 +221,7 @@ class TestStringPromptTemplate(unittest.TestCase):
 
     def test_template_with_multiple_variables(self):
         """Test template with multiple variables."""
-        template = StringPromptTemplate(
-            "My name is {name} and I am {age} years old."
-        )
+        template = StringPromptTemplate("My name is {name} and I am {age} years old.")
         result = template.format(name="Bob", age=30)
         self.assertIn("Bob", result)
         self.assertIn("30", result)
@@ -231,10 +237,7 @@ class TestStringPromptTemplate(unittest.TestCase):
 
     def test_template_with_input_variables_declaration(self):
         """Test template with explicit input variables."""
-        template = StringPromptTemplate(
-            "Tell me about {topic}",
-            input_variables=["topic"]
-        )
+        template = StringPromptTemplate("Tell me about {topic}", input_variables=["topic"])
         self.assertEqual(template.input_variables, ["topic"])
 
     def test_template_with_special_characters(self):
@@ -246,13 +249,8 @@ class TestStringPromptTemplate(unittest.TestCase):
 
     def test_template_multiline(self):
         """Test multiline template."""
-        template = StringPromptTemplate(
-            "Context: {context}\nQuestion: {question}"
-        )
-        result = template.format(
-            context="The sky is blue",
-            question="Why?"
-        )
+        template = StringPromptTemplate("Context: {context}\nQuestion: {question}")
+        result = template.format(context="The sky is blue", question="Why?")
         self.assertIn("Context:", result)
         self.assertIn("Question:", result)
 
@@ -262,10 +260,7 @@ class TestChatPromptTemplate(unittest.TestCase):
 
     def test_simple_chat_template(self):
         """Test simple chat template."""
-        messages = [
-            {"role": "system", "content": "You are helpful."},
-            {"role": "user", "content": "Hello!"}
-        ]
+        messages = [{"role": "system", "content": "You are helpful."}, {"role": "user", "content": "Hello!"}]
         template = ChatPromptTemplate(messages)
         result = template.format()
 
@@ -276,7 +271,7 @@ class TestChatPromptTemplate(unittest.TestCase):
         """Test chat template with template variables."""
         messages = [
             {"role": "system", "content": "You are a {role}."},
-            {"role": "user", "content": "What is {question}?"}
+            {"role": "user", "content": "What is {question}?"},
         ]
         template = ChatPromptTemplate(messages)
         result = template.format(role="teacher", question="1+1")
@@ -286,10 +281,7 @@ class TestChatPromptTemplate(unittest.TestCase):
 
     def test_chat_template_format_messages(self):
         """Test converting chat template to Message objects."""
-        messages = [
-            {"role": "user", "content": "Hello"},
-            {"role": "assistant", "content": "Hi there!"}
-        ]
+        messages = [{"role": "user", "content": "Hello"}, {"role": "assistant", "content": "Hi there!"}]
         template = ChatPromptTemplate(messages)
         result_messages = template.format_messages()
 
@@ -311,9 +303,7 @@ class TestChatPromptTemplate(unittest.TestCase):
 
     def test_chat_template_with_metadata(self):
         """Test chat template with metadata."""
-        messages = [
-            {"role": "user", "content": "Test"}
-        ]
+        messages = [{"role": "user", "content": "Test"}]
         template = ChatPromptTemplate(messages)
         msgs = template.format_messages()
 
@@ -325,14 +315,8 @@ class TestFewShotPromptTemplate(unittest.TestCase):
 
     def test_few_shot_with_examples(self):
         """Test few-shot prompt with examples."""
-        examples = [
-            {"input": "What is 2+2?", "output": "4"},
-            {"input": "What is 3+3?", "output": "6"}
-        ]
-        template = FewShotPromptTemplate(
-            examples=examples,
-            template="Input: {question}\nOutput: ?"
-        )
+        examples = [{"input": "What is 2+2?", "output": "4"}, {"input": "What is 3+3?", "output": "6"}]
+        template = FewShotPromptTemplate(examples=examples, template="Input: {question}\nOutput: ?")
         result = template.format(question="What is 5+5?")
 
         self.assertIn("2+2", result)
@@ -341,10 +325,7 @@ class TestFewShotPromptTemplate(unittest.TestCase):
     def test_few_shot_examples_come_first(self):
         """Test that examples appear before the main question."""
         examples = [{"example": "test"}]
-        template = FewShotPromptTemplate(
-            examples=examples,
-            template="Main question: {q}"
-        )
+        template = FewShotPromptTemplate(examples=examples, template="Main question: {q}")
         result = template.format(q="test")
 
         example_pos = result.find("test") if "test" in result else -1
@@ -354,10 +335,7 @@ class TestFewShotPromptTemplate(unittest.TestCase):
     def test_few_shot_format_messages(self):
         """Test converting few-shot to messages."""
         examples = [{"ex": "1"}]
-        template = FewShotPromptTemplate(
-            examples=examples,
-            template="Question: {q}"
-        )
+        template = FewShotPromptTemplate(examples=examples, template="Question: {q}")
         messages = template.format_messages(q="test")
 
         self.assertEqual(len(messages), 1)
@@ -365,10 +343,7 @@ class TestFewShotPromptTemplate(unittest.TestCase):
 
     def test_few_shot_empty_examples(self):
         """Test few-shot with no examples."""
-        template = FewShotPromptTemplate(
-            examples=[],
-            template="Just ask: {q}"
-        )
+        template = FewShotPromptTemplate(examples=[], template="Just ask: {q}")
         result = template.format(q="What?")
 
         self.assertIn("What?", result)
@@ -376,21 +351,10 @@ class TestFewShotPromptTemplate(unittest.TestCase):
     def test_few_shot_complex_examples(self):
         """Test few-shot with complex examples."""
         examples = [
-            {
-                "input": "Classify: The movie was great!",
-                "output": "positive",
-                "confidence": 0.95
-            },
-            {
-                "input": "Classify: I hated it.",
-                "output": "negative",
-                "confidence": 0.92
-            }
+            {"input": "Classify: The movie was great!", "output": "positive", "confidence": 0.95},
+            {"input": "Classify: I hated it.", "output": "negative", "confidence": 0.92},
         ]
-        template = FewShotPromptTemplate(
-            examples=examples,
-            template="Classify: {text}"
-        )
+        template = FewShotPromptTemplate(examples=examples, template="Classify: {text}")
         result = template.format(text="It was okay.")
 
         self.assertIn("positive", result)
@@ -404,14 +368,8 @@ class TestPipelinePromptTemplate(unittest.TestCase):
         """Test basic pipeline composition."""
         t1 = StringPromptTemplate("Context: {context}")
         t2 = StringPromptTemplate("Question: {question}")
-        pipeline = PipelinePromptTemplate(
-            templates=[t1, t2],
-            final_prompt="Analyze:\n{context}"
-        )
-        result = pipeline.format(
-            context="test context",
-            question="test question"
-        )
+        pipeline = PipelinePromptTemplate(templates=[t1, t2], final_prompt="Analyze:\n{context}")
+        result = pipeline.format(context="test context", question="test question")
 
         self.assertIn("Context:", result)
         self.assertIn("Question:", result)
@@ -422,13 +380,8 @@ class TestPipelinePromptTemplate(unittest.TestCase):
         t2 = StringPromptTemplate("Stage 2: {input2}")
         t3 = StringPromptTemplate("Stage 3: {input3}")
 
-        pipeline = PipelinePromptTemplate(
-            templates=[t1, t2, t3],
-            final_prompt="Final: {context}"
-        )
-        result = pipeline.format(
-            input1="a", input2="b", input3="c"
-        )
+        pipeline = PipelinePromptTemplate(templates=[t1, t2, t3], final_prompt="Final: {context}")
+        result = pipeline.format(input1="a", input2="b", input3="c")
 
         self.assertIn("Stage 1:", result)
         self.assertIn("Stage 2:", result)
@@ -437,10 +390,7 @@ class TestPipelinePromptTemplate(unittest.TestCase):
     def test_pipeline_format_messages(self):
         """Test converting pipeline to messages."""
         t1 = StringPromptTemplate("First")
-        pipeline = PipelinePromptTemplate(
-            templates=[t1],
-            final_prompt="Final: {context}"
-        )
+        pipeline = PipelinePromptTemplate(templates=[t1], final_prompt="Final: {context}")
         messages = pipeline.format_messages()
 
         self.assertEqual(len(messages), 1)
@@ -448,15 +398,8 @@ class TestPipelinePromptTemplate(unittest.TestCase):
 
     def test_pipeline_composition_order(self):
         """Test that pipeline maintains template order."""
-        templates = [
-            StringPromptTemplate("First"),
-            StringPromptTemplate("Second"),
-            StringPromptTemplate("Third")
-        ]
-        pipeline = PipelinePromptTemplate(
-            templates=templates,
-            final_prompt="Done"
-        )
+        templates = [StringPromptTemplate("First"), StringPromptTemplate("Second"), StringPromptTemplate("Third")]
+        pipeline = PipelinePromptTemplate(templates=templates, final_prompt="Done")
         result = pipeline.format()
 
         # Check that all parts are present
@@ -512,7 +455,7 @@ class TestTokenCounter(unittest.TestCase):
         messages = [
             Message(MessageRole.USER, "Hello"),
             Message(MessageRole.ASSISTANT, "Hi there!"),
-            Message(MessageRole.USER, "How are you?")
+            Message(MessageRole.USER, "How are you?"),
         ]
         tokens = counter.count_messages_tokens(messages)
 
@@ -545,6 +488,7 @@ class TestPromptStore(unittest.TestCase):
 
     def tearDown(self):
         import shutil
+
         shutil.rmtree(self.temp_dir, ignore_errors=True)
 
     def test_save_and_load_prompt(self):
@@ -599,9 +543,7 @@ class TestPromptStore(unittest.TestCase):
         store = PromptStore(self.temp_dir)
 
         string_template = StringPromptTemplate("String: {x}")
-        chat_template = ChatPromptTemplate([
-            {"role": "user", "content": "Chat"}
-        ])
+        chat_template = ChatPromptTemplate([{"role": "user", "content": "Chat"}])
 
         store.save_prompt("string", string_template)
         store.save_prompt("chat", chat_template)

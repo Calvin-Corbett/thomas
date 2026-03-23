@@ -1,35 +1,3 @@
-"""Distributed tracing with spans, traces, context propagation, and sampling.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.tracing."""
 
-Provides distributed trace creation, span management, context
-propagation, and trace sampling strategies.
-"""
-
-from .core import (
-    FixedRateSampler,
-    SamplingStrategy,
-    Span,
-    SpanEvent,
-    SpanKind,
-    SpanLink,
-    SpanStatus,
-    Trace,
-    TraceContext,
-    Tracer,
-    TracingCollector,
-)
-
-__all__ = [
-    "SpanKind",
-    "SpanStatus",
-    "SpanEvent",
-    "SpanLink",
-    "Span",
-    "Trace",
-    "TraceContext",
-    "Tracer",
-    "SamplingStrategy",
-    "FixedRateSampler",
-    "TracingCollector",
-]
-
-__version__ = "1.0.0"
+from thomas.marketplace.tracing import *  # noqa: F401,F403

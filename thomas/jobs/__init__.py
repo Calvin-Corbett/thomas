@@ -1,21 +1,3 @@
-"""Job scheduling module for cron, recurring, and dependent jobs."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.jobs."""
 
-from thomas.jobs.core import (
-    Job,
-    JobDefinition,
-    JobDependencyResolver,
-    JobExecution,
-    JobStatus,
-    Scheduler,
-)
-from thomas.jobs.tools import register_jobs_tools
-
-__all__ = [
-    "JobStatus",
-    "JobExecution",
-    "JobDefinition",
-    "Job",
-    "JobDependencyResolver",
-    "Scheduler",
-    "register_jobs_tools",
-]
+from thomas.marketplace.jobs import *  # noqa: F401,F403

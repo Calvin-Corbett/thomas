@@ -3,7 +3,7 @@ from __future__ import annotations
 import tempfile
 from pathlib import Path
 
-from thomas.observability.task_ledger import (
+from thomas.marketplace.observability.task_ledger import (
     TaskLedgerStore,
     classify_completion_state,
     derive_active_goal,

@@ -4,7 +4,7 @@ Tests for type coercion.
 
 from datetime import datetime
 
-from thomas.validation.coercion import CoercionConfig, TypeCoercer
+from thomas.marketplace.validation.coercion import CoercionConfig, TypeCoercer
 
 
 class TestIntCoercion:

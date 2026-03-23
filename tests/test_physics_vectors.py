@@ -4,7 +4,7 @@ Tests for physics vector types and operations.
 
 import pytest
 
-from thomas.physics._types import Vec2, Vec3
+from thomas.marketplace.physics._types import Vec2, Vec3
 
 
 class TestVec2:

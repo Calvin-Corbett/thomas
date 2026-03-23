@@ -1,6 +1,5 @@
 import asyncio
 import io
-import json
 import sys
 
 import pytest
@@ -322,10 +321,7 @@ async def test_gateway_restart_concurrency_soak_rejects_parallel_burst(aiohttp_c
     first_task = asyncio.create_task(client.post("/gateway/restart", json={"gateway": "primary"}))
     await asyncio.wait_for(started.wait(), timeout=2.0)
 
-    burst = [
-        asyncio.create_task(client.post("/gateway/restart", json={"gateway": f"burst-{i}"}))
-        for i in range(10)
-    ]
+    burst = [asyncio.create_task(client.post("/gateway/restart", json={"gateway": f"burst-{i}"})) for i in range(10)]
 
     await asyncio.sleep(0.05)
     gate.set()
@@ -339,5 +335,3 @@ async def test_gateway_restart_concurrency_soak_rejects_parallel_burst(aiohttp_c
         if resp.status == 409:
             body = await resp.json()
             assert body["error"]["code"] == "restart_in_progress"
-
-

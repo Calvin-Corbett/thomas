@@ -5,7 +5,7 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.real_estate.mortgage import (
+from thomas.marketplace.real_estate.mortgage import (
     AffordabilityCalculator,
     APRCalculation,
     ARMSimulation,

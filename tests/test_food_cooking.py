@@ -6,8 +6,8 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.food_tech._types import CookingMethod
-from thomas.food_tech.cooking import CookingScience
+from thomas.marketplace.food_tech._types import CookingMethod
+from thomas.marketplace.food_tech.cooking import CookingScience
 
 
 class TestTemperatureConversion:

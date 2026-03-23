@@ -1,7 +1,6 @@
 """Tests for thomas.server.routes.goals (task kanban CRUD + stats)."""
 
 import tempfile
-import types
 import unittest
 from unittest.mock import patch
 
@@ -177,11 +176,14 @@ class TestGoalsRoutesLocal(AioHTTPTestCase):
 
     async def test_delete_nonexistent_goal_fallback_404(self):
         """When PE lacks delete_goal(), handler checks list length and returns 404."""
+
         class MinimalPE:
             def __init__(self):
                 self.goals = []
+
             def save(self):
                 pass
+
         minimal_pe = MinimalPE()
         with patch("thomas.server.routes.goals.get_persistence", return_value=minimal_pe):
             resp = await self.client.delete("/api/goals/999")

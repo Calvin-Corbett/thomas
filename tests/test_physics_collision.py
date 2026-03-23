@@ -2,8 +2,8 @@
 Tests for collision detection algorithms.
 """
 
-from thomas.physics._types import AABB, Plane, Ray, Sphere, Vec2, Vec3
-from thomas.physics.collision_detection import (
+from thomas.marketplace.physics._types import AABB, Plane, Ray, Sphere, Vec2, Vec3
+from thomas.marketplace.physics.collision_detection import (
     collide_aabb_aabb,
     collide_aabb_sphere,
     collide_sphere_plane,

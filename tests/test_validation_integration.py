@@ -4,13 +4,13 @@ End-to-end integration tests for validation module.
 
 import pytest
 
-from thomas.validation._types import SchemaDefinition, ValidatorConfig
-from thomas.validation.coercion import CoercionConfig, TypeCoercer
-from thomas.validation.core import Validator
-from thomas.validation.decorators import schema_class, validate_args, validate_return
-from thomas.validation.formatters import ErrorGrouper, HumanErrorFormatter, JsonErrorFormatter
-from thomas.validation.sanitizers import InputSanitizer, SanitizerConfig
-from thomas.validation.schema import Schema, SchemaRegistry
+from thomas.marketplace.validation._types import SchemaDefinition, ValidatorConfig
+from thomas.marketplace.validation.coercion import CoercionConfig, TypeCoercer
+from thomas.marketplace.validation.core import Validator
+from thomas.marketplace.validation.decorators import schema_class, validate_args, validate_return
+from thomas.marketplace.validation.formatters import ErrorGrouper, HumanErrorFormatter, JsonErrorFormatter
+from thomas.marketplace.validation.sanitizers import InputSanitizer, SanitizerConfig
+from thomas.marketplace.validation.schema import Schema, SchemaRegistry
 
 
 class TestCompleteValidationPipeline:
@@ -190,7 +190,7 @@ class TestDecoratorValidation:
         assert "John" in result
 
         # Invalid call should raise
-        from thomas.validation._exceptions import ValidationException
+        from thomas.marketplace.validation._exceptions import ValidationException
 
         with pytest.raises(ValidationException):
             process_user(age=30)  # Missing required 'name'
@@ -236,7 +236,7 @@ class TestDecoratorValidation:
         assert user.name == "John"
 
         # Invalid initialization should raise
-        from thomas.validation._exceptions import ValidationException
+        from thomas.marketplace.validation._exceptions import ValidationException
 
         with pytest.raises(ValidationException):
             User("John", 123)  # email should be string

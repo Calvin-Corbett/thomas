@@ -1,7 +1,7 @@
 """Tests for music.harmony module."""
 
-from thomas.music import chords, harmony
-from thomas.music._types import Note
+from thomas.marketplace.music import chords, harmony
+from thomas.marketplace.music._types import Note
 
 
 class TestVoiceRanges:

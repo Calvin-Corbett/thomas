@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.climate import temperature
-from thomas.climate._exceptions import ClimateDataError, InvalidParameterError
+from thomas.marketplace.climate import temperature
+from thomas.marketplace.climate._exceptions import ClimateDataError, InvalidParameterError
 
 
 class TestAnomalyCalculation:

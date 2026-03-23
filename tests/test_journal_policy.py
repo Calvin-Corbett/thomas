@@ -1,4 +1,4 @@
-from thomas.observability.journal import journal_skip_reason, should_create_journal
+from thomas.marketplace.observability.journal import journal_skip_reason, should_create_journal
 
 
 def test_journal_skip_reason_disabled() -> None:

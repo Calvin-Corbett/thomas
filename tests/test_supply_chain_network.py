@@ -15,7 +15,7 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.supply_chain import (
+from thomas.marketplace.supply_chain import (
     Facility,
     FacilityLocationException,
     NetworkDesigner,

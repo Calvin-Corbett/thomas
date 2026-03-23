@@ -1,22 +1,3 @@
-"""Units of measurement and conversion system.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.units."""
 
-Provides unit definitions, conversions, and dimensional analysis.
-"""
-
-from .core import (
-    Dimension,
-    DimensionalAnalysis,
-    Quantity,
-    Unit,
-    UnitRegistry,
-)
-
-__all__ = [
-    "Dimension",
-    "Unit",
-    "UnitRegistry",
-    "Quantity",
-    "DimensionalAnalysis",
-]
-
-__version__ = "1.0.0"
+from thomas.marketplace.units import *  # noqa: F401,F403

@@ -2,7 +2,7 @@
 Tests for input sanitization.
 """
 
-from thomas.validation.sanitizers import InputSanitizer, SanitizerConfig
+from thomas.marketplace.validation.sanitizers import InputSanitizer, SanitizerConfig
 
 
 class TestHtmlStripping:

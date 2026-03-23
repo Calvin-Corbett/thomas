@@ -7,14 +7,14 @@ authentication, and message transmission.
 
 import pytest
 
-from thomas.email_protocol._exceptions import (
+from thomas.marketplace.email_protocol._exceptions import (
     SMTPAuthenticationError,
     SMTPError,
     SMTPRecipientsRefused,
     SMTPSenderRefused,
 )
-from thomas.email_protocol._types import EmailAddress, EmailMessage
-from thomas.email_protocol.smtp import (
+from thomas.marketplace.email_protocol._types import EmailAddress, EmailMessage
+from thomas.marketplace.email_protocol.smtp import (
     SMTPClient,
     SMTPResponse,
     SMTPState,

@@ -6,12 +6,11 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
-from thomas.security.mutating_route_policy import evaluate_mutating_route_policy_exceptions
+from thomas.marketplace.security.mutating_route_policy import evaluate_mutating_route_policy_exceptions
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(
         description="Check mutating API route policy exceptions against runtime policy snapshot."
     )
@@ -66,4 +65,3 @@ def main(argv: Optional[List[str]] = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(main())
-

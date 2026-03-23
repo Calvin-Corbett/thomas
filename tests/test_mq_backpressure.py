@@ -9,7 +9,7 @@ import asyncio
 
 import pytest
 
-from thomas.message_queue.backpressure import (
+from thomas.marketplace.message_queue.backpressure import (
     BackpressureConfig,
     BackpressureManager,
     SlidingWindow,

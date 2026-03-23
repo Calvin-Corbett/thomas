@@ -5,8 +5,8 @@ from typing import Any
 
 from thomas.agent.approval import ApprovalBroker
 from thomas.agent.guarded_tools import GuardedToolRunner
-from thomas.policy.redact import Redactor
-from thomas.policy.types import PolicyContext, PolicyDecision
+from thomas.marketplace.policy.redact import Redactor
+from thomas.marketplace.policy.types import PolicyContext, PolicyDecision
 
 
 class _RequireApprovalPolicy:

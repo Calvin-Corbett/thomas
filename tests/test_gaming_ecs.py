@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.gaming_platform._exceptions import ComponentError, EntityError
-from thomas.gaming_platform._types import Component, Entity, Transform
-from thomas.gaming_platform.ecs import EntityComponentSystem, SparseSet
+from thomas.marketplace.gaming_platform._exceptions import ComponentError, EntityError
+from thomas.marketplace.gaming_platform._types import Component, Entity, Transform
+from thomas.marketplace.gaming_platform.ecs import EntityComponentSystem, SparseSet
 
 
 class HealthComponent(Component):

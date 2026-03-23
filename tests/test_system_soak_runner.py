@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from thomas.system.soak_runner import SoakOptions, run_soak
 
@@ -6,7 +6,6 @@ from thomas.system.soak_runner import SoakOptions, run_soak
 class _Result:
     def __init__(self, code: int) -> None:
         self.returncode = code
-
 
 
 def test_soak_runner_counts_failures_and_injection() -> None:

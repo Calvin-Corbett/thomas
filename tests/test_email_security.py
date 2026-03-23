@@ -5,8 +5,8 @@ Tests SPF checking, DKIM signing, DMARC evaluation, phishing detection,
 and attachment analysis.
 """
 
-from thomas.email_protocol._types import Attachment, EmailAddress, EmailMessage
-from thomas.email_protocol.security import (
+from thomas.marketplace.email_protocol._types import Attachment, EmailAddress, EmailMessage
+from thomas.marketplace.email_protocol.security import (
     AttachmentAnalyzer,
     AuthenticationResult,
     DKIMSigner,

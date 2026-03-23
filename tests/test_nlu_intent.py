@@ -4,8 +4,8 @@ Tests for intent classification module.
 
 import unittest
 
-from thomas.nlu._exceptions import ClassificationError
-from thomas.nlu.intent import IntentClassifier
+from thomas.marketplace.nlu._exceptions import ClassificationError
+from thomas.marketplace.nlu.intent import IntentClassifier
 
 
 class TestIntentClassifier(unittest.TestCase):

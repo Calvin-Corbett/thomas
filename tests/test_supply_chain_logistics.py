@@ -15,7 +15,7 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.supply_chain import Location, LogisticsOptimizer, Route, Vehicle
+from thomas.marketplace.supply_chain import Location, LogisticsOptimizer, Route, Vehicle
 
 
 class TestClarkWrightSavingsAlgorithm:

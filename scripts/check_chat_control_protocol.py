@@ -10,10 +10,8 @@ This guard ensures chat-controlled settings stay generic (not one-off hacks):
 from __future__ import annotations
 
 import argparse
-import sys
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
-
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -68,7 +66,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             SERVER_APP,
             (
                 "resolve_ui_control_request(",
-                "\"type\": \"ui_state_patch\"",
+                '"type": "ui_state_patch"',
             ),
         )
     )
@@ -95,9 +93,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     errors.extend(
         _require_substrings(
             WEB_STORE,
-            (
-                "autonomyLevel",
-            ),
+            ("autonomyLevel",),
         )
     )
 

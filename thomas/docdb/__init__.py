@@ -1,17 +1,3 @@
-"""Document database module with collections, indexes, and aggregation."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.docdb."""
 
-from thomas.docdb.core import (
-    Collection,
-    Document,
-    DocumentDatabase,
-    Index,
-)
-from thomas.docdb.tools import register_docdb_tools
-
-__all__ = [
-    "DocumentDatabase",
-    "Collection",
-    "Document",
-    "Index",
-    "register_docdb_tools",
-]
+from thomas.marketplace.docdb import *  # noqa: F401,F403

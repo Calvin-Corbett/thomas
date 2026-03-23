@@ -204,7 +204,7 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
             )
             return _FakeWebhookResponse()
 
-        with patch("thomas.asset_studio.runtime.urllib.request.urlopen", side_effect=_fake_urlopen):
+        with patch("thomas.marketplace.asset_studio.runtime.urllib.request.urlopen", side_effect=_fake_urlopen):
             create = await self.client.post(
                 "/api/asset-studio/v1/jobs",
                 json={
@@ -276,7 +276,7 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
                 raise RuntimeError("temporary webhook failure")
             return _FakeWebhookResponse()
 
-        with patch("thomas.asset_studio.runtime.urllib.request.urlopen", side_effect=_flaky_urlopen):
+        with patch("thomas.marketplace.asset_studio.runtime.urllib.request.urlopen", side_effect=_flaky_urlopen):
             create = await self.client.post(
                 "/api/asset-studio/v1/jobs",
                 json={
@@ -927,7 +927,7 @@ class TestAssetStudioRoutes(AioHTTPTestCase):
             captured_urls.append(str(getattr(request, "full_url", "")))
             return _FakeWebhookResponse()
 
-        with patch("thomas.asset_studio.runtime.urllib.request.urlopen", side_effect=_capture_urlopen):
+        with patch("thomas.marketplace.asset_studio.runtime.urllib.request.urlopen", side_effect=_capture_urlopen):
             run = await self.client.post(
                 f"/api/asset-studio/v1/templates/{template_id}/run",
                 json={"wait": True, "wait_timeout_s": 30},

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date
 from pathlib import Path
 
-from thomas.security import mutating_route_policy as mod
+from thomas.marketplace.security import mutating_route_policy as mod
 
 
 def _snapshot(*, authz: str = "require_api_access", csrf: str = "same_origin_browser_local_mode") -> dict:

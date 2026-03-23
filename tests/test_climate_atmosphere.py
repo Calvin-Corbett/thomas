@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.climate import atmosphere
-from thomas.climate._exceptions import InvalidParameterError
+from thomas.marketplace.climate import atmosphere
+from thomas.marketplace.climate._exceptions import InvalidParameterError
 
 
 class TestIdealGasLaw:

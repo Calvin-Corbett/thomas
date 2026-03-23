@@ -1,6 +1,6 @@
 """Tests for DSL features: for loops, function calls, and pattern matching."""
 
-from thomas.dsl import VM, Compiler, Lexer, Parser
+from thomas.marketplace.dsl import VM, Compiler, Lexer, Parser
 
 
 class TestForLoops:

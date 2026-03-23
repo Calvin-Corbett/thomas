@@ -6,7 +6,6 @@ import subprocess
 import sys
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -39,9 +38,7 @@ def _workboard_text(*claims: str) -> str:
         scope = claim.split("scope=", 1)[1].split(";", 1)[0]
         agent = claim.split("agent=", 1)[1].split(";", 1)[0]
         task = claim.split("task=", 1)[1]
-        active_tasks.append(
-            f"- task_id=TASK-{idx}; agent={agent}; scope={scope}; summary={task}; status=in_progress"
-        )
+        active_tasks.append(f"- task_id=TASK-{idx}; agent={agent}; scope={scope}; summary={task}; status=in_progress")
     active_block = "\n".join(active_tasks) or "- none"
     return (
         "# Workboard\n\n"
@@ -81,7 +78,9 @@ def _passing_gates() -> tuple[tuple[str, tuple[str, ...]], ...]:
 def test_site_visual_proof_gate_only_runs_for_site_paths() -> None:
     assert mod._gate_applies("site_visual_proof", ["apps/site/src/app/page.tsx"]) is True
     assert mod._gate_applies("site_visual_proof", ["apps/site/verification/ui-proof.json"]) is True
-    assert mod._gate_applies("site_visual_proof", ["scripts/agent_commit.py", "tests/test_commit_gate_split.py"]) is False
+    assert (
+        mod._gate_applies("site_visual_proof", ["scripts/agent_commit.py", "tests/test_commit_gate_split.py"]) is False
+    )
     assert mod._gate_applies("boot_smoke", ["scripts/agent_commit.py"]) is True
 
 

@@ -4,8 +4,8 @@ Tests for vectorized query execution engine.
 
 import pytest
 
-from thomas.columnar._types import ColumnType
-from thomas.columnar.query import (
+from thomas.marketplace.columnar._types import ColumnType
+from thomas.marketplace.columnar.query import (
     ColumnBatch,
     HashAggregator,
     QueryExecutor,

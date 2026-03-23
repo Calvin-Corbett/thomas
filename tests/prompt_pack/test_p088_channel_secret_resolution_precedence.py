@@ -2,7 +2,7 @@ from pathlib import Path
 
 import pytest
 
-from thomas.channels.p088_channel_secret_resolution_precedence import (
+from thomas.marketplace.channels.p088_channel_secret_resolution_precedence import (
     ChannelSecretRequest,
     InvalidSecretRequestError,
     SecretNotFoundError,

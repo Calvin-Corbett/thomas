@@ -2,14 +2,14 @@
 
 from datetime import datetime, timedelta
 
-from thomas.visualization._types import (
+from thomas.marketplace.visualization._types import (
     Color,
     ColorMap,
     DataPoint,
     Series,
 )
-from thomas.visualization.heatmap import Heatmap
-from thomas.visualization.scales import LinearScale
+from thomas.marketplace.visualization.heatmap import Heatmap
+from thomas.marketplace.visualization.scales import LinearScale
 
 
 class TestHeatmap:

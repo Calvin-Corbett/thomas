@@ -4,7 +4,8 @@ import json
 from pathlib import Path
 
 import scripts.module_audit_sweep as mod
-from thomas.observability.module_audit import MAJOR_MODULES
+
+from thomas.marketplace.observability.module_audit import MAJOR_MODULES
 
 
 def test_module_audit_sweep_records_all_major_modules(tmp_path: Path, capsys) -> None:

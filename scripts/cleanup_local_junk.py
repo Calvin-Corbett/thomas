@@ -11,9 +11,8 @@ import fnmatch
 import json
 import shutil
 import subprocess
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List
-
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -59,7 +58,7 @@ WINDOWS_DEVICE_NAMES = {
 }
 
 
-def _git_ls_files(repo_root: Path, args: List[str]) -> List[str]:
+def _git_ls_files(repo_root: Path, args: list[str]) -> list[str]:
     proc = subprocess.run(
         ["git", "ls-files", *args],
         cwd=repo_root,
@@ -77,7 +76,7 @@ def _git_ls_files(repo_root: Path, args: List[str]) -> List[str]:
     return sorted(set(out))
 
 
-def _git_untracked(repo_root: Path, include_ignored: bool) -> List[str]:
+def _git_untracked(repo_root: Path, include_ignored: bool) -> list[str]:
     paths = set(_git_ls_files(repo_root, ["--others", "--exclude-standard"]))
     if include_ignored:
         paths.update(_git_ls_files(repo_root, ["--others", "--ignored", "--exclude-standard"]))
@@ -108,7 +107,7 @@ def _remove_path(path: Path) -> tuple[bool, str]:
     return True, ""
 
 
-def run(argv: List[str] | None = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Clean known local junk artifacts.")
     parser.add_argument("--apply", action="store_true", help="Delete matched files/directories.")
     parser.add_argument(
@@ -130,8 +129,8 @@ def run(argv: List[str] | None = None) -> int:
     untracked = _git_untracked(ROOT, include_ignored=args.ignored)
     candidates = [p for p in untracked if _matches_any(p, JUNK_PATTERNS)]
 
-    removed: List[str] = []
-    failed: List[dict[str, str]] = []
+    removed: list[str] = []
+    failed: list[dict[str, str]] = []
     if args.apply:
         for rel in candidates:
             abs_path = (ROOT / rel).resolve()

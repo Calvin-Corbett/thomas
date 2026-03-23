@@ -7,7 +7,7 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.agriculture.nutrients import (
+from thomas.marketplace.agriculture.nutrients import (
     FertilizerBlendCalculator,
     FertilizerRecommendation,
     ManureCrediting,

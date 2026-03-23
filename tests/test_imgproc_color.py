@@ -4,7 +4,7 @@ Tests for color science module.
 
 import numpy as np
 
-from thomas.image_proc.color_science import ChromaticityPoint, ColorScience, Illuminant, XYZColor
+from thomas.marketplace.image_proc.color_science import ChromaticityPoint, ColorScience, Illuminant, XYZColor
 
 
 class TestColorScience:
@@ -168,7 +168,7 @@ class TestColorScience:
         gray = 0.5 + np.random.normal(0, 0.02, (h, w, 3))
         img_data = np.clip(gray, 0, 1)
 
-        from thomas.image_proc import Image
+        from thomas.marketplace.image_proc import Image
 
         img = Image(data=img_data)
 
@@ -183,7 +183,7 @@ class TestColorScience:
         h, w = 64, 64
         dark_img = np.ones((h, w, 3)) * 0.1
 
-        from thomas.image_proc import Image
+        from thomas.marketplace.image_proc import Image
 
         img = Image(data=dark_img)
 
@@ -245,7 +245,7 @@ class TestColorScience:
 
     def test_color_temperature_range(self):
         """Test white point detection produces reasonable temperatures."""
-        from thomas.image_proc import Image
+        from thomas.marketplace.image_proc import Image
 
         for cct_target in [3000, 6500, 9000]:
             # Create image biased toward target temperature

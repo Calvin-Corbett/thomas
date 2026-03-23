@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-from typing import List, Optional
 
 from thomas.plugins.certification import certify_extension_catalog
 
@@ -33,7 +32,7 @@ def _render_text(payload: dict) -> str:
     return "\n".join(lines)
 
 
-def main(argv: Optional[List[str]] = None) -> int:
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Run extension certification checks.")
     parser.add_argument("--root", default="", help="Optional extension root path (contains catalog.json).")
     parser.add_argument(

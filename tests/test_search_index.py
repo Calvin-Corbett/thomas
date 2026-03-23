@@ -2,7 +2,7 @@
 
 import json
 
-from thomas.search_engine import (
+from thomas.marketplace.search_engine import (
     FieldMapping,
     FieldType,
     IndexConfig,

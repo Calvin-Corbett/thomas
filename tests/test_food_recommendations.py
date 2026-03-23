@@ -6,14 +6,14 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.food_tech._types import (
+from thomas.marketplace.food_tech._types import (
     CookingStep,
     FoodCategory,
     Ingredient,
     NutritionFacts,
     Recipe,
 )
-from thomas.food_tech.recommendations import RecipeRecommendationEngine
+from thomas.marketplace.food_tech.recommendations import RecipeRecommendationEngine
 
 
 class TestRecipeRecommendationEngine:

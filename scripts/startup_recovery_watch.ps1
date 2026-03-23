@@ -11,16 +11,56 @@ param(
 $ErrorActionPreference = "Stop"
 Set-Location $Root
 
-function Test-ThomasHttpOnPort([int]$P) {
+function Invoke-ThomasProbeRequest {
+  param(
+    [Parameter(Mandatory = $true)][string]$Uri,
+    [int]$TimeoutSec = 2
+  )
+
   try {
-    $resp = Invoke-WebRequest -Uri ("http://127.0.0.1:{0}/api/models" -f $P) -UseBasicParsing -TimeoutSec 2 -Method Get -ErrorAction Stop
-    return ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500)
+    $resp = Invoke-WebRequest -Uri $Uri -UseBasicParsing -TimeoutSec $TimeoutSec -Method Get -ErrorAction Stop
+    return [pscustomobject]@{ Ok = ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 400); StatusCode = [int]$resp.StatusCode; Detail = ("HTTP {0}" -f [int]$resp.StatusCode) }
   } catch {
-    return $false
+    $statusCode = 0
+    try { $statusCode = [int]$_.Exception.Response.StatusCode.value__ } catch { }
+    $ok = ($statusCode -gt 0 -and $statusCode -lt 500 -and $statusCode -notin @(500, 502, 503, 504))
+    $detail = if ($statusCode -gt 0) { "HTTP {0}" -f $statusCode } else { $_.Exception.Message }
+    return [pscustomobject]@{ Ok = $ok; StatusCode = [int]$statusCode; Detail = $detail }
   }
 }
 
-function Wait-ThomasHttpOnPort {
+function Get-ThomasBootHealth {
+  param([Parameter(Mandatory = $true)][int]$P)
+
+  $listening = $false
+  try {
+    $listening = [bool](Get-NetTCPConnection -LocalPort $P -State Listen -ErrorAction SilentlyContinue)
+  } catch { }
+
+  $probeSpecs = @(
+    @{ Id = 'root'; Path = '/'; Class = 'core' },
+    @{ Id = 'health'; Path = '/api/health'; Class = 'core' },
+    @{ Id = 'models'; Path = '/api/models'; Class = 'important' },
+    @{ Id = 'recovery_notice'; Path = '/api/bootdoctor/recovery_notice'; Class = 'important' }
+  )
+
+  $probeResults = @()
+  foreach ($spec in $probeSpecs) {
+    if ($listening) {
+      $probe = Invoke-ThomasProbeRequest -Uri ("http://127.0.0.1:{0}{1}" -f $P, $spec.Path)
+      $probeResults += [pscustomobject]@{ id = $spec.Id; class = $spec.Class; path = $spec.Path; ok = [bool]$probe.Ok; status = [int]$probe.StatusCode; detail = [string]$probe.Detail }
+    } else {
+      $probeResults += [pscustomobject]@{ id = $spec.Id; class = $spec.Class; path = $spec.Path; ok = $false; status = 0; detail = 'port not listening' }
+    }
+  }
+
+  $coreFailed = ($probeResults | Where-Object { $_.class -eq 'core' -and -not $_.ok }).Count -gt 0
+  $importantFailed = ($probeResults | Where-Object { $_.class -ne 'core' -and -not $_.ok }).Count -gt 0
+  $severity = if (-not $listening -or $coreFailed) { 'fatal' } elseif ($importantFailed) { 'degraded' } else { 'healthy' }
+  return [pscustomobject]@{ Ready = ($severity -ne 'fatal'); Severity = $severity; Listening = $listening; ProbeResults = @($probeResults) }
+}
+
+function Wait-ThomasBootHealth {
   param(
     [Parameter(Mandatory = $true)][int]$P,
     [Parameter(Mandatory = $true)][int]$TimeoutSec,
@@ -28,11 +68,16 @@ function Wait-ThomasHttpOnPort {
   )
 
   $deadline = (Get-Date).AddSeconds([Math]::Max(1, $TimeoutSec))
+  $last = $null
   while ((Get-Date) -lt $deadline) {
-    if (Test-ThomasHttpOnPort $P) { return $true }
+    $last = Get-ThomasBootHealth -P $P
+    if ($last.Ready) { return $last }
     Start-Sleep -Milliseconds ([Math]::Max(50, $DelayMs))
   }
-  return (Test-ThomasHttpOnPort $P)
+  if ($null -eq $last) {
+    $last = Get-ThomasBootHealth -P $P
+  }
+  return $last
 }
 
 function Open-ThomasBrowser {
@@ -63,6 +108,37 @@ function Get-FileTailText {
   }
 }
 
+function Get-BootDoctorRuntimeDir {
+  return (Join-Path $Root "runtimeoot_doctor")
+}
+
+function Write-BootDoctorDegradedStatus {
+  param(
+    [Parameter(Mandatory = $true)][string]$Reason,
+    [Parameter(Mandatory = $true)][int]$DiagPort
+  )
+
+  $diagDir = Get-BootDoctorRuntimeDir
+  New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
+  $statusPath = Join-Path $diagDir 'rescue_status.json'
+  $payload = [ordered]@{
+    status = 'degraded'
+    phase = 'repairing'
+    message = 'Thomas launched in a degraded state while Boot Doctor investigates.'
+    reason = $Reason
+    severity = 'degraded'
+    recovered = $true
+    blocking = $false
+    port = [int]$DiagPort
+    repairs = @()
+    ai_summary = ''
+    recommended_actions = @('retry_repair', 'restart', 'open_rescue')
+    probe_results = @()
+    updated_at_utc = (Get-Date).ToUniversalTime().ToString('yyyy-MM-ddTHH:mm:ssZ')
+  }
+  $payload | ConvertTo-Json -Depth 6 | Set-Content -Path $statusPath -Encoding UTF8
+}
+
 function Write-StartupContext {
   param(
     [Parameter(Mandatory = $true)][string]$Reason,
@@ -71,7 +147,7 @@ function Write-StartupContext {
     [string[]]$StartupLogPaths = @()
   )
 
-  $diagDir = Join-Path $Root "runtime\boot_doctor"
+  $diagDir = Get-BootDoctorRuntimeDir
   New-Item -ItemType Directory -Force -Path $diagDir | Out-Null
   $stamp = Get-Date -Format "yyyyMMdd_HHmmss"
   $path = Join-Path $diagDir ("startup_context_{0}.json" -f $stamp)
@@ -92,13 +168,36 @@ function Write-StartupContext {
   return $path
 }
 
+function Start-BootDoctorBackgroundRepair {
+  param(
+    [Parameter(Mandatory = $true)][string]$Reason,
+    [Parameter(Mandatory = $true)][int]$DiagPort
+  )
+
+  $bootDoctorScript = Join-Path $Root "scriptsootdoctor.ps1"
+  if (-not (Test-Path $bootDoctorScript)) {
+    return $null
+  }
+
+  return Start-Process -FilePath "powershell.exe" -ArgumentList @(
+    "-NoProfile",
+    "-ExecutionPolicy", "Bypass",
+    "-File", $bootDoctorScript,
+    "report",
+    "--force",
+    "--port", "$DiagPort",
+    "--reason", $Reason,
+    "--relaunch"
+  ) -WorkingDirectory $Root -WindowStyle Hidden -PassThru
+}
+
 function Start-BootDoctorRescue {
   param(
     [Parameter(Mandatory = $true)][string]$Reason,
     [Parameter(Mandatory = $true)][string]$ContextPath
   )
 
-  $bootDoctorScript = Join-Path $Root "scripts\bootdoctor.ps1"
+  $bootDoctorScript = Join-Path $Root "scriptsootdoctor.ps1"
   if (-not (Test-Path $bootDoctorScript)) {
     return $null
   }
@@ -116,12 +215,18 @@ function Start-BootDoctorRescue {
   ) -WorkingDirectory $Root -PassThru
 }
 
-if (Wait-ThomasHttpOnPort -P $Port -TimeoutSec $StartupTimeoutSec) {
+$startupState = Wait-ThomasBootHealth -P $Port -TimeoutSec $StartupTimeoutSec
+if ($startupState.Ready) {
+  if ($startupState.Severity -eq 'degraded') {
+    $reason = "Startup watchdog: Thomas became available in a degraded state on port $Port."
+    Write-BootDoctorDegradedStatus -Reason $reason -DiagPort $Port
+    try { Start-BootDoctorBackgroundRepair -Reason $reason -DiagPort $Port | Out-Null } catch { }
+  }
   Open-ThomasBrowser
   exit 0
 }
 
-$reason = "Startup watchdog: Thomas never became healthy on port $Port."
+$reason = "Startup watchdog: Thomas never became ready on port $Port."
 $startupLogPaths = @(
   (Join-Path $Root "runtime\logs\server_stderr.log"),
   (Join-Path $Root "runtime\logs\server_stdout.log")
@@ -133,14 +238,18 @@ foreach ($logPath in $startupLogPaths) {
     break
   }
 }
-$contextPath = Write-StartupContext -Reason $reason -HealthStatus "unhealthy" -StdErrTail $stderrTail -StartupLogPaths $startupLogPaths
+$contextPath = Write-StartupContext -Reason $reason -HealthStatus ([string]$startupState.Severity) -StdErrTail $stderrTail -StartupLogPaths $startupLogPaths
 $proc = $null
 try {
   $proc = Start-BootDoctorRescue -Reason $reason -ContextPath $contextPath
 } catch {
 }
 
-if (Wait-ThomasHttpOnPort -P $Port -TimeoutSec $RecoveryTimeoutSec) {
+$recoveryState = Wait-ThomasBootHealth -P $Port -TimeoutSec $RecoveryTimeoutSec
+if ($recoveryState.Ready) {
+  if ($recoveryState.Severity -eq 'degraded') {
+    Write-BootDoctorDegradedStatus -Reason "Boot Doctor rescue restored Thomas in a degraded state on port $Port." -DiagPort $Port
+  }
   Open-ThomasBrowser
   exit 0
 }

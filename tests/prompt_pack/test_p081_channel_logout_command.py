@@ -3,15 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from thomas.channels.p081_channel_logout_command import (
+from thomas.cli.commands.channel_ops import p081_channel_logout_command as cli_mod
+from thomas.marketplace.channels.p081_channel_logout_command import (
     ChannelLogoutError,
     ChannelLogoutRequest,
     error_to_json,
     logout_channel,
     logout_result_to_json,
 )
-
-from thomas.cli.commands.channel_ops import p081_channel_logout_command as cli_mod
 
 
 def test_logout_channel_success_deletes_config(tmp_path: Path) -> None:

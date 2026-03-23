@@ -5,7 +5,7 @@ Tests for inpainting module.
 import numpy as np
 import pytest
 
-from thomas.image_proc import Image, Inpainter, InpaintMask
+from thomas.marketplace.image_proc import Image, Inpainter, InpaintMask
 
 
 class TestInpainting:

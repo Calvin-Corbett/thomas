@@ -4,7 +4,7 @@ Tests for classical pathfinding algorithms.
 
 import pytest
 
-from thomas.pathfinding import (
+from thomas.marketplace.pathfinding import (
     Graph,
     Node,
     astar,

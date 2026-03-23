@@ -1,11 +1,10 @@
 import json
-import os
 from pathlib import Path
 
 import pytest
 
 from thomas.cli.commands.nodes.p049_nodes_pairing_handshake import main as cli_main
-from thomas.nodes.p049_nodes_pairing_handshake import (
+from thomas.marketplace.nodes.p049_nodes_pairing_handshake import (
     NodesPairingHandshakeError,
     NodesPairingHandshakeInput,
     nodes_pairing_handshake,

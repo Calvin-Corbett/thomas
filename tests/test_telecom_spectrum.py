@@ -4,8 +4,8 @@ Tests for spectrum management module.
 
 import pytest
 
-from thomas.telecom._types import Frequency
-from thomas.telecom.spectrum import (
+from thomas.marketplace.telecom._types import Frequency
+from thomas.marketplace.telecom.spectrum import (
     CognitiveRadio,
     GuardBandCalculator,
     InterferenceCalculator,

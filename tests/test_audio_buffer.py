@@ -5,8 +5,8 @@ Tests for audio buffer management and sample conversion.
 import numpy as np
 import pytest
 
-from thomas.audio_engine._exceptions import BufferOverflowError, BufferUnderflowError
-from thomas.audio_engine.buffer import (
+from thomas.marketplace.audio_engine._exceptions import BufferOverflowError, BufferUnderflowError
+from thomas.marketplace.audio_engine.buffer import (
     AudioBufferPool,
     BitDepthConverter,
     ChannelConverter,

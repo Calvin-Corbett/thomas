@@ -1,6 +1,6 @@
 """Tests for DSL compiler."""
 
-from thomas.dsl import Assignment, BinaryOp, Compiler, DictExpr, IfExpr, ListExpr, Literal, OpCode, UnaryOp
+from thomas.marketplace.dsl import Assignment, BinaryOp, Compiler, DictExpr, IfExpr, ListExpr, Literal, OpCode, UnaryOp
 
 
 class TestCompiler:
@@ -136,7 +136,7 @@ class TestCompiler:
 
     def test_add_constant(self) -> None:
         """Test adding constants to code object."""
-        from thomas.dsl import CodeObject
+        from thomas.marketplace.dsl import CodeObject
 
         code = CodeObject()
 
@@ -148,7 +148,7 @@ class TestCompiler:
 
     def test_add_variable(self) -> None:
         """Test adding variables to code object."""
-        from thomas.dsl import CodeObject
+        from thomas.marketplace.dsl import CodeObject
 
         code = CodeObject()
 
@@ -160,7 +160,7 @@ class TestCompiler:
 
     def test_emit_instruction(self) -> None:
         """Test emitting instructions."""
-        from thomas.dsl import CodeObject
+        from thomas.marketplace.dsl import CodeObject
 
         code = CodeObject()
 
@@ -172,7 +172,7 @@ class TestCompiler:
 
     def test_patch_jump(self) -> None:
         """Test patching jump instructions."""
-        from thomas.dsl import CodeObject
+        from thomas.marketplace.dsl import CodeObject
 
         code = CodeObject()
 

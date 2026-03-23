@@ -4,8 +4,8 @@ Tests for protocol stack module.
 
 import pytest
 
-from thomas.telecom._types import Modulation, Protocol
-from thomas.telecom.protocols import (
+from thomas.marketplace.telecom._types import Modulation, Protocol
+from thomas.marketplace.telecom.protocols import (
     FrameStructure,
     HARQSimulator,
     OFDMAllocator,

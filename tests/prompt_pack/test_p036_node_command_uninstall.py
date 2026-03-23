@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import importlib
 import importlib.util
-from pathlib import Path
 import subprocess
 import sys
+from pathlib import Path
 from types import ModuleType
 from typing import Any
 
@@ -29,7 +29,7 @@ def _load_module(dotted: str, file_path: Path) -> ModuleType:
 def core_mod() -> ModuleType:
     repo_root = Path(__file__).resolve().parents[2]
     return _load_module(
-        "thomas.nodes.p036_node_command_uninstall",
+        "thomas.marketplace.nodes.p036_node_command_uninstall",
         repo_root / "thomas" / "nodes" / "p036_node_command_uninstall.py",
     )
 
@@ -96,7 +96,9 @@ def test_uninstall_missing_package_json(monkeypatch: pytest.MonkeyPatch, tmp_pat
     project_dir.mkdir()
 
     # Ensure subprocess is never called.
-    monkeypatch.setattr(core_mod.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run")))
+    monkeypatch.setattr(
+        core_mod.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run"))
+    )
 
     req = core_mod.NodeCommandUninstallRequest(package="lodash", project_dir=str(project_dir), npm_executable="npm")
     with pytest.raises(core_mod.NodeCommandUninstallError) as ei:
@@ -110,7 +112,9 @@ def test_uninstall_invalid_package(monkeypatch: pytest.MonkeyPatch, tmp_path: Pa
     project_dir.mkdir()
     (project_dir / "package.json").write_text('{"name":"proj"}', encoding="utf-8")
 
-    monkeypatch.setattr(core_mod.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run")))
+    monkeypatch.setattr(
+        core_mod.subprocess, "run", lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not run"))
+    )
 
     req = core_mod.NodeCommandUninstallRequest(package="--force", project_dir=str(project_dir), npm_executable="npm")
     with pytest.raises(core_mod.NodeCommandUninstallError) as ei:
@@ -167,7 +171,9 @@ def test_request_roundtrip(core_mod: ModuleType) -> None:
     assert req.to_dict() == payload
 
 
-def test_cli_json_success(monkeypatch: pytest.MonkeyPatch, cli_mod: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_json_success(
+    monkeypatch: pytest.MonkeyPatch, cli_mod: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
     # Patch _load_core so we don't depend on a full Thomas environment.
     class StubErr(Exception):
         def __init__(self, code: str, message: str):
@@ -217,7 +223,9 @@ def test_cli_json_success(monkeypatch: pytest.MonkeyPatch, cli_mod: ModuleType, 
     assert '"ok": true' in out.lower()
 
 
-def test_cli_json_failure(monkeypatch: pytest.MonkeyPatch, cli_mod: ModuleType, capsys: pytest.CaptureFixture[str]) -> None:
+def test_cli_json_failure(
+    monkeypatch: pytest.MonkeyPatch, cli_mod: ModuleType, capsys: pytest.CaptureFixture[str]
+) -> None:
     class StubErr(Exception):
         def __init__(self, code: str, message: str):
             super().__init__(message)

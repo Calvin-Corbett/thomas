@@ -1,8 +1,8 @@
 """Tests for 2D physics engine."""
 
-from thomas.gaming_platform._types import Collider, Entity, RigidBody, Transform
-from thomas.gaming_platform.ecs import EntityComponentSystem
-from thomas.gaming_platform.physics2d import (
+from thomas.marketplace.gaming_platform._types import Collider, Entity, RigidBody, Transform
+from thomas.marketplace.gaming_platform.ecs import EntityComponentSystem
+from thomas.marketplace.gaming_platform.physics2d import (
     AABB,
     Circle,
     Physics2D,

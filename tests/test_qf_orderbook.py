@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.quantfin._types import Asset, Order, OrderSide, OrderStatus, OrderType
-from thomas.quantfin.orderbook import LimitOrderBook
+from thomas.marketplace.quantfin._types import Asset, Order, OrderSide, OrderStatus, OrderType
+from thomas.marketplace.quantfin.orderbook import LimitOrderBook
 
 
 class TestOrderBook:

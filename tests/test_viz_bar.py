@@ -2,14 +2,14 @@
 
 import pytest
 
-from thomas.visualization._exceptions import InvalidDataError
-from thomas.visualization._types import (
+from thomas.marketplace.visualization._exceptions import InvalidDataError
+from thomas.marketplace.visualization._types import (
     Color,
     DataPoint,
     Series,
 )
-from thomas.visualization.bar_chart import BarChart, BarGeometry
-from thomas.visualization.scales import CategoricalScale, LinearScale
+from thomas.marketplace.visualization.bar_chart import BarChart, BarGeometry
+from thomas.marketplace.visualization.scales import CategoricalScale, LinearScale
 
 
 class TestBarChart:

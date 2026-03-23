@@ -1,4 +1,4 @@
-from thomas.autonomy.mode_policy import apply_workflow_mode_policy, classify_task
+from thomas.marketplace.autonomy.mode_policy import apply_workflow_mode_policy, classify_task
 
 
 def test_classify_task_detects_coding_signals() -> None:

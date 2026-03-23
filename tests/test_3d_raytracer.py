@@ -11,9 +11,9 @@ Tests:
 - Anti-aliasing
 """
 
-from thomas.graphics3d import mesh as mesh_module
-from thomas.graphics3d import raytracer
-from thomas.graphics3d._types import AABB, Color, Ray, Vec3
+from thomas.marketplace.graphics3d import mesh as mesh_module
+from thomas.marketplace.graphics3d import raytracer
+from thomas.marketplace.graphics3d._types import AABB, Color, Ray, Vec3
 
 
 class TestRaySphereIntersection:
@@ -222,7 +222,7 @@ class TestSoftShadows:
 
     def test_soft_shadow_creation(self) -> None:
         """Test soft shadow computation."""
-        from thomas.graphics3d._types import Light, LightType
+        from thomas.marketplace.graphics3d._types import Light, LightType
 
         position = Vec3(0, 0, 0)
         light = Light(type=LightType.DIRECTIONAL, direction=Vec3(0, -1, 0), range=10.0)
@@ -233,7 +233,7 @@ class TestSoftShadows:
 
     def test_soft_shadow_with_occluder(self) -> None:
         """Test soft shadow with occluding geometry."""
-        from thomas.graphics3d._types import Light, LightType
+        from thomas.marketplace.graphics3d._types import Light, LightType
 
         position = Vec3(0, 0, 0)
         light = Light(type=LightType.POINT, position=Vec3(5, 5, 5), range=100.0)

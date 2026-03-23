@@ -18,8 +18,8 @@ import pytest
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from thomas.db_internals import BufferPool
-from thomas.db_internals._exceptions import (
+from thomas.marketplace.db_internals import BufferPool
+from thomas.marketplace.db_internals._exceptions import (
     BufferPoolException,
     PageException,
 )

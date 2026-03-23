@@ -2,7 +2,7 @@
 Tests for Markdown extensions.
 """
 
-from thomas.markdown.extensions import (
+from thomas.marketplace.markdown.extensions import (
     AbbreviationExtension,
     AdmonitionExtension,
     AttributeListExtension,
@@ -14,7 +14,7 @@ from thomas.markdown.extensions import (
     TableOfContentsExtension,
     TaskListExtension,
 )
-from thomas.markdown.parser import Parser
+from thomas.marketplace.markdown.parser import Parser
 
 
 class TestTableOfContents:

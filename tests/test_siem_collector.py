@@ -4,9 +4,9 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.siem._exceptions import ParsingException
-from thomas.siem._types import Asset, EventCategory, EventSeverity
-from thomas.siem.collector import (
+from thomas.marketplace.siem._exceptions import ParsingException
+from thomas.marketplace.siem._types import Asset, EventCategory, EventSeverity
+from thomas.marketplace.siem.collector import (
     CEFParser,
     EventEnricher,
     JSONLogParser,
@@ -139,7 +139,7 @@ class TestEventEnricher:
         )
         enricher = EventEnricher(assets={"server1": asset})
 
-        from thomas.siem._types import SecurityEvent
+        from thomas.marketplace.siem._types import SecurityEvent
 
         event = SecurityEvent(host="server1", message="Test")
 
@@ -152,7 +152,7 @@ class TestEventEnricher:
         """Test geolocation enrichment."""
         enricher = EventEnricher()
 
-        from thomas.siem._types import SecurityEvent
+        from thomas.marketplace.siem._types import SecurityEvent
 
         event = SecurityEvent(src_ip="8.8.8.8", message="Test")
 
@@ -164,7 +164,7 @@ class TestEventEnricher:
         """Test protocol enrichment."""
         enricher = EventEnricher()
 
-        from thomas.siem._types import SecurityEvent
+        from thomas.marketplace.siem._types import SecurityEvent
 
         event = SecurityEvent(protocol="HTTPS", message="Test")
 

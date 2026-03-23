@@ -11,8 +11,8 @@ Tests:
 
 import math
 
-from thomas.graphics3d import shading
-from thomas.graphics3d._types import Color, Light, LightType, Material, Vec3
+from thomas.marketplace.graphics3d import shading
+from thomas.marketplace.graphics3d._types import Color, Light, LightType, Material, Vec3
 
 
 class TestPhongLighting:

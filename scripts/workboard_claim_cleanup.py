@@ -5,15 +5,14 @@ from __future__ import annotations
 
 import argparse
 import json
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Dict, List, Sequence, Tuple
 
 try:
     from scripts import check_workboard_claim_freshness as freshness_gate
     from scripts import check_workboard_claims as claims_gate
-    from scripts import workboard_claim
-    from scripts import workboard_issue
+    from scripts import workboard_claim, workboard_issue
 except Exception:  # pragma: no cover
     import check_workboard_claim_freshness as freshness_gate  # type: ignore
     import check_workboard_claims as claims_gate  # type: ignore
@@ -42,18 +41,18 @@ def _stale_claim_candidates(
     workboard_path: Path,
     max_age_hours: float,
     now: datetime,
-) -> Tuple[List[str], List[dict[str, object]]]:
+) -> tuple[list[str], list[dict[str, object]]]:
     violations, claims, active_tasks, _grab, issues = claims_gate.evaluate_board(workboard_path)
     if violations:
         return list(violations), []
 
     max_age_seconds = float(max_age_hours) * 3600.0
     now_ts = now.timestamp()
-    tasks_by_agent: Dict[str, List[claims_gate.ActiveTask]] = {}
+    tasks_by_agent: dict[str, list[claims_gate.ActiveTask]] = {}
     for task in active_tasks:
         tasks_by_agent.setdefault(_norm(task.agent), []).append(task)
 
-    stale_claims: List[dict[str, object]] = []
+    stale_claims: list[dict[str, object]] = []
     for claim in claims:
         claim_ts = _line_commit_unix(workboard_path, int(claim.line_no))
         stale = False
@@ -71,9 +70,7 @@ def _stale_claim_candidates(
             if age_seconds > max_age_seconds:
                 stale = True
                 claim_item["age_hours"] = round(age_seconds / 3600.0, 2)
-                claim_item["last_update_utc"] = datetime.fromtimestamp(
-                    claim_ts, tz=timezone.utc
-                ).isoformat()
+                claim_item["last_update_utc"] = datetime.fromtimestamp(claim_ts, tz=timezone.utc).isoformat()
 
         if not stale:
             continue
@@ -85,8 +82,7 @@ def _stale_claim_candidates(
             {
                 issue.issue_id
                 for issue in issues
-                if _norm(issue.task_id) in {_norm(task_id) for task_id in task_ids}
-                and _norm(issue.state) != "resolved"
+                if _norm(issue.task_id) in {_norm(task_id) for task_id in task_ids} and _norm(issue.state) != "resolved"
             },
             key=str.lower,
         )
@@ -95,9 +91,9 @@ def _stale_claim_candidates(
     return [], stale_claims
 
 
-def _unique_stale_agents(stale_claims: List[dict[str, object]]) -> List[str]:
+def _unique_stale_agents(stale_claims: list[dict[str, object]]) -> list[str]:
     seen: set[str] = set()
-    ordered: List[str] = []
+    ordered: list[str] = []
     for item in stale_claims:
         agent = str(item.get("agent", "")).strip()
         key = _norm(agent)
@@ -113,11 +109,11 @@ def _reassign_owned_open_issues(
     workboard_path: Path,
     from_owner: str,
     to_owner: str,
-) -> Tuple[bool, List[str], str | None]:
+) -> tuple[bool, list[str], str | None]:
     original_text = workboard_path.read_text(encoding="utf-8")
     lines = original_text.splitlines()
     section_start, section_end = workboard_issue._find_issues_section(lines)  # type: ignore[attr-defined]
-    issue_ids: List[str] = []
+    issue_ids: list[str] = []
 
     for idx in workboard_issue._bullet_indices(lines, section_start, section_end):  # type: ignore[attr-defined]
         entry, fields, err = workboard_issue._parse_issue_line(idx + 1, lines[idx])  # type: ignore[attr-defined]
@@ -262,10 +258,10 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print(f"- {item}")
         return 1
 
-    moved_task_ids: List[str] = []
-    released_agents: List[str] = []
-    reassigned_issue_ids: List[str] = []
-    apply_errors: List[str] = []
+    moved_task_ids: list[str] = []
+    released_agents: list[str] = []
+    reassigned_issue_ids: list[str] = []
+    apply_errors: list[str] = []
     stale_agents = _unique_stale_agents(stale_claims)
 
     if args.apply and stale_agents:
@@ -288,9 +284,7 @@ def run(argv: Sequence[str] | None = None) -> int:
                 if ok:
                     moved_task_ids.append(task.task_id)
                 else:
-                    apply_errors.append(
-                        f"failed moving task `{task.task_id}` for `{agent}` to up-for-grabs: {message}"
-                    )
+                    apply_errors.append(f"failed moving task `{task.task_id}` for `{agent}` to up-for-grabs: {message}")
 
             ok_release, release_msg = workboard_claim.release(workboard_path, agent=agent)
             if ok_release:
@@ -356,10 +350,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             print("Workboard claim cleanup: PASS")
         else:
             print("Workboard claim cleanup: FAIL")
-        print(
-            f"- stale claims: {payload['stale_claim_count']} "
-            f"(max age {float(args.max_age_hours):.1f}h)"
-        )
+        print(f"- stale claims: {payload['stale_claim_count']} " f"(max age {float(args.max_age_hours):.1f}h)")
         if stale_agents:
             print(f"- stale agents: {', '.join(stale_agents)}")
         if args.apply:

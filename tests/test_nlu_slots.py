@@ -4,9 +4,9 @@ Tests for slot filling module.
 
 import unittest
 
-from thomas.nlu._exceptions import ClassificationError
-from thomas.nlu._types import Sentence
-from thomas.nlu.slot_filling import (
+from thomas.marketplace.nlu._exceptions import ClassificationError
+from thomas.marketplace.nlu._types import Sentence
+from thomas.marketplace.nlu.slot_filling import (
     DateSlotExtractor,
     EmailSlotExtractor,
     LocationSlotExtractor,
@@ -92,7 +92,7 @@ class TestSlotFiller(unittest.TestCase):
 
     def test_carry_slots(self) -> None:
         """Test carrying slots across turns."""
-        from thomas.nlu._types import Slot
+        from thomas.marketplace.nlu._types import Slot
 
         previous_slots = [
             Slot(name="date", value="2024-01-15", value_type="date"),

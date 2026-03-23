@@ -1,6 +1,6 @@
 """Tests for UI system."""
 
-from thomas.gaming_platform.ui import (
+from thomas.marketplace.gaming_platform.ui import (
     Button,
     Label,
     LayoutMode,

@@ -7,15 +7,15 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.food_tech._exceptions import ConstraintViolationError, PlanGenerationError
-from thomas.food_tech._types import (
+from thomas.marketplace.food_tech._exceptions import ConstraintViolationError, PlanGenerationError
+from thomas.marketplace.food_tech._types import (
     CookingStep,
     FoodCategory,
     Ingredient,
     NutritionFacts,
     Recipe,
 )
-from thomas.food_tech.meal_planning import MealPlanner
+from thomas.marketplace.food_tech.meal_planning import MealPlanner
 
 
 class TestMealPlanner:

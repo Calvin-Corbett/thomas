@@ -1,12 +1,11 @@
+import importlib.util
 import io
 import json
 import sys
 import types
-import importlib.util
 from pathlib import Path
 
 import pytest
-
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -25,7 +24,7 @@ def _load_module(module_name: str, rel_path: str):
 @pytest.fixture()
 def core():
     return _load_module(
-        "thomas.channels.p084_channel_resolve_command",
+        "thomas.marketplace.channels.p084_channel_resolve_command",
         "thomas/channels/p084_channel_resolve_command.py",
     )
 
@@ -43,17 +42,17 @@ class _FakeTelegramResolver:
 def _ensure_cli_loaded(core):
     # Create a minimal module hierarchy so the CLI module can import the core module.
     thomas_pkg = types.ModuleType("thomas")
-    channels_pkg = types.ModuleType("thomas.channels")
+    channels_pkg = types.ModuleType("thomas.marketplace.channels")
     cli_pkg = types.ModuleType("thomas.cli")
     commands_pkg = types.ModuleType("thomas.cli.commands")
     channel_ops_pkg = types.ModuleType("thomas.cli.commands.channel_ops")
 
     sys.modules.setdefault("thomas", thomas_pkg)
-    sys.modules.setdefault("thomas.channels", channels_pkg)
+    sys.modules.setdefault("thomas.marketplace.channels", channels_pkg)
     sys.modules.setdefault("thomas.cli", cli_pkg)
     sys.modules.setdefault("thomas.cli.commands", commands_pkg)
     sys.modules.setdefault("thomas.cli.commands.channel_ops", channel_ops_pkg)
-    sys.modules["thomas.channels.p084_channel_resolve_command"] = core
+    sys.modules["thomas.marketplace.channels.p084_channel_resolve_command"] = core
 
     return _load_module(
         "thomas.cli.commands.channel_ops.p084_channel_resolve_command",
@@ -63,7 +62,9 @@ def _ensure_cli_loaded(core):
 
 def test_resolve_telegram_username_success(core):
     req = core.ChannelResolveRequest(reference="@mychannel")
-    resolver = _FakeTelegramResolver({"id": 123456789, "title": "My Channel", "username": "mychannel", "type": "channel"})
+    resolver = _FakeTelegramResolver(
+        {"id": 123456789, "title": "My Channel", "username": "mychannel", "type": "channel"}
+    )
 
     result = core.resolve_channel(req, telegram_resolver=resolver)
 
@@ -78,7 +79,9 @@ def test_resolve_telegram_username_success(core):
 def test_resolve_alias_from_config(core):
     cfg = {"channels": {"alerts": "telegram:@alerts_channel"}}
     req = core.ChannelResolveRequest(reference="alerts", config=cfg)
-    resolver = _FakeTelegramResolver({"chat_id": -100555, "title": "Alerts", "username": "alerts_channel", "type": "supergroup"})
+    resolver = _FakeTelegramResolver(
+        {"chat_id": -100555, "title": "Alerts", "username": "alerts_channel", "type": "supergroup"}
+    )
 
     result = core.resolve_channel(req, telegram_resolver=resolver)
 
@@ -90,7 +93,9 @@ def test_resolve_alias_from_config(core):
 
 def test_invalid_reference_empty(core):
     with pytest.raises(core.InvalidChannelReference) as ei:
-        core.resolve_channel(core.ChannelResolveRequest(reference="   "), telegram_resolver=_FakeTelegramResolver({"id": 1}))
+        core.resolve_channel(
+            core.ChannelResolveRequest(reference="   "), telegram_resolver=_FakeTelegramResolver({"id": 1})
+        )
     assert ei.value.code == "INVALID_INPUT"
     assert ei.value.exit_code == 2
 

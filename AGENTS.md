@@ -1,265 +1,154 @@
 # Thomas Agent Instructions
 
-Thomas is an AI coding agent with intentionally broad scope.
-The breadth is a feature â€” don't reduce scope without explicit user request.
+## STOP — Read This Before Anything Else
+
+1. Run the startup router: `python scripts/agent_startup_router.py --summary "<task summary>"`
+2. Read [GUARDRAILS.md](GUARDRAILS.md) and the module-level `GUARDRAILS.md` for whatever directory you are modifying
+3. Read [docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md) — this project has a monolith source loader; editing the wrong file means your changes DO NOTHING
+4. Check `agent_safety.toml` for protected files, forbidden patterns, and circular import rules
+5. NEVER create files matching `*_part*.py` or `*.part*.py` — this is a banned monolith split pattern
+6. NEVER use `exec()` to load code from other files — use normal Python imports
+7. NEVER commit with `--no-verify` — pre-commit hooks exist for a reason
+8. NEVER modify protected files listed in `agent_safety.toml` without explicit user approval
+9. Tag every commit with your model name (e.g., `Thomas-Agent: codex` or `Thomas-Agent: claude`)
+10. Run `ruff check` on any Python file you modify before committing
+
+## What Thomas Is — Do Not Misjudge This Repo
+
+Thomas is an AI-first workspace platform with a **marketplace of domain modules**. The repo is intentionally broad in scope — that is a feature, not a problem. Everything under `thomas/` that is NOT listed in the Architecture section below is marketplace inventory. Do not refactor, delete, rename, or judge the project based on these modules. They are plugin content for the Thomas marketplace. See `thomas/marketplace/MANIFEST.json` for the full registry.
+
+**Core runtime modules** (the only directories you should modify for core work):
+
+- `thomas/agent/` — Chat dispatch and agent loop
+- `thomas/core/` — Config, persistence, token economy, LLM clients (MUST NOT import from server, tools, or any sibling)
+- `thomas/server/` — aiohttp web app, routes, web UI
+- `thomas/cli/` — CLI and REPL
+- `thomas/tools/` — Tool definitions and registry
+- `thomas/memory/` — Conversation and context stores
+- `thomas/browser/` — Browser automation
+
+**Everything else under `thomas/`** — Marketplace domain modules. Leave them alone unless the user explicitly asks you to work on them.
 
 ## Worktree discipline (required)
+
 - Read `WORKTREE_RULES.md` before making edits.
 - Use only the explicitly assigned worktree path for the task.
 - If no worktree is specified, use `C:\Users\corbe\Thomas` (`master`).
 - Do not edit multiple worktrees in one task unless explicitly requested.
 - Do not create, remove, move, or rebind worktrees without explicit user approval.
-- Include the active worktree path in status and handoff updates.
 - If branch/worktree intent is unclear, stop and ask before editing.
 - If git status --porcelain is not clean, do not start normal implementation work in that repo. Clean it first, or use only an explicit audited dirty-worktree override for cleanup/remediation lanes.
 
-## Router-First Startup (required)
-- Run `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...` before loading long docs.
-- Read the returned lane card in `docs/ai/CHECKLISTS/` and only the docs it points to.
-- Workboard awareness is always required; full claim/handoff protocol is required only when the router flags tracked, risky, broad, shared, or multi-agent work.
-- Guided mode is the default. Expert mode reduces visible instructions, but it does not disable hard gates.
-## CRITICAL â€” File Editing Rules (Read First!)
-
-**[docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md)** â€” MUST READ before editing ANY file.
-This project has a monolith source loader pattern. Multiple copies of the same code exist in different locations.
-If you edit the wrong file, your changes DO NOTHING. The doc explains exactly which files to edit.
-
-## Guardrails â€” Read Before Doing Anything
+## Guardrails — Read Before Writing Code
 
 Before writing ANY code, read:
-1. **[docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md)** â€” Which files actually run in production
-2. **[GUARDRAILS.md](GUARDRAILS.md)** â€” Immutable project-wide rules
+
+1. **[docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md)** — Which files actually run in production
+2. **[GUARDRAILS.md](GUARDRAILS.md)** — Immutable project-wide rules
 3. The `GUARDRAILS.md` in the specific module directory you're modifying
 
-**These rules cannot be bypassed.** If a test fails because of your code, fix your code â€” not the test. If a file is too large, split it â€” don't increase the limit. If you're unsure, ask the user.
+**These rules cannot be bypassed.** If a test fails because of your code, fix your code — not the test. If a file is too large, split it — don't increase the limit. If you're unsure, ask the user.
 
 ## Start Here
-1. Run `python scripts/agent_startup_router.py --summary "<task summary>" [--path <repo/path>]...`.
+
+1. Run `python scripts/agent_startup_router.py --summary "<task summary>"`.
 2. Read the returned lane card plus `docs/AGENT_FILE_EDITING_RULES.md`, `GUARDRAILS.md`, and any module `GUARDRAILS.md` the router points to.
 3. Use these deeper docs only when the lane requires them:
    - `PROJECT_INDEX.md` for runtime boot paths and system wiring
    - `thomas/_architecture.py` for architecture fitness and dependency rules
    - `KNOWN_ISSUES.md` for recurring pitfalls worth reusing instead of rediscovering
 
-**Keep both files updated.** When you change boot paths, add entry points, move key files,
-or discover a gotcha that cost significant debugging time â€” update `PROJECT_INDEX.md`.
-When you add/remove modules or change dependencies â€” update `_architecture.py`.
+**Keep both files updated.** When you change boot paths, add entry points, move key files, or discover a gotcha that cost significant debugging time — update `PROJECT_INDEX.md`. When you add/remove modules or change dependencies — update `_architecture.py`.
 
 ## Changelog & Versioning (Dev Agent Responsibility)
 
-**You own the changelog.** This is your development log â€” update it as you work, not at the end.
+**You own the changelog.** This is your development log — update it as you work, not at the end.
 
-1. **When to write entries:** After each logical unit of work (a bug fix, a new feature, a
-   refactor). Don't batch them. Don't wait for "before commit." Write it while the context
-   is fresh.
-2. **Version bump:** Any behavioral change (bug fix, new feature, changed behavior) needs a
-   version bump in **both** `pyproject.toml` and `thomas/__init__.py`. Bump once per session,
-   not once per change.
-3. **Format:** Follow Keep a Changelog categories: `### Added`, `### Changed`, `### Fixed`,
-   `### Removed`. Be specific â€” name the files, endpoints, or behaviors affected.
-4. **What counts:** Code changes, new files, config changes, architectural changes, bug fixes.
-   Pure docs-only changes (README, comments) don't need a version bump but still get a
-   changelog entry under `[Unreleased]` if notable.
+1. **When to write entries:** After each logical unit of work (a bug fix, a new feature, a refactor). Don't batch them.
+2. **Version bump:** Any behavioral change needs a version bump in **both** `pyproject.toml` and `thomas/__init__.py`. Bump once per session, not once per change.
+3. **Format:** Follow Keep a Changelog categories: `### Added`, `### Changed`, `### Fixed`, `### Removed`. Be specific — name the files, endpoints, or behaviors affected.
+4. **What counts:** Code changes, new files, config changes, architectural changes, bug fixes. Pure docs-only changes don't need a version bump but still get a changelog entry under `[Unreleased]` if notable.
 
-**The changelog is the project's memory across sessions.** Future agents (including you in a
-new context window) rely on it to understand what changed and why. Sloppy changelog = lost
-context = repeated mistakes.
+**The changelog is the project's memory across sessions.** Future agents rely on it to understand what changed and why.
 
 ## Agent Commit Path (Required for Agents)
 
-- When scoped implementation work is complete, agents must use `python scripts/agent_commit.py --message "<msg>"` instead of raw `git commit`.
-- `agent_commit.py` isolates claimed files in a temporary git index, runs local staged-file and ownership gates, and leaves unrelated repo dirt untouched.
-- Repo-wide debt checks now belong to `python scripts/check_merge_readiness.py` and the pre-push/CI path, not the local agent commit path.
-- If no commit is created, report the explicit blocker class from `agent_commit.py`: `local_gate_failed`, `broken_repo_tool`, `claim_scope_mismatch`, `branch_race`, or `no_claimed_changes`.
-
-## Before You Commit
-For repo-wide merge/release readiness, run `python scripts/check_merge_readiness.py`.
-It checks repo hygiene, release hygiene, architecture fitness, and the workboard audit backstop.
+- Use `python scripts/agent_commit.py --message "<msg>"` instead of raw `git commit`.
+- `agent_commit.py` isolates claimed files in a temporary git index, runs local gates, and leaves unrelated repo dirt untouched.
+- For dirty-worktree fallback: `python scripts/agent_commit.py --include <file> --allow-scope-fallback --fallback-reason "<reason>" --message "<msg>"`
+- For merge readiness: `python scripts/check_merge_readiness.py`
+- If no commit is created, report the explicit blocker class: `local_gate_failed`, `broken_repo_tool`, `claim_scope_mismatch`, `branch_race`, or `no_claimed_changes`.
 
 ## Before You Delete Code
+
 Never bulk-delete. For EVERY file or function you want to remove:
-1. `grep -r '<name>' thomas/ tests/ scripts/ --include='*.py'` â€” find ALL references
+
+1. `grep -r '<name>' thomas/ tests/ scripts/ --include='*.py'` — find ALL references
 2. If anything imports it: don't delete. Refactor or replace instead.
 3. If only lazy/conditional imports: stub with safe fallbacks first.
 4. After deletion: verify server boots (`python -m thomas serve --port 0`) and tests pass.
 
-## Deep Context (read only when your task touches these areas)
-- UI/tabs: `docs/WORKBENCH_OPERATOR_PROTOCOL.md`
-- Workbench framing: tabs are AI-first operator control surfaces.
-- Risky changes: `definitions/change-classification.md`
-- Agent loop internals: `SOUL.md`
-- Current priorities: `plans/thomas/WORKBOARD.md`
-- Website releases: deploy via CI (`site-release.yml`), not ad-hoc
+---
 
-## Multi-Agent Handshake Protocol (Required)
-When multiple agents are active, use a double-handshake before bundling commits.
-This applies to every agent identity that touches the repo (Codex, Claude, Grok, Thomas, or human contributors).
+## Deep Context — Read Only When Your Task Requires It
 
-### Standard first-pass behavior (baseline)
-Default first-pass behavior is non-negotiable unless user explicitly overrides:
-- Use `agent_bootstrap_claim.py` for orchestration parents.
-- Default to `parent` role for non-orchestrator agents (using callsign `dispatcher`) and auto-run dispatch.
-- Dispatch uses a minimum floor of 2 workers by default.
-- READY workers are released before refill by default.
-- Completion handoff is expected by default: release/mark READY then move on.
+Most single-agent sessions do NOT need the sections below. The startup router will tell you when you do.
 
-1. Claim scope at start:
-   - Set explicit id first (PowerShell): `$env:AGENT_ID="<name>"` (or `$env:THOMAS_AGENT_ID="<name>"`)
-   - Non-orchestrator agents MUST enter active implementation work by running `agent_bootstrap_claim.py` (not manual claim flows) so parent role and child dispatch are standardized on day one.
-   - Optional one-shot bootstrap: `python scripts/agent_bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>" --name "<name>"`
-- For non-orchestrator agents, bootstrap defaults to `parent` role/callsign `dispatcher` and auto-runs dispatch to a handful of workers by default.
-   - Bootstrap fanout is clamped to at least 2 workers unless explicitly overridden with an explicit higher target.
-   - Manual `--dispatch-workers` in `scripts/workboard_claim.py` also enforces the same minimum 2-worker floor.
-   - Disable auto dispatch with `--no-auto-dispatch` (keeps bootstrap claim only).
-- Orchestrator bootstrap intentionally skips auto-dispatch.
-   - `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <solo|parent|worker> --parent <none|parent-id> --scope "<path[,path...]>" --task "[WIP][HSK-<id>] <short task>"`
-2. Mark ready when code/tests are complete:
-   - `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <solo|parent|worker> --parent <none|parent-id> --scope "<path[,path...]>" --task "[READY][HSK-<id>] <summary>"`
-   - Move on after completion by default; stay on a task only when explicitly told by user or blocked by unresolved dependency.
-3. Parent agents should fan out when possible:
-   - `python scripts/workboard_claim.py --suggest-delegation --agent "<parent-name>"`
-   - One-command dispatch (release READY workers + claim fresh lanes):  
-     `python scripts/workboard_claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "thomas"`
-   - Bootstrap dispatch now inherits this behavior by default and requests task handoff when complete.
-   - If no lanes are available, dispatch auto-claims a temporary task-creator lease and notifies orchestrator.
-   - Temporary task-creator lease is single-owner: only one agent can hold it at a time.
-- Orchestrator clears temp lease when backlog is healthy:  
-     `python scripts/workboard_claim.py --release-temp-task-creator --agent "thomas" --task-manager-agent "thomas"`
-   - Claim at least one suggested worker task when non-overlapping candidates exist.
-4. Report execution issues:
-   - Add blocked tasks to `## Active Tasks` with `status=blocked`.
-   - Add/maintain a matching entry in `## Issues / Blockers` until resolved.
-   - If you cannot continue, move task details into `## Up For Grabs`.
-   - Use helper commands:
-     - `python scripts/workboard_issue.py --block --task-id "<task_id>" --reporter "<agent>" --summary "<blocker summary>"`
-     - `python scripts/workboard_issue.py --triage --issue-id "<issue_id>" --owner "<agent|team>"`
-     - `python scripts/workboard_issue.py --resolve --issue-id "<issue_id>"`
-     - `python scripts/workboard_issue.py --up-for-grabs --task-id "<task_id>" --reported-by "<agent>"`
-5. Acknowledge handoff in the log:
-   - `python scripts/append_handoff.py --title "ACK HSK-<id>" --note "<agent> marked READY" --note "<integrator> will bundle"`
-6. Integrator bundles only after READY+ACK.
-7. Release claims after commit/push:
-   - `python scripts/workboard_claim.py --release --agent "<name>"`
+### Website Dev Shortcut (Dev-Only)
 
-Optional hard lock for active edits:
-- `python scripts/active_folders.py claim --agent "<name>" --path <folder> --ttl 1800 --note "HSK-<id>"`
-- `python scripts/active_folders.py release --agent "<name>"`
-
-Guard rails:
-- Check active claims: `python scripts/workboard_claim.py --list`
-- Validate claims gate: `python scripts/check_workboard_claims.py --require-identity-metadata`
-- Validate task-problem coverage gate: `python scripts/check_workboard_task_problems.py`
-- Validate changed-file ownership gate: `python scripts/check_workboard_changed_files.py --staged --require-identity-metadata`
-- Validate per-agent gate: `python scripts/check_workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2`
-- Validate canonical repo identity gate: `python scripts/check_repo_identity.py`
-- Never commit another agent's scope unless they are marked `[READY]` and ACK is logged.
-- Never use `git commit --no-verify` except explicit emergency approval from maintainers.
-- `SKIP` is breakglass-only. Standard flow is: fix failing hooks, then commit.
-- Emergency SKIP requires `THOMAS_SKIP_BREAKGLASS=1`; agent id is auto-resolved and ticket/reason metadata are auto-generated when missing.
-- All SKIP usage is audited to `.git/thomas_skip_audit.jsonl` by `python scripts/check_precommit_skip_policy.py`.
-- Breakglass is machine-governed with cooldown/quota/scope caps (per-agent cooldown, 24h quota, and hard staged-file limit).
-- Runner skip flags (`--skip-gates`, `--skip-tests`) are breakglass-only and auto-generate missing breakglass metadata.
-- Failed runner steps must be recorded in the canonical task problem ledger via `python scripts/workboard_problem_record.py`.
-- Configure GitHub hard merge guardrails with `python scripts/configure_github_branch_protection.py --apply` or `powershell -ExecutionPolicy Bypass -File scripts/apply_branch_protection.ps1` (see `docs/GITHUB_BRANCH_PROTECTION_SETUP.md`).
-- For proof bundles, run `python scripts/evidence_pack.py --name "<run>" --command "<cmd>" [--command "<cmd2>"]` (see `docs/EVIDENCE_PACK_RUNBOOK.md`).
-
-## Task Ecosystem Control Plane (Required)
-Every agent must follow `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`.
-
-Core rules:
-1. Thomas routes tasks through `thomas` (`task-manager-agent` remains a compatibility alias); agents execute.
-2. User-requested tasks outrank background tasks.
-3. Keep the board ordered by priority and urgency (`[P0][NOW]`, `[P1][NEXT]`, `[P2][LATER]`).
-4. All agent-to-agent and agent-to-orchestrator coordination requests go through workboard message traffic.
-5. Keep alias identity stable (`Codex 1`, `Codex 2`, etc.) and track unique session ids per run.
-6. Every tracked task must have both `PLAN.md` and `PROBLEM.md` records generated via task-manager sync.
-7. Use only the canonical Thomas clone and remote identity defined by `docs/ops/repo_identity_policy.json`.
-8. Orchestration stewardship is automatic in the orchestrator role: if no active stewardship claim exists for the current board/session, claim `thomas` ownership immediately before any board edits, task creation, or task dispatch.
-
-Required commands:
-- Sync plans: `python scripts/workboard_task_manager.py --sync-plans --apply`
-- Sync plans with explicit roots: `python scripts/workboard_task_manager.py --sync-plans --plan-root "<path>" --problem-root "<path>" --apply`
-- Record a failed check in task problem ledger: `python scripts/workboard_problem_record.py --runner auto_checks --step "<label>" --exit-code <code> --command "<cmd>" --task-id "<task_id>"`
-- `python scripts/auto_checks.py` and `python scripts/doc.py` auto-record failed steps to task `PROBLEM.md` unless `--no-record-problem-on-fail` is set.
-- Sync sessions: `python scripts/workboard_task_manager.py --sync-sessions --apply`
-- Sweep inactive: `python scripts/workboard_task_manager.py --sweep-inactive --max-idle-minutes 1 --apply --task-manager-agent "thomas"`
-- Message send: `python scripts/workboard_message.py --send --from-agent "<agent>" --to-agent "<agent|thomas>" --summary "<text>" --task-id "<task_id>"`
-- Message ack: `python scripts/workboard_message.py --ack --msg-id "<msg_id>" --by "<agent>"`
-- Message resolve: `python scripts/workboard_message.py --resolve --msg-id "<msg_id>" --by "<agent>"`
-- Preference capture: `python scripts/workboard_task_manager.py --capture-preference --preference-summary "<summary>" --preference-verbatim "<verbatim>"`
-
-## Website Dev Shortcut (Dev-Only)
 If a task mentions website/site/homepage/domain/Spline or the user asks for web changes:
+
 1. Start in `apps/site` immediately.
 2. Read `apps/site/README_DEV.md` first for current URLs and workflow.
 3. Run website commands from `apps/site` (`npm run dev`, `npm run typecheck`, deploy scripts).
 4. Apply skill `ui-precision-guard` at `skills/ui-precision-guard/SKILL.md` for any UI edit.
-5. For `thomas/server/web/**` UI files, use the repo-local `skills/ui-precision-guard` workflow and satisfy its `Common-Practice Logic Mode` checklist before handoff.
+5. For `thomas/server/web/**` UI files, use the repo-local `skills/ui-precision-guard` workflow.
 
-## Runtime Skills (Model-Agnostic)
-Thomas resolves runtime skills at the orchestrator layer before model calls.
-This applies across providers (Codex, Anthropic, OpenAI-compatible), not just Codex.
+### Hard Gate: Website Visual Proof (All Agents)
 
-Selection order is:
-1. Explicit skill mention in prompt (`$skill-name`, inline mention, or `skill <name>`)
-2. Pinned skills from `.thomas/cli/skills.json`
-3. Relevance-ranked skills from discovered roots
+When UI files change in `apps/site/src/app/**` or `apps/site/src/components/**`, you must update verification artifacts and run:
 
-Discovery roots:
-- `<thomas_install_root>/skills`
-- `~/.thomas/skills`
-- `<cwd>/.thomas/skills`
-- `<cwd>/skills`
-
-## Hard Gate: Website Visual Proof (All Agents)
-This rule applies to Thomas and any external/competing agent editing this repo.
-
-When UI files change in:
-- `apps/site/src/app/**`
-- `apps/site/src/components/**`
-
-you must update:
-- `apps/site/verification/ui-proof.json`
-- `apps/site/verification/runtime-report.json`
-- `apps/site/verification/screenshots/full-page.png`
-- `apps/site/verification/screenshots/footer-focus.png`
-- `apps/site/verification/baselines/full-page.png`
-- `apps/site/verification/baselines/footer-focus.png`
-- `apps/site/verification/diffs/full-page-diff.png`
-- `apps/site/verification/diffs/footer-focus-diff.png`
-
-and run:
 - `python scripts/refresh_site_visual_proof.py`
 - `python scripts/check_site_visual_proof.py`
 
-Enforcement is hard-coded via:
-- pre-commit hook `thomas-site-visual-proof-gate`
-- CI workflow `.github/workflows/site-release.yml`
-- runtime browser verifier `scripts/verify_site_visual_runtime.mjs` (auto screenshots + DOM assertions)
-- proof refresh script `scripts/refresh_site_visual_proof.py` (pixel-diff baseline comparisons)
+Enforcement: pre-commit hook `thomas-site-visual-proof-gate`, CI workflow `site-release.yml`.
 
-## LOC Counting Protocol (Default)
-When a user asks for LOC/SLOC counts, run the full sweep by default.
+### Runtime Skills (Model-Agnostic)
 
-Required method:
-1. Count git-tracked files only (`git ls-files -z`) so local build artifacts do not skew totals.
-2. For each tracked file present on disk, run language-aware analysis with UTF-8 fallback.
-3. Report commit hash + branch with the results.
-4. Report file coverage stats:
-   - tracked files
-   - present files
-   - missing files
-   - analyzer state counts (analyzed/unknown/binary/generated/empty)
-5. Report SLOC buckets:
-   - `prod_app`
-   - `tests`
-   - `docs_config_data`
-   - `total_buckets`
-6. Report physical line totals:
-   - all present files
-   - text files only
-   - binary/text file counts
-7. Report top languages by SLOC:
-   - total repo
-   - `prod_app` subset
-8. Call out when JSON/config/docs dominate totals, and offer a stricter "pure app code" rerun (exclude JSON/lock/docs/diff) when needed.
+Thomas resolves runtime skills at the orchestrator layer before model calls. Selection order: explicit skill mention > pinned skills from `.thomas/cli/skills.json` > relevance-ranked from discovered roots (`<thomas_install_root>/skills`, `~/.thomas/skills`, `<cwd>/.thomas/skills`, `<cwd>/skills`).
+
+### Multi-Agent Handshake Protocol
+
+When multiple agents are active, use a double-handshake before bundling commits. This applies to every agent identity (Codex, Claude, Grok, Thomas, or human contributors).
+
+**Standard first-pass behavior (non-negotiable unless user overrides):**
+
+- Use `agent_bootstrap_claim.py` for orchestration parents.
+- Default to `parent` role (callsign `dispatcher`) with auto dispatch.
+- Dispatch minimum floor: 2 workers.
+- READY workers released before refill.
+- Completion handoff expected: release/mark READY then move on.
+
+**Steps:**
+
+1. **Claim scope:** `python scripts/agent_bootstrap_claim.py --agent "<name>" --scope "<path[,path...]>" --task "<short task>" --name "<name>"`
+2. **Mark ready:** `python scripts/workboard_claim.py --claim --agent "<name>" --name "<callsign>" --role <role> --parent <parent-id> --scope "<paths>" --task "[READY][HSK-<id>] <summary>"`
+3. **Fan out (parents):** `python scripts/workboard_claim.py --dispatch-workers --agent "<parent-name>" --dispatch-release-ready --dispatch-target-workers 2 --task-manager-agent "thomas"`
+4. **Report issues:** `python scripts/workboard_issue.py --block --task-id "<id>" --reporter "<agent>" --summary "<blocker>"`
+5. **Acknowledge handoff:** `python scripts/append_handoff.py --title "ACK HSK-<id>" --note "<agent> marked READY"`
+6. **Integrator bundles** only after READY+ACK.
+7. **Release claims:** `python scripts/workboard_claim.py --release --agent "<name>"`
+
+**Guard rails:** Never commit another agent's scope unless `[READY]` + ACK. Never use `--no-verify` except explicit emergency. SKIP requires `THOMAS_SKIP_BREAKGLASS=1` and is audited.
+
+### Task Ecosystem Control Plane
+
+Every agent must follow `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md`.
+
+Core rules: Thomas routes tasks (agents execute), user tasks outrank background tasks, keep board ordered by priority (`[P0][NOW]`, `[P1][NEXT]`, `[P2][LATER]`), all coordination goes through workboard messages, every tracked task needs `PLAN.md` and `PROBLEM.md`.
+
+Key commands: `workboard_task_manager.py --sync-plans --apply`, `workboard_problem_record.py`, `workboard_message.py --send/--ack/--resolve`.
+
+### LOC Counting Protocol
+
+When a user asks for LOC/SLOC counts, count git-tracked files only (`git ls-files -z`), run language-aware analysis, report commit hash + branch, file coverage stats, SLOC buckets (`prod_app`, `tests`, `docs_config_data`), physical line totals, and top languages. Call out when JSON/config/docs dominate and offer a stricter rerun.

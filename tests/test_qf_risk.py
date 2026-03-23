@@ -3,8 +3,8 @@
 import numpy as np
 import pytest
 
-from thomas.quantfin._exceptions import RiskError
-from thomas.quantfin.risk import (
+from thomas.marketplace.quantfin._exceptions import RiskError
+from thomas.marketplace.quantfin.risk import (
     calculate_drawdown,
     calmar_ratio,
     conditional_var,

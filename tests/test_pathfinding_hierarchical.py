@@ -2,8 +2,8 @@
 Tests for hierarchical pathfinding algorithms.
 """
 
-from thomas.pathfinding import Graph, Node
-from thomas.pathfinding.hierarchical import (
+from thomas.marketplace.pathfinding import Graph, Node
+from thomas.marketplace.pathfinding.hierarchical import (
     HierarchicalPathfinder,
     build_hpa_star,
 )

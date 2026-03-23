@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.smart_home._exceptions import SensorError
-from thomas.smart_home._types import AlarmState
-from thomas.smart_home.security import ArmingSchedule, SecuritySystem
+from thomas.marketplace.smart_home._exceptions import SensorError
+from thomas.marketplace.smart_home._types import AlarmState
+from thomas.marketplace.smart_home.security import ArmingSchedule, SecuritySystem
 
 
 class TestSecuritySystem:

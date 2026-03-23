@@ -2,8 +2,8 @@
 Tests for columnar indexes: bitmaps, zone maps, bloom filters, inverted indexes.
 """
 
-from thomas.columnar._types import Statistics
-from thomas.columnar.indexes import (
+from thomas.marketplace.columnar._types import Statistics
+from thomas.marketplace.columnar.indexes import (
     BitmapIndex,
     BloomFilter,
     IndexAdvisor,

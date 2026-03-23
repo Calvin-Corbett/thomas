@@ -1,23 +1,3 @@
-"""Data warehouse with star schema, dimensions, facts, and ETL."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.data_warehouse."""
 
-from thomas.data_warehouse.core import (
-    DataWarehouse,
-    Dimension,
-    DimensionRecord,
-    ETLJob,
-    FactRecord,
-    FactTable,
-    StarSchema,
-)
-from thomas.data_warehouse.tools import register_data_warehouse_tools
-
-__all__ = [
-    "DataWarehouse",
-    "StarSchema",
-    "Dimension",
-    "FactTable",
-    "DimensionRecord",
-    "FactRecord",
-    "ETLJob",
-    "register_data_warehouse_tools",
-]
+from thomas.marketplace.data_warehouse import *  # noqa: F401,F403

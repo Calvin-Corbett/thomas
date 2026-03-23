@@ -745,3 +745,18 @@
       border-width: 0;
     }
   
+
+
+    .desktop-mode-actions {
+      flex-wrap: wrap;
+    }
+
+    .desktop-mode-actions .btn {
+      min-width: 180px;
+    }
+
+    .status-badge.status-pending {
+      background: rgba(234, 179, 8, 0.14);
+      color: #facc15;
+      border: 1px solid rgba(234, 179, 8, 0.28);
+    }

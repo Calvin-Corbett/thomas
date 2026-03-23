@@ -4,7 +4,7 @@ import types
 
 import pytest
 
-from thomas.channels.p075_channel_provider_interface_contract import (
+from thomas.marketplace.channels.p075_channel_provider_interface_contract import (
     ERROR_INVALID_INPUT,
     ERROR_MISSING_CONFIG,
     ERROR_PROVIDER_EXTERNAL_FAILURE,
@@ -37,9 +37,18 @@ def test_unknown_provider_returns_deterministic_error():
 @pytest.mark.parametrize(
     "req, expected_code",
     [
-        (ProviderContractRequest(provider="dummy", action="send", config=None, recipient="x", message="hi"), ERROR_MISSING_CONFIG),
-        (ProviderContractRequest(provider="dummy", action="send", config={}, recipient=None, message="hi"), ERROR_INVALID_INPUT),
-        (ProviderContractRequest(provider="dummy", action="send", config={}, recipient="x", message=""), ERROR_INVALID_INPUT),
+        (
+            ProviderContractRequest(provider="dummy", action="send", config=None, recipient="x", message="hi"),
+            ERROR_MISSING_CONFIG,
+        ),
+        (
+            ProviderContractRequest(provider="dummy", action="send", config={}, recipient=None, message="hi"),
+            ERROR_INVALID_INPUT,
+        ),
+        (
+            ProviderContractRequest(provider="dummy", action="send", config={}, recipient="x", message=""),
+            ERROR_INVALID_INPUT,
+        ),
         (ProviderContractRequest(provider="dummy", action="nope"), ERROR_INVALID_INPUT),
     ],
 )
@@ -72,7 +81,9 @@ def test_success_describe_and_send_with_module_function_provider():
     assert resp.result["name"] == "Dummy Provider"
 
     resp2 = run_provider_contract(
-        ProviderContractRequest(provider="dummy", action="send", config={"api_key": "secret"}, recipient="dest", message="hello")
+        ProviderContractRequest(
+            provider="dummy", action="send", config={"api_key": "secret"}, recipient="dest", message="hello"
+        )
     )
     assert resp2.ok is True
     assert resp2.result is not None
@@ -92,7 +103,9 @@ def test_missing_required_config_keys_are_detected():
     mod.send_message = send_message
     _install_module("thomas.integrations.needcfg", mod)
 
-    resp = run_provider_contract(ProviderContractRequest(provider="needcfg", action="send", config={}, recipient="x", message="hi"))
+    resp = run_provider_contract(
+        ProviderContractRequest(provider="needcfg", action="send", config={}, recipient="x", message="hi")
+    )
     assert resp.ok is False
     assert resp.error is not None
     assert resp.error.code == ERROR_MISSING_CONFIG

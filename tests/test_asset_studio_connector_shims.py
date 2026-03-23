@@ -4,7 +4,7 @@ import argparse
 import json
 from pathlib import Path
 
-from thomas.asset_studio import connector_shims as shims
+from thomas.marketplace.asset_studio import connector_shims as shims
 
 
 def test_comfyui_queue_prompt_uses_http_post(monkeypatch):
@@ -90,4 +90,3 @@ def test_otio_validate_timeline_json_fallback(tmp_path: Path):
     assert out["schema"] == "Timeline.1"
     assert int(out["track_count"]) == 2
     assert int(out["clip_count"]) == 3
-

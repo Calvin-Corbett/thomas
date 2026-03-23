@@ -5,14 +5,14 @@ from __future__ import annotations
 import argparse
 import os
 import sys
+from collections.abc import Iterable
 from pathlib import Path
-from typing import Iterable, List, Set
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
-from thomas.observability.module_audit import (
+from thomas.marketplace.observability.module_audit import (
     MAJOR_MODULES,
     build_file_hashes,
     default_registry_path,
@@ -26,7 +26,7 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parent.parent
 
 
-def _insert_or_append(lines: List[str], idx: int, payload: List[str]) -> List[str]:
+def _insert_or_append(lines: list[str], idx: int, payload: list[str]) -> list[str]:
     return lines[:idx] + payload + lines[idx:]
 
 
@@ -67,8 +67,8 @@ def append_unreleased_audit_line(changelog_path: Path, line: str) -> bool:
     return True
 
 
-def _modules_from_files(paths: Iterable[str]) -> Set[str]:
-    out: Set[str] = set()
+def _modules_from_files(paths: Iterable[str]) -> set[str]:
+    out: set[str] = set()
     for raw in paths:
         module = module_for_path(raw)
         if module:
@@ -76,7 +76,7 @@ def _modules_from_files(paths: Iterable[str]) -> Set[str]:
     return out
 
 
-def run(argv: List[str] | None = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Record module-level audit entries.")
     parser.add_argument("--module", action="append", default=[], help=f"Module name ({', '.join(MAJOR_MODULES)})")
     parser.add_argument("--file", action="append", default=[], help="Changed file path (auto-detect module)")
@@ -113,11 +113,7 @@ def run(argv: List[str] | None = None) -> int:
 
     for module in modules:
         module_files = sorted(
-            {
-                normalize_path(p)
-                for p in args.file
-                if module_for_path(p) == module and normalize_path(p)
-            }
+            {normalize_path(p) for p in args.file if module_for_path(p) == module and normalize_path(p)}
         )
         file_hashes = build_file_hashes(root, module_files)
         entry = record_audit(
@@ -151,4 +147,3 @@ def run(argv: List[str] | None = None) -> int:
 
 if __name__ == "__main__":
     raise SystemExit(run())
-

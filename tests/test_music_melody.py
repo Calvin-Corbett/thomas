@@ -1,7 +1,7 @@
 """Tests for music.melody module."""
 
-from thomas.music import melody, theory
-from thomas.music._types import Note, ScaleType
+from thomas.marketplace.music import melody, theory
+from thomas.marketplace.music._types import Note, ScaleType
 
 
 class TestMelodicContour:

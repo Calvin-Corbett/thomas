@@ -4,9 +4,9 @@ import tempfile
 from datetime import UTC, datetime
 from pathlib import Path
 
-from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
-from thomas.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
-from thomas.observability.run_db import connect, ensure_schema
+from thomas.marketplace.observability.onboarding_outcomes import build_onboarding_outcome_report
+from thomas.marketplace.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
+from thomas.marketplace.observability.run_db import connect, ensure_schema
 
 
 def _seed_event(

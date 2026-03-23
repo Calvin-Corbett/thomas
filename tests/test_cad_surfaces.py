@@ -4,8 +4,8 @@ Tests for surface operations.
 
 import pytest
 
-from thomas.cad._types import Point3D, Vector3D
-from thomas.cad.surfaces import (
+from thomas.marketplace.cad._types import Point3D, Vector3D
+from thomas.marketplace.cad.surfaces import (
     BezierPatch,
     BSplineSurface,
     ruled_surface,
@@ -134,7 +134,7 @@ class TestRuledSurface:
 
     def test_ruled_surface_mismatched_curves(self) -> None:
         """Test ruled surface with mismatched curves."""
-        from thomas.cad._exceptions import SurfaceError
+        from thomas.marketplace.cad._exceptions import SurfaceError
 
         curve1 = [Point3D(0, 0, 0), Point3D(1, 0, 0)]
         curve2 = [Point3D(0, 1, 0), Point3D(1, 1, 0), Point3D(2, 1, 0)]
@@ -192,7 +192,7 @@ class TestSurfaceNormalMap:
 
     def test_surface_normal_map_generation(self) -> None:
         """Test normal map generation."""
-        from thomas.cad.surfaces import surface_normal_map
+        from thomas.marketplace.cad.surfaces import surface_normal_map
 
         control_points = [
             [Point3D(0, 0, 0), Point3D(1, 0, 0)],
@@ -209,7 +209,7 @@ class TestSurfaceNormalMap:
 
     def test_surface_normal_map_resolution(self) -> None:
         """Test normal map at different resolutions."""
-        from thomas.cad.surfaces import surface_normal_map
+        from thomas.marketplace.cad.surfaces import surface_normal_map
 
         control_points = [
             [Point3D(0, 0, 0), Point3D(1, 0, 0)],
@@ -229,7 +229,7 @@ class TestSurfaceErrors:
 
     def test_bezier_patch_empty_grid(self) -> None:
         """Test Bezier patch with empty control grid."""
-        from thomas.cad._exceptions import SurfaceError
+        from thomas.marketplace.cad._exceptions import SurfaceError
 
         with pytest.raises(SurfaceError):
             BezierPatch([], degree_u=1, degree_v=1)

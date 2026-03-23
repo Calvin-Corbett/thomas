@@ -5,8 +5,8 @@ from pathlib import Path
 
 import pytest
 
-from thomas.kvstore.bloom_filter import BloomFilterConfig
-from thomas.kvstore.sstable import SSTable, SSTableWriter
+from thomas.marketplace.kvstore.bloom_filter import BloomFilterConfig
+from thomas.marketplace.kvstore.sstable import SSTable, SSTableWriter
 
 
 class TestSSTableWriterBasics:

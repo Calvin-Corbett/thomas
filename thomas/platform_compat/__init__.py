@@ -1,29 +1,3 @@
-"""Platform compatibility layer for cross-platform support.
+"""Backward-compatible re-export. Module moved to thomas.marketplace.platform_compat."""
 
-Provides OS detection, feature flags, polyfills, and
-platform-specific abstraction layers.
-"""
-
-from .core import (
-    Architecture,
-    FeatureFlag,
-    FeatureFlagRegistry,
-    OSType,
-    PlatformAbstraction,
-    PlatformDetector,
-    Polyfill,
-    PolyfillManager,
-)
-
-__all__ = [
-    "OSType",
-    "Architecture",
-    "PlatformDetector",
-    "FeatureFlag",
-    "FeatureFlagRegistry",
-    "Polyfill",
-    "PolyfillManager",
-    "PlatformAbstraction",
-]
-
-__version__ = "1.0.0"
+from thomas.marketplace.platform_compat import *  # noqa: F401,F403

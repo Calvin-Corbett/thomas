@@ -6,7 +6,7 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.food_tech._types import (
+from thomas.marketplace.food_tech._types import (
     Allergen,
     CookingStep,
     DietaryRestriction,
@@ -15,7 +15,7 @@ from thomas.food_tech._types import (
     Recipe,
     Substitution,
 )
-from thomas.food_tech.dietary import DietaryManager
+from thomas.marketplace.food_tech.dietary import DietaryManager
 
 
 class TestDietaryManager:

@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from thomas.recommender._exceptions import ColdStartError, InsufficientDataError, RecommenderError
-from thomas.recommender._types import (
+from thomas.marketplace.recommender._exceptions import ColdStartError, InsufficientDataError, RecommenderError
+from thomas.marketplace.recommender._types import (
     FeatureVector,
     InteractionType,
     ItemProfile,

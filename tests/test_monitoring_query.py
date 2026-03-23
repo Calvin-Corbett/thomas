@@ -4,7 +4,7 @@ Tests for query engine module.
 
 import time
 
-from thomas.monitoring.query_engine import (
+from thomas.marketplace.monitoring.query_engine import (
     Lexer,
     Parser,
     QueryEngine,
@@ -243,7 +243,7 @@ class MockStorage:
 
     def query(self, series_key: str, start: float, end: float) -> list:
         """Return mock samples."""
-        from thomas.monitoring._types import MetricSample
+        from thomas.marketplace.monitoring._types import MetricSample
 
         now = time.time()
         return [

@@ -4,7 +4,7 @@ from uuid import uuid4
 
 import pytest
 
-from thomas.social_platform import (
+from thomas.marketplace.social_platform import (
     AccountStatus,
     BlockedUserError,
     DuplicateActionError,

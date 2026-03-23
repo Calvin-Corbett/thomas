@@ -9,12 +9,12 @@ import os
 import tempfile
 import unittest
 
-from thomas.learning.analyzer import ConversationAnalyzer
-from thomas.learning.feedback import FeedbackLoop
-from thomas.learning.injector import LessonInjector
-from thomas.learning.store import LessonStore
-from thomas.learning.teacher import TeachableAgent
-from thomas.learning.types import Lesson, LessonType, TeachabilityConfig
+from thomas.marketplace.learning.analyzer import ConversationAnalyzer
+from thomas.marketplace.learning.feedback import FeedbackLoop
+from thomas.marketplace.learning.injector import LessonInjector
+from thomas.marketplace.learning.store import LessonStore
+from thomas.marketplace.learning.teacher import TeachableAgent
+from thomas.marketplace.learning.types import Lesson, LessonType, TeachabilityConfig
 
 
 class TestLessonStore(unittest.TestCase):

@@ -1,6 +1,6 @@
 """Tests for DSL parser."""
 
-from thomas.dsl import (
+from thomas.marketplace.dsl import (
     BinaryOp,
     Block,
     DictExpr,
@@ -166,7 +166,7 @@ class TestParserBasics:
     def test_parse_assignment(self) -> None:
         """Test parsing assignment."""
         ast = self._parse("x = 42")
-        from thomas.dsl import Assignment
+        from thomas.marketplace.dsl import Assignment
 
         assert isinstance(ast, Assignment)
         assert ast.target == "x"
@@ -174,7 +174,7 @@ class TestParserBasics:
     def test_parse_compound_assignment(self) -> None:
         """Test parsing compound assignment."""
         ast = self._parse("x += 1")
-        from thomas.dsl import Assignment
+        from thomas.marketplace.dsl import Assignment
 
         assert isinstance(ast, Assignment)
         assert ast.operator == "+="
@@ -188,7 +188,7 @@ class TestParserBasics:
     def test_parse_lambda_named(self) -> None:
         """Test parsing named lambda."""
         ast = self._parse("fn add(x, y) { x + y }")
-        from thomas.dsl import FunctionDef
+        from thomas.marketplace.dsl import FunctionDef
 
         assert isinstance(ast, FunctionDef)
         assert ast.name == "add"
@@ -220,14 +220,14 @@ class TestParserBasics:
     def test_parse_index_expression(self) -> None:
         """Test parsing index expression."""
         ast = self._parse("x[0]")
-        from thomas.dsl import IndexExpr
+        from thomas.marketplace.dsl import IndexExpr
 
         assert isinstance(ast, IndexExpr)
 
     def test_parse_return_statement(self) -> None:
         """Test parsing return statement."""
         ast = self._parse("return 42")
-        from thomas.dsl import ReturnExpr
+        from thomas.marketplace.dsl import ReturnExpr
 
         assert isinstance(ast, ReturnExpr)
         assert ast.value is not None
@@ -235,14 +235,14 @@ class TestParserBasics:
     def test_parse_break_statement(self) -> None:
         """Test parsing break statement."""
         ast = self._parse("break")
-        from thomas.dsl import BreakExpr
+        from thomas.marketplace.dsl import BreakExpr
 
         assert isinstance(ast, BreakExpr)
 
     def test_parse_continue_statement(self) -> None:
         """Test parsing continue statement."""
         ast = self._parse("continue")
-        from thomas.dsl import ContinueExpr
+        from thomas.marketplace.dsl import ContinueExpr
 
         assert isinstance(ast, ContinueExpr)
 
@@ -316,7 +316,7 @@ class TestParserEdgeCases:
         }
         """
         ast = self._parse(code)
-        from thomas.dsl import FunctionDef
+        from thomas.marketplace.dsl import FunctionDef
 
         assert isinstance(ast, FunctionDef)
 

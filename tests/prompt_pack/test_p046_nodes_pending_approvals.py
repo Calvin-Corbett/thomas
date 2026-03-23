@@ -4,7 +4,10 @@ import pytest
 
 
 def test_nodes_pending_approvals_success(tmp_path):
-    from thomas.nodes.p046_nodes_pending_approvals import NodesPendingApprovalsInput, nodes_pending_approvals
+    from thomas.marketplace.nodes.p046_nodes_pending_approvals import (
+        NodesPendingApprovalsInput,
+        nodes_pending_approvals,
+    )
 
     state_dir = tmp_path
     store_path = state_dir / "nodes" / "pending_approvals.json"
@@ -39,7 +42,7 @@ def test_nodes_pending_approvals_success(tmp_path):
 
 
 def test_nodes_pending_approvals_missing_config_is_deterministic(monkeypatch):
-    from thomas.nodes import p046_nodes_pending_approvals as mod
+    from thomas.marketplace.nodes import p046_nodes_pending_approvals as mod
 
     monkeypatch.delenv("THOMAS_STATE_DIR", raising=False)
     monkeypatch.setattr(mod, "_try_state_dir_from_parity_compat", lambda: None)
@@ -52,7 +55,7 @@ def test_nodes_pending_approvals_missing_config_is_deterministic(monkeypatch):
 
 
 def test_nodes_pending_approvals_invalid_store_json(tmp_path):
-    from thomas.nodes import p046_nodes_pending_approvals as mod
+    from thomas.marketplace.nodes import p046_nodes_pending_approvals as mod
 
     state_dir = tmp_path
     store_path = state_dir / "nodes" / "pending_approvals.json"
@@ -85,7 +88,7 @@ def test_cli_json_success(tmp_path, capsys):
 
 def test_cli_json_error_missing_config(monkeypatch, capsys):
     from thomas.cli.commands.nodes import p046_nodes_pending_approvals as cli_mod
-    from thomas.nodes import p046_nodes_pending_approvals as core_mod
+    from thomas.marketplace.nodes import p046_nodes_pending_approvals as core_mod
 
     monkeypatch.delenv("THOMAS_STATE_DIR", raising=False)
     monkeypatch.setattr(core_mod, "_try_state_dir_from_parity_compat", lambda: None)

@@ -9,8 +9,8 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.agriculture._types import LivestockAnimal, LivestockType
-from thomas.agriculture.livestock import (
+from thomas.marketplace.agriculture._types import LivestockAnimal, LivestockType
+from thomas.marketplace.agriculture.livestock import (
     AnimalHealthRecords,
     BodyConditionScore,
     BreedingCalendar,

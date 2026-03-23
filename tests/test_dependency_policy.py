@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.security.dependency_policy import evaluate_dependency_policy
+from thomas.marketplace.security.dependency_policy import evaluate_dependency_policy
 
 
 def test_dependency_policy_flags_direct_url_and_wildcard(tmp_path: Path) -> None:

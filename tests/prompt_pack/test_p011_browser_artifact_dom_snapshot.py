@@ -1,7 +1,7 @@
 import json
-from pathlib import Path
 import types
 import warnings
+from pathlib import Path
 
 import pytest
 from typer.testing import CliRunner
@@ -177,8 +177,7 @@ def test_resolve_active_browser_awaits_async_getter_without_runtime_warning(
 
     assert resolved is sentinel
     assert not any(
-        warning.category is RuntimeWarning and "never awaited" in str(warning.message).lower()
-        for warning in caught
+        warning.category is RuntimeWarning and "never awaited" in str(warning.message).lower() for warning in caught
     )
 
 

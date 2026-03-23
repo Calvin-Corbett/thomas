@@ -1,1 +1,3 @@
-from .handler import build_provider_request, extract_image_ids
+"""Backward-compatible re-export. Module moved to thomas.marketplace.vision."""
+
+from thomas.marketplace.vision import *  # noqa: F401,F403

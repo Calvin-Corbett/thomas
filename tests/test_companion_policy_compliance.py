@@ -5,9 +5,9 @@ import hmac
 import json
 from pathlib import Path
 
-from thomas.companion.kernel import CompanionKernel
-from thomas.companion.policy import PolicyComplianceService, resolve_policy_profile
-from thomas.companion.update import BundleVerifier
+from thomas.marketplace.companion.kernel import CompanionKernel
+from thomas.marketplace.companion.policy import PolicyComplianceService, resolve_policy_profile
+from thomas.marketplace.companion.update import BundleVerifier
 
 
 def _write_bundle(

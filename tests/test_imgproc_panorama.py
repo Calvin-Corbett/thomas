@@ -5,8 +5,8 @@ Tests for panorama stitching module.
 import numpy as np
 import pytest
 
-from thomas.image_proc import Image
-from thomas.image_proc.panorama import PanoramaStitcher
+from thomas.marketplace.image_proc import Image
+from thomas.marketplace.image_proc.panorama import PanoramaStitcher
 
 
 class TestPanoramaStitching:

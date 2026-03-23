@@ -6,8 +6,8 @@ from pathlib import Path
 
 def _load_router_module():
     root = Path(__file__).resolve().parents[1]
-    path = root / 'scripts' / 'agent_startup_router.py'
-    spec = importlib.util.spec_from_file_location('agent_startup_router', path)
+    path = root / "scripts" / "agent_startup_router.py"
+    spec = importlib.util.spec_from_file_location("agent_startup_router", path)
     assert spec and spec.loader
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
@@ -17,187 +17,190 @@ def _load_router_module():
 mod = _load_router_module()
 
 
-def _write_workboard(tmp_path: Path, claims_block: str = '- none') -> Path:
-    path = tmp_path / 'WORKBOARD.md'
+def _write_workboard(tmp_path: Path, claims_block: str = "- none") -> Path:
+    path = tmp_path / "WORKBOARD.md"
     path.write_text(
         (
-            '# Thomas Workboard\n\n'
-            'Last updated: 2026-03-18\n\n'
-            '## Agent Claims\n\n'
-            f'{claims_block}\n\n'
-            '## Active Tasks\n\n'
-            '- none\n'
+            "# Thomas Workboard\n\n"
+            "Last updated: 2026-03-18\n\n"
+            "## Agent Claims\n\n"
+            f"{claims_block}\n\n"
+            "## Active Tasks\n\n"
+            "- none\n"
         ),
-        encoding='utf-8',
+        encoding="utf-8",
     )
     return path
 
 
 def test_router_classifies_chat_lane(tmp_path: Path) -> None:
     payload = mod.classify_task(
-        summary='Answer a repo question',
+        summary="Answer a repo question",
         paths=[],
         edit_intent=False,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
-        workflow_mode='guided',
+        workflow_mode="guided",
         workboard_path=_write_workboard(tmp_path),
     )
 
-    assert payload['lane'] == 'chat'
-    assert payload['required_checks'] == []
-    assert payload['workboard_required'] is False
+    assert payload["lane"] == "chat"
+    assert payload["required_checks"] == []
+    assert payload["workboard_required"] is False
 
 
 def test_router_classifies_simple_edit_lane(tmp_path: Path) -> None:
     payload = mod.classify_task(
-        summary='Patch a small bug',
-        paths=['thomas/core/config.py'],
+        summary="Patch a small bug",
+        paths=["thomas/core/config.py"],
         edit_intent=True,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
-        workflow_mode='guided',
+        workflow_mode="guided",
         workboard_path=_write_workboard(tmp_path),
     )
 
-    assert payload['lane'] == 'simple-edit'
-    assert payload['workboard_required'] is False
-    assert 'docs/AGENT_FILE_EDITING_RULES.md' in payload['required_reads']
+    assert payload["lane"] == "simple-edit"
+    assert payload["workboard_required"] is False
+    assert "docs/AGENT_FILE_EDITING_RULES.md" in payload["required_reads"]
 
 
 def test_router_classifies_ui_proof_lane(tmp_path: Path) -> None:
     payload = mod.classify_task(
-        summary='Update the website hero',
-        paths=['apps/site/src/app/page.tsx'],
+        summary="Update the website hero",
+        paths=["apps/site/src/app/page.tsx"],
         edit_intent=True,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
-        workflow_mode='guided',
+        workflow_mode="guided",
         workboard_path=_write_workboard(tmp_path),
     )
 
-    assert payload['lane'] == 'ui-proof'
-    assert payload['workboard_required'] is True
-    assert 'skills/ui-precision-guard/SKILL.md' in payload['required_reads']
+    assert payload["lane"] == "ui-proof"
+    assert payload["workboard_required"] is True
+    assert "skills/ui-precision-guard/SKILL.md" in payload["required_reads"]
 
 
 def test_router_escalates_claim_conflict_to_risky_lane(tmp_path: Path) -> None:
     workboard = _write_workboard(
         tmp_path,
-        '- agent=Codex 7; scope=thomas/core/config.py; task=runtime lane',
+        "- agent=Codex 7; scope=thomas/core/config.py; task=runtime lane",
     )
     payload = mod.classify_task(
-        summary='Patch config flow',
-        paths=['thomas/core/config.py'],
+        summary="Patch config flow",
+        paths=["thomas/core/config.py"],
         edit_intent=True,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
-        workflow_mode='guided',
+        workflow_mode="guided",
         workboard_path=workboard,
     )
 
-    assert payload['lane'] == 'risky-edit'
-    assert payload['workboard_required'] is True
-    assert payload['workboard']['claim_conflict'] is True
-    assert payload['workboard']['matching_claims'][0]['agent'] == 'Codex 7'
+    assert payload["lane"] == "risky-edit"
+    assert payload["workboard_required"] is True
+    assert payload["workboard"]["claim_conflict"] is True
+    assert payload["workboard"]["matching_claims"][0]["agent"] == "Codex 7"
 
 
 def test_build_startup_payload_includes_preflight(monkeypatch, tmp_path: Path) -> None:
     monkeypatch.setattr(
         mod.agent_preflight,
-        'evaluate_preflight',
+        "evaluate_preflight",
         lambda **_: {
-            'status': 'degraded',
-            'summary': '1 degraded, 2 ok',
-            'checks': [
+            "status": "degraded",
+            "summary": "1 degraded, 2 ok",
+            "checks": [
                 {
-                    'id': 'rg',
-                    'status': 'degraded',
-                    'message': 'ripgrep unavailable',
-                    'user_action': 'Install rg.',
+                    "id": "rg",
+                    "status": "degraded",
+                    "message": "ripgrep unavailable",
+                    "user_action": "Install rg.",
                 }
             ],
-            'policy': {
-                'summary': 'Tell the user the environment is degraded before using slower or lower-confidence fallbacks.',
-                'can_edit': True,
-                'report_before_fallback': True,
-                'stop_before_edit': False,
+            "policy": {
+                "summary": "Tell the user the environment is degraded before using slower or lower-confidence fallbacks.",
+                "can_edit": True,
+                "report_before_fallback": True,
+                "stop_before_edit": False,
             },
-            'root': str(mod.ROOT),
-            'cwd': str(mod.ROOT),
+            "root": str(mod.ROOT),
+            "cwd": str(mod.ROOT),
         },
     )
 
     payload = mod.build_startup_payload(
-        summary='Patch a small bug',
-        paths=['thomas/core/config.py'],
+        summary="Patch a small bug",
+        paths=["thomas/core/config.py"],
         edit_intent=True,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
-        workflow_mode='guided',
+        workflow_mode="guided",
         workboard_path=_write_workboard(tmp_path),
         cwd=mod.ROOT,
     )
 
-    assert payload['lane'] == 'simple-edit'
-    assert payload['preflight']['status'] == 'degraded'
-    assert payload['preflight']['policy']['report_before_fallback'] is True
+    assert payload["lane"] == "simple-edit"
+    assert payload["preflight"]["status"] == "degraded"
+    assert payload["preflight"]["policy"]["report_before_fallback"] is True
 
 
 def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
     payload = {
-        'lane': 'simple-edit',
-        'workflow_mode': 'guided',
-        'edit_intent': True,
-        'workboard_required': False,
-        'workboard': {
-            'path': str(tmp_path / 'WORKBOARD.md'),
-            'active_claims': 0,
-            'matching_claims': [],
-            'claim_conflict': False,
-            'stale': False,
-            'updated_at': '2026-03-18',
+        "lane": "simple-edit",
+        "workflow_mode": "guided",
+        "edit_intent": True,
+        "workboard_required": False,
+        "workboard": {
+            "path": str(tmp_path / "WORKBOARD.md"),
+            "active_claims": 0,
+            "matching_claims": [],
+            "claim_conflict": False,
+            "stale": False,
+            "updated_at": "2026-03-18",
         },
-        'flags': {
-            'ui_proof': False,
-            'tracked_work': False,
-            'multi_agent': False,
-            'long_running': False,
-            'risky_paths': [],
+        "flags": {
+            "ui_proof": False,
+            "tracked_work": False,
+            "multi_agent": False,
+            "long_running": False,
+            "risky_paths": [],
         },
-        'paths': ['thomas/core/config.py'],
-        'required_reads': ['docs/AGENT_FILE_EDITING_RULES.md'],
-        'required_checks': ['Run focused regression tests for changed behavior.'],
-        'escalation_triggers': ['Scope expands beyond a small isolated change.'],
-        'preflight': {
-            'status': 'degraded',
-            'summary': '1 degraded, 3 ok',
-            'checks': [
+        "paths": ["thomas/core/config.py"],
+        "required_reads": ["docs/AGENT_FILE_EDITING_RULES.md"],
+        "required_checks": ["Run focused regression tests for changed behavior."],
+        "escalation_triggers": ["Scope expands beyond a small isolated change."],
+        "preflight": {
+            "status": "degraded",
+            "summary": "1 degraded, 3 ok",
+            "checks": [
                 {
-                    'id': 'cwd',
-                    'status': 'degraded',
-                    'message': 'Current working directory is outside repo root.',
-                    'user_action': 'Start commands from the repo root.',
+                    "id": "cwd",
+                    "status": "degraded",
+                    "message": "Current working directory is outside repo root.",
+                    "user_action": "Start commands from the repo root.",
                 }
             ],
-            'policy': {
-                'summary': 'Tell the user the environment is degraded before using slower or lower-confidence fallbacks.',
-                'can_edit': True,
-                'report_before_fallback': True,
-                'stop_before_edit': False,
+            "policy": {
+                "summary": "Tell the user the environment is degraded before using slower or lower-confidence fallbacks.",
+                "can_edit": True,
+                "report_before_fallback": True,
+                "stop_before_edit": False,
             },
-            'root': str(mod.ROOT),
-            'cwd': 'C:/Windows/System32',
+            "root": str(mod.ROOT),
+            "cwd": "C:/Windows/System32",
         },
     }
 
     text = mod._text_output(payload)
 
-    assert 'preflight_status: degraded' in text
-    assert 'preflight_policy: Tell the user the environment is degraded before using slower or lower-confidence fallbacks.' in text
-    assert 'preflight_checks:' in text
+    assert "preflight_status: degraded" in text
+    assert (
+        "preflight_policy: Tell the user the environment is degraded before using slower or lower-confidence fallbacks."
+        in text
+    )
+    assert "preflight_checks:" in text

@@ -7,15 +7,15 @@ import argparse
 import json
 import os
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import List, Sequence
 
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
 
 from thomas._architecture import MODULES as ARCH_MODULES
-from thomas.observability.module_audit import MAJOR_MODULES, default_registry_path, record_audit
+from thomas.marketplace.observability.module_audit import MAJOR_MODULES, default_registry_path, record_audit
 
 try:
     from scripts import record_module_audit as record_cli
@@ -91,7 +91,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     signing_key = str(args.signing_key or os.environ.get("THOMAS_AUDIT_SIGNING_KEY") or "").strip() or None
     changelog_path = (ROOT / args.changelog).resolve()
 
-    entries: List[dict[str, object]] = []
+    entries: list[dict[str, object]] = []
     for module in MAJOR_MODULES:
         details = dict(ARCH_MODULES.get(module) or {})
         debt = str(details.get("debt") or "").strip()

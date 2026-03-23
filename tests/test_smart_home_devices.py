@@ -4,13 +4,13 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.smart_home._exceptions import (
+from thomas.marketplace.smart_home._exceptions import (
     DeviceNotFoundError,
     DeviceOfflineError,
     InvalidCapabilityError,
 )
-from thomas.smart_home._types import Device, DeviceCapability, DeviceState, DeviceType, Protocol
-from thomas.smart_home.devices import DeviceRegistry
+from thomas.marketplace.smart_home._types import Device, DeviceCapability, DeviceState, DeviceType, Protocol
+from thomas.marketplace.smart_home.devices import DeviceRegistry
 
 
 class TestDeviceRegistry:

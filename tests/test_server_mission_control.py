@@ -787,7 +787,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertIn("pending approval not found", await with_auth_guardrails.text())
 
     async def test_mission_autonomy_approval_decision_succeeds_with_seeded_store(self):
-        from thomas.autonomy.store import AutonomyStore
+        from thomas.marketplace.autonomy.store import AutonomyStore
 
         store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote.sqlite3").resolve()))
         self.addCleanup(store.close)
@@ -834,7 +834,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertIs(updated_job.requires_approval, False)
 
     async def test_mission_autonomy_approval_decision_denied_cancels_job(self):
-        from thomas.autonomy.store import AutonomyStore
+        from thomas.marketplace.autonomy.store import AutonomyStore
 
         store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-deny.sqlite3").resolve()))
         self.addCleanup(store.close)
@@ -881,7 +881,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertIs(updated_job.cancelled, True)
 
     async def test_mission_autonomy_approval_decision_is_idempotent_after_terminal_state(self):
-        from thomas.autonomy.store import AutonomyStore
+        from thomas.marketplace.autonomy.store import AutonomyStore
 
         store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-idempotent.sqlite3").resolve()))
         self.addCleanup(store.close)
@@ -932,7 +932,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertEqual(updated_approval.decision_reason, "approved once")
 
     async def test_mission_autonomy_approval_decision_emits_expected_audit_events(self):
-        from thomas.autonomy.store import AutonomyStore
+        from thomas.marketplace.autonomy.store import AutonomyStore
 
         store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-audit.sqlite3").resolve()))
         self.addCleanup(store.close)
@@ -979,7 +979,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertEqual(str(decided_detail.get("reason") or ""), "audit coverage")
 
     async def test_mission_autonomy_approval_repeat_decision_does_not_duplicate_decided_audit(self):
-        from thomas.autonomy.store import AutonomyStore
+        from thomas.marketplace.autonomy.store import AutonomyStore
 
         store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-audit-idempotent.sqlite3").resolve()))
         self.addCleanup(store.close)
@@ -1033,7 +1033,7 @@ class TestServerMissionControlRemoteAccess(AioHTTPTestCase):
         self.assertEqual(str(decided_detail.get("reason") or ""), "first decision")
 
     async def test_mission_autonomy_approval_audit_timestamps_are_chronological(self):
-        from thomas.autonomy.store import AutonomyStore
+        from thomas.marketplace.autonomy.store import AutonomyStore
 
         store = AutonomyStore(str((Path(self._tmpdir.name) / "autonomy-remote-audit-chronology.sqlite3").resolve()))
         self.addCleanup(store.close)

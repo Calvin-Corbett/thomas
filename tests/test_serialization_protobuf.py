@@ -7,7 +7,7 @@ repeated fields, and schema descriptor usage.
 
 import pytest
 
-from thomas.serialization import (
+from thomas.marketplace.serialization import (
     CodecConfig,
     FieldDescriptor,
     MessageDescriptor,

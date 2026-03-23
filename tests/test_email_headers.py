@@ -9,8 +9,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from thomas.email_protocol._types import EmailAddress
-from thomas.email_protocol.headers import (
+from thomas.marketplace.email_protocol._types import EmailAddress
+from thomas.marketplace.email_protocol.headers import (
     HeaderBuilder,
     HeaderParser,
     generate_message_id,

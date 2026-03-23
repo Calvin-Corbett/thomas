@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from thomas.channels.p093_channel_retry_and_backoff_strategy import (
+from thomas.marketplace.channels.p093_channel_retry_and_backoff_strategy import (
     ChannelRetryConfigError,
     ChannelRetryExecutionError,
     RetryPolicy,

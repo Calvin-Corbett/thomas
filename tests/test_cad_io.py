@@ -7,10 +7,10 @@ import tempfile
 
 import pytest
 
-from thomas.cad._exceptions import IOError as CADIOError
-from thomas.cad._exceptions import UnsupportedFormatError
-from thomas.cad._types import Point2D, Point3D, Polygon, Vector3D
-from thomas.cad.io_formats import (
+from thomas.marketplace.cad._exceptions import IOError as CADIOError
+from thomas.marketplace.cad._exceptions import UnsupportedFormatError
+from thomas.marketplace.cad._types import Point2D, Point3D, Polygon, Vector3D
+from thomas.marketplace.cad.io_formats import (
     DXFWriter,
     STEPWriter,
     STLWriter,

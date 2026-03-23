@@ -10,6 +10,7 @@ Versioning: Semantic Versioning.
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
 ### Added
+- tooling: New `scripts/test_stepup_protocol.py` repo-wide pytest runner that codifies the Thomas testing ladder as collect-only -> deterministic small shards -> larger shard bundles, with an optional final monolithic sweep.
 - skills: Thomas-native skill platform now ships first-party bundled skills under `skills/`, plus explicit external skill distillation drafts with review, no-copy validation, and promotion commands.
 - safety: New `check_changelog_gate.py` pre-commit hook — rejects commits with 3+ thomas/ code changes when CHANGELOG.md is not staged (Finding 2)
 - safety: New `check_protected_files_gate.py` pre-commit hook — prevents agent modification of GUARDRAILS.md, test_architecture.py, `_architecture.py`, enforcement scripts, and other policy files (Findings 9, 12, 13)
@@ -25,6 +26,7 @@ Versioning: Semantic Versioning.
 - safety: New `_check_worktree_clean()` in `agent_preflight.py` — reports dirty worktree state at session start so agents know they're working in a dirty tree (Finding 11)
 
 ### Changed
+- tooling: `scripts/auto_checks.py`, `scripts/agent_startup_router.py`, `docs/ai/CHECKLISTS/tests.md`, `docs/ai/CHECKLISTS/agent-lane-risky-edit.md`, `docs/ai/CHECKLISTS/agent-lane-multi-file.md`, `docs/ai/AGENT_PLAYBOOK.md`, and `README.md` now point broad repo verification at the step-up shard protocol instead of treating a single full-suite pytest command as the default path.
 - tooling: `scripts/agent_commit.py` now emits machine-readable blocker payloads and supports audited explicit-scope fallback commits when no active claim exists, while the workboard ownership gates recognize that fallback without allowing overlap with another agent's claim. Selected commit paths are now realigned to `HEAD` in the live index instead of being re-added from the worktree, so unrelated staging state stays stable.
 - skills: Runtime skill discovery, CLI diagnostics, and REPL `/skill` now resolve Thomas-native roots (`<thomas_install_root>/skills`, `~/.thomas/skills`, `<cwd>/.thomas/skills`, `<cwd>/skills`) instead of `.codex` roots during normal operation.
 - safety: Placeholder file protection in `validate_agent_changes.py` promoted from warning to hard rejection — commits modifying episodic.py, episodic_store.py, or summarization.py are now BLOCKED (Finding 3)
@@ -38,6 +40,8 @@ Versioning: Semantic Versioning.
 - safety: Meta-test `test_all_local_hooks_are_skip_protected` ensures every hook in `.pre-commit-config.yaml` has a PROTECTED_SKIP_HOOKS entry — prevents future drift
 
 ### Fixed
+- compatibility: Restored legacy package import surfaces for moved marketplace modules (`channels`, `companion`, `learning`, `nodes`, `observability`, and `policy`), plus server/preferences export shims that newer split modules had stopped exposing.
+- tooling: Replaced the broken `thomas.tools.dep_scanner` monolith stub with a direct compatibility wrapper over the split scanner modules and repaired the malformed `swarm.py` entrypoint path so collection can reach the real runtime regressions again.
 - cross-platform: `agent_preflight.py` now detects OS and uses `.venv/bin/python` on Linux/Mac or `.venv/Scripts/python.exe` on Windows (was Windows-only)
 - cross-platform: `check_worktree_branch_guard.py` now auto-detects worktree paths via `git worktree list --porcelain` instead of hardcoded `C:\Users\corbe\` paths — works on any machine
 - safety: Adversarial audit priority matrix updated — all 15 findings now addressed (13 fixed, 2 mitigated)

@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Sequence, Tuple
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 CONTRACT_PATH = ROOT / "demo" / "baselines" / "agent_test_suite_full_coverage.contract.json"
@@ -12,7 +12,7 @@ DOC_PATH = ROOT / "docs" / "AGENT_TEST_SUITE_FULL_COVERAGE.md"
 LATEST_RESULT_PATH = ROOT / "docs" / "openclaw_gap_runs" / "latest_full_suite_compare.json"
 
 
-CORE_GROUPS: Sequence[Tuple[str, Sequence[str]]] = [
+CORE_GROUPS: Sequence[tuple[str, Sequence[str]]] = [
     (
         "coverage_and_correctness",
         [
@@ -275,7 +275,7 @@ AGENTIC_NATIVE_CHECKS: Sequence[str] = [
 ]
 
 
-CATEGORY_TEST_MODE: Dict[str, str] = {
+CATEGORY_TEST_MODE: dict[str, str] = {
     "coverage_and_correctness": "quick",
     "interfaces_and_protocols": "quick",
     "extensions_and_state": "quick",
@@ -294,7 +294,7 @@ CATEGORY_TEST_MODE: Dict[str, str] = {
 }
 
 
-BENCHMARK_FAMILY_CATALOG: Dict[str, Dict[str, str]] = {
+BENCHMARK_FAMILY_CATALOG: dict[str, dict[str, str]] = {
     "coverage_and_correctness": {
         "name": "Foundation Integrity",
         "test_mode": "quick",
@@ -378,7 +378,7 @@ BENCHMARK_FAMILY_CATALOG: Dict[str, Dict[str, str]] = {
 }
 
 
-PROGRAM_EXTENSION_CHECKS: Sequence[Dict[str, str]] = [
+PROGRAM_EXTENSION_CHECKS: Sequence[dict[str, str]] = [
     {
         "category": "evaluation_governance",
         "title": "Versioned evaluation dataset with immutable snapshots.",
@@ -701,8 +701,8 @@ def _now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _build_checks() -> List[Dict[str, Any]]:
-    checks: List[Dict[str, Any]] = []
+def _build_checks() -> list[dict[str, Any]]:
+    checks: list[dict[str, Any]] = []
     n = 1
     for category, items in CORE_GROUPS:
         for title in items:
@@ -758,14 +758,14 @@ def _build_checks() -> List[Dict[str, Any]]:
     return checks
 
 
-def _load_runtime_metrics() -> List[str]:
+def _load_runtime_metrics() -> list[str]:
     if not LATEST_RESULT_PATH.exists():
         return []
     try:
         payload = json.loads(LATEST_RESULT_PATH.read_text(encoding="utf-8"))
     except Exception:
         return []
-    out: List[str] = []
+    out: list[str] = []
     for row in list(payload.get("metric_board") or []):
         if not isinstance(row, dict):
             continue
@@ -775,8 +775,8 @@ def _load_runtime_metrics() -> List[str]:
     return sorted(set(out))
 
 
-def _build_benchmark_family_rows(checks: Sequence[Mapping[str, Any]]) -> List[Dict[str, Any]]:
-    rows: Dict[str, Dict[str, Any]] = {}
+def _build_benchmark_family_rows(checks: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    rows: dict[str, dict[str, Any]] = {}
     for check in checks:
         family = str(check.get("benchmark_family") or check.get("category") or "uncategorized").strip()
         if not family:
@@ -796,7 +796,7 @@ def _build_benchmark_family_rows(checks: Sequence[Mapping[str, Any]]) -> List[Di
     return [rows[key] for key in sorted(rows.keys())]
 
 
-def _write_contract(checks: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
+def _write_contract(checks: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
     benchmark_families = _build_benchmark_family_rows(checks)
     payload = {
         "id": "thomas-full-coverage-contract-v1",
@@ -831,8 +831,8 @@ def _write_contract(checks: Sequence[Mapping[str, Any]]) -> Dict[str, Any]:
     return payload
 
 
-def _group_checks_by_category(checks: Iterable[Mapping[str, Any]]) -> Dict[str, List[Mapping[str, Any]]]:
-    out: Dict[str, List[Mapping[str, Any]]] = {}
+def _group_checks_by_category(checks: Iterable[Mapping[str, Any]]) -> dict[str, list[Mapping[str, Any]]]:
+    out: dict[str, list[Mapping[str, Any]]] = {}
     for row in checks:
         category = str(row.get("category") or "uncategorized")
         out.setdefault(category, []).append(row)
@@ -846,13 +846,13 @@ def _write_doc(contract: Mapping[str, Any], runtime_metrics: Sequence[str]) -> N
     benchmark_families = [row for row in list(contract.get("benchmark_families") or []) if isinstance(row, dict)]
     groups = _group_checks_by_category(checks)
     implemented = sum(1 for row in checks if str(row.get("implementation_state") or "").lower() == "implemented")
-    checks_by_mode: Dict[str, int] = {}
+    checks_by_mode: dict[str, int] = {}
     for row in checks:
         mode = str(row.get("test_mode") or "quick").strip().lower() or "quick"
         checks_by_mode[mode] = int(checks_by_mode.get(mode) or 0) + 1
     program = dict(contract.get("benchmark_program") or {})
     policy = dict(contract.get("execution_policy") or {})
-    lines: List[str] = []
+    lines: list[str] = []
     lines.append("# Full Coverage Test Suite")
     lines.append("")
     lines.append("This document is the full test-suite contract for Thomas.")
@@ -895,7 +895,9 @@ def _write_doc(contract: Mapping[str, Any], runtime_metrics: Sequence[str]) -> N
     lines.append("- Token efficiency (`token_efficiency_score`):")
     lines.append("- Separate token-only score; only emitted when token telemetry evidence exists.")
     lines.append("- Token 1v1 compares token score, effective tokens per success, and telemetry coverage.")
-    lines.append("- Typical confusion: previous `90%+` values are often runtime 1v1 head-to-head, not overall full-suite score.")
+    lines.append(
+        "- Typical confusion: previous `90%+` values are often runtime 1v1 head-to-head, not overall full-suite score."
+    )
     lines.append("")
     lines.append("## Runtime Metric Board (Current)")
     lines.append("")
@@ -922,9 +924,7 @@ def _write_doc(contract: Mapping[str, Any], runtime_metrics: Sequence[str]) -> N
         lines.append(f"### {category}")
         lines.append("")
         for row in rows:
-            lines.append(
-                f"- `{row.get('id')}` [{row.get('implementation_state')}] {row.get('title')}"
-            )
+            lines.append(f"- `{row.get('id')}` [{row.get('implementation_state')}] {row.get('title')}")
         lines.append("")
     DOC_PATH.parent.mkdir(parents=True, exist_ok=True)
     DOC_PATH.write_text("\n".join(lines), encoding="utf-8")

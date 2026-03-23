@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Optional, TypedDict
+from typing import TypedDict
 
 import pytest
 
-from thomas.channels.p077_channel_provider_config_schema import (
+from thomas.marketplace.channels.p077_channel_provider_config_schema import (
     ChannelProviderNotFoundError,
     InvalidProviderNameError,
-    json_schema_from_type,
     get_channel_provider_config_schema,
+    json_schema_from_type,
 )
 
 
@@ -18,7 +18,7 @@ def test_json_schema_from_dataclass_required_and_optional() -> None:
     class Example:
         token: str
         chat_id: int
-        timeout: Optional[int] = None
+        timeout: int | None = None
 
     schema = json_schema_from_type(Example)
     assert schema["type"] == "object"

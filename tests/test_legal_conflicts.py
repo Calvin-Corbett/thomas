@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.legal.conflicts import ConflictChecker
+from thomas.marketplace.legal.conflicts import ConflictChecker
 
 
 class TestConflictChecker:

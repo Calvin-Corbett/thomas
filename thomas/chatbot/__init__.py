@@ -1,21 +1,3 @@
-"""Chatbot framework with intents, slots, and dialogue management."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.chatbot."""
 
-from thomas.chatbot.core import (
-    Chatbot,
-    DialogueState,
-    Intent,
-    IntentType,
-    Response,
-    Slot,
-)
-from thomas.chatbot.tools import register_chatbot_tools
-
-__all__ = [
-    "Chatbot",
-    "Intent",
-    "IntentType",
-    "Slot",
-    "DialogueState",
-    "Response",
-    "register_chatbot_tools",
-]
+from thomas.marketplace.chatbot import *  # noqa: F401,F403

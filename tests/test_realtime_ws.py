@@ -5,9 +5,9 @@ from aiohttp import web
 from aiohttp.client_exceptions import WSServerHandshakeError
 from aiohttp.test_utils import TestClient, TestServer
 
-from thomas.realtime import keys
-from thomas.realtime.config import RealtimeConfig
-from thomas.realtime.routes import setup_realtime_routes
+from thomas.marketplace.realtime import keys
+from thomas.marketplace.realtime.config import RealtimeConfig
+from thomas.marketplace.realtime.routes import setup_realtime_routes
 
 
 async def dummy_streamer(payload):

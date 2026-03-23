@@ -16,7 +16,7 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.supply_chain import (
+from thomas.marketplace.supply_chain import (
     CarrierOption,
     Container,
     Item,

@@ -5,9 +5,9 @@ from datetime import datetime
 
 import pytest
 
-from thomas.recommender._types import InteractionType, Rating, Recommendation
-from thomas.recommender.cold_start import BanditRecommender, ColdStartHandler, HybridWarmupHandler
-from thomas.recommender.pipeline import A_BTestManager, ExplanationGenerator, RecommendationPipeline
+from thomas.marketplace.recommender._types import InteractionType, Rating, Recommendation
+from thomas.marketplace.recommender.cold_start import BanditRecommender, ColdStartHandler, HybridWarmupHandler
+from thomas.marketplace.recommender.pipeline import A_BTestManager, ExplanationGenerator, RecommendationPipeline
 
 
 def _rating(user_id: str, item_id: str, score: float = 1.0) -> Rating:

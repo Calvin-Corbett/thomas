@@ -1,17 +1,3 @@
-"""Knowledge graph module for semantic reasoning and entity relations."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.knowledge_graph."""
 
-from thomas.knowledge_graph.core import (
-    Entity,
-    KnowledgeGraph,
-    Relation,
-    Triple,
-)
-from thomas.knowledge_graph.tools import register_knowledge_graph_tools
-
-__all__ = [
-    "Triple",
-    "Entity",
-    "Relation",
-    "KnowledgeGraph",
-    "register_knowledge_graph_tools",
-]
+from thomas.marketplace.knowledge_graph import *  # noqa: F401,F403

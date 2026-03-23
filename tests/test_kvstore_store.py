@@ -5,8 +5,8 @@ import time
 
 import pytest
 
-from thomas.kvstore import CompactionStrategy, KVStore, KVStoreConfig
-from thomas.kvstore._exceptions import KeyNotFoundError
+from thomas.marketplace.kvstore import CompactionStrategy, KVStore, KVStoreConfig
+from thomas.marketplace.kvstore._exceptions import KeyNotFoundError
 
 
 class TestKVStoreBasics:

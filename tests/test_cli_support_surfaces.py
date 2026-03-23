@@ -7,7 +7,7 @@ from click.testing import CliRunner
 
 import thomas.cli.main_runtime_ops as cli_runtime_ops
 from thomas.cli.main import cli
-from thomas.observability.run_db import connect, ensure_schema
+from thomas.marketplace.observability.run_db import connect, ensure_schema
 
 
 def _write_min_config(path: Path) -> Path:

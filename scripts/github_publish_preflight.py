@@ -27,7 +27,7 @@ BLOCKED_TRACKED_EXACT = {
     ".env.development",
     "secrets.json",
     "thomas.db",
-    "thomas.asset_studio.db",
+    "thomas.marketplace.asset_studio.db",
     "thomas_search.db",
 }
 BLOCKED_TRACKED_SUFFIXES = (
@@ -44,7 +44,7 @@ REQUIRED_GITIGNORE_SNIPPETS = (
     ".thomas/",
     "runtime/",
     "thomas.db",
-    "thomas.asset_studio.db",
+    "thomas.marketplace.asset_studio.db",
 )
 DEFAULT_REQUIRED_BRANCHES = ("dev", "prod")
 SCAN_SKIP_PREFIXES = (

@@ -4,9 +4,10 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-from thomas.observability.run_db import ENV_DB_PATH
-from thomas.observability.event_recorder import start_run, record_event, end_run
-from thomas.observability.run_store_replay import list_events, count_events
+from thomas.marketplace.observability.event_recorder import end_run, record_event, start_run
+from thomas.marketplace.observability.run_db import ENV_DB_PATH
+from thomas.marketplace.observability.run_store_replay import count_events, list_events
+
 
 def test_event_recorder_writes_and_replays(tmp_path: Path):
     db = tmp_path / "runs.sqlite3"

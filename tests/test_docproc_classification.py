@@ -1,6 +1,6 @@
 """Tests for document classification module."""
 
-from thomas.doc_processing.classification import (
+from thomas.marketplace.doc_processing.classification import (
     DocumentClassifier,
     GenreClassifier,
     LanguageDetector,

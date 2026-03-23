@@ -1,6 +1,6 @@
 """Tests for query types and parsing."""
 
-from thomas.search_engine import (
+from thomas.marketplace.search_engine import (
     BooleanQuery,
     FieldMapping,
     FieldType,

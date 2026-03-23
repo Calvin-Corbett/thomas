@@ -7,13 +7,13 @@ and RFC 2047 header encoding.
 
 import pytest
 
-from thomas.email_protocol._exceptions import MIMEEncodingError
-from thomas.email_protocol._types import (
+from thomas.marketplace.email_protocol._exceptions import MIMEEncodingError
+from thomas.marketplace.email_protocol._types import (
     ContentType,
     Encoding,
     MIMEPart,
 )
-from thomas.email_protocol.mime import (
+from thomas.marketplace.email_protocol.mime import (
     MIMEBuilder,
     MIMEParser,
     decode_rfc2047,

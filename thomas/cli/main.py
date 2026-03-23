@@ -1,63 +1,114 @@
-"""Runtime composition generated from source fragments."""
+"""Thomas CLI entry point and command registration."""
 
-import sys
-from pathlib import Path
+from __future__ import annotations
 
-_CURRENT_FILE = Path(__file__).resolve()
-for _parent in (_CURRENT_FILE.parent, *_CURRENT_FILE.parents):
-    _loader_marker = _parent / "scripts" / "monolith_source_loader.py"
-    if _loader_marker.exists():
-        if str(_parent) not in sys.path:
-            sys.path.insert(0, str(_parent))
-        break
-else:
-    raise RuntimeError("Unable to locate monolith_source_loader.py in repository root")
+import thomas.cli._commands_misc  # noqa: F401
 
-from scripts.monolith_source_loader import load_monolith_source
+# These imports trigger registration of commands on the cli group
+import thomas.cli._commands_models  # noqa: F401
+
+# Import all command groups from submodules to register them
+from thomas.cli._commands_base import cli, log
 
 
-class _AstCompatGroup:
-    """AST-only compatibility shim for CLI guard tests.
-
-    Runtime command registration is sourced from ``main_part*.py`` via
-    ``load_monolith_source(...)`` below.
-    """
-
-    @staticmethod
-    def command(*_args, **_kwargs):
-        def _decorator(func):
-            return func
-
-        return _decorator
+def main() -> None:
+    cli(obj={})
 
 
-models = _AstCompatGroup()
+for _module_name, _register_name in (
+    ("thomas.cli.commands.channels", "register_channels_commands"),
+    ("thomas.cli.commands.cron", "register_cron_commands"),
+    ("thomas.cli.commands.research", "register_research_commands"),
+    ("thomas.cli.commands.evolve", "register_evolve_commands"),
+    ("thomas.cli.commands.sessions", "register_sessions_commands"),
+    ("thomas.cli.commands.webhooks", "register_webhooks_commands"),
+    ("thomas.cli.commands.companion", "register_companion_commands"),
+    ("thomas.cli.commands.setup_wizard", "register_setup_commands"),
+    ("thomas.cli.commands.quickstart", "register_quickstart_commands"),
+    ("thomas.cli.commands.shortcuts", "register_shortcuts_commands"),
+    ("thomas.cli.commands.updater", "register_update_commands"),
+    ("thomas.cli.commands.release", "register_release_commands"),
+):
+    try:
+        _mod = __import__(_module_name, fromlist=[_register_name])
+        _register = getattr(_mod, _register_name, None)
+        if callable(_register):
+            _register(cli)
+    except Exception as e:
+        log.debug("Failed to register %s.%s: %s", _module_name, _register_name, e)
 
 
-def _run_models_discover(ctx, model_name, timeout_s):
-    raise RuntimeError("models discover shim should be replaced by monolith loader")
+try:
+    from thomas.cli.parity_commands import register_parity_commands
+
+    register_parity_commands(cli)
+except Exception as e:
+    log.debug("Failed to register parity commands: %s", e)
+
+try:
+    from thomas.cli.quality_ops import register_quality_ops
+
+    register_quality_ops(cli)
+except Exception as e:
+    log.debug("Failed to register quality ops commands: %s", e)
 
 
-@models.command("scan")
-def models_scan(ctx, timeout_s):
-    return _run_models_discover(ctx=ctx, model_name=None, timeout_s=timeout_s)
+# --- Architecture tools ---
+try:
+    from thomas.cli.doctor import doctor_command
+
+    cli.add_command(doctor_command)
+except Exception as e:
+    log.debug("Failed to register doctor command: %s", e)
+
+try:
+    from thomas.cli.why import why_command
+
+    cli.add_command(why_command)
+except Exception as e:
+    log.debug("Failed to register why command: %s", e)
+
+try:
+    from thomas.cli.scaffold import scaffold_group
+
+    cli.add_command(scaffold_group)
+except Exception as e:
+    log.debug("Failed to register scaffold command: %s", e)
+
+try:
+    from thomas.cli.generate_agent_docs import generate_agent_docs_command
+
+    cli.add_command(generate_agent_docs_command)
+except Exception as e:
+    log.debug("Failed to register generate_agent_docs command: %s", e)
+
+try:
+    from thomas.cli.sweep import sweep_command
+
+    cli.add_command(sweep_command)
+except Exception as e:
+    log.debug("Failed to register sweep command: %s", e)
+try:
+    from thomas.cli.heartbeat_cmd import heartbeat_command
+
+    cli.add_command(heartbeat_command)
+except Exception as e:
+    log.debug("Failed to register heartbeat command: %s", e)
+
+try:
+    from thomas.cli.commands.investigate import register_investigate_commands
+
+    register_investigate_commands(cli)
+except Exception as e:
+    log.debug("Failed to register investigate commands: %s", e)
+
+try:
+    from thomas.cli.commands.desktop_operator import register_desktop_operator_commands
+
+    register_desktop_operator_commands(cli)
+except Exception as e:
+    log.debug("Failed to register desktop operator commands: %s", e)
 
 
-load_monolith_source(
-    base_path=Path(__file__),
-    part_files=(
-        "main_part01.py",
-        "main_part02.py",
-        "main_part03.py",
-    ),
-    namespace=globals(),
-)
-
-
-del _CURRENT_FILE
-
-del _loader_marker
-
-del _parent
-
-del load_monolith_source
+if __name__ == "__main__":
+    main()

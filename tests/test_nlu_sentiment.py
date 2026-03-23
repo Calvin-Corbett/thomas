@@ -4,8 +4,8 @@ Tests for sentiment analysis module.
 
 import unittest
 
-from thomas.nlu._types import POSTag, Sentence, Span, Token
-from thomas.nlu.sentiment import SentimentAnalyzer
+from thomas.marketplace.nlu._types import POSTag, Sentence, Span, Token
+from thomas.marketplace.nlu.sentiment import SentimentAnalyzer
 
 
 class TestSentimentAnalyzer(unittest.TestCase):

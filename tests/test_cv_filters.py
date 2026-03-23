@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.cv import core, filters
-from thomas.cv._exceptions import InvalidParameterError
-from thomas.cv._types import Kernel
+from thomas.marketplace.cv import core, filters
+from thomas.marketplace.cv._exceptions import InvalidParameterError
+from thomas.marketplace.cv._types import Kernel
 
 
 class TestConvolution:

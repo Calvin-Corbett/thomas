@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 
 from thomas.cli.commands.nodes import p047_nodes_approve_action as cli
-from thomas.nodes.p047_nodes_approve_action import (
+from thomas.marketplace.nodes.p047_nodes_approve_action import (
     DEFAULT_APPROVALS_ENV_VAR,
     DEFAULT_LEDGER_FILENAME,
     NodesApproveActionConfigError,

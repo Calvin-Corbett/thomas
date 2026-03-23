@@ -10,8 +10,8 @@ Tests:
 - Line rasterization
 """
 
-from thomas.graphics3d import rasterizer
-from thomas.graphics3d._types import Color, FrameBuffer, Vec2, Vec4
+from thomas.marketplace.graphics3d import rasterizer
+from thomas.marketplace.graphics3d._types import Color, FrameBuffer, Vec2, Vec4
 
 
 class TestViewportTransform:

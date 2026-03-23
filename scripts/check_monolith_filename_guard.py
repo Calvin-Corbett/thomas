@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Reject legacy monolith split filename patterns that use `.partNN.ext`.
+"""Reject legacy monolith split filename patterns.
 
+Catches both `.partNN.ext` (dot-separated) and `_partNN.ext` (underscore-separated).
 This check is intentionally strict and filename-only: if any staged or tracked
 repository file matches the pattern, the gate fails unless that file is outside
 scanned directories.
@@ -18,7 +19,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 
-FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),)
+FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),
+    re.compile(r"_part\d+\.\w+$", re.IGNORECASE),
+)
 
 SKIP_DIR_NAMES = {
     ".git",

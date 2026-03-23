@@ -7,7 +7,7 @@ canonical encoding, half-precision floats, and tagged values.
 
 import pytest
 
-from thomas.serialization import (
+from thomas.marketplace.serialization import (
     CBORCodec,
     CodecConfig,
     DeserializationError,

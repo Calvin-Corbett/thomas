@@ -4,8 +4,8 @@ Tests for audio synthesis including oscillators, ADSR, and FM synthesis.
 
 import numpy as np
 
-from thomas.audio_engine._types import WaveformType
-from thomas.audio_engine.synthesis import (
+from thomas.marketplace.audio_engine._types import WaveformType
+from thomas.marketplace.audio_engine.synthesis import (
     LFO,
     AdditiveSynthesis,
     ADSREnvelope,

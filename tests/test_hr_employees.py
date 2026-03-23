@@ -5,14 +5,14 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.hr_platform._exceptions import EmployeeNotFoundError
-from thomas.hr_platform._types import (
+from thomas.marketplace.hr_platform._exceptions import EmployeeNotFoundError
+from thomas.marketplace.hr_platform._types import (
     Department,
     Employee,
     EmploymentStatus,
     Position,
 )
-from thomas.hr_platform.employees import EmployeeManager
+from thomas.marketplace.hr_platform.employees import EmployeeManager
 
 
 class TestEmployeeManager:

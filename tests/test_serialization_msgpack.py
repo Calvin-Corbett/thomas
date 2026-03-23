@@ -12,7 +12,7 @@ from enum import Enum
 
 import pytest
 
-from thomas.serialization import (
+from thomas.marketplace.serialization import (
     CodecConfig,
     DeserializationError,
     MessagePackCodec,

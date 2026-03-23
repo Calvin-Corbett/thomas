@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.project_mgmt._types import SprintStatus, Task, TaskStatus
-from thomas.project_mgmt.agile import AgileManager
+from thomas.marketplace.project_mgmt._types import SprintStatus, Task, TaskStatus
+from thomas.marketplace.project_mgmt.agile import AgileManager
 
 
 class TestAgileManager:
@@ -193,7 +193,7 @@ class TestAgileManager:
 
     def test_groom_backlog(self, manager: AgileManager) -> None:
         """Test backlog grooming/prioritization."""
-        from thomas.project_mgmt._types import Priority
+        from thomas.marketplace.project_mgmt._types import Priority
 
         task1 = Task(
             id="task-1",

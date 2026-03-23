@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.dsl import Lexer, TokenType
+from thomas.marketplace.dsl import Lexer, TokenType
 
 
 class TestLexerBasics:

@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.doc_processing._types import Document, Page, Sentence
-from thomas.doc_processing.summarization import (
+from thomas.marketplace.doc_processing._types import Document, Page, Sentence
+from thomas.marketplace.doc_processing.summarization import (
     DocumentSummarizer,
     LexRankSummarizer,
     LSASummarizer,
@@ -191,7 +191,7 @@ class TestDocumentSummarizer:
         ]
 
         # Create document with sentences in blocks
-        from thomas.doc_processing._types import Paragraph, TextBlock
+        from thomas.marketplace.doc_processing._types import Paragraph, TextBlock
 
         para = Paragraph(sentences=sentences, text=text)
         block = TextBlock(text=text, bbox=None, paragraphs=[para])

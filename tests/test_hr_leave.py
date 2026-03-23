@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.hr_platform._exceptions import LeaveBalanceError
-from thomas.hr_platform._types import Employee, LeaveType
-from thomas.hr_platform.leave import LeaveBalance, LeaveManager
+from thomas.marketplace.hr_platform._exceptions import LeaveBalanceError
+from thomas.marketplace.hr_platform._types import Employee, LeaveType
+from thomas.marketplace.hr_platform.leave import LeaveBalance, LeaveManager
 
 
 class TestLeaveManager:

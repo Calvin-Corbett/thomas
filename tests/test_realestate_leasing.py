@@ -5,8 +5,8 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.real_estate._types import Lease, Tenant
-from thomas.real_estate.leasing import (
+from thomas.marketplace.real_estate._types import Lease, Tenant
+from thomas.marketplace.real_estate.leasing import (
     CAMCalculation,
     LeaseAbstraction,
     LeaseDatabase,

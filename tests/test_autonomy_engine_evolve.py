@@ -5,11 +5,11 @@ import tempfile
 import unittest
 from datetime import datetime, timezone
 
-import thomas.autonomy.engine as engine_module
-from thomas.autonomy.engine import AutonomyEngine
-from thomas.autonomy.policy import AutonomyPolicy
-from thomas.autonomy.scheduler import EngineTiming
-from thomas.autonomy.store import AutonomyStore
+import thomas.marketplace.autonomy.engine as engine_module
+from thomas.marketplace.autonomy.engine import AutonomyEngine
+from thomas.marketplace.autonomy.policy import AutonomyPolicy
+from thomas.marketplace.autonomy.scheduler import EngineTiming
+from thomas.marketplace.autonomy.store import AutonomyStore
 
 
 class _FakeProcess:

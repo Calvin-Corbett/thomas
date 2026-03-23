@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 from aiohttp import web
@@ -16,8 +17,7 @@ from thomas.core.config import AppConfig
 from thomas.server.secrets import SecretStore
 from thomas.tools.registry import ToolRegistry
 
-# ── App-level typed keys ──────────────────────────────────────────────
-
+# App-level typed keys
 APP_CONFIG = web.AppKey("config", AppConfig)
 APP_TOOLS = web.AppKey("tools", ToolRegistry)
 APP_MEMORY = web.AppKey("memory", object)
@@ -48,9 +48,9 @@ APP_SHUTDOWN_EVENT = web.AppKey("shutdown_event", asyncio.Event)
 APP_RESTART_REQUESTED = web.AppKey("restart_requested", bool)
 APP_RUNTIME_GUARD_STATE = web.AppKey("runtime_guard_state", dict)
 APP_RUNTIME_GUARD_TASK = web.AppKey("runtime_guard_task", object)
-
-
-# ── Shared data classes ───────────────────────────────────────────────
+APP_BOOT_DOCTOR_ROOT = web.AppKey("boot_doctor_root", Path)
+APP_LOCAL_STEP_UP_AUTH_PROVIDER = web.AppKey("local_step_up_auth_provider", object)
+APP_PROTECTED_INTERNALS_GATE = web.AppKey("protected_internals_gate", object)
 
 
 @dataclass

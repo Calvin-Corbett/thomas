@@ -4,7 +4,7 @@ Tests for 5G features module.
 
 import pytest
 
-from thomas.telecom.five_g import (
+from thomas.marketplace.telecom.five_g import (
     BeamManager,
     EdgeComputeOptimizer,
     MassiveMIMO,

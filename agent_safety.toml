@@ -1,0 +1,246 @@
+# ============================================================================
+# Agent Safety Configuration
+# ============================================================================
+#
+# This file defines how AI agents must behave in this repository.
+# Every pre-commit hook reads from this file to enforce the rules.
+#
+# To use in a new repo:  python -m agent_safety init
+# To customize:          edit this file, hooks pick up changes automatically
+#
+# Docs: docs/AGENT_ADVERSARIAL_AUDIT_2026-03-19.md
+# ============================================================================
+
+[project]
+name = "Thomas"
+language = "python"       # primary language: python, javascript, typescript
+source_dirs = [
+    "thomas/",
+    "scripts/",
+    "extensions/",
+    "agents/",
+    "cli/",
+    "plugins/",
+]
+test_dirs = ["tests/"]
+
+# ── File Size Limits ────────────────────────────────────────────────────────
+
+[limits]
+python_soft = 800         # warning threshold
+python_hard = 1200        # hard block — commit rejected
+js_soft = 800
+js_hard = 2000
+css_soft = 600
+css_hard = 1200
+html_soft = 2000
+html_hard = 3000
+
+# ── Protected Files ─────────────────────────────────────────────────────────
+# Agents cannot modify these files. Humans can bypass with breakglass.
+
+[protected]
+policy_files = [
+    "AGENTS.md",
+    "GUARDRAILS.md",
+    "AGENT_RULES_QUICK_REFERENCE.md",
+    "AGENT_SAFETY_GATES.md",
+    "WORKTREE_RULES.md",
+    "PROJECT_MANAGEMENT_RULES.md",
+    "agent_safety.toml",
+    "thomas.toml",
+    "thomas.prod.toml",
+    "pyproject.toml",
+    "docker-compose.yml",
+    "docker-compose.dev.yml",
+    "Dockerfile",
+    ".gitignore",
+    # ── Root of the enforcement chain (Audit Finding 2, 2026-03-19) ──
+    ".pre-commit-config.yaml",
+    # ── Monolith baseline controls file-size exemptions (Audit Finding 5) ──
+    "docs/monolith_guard_baseline.json",
+]
+
+# Add module-specific GUARDRAILS.md files here
+guardrails_files = [
+    "thomas/server/GUARDRAILS.md",
+    "thomas/memory/GUARDRAILS.md",
+    "thomas/agent/GUARDRAILS.md",
+    "thomas/core/GUARDRAILS.md",
+    "thomas/tools/GUARDRAILS.md",
+    "thomas/browser/GUARDRAILS.md",
+    "thomas/cli/GUARDRAILS.md",
+    "thomas/server/web/js/app_parts/GUARDRAILS.md",
+]
+
+# Architecture and test files agents must not weaken
+enforcement_files = [
+    "tests/test_architecture.py",
+    "thomas/_architecture.py",
+]
+
+# Scripts that enforce the rules — also protected.
+# IMPORTANT: Every script referenced in .pre-commit-config.yaml MUST be listed
+# here. An unprotected hook script can be rewritten by an agent to always pass,
+# silently disabling that gate. (Audit Finding 1, 2026-03-19)
+enforcement_scripts = [
+    # ── Core safety gates (original 13) ──
+    "scripts/validate_agent_changes.py",
+    "scripts/check_protected_files_gate.py",
+    "scripts/check_precommit_skip_policy.py",
+    "scripts/check_monolith_guard.py",
+    "scripts/check_deletions.py",
+    "scripts/check_exception_handler_gate.py",
+    "scripts/check_duplicate_filename_gate.py",
+    "scripts/check_circular_imports_gate.py",
+    "scripts/check_changelog_gate.py",
+    "scripts/check_boot_smoke_gate.py",
+    "scripts/check_type_safety_gate.py",
+    "scripts/post_commit_audit.py",
+    "scripts/agent_safety_config.py",
+    # ── Workboard & scope enforcement (Audit Finding 1) ──
+    "scripts/check_workboard_claims.py",
+    "scripts/check_workboard_task_problems.py",
+    "scripts/check_workboard_changed_files.py",
+    "scripts/check_workboard_agent_claim.py",
+    "scripts/check_commit_scope_gate.py",
+    "scripts/workboard_issue.py",
+    "scripts/workboard_problem_record.py",
+    # ── Repo & build integrity (Audit Finding 1) ──
+    "scripts/check_monolith_filename_guard.py",
+    "scripts/check_feature_registry.py",
+    "scripts/check_repo_identity.py",
+    "scripts/check_merge_readiness.py",
+    "scripts/check_release_update_gate.py",
+    "scripts/check_site_visual_proof.py",
+    "scripts/check_dependency_gate.py",
+    "scripts/check_frontend_lint_gate.py",
+    "scripts/check_verification_record_gate.py",
+    # ── Operational & structural gates (Audit Finding 1) ──
+    "scripts/active_folders.py",
+    "scripts/check_plan_structure_gate.py",
+    "scripts/check_core_overhead_guard.py",
+    "scripts/check_worktree_rules_gate.py",
+    "scripts/check_worktree_branch_guard.py",
+    "scripts/check_test_coverage_gate.py",
+    "scripts/check_shrinkage_gate.py",
+    "scripts/auto_checks.py",
+    "scripts/test_stepup_protocol.py",
+    # ── Agent commit path (not in hooks but critical) ──
+    "scripts/agent_commit.py",
+    "scripts/check_monolith_baseline_approval_gate.py",
+]
+
+# ── Placeholder / Stub Files ────────────────────────────────────────────────
+# Files that are intentional stubs and must NOT be "completed" by agents.
+
+[stubs]
+placeholder_files = [
+    "thomas/memory/episodic.py",
+    "thomas/memory/episodic_store.py",
+    "thomas/memory/episodic_retrieval.py",
+    "thomas/memory/episodic_embeddings.py",
+    "thomas/memory/summarization.py",
+    "thomas/memory/thought_signatures.py",
+]
+
+build_output_files = [
+    "thomas/server/web/js/app.js",
+    "thomas/server/web/css/app.css",
+]
+
+# ── Exception Handling ──────────────────────────────────────────────────────
+
+[exceptions]
+require_specific = true   # block broad except handlers
+# What's required for a broad catch to be allowed:
+broad_catch_requires = ["logging", "reraise"]  # must have BOTH
+# Ratchet: only flag NEW violations (compare against HEAD)
+ratchet = true
+
+# ── Duplicate Filenames ─────────────────────────────────────────────────────
+
+[duplicates]
+# Suffixes that signal "I made a copy instead of fixing the original"
+forbidden_suffixes = [
+    "_v2", "_v3", "_v4", "_new", "_updated", "_fixed", "_copy",
+    "_backup", "_old", "_revised", "_alt", "_temp", "_tmp", "_wip",
+    "_next", "_improved", "_better", "_refactored", "_clean",
+    "_II", "_two", "_three",
+    "-v2", "-v3", "-v4", "-new", "-updated", "-fixed", "-copy",
+    "-backup", "-old", "-revised", "-alt", "-temp", "-tmp", "-wip",
+    "-next", "-improved", "-better", "-refactored", "-clean",
+]
+
+# Prefixes that signal the same thing
+forbidden_prefixes = [
+    "new_", "new-", "copy_of_", "copy-of-",
+    "backup_", "backup-", "old_", "old-",
+    "fresh_", "fresh-", "my_", "my-",
+    "real_", "real-", "actual_", "actual-",
+]
+
+# ── Changelog ───────────────────────────────────────────────────────────────
+
+[changelog]
+required = true
+file = "CHANGELOG.md"
+# How many code files must change before CHANGELOG is required
+threshold = 3
+
+# ── Circular Imports ────────────────────────────────────────────────────────
+# Pairs of modules where A must NOT import from B.
+# Format: [["source.module", "target.module"]]
+
+[circular_imports]
+module_prefix = "thomas"  # the top-level package name
+# Dependency hierarchy (top imports bottom, never reverse):
+#   cli -> server -> agent -> tools -> core
+#                    agent -> memory -> core
+# core MUST NOT import from any sibling. It is the foundation.
+forbidden_pairs = [
+    ["thomas.server", "thomas.browser"],
+    ["thomas.memory", "thomas.agent"],
+    ["thomas.memory", "thomas.server"],
+    ["thomas.memory", "thomas.tools"],
+    ["thomas.agent", "thomas.cli"],
+    ["thomas.agent", "thomas.server"],
+    ["thomas.core", "thomas.agent"],
+    ["thomas.core", "thomas.server"],
+    ["thomas.core", "thomas.tools"],
+]
+
+# ── Boot Smoke Test ─────────────────────────────────────────────────────────
+# Modules to try importing as a basic health check.
+
+[boot_smoke]
+trigger_on_dirs = ["thomas/"]  # only run when these dirs have changes
+imports = [
+    "thomas",
+    "thomas.core",
+    "thomas.core.config",
+    "thomas.memory",
+    "thomas.agent",
+    "thomas.server",
+]
+
+# ── Type Safety ─────────────────────────────────────────────────────────────
+# Gradual mypy enforcement. Only files listed here are checked.
+
+[type_safety]
+enabled = true
+tool = "mypy"
+args = ["--ignore-missing-imports", "--no-error-summary", "--no-color-output"]
+# Add files here as they pass mypy for the first time
+enabled_files = [
+    "thomas/core/__init__.py",
+]
+
+# ── Dead Code ───────────────────────────────────────────────────────────────
+# Directories containing legacy code that should not be edited.
+
+[dead_code]
+directories = [
+    "thomas/server/web/js/app_parts/",
+]
+redirect_to = "thomas/server/web/js/app_runtime_primary.mjs"

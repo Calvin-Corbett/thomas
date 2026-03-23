@@ -9,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from ._exceptions import CircularIncludeError
-from ._types import Extension, TemplateConfig
+from ._types import Block, Extends, Extension, TemplateConfig
 from .filters import BUILTIN_FILTERS
 from .lexer import Lexer
 from .parser import Parser
@@ -212,14 +212,8 @@ class Environment:
         """
         # Check cache
         if self.config.cache_compiled and name in self._cache:
-            ast, source_hash = self._cache[name]
-            # Verify cache is still valid
-            try:
-                source, _ = self.loader.get_source(name)
-                if self._hash_source(source) == source_hash:
-                    return Template(self, ast, name)
-            except Exception:
-                pass
+            ast, _source_hash = self._cache[name]
+            return Template(self, ast, name)
 
         # Load and compile template
         source, filename = self.loader.get_source(name)
@@ -291,11 +285,9 @@ class Template:
         Returns:
             Rendered output
         """
-        # Add globals to context
         ctx = dict(self.environment.globals)
         ctx.update(context)
 
-        # Check for circular includes
         if self.name in self.environment._include_stack:
             raise CircularIncludeError(f"Circular include detected: {self.name}")
 
@@ -307,7 +299,10 @@ class Template:
                 self.environment.filters,
                 self.environment.tests,
             )
-            output = renderer.render(self.ast, ctx)
+            block_overrides = {node.name: node.body for node in self.ast.body if isinstance(node, Block)}
+            parent_name = next((node.parent for node in self.ast.body if isinstance(node, Extends)), None)
+            render_ast = self.environment.get_template(parent_name).ast if parent_name else self.ast
+            output = renderer.render(render_ast, ctx, block_overrides=block_overrides)
         finally:
             self.environment._include_stack.pop()
 

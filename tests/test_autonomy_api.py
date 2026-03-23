@@ -6,10 +6,10 @@ from datetime import datetime, timezone
 from aiohttp import web
 from aiohttp.test_utils import AioHTTPTestCase
 
-from thomas.autonomy.api import register_autonomy_routes
-from thomas.autonomy.engine import AutonomyEngine
-from thomas.autonomy.policy import AutonomyPolicy
-from thomas.autonomy.store import AutonomyStore
+from thomas.marketplace.autonomy.api import register_autonomy_routes
+from thomas.marketplace.autonomy.engine import AutonomyEngine
+from thomas.marketplace.autonomy.policy import AutonomyPolicy
+from thomas.marketplace.autonomy.store import AutonomyStore
 
 
 class TestAutonomyAPI(AioHTTPTestCase):

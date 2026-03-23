@@ -22,7 +22,10 @@ def test_run_ui_wires_visible_bootdoctor_rescue_and_watchdog() -> None:
         in text
     )
     assert "Detached server failed to become healthy on port {0} (pid {1})." in text
-    assert 'Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths' in text
+    assert (
+        'Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths'
+        in text
+    )
     assert "function Start-DetachedThomasServer" in text
 
 

@@ -4,7 +4,14 @@ from pathlib import Path
 
 from aiohttp.test_utils import AioHTTPTestCase
 
+import thomas.core.rules_of_road as rules_of_road
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
+
+if not hasattr(rules_of_road, "build_remediation_prompt"):
+    rules_of_road.build_remediation_prompt = lambda *args, **kwargs: ""
+if not hasattr(rules_of_road, "evaluate_rules"):
+    rules_of_road.evaluate_rules = lambda *args, **kwargs: {}
+
 from thomas.server.app import create_app
 
 
@@ -39,6 +46,10 @@ class TestServerSettingsPage(AioHTTPTestCase):
         self.assertIn("settings-content", text)
         self.assertIn("General Settings", text)
         self.assertIn("Models & Providers", text)
+        self.assertIn("Workflow Mode", text)
+        self.assertIn("Isolated Desktop Mode", text)
+        self.assertIn("Install Host Service", text)
+        self.assertIn("Open Viewer", text)
 
     async def test_settings_page_scroll_layout_guards_present(self):
         root = Path(__file__).resolve().parents[1]
@@ -75,6 +86,12 @@ class TestServerSettingsPage(AioHTTPTestCase):
         self.assertIn("const PREFERENCES_API = '/api/preferences';", script)
         self.assertIn("buildPreferencesPatch", script)
         self.assertIn("method: 'PATCH'", script)
+        self.assertIn("/api/onboarding/desktop/status", script)
+        self.assertIn("/api/onboarding/desktop/install", script)
+        self.assertIn("/api/onboarding/desktop/trust", script)
+        self.assertIn("/api/onboarding/desktop/open-viewer", script)
+        self.assertIn("saveIsolatedDesktopSettings", script)
+        self.assertIn("installIsolatedDesktopMode", script)
         self.assertNotIn("/api/settings", script)
 
 

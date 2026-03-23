@@ -5,8 +5,8 @@ Tests for solar energy module.
 import math
 from datetime import datetime, timedelta
 
-from thomas.energy._types import EnergySource, WeatherCondition
-from thomas.energy.solar import (
+from thomas.marketplace.energy._types import EnergySource, WeatherCondition
+from thomas.marketplace.energy.solar import (
     SolarPlant,
     apply_temperature_derating,
     calculate_air_mass,

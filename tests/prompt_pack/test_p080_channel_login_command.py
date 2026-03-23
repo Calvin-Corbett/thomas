@@ -5,8 +5,8 @@ import types
 
 import pytest
 
-import thomas.channels.p080_channel_login_command as core
 import thomas.cli.commands.channel_ops.p080_channel_login_command as cli
+import thomas.marketplace.channels.p080_channel_login_command as core
 
 
 def test_channel_login_success_calls_integration_login(monkeypatch: pytest.MonkeyPatch) -> None:

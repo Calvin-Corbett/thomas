@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.legal._exceptions import InvalidContractStateError
-from thomas.legal._types import ContractStatus
-from thomas.legal.contracts import (
+from thomas.marketplace.legal._exceptions import InvalidContractStateError
+from thomas.marketplace.legal._types import ContractStatus
+from thomas.marketplace.legal.contracts import (
     ClauseLibrary,
     ContractManager,
 )

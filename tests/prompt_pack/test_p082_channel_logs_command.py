@@ -6,14 +6,13 @@ from pathlib import Path
 
 import pytest
 
-from thomas.channels.p082_channel_logs_command import (
+from thomas.cli.commands.channel_ops.p082_channel_logs_command import _run_from_args
+from thomas.marketplace.channels.p082_channel_logs_command import (
     ChannelLogsRequest,
     InvalidInputError,
     MissingConfigError,
     get_channel_logs,
 )
-
-from thomas.cli.commands.channel_ops.p082_channel_logs_command import _run_from_args
 
 
 def _write_lines(path: Path, lines: list[str]) -> None:

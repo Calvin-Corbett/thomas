@@ -13,30 +13,32 @@ Tests cover:
 import json
 import re
 import unittest
-from datetime import datetime, date
-from typing import List, Optional, Any
+from datetime import date, datetime
+from typing import Any
 from xml.etree import ElementTree as ET
 
 # Note: These imports assume the modules exist or will be created
 try:
-    from thomas.parsers.types import ParsedOutput
-    from thomas.parsers.json_parser import JSONOutputParser
-    from thomas.parsers.pydantic_parser import PydanticOutputParser, StructuredParser
-    from thomas.parsers.list_parser import CommaSeparatedListParser
-    from thomas.parsers.regex_parser import RegexOutputParser
-    from thomas.parsers.xml_parser import XMLOutputParser
-    from thomas.parsers.datetime_parser import DatetimeParser
-    from thomas.parsers.retry import RetryParser
+    from thomas.marketplace.parsers.datetime_parser import DatetimeParser
+    from thomas.marketplace.parsers.json_parser import JSONOutputParser
+    from thomas.marketplace.parsers.list_parser import CommaSeparatedListParser
+    from thomas.marketplace.parsers.pydantic_parser import PydanticOutputParser, StructuredParser
+    from thomas.marketplace.parsers.regex_parser import RegexOutputParser
+    from thomas.marketplace.parsers.retry import RetryParser
+    from thomas.marketplace.parsers.types import ParsedOutput
+    from thomas.marketplace.parsers.xml_parser import XMLOutputParser
 except ImportError:
     # Fallback: define minimal mock classes
     class ParsedOutput:
         """Basic parsed output container."""
+
         def __init__(self, content: Any, raw: str = None):
             self.content = content
             self.raw = raw
 
     class JSONOutputParser:
         """JSON output parser."""
+
         def parse(self, text: str) -> ParsedOutput:
             # Try to extract JSON from text
             try:
@@ -44,7 +46,7 @@ except ImportError:
                 return ParsedOutput(data, text)
             except json.JSONDecodeError:
                 # Try to find JSON in the text
-                match = re.search(r'\{.*\}|\[.*\]', text, re.DOTALL)
+                match = re.search(r"\{.*\}|\[.*\]", text, re.DOTALL)
                 if match:
                     try:
                         data = json.loads(match.group())
@@ -55,6 +57,7 @@ except ImportError:
 
     class PydanticOutputParser:
         """Pydantic-based structured parser."""
+
         def __init__(self, schema: dict = None):
             self.schema = schema or {}
 
@@ -65,17 +68,20 @@ except ImportError:
 
     class StructuredParser(PydanticOutputParser):
         """Alias for PydanticOutputParser."""
+
         pass
 
     class CommaSeparatedListParser:
         """Parse comma-separated values into a list."""
+
         def parse(self, text: str) -> ParsedOutput:
-            items = [item.strip() for item in text.split(',')]
+            items = [item.strip() for item in text.split(",")]
             return ParsedOutput(items, text)
 
     class RegexOutputParser:
         """Parse text using regex patterns."""
-        def __init__(self, pattern: str, groups: List[str] = None):
+
+        def __init__(self, pattern: str, groups: list[str] = None):
             self.pattern = pattern
             self.groups = groups or []
 
@@ -93,6 +99,7 @@ except ImportError:
 
     class XMLOutputParser:
         """Parse XML output."""
+
         def parse(self, text: str) -> ParsedOutput:
             try:
                 root = ET.fromstring(text)
@@ -102,6 +109,7 @@ except ImportError:
 
     class DatetimeParser:
         """Parse datetime strings."""
+
         def __init__(self, format_str: str = "%Y-%m-%d %H:%M:%S"):
             self.format_str = format_str
 
@@ -114,6 +122,7 @@ except ImportError:
 
     class RetryParser:
         """Parser with retry logic."""
+
         def __init__(self, parser, max_retries: int = 3):
             self.parser = parser
             self.max_retries = max_retries
@@ -167,7 +176,7 @@ class TestJSONOutputParser(unittest.TestCase):
 
     def test_parse_json_array(self):
         """Test parsing JSON array."""
-        json_str = '[1, 2, 3, 4, 5]'
+        json_str = "[1, 2, 3, 4, 5]"
         result = self.parser.parse(json_str)
 
         self.assertEqual(result.content, [1, 2, 3, 4, 5])
@@ -189,7 +198,7 @@ class TestJSONOutputParser(unittest.TestCase):
 
     def test_parse_invalid_json_raises_error(self):
         """Test that invalid JSON raises error."""
-        invalid_json = '{invalid json}'
+        invalid_json = "{invalid json}"
 
         with self.assertRaises(ValueError):
             self.parser.parse(invalid_json)
@@ -203,7 +212,7 @@ class TestJSONOutputParser(unittest.TestCase):
 
     def test_parse_complex_json(self):
         """Test parsing complex nested JSON."""
-        json_str = '''
+        json_str = """
         {
             "users": [
                 {"id": 1, "name": "Alice"},
@@ -214,7 +223,7 @@ class TestJSONOutputParser(unittest.TestCase):
                 "page": 1
             }
         }
-        '''
+        """
         result = self.parser.parse(json_str)
 
         self.assertEqual(len(result.content["users"]), 2)
@@ -231,11 +240,7 @@ class TestPydanticOutputParser(unittest.TestCase):
 
     def test_parser_with_schema(self):
         """Test parser with schema definition."""
-        schema = {
-            "name": "string",
-            "age": "integer",
-            "email": "string"
-        }
+        schema = {"name": "string", "age": "integer", "email": "string"}
         parser = PydanticOutputParser(schema=schema)
         self.assertEqual(parser.schema, schema)
 
@@ -319,7 +324,7 @@ class TestRegexOutputParser(unittest.TestCase):
 
     def test_simple_regex_pattern(self):
         """Test parsing with simple regex."""
-        parser = RegexOutputParser(r'name: (\w+)')
+        parser = RegexOutputParser(r"name: (\w+)")
         text = "name: Alice"
         result = parser.parse(text)
 
@@ -327,10 +332,7 @@ class TestRegexOutputParser(unittest.TestCase):
 
     def test_regex_with_groups(self):
         """Test regex with named groups."""
-        parser = RegexOutputParser(
-            r'(?P<name>\w+): (?P<value>\d+)',
-            groups=["name", "value"]
-        )
+        parser = RegexOutputParser(r"(?P<name>\w+): (?P<value>\d+)", groups=["name", "value"])
         text = "count: 42"
         result = parser.parse(text)
 
@@ -338,7 +340,7 @@ class TestRegexOutputParser(unittest.TestCase):
 
     def test_regex_multiple_matches(self):
         """Test regex matching in text with multiple patterns."""
-        parser = RegexOutputParser(r'Result: (\d+)')
+        parser = RegexOutputParser(r"Result: (\d+)")
         text = "Processing... Result: 42 Complete."
         result = parser.parse(text)
 
@@ -346,7 +348,7 @@ class TestRegexOutputParser(unittest.TestCase):
 
     def test_regex_pattern_not_found(self):
         """Test error when pattern not found."""
-        parser = RegexOutputParser(r'xxx')
+        parser = RegexOutputParser(r"xxx")
         text = "no match here"
 
         with self.assertRaises(ValueError):
@@ -354,10 +356,7 @@ class TestRegexOutputParser(unittest.TestCase):
 
     def test_regex_extraction_of_multiple_groups(self):
         """Test extracting multiple regex groups."""
-        parser = RegexOutputParser(
-            r'(\w+) scored (\d+) points',
-            groups=["player", "score"]
-        )
+        parser = RegexOutputParser(r"(\w+) scored (\d+) points", groups=["player", "score"])
         text = "Alice scored 95 points"
         result = parser.parse(text)
 
@@ -365,9 +364,7 @@ class TestRegexOutputParser(unittest.TestCase):
 
     def test_regex_with_complex_pattern(self):
         """Test complex regex pattern."""
-        parser = RegexOutputParser(
-            r'Email: ([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
-        )
+        parser = RegexOutputParser(r"Email: ([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})")
         text = "Contact us at Email: user@example.com today."
         result = parser.parse(text)
 
@@ -382,12 +379,12 @@ class TestXMLOutputParser(unittest.TestCase):
 
     def test_parse_simple_xml(self):
         """Test parsing simple XML."""
-        xml_str = '<root><name>Alice</name></root>'
+        xml_str = "<root><name>Alice</name></root>"
         result = self.parser.parse(xml_str)
 
         self.assertIsNotNone(result.content)
         root = result.content
-        self.assertEqual(root.find('name').text, 'Alice')
+        self.assertEqual(root.find("name").text, "Alice")
 
     def test_parse_xml_with_attributes(self):
         """Test parsing XML with attributes."""
@@ -395,12 +392,12 @@ class TestXMLOutputParser(unittest.TestCase):
         result = self.parser.parse(xml_str)
 
         root = result.content
-        self.assertEqual(root.get('id'), '123')
-        self.assertEqual(root.find('name').text, 'Bob')
+        self.assertEqual(root.get("id"), "123")
+        self.assertEqual(root.find("name").text, "Bob")
 
     def test_parse_nested_xml(self):
         """Test parsing nested XML structure."""
-        xml_str = '''
+        xml_str = """
         <root>
             <user>
                 <profile>
@@ -409,38 +406,38 @@ class TestXMLOutputParser(unittest.TestCase):
                 </profile>
             </user>
         </root>
-        '''
+        """
         result = self.parser.parse(xml_str)
 
         root = result.content
-        name_elem = root.find('.//name')
-        self.assertEqual(name_elem.text, 'Charlie')
+        name_elem = root.find(".//name")
+        self.assertEqual(name_elem.text, "Charlie")
 
     def test_parse_xml_with_multiple_elements(self):
         """Test parsing XML with multiple similar elements."""
-        xml_str = '''
+        xml_str = """
         <users>
             <user>Alice</user>
             <user>Bob</user>
             <user>Charlie</user>
         </users>
-        '''
+        """
         result = self.parser.parse(xml_str)
 
-        users = result.content.findall('user')
+        users = result.content.findall("user")
         self.assertEqual(len(users), 3)
-        self.assertEqual(users[0].text, 'Alice')
+        self.assertEqual(users[0].text, "Alice")
 
     def test_parse_invalid_xml(self):
         """Test error on invalid XML."""
-        invalid_xml = '<root><unclosed>'
+        invalid_xml = "<root><unclosed>"
 
         with self.assertRaises(ValueError):
             self.parser.parse(invalid_xml)
 
     def test_xml_preserves_raw_text(self):
         """Test that raw XML is preserved."""
-        xml_str = '<test>data</test>'
+        xml_str = "<test>data</test>"
         result = self.parser.parse(xml_str)
 
         self.assertEqual(result.raw, xml_str)
@@ -540,7 +537,7 @@ class TestRetryParser(unittest.TestCase):
 
     def test_retry_fails_after_max_attempts(self):
         """Test that parser fails after max retries."""
-        base_parser = RegexOutputParser(r'xxx')
+        base_parser = RegexOutputParser(r"xxx")
         retry_parser = RetryParser(base_parser, max_retries=2)
 
         text = "no match"

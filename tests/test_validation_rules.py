@@ -2,9 +2,9 @@
 Tests for built-in validation rules.
 """
 
-from thomas.validation import rules
-from thomas.validation._types import SchemaDefinition
-from thomas.validation.core import Validator
+from thomas.marketplace.validation import rules
+from thomas.marketplace.validation._types import SchemaDefinition
+from thomas.marketplace.validation.core import Validator
 
 
 class TestRequiredRule:

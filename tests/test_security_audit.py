@@ -2,8 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.security.security_audit import run_security_audit
-
+from thomas.marketplace.security.security_audit import run_security_audit
 
 ROOT = Path(__file__).resolve().parents[1]
 

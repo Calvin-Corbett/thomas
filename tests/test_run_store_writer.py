@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from thomas.observability import run_store
+from thomas.marketplace.observability import run_store
 
 
 def test_threaded_writer_falls_back_when_worker_is_unavailable(tmp_path: Path) -> None:

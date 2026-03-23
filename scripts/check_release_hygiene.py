@@ -11,10 +11,10 @@ try:
 except Exception:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
-from thomas.observability.onboarding_outcomes import build_onboarding_outcome_report
-from thomas.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
-from thomas.observability.run_db import resolve_runs_db_path
-from thomas.security.security_audit import run_security_audit
+from thomas.marketplace.observability.onboarding_outcomes import build_onboarding_outcome_report
+from thomas.marketplace.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
+from thomas.marketplace.observability.run_db import resolve_runs_db_path
+from thomas.marketplace.security.security_audit import run_security_audit
 
 ROOT = Path(__file__).resolve().parents[1]
 

@@ -7,11 +7,11 @@ pytestmark = pytest.mark.xfail(
 """Tests for thomas.human_loop module."""
 import unittest
 
-from thomas.human_loop.approval import ApprovalGate, GateType
-from thomas.human_loop.escalation import EscalationManager
-from thomas.human_loop.handler import HumanInputHandler
-from thomas.human_loop.proxy import HumanProxy
-from thomas.human_loop.types import (
+from thomas.marketplace.human_loop.approval import ApprovalGate, GateType
+from thomas.marketplace.human_loop.escalation import EscalationManager
+from thomas.marketplace.human_loop.handler import HumanInputHandler
+from thomas.marketplace.human_loop.proxy import HumanProxy
+from thomas.marketplace.human_loop.types import (
     EscalationLevel,
     HumanInputMode,
     HumanLoopConfig,

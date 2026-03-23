@@ -1,7 +1,7 @@
 """Tests for table processing module."""
 
-from thomas.doc_processing._types import Table, TableCell
-from thomas.doc_processing.tables import (
+from thomas.marketplace.doc_processing._types import Table, TableCell
+from thomas.marketplace.doc_processing.tables import (
     CrossTableReferencer,
     TableComparator,
     TableConverter,

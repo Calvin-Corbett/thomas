@@ -1,8 +1,8 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.security.incident_drill import run_security_incident_drill
+from thomas.marketplace.security.incident_drill import run_security_incident_drill
 
 
 def test_security_incident_drill_passes_artifact_only_with_required_docs(tmp_path: Path) -> None:

@@ -1,9 +1,9 @@
 import unittest
 
-from thomas.policy.config import PolicyConfig
-from thomas.policy.policy import PolicyEngine
-from thomas.policy.redact import Redactor
-from thomas.policy.types import PolicyContext
+from thomas.marketplace.policy.config import PolicyConfig
+from thomas.marketplace.policy.policy import PolicyEngine
+from thomas.marketplace.policy.redact import Redactor
+from thomas.marketplace.policy.types import PolicyContext
 
 
 class TestRedaction(unittest.TestCase):

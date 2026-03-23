@@ -10,9 +10,9 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.travel._exceptions import BookingError, InvalidPassportError
-from thomas.travel._types import Airport, FareClass, Flight, Passenger, Seat
-from thomas.travel.booking import (
+from thomas.marketplace.travel._exceptions import BookingError, InvalidPassportError
+from thomas.marketplace.travel._types import Airport, FareClass, Flight, Passenger, Seat
+from thomas.marketplace.travel.booking import (
     BookingModificationEngine,
     BookingWorkflow,
     CancellationEngine,
@@ -238,7 +238,7 @@ class TestBookingModification:
         """Test changing flight date."""
         engine = BookingModificationEngine()
 
-        from thomas.travel.booking import Booking, BookingStatus
+        from thomas.marketplace.travel.booking import Booking, BookingStatus
 
         booking = Booking(
             pnr="ABC123",
@@ -289,7 +289,7 @@ class TestCancellation:
 
     def test_cancel_booking_full_refund(self, sample_flight):
         """Test cancellation with full refund."""
-        from thomas.travel.booking import Booking, BookingStatus
+        from thomas.marketplace.travel.booking import Booking, BookingStatus
 
         booking = Booking(
             pnr="ABC123",
@@ -309,7 +309,7 @@ class TestCancellation:
 
     def test_cancel_booking_partial_refund(self, sample_flight):
         """Test cancellation with partial refund."""
-        from thomas.travel.booking import Booking, BookingStatus
+        from thomas.marketplace.travel.booking import Booking, BookingStatus
 
         # Flight is 2 days away
         near_flight = Flight(

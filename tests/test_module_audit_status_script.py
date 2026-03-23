@@ -5,7 +5,8 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 import scripts.module_audit_status as mod
-from thomas.observability.module_audit import MAJOR_MODULES
+
+from thomas.marketplace.observability.module_audit import MAJOR_MODULES
 
 
 def _write_registry(
@@ -56,9 +57,7 @@ def test_module_audit_status_strict_fails_for_stale(tmp_path: Path, capsys) -> N
     assert payload["strict"] is True
 
 
-def test_module_audit_status_passes_with_fresh_entries_and_issue_count(
-    tmp_path: Path, capsys
-) -> None:
+def test_module_audit_status_passes_with_fresh_entries_and_issue_count(tmp_path: Path, capsys) -> None:
     registry = tmp_path / "module_audit_log.json"
     fresh = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     _write_registry(registry, audited_at=fresh, with_issues=True)

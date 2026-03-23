@@ -2,7 +2,7 @@
 
 from datetime import timedelta
 
-from thomas.caching import InclusivityMode, MultiTierCache, WritePolicy
+from thomas.marketplace.caching import InclusivityMode, MultiTierCache, WritePolicy
 
 
 class SimpleMemoryTier:

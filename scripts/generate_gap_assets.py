@@ -9,7 +9,6 @@ import json
 import shutil
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 PROFILE_COUNT = 192
 FIXTURE_COUNT = 1536
@@ -134,7 +133,6 @@ def generate_browser_workflow_profiles(profile_count: int = PROFILE_COUNT) -> in
         "            return row\n"
         "    return None\n",
     )
-
 
     return profile_count
 
@@ -305,7 +303,6 @@ def generate_browser_workflow_fixture_corpus(fixture_count: int = FIXTURE_COUNT)
         for root in fixture_roots:
             _write_json(root / f"case_{idx:04d}.json", fixture)
 
-
     return fixture_count
 
 
@@ -352,8 +349,7 @@ def generate_extension_packs() -> int:
                         "healthcheck",
                     ],
                     "description": (
-                        f"Operational extension pack for {domain} workflows via {target} "
-                        f"with {mode} mode policies."
+                        f"Operational extension pack for {domain} workflows via {target} " f"with {mode} mode policies."
                     ),
                 }
                 _write_json(ext_dir / "manifest.json", manifest)
@@ -392,7 +388,6 @@ def generate_extension_packs() -> int:
             "packs": catalog,
         },
     )
-
 
     return len(catalog)
 

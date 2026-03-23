@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.real_estate._exceptions import InsufficientDataError
-from thomas.real_estate._types import Address, Comparable, Property, PropertyType, ZoningType
-from thomas.real_estate.valuation import (
+from thomas.marketplace.real_estate._exceptions import InsufficientDataError
+from thomas.marketplace.real_estate._types import Address, Comparable, Property, PropertyType, ZoningType
+from thomas.marketplace.real_estate.valuation import (
     AppreciationForecasting,
     AutomatedValuationModel,
     ComparableSalesAnalysis,

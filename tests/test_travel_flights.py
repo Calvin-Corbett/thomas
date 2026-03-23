@@ -10,9 +10,9 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.travel._exceptions import FlightNotAvailableError, InvalidConnectionError, NoRouteFoundError
-from thomas.travel._types import Currency, Fare, FareClass, Flight, Seat
-from thomas.travel.flights import (
+from thomas.marketplace.travel._exceptions import FlightNotAvailableError, InvalidConnectionError, NoRouteFoundError
+from thomas.marketplace.travel._types import Currency, Fare, FareClass, Flight, Seat
+from thomas.marketplace.travel.flights import (
     CodeshareManager,
     DijkstraRouter,
     FareClassManager,
@@ -20,7 +20,7 @@ from thomas.travel.flights import (
     FlightScheduler,
     FlightSearchEngine,
 )
-from thomas.travel.geography import AirportDatabase
+from thomas.marketplace.travel.geography import AirportDatabase
 
 
 @pytest.fixture

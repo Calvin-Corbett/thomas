@@ -6,8 +6,8 @@ pytestmark = pytest.mark.xfail(
 )
 """Tests for irrigation module."""
 
-from thomas.agriculture._types import IrrigationType
-from thomas.agriculture.irrigation import (
+from thomas.marketplace.agriculture._types import IrrigationType
+from thomas.marketplace.agriculture.irrigation import (
     CropWaterRequirement,
     DeficitIrrigationStrategy,
     FerrtigationCalculator,

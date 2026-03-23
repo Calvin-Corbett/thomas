@@ -1,21 +1,23 @@
-﻿import io
+import io
 import os
 import time
-from pathlib import Path
 
 import pytest
+
 pytest.importorskip("PIL")
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from PIL import Image
 
-from thomas.vision.api import (
-    router as vision_router,
-    get_upload_dir,
+from thomas.marketplace.vision.api import (
     cleanup_old_uploads,
+    get_upload_dir,
     resolve_upload_paths,
 )
-from thomas.vision.handler import (
+from thomas.marketplace.vision.api import (
+    router as vision_router,
+)
+from thomas.marketplace.vision.handler import (
     build_anthropic_payload,
     build_openai_payload,
     build_provider_request,
@@ -164,7 +166,7 @@ async def test_ocr_fallback_path(monkeypatch, tmp_path):
     img.write_bytes(_png_bytes())
 
     # Mock OCR to avoid requiring tesseract in CI
-    monkeypatch.setattr("thomas.vision.handler.extract_text_from_images", lambda paths: ["hello from ocr"])
+    monkeypatch.setattr("thomas.marketplace.vision.handler.extract_text_from_images", lambda paths: ["hello from ocr"])
 
     req = await build_provider_request(
         prompt="read this",
@@ -175,5 +177,3 @@ async def test_ocr_fallback_path(monkeypatch, tmp_path):
     assert req.used_ocr_fallback is True
     assert "OCR_EXTRACT_FROM_IMAGES" in (req.ocr_text or "")
     assert req.provider == "openai"
-
-

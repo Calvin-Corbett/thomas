@@ -53,6 +53,8 @@ class TestSetupRoutesLocal(AioHTTPTestCase):
         self.assertIn("system", body)
         self.assertIn("platform", body["system"])
         self.assertIn("python_version", body["system"])
+        self.assertIn("isolated_desktop", body)
+        self.assertIn("installation_state", body["isolated_desktop"])
 
     async def test_bootstrap_returns_tools(self):
         resp = await self.client.get("/api/setup/bootstrap")

@@ -54,7 +54,7 @@ def t_audit():
     import os
     import tempfile
 
-    from thomas.observability import file_audit
+    from thomas.marketplace.observability import file_audit
 
     with tempfile.TemporaryDirectory() as td:
         file_audit.init_audit(os.path.join(td, "a.db"))

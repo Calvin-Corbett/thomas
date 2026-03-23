@@ -15,11 +15,11 @@ import os
 import re
 import subprocess
 import sys
+from collections.abc import Iterable, Mapping
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, Iterable, List, Mapping
-
+from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASELINE = ROOT / "demo" / "baselines" / "openclaw.current.json"
@@ -81,13 +81,13 @@ class BaselineSpec:
     baseline_path: Path
     commit: str
     local_snapshot_path: Path
-    thomas_roots: List[str]
-    openclaw_roots: List[str]
+    thomas_roots: list[str]
+    openclaw_roots: list[str]
     openclaw_top_level_commands: int
-    openclaw_subcommand_depth: Dict[str, int]
+    openclaw_subcommand_depth: dict[str, int]
 
 
-def _read_json(path: Path) -> Dict[str, Any]:
+def _read_json(path: Path) -> dict[str, Any]:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:
@@ -135,7 +135,7 @@ def _load_baseline(path: Path) -> BaselineSpec:
     depth_raw = comparison.get("openclaw_subcommand_depth") or {}
     if not isinstance(depth_raw, dict):
         raise SystemExit("comparison.openclaw_subcommand_depth must be an object")
-    openclaw_depth: Dict[str, int] = {}
+    openclaw_depth: dict[str, int] = {}
     for k, v in depth_raw.items():
         key = str(k).strip()
         if not key:
@@ -155,7 +155,7 @@ def _load_baseline(path: Path) -> BaselineSpec:
     )
 
 
-def _count_code(root_paths: Iterable[Path]) -> Dict[str, int]:
+def _count_code(root_paths: Iterable[Path]) -> dict[str, int]:
     files = 0
     loc = 0
     for p in _iter_code_files(root_paths):
@@ -197,7 +197,7 @@ def _iter_code_files(root_paths: Iterable[Path]) -> Iterable[Path]:
                 yield p
 
 
-def _count_text_occurrences(root_paths: Iterable[Path], needle: str) -> Dict[str, int]:
+def _count_text_occurrences(root_paths: Iterable[Path], needle: str) -> dict[str, int]:
     files = 0
     occurrences = 0
     for p in _iter_code_files(root_paths):
@@ -236,7 +236,7 @@ def _metric_row(
     openclaw: int | float,
     preference: str,
     rationale: str,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     winner = "tie"
     if preference == "higher_is_better":
         if float(thomas) > float(openclaw):
@@ -281,7 +281,7 @@ def _is_test_file(path: Path) -> bool:
     return False
 
 
-def _count_test_code(root_paths: Iterable[Path]) -> Dict[str, int]:
+def _count_test_code(root_paths: Iterable[Path]) -> dict[str, int]:
     files = 0
     loc = 0
     for p in _iter_code_files(root_paths):
@@ -297,7 +297,7 @@ def _count_test_code(root_paths: Iterable[Path]) -> Dict[str, int]:
     return {"files": files, "loc": loc}
 
 
-def _run_help(args: List[str]) -> str:
+def _run_help(args: list[str]) -> str:
     proc = subprocess.run(
         [sys.executable, "-m", "thomas"] + args,
         cwd=ROOT,
@@ -308,7 +308,7 @@ def _run_help(args: List[str]) -> str:
     return out
 
 
-def _parse_click_commands(help_text: str) -> List[str]:
+def _parse_click_commands(help_text: str) -> list[str]:
     lines = help_text.splitlines()
     start = None
     for i, line in enumerate(lines):
@@ -318,7 +318,7 @@ def _parse_click_commands(help_text: str) -> List[str]:
     if start is None:
         return []
 
-    names: List[str] = []
+    names: list[str] = []
     for line in lines[start:]:
         stripped = line.strip()
         if not stripped:
@@ -343,7 +343,7 @@ def _count_subcommands(command: str) -> int:
     return len(_parse_click_commands(help_text))
 
 
-def _build_result(spec: BaselineSpec) -> Dict[str, Any]:
+def _build_result(spec: BaselineSpec) -> dict[str, Any]:
     thomas_root_paths = [ROOT / rel for rel in spec.thomas_roots]
     openclaw_root_paths = [spec.local_snapshot_path / rel for rel in spec.openclaw_roots]
 
@@ -392,7 +392,7 @@ def _build_result(spec: BaselineSpec) -> Dict[str, Any]:
     thomas_responses_compat = _count_text_occurrences(thomas_gateway_paths, "/v1/responses")
     openclaw_responses_compat = _count_text_occurrences(openclaw_gateway_paths, "/v1/responses")
 
-    metric_board: List[Dict[str, Any]] = [
+    metric_board: list[dict[str, Any]] = [
         _metric_row(
             metric="loc.total_files",
             thomas=int(thomas_code["files"]),
@@ -519,7 +519,7 @@ def _build_result(spec: BaselineSpec) -> Dict[str, Any]:
         )
 
     metric_summary = {"thomas_wins": 0, "openclaw_wins": 0, "ties": 0, "total": len(metric_board)}
-    openclaw_leads: List[Dict[str, Any]] = []
+    openclaw_leads: list[dict[str, Any]] = []
     for row in metric_board:
         winner = str(row.get("winner") or "tie")
         if winner == "thomas":
@@ -607,7 +607,9 @@ def _print_human(result: Mapping[str, Any]) -> None:
             )
     print("")
     print("CLI Surface")
-    print(f"- top-level commands: Thomas {cli['thomas_top_level_commands']} vs OpenClaw {cli['openclaw_top_level_commands']}")
+    print(
+        f"- top-level commands: Thomas {cli['thomas_top_level_commands']} vs OpenClaw {cli['openclaw_top_level_commands']}"
+    )
     print(
         "- tracked subcommand depth: "
         f"Thomas {cli['thomas_depth_total']} vs OpenClaw {cli['openclaw_depth_total']} "
@@ -630,7 +632,7 @@ def _print_human(result: Mapping[str, Any]) -> None:
             print(f"  - ... and {len(leads) - 10} more")
 
 
-def run(argv: List[str] | None = None) -> int:
+def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Compare Thomas against pinned OpenClaw baseline.")
     parser.add_argument(
         "--baseline",

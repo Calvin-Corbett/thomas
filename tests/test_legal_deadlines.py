@@ -4,8 +4,8 @@ from datetime import date, timedelta
 
 import pytest
 
-from thomas.legal._exceptions import DeadlineCalculationError
-from thomas.legal.deadlines import DeadlineManager
+from thomas.marketplace.legal._exceptions import DeadlineCalculationError
+from thomas.marketplace.legal.deadlines import DeadlineManager
 
 
 class TestDeadlineManager:

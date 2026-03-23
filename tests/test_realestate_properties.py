@@ -5,16 +5,16 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.real_estate._exceptions import (
+from thomas.marketplace.real_estate._exceptions import (
     PropertyNotFoundError,
 )
-from thomas.real_estate._types import (
+from thomas.marketplace.real_estate._types import (
     Address,
     Property,
     PropertyType,
     ZoningType,
 )
-from thomas.real_estate.properties import (
+from thomas.marketplace.real_estate.properties import (
     GeospatialSearch,
     PropertyComparison,
     PropertyDatabase,

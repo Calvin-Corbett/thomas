@@ -2,9 +2,9 @@
 
 import pytest
 
-from thomas.cv import core, features
-from thomas.cv._exceptions import InvalidParameterError
-from thomas.cv._types import Descriptor, Feature
+from thomas.marketplace.cv import core, features
+from thomas.marketplace.cv._exceptions import InvalidParameterError
+from thomas.marketplace.cv._types import Descriptor, Feature
 
 
 class TestHarrisCornerDetector:

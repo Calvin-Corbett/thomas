@@ -8,9 +8,10 @@ from pathlib import Path
 from aiohttp import web
 from aiohttp.test_utils import TestClient, TestServer
 
-from thomas.observability.run_db import ENV_DB_PATH
-from thomas.observability.run_store_replay import count_events
+from thomas.marketplace.observability.run_db import ENV_DB_PATH
+from thomas.marketplace.observability.run_store_replay import count_events
 from thomas.server.middleware.replay_observability import replay_observability_middleware
+
 
 def test_middleware_creates_run_and_records_http(tmp_path: Path):
     async def _run() -> None:

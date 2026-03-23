@@ -2,13 +2,13 @@
 
 from datetime import datetime, timedelta
 
-from thomas.siem._types import (
+from thomas.marketplace.siem._types import (
     EventCategory,
     EventSeverity,
     Indicator,
     SecurityEvent,
 )
-from thomas.siem.detection import (
+from thomas.marketplace.siem.detection import (
     AnomalyDetector,
     BehavioralAnalyzer,
     BruteForceDetector,

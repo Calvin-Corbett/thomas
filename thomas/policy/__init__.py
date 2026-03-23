@@ -1,12 +1,19 @@
-"""Guardrails / Policy subsystem for Thomas.
+"""Backward-compatible bridge for the moved policy package."""
 
-Off-by-default. When enabled, PolicyEngine evaluates each tool call and can:
-  - ALLOW
-  - DENY (no execution; returns ok=false tool result)
-  - REQUIRE_APPROVAL (pause until user decision)
-"""
+from __future__ import annotations
 
-from .types import PolicyDecisionType, PolicyDecision, PolicyContext
-from .policy import PolicyEngine
-from .config import PolicyConfig, load_policy_config
-from .redact import Redactor
+from pathlib import Path
+from pkgutil import extend_path
+
+__path__ = extend_path(__path__, __name__)
+_MARKETPLACE_DIR = Path(__file__).resolve().parents[1] / "marketplace" / "policy"
+_MARKETPLACE_PATH = str(_MARKETPLACE_DIR)
+if _MARKETPLACE_DIR.exists() and _MARKETPLACE_PATH not in __path__:
+    __path__.append(_MARKETPLACE_PATH)
+
+from thomas.marketplace.policy import *  # noqa: F401,F403
+
+del Path
+del extend_path
+del _MARKETPLACE_DIR
+del _MARKETPLACE_PATH

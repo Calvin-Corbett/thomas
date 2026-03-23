@@ -1,5 +1,6 @@
 import unittest
-from thomas.realtime.intent import predict_intent, next_action_suggestions
+
+from thomas.marketplace.realtime.intent import next_action_suggestions, predict_intent
 
 
 class TestIntent(unittest.TestCase):

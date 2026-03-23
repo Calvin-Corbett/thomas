@@ -10,6 +10,7 @@ from ._types import (
     Block,
     Call,
     Context,
+    Extends,
     FilterBlock,
     ForLoop,
     IfBlock,
@@ -93,7 +94,9 @@ class Renderer:
         self.output = ""
         self.context: Context | None = None
 
-    def render(self, ast: Template, context_vars: dict[str, Any]) -> str:
+    def render(
+        self, ast: Template, context_vars: dict[str, Any], block_overrides: dict[str, list[TemplateNode]] | None = None
+    ) -> str:
         """
         Render template AST with given context variables.
 
@@ -106,6 +109,8 @@ class Renderer:
         """
         self.output = ""
         self.context = Context(variables=context_vars)
+        if block_overrides:
+            self.context.blocks.update(block_overrides)
 
         try:
             self._render_node(ast)
@@ -140,6 +145,8 @@ class Renderer:
             self._render_call(node)
         elif isinstance(node, RawBlock):
             self._render_raw(node)
+        elif isinstance(node, Extends):
+            return
         else:
             raise TemplateRuntimeError(f"Unknown node type: {type(node)}")
 
@@ -375,9 +382,38 @@ class Renderer:
         # Variable reference
         return self._resolve_variable(expr)
 
+    def _evaluate_test_call(self, value_expr: str, test_expr: str) -> bool:
+        """Evaluate a registered template test expression."""
+        value = self._evaluate_expression(value_expr)
+        test_expr = test_expr.strip()
+        test_name = test_expr
+        test_args: list[Any] = []
+
+        if test_expr.endswith(")") and "(" in test_expr:
+            test_name, raw_args = test_expr.split("(", 1)
+            raw_args = raw_args[:-1].strip()
+            if raw_args:
+                test_args = [self._evaluate_expression(part.strip()) for part in raw_args.split(",") if part.strip()]
+
+        test_name = test_name.strip()
+        if test_name not in self.tests:
+            raise TemplateRuntimeError(f"Test not found: {test_name}")
+        try:
+            return bool(self.tests[test_name](value, *test_args))
+        except Exception as e:
+            raise TemplateRuntimeError(f"Test error in {test_name}: {e}") from e
+
     def _evaluate_condition(self, condition: str) -> bool:
         """Evaluate a condition expression."""
         condition = condition.strip()
+
+        if " is not " in condition:
+            value_expr, test_expr = condition.split(" is not ", 1)
+            return not self._evaluate_test_call(value_expr.strip(), test_expr.strip())
+
+        if " is " in condition:
+            value_expr, test_expr = condition.split(" is ", 1)
+            return self._evaluate_test_call(value_expr.strip(), test_expr.strip())
 
         # Handle comparisons
         for op, op_name in [

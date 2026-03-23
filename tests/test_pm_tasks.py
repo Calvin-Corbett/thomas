@@ -2,12 +2,12 @@
 
 import pytest
 
-from thomas.project_mgmt._exceptions import (
+from thomas.marketplace.project_mgmt._exceptions import (
     CircularDependencyError,
     TaskNotFoundError,
 )
-from thomas.project_mgmt._types import DependencyType, Priority, TaskStatus
-from thomas.project_mgmt.tasks import TaskManager
+from thomas.marketplace.project_mgmt._types import DependencyType, Priority, TaskStatus
+from thomas.marketplace.project_mgmt.tasks import TaskManager
 
 
 class TestTaskManager:

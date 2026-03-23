@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from thomas.observability.module_audit import (
+from thomas.marketplace.observability.module_audit import (
     build_file_hashes,
     load_registry,
     module_for_path,

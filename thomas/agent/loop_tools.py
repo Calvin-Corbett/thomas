@@ -20,8 +20,8 @@ from thomas.agent.loop_tool_exec import (
 )
 from thomas.agent.routing import RouteDecision
 from thomas.core.events import AgentEvent
+from thomas.marketplace.observability import file_audit as _file_audit
 from thomas.models.protocol import profile_prefers_always_tools
-from thomas.observability import file_audit as _file_audit
 
 if TYPE_CHECKING:
     from thomas.agent.loop_core import AgentLoop

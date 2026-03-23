@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import json
 from pathlib import Path
@@ -167,5 +167,3 @@ def test_cli_browser_artifact_screenshot_json_failure(tmp_path: Path) -> None:
     payload = json.loads(result.stdout)
     assert payload["ok"] is False
     assert payload["error"]["code"] == BrowserArtifactScreenshotErrorCode.INVALID_INPUT.value
-
-

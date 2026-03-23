@@ -4,8 +4,8 @@ Tests for metrics module.
 
 import pytest
 
-from thomas.monitoring._exceptions import MetricError
-from thomas.monitoring.metrics import (
+from thomas.marketplace.monitoring._exceptions import MetricError
+from thomas.marketplace.monitoring.metrics import (
     Counter,
     Gauge,
     Histogram,

@@ -4,7 +4,7 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.real_estate.investment import (
+from thomas.marketplace.real_estate.investment import (
     AcquisitionAnalysis,
     CapRateAnalysis,
     CashFlowProjection,

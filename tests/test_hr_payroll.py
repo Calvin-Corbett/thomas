@@ -5,9 +5,9 @@ from decimal import Decimal
 
 import pytest
 
-from thomas.hr_platform._exceptions import PayrollCalculationError
-from thomas.hr_platform._types import Employee, EmploymentStatus
-from thomas.hr_platform.payroll import PayrollEngine
+from thomas.marketplace.hr_platform._exceptions import PayrollCalculationError
+from thomas.marketplace.hr_platform._types import Employee, EmploymentStatus
+from thomas.marketplace.hr_platform.payroll import PayrollEngine
 
 
 class TestPayrollEngine:

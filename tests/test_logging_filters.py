@@ -2,8 +2,8 @@
 
 import unittest
 
-from thomas.logging_framework._types import LogLevel
-from thomas.logging_framework.filters import (
+from thomas.marketplace.logging_framework._types import LogLevel
+from thomas.marketplace.logging_framework.filters import (
     CompositeFilter,
     ContextFilter,
     DeduplicationFilter,
@@ -15,8 +15,8 @@ from thomas.logging_framework.filters import (
     RegexFilter,
     SamplingFilter,
 )
-from thomas.logging_framework.handlers import MemoryHandler
-from thomas.logging_framework.logger import Logger, get_logger
+from thomas.marketplace.logging_framework.handlers import MemoryHandler
+from thomas.marketplace.logging_framework.logger import Logger, get_logger
 
 
 class TestLevelFilter(unittest.TestCase):

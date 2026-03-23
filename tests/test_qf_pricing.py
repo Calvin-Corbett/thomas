@@ -3,9 +3,9 @@
 import numpy as np
 import pytest
 
-from thomas.quantfin._exceptions import PricingError
-from thomas.quantfin._types import OptionType
-from thomas.quantfin.pricing import (
+from thomas.marketplace.quantfin._exceptions import PricingError
+from thomas.marketplace.quantfin._types import OptionType
+from thomas.marketplace.quantfin.pricing import (
     asian_option,
     barrier_option,
     binomial_american_option,

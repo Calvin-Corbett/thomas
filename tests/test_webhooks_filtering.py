@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.webhooks._exceptions import FilterExpressionError
-from thomas.webhooks.filtering import EventFilter, FilterParser
+from thomas.marketplace.webhooks._exceptions import FilterExpressionError
+from thomas.marketplace.webhooks.filtering import EventFilter, FilterParser
 
 
 class TestFilterParser:

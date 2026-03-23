@@ -4,8 +4,8 @@ Tests for health checking module.
 
 from datetime import timedelta
 
-from thomas.monitoring._types import Check, CheckStatus
-from thomas.monitoring.health import HealthChecker, HealthStatus
+from thomas.marketplace.monitoring._types import Check, CheckStatus
+from thomas.marketplace.monitoring.health import HealthChecker, HealthStatus
 
 
 class TestHealthChecker:
@@ -43,7 +43,7 @@ class TestHealthChecker:
         """Test registering custom check handler."""
 
         def custom_handler(check: Check):
-            from thomas.monitoring._types import CheckResult, CheckStatus
+            from thomas.marketplace.monitoring._types import CheckResult, CheckStatus
 
             return CheckResult(
                 check=check,
@@ -275,7 +275,7 @@ class TestCheckExecution:
 
     def test_check_result_response_time(self) -> None:
         """Test check result includes response time."""
-        from thomas.monitoring._types import CheckResult
+        from thomas.marketplace.monitoring._types import CheckResult
 
         check = Check(name="test", check_type="http")
         result = CheckResult(
@@ -288,7 +288,7 @@ class TestCheckExecution:
 
     def test_check_result_details(self) -> None:
         """Test check result details."""
-        from thomas.monitoring._types import CheckResult
+        from thomas.marketplace.monitoring._types import CheckResult
 
         check = Check(name="test", check_type="disk")
         details = {

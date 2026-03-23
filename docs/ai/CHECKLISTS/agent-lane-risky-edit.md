@@ -10,6 +10,7 @@
   - local module `GUARDRAILS.md` for touched paths
 - Required checks:
   - run focused regression tests for changed behavior
+  - run `python scripts/test_stepup_protocol.py` when the change needs repo-wide regression confidence
   - run release hygiene checks when product behavior changes
   - validate workboard claim requirements if tracked work is required
 - Required proof:

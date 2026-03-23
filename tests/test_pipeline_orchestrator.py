@@ -8,21 +8,21 @@ sys.path.insert(0, "/sessions/zen-pensive-cannon/mnt/Thomas")
 
 from datetime import timedelta
 
-from thomas.data_pipeline._exceptions import CircuitBreakerOpen, RetryError
-from thomas.data_pipeline._types import (
+from thomas.marketplace.data_pipeline._exceptions import CircuitBreakerOpen, RetryError
+from thomas.marketplace.data_pipeline._types import (
     PipelineConfig,
     PipelineState,
     Record,
     Stage,
 )
-from thomas.data_pipeline.orchestrator import (
+from thomas.marketplace.data_pipeline.orchestrator import (
     CircuitBreaker,
     DependencyGraph,
     PipelineBuilder,
     PipelineOrchestrator,
     RetryPolicy,
 )
-from thomas.data_pipeline.sinks import NullSink
+from thomas.marketplace.data_pipeline.sinks import NullSink
 
 
 class MockDataSource:
@@ -35,7 +35,7 @@ class MockDataSource:
         return self.records
 
     def get_schema(self):
-        from thomas.data_pipeline._types import DataType, Field, Schema
+        from thomas.marketplace.data_pipeline._types import DataType, Field, Schema
 
         return Schema(fields=[Field(name="id", data_type=DataType.INTEGER)])
 
@@ -288,7 +288,7 @@ class TestPipelineBuilder:
 
     def test_builder_validation(self):
         """Test builder validation."""
-        from thomas.data_pipeline._exceptions import ConfigurationError
+        from thomas.marketplace.data_pipeline._exceptions import ConfigurationError
 
         builder = PipelineBuilder("empty_pipeline")
 

@@ -10,9 +10,9 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.travel._exceptions import CurrencyConversionError
-from thomas.travel._types import Currency, FareClass
-from thomas.travel.pricing import (
+from thomas.marketplace.travel._exceptions import CurrencyConversionError
+from thomas.marketplace.travel._types import Currency, FareClass
+from thomas.marketplace.travel.pricing import (
     BundleDiscountCalculator,
     CurrencyConverter,
     DemandForecast,

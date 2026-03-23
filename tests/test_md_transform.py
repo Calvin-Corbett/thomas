@@ -2,8 +2,8 @@
 Tests for Markdown AST transformations.
 """
 
-from thomas.markdown.parser import Parser
-from thomas.markdown.transform import (
+from thomas.marketplace.markdown.parser import Parser
+from thomas.marketplace.markdown.transform import (
     DocumentSplitter,
     FootnoteRenumberer,
     HeadingLevelShift,
@@ -26,7 +26,7 @@ class TestHeadingLevelShift:
         shifted = HeadingLevelShift.shift(doc, -1)
 
         # First heading should now be H1
-        from thomas.markdown._types import Heading
+        from thomas.marketplace.markdown._types import Heading
 
         headings = [child for child in shifted.children if isinstance(child, Heading)]
         assert headings[0].level == 1
@@ -40,7 +40,7 @@ class TestHeadingLevelShift:
 
         shifted = HeadingLevelShift.shift(doc, 1)
 
-        from thomas.markdown._types import Heading
+        from thomas.marketplace.markdown._types import Heading
 
         headings = [child for child in shifted.children if isinstance(child, Heading)]
         assert headings[0].level == 2
@@ -55,7 +55,7 @@ class TestHeadingLevelShift:
         # Try to shift up 5 levels (beyond h6)
         shifted = HeadingLevelShift.shift(doc, 5)
 
-        from thomas.markdown._types import Heading
+        from thomas.marketplace.markdown._types import Heading
 
         headings = [child for child in shifted.children if isinstance(child, Heading)]
         assert headings[0].level == 6  # Clamped to max
@@ -69,7 +69,7 @@ class TestHeadingLevelShift:
         # Shift down too much
         shifted = HeadingLevelShift.shift(doc, -5)
 
-        from thomas.markdown._types import Heading
+        from thomas.marketplace.markdown._types import Heading
 
         headings = [child for child in shifted.children if isinstance(child, Heading)]
         assert headings[0].level == 1  # Clamped to min
@@ -87,7 +87,7 @@ class TestLinkRewriting:
         url_map = {"oldurl.com": "newurl.com"}
         rewritten = LinkRewriter.rewrite_links(doc, url_map)
 
-        from thomas.markdown._types import Link
+        from thomas.marketplace.markdown._types import Link
 
         def find_links(node):
             links = []
@@ -113,7 +113,7 @@ class TestLinkRewriting:
 
         rewritten = LinkRewriter.rewrite_with_function(doc, https_transform)
 
-        from thomas.markdown._types import Link
+        from thomas.marketplace.markdown._types import Link
 
         def find_links(node):
             links = []
@@ -352,7 +352,7 @@ Paragraph 2"""
         shifted = HeadingLevelShift.shift(doc, 1)
 
         # Content should be preserved
-        from thomas.markdown._types import Heading, Paragraph
+        from thomas.marketplace.markdown._types import Heading, Paragraph
 
         headings = [c for c in shifted.children if isinstance(c, Heading)]
         paragraphs = [c for c in shifted.children if isinstance(c, Paragraph)]

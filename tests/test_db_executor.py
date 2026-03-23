@@ -19,7 +19,7 @@ import pytest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from thomas.db_internals import (
+from thomas.marketplace.db_internals import (
     BinaryOpNode,
     BufferPool,
     Column,
@@ -29,7 +29,7 @@ from thomas.db_internals import (
     Record,
     Table,
 )
-from thomas.db_internals.executor import (
+from thomas.marketplace.db_internals.executor import (
     AggregationOperator,
     ExecutionContext,
     FilterOperator,

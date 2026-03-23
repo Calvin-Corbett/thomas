@@ -4,8 +4,8 @@ Tests for NER module.
 
 import unittest
 
-from thomas.nlu._types import NERTag, POSTag, Sentence, Span, Token
-from thomas.nlu.ner import GazetteerMatcher, NERTagger
+from thomas.marketplace.nlu._types import NERTag, POSTag, Sentence, Span, Token
+from thomas.marketplace.nlu.ner import GazetteerMatcher, NERTagger
 
 
 class TestGazetteerMatcher(unittest.TestCase):

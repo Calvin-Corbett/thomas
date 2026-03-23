@@ -2,13 +2,13 @@
 
 import pytest
 
-from thomas.visualization._exceptions import InvalidDataError
-from thomas.visualization._types import (
+from thomas.marketplace.visualization._exceptions import InvalidDataError
+from thomas.marketplace.visualization._types import (
     DataPoint,
     Series,
 )
-from thomas.visualization.scales import LinearScale
-from thomas.visualization.scatter import ScatterPlot
+from thomas.marketplace.visualization.scales import LinearScale
+from thomas.marketplace.visualization.scatter import ScatterPlot
 
 
 class TestScatterPlot:

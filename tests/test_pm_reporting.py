@@ -4,8 +4,8 @@ from datetime import datetime, timedelta
 
 import pytest
 
-from thomas.project_mgmt._types import Project, Task, TaskStatus
-from thomas.project_mgmt.reporting import ReportingManager
+from thomas.marketplace.project_mgmt._types import Project, Task, TaskStatus
+from thomas.marketplace.project_mgmt.reporting import ReportingManager
 
 
 class TestReportingManager:

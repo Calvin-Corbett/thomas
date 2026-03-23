@@ -1,23 +1,3 @@
-"""Service gateway module for routing, service discovery, and load balancing."""
+"""Backward-compatible re-export. Module moved to thomas.marketplace.gateway."""
 
-from thomas.gateway.core import (
-    APIGateway,
-    CircuitBreaker,
-    LoadBalancer,
-    Route,
-    ServiceInstance,
-    ServiceRegistry,
-    ServiceStatus,
-)
-from thomas.gateway.tools import register_gateway_tools
-
-__all__ = [
-    "ServiceStatus",
-    "ServiceInstance",
-    "Route",
-    "ServiceRegistry",
-    "LoadBalancer",
-    "CircuitBreaker",
-    "APIGateway",
-    "register_gateway_tools",
-]
+from thomas.marketplace.gateway import *  # noqa: F401,F403

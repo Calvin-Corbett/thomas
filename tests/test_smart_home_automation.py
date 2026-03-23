@@ -4,8 +4,8 @@ from datetime import datetime
 
 import pytest
 
-from thomas.smart_home._exceptions import AutomationError
-from thomas.smart_home._types import (
+from thomas.marketplace.smart_home._exceptions import AutomationError
+from thomas.marketplace.smart_home._types import (
     Action,
     Automation,
     ComparisonOperator,
@@ -13,7 +13,7 @@ from thomas.smart_home._types import (
     Trigger,
     TriggerType,
 )
-from thomas.smart_home.automation import AutomationEngine
+from thomas.marketplace.smart_home.automation import AutomationEngine
 
 
 class TestAutomationEngine:

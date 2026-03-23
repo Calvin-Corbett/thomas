@@ -1,6 +1,6 @@
 """Tests for faceted search."""
 
-from thomas.search_engine import (
+from thomas.marketplace.search_engine import (
     DateHistogramFacet,
     FacetAggregator,
     FieldMapping,

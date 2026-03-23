@@ -2,7 +2,7 @@
 
 import pytest
 
-from thomas.nlg.style import StyleController, StyleError
+from thomas.marketplace.nlg.style import StyleController, StyleError
 
 
 class TestFleschKincaid:

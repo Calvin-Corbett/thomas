@@ -2,11 +2,11 @@
 
 from datetime import datetime, timedelta
 
-from thomas.siem._types import (
+from thomas.marketplace.siem._types import (
     NetworkFlow,
     SecurityEvent,
 )
-from thomas.siem.forensics import (
+from thomas.marketplace.siem.forensics import (
     Artifact,
     CustodyTracker,
     FileHashAnalyzer,

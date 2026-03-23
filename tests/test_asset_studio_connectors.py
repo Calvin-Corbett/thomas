@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from thomas.asset_studio.contracts import default_connector_catalog
+from thomas.marketplace.asset_studio.contracts import default_connector_catalog
 
 
 def test_default_catalog_includes_new_engine_and_api_connectors() -> None:

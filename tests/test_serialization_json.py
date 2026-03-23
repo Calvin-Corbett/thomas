@@ -15,7 +15,7 @@ from typing import NamedTuple
 
 import pytest
 
-from thomas.serialization import (
+from thomas.marketplace.serialization import (
     CodecConfig,
     DeserializationError,
     JSONCodec,

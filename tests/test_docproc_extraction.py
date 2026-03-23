@@ -1,7 +1,7 @@
 """Tests for document extraction module."""
 
-from thomas.doc_processing._types import Page, TextBlock
-from thomas.doc_processing.extraction import (
+from thomas.marketplace.doc_processing._types import Page, TextBlock
+from thomas.marketplace.doc_processing.extraction import (
     FootnoteExtractor,
     HeaderFooterDetector,
     HTMLTextExtractor,

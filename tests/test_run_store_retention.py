@@ -1,11 +1,12 @@
-
 import sqlite3
 from pathlib import Path
 
-from thomas.observability import run_store
+from thomas.marketplace.observability import run_store
+
 
 def _count(conn, table):
     return conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
+
 
 def test_retention_deletes_oldest_count(tmp_path: Path, monkeypatch):
     db_path = tmp_path / "runs.sqlite3"
@@ -43,6 +44,7 @@ def test_retention_deletes_oldest_count(tmp_path: Path, monkeypatch):
 
     assert run_count == 3
     assert ev_count == 3
+
 
 def test_retention_size_deletes_some(tmp_path: Path, monkeypatch):
     db_path = tmp_path / "runs.sqlite3"

@@ -6,13 +6,13 @@ import sys
 
 sys.path.insert(0, "/sessions/zen-pensive-cannon/mnt/Thomas")
 
-from thomas.data_pipeline._types import (
+from thomas.marketplace.data_pipeline._types import (
     DataType,
     Field,
     Record,
     Schema,
 )
-from thomas.data_pipeline.quality import (
+from thomas.marketplace.data_pipeline.quality import (
     ConstraintValidator,
     DataProfiler,
     QualityRulesEngine,

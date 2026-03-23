@@ -3,14 +3,12 @@
 import tempfile
 import unittest
 from dataclasses import dataclass
-from typing import List
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
-
 
 # ── Fake Codex bridge objects for testing ──
 
@@ -35,7 +33,7 @@ class FakeCodexModel:
 class FakeCodexBridge:
     """Lightweight stand-in for the real CodexBridge (external service mock)."""
 
-    def __init__(self, *, logged_in: bool = False, models: List[FakeCodexModel] | None = None):
+    def __init__(self, *, logged_in: bool = False, models: list[FakeCodexModel] | None = None):
         self._account = FakeCodexAccount(
             logged_in=logged_in,
             email="test@example.com" if logged_in else "",
@@ -105,7 +103,7 @@ class TestCodexRoutesLocal(AioHTTPTestCase):
     async def test_codex_status_not_logged_in(self):
         """Status returns logged_in=False when bridge has no active session."""
         fake = FakeCodexBridge(logged_in=False)
-        with patch("thomas.codex.bridge.CodexBridge", return_value=fake):
+        with patch("thomas.marketplace.codex.bridge.CodexBridge", return_value=fake):
             resp = await self.client.get("/api/codex/status")
         self.assertEqual(resp.status, 200)
         body = await resp.json()
@@ -114,7 +112,7 @@ class TestCodexRoutesLocal(AioHTTPTestCase):
     async def test_codex_status_logged_in(self):
         """Status returns account fields when bridge reports logged in."""
         fake = FakeCodexBridge(logged_in=True)
-        with patch("thomas.codex.bridge.CodexBridge", return_value=fake):
+        with patch("thomas.marketplace.codex.bridge.CodexBridge", return_value=fake):
             resp = await self.client.get("/api/codex/status")
         self.assertEqual(resp.status, 200)
         body = await resp.json()
@@ -128,7 +126,7 @@ class TestCodexRoutesLocal(AioHTTPTestCase):
     async def test_codex_login_fresh(self):
         """Login completes successfully on a fresh bridge."""
         fake = FakeCodexBridge(logged_in=False)
-        with patch("thomas.codex.bridge.CodexBridge", return_value=fake):
+        with patch("thomas.marketplace.codex.bridge.CodexBridge", return_value=fake):
             resp = await self.client.post("/api/codex/login", json={})
         self.assertEqual(resp.status, 200)
         body = await resp.json()
@@ -139,7 +137,7 @@ class TestCodexRoutesLocal(AioHTTPTestCase):
     async def test_codex_login_already_logged_in(self):
         """Login returns already=True when already authenticated."""
         fake = FakeCodexBridge(logged_in=True)
-        with patch("thomas.codex.bridge.CodexBridge", return_value=fake):
+        with patch("thomas.marketplace.codex.bridge.CodexBridge", return_value=fake):
             resp = await self.client.post("/api/codex/login", json={})
         self.assertEqual(resp.status, 200)
         body = await resp.json()
@@ -166,7 +164,7 @@ class TestCodexRoutesLocal(AioHTTPTestCase):
                 FakeCodexModel(id="gpt-4o-mini", display_name="GPT-4o Mini", is_default=False),
             ],
         )
-        with patch("thomas.codex.bridge.CodexBridge", return_value=fake):
+        with patch("thomas.marketplace.codex.bridge.CodexBridge", return_value=fake):
             resp = await self.client.get("/api/codex/models")
         self.assertEqual(resp.status, 200)
         body = await resp.json()

@@ -3,12 +3,12 @@ import json
 import pytest
 from typer.testing import CliRunner
 
-from thomas.channels.p085_channel_list_enriched_output import (
+from thomas.cli.commands.channel_ops import p085_channel_list_enriched_output as cli_mod
+from thomas.marketplace.channels.p085_channel_list_enriched_output import (
     ChannelListEnrichedOutputError,
     ChannelListEnrichedRequest,
     channel_list_enriched_output,
 )
-from thomas.cli.commands.channel_ops import p085_channel_list_enriched_output as cli_mod
 
 
 class StubIntegration:

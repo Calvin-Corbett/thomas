@@ -2,8 +2,8 @@
 
 import pytest
 
-from thomas.climate import weather
-from thomas.climate._exceptions import ClimateDataError, InvalidParameterError
+from thomas.marketplace.climate import weather
+from thomas.marketplace.climate._exceptions import ClimateDataError, InvalidParameterError
 
 
 class TestBeaufortScale:

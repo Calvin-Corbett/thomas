@@ -1,6 +1,6 @@
 """Tests for input system."""
 
-from thomas.gaming_platform.input import (
+from thomas.marketplace.gaming_platform.input import (
     GamepadAxis,
     GamepadButton,
     InputBuffer,

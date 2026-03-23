@@ -3,15 +3,14 @@ from pathlib import Path
 
 import pytest
 
-from thomas.nodes.p027_node_host_config_model import (
+from thomas.cli.commands.nodes.p027_node_host_config_model import cli as cli_entry
+from thomas.marketplace.nodes.p027_node_host_config_model import (
     NodeHostConfigModelExternalFailure,
     NodeHostConfigModelInvalidInputError,
     NodeHostConfigModelMissingConfigError,
     NodeHostConfigModelRequest,
     node_host_config_model,
 )
-
-from thomas.cli.commands.nodes.p027_node_host_config_model import cli as cli_entry
 
 
 def test_model_schema_contains_browser_proxy() -> None:

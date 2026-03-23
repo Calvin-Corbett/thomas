@@ -7,7 +7,7 @@ pytestmark = pytest.mark.xfail(
     strict=False,
 )
 
-from thomas.agriculture.precision import (
+from thomas.marketplace.agriculture.precision import (
     AsAppliedVsAsPresc,
     GPSFieldBoundary,
     NDVICalculator,

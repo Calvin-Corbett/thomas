@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from thomas.nodes.p039_nodes_invoke_action import (
+from thomas.marketplace.nodes.p039_nodes_invoke_action import (
     InvokeActionRequest,
     MissingNodeConfig,
     RemoteFailure,
@@ -114,7 +114,7 @@ def test_cli_json_success(monkeypatch, capsys):
     monkeypatch.setenv("THOMAS_NODE_REGISTRY", json.dumps({"n1": "http://node.local"}))
 
     from thomas.cli.commands.nodes import p039_nodes_invoke_action as cli_mod
-    from thomas.nodes import p039_nodes_invoke_action as nodes_mod
+    from thomas.marketplace.nodes import p039_nodes_invoke_action as nodes_mod
 
     def _post(url, json=None, timeout=None, headers=None):
         return _DummyResponse(200, {"result": {"ok": True, "echo": json}})

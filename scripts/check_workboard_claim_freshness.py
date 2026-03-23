@@ -6,9 +6,9 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Sequence
 
 try:
     from scripts import check_workboard_claims as claims_gate
@@ -196,14 +196,10 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     if not ok:
         print("Workboard claim freshness gate: FAIL")
-        print(
-            f"- stale active claims detected (max age {float(args.max_age_hours):.1f}h):"
-        )
+        print(f"- stale active claims detected (max age {float(args.max_age_hours):.1f}h):")
         for item in stale_claims:
             if item.get("issue") == "missing_blame_timestamp":
-                print(
-                    f"- agent `{item['agent']}` line {item['line_no']}: unable to resolve git blame timestamp"
-                )
+                print(f"- agent `{item['agent']}` line {item['line_no']}: unable to resolve git blame timestamp")
             else:
                 print(
                     f"- agent `{item['agent']}` line {item['line_no']}: "
@@ -212,9 +208,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 1
 
     print("Workboard claim freshness gate: PASS")
-    print(
-        f"- checked active claims: {len(claims)} (max age {float(args.max_age_hours):.1f}h)"
-    )
+    print(f"- checked active claims: {len(claims)} (max age {float(args.max_age_hours):.1f}h)")
     return 0
 
 

@@ -2,7 +2,7 @@
 Tests for name generation.
 """
 
-from thomas.procgen.names import (
+from thomas.marketplace.procgen.names import (
     MarkovChain,
     NameGenerator,
     PhonotacticRules,
