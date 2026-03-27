@@ -2,74 +2,64 @@
 
 import { useEffect, useRef, useState } from "react";
 
-type Tint = "blue" | "green" | "orange" | "pink" | "purple" | "yellow";
-
-type Rider = {
-  id: string;
-  tint: Tint;
-  lane: 0 | 1 | 2;
+type Walker = {
   x: number;
-  speed: number;
   direction: -1 | 1;
   jumpTimer: number;
   nextJump: number;
 };
 
-const RIDER_SPECS: Array<{ id: string; tint: Tint; lane: 0 | 1 | 2; speed: number; direction: -1 | 1 }> = [
-  { id: "rider-echo", tint: "blue", lane: 2, speed: 2.7, direction: 1 },
-  { id: "rider-sage", tint: "green", lane: 1, speed: 2.3, direction: -1 },
-  { id: "rider-bolt", tint: "orange", lane: 2, speed: 2.9, direction: 1 },
-  { id: "rider-puff", tint: "pink", lane: 1, speed: 2.1, direction: 1 },
-  { id: "rider-void", tint: "purple", lane: 1, speed: 2.4, direction: -1 },
-  { id: "rider-spark", tint: "yellow", lane: 2, speed: 2.8, direction: 1 },
+const THOMAS_PHRASES = [
+  "locked in",
+  "shipping the next move",
+  "eyes on the task",
+  "walking the footer beat",
+  "Thomas is online",
+  "still building",
 ];
 
-const PHRASES = [
-  "rawr mode engaged",
-  "trex torque online",
-  "patrolling the release notes",
-  "branch is clean, claws are sharp",
-  "jumping over blockers",
-  "tiny rider, giant velocity",
-  "thomas build train rolling",
-  "sprint dinosaur approved",
-  "ship it then stomp it",
-];
-const INITIAL_BUBBLE_DELAY_MS = 420;
-
-const MIN_X = -8;
-const MAX_X = 108;
+const WALK_MIN_X = 8;
+const WALK_MAX_X = 92;
+const WALK_SPEED = 12;
+const INITIAL_BUBBLE_DELAY_MS = 900;
 
 function randomBetween(min: number, max: number) {
   return min + Math.random() * (max - min);
 }
 
-function seedRiders() {
-  const step = (MAX_X - MIN_X) / RIDER_SPECS.length;
-  return RIDER_SPECS.map((spec, index) => ({
-    ...spec,
-    x: MIN_X + step * index,
+function seedWalker(): Walker {
+  return {
+    x: 16,
+    direction: 1,
     jumpTimer: 0,
-    nextJump: randomBetween(2.2, 5.8),
-  }));
+    nextJump: randomBetween(2.2, 4.1),
+  };
 }
 
 export function DinoRiders() {
-  const [riders, setRiders] = useState<Rider[]>(() => seedRiders());
-  const ridersRef = useRef<Rider[]>(riders);
-  const [bubble, setBubble] = useState<{ id: string; text: string } | null>(null);
+  const [walker, setWalker] = useState<Walker>(() => seedWalker());
+  const walkerRef = useRef<Walker>(walker);
+  const [bubbleText, setBubbleText] = useState<string | null>(null);
   const reduceMotionRef = useRef(false);
 
   useEffect(() => {
-    ridersRef.current = riders;
-  }, [riders]);
+    walkerRef.current = walker;
+  }, [walker]);
 
   useEffect(() => {
     if (typeof window === "undefined" || typeof window.matchMedia !== "function") return;
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
     const onChange = () => {
       reduceMotionRef.current = media.matches;
-      if (media.matches) setBubble(null);
+      if (media.matches) {
+        setBubbleText(null);
+        setWalker((current) => ({
+          ...current,
+          x: 50,
+          direction: 1,
+          jumpTimer: 0,
+        }));
+      }
     };
     onChange();
     media.addEventListener("change", onChange);
@@ -85,28 +75,33 @@ export function DinoRiders() {
       previous = now;
 
       if (!reduceMotionRef.current) {
-        setRiders((current) =>
-          current.map((rider) => {
-            let x = rider.x + rider.direction * rider.speed * delta;
-            if (rider.direction > 0 && x > MAX_X) x = MIN_X;
-            if (rider.direction < 0 && x < MIN_X) x = MAX_X;
+        setWalker((current) => {
+          let x = current.x + current.direction * WALK_SPEED * delta;
+          let direction = current.direction;
 
-            let jumpTimer = Math.max(0, rider.jumpTimer - delta);
-            let nextJump = rider.nextJump - delta;
+          if (x >= WALK_MAX_X) {
+            x = WALK_MAX_X;
+            direction = -1;
+          } else if (x <= WALK_MIN_X) {
+            x = WALK_MIN_X;
+            direction = 1;
+          }
 
-            if (jumpTimer === 0 && nextJump <= 0) {
-              jumpTimer = randomBetween(0.52, 0.7);
-              nextJump = randomBetween(3.2, 6.4);
-            }
+          let jumpTimer = Math.max(0, current.jumpTimer - delta);
+          let nextJump = current.nextJump - delta;
 
-            return {
-              ...rider,
-              x,
-              jumpTimer,
-              nextJump,
-            };
-          }),
-        );
+          if (jumpTimer === 0 && nextJump <= 0) {
+            jumpTimer = randomBetween(0.34, 0.52);
+            nextJump = randomBetween(2.4, 4.8);
+          }
+
+          return {
+            x,
+            direction,
+            jumpTimer,
+            nextJump,
+          };
+        });
       }
 
       frameId = requestAnimationFrame(tick);
@@ -131,20 +126,23 @@ export function DinoRiders() {
     };
 
     const clearBubble = () => {
-      setBubble(null);
-      schedule(randomBetween(1800, 4300));
+      setBubbleText(null);
+      schedule(randomBetween(2400, 4200));
     };
 
     const showBubble = () => {
       if (cancelled || reduceMotionRef.current) return;
-      const active = ridersRef.current.filter((rider) => rider.x > 18 && rider.x < 82);
-      const pool = active.length > 0 ? active : ridersRef.current;
-      const picked = pool[Math.floor(Math.random() * pool.length)];
-      const text = PHRASES[Math.floor(Math.random() * PHRASES.length)];
-      setBubble({ id: picked.id, text });
+      const activeWalker = walkerRef.current;
+      if (activeWalker.x < 16 || activeWalker.x > 84) {
+        schedule(900);
+        return;
+      }
+
+      const phrase = THOMAS_PHRASES[Math.floor(Math.random() * THOMAS_PHRASES.length)];
+      setBubbleText(phrase);
 
       if (hideTimer) clearTimeout(hideTimer);
-      hideTimer = setTimeout(clearBubble, randomBetween(1500, 2400));
+      hideTimer = setTimeout(clearBubble, randomBetween(1500, 2200));
     };
 
     schedule(INITIAL_BUBBLE_DELAY_MS);
@@ -156,48 +154,52 @@ export function DinoRiders() {
     };
   }, []);
 
+  const handleThomasClick = () => {
+    setWalker((current) => ({
+      ...current,
+      jumpTimer: 0.48,
+      nextJump: randomBetween(2.7, 4.6),
+    }));
+    setBubbleText("Thomas");
+    window.setTimeout(() => {
+      setBubbleText((current) => (current === "Thomas" ? null : current));
+    }, 1100);
+  };
+
+  const isSpeaking = bubbleText !== null;
+  const facingLeft = walker.direction < 0 && !isSpeaking;
+  const robotClass = [
+    "pixel-agent pixel-agent-blue footer-thomas-robot",
+    facingLeft ? "facing-left" : "",
+    isSpeaking ? "looking-user" : "",
+  ]
+    .filter(Boolean)
+    .join(" ");
+
   return (
-    <section className="dino-riders-band" aria-label="Robot riders on T-Rex patrol">
-      <div className="dino-riders-grid" />
+    <section className="dino-riders-band" aria-label="Thomas walking across the footer">
       <div className="dino-riders-track">
-        {riders.map((rider) => {
-          const isJumping = rider.jumpTimer > 0;
-          const isSpeaking = bubble?.id === rider.id;
-          return (
-            <div
-              key={rider.id}
-              className={`dino-rider-track lane-${rider.lane}${isJumping ? " is-jumping" : ""}`}
-              style={{ left: `${rider.x}%` }}
-            >
-              {isSpeaking ? <div className="dino-rider-bubble">{bubble?.text}</div> : null}
-              <span className={`dino-rider-sprite${rider.direction < 0 ? " facing-left" : ""}`}>
-                <span className="trex-tail" />
-                <span className="trex-body" />
-                <span className="trex-belly" />
-                <span className="trex-neck" />
-                <span className="trex-head" />
-                <span className="trex-jaw" />
-                <span className="trex-eye" />
-                <span className="trex-arm" />
-                <span className="trex-leg trex-leg-back" />
-                <span className="trex-leg trex-leg-front" />
-                <span className="trex-saddle" />
-                <span className="trex-saddle-strap" />
-                <span className="dino-rider-robot-wrap">
-                  <span className={`pixel-agent pixel-agent-${rider.tint} dino-rider-robot`}>
-                    <span className="agent-head">
-                      <span className="agent-eye agent-eye-left" />
-                      <span className="agent-eye agent-eye-right" />
-                    </span>
-                    <span className="agent-body" />
-                    <span className="agent-leg agent-leg-left" />
-                    <span className="agent-leg agent-leg-right" />
-                  </span>
+        <div
+          className={`footer-thomas-track${walker.jumpTimer > 0 ? " is-jumping" : ""}`}
+          style={{ left: `${walker.x}%` }}
+        >
+          {bubbleText ? <div className="footer-thomas-bubble">{bubbleText}</div> : null}
+          <button type="button" className="footer-thomas-hitbox" aria-label="Thomas footer robot" onClick={handleThomasClick}>
+            <span className="footer-thomas-shadow" />
+            <span className="footer-thomas-robot-frame">
+              <span className={robotClass}>
+                <span className="agent-head">
+                  <span className="agent-eye agent-eye-left" />
+                  <span className="agent-eye agent-eye-right" />
                 </span>
+                <span className="agent-body" />
+                <span className="agent-leg agent-leg-left" />
+                <span className="agent-leg agent-leg-right" />
               </span>
-            </div>
-          );
-        })}
+            </span>
+            <span className="footer-thomas-name">Thomas</span>
+          </button>
+        </div>
       </div>
     </section>
   );

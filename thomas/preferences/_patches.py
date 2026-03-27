@@ -2,9 +2,10 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ._types import (
+    AnimationFidelity,
     AutonomyLevel,
     BubbleStyle,
     ContextPruneStrategy,
@@ -336,12 +337,42 @@ class AdvancedInterfacePatch(BaseModel):
     ui_density: UIDensity | None = None
     show_timestamps: bool | None = None
     show_token_meter: bool | None = None
+    animation_fidelity: AnimationFidelity | None = None
     animations_enabled: bool | None = None
+    advanced_chat_physics: bool | None = None
     code_theme: str | None = None
     debug_panel_enabled: bool | None = None
     event_log_verbosity: EventLogVerbosity | None = None
     workflow_mode: WorkflowMode | None = None
     labs_flags: str | None = None
+
+    @field_validator("animation_fidelity", mode="before")
+    @classmethod
+    def _normalize_animation_fidelity(cls, v: Any) -> str | None:
+        if v is None:
+            return None
+        raw = str(v or "").strip().lower().replace("-", "_").replace(" ", "_")
+        if not raw:
+            return None
+        aliases = {
+            "high": "high",
+            "high_fidelity": "high",
+            "full": "high",
+            "balanced": "balanced",
+            "medium": "balanced",
+            "default": "balanced",
+            "minimal": "minimal",
+            "minimal_motion": "minimal",
+            "reduced": "minimal",
+            "off": "minimal",
+        }
+        return aliases.get(raw, "high")
+
+    @model_validator(mode="after")
+    def _sync_animation_flags(self):
+        if self.animation_fidelity is not None:
+            self.animations_enabled = self.animation_fidelity != "minimal"
+        return self
 
     @field_validator("ui_density", mode="before")
     @classmethod

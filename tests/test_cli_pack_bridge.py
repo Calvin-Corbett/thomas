@@ -204,6 +204,27 @@ def test_non_browser_proxy_run_missing_main_keeps_legacy_noop_success(tmp_path: 
     assert "executed via noop" in result.output
 
 
+def test_message_proxy_run_missing_main_is_not_noop_success(tmp_path: Path, monkeypatch) -> None:
+    monkeypatch.syspath_prepend(str(tmp_path))
+    package_name = _write_pack_package(
+        tmp_path,
+        f"pkg_{uuid.uuid4().hex}",
+        {
+            "p001_message_missing_entrypoint": '"""Placeholder module with no entrypoint."""',
+        },
+    )
+    group = click.Group("message")
+    added = register_pack_proxy_commands(group, package=package_name, family_hint="message")
+    assert added == 1
+
+    result = CliRunner().invoke(group, ["missing-entrypoint", "--run", "--json"])
+    assert result.exit_code == 1
+    payload = json.loads(result.output)
+    assert payload["ok"] is False
+    assert payload["mode"] == "noop"
+    assert payload["error_code"] == "entrypoint_missing"
+
+
 def test_proxy_run_main_nonzero_reports_meaningful_error(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.syspath_prepend(str(tmp_path))
     package_name = _write_pack_package(

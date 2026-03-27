@@ -5,6 +5,7 @@ RUNTIME_JS = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mj
 TASK_CSS = ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-005a.css"
 MISSION_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-002.css"
 SIDEBAR_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-001a.css"
+MOTION_PROOF_SCRIPT = ROOT / "scripts" / "capture_chat_motion_proof.mjs"
 
 
 def _read(path: Path) -> str:
@@ -28,28 +29,59 @@ def test_mission_runtime_panel_and_stream_contract() -> None:
     assert ".mission-runtime-task {" in mission_css
 
 
-def test_chat_presence_alert_is_disabled() -> None:
+def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
     js = _read(RUNTIME_JS)
     task_css = _read(TASK_CSS)
     mission_css = _read(MISSION_CSS)
     sidebar_css = _read(SIDEBAR_CSS)
+    proof_script = _read(MOTION_PROOF_SCRIPT)
 
     assert "const TASK_CONTINUITY_REFRESH_INTERVAL_MS = 2800;" in js
     assert "async function fetchTaskContinuitySessionActivity(" in js
     assert "function ensureTaskContinuityRuntimeUi(" in js
     assert "function syncTaskContinuityPanelVisibility(" in js
     assert "function removeChatAgentPresenceUi()" in js
-    assert "function ensureChatAgentPresenceUi()" in js
-    assert "root.remove();" in js
-    assert "function chatAgentPresenceShouldBeVisible()" in js
+    assert "function chatWorldEnsureUi()" in js
+    assert "function chatRobotWorldBuildPlatformGraph(" in js
+    assert "function chatRobotWorldFindRoute(" in js
+    assert "function chatRobotWorldRunDebugScenario(" in js
+    assert "function chatRobotWorldSpawnDebugHelper(" in js
+    assert "function chatRobotWorldSyncDebugState(" in js
+    assert "function chatWorldCurrentMode(" in js
+    assert "function chatPhysicsWorldPrime(" in js
+    assert "function chatPhysicsWorldAdvanceActor(" in js
+    assert "function chatPhysicsWorldRebuildStatics(" in js
+    assert "function chatPhysicsWorldStablePlatformForState(" in js
+    assert "function chatPhysicsWorldSnapActorsToStableSurfaces(" in js
+    assert "__THOMAS_CHAT_WORLD_DEBUG__" in js
+    assert "CHAT_WORLD_MODE_PHYSICS" in js
+    assert "advanced_chat_physics" in js
+    assert "worldMode: chatWorldCurrentMode()" in js
+    assert "bodyVelocityX" in js
     assert "function setChatAgentPresence(activity)" in js
-    assert "void activity;" in js
-    assert "Click to inspect delegated work" not in js
+    assert "Open Office" in js
     assert ".task-continuity-panel {" in task_css
-    assert ".chat-agent-presence {" in task_css
-    assert "display: none !important;" in task_css
+    assert ".chat-robot-world {" in task_css
+    assert ".chat-robot-world-physics {" in task_css
+    assert ".chat-robot-world-route.route-door {" in task_css
+    assert ".chat-robot-world-route.route-ladder {" in task_css
+    assert ".chat-robot-world-route.route-lift" in task_css
     assert ".mission-runtime-panel.is-focused {" in mission_css
     assert ".nav-item::before {" in sidebar_css
     assert "display: none;" in sidebar_css
     assert ".nav-item.active::before {" in sidebar_css
     assert "animation: none;" in sidebar_css
+    assert "globalThis.__THOMAS_CHAT_WORLD_DEBUG__?.getSnapshot?.()" in proof_script
+    assert "motion-proof.json" in proof_script
+    assert "motion-proof.html" in proof_script
+    assert "--scenario" in proof_script
+    assert "--physics" in proof_script
+    assert "worldMode" in proof_script
+    assert "runScenario" in js
+    assert "labelCenterOffsetPx" in js
+    assert "visualCenterOffsetPx" in js
+    assert "propKind" in js
+    assert "chatAgentPresenceUpsert(specId, {" in js
+    assert "window.setTimeout(() => {" in js
+    assert "propKinds" in proof_script
+    assert "maxLabelDriftPx" in proof_script

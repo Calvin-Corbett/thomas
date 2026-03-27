@@ -256,6 +256,9 @@ def test_advanced_settings_roundtrip(tmp_db):
     assert initial.json()["advanced"]["tools"]["allow_shell"] is True
     assert initial.json()["advanced"]["runtime"]["default_mode"] == "auto"
     assert initial.json()["advanced"]["failover"]["enabled"] is True
+    assert initial.json()["advanced"]["interface"]["animation_fidelity"] == "high"
+    assert initial.json()["advanced"]["interface"]["animations_enabled"] is True
+    assert initial.json()["advanced"]["interface"]["advanced_chat_physics"] is False
 
     patch_payload = {
         "advanced": {
@@ -292,6 +295,8 @@ def test_advanced_settings_roundtrip(tmp_db):
             "interface": {
                 "ui_density": "dense",
                 "event_log_verbosity": "verbose",
+                "animation_fidelity": "minimal",
+                "advanced_chat_physics": True,
             },
         }
     }
@@ -320,6 +325,9 @@ def test_advanced_settings_roundtrip(tmp_db):
     assert data["advanced"]["failover"]["cooldown_seconds"] == 42
     assert data["advanced"]["interface"]["ui_density"] == "dense"
     assert data["advanced"]["interface"]["event_log_verbosity"] == "verbose"
+    assert data["advanced"]["interface"]["animation_fidelity"] == "minimal"
+    assert data["advanced"]["interface"]["animations_enabled"] is False
+    assert data["advanced"]["interface"]["advanced_chat_physics"] is True
 
     cleared = c.patch("/api/preferences", json={"advanced": {"model": {"deterministic_seed": None}}})
     assert cleared.status_code == 200
