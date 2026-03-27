@@ -133,6 +133,38 @@ class TestServerTaskLedger(AioHTTPTestCase):
         self.assertIn("chat.route", sources)
         self.assertIn("chat.done", sources)
 
+    async def test_task_definition_is_created_for_max_mode_task_requests(self):
+        sid = await self._new_session_id()
+
+        _FakeAgentLoopTaskLedger.route_path = "coding_task"
+        _FakeAgentLoopTaskLedger.done_text = (
+            "Completed and verified. I opened the page, clicked Start, and confirmed the snake visibly moves."
+        )
+        _FakeAgentLoopTaskLedger.done_token_report = {"rules_of_road": {"passed": True}}
+        with patch("thomas.server.routes.chat_aiohttp.AgentLoop", _FakeAgentLoopTaskLedger):
+            chat_resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "token_economy": "max",
+                    "text": "Build a snake game with a visible start flow and restart button.",
+                },
+            )
+        self.assertEqual(chat_resp.status, 200)
+        events = _parse_ndjson(await chat_resp.text())
+        self.assertTrue(any(e.get("type") == "task_definition" for e in events))
+        self.assertTrue(any(e.get("type") == "task_evaluation" for e in events))
+
+        current_resp = await self.client.get(f"/api/task-ledger/current?session_id={sid}")
+        self.assertEqual(current_resp.status, 200)
+        current_payload = await current_resp.json()
+        task_definition = current_payload.get("task_definition") or {}
+        task_evaluation = current_payload.get("task_evaluation") or {}
+        self.assertEqual(str(current_payload.get("task_definition_status") or ""), "complete")
+        self.assertEqual(str(task_definition.get("deliverable_type") or ""), "interactive_game")
+        self.assertEqual(str(task_evaluation.get("status") or ""), "passed")
+
     async def test_task_ledger_marks_blocked_when_missing_input_is_detected(self):
         sid = await self._new_session_id()
 

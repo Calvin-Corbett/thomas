@@ -15,9 +15,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import shlex
 import subprocess
 import sys
+import tempfile
 import time
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -257,10 +259,16 @@ def _execute_step(
     capture_output: bool = False,
 ) -> dict[str, Any]:
     started = time.monotonic()
+    env = os.environ.copy()
+    env.setdefault("PYTHONDONTWRITEBYTECODE", "1")
+    pycache_prefix = Path(tempfile.gettempdir()) / "thomas_pycache"
+    pycache_prefix.mkdir(parents=True, exist_ok=True)
+    env.setdefault("PYTHONPYCACHEPREFIX", str(pycache_prefix))
     kwargs: dict[str, Any] = {
         "cwd": repo_root,
         "check": False,
         "timeout": int(step["timeout_seconds"]),
+        "env": env,
     }
     if capture_output:
         kwargs.update({"capture_output": True, "text": True})

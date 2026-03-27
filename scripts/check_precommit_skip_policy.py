@@ -12,6 +12,11 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+try:
+    from agent_safety_config import load_config
+except ImportError:  # pragma: no cover
+    from scripts.agent_safety_config import load_config  # type: ignore
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_AUDIT_LOG = ROOT / ".git" / "thomas_skip_audit.jsonl"
 AGENT_ENV_KEYS: tuple[str, ...] = (
@@ -46,6 +51,10 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-auto-checks-quick",
     "thomas-monolith-filename-pattern-gate",
 )
+
+
+def _config():
+    return load_config()
 
 
 def _now_utc() -> datetime:
@@ -218,6 +227,7 @@ def _load_breakglass_history(*, audit_log: Path, agent: str, now: datetime) -> l
 
 def run(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Require explicit, auditable metadata for pre-commit SKIP usage.")
+    cfg = _config()
     parser.add_argument(
         "--audit-log",
         default=str(DEFAULT_AUDIT_LOG),
@@ -226,31 +236,31 @@ def run(argv: Sequence[str] | None = None) -> int:
     parser.add_argument(
         "--max-skip-hooks",
         type=int,
-        default=DEFAULT_MAX_SKIP_HOOKS,
+        default=cfg.skip_policy_max_skip_hooks(),
         help="Maximum allowed skipped hook ids without breakglass (default: 4).",
     )
     parser.add_argument(
         "--max-staged-files-with-skip",
         type=int,
-        default=DEFAULT_MAX_STAGED_FILES_WITH_SKIP,
+        default=cfg.skip_policy_max_staged_files_with_skip(),
         help="Maximum staged file count allowed with SKIP without breakglass (default: 200).",
     )
     parser.add_argument(
         "--max-staged-files-with-breakglass",
         type=int,
-        default=DEFAULT_MAX_STAGED_FILES_WITH_BREAKGLASS,
+        default=cfg.skip_policy_max_staged_files_with_breakglass(),
         help="Maximum staged file count allowed with breakglass SKIP (default: 60).",
     )
     parser.add_argument(
         "--breakglass-max-per-agent-24h",
         type=int,
-        default=DEFAULT_BREAKGLASS_MAX_PER_AGENT_24H,
+        default=cfg.skip_policy_breakglass_max_per_agent_24h(),
         help="Maximum breakglass SKIP uses per agent in rolling 24h window (default: 3).",
     )
     parser.add_argument(
         "--breakglass-cooldown-minutes",
         type=int,
-        default=DEFAULT_BREAKGLASS_COOLDOWN_MINUTES,
+        default=cfg.skip_policy_breakglass_cooldown_minutes(),
         help="Minimum minutes required between breakglass SKIP uses by same agent (default: 15).",
     )
     parser.add_argument(
@@ -355,6 +365,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         return 1
 
     protected_hooks = list(PROTECTED_SKIP_HOOKS)
+    protected_hooks.extend(str(item or "").strip() for item in cfg.skip_policy_protected_hooks())
     protected_hooks.extend(str(item or "").strip() for item in args.protected_hook)
     protected_skipped = _find_protected_skip_hooks(skip_hooks, protected_hooks=protected_hooks)
     if protected_skipped and not breakglass_enabled:

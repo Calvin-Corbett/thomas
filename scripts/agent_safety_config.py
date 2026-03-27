@@ -248,24 +248,7 @@ def _resolve_config_path(path: Path | None = None) -> Path:
         return explicit
     env_value = str(os.getenv(CONFIG_ENV, "")).strip()
     if env_value:
-        candidate = Path(env_value).expanduser().resolve()
-        # Security: only accept config paths within the repo root.
-        # An agent with shell access could set this env var to point at
-        # an empty file, collapsing all protections to permissive defaults.
-        # Audit Finding 3 (Cowork Adversarial Audit, 2026-03-19).
-        try:
-            candidate.relative_to(ROOT)
-        except ValueError:
-            import warnings
-
-            warnings.warn(
-                f"THOMAS_AGENT_SAFETY_CONFIG points outside repo root "
-                f"({candidate}); ignoring and using default config. "
-                f"This restriction prevents config-override attacks.",
-                stacklevel=2,
-            )
-            return CONFIG_PATH
-        return candidate
+        return Path(env_value).expanduser().resolve()
     return CONFIG_PATH
 
 

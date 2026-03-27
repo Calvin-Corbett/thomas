@@ -53,6 +53,16 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         self.assertEqual(cloud["model"], "gpt-4")
         self.assertTrue(cloud["has_api_key"])
 
+    async def test_models_profile_exposes_chat_controls(self):
+        resp = await self.client.get("/api/models")
+        body = await resp.json()
+        cloud = next(p for p in body["profiles"] if p["name"] == "cloud")
+        controls = cloud.get("chat_controls") or {}
+        self.assertIn("model", controls)
+        self.assertIn("thomas", controls)
+        self.assertIn("autonomy_level", controls.get("thomas", {}))
+        self.assertIn("token_economy", controls.get("thomas", {}))
+
     async def test_models_capabilities(self):
         resp = await self.client.get("/api/models/capabilities")
         self.assertEqual(resp.status, 200)
@@ -60,6 +70,15 @@ class TestModelsRoutesLocal(AioHTTPTestCase):
         self.assertIn("profiles", body)
         self.assertIn("cloud", body["profiles"])
         self.assertIn("local", body["profiles"])
+
+    async def test_models_capabilities_include_chat_controls(self):
+        resp = await self.client.get("/api/models/capabilities")
+        body = await resp.json()
+        self.assertIn("chat_controls", body)
+        profiles = body["chat_controls"].get("profiles") or {}
+        self.assertIn("cloud", profiles)
+        self.assertIn("local", profiles)
+        self.assertIn("thomas", profiles["cloud"])
 
     async def test_profile_unknown_returns_404(self):
         resp = await self.client.get("/api/models/nonexistent/handshake")

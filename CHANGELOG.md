@@ -10,6 +10,7 @@ Versioning: Semantic Versioning.
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
 ### Added
+- tests: Added `/api/v2/chat` max-mode regression coverage plus dispatch-router heuristics coverage so the live default chat path is exercised directly.
 - tooling: New `scripts/test_stepup_protocol.py` repo-wide pytest runner that codifies the Thomas testing ladder as collect-only -> deterministic small shards -> larger shard bundles, with an optional final monolithic sweep.
 - skills: Thomas-native skill platform now ships first-party bundled skills under `skills/`, plus explicit external skill distillation drafts with review, no-copy validation, and promotion commands.
 - safety: New `check_changelog_gate.py` pre-commit hook — rejects commits with 3+ thomas/ code changes when CHANGELOG.md is not staged (Finding 2)
@@ -26,6 +27,7 @@ Versioning: Semantic Versioning.
 - safety: New `_check_worktree_clean()` in `agent_preflight.py` — reports dirty worktree state at session start so agents know they're working in a dirty tree (Finding 11)
 
 ### Changed
+- server: `/api/v2/chat` now keeps Thomas as the only conversational voice and treats Max mode as a silent background-delegation sidecar instead of surfacing named-bot orchestration in-band.
 - tooling: `scripts/auto_checks.py`, `scripts/agent_startup_router.py`, `docs/ai/CHECKLISTS/tests.md`, `docs/ai/CHECKLISTS/agent-lane-risky-edit.md`, `docs/ai/CHECKLISTS/agent-lane-multi-file.md`, `docs/ai/AGENT_PLAYBOOK.md`, and `README.md` now point broad repo verification at the step-up shard protocol instead of treating a single full-suite pytest command as the default path.
 - tooling: `scripts/agent_commit.py` now emits machine-readable blocker payloads and supports audited explicit-scope fallback commits when no active claim exists, while the workboard ownership gates recognize that fallback without allowing overlap with another agent's claim. Selected commit paths are now realigned to `HEAD` in the live index instead of being re-added from the worktree, so unrelated staging state stays stable.
 - skills: Runtime skill discovery, CLI diagnostics, and REPL `/skill` now resolve Thomas-native roots (`<thomas_install_root>/skills`, `~/.thomas/skills`, `<cwd>/.thomas/skills`, `<cwd>/skills`) instead of `.codex` roots during normal operation.
@@ -40,6 +42,11 @@ Versioning: Semantic Versioning.
 - safety: Meta-test `test_all_local_hooks_are_skip_protected` ensures every hook in `.pre-commit-config.yaml` has a PROTECTED_SKIP_HOOKS entry — prevents future drift
 
 ### Fixed
+- chat: Tightened delegation routing so exploratory planning and status follow-ups stay conversational while explicit execution requests can start normalized background work without leaking `Got it. Sending ...` text into the transcript.
+- server: Corrected the chat runtime import in `thomas/server/routes/chat_request_setup.py` so `/api/chat` loads token-economy helpers from `thomas.core.token_economy` instead of the removed `thomas.core.runtime` module.
+- preferences: Restored the fallback `thomas.preferences.store` export surface so `PreferencesStore`, `get_db_path`, and related compatibility imports resolve when the monolith source loader is absent, allowing Thomas server startup to complete again.
+- server: Restored the frontend route contract by registering the hyphenated task-ledger/chat persistence aliases and re-enabling the V2 and observability server bundles.
+- server: Repaired task-ledger, chat storage, and Codex provider compatibility so the live shell can poll state, list chats, and stream V2 chat again.
 - compatibility: Restored legacy package import surfaces for moved marketplace modules (`channels`, `companion`, `learning`, `nodes`, `observability`, and `policy`), plus server/preferences export shims that newer split modules had stopped exposing.
 - tooling: Replaced the broken `thomas.tools.dep_scanner` monolith stub with a direct compatibility wrapper over the split scanner modules and repaired the malformed `swarm.py` entrypoint path so collection can reach the real runtime regressions again.
 - cross-platform: `agent_preflight.py` now detects OS and uses `.venv/bin/python` on Linux/Mac or `.venv/Scripts/python.exe` on Windows (was Windows-only)
@@ -54,6 +61,15 @@ Versioning: Semantic Versioning.
 - portable: New `scripts/agent_safety_config.py` — config loader with fallback TOML parser for Python 3.8+
 - portable: New `scripts/agent_safety_init.py` — scaffolds agent safety into any repo with one command
 - portable: Refactored 5 hooks to read from agent_safety.toml instead of hardcoded constants — Thomas unchanged, rules now portable
+
+- ui: Fixed the live Marketplace workspace renderer in `thomas/server/web/js/app_runtime_primary.mjs` so catalog cards no longer crash on undefined `typeLabel` / `installBehaviorLabel` helpers.
+- orchestrator: Corrected `thomas/marketplace/orchestrator/brain_v3.py` to load the real dispatch classifier from `thomas/agent/dispatch.py`, restoring direct casual-chat replies instead of routing every message through visible bot handoffs.
+- server: Registered the local project route bundle in `thomas/server/app_routes_init.py`, bringing the My Stuff project board APIs back online.
+- projects: Updated `thomas/server/routes/local_projects_helpers_aiohttp.py` to resolve its registry path from the current runtime state directories instead of the removed `AppConfig.home_dir` field, fixing `/api/local/projects` in live runs.
+- packaging: Declared the active CLI, scheduler, server-upload, travel, database, HTTP, and science dependencies (`typer`, `requests`, `croniter`, `fastapi`, `python-multipart`, `sqlalchemy`, `pytz`, `scipy`) so editable test/server installs now match the modules the repo actually imports.
+- compatibility: Restored benchmark helper re-exports in `thomas/demo/agentic_benchmark.py` and the `serve_async` compatibility export in `thomas/server/app.py`, fixing collection/runtime surfaces that had drifted during the split-module refactor.
+- compatibility: Restored the agent-facing export surfaces expected by the comparison/workboard tooling, fixed the low-intent route prompt copy, and repaired the missing imports in `thomas/agent/loop_execution.py` so runtime skills and rules-of-road evaluation execute again during agent turns.
+- safety: Re-enabled explicit `THOMAS_AGENT_SAFETY_CONFIG` overrides for the safety hooks and disabled Python bytecode emission during pytest runs so alternate safety configs work without polluting `thomas/` with generated `.pyc` files.
 
 ## [0.14.47] - 2026-03-19
 
