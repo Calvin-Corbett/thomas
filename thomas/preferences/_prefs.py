@@ -2,9 +2,10 @@
 
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from ._types import (
+    AnimationFidelity,
     AutonomyLevel,
     BubbleStyle,
     ContextPruneStrategy,
@@ -284,12 +285,38 @@ class AdvancedInterfacePrefs(BaseModel):
     ui_density: UIDensity = "comfortable"
     show_timestamps: bool = False
     show_token_meter: bool = False
+    animation_fidelity: AnimationFidelity = "high"
     animations_enabled: bool = True
+    advanced_chat_physics: bool = False
     code_theme: str = "atom-one-dark"
     debug_panel_enabled: bool = False
     event_log_verbosity: EventLogVerbosity = "standard"
     workflow_mode: WorkflowMode = "guided"
     labs_flags: str = ""
+
+    @field_validator("animation_fidelity", mode="before")
+    @classmethod
+    def _normalize_animation_fidelity(cls, v: Any) -> str:
+        raw = str(v or "").strip().lower().replace("-", "_").replace(" ", "_")
+        aliases = {
+            "": "high",
+            "high": "high",
+            "high_fidelity": "high",
+            "full": "high",
+            "balanced": "balanced",
+            "medium": "balanced",
+            "default": "balanced",
+            "minimal": "minimal",
+            "minimal_motion": "minimal",
+            "reduced": "minimal",
+            "off": "minimal",
+        }
+        return aliases.get(raw, "high")
+
+    @model_validator(mode="after")
+    def _sync_animation_flags(self):
+        self.animations_enabled = self.animation_fidelity != "minimal"
+        return self
 
     @field_validator("workflow_mode", mode="before")
     @classmethod

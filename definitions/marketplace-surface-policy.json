@@ -1,0 +1,35 @@
+{
+  "schema_version": 1,
+  "strict_proxy_families": [
+    "browser",
+    "gateway",
+    "channel",
+    "channels",
+    "message",
+    "messages",
+    "plugin",
+    "plugins",
+    "openai",
+    "responses",
+    "mission",
+    "missions"
+  ],
+  "hidden_ids": [],
+  "hidden_prefixes": [],
+  "hidden_terms": [],
+  "scaffold_ids": [],
+  "scaffold_prefixes": [],
+  "scaffold_tags": [
+    "scaffold",
+    "placeholder",
+    "proxy",
+    "noop"
+  ],
+  "scaffold_terms": [
+    "placeholder",
+    "proxy/noop",
+    "proxy noop",
+    "not implemented",
+    "stub"
+  ]
+}

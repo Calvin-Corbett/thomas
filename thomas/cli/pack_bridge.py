@@ -13,6 +13,8 @@ from typing import Any
 
 import click
 
+from thomas.marketplace.surface_policy import family_requires_strict_entrypoint
+
 _PACK_FILE_RE = re.compile(r"^p(?P<prompt_id>\d{3})_(?P<slug>.+)$")
 
 
@@ -363,9 +365,7 @@ def register_pack_proxy_commands(
     excluded = {str(x).strip() for x in (exclude_modules or []) if str(x).strip()}
     allowed = {str(x).strip() for x in (allowlisted_modules or []) if str(x).strip()}
     used = set(str(name).strip() for name in group.commands.keys())
-    strict_for_family = bool(
-        strict_run_missing_entrypoint or str(family_hint or "").strip().lower() in {"browser", "gateway"}
-    )
+    strict_for_family = bool(strict_run_missing_entrypoint or family_requires_strict_entrypoint(family_hint))
     added = 0
 
     for path in _iter_pack_files(package):

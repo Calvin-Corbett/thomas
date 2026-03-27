@@ -173,6 +173,7 @@ const composerModeChip = document.getElementById('composerModeChip');
 const composerModeChipLabel = document.getElementById('composerModeChipLabel');
 const composerModeChipCloseBtn = document.getElementById('composerModeChipCloseBtn');
 const composerBox = document.querySelector('.composer-box');
+const composerStatusBar = document.getElementById('composerStatusBar');
 const toastContainer = document.getElementById('toastContainer');
 const composerDisclaimer = document.getElementById('composerDisclaimer');
 const chatGamePanel = document.getElementById('chatGamePanel');
@@ -469,6 +470,7 @@ const settingAdvCodeTheme = document.getElementById('settingAdvCodeTheme');
 const settingAdvEventLogVerbosity = document.getElementById('settingAdvEventLogVerbosity');
 const settingAdvShowTimestamps = document.getElementById('settingAdvShowTimestamps');
 const settingAdvShowTokenMeter = document.getElementById('settingAdvShowTokenMeter');
+const settingAdvAnimationFidelity = document.getElementById('settingAdvAnimationFidelity');
 const settingAdvAnimationsEnabled = document.getElementById('settingAdvAnimationsEnabled');
 const settingAdvDebugPanelEnabled = document.getElementById('settingAdvDebugPanelEnabled');
 const settingAdvLabsFlags = document.getElementById('settingAdvLabsFlags');
@@ -604,6 +606,7 @@ const easySetupStep1 = document.getElementById('easySetupStep1');
 const easySetupStep2 = document.getElementById('easySetupStep2');
 const easySetupStep3 = document.getElementById('easySetupStep3');
 const easySetupStep4 = document.getElementById('easySetupStep4');
+const easySetupStep5 = document.getElementById('easySetupStep5');
 const easySetupPathGrid = document.getElementById('easySetupPathGrid');
 const easySetupRecommendedHint = document.getElementById('easySetupRecommendedHint');
 const easySetupConnectionMeta = document.getElementById('easySetupConnectionMeta');
@@ -624,10 +627,20 @@ const easySetupApproveAllBtn = document.getElementById('easySetupApproveAllBtn')
 const easySetupReviewDownloadsBtn = document.getElementById('easySetupReviewDownloadsBtn');
 const easySetupReviewPanel = document.getElementById('easySetupReviewPanel');
 const easySetupDependencyStatus = document.getElementById('easySetupDependencyStatus');
+const easySetupAnimationGrid = document.getElementById('easySetupAnimationGrid');
+const easySetupAnimationHint = document.getElementById('easySetupAnimationHint');
 const easySetupReadyList = document.getElementById('easySetupReadyList');
 const easySetupBackBtn = document.getElementById('easySetupBackBtn');
 const easySetupDismissBtn = document.getElementById('easySetupDismissBtn');
 const easySetupNextBtn = document.getElementById('easySetupNextBtn');
+
+function getSettingAdvChatPhysicsToggle() {
+    return document.getElementById('settingAdvChatPhysicsEnabled');
+}
+
+function getEasySetupPhysicsToggle() {
+    return document.getElementById('easySetupPhysicsToggle');
+}
 
 let activeAutonomyLevel = 1;
 let activeTokenEconomy = 'balanced';
@@ -702,6 +715,10 @@ const chatAgentPresenceStateByActivityId = new Map();
 let chatRobotWorldRaf = 0;
 let chatRobotWorldLastFrameAt = 0;
 let chatPrimaryPresenceState = null;
+let chatRobotWorldLatestSnapshot = null;
+let chatRobotWorldDebugSamples = [];
+let chatRobotWorldDebugScenario = null;
+let chatPhysicsWorldState = null;
 let missionState = null;
 let contentState = null;
 const spendState = { payload: null, lastFetchedAt: 0 };
@@ -727,14 +744,33 @@ const CHAT_AGENT_PRESENCE_EXIT_MS = 760;
 const CHAT_PRIMARY_ROBOT_LINGER_MS = 10_000;
 const CHAT_PRIMARY_ROBOT_MIN_ACTION_MS = 2_600;
 const CHAT_PRIMARY_ROBOT_MAX_ACTION_MS = 5_600;
-const CHAT_PRIMARY_ROBOT_WORLD_HEIGHT = 150;
+const CHAT_PRIMARY_ROBOT_WORLD_HEIGHT = 108;
 const CHAT_PRIMARY_ROBOT_WORLD_PADDING_X = 18;
-const CHAT_PRIMARY_ROBOT_GROUND_OFFSET = 22;
+const CHAT_PRIMARY_ROBOT_GROUND_OFFSET = 26;
 const CHAT_PRIMARY_ROBOT_PERCH_LIFT = 36;
 const CHAT_PRIMARY_ROBOT_GRAVITY = 0.62;
 const CHAT_PRIMARY_ROBOT_FALL_SPEED_MAX = 11.5;
-const CHAT_PRIMARY_ROBOT_WALK_SPEED = 1.15;
+const CHAT_PRIMARY_ROBOT_WALK_SPEED = 1.7;
 const CHAT_PRIMARY_ROBOT_JUMP_SPEED = -7.6;
+const CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT = 56;
+const CHAT_PRIMARY_ROBOT_FOOT_OFFSET = 42;
+const CHAT_PRIMARY_ROBOT_DEBUG_KEY = '__THOMAS_CHAT_WORLD_DEBUG__';
+const CHAT_PRIMARY_ROBOT_DEBUG_SAMPLE_LIMIT = 240;
+const CHAT_PRIMARY_ROBOT_TASK_FOCUS_DELAY_MS = 1800;
+const CHAT_PRIMARY_ROBOT_TASK_FOCUS_RETURN_DELAY_MS = 1200;
+const CHAT_AGENT_PRESENCE_PORTAL_OUT_MS = 720;
+const CHAT_AGENT_DEBUG_HELPER_ID = 'debug-helper';
+const ANIMATION_FIDELITY_HIGH = 'high';
+const ANIMATION_FIDELITY_BALANCED = 'balanced';
+const ANIMATION_FIDELITY_MINIMAL = 'minimal';
+const ANIMATION_FIDELITY_VALUES = new Set([
+    ANIMATION_FIDELITY_HIGH,
+    ANIMATION_FIDELITY_BALANCED,
+    ANIMATION_FIDELITY_MINIMAL,
+]);
+const CHAT_WORLD_MODE_AMBIENT = 'ambient';
+const CHAT_WORLD_MODE_PHYSICS = 'physics';
+const EASY_SETUP_TOTAL_STEPS = 5;
 const CHAT_AGENT_PRESENCE_FLOAT_PAD_X = 26;
 const CHAT_AGENT_PRESENCE_FLOAT_PAD_TOP = 92;
 const CHAT_AGENT_PRESENCE_FLOAT_PAD_BOTTOM = 168;
@@ -1417,61 +1453,16 @@ if (window.visualViewport) {
 }
 
 function _createRobotStatus(category) {
-    const anim = _pickRobotAnimation();
     const wrapper = document.createElement('div');
-    wrapper.className = 'chat-robot-status chat-robot-status-staging';
+    wrapper.className = 'chat-robot-status chat-robot-status-inline';
     wrapper.innerHTML = `
-        <span class="chat-robot-portal-wrap">
-            <span class="chat-robot-portal portal-opening">
-                <span class="chat-game-portal-ring"></span>
-                <span class="chat-game-portal-ring ring-inner"></span>
-                <span class="chat-game-portal-core"></span>
-            </span>
-            <span class="chat-robot-agent-step chat-robot-enter-step">
-                <span class="chat-robot-agent chat-robot-enter pixel-agent pixel-agent-blue" data-idle-anim="${anim}">
-                    <span class="agent-head office-agent-head">
-                        <span class="agent-eye office-agent-eye office-agent-eye-left agent-eye-left"></span>
-                        <span class="agent-eye office-agent-eye office-agent-eye-right agent-eye-right"></span>
-                    </span>
-                    <span class="agent-body office-agent-body"></span>
-                    <span class="agent-leg office-agent-leg office-agent-leg-left agent-leg-left"></span>
-                    <span class="agent-leg office-agent-leg office-agent-leg-right agent-leg-right"></span>
-                </span>
-            </span>
-        </span>
-        <span class="chat-robot-text-wrap">
+        <span class="chat-robot-text-wrap chat-robot-text-wrap-inline">
             <span class="chat-robot-saying-row">
                 <span class="chat-robot-saying">${pickChatSaying(category)}</span>
             </span>
             <span class="chat-robot-timer">0.0s</span>
         </span>
     `;
-
-    // Stagger: entrance first, THEN idle animation after materialize finishes
-    const agentEl = wrapper.querySelector('.chat-robot-agent');
-    const portalEl = wrapper.querySelector('.chat-robot-portal');
-    if (agentEl) {
-        agentEl.addEventListener('animationend', function onMaterialize(e) {
-            if (e.animationName === 'chatRobotMaterialize') {
-                agentEl.classList.remove('chat-robot-enter');
-                agentEl.classList.add('chat-robot-anim-' + (agentEl.dataset.idleAnim || 'bouncing'));
-                agentEl.removeEventListener('animationend', onMaterialize);
-            }
-        });
-    }
-    // Close portal after it opens
-    if (portalEl) {
-        portalEl.addEventListener('animationend', function onPortalOpen(e) {
-            if (e.animationName === 'chatPortalOpen') {
-                setTimeout(() => {
-                    portalEl.classList.remove('portal-opening');
-                    portalEl.classList.add('portal-closing');
-                    portalEl.addEventListener('animationend', () => portalEl.remove(), { once: true });
-                }, CHAT_ROBOT_STATUS_PORTAL_PAUSE_MS);
-                portalEl.removeEventListener('animationend', onPortalOpen);
-            }
-        });
-    }
     return wrapper;
 }
 
@@ -1595,7 +1586,7 @@ let suggestionContext = '';
 let suggestionDismissible = true;
 const introShownSessionIds = new Set();
 
-const ONBOARDING_VERSION = 3;
+const ONBOARDING_VERSION = 4;
 const easySetupState = {
     step: 1,
     source: 'auto',
@@ -1614,6 +1605,8 @@ const easySetupState = {
     interviewIndex: -1,
     interviewAnswers: {},
     interviewSkipChosen: false,
+    animationFidelity: ANIMATION_FIDELITY_HIGH,
+    chatPhysicsEnabled: false,
 };
 
 const onboardingInterviewQuestions = [
@@ -1681,6 +1674,46 @@ const onboardingInterviewQuestions = [
         ],
     },
 ];
+
+function normalizeAnimationFidelity(valueRaw, fallback = ANIMATION_FIDELITY_HIGH) {
+    const value = safeString(valueRaw).toLowerCase();
+    if (ANIMATION_FIDELITY_VALUES.has(value)) return value;
+    return fallback;
+}
+
+function prefersReducedMotion() {
+    return Boolean(window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+}
+
+function recommendedAnimationFidelity() {
+    return prefersReducedMotion() ? ANIMATION_FIDELITY_BALANCED : ANIMATION_FIDELITY_HIGH;
+}
+
+function animationFidelityFromInterfacePrefs(interfacePrefs = {}) {
+    const explicit = normalizeAnimationFidelity(interfacePrefs?.animation_fidelity, '');
+    if (explicit) return explicit;
+    if (interfacePrefs?.animations_enabled === false) return ANIMATION_FIDELITY_MINIMAL;
+    if (interfacePrefs?.animations_enabled === true) return ANIMATION_FIDELITY_HIGH;
+    return recommendedAnimationFidelity();
+}
+
+function isAnimationFidelityEnabled(fidelityRaw) {
+    return normalizeAnimationFidelity(fidelityRaw, ANIMATION_FIDELITY_HIGH) !== ANIMATION_FIDELITY_MINIMAL;
+}
+
+function chatWorldPhysicsEnabledFromInterfacePrefs(interfacePrefs = {}) {
+    return Boolean(interfacePrefs?.advanced_chat_physics);
+}
+
+function chatWorldModeFromInterfacePrefs(interfacePrefs = {}) {
+    const fidelity = animationFidelityFromInterfacePrefs(interfacePrefs);
+    if (fidelity === ANIMATION_FIDELITY_MINIMAL) {
+        return CHAT_WORLD_MODE_AMBIENT;
+    }
+    return chatWorldPhysicsEnabledFromInterfacePrefs(interfacePrefs)
+        ? CHAT_WORLD_MODE_PHYSICS
+        : CHAT_WORLD_MODE_AMBIENT;
+}
 
 // 
 //   EASY SETUP / ONBOARDING                                               
@@ -2475,14 +2508,14 @@ function updateMessageTaskStrip(messageId, patch = {}) {
 
 function chatTaskRobotAgentMarkup() {
     return `
-        <span class="office-pixel-agent looking-user">
-            <span class="office-agent-head">
-                <span class="office-agent-eye office-agent-eye-left"></span>
-                <span class="office-agent-eye office-agent-eye-right"></span>
+        <span class="chat-robot-agent chat-robot-world-agent">
+            <span class="agent-head office-agent-head">
+                <span class="agent-eye office-agent-eye office-agent-eye-left agent-eye-left"></span>
+                <span class="agent-eye office-agent-eye office-agent-eye-right agent-eye-right"></span>
             </span>
-            <span class="office-agent-body"></span>
-            <span class="office-agent-leg office-agent-leg-left"></span>
-            <span class="office-agent-leg office-agent-leg-right"></span>
+            <span class="agent-body office-agent-body"></span>
+            <span class="agent-leg office-agent-leg office-agent-leg-left agent-leg-left"></span>
+            <span class="agent-leg office-agent-leg office-agent-leg-right agent-leg-right"></span>
         </span>
     `;
 }
@@ -2506,6 +2539,7 @@ function chatWorldEnsureUi() {
         root.id = 'chatAgentPresence';
         root.className = 'chat-robot-world is-hidden';
         root.innerHTML = `
+            <div class="chat-robot-world-physics hidden" data-role="physics"></div>
             <div class="chat-robot-world-stage" data-role="stage"></div>
             <div class="chat-robot-world-ground" aria-hidden="true"></div>
         `;
@@ -2578,6 +2612,9 @@ function chatRobotWorldShouldBeVisible() {
 
 function chatRobotWorldAmbientLine(state) {
     if (!state) return '';
+    if (safeString(state.kind) === 'primary' && chatRobotWorldTaskIsLive(state)) {
+        return safeString(state.summary || state.taskText) || 'Coordinating the active run while helpers work.';
+    }
     const mode = safeString(state.mode);
     if (mode === 'sleep') return 'Power nap while the task strip keeps score.';
     if (mode === 'workout') return 'Training while the background work cooks.';
@@ -2591,31 +2628,915 @@ function chatRobotWorldAmbientLine(state) {
     return safeString(state.summary || state.taskText) || 'Standing by.';
 }
 
+function chatRobotWorldTaskIsLive(state) {
+    return Boolean(state && !chatTaskIsTerminal(state.status) && safeString(state.status) !== 'idle');
+}
+
+function chatRobotWorldRectIsRenderable(rect) {
+    return Boolean(
+        rect
+        && Number.isFinite(rect.top)
+        && Number.isFinite(rect.bottom)
+        && Number.isFinite(rect.left)
+        && Number.isFinite(rect.right)
+        && Number.isFinite(rect.width)
+        && Number.isFinite(rect.height)
+        && rect.width > 2
+        && rect.height > 2
+    );
+}
+
+function chatRobotWorldRectWithin(rect, containerRect, slack = 48) {
+    if (!chatRobotWorldRectIsRenderable(rect)) return false;
+    if (!chatRobotWorldRectIsRenderable(containerRect)) return true;
+    return (
+        rect.top >= (containerRect.top - slack)
+        && rect.bottom <= (containerRect.bottom + slack)
+        && rect.left >= (containerRect.left - slack)
+        && rect.right <= (containerRect.right + slack)
+    );
+}
+
+function chatRobotWorldClamp(n, min, max) {
+    return Math.min(max, Math.max(min, n));
+}
+
 function chatRobotWorldBounds() {
     const mainRect = mainContent instanceof HTMLElement
         ? mainContent.getBoundingClientRect()
         : { left: 0, right: window.innerWidth, width: window.innerWidth, top: 0 };
-    const composerRect = composerContainer instanceof HTMLElement
+    const rawComposerRect = composerContainer instanceof HTMLElement
         ? composerContainer.getBoundingClientRect()
         : null;
+    const composerRect = chatRobotWorldRectIsRenderable(rawComposerRect) ? rawComposerRect : null;
+    const rawInputRowRect = composerContainer instanceof HTMLElement
+        ? composerContainer.querySelector('.composer-input-row')?.getBoundingClientRect?.()
+        : null;
+    const inputRowRect = chatRobotWorldRectWithin(rawInputRowRect, composerRect, 32) ? rawInputRowRect : null;
+    const rawStatusBarRect = composerStatusBar instanceof HTMLElement
+        ? composerStatusBar.getBoundingClientRect()
+        : null;
+    const statusBarRect = chatRobotWorldRectWithin(rawStatusBarRect, composerRect, 20) ? rawStatusBarRect : null;
+    const rawSuggestionRect = (assistantSuggestionRail instanceof HTMLElement && !assistantSuggestionRail.classList.contains('hidden'))
+        ? assistantSuggestionRail.getBoundingClientRect()
+        : null;
+    const suggestionRect = chatRobotWorldRectWithin(rawSuggestionRect, composerRect, 64) ? rawSuggestionRect : null;
     const width = Math.max(220, Math.round((mainRect.width || window.innerWidth) - (CHAT_PRIMARY_ROBOT_WORLD_PADDING_X * 2)));
-    const height = CHAT_PRIMARY_ROBOT_WORLD_HEIGHT;
     const left = Math.round((mainRect.left || 0) + CHAT_PRIMARY_ROBOT_WORLD_PADDING_X);
-    const top = composerRect
-        ? Math.round(Math.max(72, composerRect.top - height - 12))
-        : Math.round(Math.max(72, window.innerHeight - height - 152));
+    const anchorTop = Math.min(
+        suggestionRect ? suggestionRect.top : Number.POSITIVE_INFINITY,
+        composerRect ? composerRect.top : Number.POSITIVE_INFINITY,
+    );
+    const top = Number.isFinite(anchorTop)
+        ? Math.round(Math.max(72, anchorTop - 124))
+        : Math.round(Math.max(72, window.innerHeight - CHAT_PRIMARY_ROBOT_WORLD_HEIGHT - 34));
+    const bottom = composerRect
+        ? Math.round(Math.min(window.innerHeight - 8, composerRect.bottom + 14))
+        : Math.round(Math.min(window.innerHeight - 8, top + CHAT_PRIMARY_ROBOT_WORLD_HEIGHT));
+    const height = Math.max(CHAT_PRIMARY_ROBOT_WORLD_HEIGHT, bottom - top);
+    const fallbackFloorLineY = inputRowRect
+        ? Math.round(inputRowRect.bottom - top)
+        : Math.round(height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET);
+    const rawFloorLineY = statusBarRect
+        ? Math.round(statusBarRect.top - top)
+        : inputRowRect
+            ? Math.round(inputRowRect.bottom - top)
+            : Math.round(height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET);
+    const floorLineY = chatRobotWorldClamp(
+        Number.isFinite(rawFloorLineY) ? rawFloorLineY : fallbackFloorLineY,
+        24,
+        Math.max(28, height - 6),
+    );
     return {
         left,
         top,
         width,
         height,
-        groundY: height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET,
+        floorLineY,
+        groundY: chatRobotWorldClamp(
+            floorLineY - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+            0,
+            Math.max(0, height - CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT),
+        ),
     };
+}
+
+function chatRobotWorldGeometry(bounds = chatRobotWorldBounds()) {
+    const rawComposerBoxRect = composerBox instanceof HTMLElement
+        ? composerBox.getBoundingClientRect()
+        : null;
+    const composerBoxRect = chatRobotWorldRectIsRenderable(rawComposerBoxRect) ? rawComposerBoxRect : null;
+    const rawComposerRect = composerContainer instanceof HTMLElement
+        ? composerContainer.getBoundingClientRect()
+        : null;
+    const composerRect = chatRobotWorldRectIsRenderable(rawComposerRect) ? rawComposerRect : composerBoxRect;
+    const rawInputRowRect = composerContainer instanceof HTMLElement
+        ? composerContainer.querySelector('.composer-input-row')?.getBoundingClientRect?.()
+        : null;
+    const inputRowRect = chatRobotWorldRectWithin(rawInputRowRect, composerRect, 32) ? rawInputRowRect : null;
+    const rawStatusBarRect = composerStatusBar instanceof HTMLElement
+        ? composerStatusBar.getBoundingClientRect()
+        : null;
+    const statusBarRect = chatRobotWorldRectWithin(rawStatusBarRect, composerRect, 20) ? rawStatusBarRect : null;
+    const rawSuggestionRect = (assistantSuggestionRail instanceof HTMLElement && !assistantSuggestionRail.classList.contains('hidden'))
+        ? assistantSuggestionRail.getBoundingClientRect()
+        : null;
+    const suggestionRect = chatRobotWorldRectWithin(rawSuggestionRect, composerRect, 64) ? rawSuggestionRect : null;
+    const clampWorldY = (value, fallback, min = 0, max = bounds.height) => chatRobotWorldClamp(
+        Number.isFinite(value) ? Math.round(value) : Math.round(fallback),
+        min,
+        Math.max(min, max),
+    );
+    const composerBlock = composerBoxRect
+        ? {
+            id: 'composer-block',
+            x1: Math.max(18, Math.round(composerBoxRect.left - bounds.left + 6)),
+            x2: Math.min(bounds.width - 18, Math.round(composerBoxRect.right - bounds.left - 6)),
+            topY: clampWorldY(composerBoxRect.top - bounds.top, bounds.floorLineY - 96, 18, Math.max(24, bounds.height - 44)),
+            bottomY: clampWorldY(composerBoxRect.bottom - bounds.top, bounds.floorLineY - 12, 24, Math.max(28, bounds.height - 8)),
+        }
+        : null;
+    const floorY = statusBarRect
+        ? clampWorldY(statusBarRect.top - bounds.top, bounds.floorLineY, 24, Math.max(28, bounds.height - 6))
+        : inputRowRect
+            ? clampWorldY(inputRowRect.bottom - bounds.top, bounds.floorLineY, 24, Math.max(28, bounds.height - 6))
+            : bounds.floorLineY;
+    const roofY = composerBoxRect
+        ? clampWorldY(composerBoxRect.top - bounds.top, floorY - 46, 18, Math.max(24, floorY - 8))
+        : Math.max(18, floorY - 46);
+    const suggestionTopY = suggestionRect
+        ? clampWorldY(suggestionRect.top - bounds.top, roofY - 32, 18, Math.max(24, floorY - 12))
+        : 0;
+    const tunnelInset = 22;
+    return {
+        baseFloor: {
+            id: 'base-floor',
+            x1: 12,
+            x2: bounds.width - 12,
+            y: floorY,
+        },
+        floorY,
+        roofY,
+        composerBlock,
+        wall: composerBlock,
+        suggestionBox: suggestionRect
+            ? {
+                id: 'suggestion-box',
+                x1: Math.max(12, Math.round(suggestionRect.left - bounds.left)),
+                x2: Math.min(bounds.width - 12, Math.round(suggestionRect.right - bounds.left)),
+                topY: suggestionTopY,
+                bottomY: clampWorldY(suggestionRect.bottom - bounds.top, suggestionTopY + 42, suggestionTopY + 8, Math.max(suggestionTopY + 12, floorY - 4)),
+            }
+            : null,
+        backgroundTunnel: composerBlock
+            ? {
+                id: 'background-tunnel',
+                leftDoorX: Math.max(20, composerBlock.x1 - tunnelInset),
+                rightDoorX: Math.min(bounds.width - 20, composerBlock.x2 + tunnelInset),
+                y: chatRobotWorldClamp(
+                    floorY - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    0,
+                    Math.max(0, bounds.height - CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT),
+                ),
+            }
+            : null,
+        tunnel: composerBlock
+            ? {
+                leftDoorX: Math.max(20, composerBlock.x1 - tunnelInset),
+                rightDoorX: Math.min(bounds.width - 20, composerBlock.x2 + tunnelInset),
+            }
+            : null,
+    };
+}
+
+function chatRobotWorldMotionProfile(fidelityRaw) {
+    const fidelity = normalizeAnimationFidelity(fidelityRaw, animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {}));
+    if (fidelity === ANIMATION_FIDELITY_MINIMAL) {
+        return { fidelity, walkSpeed: 0.06, actionMinMs: 7600, actionMaxMs: 12_400, helperSpeedScale: 0.84 };
+    }
+    if (fidelity === ANIMATION_FIDELITY_BALANCED) {
+        return { fidelity, walkSpeed: 0.085, actionMinMs: 7200, actionMaxMs: 11_600, helperSpeedScale: 0.9 };
+    }
+    return { fidelity, walkSpeed: 0.11, actionMinMs: 6800, actionMaxMs: 10_800, helperSpeedScale: 0.94 };
+}
+
+function chatRobotWorldPrimaryUsesGroundedPhysics(state) {
+    return chatWorldIsPhysicsMode()
+        && !chatRobotWorldTaskIsLive(state)
+        && safeString(state?.kind) === 'primary';
+}
+
+function chatRobotWorldAddPlatformEdge(edges, fromId, toId, meta = {}) {
+    if (!fromId || !toId || fromId === toId) return;
+    if (!edges.has(fromId)) edges.set(fromId, []);
+    if (!edges.has(toId)) edges.set(toId, []);
+    edges.get(fromId).push({ to: toId, ...meta });
+    edges.get(toId).push({ to: fromId, ...meta });
+}
+
+function chatRobotWorldBuildPlatformGraph(bounds = chatRobotWorldBounds(), fidelityRaw = animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {})) {
+    const fidelity = normalizeAnimationFidelity(fidelityRaw, ANIMATION_FIDELITY_HIGH);
+    const geometry = chatRobotWorldGeometry(bounds);
+    const platforms = [];
+    const edges = new Map();
+    const pushPlatform = (platform) => {
+        if (!platform || !Number.isFinite(platform.x1) || !Number.isFinite(platform.x2) || platform.x2 - platform.x1 < 28) return;
+        platforms.push(platform);
+    };
+    if (geometry.composerBlock) {
+        pushPlatform({ id: 'floor-left', kind: 'floor', x1: geometry.baseFloor.x1, x2: geometry.composerBlock.x1 - 10, y: geometry.floorY });
+        pushPlatform({ id: 'floor-right', kind: 'floor', x1: geometry.composerBlock.x2 + 10, x2: geometry.baseFloor.x2, y: geometry.floorY });
+        pushPlatform({ id: 'composer-roof', kind: 'roof', x1: geometry.composerBlock.x1 + 12, x2: geometry.composerBlock.x2 - 12, y: geometry.roofY });
+    } else {
+        pushPlatform({ id: 'floor-main', kind: 'floor', x1: geometry.baseFloor.x1, x2: geometry.baseFloor.x2, y: geometry.floorY });
+    }
+    if (geometry.suggestionBox && fidelity !== ANIMATION_FIDELITY_MINIMAL) {
+        pushPlatform({
+            id: 'suggestion-top',
+            kind: 'suggestion',
+            x1: geometry.suggestionBox.x1 + 10,
+            x2: geometry.suggestionBox.x2 - 10,
+            y: geometry.suggestionBox.topY,
+        });
+    }
+    if (composerContainer instanceof HTMLElement && fidelity === ANIMATION_FIDELITY_HIGH) {
+        const platformEls = composerContainer.querySelectorAll('#attachBtn, #micBtn, #sendBtn, .composer-mode-chip, .assistant-suggestion-bubbles > *, .assistant-suggestion-head');
+        platformEls.forEach((el, index) => {
+            if (!(el instanceof HTMLElement) || !el.offsetParent) return;
+            const rect = el.getBoundingClientRect();
+            const x1 = Math.max(12, Math.round(rect.left - bounds.left));
+            const x2 = Math.min(bounds.width - 12, Math.round(rect.right - bounds.left));
+            const y = Math.round(rect.top - bounds.top);
+            if (x2 - x1 < 28 || y < 12 || y > bounds.height - 10) return;
+            pushPlatform({ id: `ui-${index}`, kind: 'ui', x1, x2, y });
+        });
+    }
+    const dedupedPlatforms = platforms
+        .filter((platform, index, list) => !list.some((other, otherIndex) => (
+            otherIndex < index
+            && Math.abs(other.y - platform.y) <= 2
+            && Math.abs(other.x1 - platform.x1) <= 4
+            && Math.abs(other.x2 - platform.x2) <= 4
+        )))
+        .sort((a, b) => a.y - b.y);
+    const platformsById = new Map(dedupedPlatforms.map((platform) => [platform.id, platform]));
+    const floorIds = dedupedPlatforms.filter((platform) => platform.kind === 'floor').map((platform) => platform.id);
+    const roofIds = dedupedPlatforms.filter((platform) => platform.kind === 'roof').map((platform) => platform.id);
+    const upperIds = dedupedPlatforms
+        .filter((platform) => platform.kind === 'roof' || platform.kind === 'suggestion' || platform.kind === 'ui')
+        .map((platform) => platform.id);
+
+    if (floorIds.length === 2 && geometry.backgroundTunnel) {
+        chatRobotWorldAddPlatformEdge(edges, floorIds[0], floorIds[1], { kind: 'tunnel', routeKind: 'door' });
+    }
+    if (floorIds.length >= 1 && roofIds.length >= 1) {
+        floorIds.forEach((floorId) => {
+            roofIds.forEach((roofId) => {
+                chatRobotWorldAddPlatformEdge(edges, floorId, roofId, {
+                    kind: 'climb',
+                    routeKind: chatRobotWorldTransitionKindForFidelity(fidelity),
+                });
+            });
+        });
+    }
+    if (upperIds.length >= 2) {
+        for (let i = 0; i < upperIds.length; i += 1) {
+            for (let j = i + 1; j < upperIds.length; j += 1) {
+                const a = platformsById.get(upperIds[i]);
+                const b = platformsById.get(upperIds[j]);
+                if (!a || !b) continue;
+                const overlapsX = !(a.x2 < b.x1 || b.x2 < a.x1);
+                const nearY = Math.abs(a.y - b.y) <= 22;
+                if (overlapsX || nearY) {
+                    chatRobotWorldAddPlatformEdge(edges, a.id, b.id, {
+                        kind: 'climb',
+                        routeKind: chatRobotWorldTransitionKindForFidelity(fidelity),
+                    });
+                }
+            }
+        }
+    }
+    upperIds.forEach((upperId) => {
+        floorIds.forEach((floorId) => {
+            chatRobotWorldAddPlatformEdge(edges, floorId, upperId, {
+                kind: 'climb',
+                routeKind: chatRobotWorldTransitionKindForFidelity(fidelity),
+            });
+        });
+    });
+    return {
+        fidelity,
+        bounds,
+        geometry,
+        platforms: dedupedPlatforms,
+        platformsById,
+        edges,
+    };
+}
+
+function chatRobotWorldPlatforms(bounds = chatRobotWorldBounds(), fidelityRaw = animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {})) {
+    return chatRobotWorldBuildPlatformGraph(bounds, fidelityRaw).platforms;
+}
+
+function chatWorldCurrentMode(interfacePrefs = currentPreferences?.advanced?.interface || {}) {
+    return chatWorldModeFromInterfacePrefs(interfacePrefs);
 }
 
 function chatRobotWorldStage() {
     const root = chatWorldEnsureUi();
     return root.querySelector('[data-role="stage"]');
+}
+
+function chatRobotWorldPhysicsLayer() {
+    const root = chatWorldEnsureUi();
+    return root.querySelector('[data-role="physics"]');
+}
+
+function chatWorldIsPhysicsMode(interfacePrefs = currentPreferences?.advanced?.interface || {}) {
+    return chatWorldCurrentMode(interfacePrefs) === CHAT_WORLD_MODE_PHYSICS;
+}
+
+function chatPhysicsWorldActorMetrics(state) {
+    return safeString(state?.kind) === 'delegation'
+        ? {
+            width: 18,
+            height: 28,
+            centerOffsetX: 23,
+            centerOffsetY: 28,
+        }
+        : {
+            width: 20,
+            height: 30,
+            centerOffsetX: 23,
+            centerOffsetY: 28,
+        };
+}
+
+function chatPhysicsColorToInt(colorRaw, fallback = 0x9ad8ff) {
+    const color = safeString(colorRaw).trim();
+    if (!color) return fallback;
+    const normalized = color.startsWith('#') ? color.slice(1) : color;
+    if (!/^[0-9a-f]{6}$/i.test(normalized)) return fallback;
+    return Number.parseInt(normalized, 16);
+}
+
+function chatPhysicsWorldStateSignature(bounds, graph) {
+    return JSON.stringify({
+        width: Math.round(Number(bounds?.width || 0)),
+        height: Math.round(Number(bounds?.height || 0)),
+        floorLineY: Math.round(Number(bounds?.floorLineY || 0)),
+        groundY: Math.round(Number(bounds?.groundY || 0)),
+        geometry: graph?.geometry || null,
+        platforms: Array.isArray(graph?.platforms)
+            ? graph.platforms.map((platform) => ({
+                id: safeString(platform?.id),
+                kind: safeString(platform?.kind),
+                x1: Math.round(Number(platform?.x1 || 0)),
+                x2: Math.round(Number(platform?.x2 || 0)),
+                y: Math.round(Number(platform?.y || 0)),
+            }))
+            : [],
+    });
+}
+
+function chatPhysicsWorldBodyCenterFromState(state) {
+    const metrics = chatPhysicsWorldActorMetrics(state);
+    return {
+        x: Number(state?.x || 0) + metrics.centerOffsetX,
+        y: Number(state?.y || 0) + metrics.centerOffsetY,
+    };
+}
+
+function chatPhysicsWorldSyncStateFromBody(state, actorRecord, bounds = chatRobotWorldBounds()) {
+    const body = actorRecord?.body;
+    const node = actorRecord?.node;
+    if (!state || !body || !node) return;
+    const metrics = actorRecord.metrics || chatPhysicsWorldActorMetrics(state);
+    const bodyCenterX = Number(node.x || 0);
+    const bodyCenterY = Number(node.y || 0);
+    state.x = chatRobotWorldClamp(
+        bodyCenterX - metrics.centerOffsetX,
+        0,
+        Math.max(0, Number(bounds?.width || 0) - 18),
+    );
+    state.y = chatRobotWorldClamp(
+        bodyCenterY - metrics.centerOffsetY,
+        0,
+        Math.max(0, Number(bounds?.height || 0) - CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT),
+    );
+}
+
+function chatPhysicsWorldSyncBodyFromState(state, actorRecord) {
+    const body = actorRecord?.body;
+    const node = actorRecord?.node;
+    if (!state || !body || !node) return;
+    const center = chatPhysicsWorldBodyCenterFromState(state);
+    node.setPosition(center.x, center.y);
+    body.reset(center.x, center.y);
+    body.setVelocity(0, 0);
+}
+
+function chatPhysicsWorldSetActorGravity(actorRecord, enabled) {
+    const body = actorRecord?.body;
+    if (!body) return;
+    body.setAllowGravity(Boolean(enabled));
+    if (!enabled) body.setVelocityY(0);
+}
+
+function chatPhysicsWorldClearStaticBodies(worldState) {
+    const bodies = Array.isArray(worldState?.staticBodies) ? worldState.staticBodies : [];
+    bodies.forEach((entry) => {
+        try {
+            entry?.body?.destroy?.();
+        } catch (_) {}
+        try {
+            entry?.node?.destroy?.();
+        } catch (_) {}
+    });
+    if (worldState) worldState.staticBodies = [];
+}
+
+function chatPhysicsWorldEnsureVisualLayer(worldState) {
+    const scene = worldState?.scene;
+    if (!scene) return null;
+    if (worldState.visualLayer?.graphics?.active) return worldState.visualLayer;
+    const graphics = scene.add.graphics();
+    graphics.setDepth(30);
+    worldState.visualLayer = { graphics };
+    return worldState.visualLayer;
+}
+
+function chatPhysicsWorldDrawTraversalProp(graphics, placement) {
+    void graphics;
+    void placement;
+}
+
+function chatPhysicsWorldRenderVisualLayer(worldState, bounds, graph, actors = []) {
+    const visualLayer = chatPhysicsWorldEnsureVisualLayer(worldState);
+    const graphics = visualLayer?.graphics;
+    if (!graphics) return;
+    graphics.clear();
+    void bounds;
+    void graph;
+    void actors;
+}
+
+function chatPhysicsWorldAddStaticRect(worldState, id, left, top, width, height) {
+    const scene = worldState?.scene;
+    if (!scene || !scene.physics) return null;
+    const safeWidth = Math.max(4, Math.round(width));
+    const safeHeight = Math.max(4, Math.round(height));
+    const node = scene.add.rectangle(
+        Math.round(left + (safeWidth * 0.5)),
+        Math.round(top + (safeHeight * 0.5)),
+        safeWidth,
+        safeHeight,
+        0x9bd8ff,
+        0.001,
+    );
+    node.setVisible(false);
+    scene.physics.add.existing(node, true);
+    const body = node.body;
+    const entry = { id: safeString(id), node, body };
+    worldState.staticBodies.push(entry);
+    return entry;
+}
+
+function chatPhysicsWorldRefreshActorColliders(worldState, actorRecord) {
+    if (!worldState?.scene || !actorRecord?.node) return;
+    actorRecord.colliders = Array.isArray(actorRecord.colliders) ? actorRecord.colliders : [];
+    actorRecord.colliders.forEach((collider) => {
+        try { collider?.destroy?.(); } catch (_) {}
+    });
+    actorRecord.colliders = [];
+    (worldState.staticBodies || []).forEach((entry) => {
+        const collider = worldState.scene.physics.add.collider(actorRecord.node, entry.node);
+        actorRecord.colliders.push(collider);
+    });
+}
+
+function chatPhysicsWorldDestroyActorVisual(actorRecord) {
+    const visual = actorRecord?.visual;
+    if (!visual) return;
+    try { visual.root?.destroy?.(); } catch (_) {}
+    actorRecord.visual = null;
+}
+
+function chatPhysicsWorldEnsureActorVisual(worldState, state, actorRecord) {
+    void worldState;
+    void state;
+    if (actorRecord?.visual) {
+        chatPhysicsWorldDestroyActorVisual(actorRecord);
+    }
+    return null;
+}
+
+function chatPhysicsWorldRenderActorVisual(state, actorRecord) {
+    void state;
+    if (actorRecord?.visual) {
+        chatPhysicsWorldDestroyActorVisual(actorRecord);
+    }
+}
+
+function chatPhysicsWorldRebuildStatics(worldState, bounds, graph) {
+    if (!worldState?.scene?.physics) return;
+    const scene = worldState.scene;
+    const geometry = graph?.geometry || chatRobotWorldGeometry(bounds);
+    const platforms = Array.isArray(graph?.platforms) ? graph.platforms : [];
+    scene.physics.world.setBounds(0, 0, Math.max(220, Number(bounds?.width || 0)), Math.max(140, Number(bounds?.height || 0)));
+    chatPhysicsWorldClearStaticBodies(worldState);
+    chatPhysicsWorldAddStaticRect(
+        worldState,
+        'floor',
+        Number(geometry?.baseFloor?.x1 || 0),
+        Number(geometry?.floorY || bounds?.floorLineY || 0),
+        Math.max(24, Number(geometry?.baseFloor?.x2 || bounds?.width || 0) - Number(geometry?.baseFloor?.x1 || 0)),
+        8,
+    );
+    if (geometry?.composerBlock) {
+        chatPhysicsWorldAddStaticRect(
+            worldState,
+            'composer-block',
+            Number(geometry.composerBlock.x1 || 0),
+            Number(geometry.composerBlock.topY || 0),
+            Math.max(24, Number(geometry.composerBlock.x2 || 0) - Number(geometry.composerBlock.x1 || 0)),
+            Math.max(24, Number(geometry.composerBlock.bottomY || 0) - Number(geometry.composerBlock.topY || 0)),
+        );
+    }
+    if (geometry?.suggestionBox) {
+        const suggestionWidth = Math.max(24, Number(geometry.suggestionBox.x2 || 0) - Number(geometry.suggestionBox.x1 || 0));
+        const suggestionHeight = Math.max(14, Number(geometry.suggestionBox.bottomY || 0) - Number(geometry.suggestionBox.topY || 0));
+        const wallThickness = 8;
+        chatPhysicsWorldAddStaticRect(
+            worldState,
+            'suggestion-ceiling',
+            Number(geometry.suggestionBox.x1 || 0),
+            Number(geometry.suggestionBox.topY || 0),
+            suggestionWidth,
+            wallThickness,
+        );
+        chatPhysicsWorldAddStaticRect(
+            worldState,
+            'suggestion-wall-left',
+            Number(geometry.suggestionBox.x1 || 0),
+            Number(geometry.suggestionBox.topY || 0),
+            wallThickness,
+            suggestionHeight,
+        );
+        chatPhysicsWorldAddStaticRect(
+            worldState,
+            'suggestion-wall-right',
+            Number(geometry.suggestionBox.x2 || 0) - wallThickness,
+            Number(geometry.suggestionBox.topY || 0),
+            wallThickness,
+            suggestionHeight,
+        );
+    }
+    platforms
+        .filter((platform) => new Set(['roof', 'ui', 'suggestion']).has(safeString(platform?.kind)))
+        .forEach((platform) => {
+            chatPhysicsWorldAddStaticRect(
+                worldState,
+                `platform-${safeString(platform.id)}`,
+                Number(platform.x1 || 0),
+                Number(platform.y || 0),
+                Math.max(18, Number(platform.x2 || 0) - Number(platform.x1 || 0)),
+                8,
+            );
+        });
+    (worldState.actorBodies || new Map()).forEach((actorRecord) => {
+        chatPhysicsWorldRefreshActorColliders(worldState, actorRecord);
+    });
+}
+
+function chatPhysicsWorldRemoveActor(worldState, activityId) {
+    const key = safeString(activityId);
+    if (!worldState?.actorBodies?.has(key)) return;
+    const record = worldState.actorBodies.get(key);
+    chatPhysicsWorldDestroyActorVisual(record);
+    (record?.colliders || []).forEach((collider) => {
+        try { collider?.destroy?.(); } catch (_) {}
+    });
+    try { record?.body?.destroy?.(); } catch (_) {}
+    try { record?.node?.destroy?.(); } catch (_) {}
+    worldState.actorBodies.delete(key);
+}
+
+function chatPhysicsWorldEnsureActor(worldState, state) {
+    if (!worldState?.scene?.physics || !state) return null;
+    const key = safeString(state.activityId);
+    if (!key) return null;
+    let actorRecord = worldState.actorBodies.get(key);
+    const center = chatPhysicsWorldBodyCenterFromState(state);
+    if (!actorRecord) {
+        const metrics = chatPhysicsWorldActorMetrics(state);
+        const node = worldState.scene.add.rectangle(
+            center.x,
+            center.y,
+            metrics.width,
+            metrics.height,
+            0xffffff,
+            0.001,
+        );
+        node.setVisible(false);
+        worldState.scene.physics.add.existing(node, false);
+        const body = node.body;
+        body.setCollideWorldBounds(true);
+        body.setDragX(2600);
+        body.setMaxVelocity(108, 860);
+        actorRecord = {
+            activityId: key,
+            node,
+            body,
+            colliders: [],
+            metrics,
+        };
+        worldState.actorBodies.set(key, actorRecord);
+        chatPhysicsWorldRefreshActorColliders(worldState, actorRecord);
+    } else {
+        actorRecord.metrics = chatPhysicsWorldActorMetrics(state);
+    }
+    if (Math.abs(Number(actorRecord.node.x || 0) - center.x) > 48 || Math.abs(Number(actorRecord.node.y || 0) - center.y) > 56) {
+        chatPhysicsWorldSyncBodyFromState(state, actorRecord);
+    }
+    actorRecord.node.body.setSize(actorRecord.metrics.width, actorRecord.metrics.height, true);
+    chatPhysicsWorldEnsureActorVisual(worldState, state, actorRecord);
+    return actorRecord;
+}
+
+function chatPhysicsWorldStablePlatformForState(state, graph = null) {
+    const platformGraph = graph || chatPhysicsWorldState?.graph || null;
+    const platformsById = platformGraph?.platformsById instanceof Map ? platformGraph.platformsById : new Map();
+    const livePlatforms = Array.isArray(platformGraph?.platforms) ? platformGraph.platforms : [];
+    const currentPlatformId = safeString(state?.currentPlatformId);
+    const targetPlatformId = safeString(state?.targetPlatformId);
+    const preferredX = Number.isFinite(Number(state?.targetX)) ? Number(state.targetX) : Number(state?.x || 0);
+    const current = currentPlatformId ? platformsById.get(currentPlatformId) : null;
+    if (current) return current;
+    const target = targetPlatformId ? platformsById.get(targetPlatformId) : null;
+    if (target) return target;
+    const floorPlatforms = livePlatforms.filter((platform) => safeString(platform?.kind) === 'floor');
+    const candidates = floorPlatforms.length ? floorPlatforms : livePlatforms;
+    if (!candidates.length) return null;
+    let best = candidates[0];
+    let bestScore = Number.POSITIVE_INFINITY;
+    candidates.forEach((platform) => {
+        const x1 = Number(platform?.x1 || 0);
+        const x2 = Number(platform?.x2 || x1);
+        const centerX = (x1 + x2) * 0.5;
+        const clampedX = chatRobotWorldClamp(preferredX, x1, x2);
+        const score = Math.abs(clampedX - preferredX) + (Math.abs(centerX - preferredX) * 0.1);
+        if (score < bestScore) {
+            best = platform;
+            bestScore = score;
+        }
+    });
+    return best;
+}
+
+function chatPhysicsWorldSnapActorsToStableSurfaces(worldState, actors = [], graph = null) {
+    if (!worldState?.ready && !worldState?.scene) return;
+    (actors || []).forEach((state) => {
+        if (!state) return;
+        if (state.portalTransfer || state.transition) return;
+        const actorRecord = chatPhysicsWorldEnsureActor(worldState, state);
+        if (!actorRecord?.body) return;
+        const stablePlatform = chatPhysicsWorldStablePlatformForState(state, graph);
+        if (!stablePlatform) return;
+        const x1 = Number(stablePlatform.x1 || 0);
+        const x2 = Number(stablePlatform.x2 || x1);
+        const fallbackX = Math.round((x1 + x2) * 0.5);
+        const nextX = chatRobotWorldClamp(
+            Number.isFinite(Number(state.targetX)) ? Number(state.targetX) : Number(state.x || fallbackX),
+            x1 + 6,
+            x2 - 6,
+        );
+        state.x = nextX;
+        state.y = Number(stablePlatform.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+        state.targetX = nextX;
+        state.targetY = state.y;
+        state.currentPlatformId = safeString(stablePlatform.id);
+        state.targetPlatformId = safeString(stablePlatform.id);
+        state.hiddenTransit = false;
+        state.vx = 0;
+        state.vy = 0;
+        chatPhysicsWorldSyncBodyFromState(state, actorRecord);
+        try {
+            actorRecord.body.setVelocity(0, 0);
+        } catch (_) {}
+        chatPhysicsWorldRenderActorVisual(state, actorRecord);
+    });
+}
+
+function chatPhysicsWorldSyncActors(worldState, actors) {
+    if (!worldState?.scene) return;
+    const liveIds = new Set((actors || []).map((state) => safeString(state?.activityId)).filter(Boolean));
+    [...(worldState.actorBodies?.keys?.() || [])].forEach((activityId) => {
+        if (!liveIds.has(activityId)) {
+            chatPhysicsWorldRemoveActor(worldState, activityId);
+        }
+    });
+    (actors || []).forEach((state) => {
+        chatPhysicsWorldEnsureActor(worldState, state);
+    });
+}
+
+function chatPhysicsWorldDestroy() {
+    const worldState = chatPhysicsWorldState;
+    if (!worldState) return;
+    try {
+        worldState.game?.destroy?.(true);
+    } catch (_) {}
+    if (worldState.layer instanceof HTMLElement) {
+        worldState.layer.classList.add('hidden');
+        worldState.layer.innerHTML = '';
+    }
+    chatPhysicsWorldState = null;
+}
+
+function chatPhysicsWorldPrime(bounds, graph, actors = []) {
+    if (chatWorldCurrentMode() !== CHAT_WORLD_MODE_PHYSICS) {
+        chatPhysicsWorldDestroy();
+        return null;
+    }
+    const layer = chatRobotWorldPhysicsLayer();
+    if (!(layer instanceof HTMLElement)) return null;
+    layer.classList.remove('hidden');
+    layer.style.width = `${Math.round(Number(bounds?.width || 0))}px`;
+    layer.style.height = `${Math.round(Number(bounds?.height || 0))}px`;
+    const nextSignature = chatPhysicsWorldStateSignature(bounds, graph);
+    if (chatPhysicsWorldState?.ready && chatPhysicsWorldState.signature !== nextSignature) {
+        chatPhysicsWorldRebuildStatics(chatPhysicsWorldState, bounds, graph);
+        chatPhysicsWorldState.signature = nextSignature;
+    }
+    if (chatPhysicsWorldState?.ready) {
+        chatPhysicsWorldState.bounds = bounds;
+        chatPhysicsWorldState.graph = graph;
+        chatPhysicsWorldState.signature = nextSignature;
+        chatPhysicsWorldSyncActors(chatPhysicsWorldState, actors);
+        if (chatPhysicsWorldState.signature === nextSignature) {
+            chatPhysicsWorldSnapActorsToStableSurfaces(chatPhysicsWorldState, actors, graph);
+        }
+        return chatPhysicsWorldState;
+    }
+    if (chatPhysicsWorldState?.loadingPromise) return chatPhysicsWorldState;
+    const worldState = {
+        layer,
+        bounds,
+        graph,
+        signature: nextSignature,
+        actorBodies: new Map(),
+        staticBodies: [],
+        game: null,
+        scene: null,
+        ready: false,
+        loadingPromise: null,
+    };
+    chatPhysicsWorldState = worldState;
+    worldState.loadingPromise = (async () => {
+        const Phaser = await moduleWorkbenchLoadPhaser();
+        if (chatWorldCurrentMode() !== CHAT_WORLD_MODE_PHYSICS || chatPhysicsWorldState !== worldState) return null;
+        let resolveSceneReady = () => {};
+        const readyPromise = new Promise((resolve) => {
+            resolveSceneReady = resolve;
+        });
+        worldState.game = new Phaser.Game({
+            type: Phaser.CANVAS,
+            parent: layer,
+            width: Math.max(220, Math.round(Number(bounds?.width || 0))),
+            height: Math.max(140, Math.round(Number(bounds?.height || 0))),
+            transparent: true,
+            audio: { noAudio: true },
+            banner: false,
+            fps: { target: 60, forceSetTimeOut: false },
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { y: 980 },
+                    debug: false,
+                },
+            },
+            scene: {
+                create() {
+                    worldState.scene = this;
+                    this.cameras.main.setBackgroundColor('rgba(0,0,0,0)');
+                    resolveSceneReady(this);
+                },
+            },
+        });
+        await readyPromise;
+        if (chatPhysicsWorldState !== worldState) return null;
+        chatPhysicsWorldRebuildStatics(worldState, bounds, graph);
+        chatPhysicsWorldSyncActors(worldState, actors);
+        chatPhysicsWorldSnapActorsToStableSurfaces(worldState, actors, graph);
+        chatPhysicsWorldRenderVisualLayer(worldState, bounds, graph, actors);
+        worldState.ready = true;
+        worldState.loadingPromise = null;
+        return worldState;
+    })().catch((error) => {
+        console.error('Failed to initialize chat physics world', error);
+        if (chatPhysicsWorldState === worldState) {
+            chatPhysicsWorldDestroy();
+        }
+        return null;
+    });
+    return worldState;
+}
+
+function chatPhysicsWorldAdvanceActor(worldState, state, dt, bounds, graph, walkSpeed, { scenarioLocked = false } = {}) {
+    const actorRecord = chatPhysicsWorldEnsureActor(worldState, state);
+    if (!actorRecord?.body) return false;
+    const body = actorRecord.body;
+    const targetPlatform = graph?.platformsById?.get(safeString(state.targetPlatformId || state.currentPlatformId || '')) || null;
+    if (state.portalTransfer) {
+        chatPhysicsWorldSetActorGravity(actorRecord, false);
+        chatRobotWorldAdvancePortalTransfer(state, bounds);
+        chatPhysicsWorldSyncBodyFromState(state, actorRecord);
+        chatPhysicsWorldRenderActorVisual(state, actorRecord);
+        return true;
+    }
+    if (state.transition) {
+        chatPhysicsWorldSetActorGravity(actorRecord, false);
+        chatRobotWorldAdvanceTransition(state, dt, bounds);
+        chatPhysicsWorldSyncBodyFromState(state, actorRecord);
+        chatPhysicsWorldRenderActorVisual(state, actorRecord);
+        return true;
+    }
+    chatPhysicsWorldSetActorGravity(actorRecord, true);
+    if (targetPlatform && Number(state.postTransitionStickUntil || 0) > Date.now()) {
+        state.x = chatRobotWorldClamp(
+            Number(state.x || 0),
+            Number(targetPlatform.x1 || 0) + 4,
+            Number(targetPlatform.x2 || 0) - 4,
+        );
+        state.y = Number(targetPlatform.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+        chatPhysicsWorldSyncBodyFromState(state, actorRecord);
+        state.currentPlatformId = safeString(targetPlatform.id);
+        chatPhysicsWorldRenderActorVisual(state, actorRecord);
+        return true;
+    }
+    if (scenarioLocked || (safeString(state.kind) === 'delegation' && state.exiting)) {
+        body.setVelocityX(0);
+        chatPhysicsWorldSyncStateFromBody(state, actorRecord, bounds);
+        chatPhysicsWorldRenderActorVisual(state, actorRecord);
+        return true;
+    }
+    const targetX = Number(state.targetX ?? state.x ?? 0);
+    const currentCenterX = Number(actorRecord.node.x || 0);
+    const desiredCenterX = targetX + actorRecord.metrics.centerOffsetX;
+    const dx = desiredCenterX - currentCenterX;
+    let desiredVelocityX = 0;
+    if (Math.abs(dx) > 3) {
+        state.facing = dx >= 0 ? 1 : -1;
+        desiredVelocityX = (dx >= 0 ? 1 : -1) * (walkSpeed * 60);
+        if ((state.mode === 'sleep' || state.mode === 'workout') && safeString(state.status) === 'idle') {
+            desiredVelocityX *= 0.35;
+        }
+    }
+    if (targetPlatform) {
+        const minCenterX = Number(targetPlatform.x1 || 0) + actorRecord.metrics.centerOffsetX - 2;
+        const maxCenterX = Number(targetPlatform.x2 || 0) - (46 - actorRecord.metrics.centerOffsetX) + 2;
+        if (currentCenterX <= minCenterX && desiredVelocityX < 0) desiredVelocityX = 0;
+        if (currentCenterX >= maxCenterX && desiredVelocityX > 0) desiredVelocityX = 0;
+    }
+    body.setVelocityX(desiredVelocityX);
+    chatPhysicsWorldSyncStateFromBody(state, actorRecord, bounds);
+    const landedPlatform = chatRobotWorldCurrentPlatform(state, graph?.platforms || []);
+    if (landedPlatform) {
+        state.currentPlatformId = safeString(landedPlatform.id);
+    }
+    if (
+        targetPlatform
+        && landedPlatform
+        && safeString(landedPlatform.id) === safeString(targetPlatform.id)
+        && (body.blocked?.down || body.touching?.down)
+    ) {
+        state.x = chatRobotWorldClamp(
+            Number(state.x || 0),
+            Number(targetPlatform.x1 || 0) + 4,
+            Number(targetPlatform.x2 || 0) - 4,
+        );
+        state.y = Number(targetPlatform.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+        chatPhysicsWorldSyncBodyFromState(state, actorRecord);
+    }
+    chatPhysicsWorldRenderActorVisual(state, actorRecord);
+    return true;
+}
+
+function chatPhysicsWorldActorDebugRow(activityId) {
+    const record = chatPhysicsWorldState?.actorBodies?.get?.(safeString(activityId));
+    const body = record?.body;
+    const node = record?.node;
+    if (!record || !body || !node) return null;
+    return {
+        bodyCenterX: Math.round(Number(node.x || 0)),
+        bodyCenterY: Math.round(Number(node.y || 0)),
+        bodyVelocityX: Math.round(Number(body.velocity?.x || 0)),
+        bodyVelocityY: Math.round(Number(body.velocity?.y || 0)),
+        bodyBlockedDown: Boolean(body.blocked?.down || body.touching?.down),
+        bodyBlockedLeft: Boolean(body.blocked?.left),
+        bodyBlockedRight: Boolean(body.blocked?.right),
+    };
 }
 
 function chatWorldSyncRootVisibility() {
@@ -2624,12 +3545,24 @@ function chatWorldSyncRootVisibility() {
     const show = chatRobotWorldShouldBeVisible() && (Boolean(chatPrimaryPresenceState?.element) || hasHelpers);
     root.classList.toggle('is-hidden', !show);
     root.classList.toggle('is-active', show);
+    root.dataset.worldMode = chatWorldCurrentMode();
     const bounds = chatRobotWorldBounds();
     root.style.left = `${bounds.left}px`;
     root.style.top = `${bounds.top}px`;
     root.style.width = `${bounds.width}px`;
     root.style.height = `${bounds.height}px`;
     root.style.setProperty('--chat-robot-ground-y', `${bounds.groundY}px`);
+    const physicsLayer = root.querySelector('[data-role="physics"]');
+    if (physicsLayer instanceof HTMLElement) {
+        physicsLayer.classList.toggle('hidden', !(show && chatWorldCurrentMode() === CHAT_WORLD_MODE_PHYSICS));
+        physicsLayer.style.width = `${bounds.width}px`;
+        physicsLayer.style.height = `${bounds.height}px`;
+    }
+    const legacyDock = document.getElementById(CHAT_ROBOT_DOCK_ID);
+    if (legacyDock instanceof HTMLElement && show) {
+        legacyDock.classList.add('is-hidden');
+        legacyDock.innerHTML = '';
+    }
 }
 
 function chatRobotWorldOfficeButtonHandler(activityId, state) {
@@ -2652,7 +3585,7 @@ function chatRobotWorldActorMarkup(name = 'Thomas', helper = false) {
             <span class="chat-game-portal-core"></span>
         </span>
         <span class="chat-robot-world-shadow" aria-hidden="true"></span>
-        <span class="chat-robot-world-bot ${helper ? 'is-helper' : 'is-primary'} chat-robot-landed" data-role="bot">
+        <span class="chat-robot-world-bot ${helper ? 'is-helper' : 'is-primary'}" data-role="bot">
             ${chatTaskRobotAgentMarkup()}
         </span>
         <span class="chat-robot-world-label" data-role="label">${escapeHtml(name)}</span>
@@ -2685,6 +3618,12 @@ function chatRobotWorldCreateActorElement(activityId, state) {
         state.paused = !state.paused;
         el.classList.toggle('is-expanded', Boolean(state.paused));
     });
+    const routeEl = document.createElement('span');
+    routeEl.className = 'chat-robot-world-route hidden';
+    routeEl.dataset.role = 'route';
+    routeEl.dataset.activityId = safeString(activityId);
+    stage.appendChild(routeEl);
+    state.routeElement = routeEl;
     stage.appendChild(el);
     return el;
 }
@@ -2740,9 +3679,14 @@ function chatRobotWorldApplyPalette(state) {
     state.element.style.setProperty('--agent-primary', palette.primary);
     state.element.style.setProperty('--agent-secondary', palette.secondary);
     state.element.style.setProperty('--agent-glow', palette.glow);
-    const agentEl = state.element.querySelector('.office-pixel-agent');
+    const agentEl = state.element.querySelector('.chat-robot-agent, .office-pixel-agent');
     if (!(agentEl instanceof HTMLElement)) return;
     agentEl.classList.toggle('facing-left', Number(state.facing || 1) < 0);
+    CHAT_ROBOT_ANIMATIONS.forEach((anim) => agentEl.classList.remove(`chat-robot-anim-${anim}`));
+    const behavior = safeString(state.behaviorClass).replace(/^chat-robot-anim-/, '');
+    if (behavior) {
+        agentEl.classList.add(`chat-robot-anim-${behavior}`);
+    }
     agentEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
     const costume = safeString(state.costume || 'none').toLowerCase();
     if (costume && costume !== 'none') {
@@ -2750,7 +3694,365 @@ function chatRobotWorldApplyPalette(state) {
     }
 }
 
-function chatRobotWorldPerchTarget(state) {
+function chatRobotWorldBehaviorForMode(modeRaw = '') {
+    const mode = safeString(modeRaw).toLowerCase();
+    if (mode === 'sleep') return 'napping';
+    if (mode === 'workout') return 'lifting';
+    if (mode === 'inspect') return 'scanning';
+    if (mode === 'perch') return 'looking';
+    return officePick(['bouncing', 'waving', 'shimmy', 'looking']) || 'looking';
+}
+
+function chatRobotWorldCurrentPlatform(state, platforms = []) {
+    const actorY = Number(state?.y ?? 0) + CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+    const actorX = Number(state?.x ?? 0) + 23;
+    return platforms.find((platform) => (
+        actorX >= (platform.x1 - 12)
+        && actorX <= (platform.x2 + 12)
+        && Math.abs(actorY - platform.y) <= 12
+    )) || null;
+}
+
+function chatRobotWorldFindRoute(graph, fromId, toId) {
+    const startId = safeString(fromId);
+    const targetId = safeString(toId);
+    if (!startId || !targetId) return [];
+    if (startId === targetId) return [startId];
+    const queue = [[startId]];
+    const seen = new Set([startId]);
+    while (queue.length) {
+        const route = queue.shift();
+        const nodeId = route?.[route.length - 1];
+        if (!nodeId) continue;
+        const neighbors = graph?.edges?.get(nodeId) || [];
+        for (const neighbor of neighbors) {
+            const nextId = safeString(neighbor?.to);
+            if (!nextId || seen.has(nextId)) continue;
+            const nextRoute = [...route, nextId];
+            if (nextId === targetId) return nextRoute;
+            seen.add(nextId);
+            queue.push(nextRoute);
+        }
+    }
+    return [];
+}
+
+function chatRobotWorldTransitionKindForFidelity(fidelityRaw) {
+    const fidelity = normalizeAnimationFidelity(fidelityRaw, ANIMATION_FIDELITY_HIGH);
+    if (fidelity === ANIMATION_FIDELITY_MINIMAL) return '';
+    if (fidelity === ANIMATION_FIDELITY_BALANCED) return 'ladder';
+    return officePick(['ladder', 'stairs', 'lift']) || 'ladder';
+}
+
+function chatRobotWorldCreateTransition(state, segments = [], meta = {}) {
+    if (!Array.isArray(segments) || segments.length === 0) return null;
+    const first = segments[0];
+    return {
+        kind: safeString(meta.kind || first.kind || ''),
+        routeKind: safeString(meta.routeKind || first.routeKind || ''),
+        segments,
+        index: 0,
+        startedAt: performance.now(),
+        fromX: Number(state?.x || 0),
+        fromY: Number(state?.y || 0),
+        hiddenTransit: Boolean(first.hidden),
+        targetPlatformId: safeString(meta.targetPlatformId || first.platformId || ''),
+    };
+}
+
+function chatRobotWorldPlatformCenter(platform) {
+    if (!platform) return 0;
+    return (Number(platform.x1 || 0) + Number(platform.x2 || 0)) * 0.5;
+}
+
+function chatRobotWorldAmbientZoneForX(x, bounds = chatRobotWorldBounds()) {
+    return Number(x || 0) <= (Number(bounds.width || 0) * 0.5) ? 'left' : 'right';
+}
+
+function chatRobotWorldRoutePlacement(state, transition, segment) {
+    if (!state || !transition || !segment) return null;
+    const routeKind = safeString(segment.routeKind || transition.routeKind || '');
+    if (!routeKind) return null;
+    const currentX = Number(state.x || transition.fromX || 0);
+    const currentY = Number(state.y || transition.fromY || 0);
+    const targetX = Number(segment.x || currentX);
+    const targetY = Number(segment.y || currentY);
+    if (routeKind === 'door') {
+        const hidden = Boolean(segment.hidden);
+        const doorX = Math.round(hidden ? targetX : currentX);
+        const doorY = Math.round(Math.max(currentY, targetY) + 10);
+        return {
+            kind: routeKind,
+            phase: hidden ? 'transit' : (transition.index > 0 ? 'opening' : 'staging'),
+            left: doorX - 16,
+            top: doorY - 4,
+            width: 32,
+            height: 36,
+        };
+    }
+    const propAnchorX = Number(segment.propX || targetX);
+    const propTopY = Number.isFinite(segment.propTopY) ? Number(segment.propTopY) : Math.min(currentY, targetY);
+    const propBottomY = Number.isFinite(segment.propBottomY) ? Number(segment.propBottomY) : Math.max(currentY, targetY);
+    const phase = segment.kind === 'walk' ? 'staging' : 'active';
+    if (routeKind === 'ladder') {
+        const height = Math.max(48, Math.round(propBottomY - propTopY) + 20);
+        return {
+            kind: routeKind,
+            phase,
+            left: Math.round(propAnchorX - 10),
+            top: Math.round(propTopY - 8),
+            width: 20,
+            height,
+        };
+    }
+    if (routeKind === 'lift' || routeKind === 'magic') {
+        const height = Math.max(58, Math.round(propBottomY - propTopY) + 26);
+        return {
+            kind: routeKind,
+            phase,
+            left: Math.round(propAnchorX - 14),
+            top: Math.round(propTopY - 10),
+            width: 28,
+            height,
+        };
+    }
+    const baseLeft = Math.min(propAnchorX, targetX) - 12;
+    const width = Math.max(60, Math.abs(targetX - propAnchorX) + 44);
+    const height = Math.max(32, Math.round(propBottomY - propTopY) + 18);
+    return {
+        kind: routeKind || 'stairs',
+        phase,
+        left: Math.round(baseLeft),
+        top: Math.round(propTopY - 6),
+        width: Math.round(width),
+        height,
+    };
+}
+
+function chatRobotWorldPlanTransition(state, targetPlatform, bounds, graph, fidelityRaw, options = {}) {
+    const fidelity = normalizeAnimationFidelity(fidelityRaw, ANIMATION_FIDELITY_HIGH);
+    if (fidelity === ANIMATION_FIDELITY_MINIMAL || !targetPlatform) return null;
+    const geometry = graph?.geometry || chatRobotWorldGeometry(bounds);
+    const platforms = graph?.platforms || [];
+    const platformsById = graph?.platformsById || new Map(platforms.map((platform) => [platform.id, platform]));
+    const currentPlatform = platformsById.get(safeString(state?.currentPlatformId))
+        || chatRobotWorldCurrentPlatform(state, platforms)
+        || platforms.find((platform) => platform.kind === 'floor')
+        || null;
+    const currentX = Number(state?.x || 0);
+    const currentY = Number(state?.y || bounds.groundY);
+    const targetX = Number(state?.targetX || Math.round((targetPlatform.x1 + targetPlatform.x2) * 0.5));
+    const targetY = Number(targetPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET);
+    if (!currentPlatform) return null;
+    const routeIds = chatRobotWorldFindRoute(graph, currentPlatform.id, targetPlatform.id);
+    if (!routeIds.length || routeIds.length === 1) return null;
+    const segments = [];
+    let cursorX = currentX;
+    let cursorY = currentY;
+    for (let i = 1; i < routeIds.length; i += 1) {
+        const fromPlatform = platformsById.get(routeIds[i - 1]);
+        const toPlatform = platformsById.get(routeIds[i]);
+        if (!fromPlatform || !toPlatform) continue;
+        const edge = (graph?.edges?.get(fromPlatform.id) || []).find((item) => safeString(item?.to) === toPlatform.id) || {};
+        const routeKind = safeString(options.routeKindOverride || edge.routeKind || '');
+        if (safeString(edge.kind) === 'tunnel' && geometry.backgroundTunnel) {
+            const movingRight = toPlatform.x2 > fromPlatform.x1;
+            const entryX = movingRight ? geometry.backgroundTunnel.leftDoorX : geometry.backgroundTunnel.rightDoorX;
+            const exitX = movingRight ? geometry.backgroundTunnel.rightDoorX : geometry.backgroundTunnel.leftDoorX;
+            segments.push(
+                {
+                    x: entryX,
+                    y: fromPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    durationMs: 680,
+                    kind: 'tunnel',
+                    routeKind: 'door',
+                    hidden: false,
+                    platformId: fromPlatform.id,
+                    propX: entryX,
+                    propTopY: fromPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    propBottomY: fromPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                },
+                {
+                    x: exitX,
+                    y: toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    durationMs: 1080,
+                    kind: 'tunnel',
+                    routeKind: 'door',
+                    hidden: true,
+                    platformId: toPlatform.id,
+                    propX: exitX,
+                    propTopY: toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    propBottomY: toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                },
+            );
+            cursorX = exitX;
+            cursorY = toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+            continue;
+        }
+        if (safeString(edge.kind) === 'climb') {
+            const movingRight = ((toPlatform.x1 + toPlatform.x2) * 0.5) >= ((fromPlatform.x1 + fromPlatform.x2) * 0.5);
+            const startEdgeX = movingRight
+                ? Math.max(fromPlatform.x1 + 14, fromPlatform.x2 - 20)
+                : Math.min(fromPlatform.x2 - 14, fromPlatform.x1 + 20);
+            if (Math.abs(startEdgeX - cursorX) > 10) {
+                segments.push({
+                    x: startEdgeX,
+                    y: fromPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    durationMs: 560,
+                    kind: 'walk',
+                    routeKind,
+                    hidden: false,
+                    platformId: fromPlatform.id,
+                    propX: startEdgeX,
+                    propTopY: Math.min(fromPlatform.y, toPlatform.y) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    propBottomY: Math.max(fromPlatform.y, toPlatform.y) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                });
+            }
+            if (routeKind === 'stairs') {
+                const stairEndX = movingRight
+                    ? chatRobotWorldClamp(startEdgeX + 78, toPlatform.x1 + 16, toPlatform.x2 - 18)
+                    : chatRobotWorldClamp(startEdgeX - 78, toPlatform.x1 + 18, toPlatform.x2 - 16);
+                segments.push({
+                    x: stairEndX,
+                    y: toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    durationMs: fidelity === ANIMATION_FIDELITY_HIGH ? 1360 : 1040,
+                    kind: 'climb',
+                    routeKind,
+                    hidden: false,
+                    platformId: toPlatform.id,
+                    propX: startEdgeX,
+                    propTopY: Math.min(fromPlatform.y, toPlatform.y) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    propBottomY: Math.max(fromPlatform.y, toPlatform.y) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                });
+                cursorX = stairEndX;
+                cursorY = toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+                continue;
+            }
+            const anchorX = movingRight
+                ? chatRobotWorldClamp(toPlatform.x1 + 18, toPlatform.x1 + 12, toPlatform.x2 - 14)
+                : chatRobotWorldClamp(toPlatform.x2 - 18, toPlatform.x1 + 14, toPlatform.x2 - 12);
+            segments.push({
+                x: anchorX,
+                y: toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                durationMs: routeKind === 'lift'
+                    ? (fidelity === ANIMATION_FIDELITY_HIGH ? 1180 : 980)
+                    : (fidelity === ANIMATION_FIDELITY_HIGH ? 980 : 820),
+                kind: 'climb',
+                routeKind,
+                hidden: false,
+                platformId: toPlatform.id,
+                propX: anchorX,
+                propTopY: Math.min(fromPlatform.y, toPlatform.y) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                propBottomY: Math.max(fromPlatform.y, toPlatform.y) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+            });
+            cursorX = anchorX;
+            cursorY = toPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+        }
+    }
+    segments.push({
+        x: targetX,
+        y: targetY,
+        durationMs: 620,
+        kind: 'walk',
+        routeKind: safeString(segments[segments.length - 1]?.routeKind || ''),
+        hidden: false,
+        platformId: targetPlatform.id,
+    });
+    if (!segments.length) return null;
+    return chatRobotWorldCreateTransition(state, segments, {
+        kind: safeString(segments[0]?.kind || 'walk'),
+        routeKind: safeString(segments[0]?.routeKind || ''),
+        targetPlatformId: targetPlatform.id,
+    });
+}
+
+function chatRobotWorldAdvanceTransition(state, dt, bounds) {
+    const transition = state?.transition;
+    if (!transition || !Array.isArray(transition.segments) || transition.segments.length === 0) return false;
+    const segment = transition.segments[transition.index];
+    if (!segment) {
+        state.transition = null;
+        return false;
+    }
+    const durationMs = Math.max(120, Number(segment.durationMs || 420));
+    const elapsed = Math.max(0, performance.now() - Number(transition.startedAt || 0));
+    const t = Math.min(1, elapsed / durationMs);
+    const nextX = transition.fromX + ((Number(segment.x) - transition.fromX) * t);
+    const nextY = transition.fromY + ((Number(segment.y) - transition.fromY) * t);
+    const deltaX = nextX - Number(state?.x ?? transition.fromX ?? 0);
+    state.x = nextX;
+    state.y = nextY;
+    if (Math.abs(deltaX) >= 0.5) {
+        state.facing = deltaX >= 0 ? 1 : -1;
+    }
+    state.hiddenTransit = Boolean(segment.hidden);
+    if (t < 1) return true;
+    transition.index += 1;
+    if (transition.index >= transition.segments.length) {
+        state.x = Number(segment.x);
+        state.y = Math.max(0, Math.min(bounds.height - CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT, Number(segment.y)));
+        state.currentPlatformId = safeString(segment.platformId || transition.targetPlatformId || state.currentPlatformId);
+        state.postTransitionStickUntil = Date.now() + 320;
+        state.transition = null;
+        state.hiddenTransit = false;
+        return false;
+    }
+    transition.fromX = Number(segment.x);
+    transition.fromY = Number(segment.y);
+    transition.startedAt = performance.now();
+    state.hiddenTransit = Boolean(transition.segments[transition.index]?.hidden);
+    return true;
+}
+
+function chatRobotWorldRenderRoute(state) {
+    if (!state?.element) return;
+    const routeEl = state.routeElement || state.element.querySelector('[data-role="route"]');
+    if (!(routeEl instanceof HTMLElement)) return;
+    if (chatWorldIsPhysicsMode()) {
+        routeEl.className = 'chat-robot-world-route hidden';
+        routeEl.removeAttribute('style');
+        routeEl.dataset.phase = '';
+        routeEl.dataset.kind = '';
+        state.debugPropKind = safeString(state?.transition?.routeKind || '');
+        state.debugPropPhase = safeString(state?.transition ? 'physics' : '');
+        return;
+    }
+    const transition = state.transition;
+    if (!transition || !transition.routeKind) {
+        routeEl.className = 'chat-robot-world-route hidden';
+        routeEl.removeAttribute('style');
+        routeEl.dataset.phase = '';
+        routeEl.dataset.kind = '';
+        state.debugPropKind = '';
+        state.debugPropPhase = '';
+        return;
+    }
+    const currentSegment = transition.segments[Math.min(transition.index, transition.segments.length - 1)] || null;
+    const placement = chatRobotWorldRoutePlacement(state, transition, currentSegment);
+    if (!placement) {
+        routeEl.className = 'chat-robot-world-route hidden';
+        routeEl.removeAttribute('style');
+        routeEl.dataset.phase = '';
+        routeEl.dataset.kind = '';
+        state.debugPropKind = '';
+        state.debugPropPhase = '';
+        return;
+    }
+    const routeKind = safeString(placement.kind).replace(/[^a-z0-9_-]/gi, '') || 'ladder';
+    routeEl.className = `chat-robot-world-route route-${routeKind}`;
+    routeEl.dataset.phase = safeString(placement.phase || '');
+    routeEl.dataset.kind = routeKind;
+    routeEl.style.left = `${Math.round(placement.left)}px`;
+    routeEl.style.top = `${Math.round(placement.top)}px`;
+    routeEl.style.width = `${Math.round(placement.width)}px`;
+    routeEl.style.height = `${Math.round(placement.height)}px`;
+    routeEl.style.setProperty('--route-span-width', `${Math.round(placement.width)}px`);
+    routeEl.style.setProperty('--route-span-height', `${Math.round(placement.height)}px`);
+    state.debugPropKind = routeKind;
+    state.debugPropPhase = safeString(placement.phase || '');
+}
+
+function chatRobotWorldPerchTarget(state, platforms = []) {
     const bounds = chatRobotWorldBounds();
     const anchor = sendBtn instanceof HTMLElement
         ? sendBtn.getBoundingClientRect()
@@ -2758,41 +4060,387 @@ function chatRobotWorldPerchTarget(state) {
             ? attachBtn.getBoundingClientRect()
             : null;
     if (!anchor) {
-        return { x: Math.round(bounds.width * 0.72), y: bounds.groundY - CHAT_PRIMARY_ROBOT_PERCH_LIFT };
+        const best = platforms.find((platform) => platform.kind !== 'floor');
+        if (best) {
+            return {
+                x: Math.round((best.x1 + best.x2) * 0.5),
+                y: best.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+            };
+        }
+        return { x: Math.round(bounds.width * 0.72), y: bounds.groundY };
     }
     return {
         x: Math.max(22, Math.min(bounds.width - 22, Math.round(anchor.left - bounds.left + (anchor.width * 0.5)))),
-        y: bounds.groundY - CHAT_PRIMARY_ROBOT_PERCH_LIFT - (state?.kind === 'delegation' ? 10 : 0),
+        y: Math.round(anchor.top - bounds.top - CHAT_PRIMARY_ROBOT_FOOT_OFFSET - (state?.kind === 'delegation' ? 6 : 0)),
     };
+}
+
+function chatRobotWorldTaskFocusTarget(state, graph = null) {
+    const bounds = chatRobotWorldBounds();
+    const platforms = graph?.platforms || chatRobotWorldPlatforms(bounds);
+    const strip = document.querySelector('.message-task-strip:not(.hidden)');
+    if (strip instanceof HTMLElement) {
+        const rect = strip.getBoundingClientRect();
+        const x = chatRobotWorldClamp(Math.round(rect.left - bounds.left + (rect.width * 0.5)), 28, bounds.width - 28);
+        const roof = platforms.find((platform) => platform.id === 'composer-roof')
+            || platforms.find((platform) => platform.kind === 'ui' || platform.kind === 'suggestion')
+            || platforms.find((platform) => platform.kind === 'floor')
+            || null;
+        if (roof) {
+            return {
+                x: chatRobotWorldClamp(x, roof.x1 + 10, roof.x2 - 10),
+                y: roof.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                platformId: roof.id,
+            };
+        }
+    }
+    const perch = chatRobotWorldPerchTarget(state, platforms);
+    const platform = platforms.find((item) => (
+        perch.x >= (item.x1 - 6)
+        && perch.x <= (item.x2 + 6)
+        && Math.abs((item.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET) - perch.y) <= 14
+    )) || platforms.find((item) => item.kind === 'roof' || item.kind === 'ui') || platforms[0] || null;
+    return {
+        x: platform ? chatRobotWorldClamp(perch.x, platform.x1 + 8, platform.x2 - 8) : perch.x,
+        y: platform ? (platform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET) : perch.y,
+        platformId: safeString(platform?.id),
+    };
+}
+
+function chatRobotWorldHomeTarget(state, graph = null) {
+    const bounds = chatRobotWorldBounds();
+    const platforms = graph?.platforms || chatRobotWorldPlatforms(bounds);
+    const preferredFloorId = safeString(state?.homeFloorId);
+    const floor = platforms.find((platform) => platform.id === preferredFloorId)
+        || platforms.find((platform) => platform.kind === 'floor' && Number(state?.homeX || 0) <= ((platform.x1 + platform.x2) * 0.5))
+        || platforms.find((platform) => platform.kind === 'floor')
+        || null;
+    if (!floor) {
+        return {
+            x: chatRobotWorldClamp(Number(state?.homeX || 48), 24, bounds.width - 24),
+            y: bounds.groundY,
+            platformId: '',
+        };
+    }
+    const homeX = chatRobotWorldClamp(Number(state?.homeX || floor.x1 + 18), floor.x1 + 8, floor.x2 - 8);
+    return {
+        x: homeX,
+        y: floor.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+        platformId: floor.id,
+    };
+}
+
+function chatRobotWorldStartPortalTransfer(state, target = {}, reason = 'portal') {
+    if (!state?.element || !target) return false;
+    if (state.portalTransfer) return false;
+    state.portalTransfer = {
+        reason: safeString(reason || 'portal'),
+        startedAt: performance.now(),
+        sourceX: Number(state.x || 0),
+        sourceY: Number(state.y || 0),
+        targetX: Number(target.x || state.x || 0),
+        targetY: Number(target.y || state.y || 0),
+        targetPlatformId: safeString(target.platformId || state.targetPlatformId || state.currentPlatformId || ''),
+        arrivalPortalPlayed: false,
+    };
+    state.mode = 'inspect';
+    state.modeUntil = Date.now() + 2200;
+    state.vx = 0;
+    state.vy = 0;
+    chatRobotWorldPlayPortal(state, 'open');
+    return true;
+}
+
+function chatRobotWorldAdvancePortalTransfer(state, bounds) {
+    const transfer = state?.portalTransfer;
+    if (!transfer) return false;
+    const elapsed = Math.max(0, performance.now() - Number(transfer.startedAt || 0));
+    if (elapsed < 360) {
+        state.x = transfer.sourceX;
+        state.y = transfer.sourceY;
+        state.hiddenTransit = false;
+        return true;
+    }
+    if (elapsed < 740) {
+        state.hiddenTransit = true;
+        if (!transfer.arrivalPortalPlayed) {
+            transfer.arrivalPortalPlayed = true;
+            state.x = transfer.targetX;
+            state.y = chatRobotWorldClamp(transfer.targetY, 0, Math.max(0, bounds.height - CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT));
+            if (transfer.targetPlatformId) {
+                state.currentPlatformId = transfer.targetPlatformId;
+                state.targetPlatformId = transfer.targetPlatformId;
+            }
+            chatRobotWorldPlayPortal(state, 'open');
+        }
+        return true;
+    }
+    state.hiddenTransit = false;
+    state.x = transfer.targetX;
+    state.y = chatRobotWorldClamp(transfer.targetY, 0, Math.max(0, bounds.height - CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT));
+    if (transfer.targetPlatformId) {
+        state.currentPlatformId = transfer.targetPlatformId;
+        state.targetPlatformId = transfer.targetPlatformId;
+    }
+    state.portalTransfer = null;
+    return false;
 }
 
 function chatRobotWorldChooseMode(state) {
     const terminal = chatTaskIsTerminal(state?.status);
     if (terminal) return 'idle';
+    const fidelity = animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {});
     const roll = Math.random();
-    if (roll < 0.18) return 'sleep';
-    if (roll < 0.34) return 'workout';
-    if (roll < 0.54) return 'inspect';
-    if (roll < 0.72) return 'perch';
-    if (roll < 0.9) return 'idle';
-    return 'roam';
+    if (chatRobotWorldPrimaryUsesGroundedPhysics(state)) {
+        if (fidelity === ANIMATION_FIDELITY_MINIMAL) {
+            if (roll < 0.72) return 'idle';
+            if (roll < 0.9) return 'sleep';
+            if (roll < 0.98) return 'workout';
+            return 'roam';
+        }
+        if (fidelity === ANIMATION_FIDELITY_BALANCED) {
+            if (roll < 0.56) return 'idle';
+            if (roll < 0.76) return 'sleep';
+            if (roll < 0.9) return 'workout';
+            return 'roam';
+        }
+        if (roll < 0.48) return 'idle';
+        if (roll < 0.68) return 'sleep';
+        if (roll < 0.82) return 'workout';
+        return 'roam';
+    }
+    if (!chatRobotWorldTaskIsLive(state) && safeString(state?.kind) === 'primary') {
+        if (fidelity === ANIMATION_FIDELITY_MINIMAL) {
+            if (roll < 0.58) return 'idle';
+            if (roll < 0.82) return 'sleep';
+            if (roll < 0.94) return 'workout';
+            return 'inspect';
+        }
+        if (fidelity === ANIMATION_FIDELITY_BALANCED) {
+            if (roll < 0.34) return 'idle';
+            if (roll < 0.58) return 'sleep';
+            if (roll < 0.76) return 'inspect';
+            if (roll < 0.9) return 'workout';
+            return 'roam';
+        }
+        if (roll < 0.26) return 'idle';
+        if (roll < 0.48) return 'inspect';
+        if (roll < 0.7) return 'sleep';
+        if (roll < 0.86) return 'workout';
+        return 'roam';
+    }
+    if (fidelity === ANIMATION_FIDELITY_MINIMAL) {
+        if (roll < 0.58) return 'idle';
+        if (roll < 0.78) return 'inspect';
+        if (roll < 0.9) return 'sleep';
+        return 'roam';
+    }
+    if (fidelity === ANIMATION_FIDELITY_BALANCED) {
+        if (roll < 0.26) return 'sleep';
+        if (roll < 0.34) return 'workout';
+        if (roll < 0.74) return 'idle';
+        if (roll < 0.88) return 'roam';
+        if (roll < 0.96) return 'inspect';
+        return 'idle';
+    }
+    if (roll < 0.2) return 'sleep';
+    if (roll < 0.28) return 'workout';
+    if (roll < 0.7) return 'idle';
+    if (roll < 0.88) return 'roam';
+    if (roll < 0.97) return 'inspect';
+    if (roll < 0.99) return 'perch';
+    return 'idle';
 }
 
-function chatRobotWorldRetarget(state) {
+function chatRobotWorldPickTargetPlatform(state, graph, mode, motion) {
+    const platforms = graph?.platforms || [];
+    const currentPlatform = graph?.platformsById?.get(safeString(state?.currentPlatformId))
+        || chatRobotWorldCurrentPlatform(state, platforms);
+    const currentCenter = currentPlatform
+        ? ((currentPlatform.x1 + currentPlatform.x2) * 0.5)
+        : Number(state?.x || 0);
+    const desiredDirection = Number(state?.preferredDirection || state?.facing || 1) >= 0 ? 1 : -1;
+    const liveTask = chatRobotWorldTaskIsLive(state);
+    const groundedPrimaryPhysics = chatRobotWorldPrimaryUsesGroundedPhysics(state);
+    let candidates = [];
+    if (groundedPrimaryPhysics) {
+        candidates = platforms.filter((platform) => platform.kind === 'floor');
+    } else if (mode === 'inspect') {
+        candidates = platforms.filter((platform) => new Set(['ui', 'roof', 'suggestion']).has(platform.kind));
+    } else if (mode === 'perch') {
+        candidates = platforms.filter((platform) => new Set(['roof', 'suggestion', 'ui']).has(platform.kind));
+    } else if (motion.fidelity === ANIMATION_FIDELITY_MINIMAL) {
+        candidates = platforms.filter((platform) => platform.kind === 'floor');
+    } else if (motion.fidelity === ANIMATION_FIDELITY_BALANCED) {
+        candidates = platforms.filter((platform) => platform.kind === 'floor' || platform.kind === 'roof');
+    } else {
+        candidates = platforms.filter((platform) => platform.kind === 'floor');
+    }
+    if (!liveTask && safeString(state?.kind) === 'primary') {
+        const bounds = graph?.bounds || chatRobotWorldBounds();
+        const zone = safeString(state?.ambientZone) || chatRobotWorldAmbientZoneForX(state?.x, bounds);
+        const zoneCandidates = candidates.filter((platform) => {
+            const center = chatRobotWorldPlatformCenter(platform);
+            return zone === 'right'
+                ? center >= (bounds.width * 0.46)
+                : center <= (bounds.width * 0.54);
+        });
+        if (zoneCandidates.length) {
+            candidates = zoneCandidates;
+        }
+        if (currentPlatform?.kind === 'floor' && safeString(mode) !== 'roam') {
+            const samePlatform = candidates.filter((platform) => platform.id === currentPlatform.id);
+            if (samePlatform.length) {
+                candidates = samePlatform;
+            }
+        }
+        if (groundedPrimaryPhysics && currentPlatform?.kind === 'floor' && safeString(mode) !== 'roam') {
+            const sameFloor = candidates.filter((platform) => platform.id === currentPlatform.id);
+            if (sameFloor.length) {
+                candidates = sameFloor;
+            }
+        }
+    }
+    if (!candidates.length) candidates = platforms;
+    if (!candidates.length) return null;
+    const directional = currentPlatform
+        ? candidates.filter((platform) => {
+            const center = ((platform.x1 + platform.x2) * 0.5);
+            const delta = center - currentCenter;
+            return desiredDirection > 0 ? delta > 40 : delta < -40;
+        })
+        : [];
+    const sideBiased = currentPlatform
+        ? candidates.filter((platform) => (
+            Math.sign(((platform.x1 + platform.x2) * 0.5) - ((currentPlatform.x1 + currentPlatform.x2) * 0.5)) === 0
+            || Math.abs(((platform.x1 + platform.x2) * 0.5) - ((currentPlatform.x1 + currentPlatform.x2) * 0.5)) > 40
+        ))
+        : candidates;
+    return officePick(directional) || officePick(sideBiased) || officePick(candidates) || candidates[0];
+}
+
+function chatRobotWorldRetarget(state, graph = null) {
     const bounds = chatRobotWorldBounds();
+    const motion = chatRobotWorldMotionProfile(animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {}));
+    const platformGraph = graph || chatRobotWorldBuildPlatformGraph(bounds, motion.fidelity);
+    const platforms = platformGraph.platforms || [];
+    const liveTask = chatRobotWorldTaskIsLive(state);
+    const isPrimary = safeString(state?.kind) === 'primary';
+    const physicsMode = chatWorldIsPhysicsMode();
+    const groundedPrimaryPhysics = chatRobotWorldPrimaryUsesGroundedPhysics(state);
+    if (!physicsMode && isPrimary && !liveTask) {
+        const leftFloor = platformGraph.platformsById?.get('floor-left')
+            || platforms.find((platform) => safeString(platform.kind) === 'floor')
+            || null;
+        const calmMode = officePick(['idle', 'sleep', 'inspect', 'workout']) || 'idle';
+        state.mode = calmMode;
+        state.behaviorClass = chatRobotWorldBehaviorForMode(calmMode);
+        state.modeUntil = Date.now() + 6800 + Math.random() * 2600;
+        if (leftFloor) {
+            state.currentPlatformId = safeString(leftFloor.id);
+            state.targetPlatformId = safeString(leftFloor.id);
+            state.targetY = Number(leftFloor.y || bounds.groundY) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+            state.targetX = chatRobotWorldClamp(Number(state.homeX || 46), Number(leftFloor.x1 || 0) + 6, Number(leftFloor.x2 || 0) - 24);
+            state.x = state.targetX;
+            state.y = state.targetY;
+            state.homeFloorId = safeString(leftFloor.id);
+            state.homeX = state.targetX;
+        }
+        state.transition = null;
+        state.hiddenTransit = false;
+        state.vx = 0;
+        state.vy = 0;
+        state.preferredDirection = 1;
+        if (calmMode === 'sleep') {
+            chatRobotWorldSetSpeech(state, 'Resting on standby.');
+        } else if (calmMode === 'workout') {
+            chatRobotWorldSetSpeech(state, 'Warmup set.');
+        } else if (calmMode === 'inspect') {
+            chatRobotWorldSetSpeech(state, 'Watching the chat.');
+        } else {
+            chatRobotWorldSetSpeech(state, 'Standing by.');
+        }
+        return;
+    }
+    if (isPrimary && !liveTask) {
+        const nextZone = safeString(state.ambientZone) || chatRobotWorldAmbientZoneForX(state.x, bounds);
+        state.ambientZone = nextZone;
+        state.ambientClusterRemaining = Number.isFinite(Number(state.ambientClusterRemaining))
+            ? Math.max(0, Number(state.ambientClusterRemaining))
+            : 0;
+        if (state.ambientClusterRemaining <= 0) {
+            state.ambientZone = nextZone === 'right' ? 'left' : 'right';
+            state.ambientClusterRemaining = 2 + Math.floor(Math.random() * 2);
+        } else {
+            state.ambientClusterRemaining -= 1;
+        }
+    }
     const mode = chatRobotWorldChooseMode(state);
     state.mode = mode;
-    state.modeUntil = Date.now() + CHAT_PRIMARY_ROBOT_MIN_ACTION_MS + Math.random() * (CHAT_PRIMARY_ROBOT_MAX_ACTION_MS - CHAT_PRIMARY_ROBOT_MIN_ACTION_MS);
-    if (mode === 'perch' || mode === 'inspect') {
-        const perch = chatRobotWorldPerchTarget(state);
+    state.behaviorClass = chatRobotWorldBehaviorForMode(mode);
+    state.modeUntil = Date.now() + motion.actionMinMs + Math.random() * (motion.actionMaxMs - motion.actionMinMs);
+    state.currentPlatformId = safeString(state.currentPlatformId || chatRobotWorldCurrentPlatform(state, platforms)?.id || '');
+    if (!groundedPrimaryPhysics && (mode === 'perch' || mode === 'inspect')) {
+        const perch = chatRobotWorldPerchTarget(state, platforms);
         state.targetX = perch.x;
         state.targetY = perch.y;
-        if (Math.abs((state.y || bounds.groundY) - perch.y) > 4) {
-            state.vy = CHAT_PRIMARY_ROBOT_JUMP_SPEED;
+        const perchPlatform = platforms.find((platform) => (
+            perch.x >= (platform.x1 - 6)
+            && perch.x <= (platform.x2 + 6)
+            && Math.abs((platform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET) - perch.y) <= 14
+        )) || {
+            id: 'inspect-target',
+            kind: 'ui',
+            x1: perch.x - 14,
+            x2: perch.x + 14,
+            y: perch.y + CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+        };
+        state.targetPlatformId = perchPlatform.id;
+        const transition = chatRobotWorldPlanTransition(state, perchPlatform, bounds, platformGraph, motion.fidelity);
+        if (transition) {
+            state.transition = transition;
         }
     } else {
-        state.targetY = bounds.groundY;
-        state.targetX = 24 + Math.random() * Math.max(40, bounds.width - 48);
+        const platform = chatRobotWorldPickTargetPlatform(state, platformGraph, mode, motion);
+        if (!platform) return;
+        const span = Math.max(24, (platform.x2 - platform.x1) - 12);
+        const desiredDirection = Number(state.preferredDirection || state.facing || 1) >= 0 ? 1 : -1;
+        const currentX = Number(state.x || ((platform.x1 + platform.x2) * 0.5));
+        const minX = platform.x1 + 6;
+        const maxX = platform.x2 - 6;
+        state.targetPlatformId = platform.id;
+        state.targetY = platform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+        if (safeString(platform.id) === safeString(state.currentPlatformId)) {
+            if (!liveTask && isPrimary) {
+                const hop = groundedPrimaryPhysics
+                    ? (10 + (Math.random() * 16))
+                    : (18 + (Math.random() * 34));
+                state.targetX = chatRobotWorldClamp(currentX + (desiredDirection * hop), minX, maxX);
+                if (Math.abs(state.targetX - currentX) < 14) {
+                    state.targetX = desiredDirection > 0 ? minX : maxX;
+                }
+            } else {
+                state.targetX = desiredDirection > 0 ? maxX : minX;
+                if (Math.abs(state.targetX - currentX) < 24) {
+                    state.targetX = desiredDirection > 0 ? minX : maxX;
+                }
+            }
+        } else {
+            state.targetX = desiredDirection > 0
+                ? chatRobotWorldClamp(maxX - (Math.random() * Math.min(span * 0.28, 84)), minX, maxX)
+                : chatRobotWorldClamp(minX + (Math.random() * Math.min(span * 0.28, 84)), minX, maxX);
+        }
+        state.preferredDirection = desiredDirection * -1;
+        const transition = chatRobotWorldPlanTransition(state, platform, bounds, platformGraph, motion.fidelity);
+        if (transition && !(groundedPrimaryPhysics && safeString(transition.routeKind) !== 'door')) {
+            state.transition = transition;
+            state.targetX = transition.segments[transition.segments.length - 1].x;
+            state.targetY = transition.segments[transition.segments.length - 1].y;
+        }
+    }
+    if (!liveTask && isPrimary && safeString(state.targetPlatformId) === safeString(state.currentPlatformId)) {
+        state.homeFloorId = safeString(state.currentPlatformId || state.homeFloorId);
+        state.homeX = Number(state.targetX || state.x || state.homeX || 48);
     }
     if (mode === 'sleep') {
         chatRobotWorldSetSpeech(state, 'Tiny recharge cycle.');
@@ -2809,6 +4457,7 @@ function chatRobotWorldRetarget(state) {
 
 function chatRobotWorldEnsurePrimaryState() {
     if (chatPrimaryPresenceState) return chatPrimaryPresenceState;
+    const initialBounds = chatRobotWorldBounds();
     chatPrimaryPresenceState = {
         activityId: 'primary',
         kind: 'primary',
@@ -2821,24 +4470,37 @@ function chatRobotWorldEnsurePrimaryState() {
         visibleSince: Date.now(),
         lingerUntil: 0,
         x: 46,
-        y: -52,
+        y: initialBounds.groundY,
         targetX: 46,
-        targetY: 0,
+        targetY: initialBounds.groundY,
         vx: 0,
         vy: 0,
         facing: 1,
         paused: false,
-        mode: 'falling',
-        modeUntil: 0,
+        mode: 'idle',
+        modeUntil: Date.now() + 2600,
         officeTaskId: '',
         officeAgentId: '',
         officeAgentName: DEFAULT_AGENT_NAME,
         name: DEFAULT_AGENT_NAME,
         color: '#9ad8ff',
         costume: 'none',
+        behaviorClass: 'looking',
+        transition: null,
+        hiddenTransit: false,
+        currentPlatformId: '',
+        targetPlatformId: '',
+        preferredDirection: 1,
+        homeFloorId: 'floor-left',
+        homeX: 46,
+        ambientZone: 'left',
+        ambientClusterRemaining: 2,
+        taskSpeechAt: 0,
+        portalTransfer: null,
+        debugPropKind: '',
+        debugPropPhase: '',
     };
     chatPrimaryPresenceState.element = chatRobotWorldCreateActorElement('primary', chatPrimaryPresenceState);
-    chatRobotWorldPlayPortal(chatPrimaryPresenceState, 'open');
     chatWorldSyncRootVisibility();
     chatRobotWorldEnsureLoop();
     return chatPrimaryPresenceState;
@@ -2859,32 +4521,28 @@ function chatRobotWorldLatestTaskState() {
 
 function chatRobotWorldSyncPrimaryFromTasks() {
     const primary = chatRobotWorldEnsurePrimaryState();
-    const task = chatRobotWorldLatestTaskState();
     primary.name = resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME;
     primary.officeAgentName = primary.name;
-    if (!task) {
-        if (!chatTaskIsTerminal(primary.status) && primary.status !== 'idle') {
-            primary.status = 'idle';
-            primary.summary = 'Standing by.';
-        }
-        chatRobotWorldRenderActor(primary);
-        return;
-    }
-    primary.sessionId = safeString(task.sessionId || primary.sessionId);
-    primary.startedAt = Number(task.startedAt || primary.startedAt || Date.now());
-    primary.endedAt = Number(task.endedAt || primary.endedAt || 0);
-    primary.status = safeString(task.status || 'running');
-    primary.summary = safeString(task.latestCheckpoint || task.summary || primary.summary);
-    primary.taskText = safeString(task.summary || primary.taskText);
-    if (chatTaskIsTerminal(primary.status)) {
-        primary.lingerUntil = Math.max(Number(primary.lingerUntil || 0), Date.now() + CHAT_PRIMARY_ROBOT_LINGER_MS);
-    }
+    primary.status = 'idle';
+    primary.summary = 'Standing by.';
+    primary.taskText = '';
+    primary.taskSpeechAt = 0;
     chatRobotWorldRenderActor(primary);
 }
 
-function chatRobotWorldRenderActor(state) {
+function chatRobotWorldRenderActor(state, graph = null) {
     if (!state?.element) return;
     const bounds = chatRobotWorldBounds();
+    const physicsMode = chatWorldIsPhysicsMode();
+    const platforms = graph?.platforms || chatRobotWorldPlatforms(bounds);
+    const currentPlatform = physicsMode
+        ? (chatRobotWorldCurrentPlatform(state, platforms)
+            || graph?.platformsById?.get(safeString(state?.currentPlatformId)))
+        : (graph?.platformsById?.get(safeString(state?.currentPlatformId))
+            || chatRobotWorldCurrentPlatform(state, platforms));
+    if (currentPlatform) {
+        state.currentPlatformId = currentPlatform.id;
+    }
     state.element.style.transform = `translate(${Math.round(Number(state.x) || 0)}px, ${Math.round(Number(state.y) || 0)}px)`;
     state.element.classList.toggle('is-paused', Boolean(state.paused));
     state.element.classList.toggle('is-sleeping', state.mode === 'sleep');
@@ -2892,6 +4550,13 @@ function chatRobotWorldRenderActor(state) {
     state.element.classList.toggle('is-perched', state.mode === 'perch' || state.mode === 'inspect');
     state.element.classList.toggle('is-terminal', chatTaskIsTerminal(state.status));
     state.element.classList.toggle('is-active-task', !chatTaskIsTerminal(state.status) && safeString(state.status) !== 'idle');
+    state.element.classList.toggle('is-in-tunnel', Boolean(state.hiddenTransit));
+    state.element.classList.toggle('is-traversing', Boolean(state.transition));
+    state.element.classList.toggle('is-physics-rendered', physicsMode);
+    state.element.dataset.transitionKind = safeString(state.transition?.routeKind || '');
+    state.element.dataset.platformId = safeString(state.currentPlatformId || '');
+    state.element.dataset.targetPlatformId = safeString(state.targetPlatformId || '');
+    state.element.dataset.mode = safeString(state.mode || '');
     const label = state.element.querySelector('[data-role="label"]');
     if (label instanceof HTMLElement) {
         label.textContent = safeString(state.name) || DEFAULT_AGENT_NAME;
@@ -2908,6 +4573,10 @@ function chatRobotWorldRenderActor(state) {
     if (bubbleStatus instanceof HTMLElement) {
         bubbleStatus.textContent = chatTaskStatusLabel(state.status || 'idle');
     }
+    const botEl = state.element.querySelector('[data-role="bot"]');
+    if (botEl instanceof HTMLElement) {
+        botEl.classList.toggle('is-facing-left', Number(state.facing || 1) < 0);
+    }
     if (Date.now() > Number(state.speechUntil || 0)) {
         const speechEl = state.element.querySelector('[data-role="speech"]');
         if (speechEl instanceof HTMLElement) {
@@ -2917,8 +4586,266 @@ function chatRobotWorldRenderActor(state) {
         state.element.classList.remove('is-speaking');
     }
     chatRobotWorldApplyPalette(state);
+    chatRobotWorldRenderRoute(state);
+    const botVisual = state.element.querySelector('.chat-robot-agent');
+    const labelEl = state.element.querySelector('[data-role="label"]');
+    const actorRect = state.element.getBoundingClientRect();
+    const actorCenterX = actorRect.left + (actorRect.width * 0.5);
+    const botRect = botVisual instanceof HTMLElement ? botVisual.getBoundingClientRect() : null;
+    const visualCenterOffset = botRect
+        ? ((botRect.left + (botRect.width * 0.5)) - actorCenterX)
+        : 0;
+    state.element.style.setProperty('--chat-robot-label-offset-x', `${Math.round(visualCenterOffset * 10) / 10}px`);
+    if (labelEl instanceof HTMLElement) {
+        const labelRect = labelEl.getBoundingClientRect();
+        state.element.dataset.labelOffsetPx = `${Math.round((((labelRect.left + (labelRect.width * 0.5)) - actorCenterX) * 10)) / 10}`;
+    }
+    state.element.dataset.visualCenterOffsetPx = `${Math.round(visualCenterOffset * 10) / 10}`;
+    state.element.classList.toggle('is-teleporting', Boolean(state.portalTransfer));
     const maxX = Math.max(22, bounds.width - 24);
     state.x = Math.max(16, Math.min(maxX, Number(state.x) || 0));
+}
+
+function chatRobotWorldPlaceActorOnPlatform(state, platform, x = null) {
+    if (!state || !platform) return false;
+    const anchorX = Number.isFinite(Number(x))
+        ? Number(x)
+        : chatRobotWorldClamp(
+            Math.round((Number(platform.x1 || 0) + Number(platform.x2 || 0)) * 0.5),
+            Number(platform.x1 || 0) + 10,
+            Number(platform.x2 || 0) - 10,
+        );
+    state.currentPlatformId = safeString(platform.id);
+    state.targetPlatformId = safeString(platform.id);
+    state.x = anchorX;
+    state.y = Number(platform.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+    state.targetX = anchorX;
+    state.targetY = state.y;
+    state.transition = null;
+    state.hiddenTransit = false;
+    state.portalTransfer = null;
+    state.vx = 0;
+    state.vy = 0;
+    return true;
+}
+
+function chatRobotWorldSpawnDebugHelper() {
+    const helper = chatWorldUpsertPresence(CHAT_AGENT_DEBUG_HELPER_ID, {
+        sessionId: safeString(activeChatId || taskContinuityLatestSessionId || 'debug-session'),
+        bubbleId: '',
+        name: 'Scout',
+        status: 'running',
+        summary: 'Debug helper active.',
+        taskText: 'Reviewing the staged chat-world task flow.',
+        startedAt: Date.now(),
+        color: '#7cd6ff',
+        costume: 'visor',
+    });
+    if (!helper) return null;
+    helper.mode = 'inspect';
+    helper.modeUntil = 0;
+    helper.lingerUntil = 0;
+    helper.exiting = false;
+    helper.portalClosing = false;
+    helper.portalCloseAt = 0;
+    window.setTimeout(() => {
+        const live = chatAgentPresenceStateByActivityId.get(CHAT_AGENT_DEBUG_HELPER_ID);
+        if (!live) return;
+        live.status = 'done';
+        live.summary = 'Debug helper complete.';
+        chatRobotWorldRemoveHelper(CHAT_AGENT_DEBUG_HELPER_ID);
+    }, 2400);
+    return helper;
+}
+
+function chatRobotWorldRunDebugScenario(nameRaw = '') {
+    const name = safeString(nameRaw).toLowerCase();
+    const primary = chatRobotWorldEnsurePrimaryState();
+    const bounds = chatRobotWorldBounds();
+    const fidelity = animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {});
+    const graph = chatRobotWorldBuildPlatformGraph(bounds, fidelity);
+    const platformsById = graph.platformsById || new Map();
+    const leftFloor = platformsById.get('floor-left') || graph.platforms.find((platform) => platform.kind === 'floor') || null;
+    const rightFloor = platformsById.get('floor-right') || leftFloor;
+    const roof = platformsById.get('composer-roof') || graph.platforms.find((platform) => platform.kind === 'roof') || null;
+    const suggestion = platformsById.get('suggestion-top') || graph.platforms.find((platform) => platform.kind === 'suggestion') || roof;
+    if (!name) {
+        chatRobotWorldDebugScenario = null;
+        return true;
+    }
+    chatRobotWorldDebugScenario = { name, startedAt: Date.now(), lockUntil: Date.now() + 14_000 };
+    if (name === 'helper') {
+        chatRobotWorldSpawnDebugHelper();
+        return true;
+    }
+    if (name === 'door' && leftFloor && rightFloor) {
+        const tunnel = graph?.geometry?.backgroundTunnel || null;
+        chatRobotWorldPlaceActorOnPlatform(primary, leftFloor, Math.min(leftFloor.x2 - 20, leftFloor.x1 + 34));
+        primary.preferredDirection = 1;
+        primary.mode = 'roam';
+        primary.modeUntil = Date.now() + 2600;
+        if (tunnel) {
+            primary.transition = chatRobotWorldCreateTransition(primary, [
+                {
+                    x: Number(tunnel.leftDoorX || primary.x),
+                    y: Number(leftFloor.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    durationMs: 720,
+                    kind: 'tunnel',
+                    routeKind: 'door',
+                    hidden: false,
+                    platformId: leftFloor.id,
+                    propX: Number(tunnel.leftDoorX || primary.x),
+                    propTopY: Number(leftFloor.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    propBottomY: Number(leftFloor.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                },
+                {
+                    x: Number(tunnel.rightDoorX || primary.x),
+                    y: Number(rightFloor.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    durationMs: 1120,
+                    kind: 'tunnel',
+                    routeKind: 'door',
+                    hidden: true,
+                    platformId: rightFloor.id,
+                    propX: Number(tunnel.rightDoorX || primary.x),
+                    propTopY: Number(rightFloor.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                    propBottomY: Number(rightFloor.y || 0) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET,
+                },
+            ], {
+                kind: 'tunnel',
+                routeKind: 'door',
+                targetPlatformId: rightFloor.id,
+            });
+        } else {
+            primary.transition = chatRobotWorldPlanTransition(primary, rightFloor, bounds, graph, fidelity);
+        }
+        if (primary.transition) {
+            primary.targetPlatformId = safeString(rightFloor.id);
+            primary.targetX = Number(primary.transition.segments[primary.transition.segments.length - 1]?.x || primary.targetX);
+            primary.targetY = Number(primary.transition.segments[primary.transition.segments.length - 1]?.y || primary.targetY);
+        }
+        return true;
+    }
+    if ((name === 'ladder' || name === 'stairs' || name === 'lift') && leftFloor && (roof || suggestion)) {
+        const targetPlatform = suggestion || roof;
+        chatRobotWorldPlaceActorOnPlatform(primary, leftFloor, Math.min(leftFloor.x2 - 22, leftFloor.x1 + 30));
+        primary.preferredDirection = 1;
+        primary.mode = 'inspect';
+        primary.modeUntil = Date.now() + 2600;
+        primary.transition = chatRobotWorldPlanTransition(primary, targetPlatform, bounds, graph, fidelity, { routeKindOverride: name });
+        if (primary.transition) {
+            primary.targetPlatformId = safeString(targetPlatform.id);
+            primary.targetX = Number(primary.transition.segments[primary.transition.segments.length - 1]?.x || primary.targetX);
+            primary.targetY = Number(primary.transition.segments[primary.transition.segments.length - 1]?.y || primary.targetY);
+        }
+        return true;
+    }
+    return false;
+}
+
+function chatRobotWorldCloneDebugPayload(payload) {
+    try {
+        return JSON.parse(JSON.stringify(payload));
+    } catch (_) {
+        return payload;
+    }
+}
+
+function chatRobotWorldBuildDebugSnapshot(graph, actors, frameNow = Date.now()) {
+    const platforms = (graph?.platforms || []).map((platform) => ({
+        id: safeString(platform.id),
+        kind: safeString(platform.kind),
+        x1: Math.round(Number(platform.x1 || 0)),
+        x2: Math.round(Number(platform.x2 || 0)),
+        y: Math.round(Number(platform.y || 0)),
+    }));
+    const actorRows = actors.map((state) => {
+        const currentPlatform = chatWorldCurrentMode() === CHAT_WORLD_MODE_PHYSICS
+            ? (chatRobotWorldCurrentPlatform(state, graph?.platforms || [])
+                || graph?.platformsById?.get(safeString(state?.currentPlatformId))
+                || null)
+            : (graph?.platformsById?.get(safeString(state?.currentPlatformId))
+                || chatRobotWorldCurrentPlatform(state, graph?.platforms || [])
+                || null);
+        const feetY = Math.round(Number(state?.y || 0) + CHAT_PRIMARY_ROBOT_FOOT_OFFSET);
+        const actorEl = state?.element;
+        const actorRect = actorEl instanceof HTMLElement ? actorEl.getBoundingClientRect() : null;
+        const actorCenterX = actorRect ? (actorRect.left + (actorRect.width * 0.5)) : null;
+        const botRect = actorEl?.querySelector?.('.chat-robot-agent')?.getBoundingClientRect?.() || null;
+        const labelRect = actorEl?.querySelector?.('[data-role="label"]')?.getBoundingClientRect?.() || null;
+        const physicsRow = chatPhysicsWorldActorDebugRow(state?.activityId);
+        return {
+            activityId: safeString(state?.activityId),
+            kind: safeString(state?.kind),
+            name: safeString(state?.name),
+            mode: safeString(state?.mode),
+            status: safeString(state?.status),
+            x: Math.round(Number(state?.x || 0)),
+            y: Math.round(Number(state?.y || 0)),
+            feetY,
+            facing: Number(state?.facing || 1) < 0 ? 'left' : 'right',
+            currentPlatformId: safeString(state?.currentPlatformId),
+            targetPlatformId: safeString(state?.targetPlatformId),
+            transitionKind: safeString(state?.transition?.routeKind || ''),
+            locomotionKind: safeString(state?.transition?.kind || (state?.vx ? 'walk' : 'idle')),
+            propKind: safeString(state?.debugPropKind || ''),
+            propPhase: safeString(state?.debugPropPhase || ''),
+            speechVisible: Boolean(state?.element?.querySelector?.('[data-role="speech"]:not(.hidden)')),
+            hiddenTransit: Boolean(state?.hiddenTransit),
+            legalSurfaceLock: currentPlatform ? Math.abs(feetY - Number(currentPlatform.y || feetY)) <= 12 : false,
+            surfaceDeltaPx: currentPlatform ? Math.round(feetY - Number(currentPlatform.y || feetY)) : null,
+            visualCenterOffsetPx: (actorCenterX !== null && botRect)
+                ? Math.round((((botRect.left + (botRect.width * 0.5)) - actorCenterX) * 10)) / 10
+                : null,
+            labelCenterOffsetPx: (actorCenterX !== null && labelRect)
+                ? Math.round((((labelRect.left + (labelRect.width * 0.5)) - actorCenterX) * 10)) / 10
+                : null,
+            ...physicsRow,
+        };
+    });
+    return {
+        capturedAt: Number(frameNow || Date.now()),
+        worldMode: chatWorldCurrentMode(),
+        fidelity: safeString(graph?.fidelity || ''),
+        bounds: graph?.bounds || null,
+        geometry: graph?.geometry || null,
+        physics: chatPhysicsWorldState
+            ? {
+                ready: Boolean(chatPhysicsWorldState.ready),
+                actorCount: Number(chatPhysicsWorldState.actorBodies?.size || 0),
+                signature: safeString(chatPhysicsWorldState.signature || ''),
+            }
+            : null,
+        platforms,
+        actors: actorRows,
+        primary: actorRows.find((row) => row.kind === 'primary') || null,
+        scenario: safeString(chatRobotWorldDebugScenario?.name || ''),
+    };
+}
+
+function chatRobotWorldSyncDebugState(graph, actors, frameNow = Date.now()) {
+    chatRobotWorldLatestSnapshot = chatRobotWorldBuildDebugSnapshot(graph, actors, frameNow);
+    chatRobotWorldDebugSamples.push(chatRobotWorldLatestSnapshot);
+    if (chatRobotWorldDebugSamples.length > CHAT_PRIMARY_ROBOT_DEBUG_SAMPLE_LIMIT) {
+        chatRobotWorldDebugSamples = chatRobotWorldDebugSamples.slice(-CHAT_PRIMARY_ROBOT_DEBUG_SAMPLE_LIMIT);
+    }
+    if (appRoot instanceof HTMLElement) {
+        appRoot.dataset.chatRobotPlatform = safeString(chatRobotWorldLatestSnapshot?.primary?.currentPlatformId || '');
+        appRoot.dataset.chatRobotMode = safeString(chatRobotWorldLatestSnapshot?.primary?.mode || '');
+        appRoot.dataset.chatRobotFacing = safeString(chatRobotWorldLatestSnapshot?.primary?.facing || '');
+    }
+    if (typeof window !== 'undefined') {
+        window[CHAT_PRIMARY_ROBOT_DEBUG_KEY] = {
+            getSnapshot: () => chatRobotWorldCloneDebugPayload(chatRobotWorldLatestSnapshot),
+            getSamples: () => chatRobotWorldCloneDebugPayload(chatRobotWorldDebugSamples),
+            resetSamples: () => {
+                chatRobotWorldDebugSamples = [];
+            },
+            runScenario: (name) => chatRobotWorldRunDebugScenario(name),
+            clearScenario: () => {
+                chatRobotWorldDebugScenario = null;
+            },
+        };
+    }
 }
 
 function chatRobotWorldRemoveHelper(activityId, { immediate = false } = {}) {
@@ -2926,15 +4853,17 @@ function chatRobotWorldRemoveHelper(activityId, { immediate = false } = {}) {
     if (!key || !chatAgentPresenceStateByActivityId.has(key)) return;
     const state = chatAgentPresenceStateByActivityId.get(key);
     if (!state?.element || immediate) {
+        state?.routeElement?.remove?.();
         state?.element?.remove();
         chatAgentPresenceStateByActivityId.delete(key);
         chatRobotWorldSyncRootVisibility();
         return;
     }
     state.exiting = true;
-    state.exitAt = Date.now() + (CHAT_AGENT_PRESENCE_EXIT_MS + 120);
+    state.exitAt = Date.now() + CHAT_AGENT_PRESENCE_EXIT_MS + CHAT_AGENT_PRESENCE_PORTAL_OUT_MS;
+    state.portalCloseAt = state.exitAt - CHAT_AGENT_PRESENCE_PORTAL_OUT_MS;
+    state.portalClosing = false;
     chatRobotWorldSetSpeech(state, safeString(state.status) === 'failed' ? 'Task failed.' : 'Helper complete.', 1800);
-    chatRobotWorldPlayPortal(state, 'close');
 }
 
 function chatWorldRemoveHelperPublic(activityId, { immediate = false } = {}) {
@@ -2965,38 +4894,98 @@ function chatRobotWorldEnsureLoop() {
             return;
         }
         const bounds = chatRobotWorldBounds();
+        const fidelity = animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {});
+        const graph = chatRobotWorldBuildPlatformGraph(bounds, fidelity);
+        const worldMode = chatWorldCurrentMode(currentPreferences?.advanced?.interface || {});
         chatWorldSyncRootVisibility();
         const actors = [chatPrimaryPresenceState, ...chatAgentPresenceStateByActivityId.values()].filter(Boolean);
+        const physicsWorld = worldMode === CHAT_WORLD_MODE_PHYSICS
+            ? chatPhysicsWorldPrime(bounds, graph, actors)
+            : (chatPhysicsWorldDestroy(), null);
+        if (physicsWorld?.ready) {
+            chatPhysicsWorldRenderVisualLayer(physicsWorld, bounds, graph, actors);
+        }
+        if (chatRobotWorldDebugScenario && Date.now() >= Number(chatRobotWorldDebugScenario.lockUntil || 0)) {
+            chatRobotWorldDebugScenario = null;
+        }
         actors.forEach((state) => {
             if (!state?.element || state.paused) {
-                chatRobotWorldRenderActor(state);
+                chatRobotWorldRenderActor(state, graph);
                 return;
             }
-            if ((Number(state.modeUntil || 0) <= Date.now()) && !chatTaskIsTerminal(state.status)) {
-                chatRobotWorldRetarget(state);
+            const scenarioLocked = safeString(state.kind) === 'primary'
+                && chatRobotWorldDebugScenario
+                && Date.now() < Number(chatRobotWorldDebugScenario.lockUntil || 0);
+            if (state.portalTransfer) {
+                chatRobotWorldAdvancePortalTransfer(state, bounds);
+                chatRobotWorldRenderActor(state, graph);
+                return;
             }
-            const targetX = Number(state.targetX ?? state.x ?? 0);
-            const targetY = Number(state.targetY ?? bounds.groundY);
-            const dx = targetX - Number(state.x || 0);
-            if (Math.abs(dx) > 6) {
-                state.facing = dx >= 0 ? 1 : -1;
-                state.vx = state.facing * CHAT_PRIMARY_ROBOT_WALK_SPEED * (state.kind === 'delegation' ? 0.92 : 1);
-            } else {
-                state.vx *= 0.84;
-            }
-            state.vy = Math.min(CHAT_PRIMARY_ROBOT_FALL_SPEED_MAX, Number(state.vy || 0) + CHAT_PRIMARY_ROBOT_GRAVITY * (dt / 16));
-            state.x += state.vx * (dt / 16);
-            state.y += state.vy * (dt / 16);
-            const desiredGround = Math.min(bounds.groundY, targetY);
-            if (state.y >= desiredGround) {
-                state.y = desiredGround;
-                state.vy = 0;
-                if ((state.mode === 'perch' || state.mode === 'inspect') && Math.abs(targetY - desiredGround) < 1) {
-                    state.y = targetY;
+            if (safeString(state.kind) === 'delegation' && state.exiting) {
+                if (!state.portalClosing && Date.now() >= Number(state.portalCloseAt || 0)) {
+                    state.portalClosing = true;
+                    chatRobotWorldPlayPortal(state, 'close');
                 }
+                state.vx = 0;
+                state.vy = 0;
+            } else if (!scenarioLocked && (Number(state.modeUntil || 0) <= Date.now()) && !chatTaskIsTerminal(state.status)) {
+                chatRobotWorldRetarget(state, graph);
             }
-            if (state.mode === 'sleep' || state.mode === 'workout') {
-                state.vx *= 0.75;
+            const motion = chatRobotWorldMotionProfile(fidelity);
+            const walkSpeed = motion.walkSpeed * (state.kind === 'delegation' ? motion.helperSpeedScale : 1);
+            const physicsHandled = Boolean(physicsWorld?.ready) && chatPhysicsWorldAdvanceActor(
+                physicsWorld,
+                state,
+                dt,
+                bounds,
+                graph,
+                walkSpeed,
+                { scenarioLocked },
+            );
+            if (!physicsHandled) {
+                if (state.transition) {
+                    chatRobotWorldAdvanceTransition(state, dt, bounds);
+                } else if (scenarioLocked) {
+                    state.vx = 0;
+                    state.vy = 0;
+                    state.mode = 'inspect';
+                    state.modeUntil = Date.now() + 320;
+                } else if (!(safeString(state.kind) === 'delegation' && state.exiting)) {
+                    const targetX = Number(state.targetX ?? state.x ?? 0);
+                    const targetPlatform = graph.platformsById.get(safeString(state.targetPlatformId || state.currentPlatformId || ''));
+                    const targetY = Number(targetPlatform ? (targetPlatform.y - CHAT_PRIMARY_ROBOT_FOOT_OFFSET) : (state.targetY ?? bounds.groundY));
+                    const dx = targetX - Number(state.x || 0);
+                    if (Math.abs(dx) > 3) {
+                        state.facing = dx >= 0 ? 1 : -1;
+                        state.vx = state.facing * walkSpeed;
+                        if ((state.mode === 'sleep' || state.mode === 'workout') && safeString(state.status) === 'idle') {
+                            state.vx *= 0.4;
+                        }
+                        state.x += state.vx * (dt / 16);
+                    } else {
+                        state.vx = 0;
+                        state.x = targetX;
+                    }
+                    if (targetPlatform) {
+                        state.x = Math.max(targetPlatform.x1 + 4, Math.min(targetPlatform.x2 - 4, Number(state.x || targetX)));
+                        state.currentPlatformId = targetPlatform.id;
+                    }
+                    const desiredGround = Math.max(0, Math.min(bounds.height - CHAT_PRIMARY_ROBOT_ACTOR_HEIGHT, targetY));
+                    if (Number(state.y || 0) < desiredGround - 1) {
+                        state.vy = Math.min(CHAT_PRIMARY_ROBOT_FALL_SPEED_MAX, Number(state.vy || 0) + CHAT_PRIMARY_ROBOT_GRAVITY * (dt / 16));
+                        state.y += state.vy * (dt / 16);
+                        if (state.y >= desiredGround) {
+                            state.y = desiredGround;
+                            state.vy = 0;
+                        }
+                    } else {
+                        state.y = desiredGround;
+                        state.vy = 0;
+                    }
+                } else {
+                    state.vx = 0;
+                    state.vy = 0;
+                }
             }
             if (chatTaskIsTerminal(state.status) && safeString(state.kind) === 'primary' && Date.now() >= Number(state.lingerUntil || 0)) {
                 state.status = 'idle';
@@ -3004,14 +4993,17 @@ function chatRobotWorldEnsureLoop() {
                 state.taskText = '';
                 state.endedAt = Date.now();
                 state.lingerUntil = 0;
+                state.transition = null;
                 chatRobotWorldSetSpeech(state, 'All done here. Back on standby.', 2800);
             }
             if (safeString(state.kind) === 'delegation' && state.exiting && Date.now() >= Number(state.exitAt || 0)) {
+                state.routeElement?.remove?.();
                 state.element?.remove();
                 chatAgentPresenceStateByActivityId.delete(state.activityId);
             }
-            chatRobotWorldRenderActor(state);
+            chatRobotWorldRenderActor(state, graph);
         });
+        chatRobotWorldSyncDebugState(graph, actors, frameNow);
     };
     chatRobotWorldRaf = window.requestAnimationFrame(step);
 }
@@ -3046,14 +5038,20 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
     }
     if (!chatRobotWorldShouldBeVisible()) return null;
     const existing = chatAgentPresenceStateByActivityId.get(key);
+    const bounds = chatRobotWorldBounds();
+    const helperIndex = chatAgentPresenceStateByActivityId.size;
+    const slotCount = Math.max(3, helperIndex + 2);
+    const slotWidth = Math.max(72, bounds.width / slotCount);
+    const slotCenter = (slotWidth * (helperIndex + 0.5)) + (Math.random() * 28) - 14;
+    const spawnX = chatRobotWorldClamp(slotCenter, 28, Math.max(28, bounds.width - 28));
     const state = existing || {
         activityId: key,
         kind: 'delegation',
         element: null,
-        x: 36 + (chatAgentPresenceStateByActivityId.size * 28),
-        y: -48,
-        targetX: 120,
-        targetY: chatRobotWorldBounds().groundY,
+        x: spawnX,
+        y: -56 - (Math.random() * 44),
+        targetX: spawnX,
+        targetY: bounds.groundY,
         vx: 0,
         vy: 0,
         facing: 1,
@@ -3074,6 +5072,16 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
         lingerUntil: 0,
         exiting: false,
         exitAt: 0,
+        transition: null,
+        hiddenTransit: false,
+        currentPlatformId: '',
+        targetPlatformId: '',
+        preferredDirection: 1,
+        portalTransfer: null,
+        portalCloseAt: 0,
+        portalClosing: false,
+        debugPropKind: '',
+        debugPropPhase: '',
     };
     Object.assign(state, patch);
     state.activityId = key;
@@ -3083,10 +5091,13 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
     if (!state.element) {
         state.element = chatRobotWorldCreateActorElement(key, state);
         chatRobotWorldPlayPortal(state, 'open');
-        state.targetX = 40 + Math.random() * Math.max(80, chatRobotWorldBounds().width - 80);
-        state.targetY = chatRobotWorldBounds().groundY;
+        state.x = spawnX;
+        state.y = -56 - (Math.random() * 44);
+        state.targetX = spawnX;
+        state.targetY = bounds.groundY;
         state.vy = 0;
         state.modeUntil = 0;
+        chatRobotWorldSetSpeech(state, safeString(state.summary) || 'Helper online.', 1800);
     }
     if (chatTaskIsTerminal(state.status)) {
         state.endedAt = Number(state.endedAt || Date.now());
@@ -3095,6 +5106,8 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
     } else {
         state.endedAt = 0;
         state.exiting = false;
+        state.portalClosing = false;
+        state.portalCloseAt = 0;
         if (!state.modeUntil) {
             chatRobotWorldRetarget(state);
         }
@@ -3153,16 +5166,22 @@ function chatWorldSetPresence(activity) {
         const activityId = safeString(row?.execution_id || row?.task_id || row?.bot_id || row?.bot_name || row?.agent_id || row?.specialist_id);
         if (!activityId) return;
         nextIds.add(activityId);
+        const identity = officeResolveAgentIdentity(
+            row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id,
+            activityId,
+        );
         chatAgentPresenceUpsert(activityId, {
             sessionId,
             bubbleId: chatTaskMessageBySessionId.get(sessionId) || '',
-            name: safeString(row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id || 'worker'),
+            name: identity.name,
             status: safeString(row?.state || row?.status || 'running'),
             taskText: safeString(row?.summary || row?.last_progress || row?.task || row?.current_task),
             summary: safeString(row?.summary || row?.last_progress || row?.task || row?.current_task),
             startedAt: missionToEpoch(safeString(row?.created_at || row?.updated_at)) || Date.now(),
-            color: officeFindAgentByHandle(row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id)?.color || '#9ad8ff',
-            costume: officeFindAgentByHandle(row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id)?.costume || 'none',
+            color: identity.color || '#7cd6ff',
+            costume: identity.costume || 'visor',
+            officeAgentName: identity.name,
+            officeAgentId: identity.id,
         });
     });
     [...chatAgentPresenceStateByActivityId.entries()].forEach(([activityId, state]) => {
@@ -3204,11 +5223,11 @@ function chatWorldLandAtDock(sourceNode = null) {
 
 function chatWorldPortalOutLanded() {
     const primary = chatRobotWorldEnsurePrimaryState();
-    primary.status = safeString(primary.status) === 'idle' ? 'running' : primary.status;
-    primary.summary = safeString(primary.summary) || 'On it.';
+    primary.status = safeString(primary.status) || 'idle';
+    primary.summary = safeString(primary.summary) || 'Standing by.';
     primary.mode = 'inspect';
     primary.modeUntil = Date.now() + 1800;
-    chatRobotWorldSetSpeech(primary, 'On it.', 1800);
+    chatRobotWorldSetSpeech(primary, 'Standing by on the floor.', 1800);
     chatRobotWorldRenderActor(primary);
     return Promise.resolve();
 }
@@ -3953,7 +5972,8 @@ function easySetupStepName(step) {
     if (step <= 1) return 'choose_path';
     if (step === 2) return 'connect';
     if (step === 3) return 'downloads';
-    if (step === 4) return 'brain_ready';
+    if (step === 4) return 'preferences';
+    if (step === 5) return 'brain_ready';
     return 'choose_path';
 }
 
@@ -3961,8 +5981,9 @@ function stepFromOnboardingName(nameRaw) {
     const name = safeString(nameRaw).toLowerCase();
     if (name === 'connect') return 2;
     if (name === 'downloads') return 3;
-    if (name === 'brain_ready') return 4;
-    if (name === 'interview' || name === 'completed') return 4;
+    if (name === 'preferences') return 4;
+    if (name === 'brain_ready') return 5;
+    if (name === 'interview' || name === 'completed') return 5;
     return 1;
 }
 
@@ -4585,6 +6606,75 @@ function renderEasySetupPathCards() {
     });
 }
 
+function syncEasySetupAnimationCards() {
+    if (!easySetupAnimationGrid) return;
+    const fidelity = normalizeAnimationFidelity(easySetupState.animationFidelity, recommendedAnimationFidelity());
+    easySetupState.animationFidelity = fidelity;
+    easySetupAnimationGrid.querySelectorAll('[data-animation-fidelity]').forEach((btn) => {
+        const selected = safeString(btn.getAttribute('data-animation-fidelity')) === fidelity;
+        btn.classList.toggle('selected', selected);
+        btn.setAttribute('aria-pressed', selected ? 'true' : 'false');
+    });
+    if (easySetupAnimationHint) {
+        if (fidelity === ANIMATION_FIDELITY_MINIMAL) {
+            easySetupAnimationHint.textContent = 'Minimal Motion keeps Thomas mostly grounded and trims expensive effects.';
+        } else if (fidelity === ANIMATION_FIDELITY_BALANCED) {
+            easySetupAnimationHint.textContent = 'Balanced keeps the chat robot alive but tones down the heavier traversal effects.';
+        } else {
+            easySetupAnimationHint.textContent = 'High Fidelity keeps the full portal, platform, ladder, stairs, and hidden-tunnel behavior on by default.';
+        }
+    }
+}
+
+function ensureEasySetupPhysicsControls() {
+    if (!(easySetupStep4 instanceof HTMLElement)) return null;
+    let row = easySetupStep4.querySelector('#easySetupPhysicsRow');
+    if (row instanceof HTMLElement) return row;
+    row = document.createElement('div');
+    row.id = 'easySetupPhysicsRow';
+    row.className = 'switch-row easy-setup-switch-row';
+    row.innerHTML = `
+        <div>
+            <strong>Advanced Chat Physics</strong>
+            <p>Enable the Phaser-backed chat world with real colliders, grounded bodies, and physics-driven movement. Higher CPU/GPU cost.</p>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" id="easySetupPhysicsToggle">
+            <span class="slider round"></span>
+        </label>
+    `;
+    easySetupStep4.appendChild(row);
+    const toggle = getEasySetupPhysicsToggle();
+    if (toggle instanceof HTMLInputElement) {
+        toggle.addEventListener('change', async () => {
+            easySetupState.chatPhysicsEnabled = Boolean(toggle.checked);
+            syncEasySetupPhysicsControls();
+            await persistOnboardingPrefs({
+                current_step: easySetupStepName(easySetupState.step),
+                answers: {
+                    animation_fidelity: easySetupState.animationFidelity,
+                    advanced_chat_physics: easySetupState.chatPhysicsEnabled,
+                },
+            });
+        });
+    }
+    return row;
+}
+
+function syncEasySetupPhysicsControls() {
+    const row = ensureEasySetupPhysicsControls();
+    const toggle = getEasySetupPhysicsToggle();
+    if (!(row instanceof HTMLElement) || !(toggle instanceof HTMLInputElement)) return;
+    const fidelity = normalizeAnimationFidelity(easySetupState.animationFidelity, recommendedAnimationFidelity());
+    const available = fidelity !== ANIMATION_FIDELITY_MINIMAL;
+    if (!available) {
+        easySetupState.chatPhysicsEnabled = false;
+    }
+    toggle.checked = available && Boolean(easySetupState.chatPhysicsEnabled);
+    toggle.disabled = !available;
+    row.classList.toggle('is-disabled', !available);
+}
+
 function syncEasySetupConnectionBlocks() {
     if (easySetupCodexBlock) easySetupCodexBlock.classList.toggle('hidden', easySetupState.selectedPath !== 'codex');
     if (easySetupManualBlock) easySetupManualBlock.classList.toggle('hidden', easySetupState.selectedPath !== 'manual');
@@ -4738,6 +6828,8 @@ function updateEasySetupReadyList() {
         `Verification: ${easySetupState.verified ? 'passed' : 'not verified'}`,
         `Validated profile: ${verifiedProfile}`,
         `Codex models detected: ${codexModelCount}`,
+        `Animation fidelity: ${normalizeAnimationFidelity(easySetupState.animationFidelity, recommendedAnimationFidelity())}`,
+        `Advanced chat physics: ${easySetupState.chatPhysicsEnabled ? 'enabled' : 'disabled'}`,
         depMissing > 0
             ? `Required downloads still missing: ${depMissing}`
             : 'Required downloads: complete or not needed for selected path.',
@@ -4755,7 +6847,7 @@ function updateEasySetupReadyList() {
 function updateEasySetupNavigation() {
     if (!easySetupBackBtn || !easySetupNextBtn) return;
     easySetupBackBtn.style.visibility = easySetupState.step <= 1 ? 'hidden' : 'visible';
-    easySetupNextBtn.textContent = easySetupState.step >= 4 ? 'Continue in chat' : 'Continue';
+    easySetupNextBtn.textContent = easySetupState.step >= EASY_SETUP_TOTAL_STEPS ? 'Continue in chat' : 'Continue';
 
     let disableNext = false;
     if (easySetupState.step === 1) {
@@ -4765,6 +6857,8 @@ function updateEasySetupNavigation() {
     } else if (easySetupState.step === 3) {
         const missing = missingRequiredDependencies(easySetupState.dependencyPlan).length;
         disableNext = missing > 0 && safeString(easySetupState.dependenciesAction) === 'pending';
+    } else if (easySetupState.step === 4) {
+        disableNext = !normalizeAnimationFidelity(easySetupState.animationFidelity, '');
     }
     easySetupNextBtn.disabled = disableNext;
 
@@ -4782,25 +6876,27 @@ function updateEasySetupNavigation() {
 }
 
 function setEasySetupStep(step) {
-    easySetupState.step = Math.max(1, Math.min(4, Number(step) || 1));
+    easySetupState.step = Math.max(1, Math.min(EASY_SETUP_TOTAL_STEPS, Number(step) || 1));
     if (easySetupStep1) easySetupStep1.classList.toggle('hidden', easySetupState.step !== 1);
     if (easySetupStep2) easySetupStep2.classList.toggle('hidden', easySetupState.step !== 2);
     if (easySetupStep3) easySetupStep3.classList.toggle('hidden', easySetupState.step !== 3);
     if (easySetupStep4) easySetupStep4.classList.toggle('hidden', easySetupState.step !== 4);
+    if (easySetupStep5) easySetupStep5.classList.toggle('hidden', easySetupState.step !== 5);
 
     if (easySetupProgressFill) {
-        easySetupProgressFill.style.width = `${(easySetupState.step / 4) * 100}%`;
+        easySetupProgressFill.style.width = `${(easySetupState.step / EASY_SETUP_TOTAL_STEPS) * 100}%`;
     }
     if (easySetupProgressText) {
-        easySetupProgressText.textContent = `Step ${easySetupState.step} of 4`;
+        easySetupProgressText.textContent = `Step ${easySetupState.step} of ${EASY_SETUP_TOTAL_STEPS}`;
     }
 
     renderEasySetupPathCards();
+    syncEasySetupAnimationCards();
     syncEasySetupConnectionBlocks();
     if (easySetupState.step === 3) {
         renderEasySetupDependencies();
     }
-    if (easySetupState.step === 4) {
+    if (easySetupState.step === 5) {
         updateEasySetupReadyList();
     }
     updateEasySetupNavigation();
@@ -4891,6 +6987,15 @@ async function persistOnboardingPrefs(overrides = {}) {
         ...(overrides.answers || {}),
         connection_path: safeString(easySetupState.selectedPath),
         dependency_action: safeString(easySetupState.dependenciesAction) || 'pending',
+        animation_fidelity: normalizeAnimationFidelity(
+            Object.prototype.hasOwnProperty.call(overrides.answers || {}, 'animation_fidelity')
+                ? overrides.answers.animation_fidelity
+                : easySetupState.animationFidelity,
+            recommendedAnimationFidelity(),
+        ),
+        advanced_chat_physics: Object.prototype.hasOwnProperty.call(overrides.answers || {}, 'advanced_chat_physics')
+            ? Boolean(overrides.answers.advanced_chat_physics)
+            : Boolean(easySetupState.chatPhysicsEnabled),
     };
     const dependencyPlanPayload = overrides.dependency_plan !== undefined
         ? overrides.dependency_plan
@@ -5012,10 +7117,22 @@ async function openEasySetup({ source = 'manual', force = false, restart = false
         easySetupState.interviewSkipChosen = false;
         easySetupState.dependenciesAction = 'pending';
         easySetupState.selectedPath = '';
+        easySetupState.animationFidelity = recommendedAnimationFidelity();
+        easySetupState.chatPhysicsEnabled = false;
     } else {
         easySetupState.interviewAnswers = { ...(onboarding?.answers || {}) };
         const restoredDependencyAction = safeString(onboarding?.answers?.dependency_action);
         easySetupState.dependenciesAction = restoredDependencyAction === 'approved' ? 'approved' : 'pending';
+        easySetupState.animationFidelity = normalizeAnimationFidelity(
+            onboarding?.answers?.animation_fidelity
+            || currentPreferences?.advanced?.interface?.animation_fidelity,
+            animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {}),
+        );
+        easySetupState.chatPhysicsEnabled = Boolean(
+            Object.prototype.hasOwnProperty.call(onboarding?.answers || {}, 'advanced_chat_physics')
+                ? onboarding?.answers?.advanced_chat_physics
+                : currentPreferences?.advanced?.interface?.advanced_chat_physics,
+        );
     }
 
     try {
@@ -5313,8 +7430,33 @@ async function handleEasySetupNext() {
             return;
         }
         setEasySetupStep(4);
-        await persistOnboardingPrefs({ current_step: 'brain_ready' });
-        emitOnboardingTelemetry('wizard.step_advanced', { step: 'brain_ready', path: easySetupState.selectedPath });
+        await persistOnboardingPrefs({ current_step: 'preferences' });
+        emitOnboardingTelemetry('wizard.step_advanced', { step: 'preferences', path: easySetupState.selectedPath });
+        return;
+    }
+
+    if (easySetupState.step === 4) {
+        easySetupState.animationFidelity = normalizeAnimationFidelity(
+            easySetupState.animationFidelity,
+            recommendedAnimationFidelity(),
+        );
+        if (easySetupState.animationFidelity === ANIMATION_FIDELITY_MINIMAL) {
+            easySetupState.chatPhysicsEnabled = false;
+        }
+        setEasySetupStep(5);
+        await persistOnboardingPrefs({
+            current_step: 'brain_ready',
+            answers: {
+                animation_fidelity: easySetupState.animationFidelity,
+                advanced_chat_physics: easySetupState.chatPhysicsEnabled,
+            },
+        });
+        emitOnboardingTelemetry('wizard.step_advanced', {
+            step: 'brain_ready',
+            path: easySetupState.selectedPath,
+            animation_fidelity: easySetupState.animationFidelity,
+            advanced_chat_physics: easySetupState.chatPhysicsEnabled,
+        });
         return;
     }
 
@@ -5346,6 +7488,27 @@ function initEasySetup() {
             });
         });
     }
+    if (easySetupAnimationGrid) {
+        easySetupAnimationGrid.querySelectorAll('[data-animation-fidelity]').forEach((btn) => {
+            btn.addEventListener('click', async () => {
+                easySetupState.animationFidelity = normalizeAnimationFidelity(
+                    btn.getAttribute('data-animation-fidelity'),
+                    recommendedAnimationFidelity(),
+                );
+                syncEasySetupAnimationCards();
+                syncEasySetupPhysicsControls();
+                updateEasySetupNavigation();
+                await persistOnboardingPrefs({
+                    current_step: easySetupStepName(easySetupState.step),
+                    answers: {
+                        animation_fidelity: easySetupState.animationFidelity,
+                        advanced_chat_physics: easySetupState.chatPhysicsEnabled,
+                    },
+                });
+            });
+        });
+    }
+    ensureEasySetupPhysicsControls();
 
     if (easySetupCloseBtn) easySetupCloseBtn.addEventListener('click', () => requestEasySetupClose('close_button'));
     if (easySetupBackdrop) easySetupBackdrop.addEventListener('click', () => requestEasySetupClose('backdrop'));
@@ -5427,6 +7590,11 @@ function deriveOnboardingDefaults(answers) {
     const personalityPref = safeString(answers?.personality) || 'balanced';
     const workflowPref = safeString(answers?.workflow) || 'build_features';
     const togglesPref = safeString(answers?.default_toggles) || 'safe_defaults';
+    const animationFidelity = normalizeAnimationFidelity(
+        answers?.animation_fidelity,
+        recommendedAnimationFidelity(),
+    );
+    const chatPhysicsEnabled = Boolean(answers?.advanced_chat_physics) && animationFidelity !== ANIMATION_FIDELITY_MINIMAL;
 
     let autonomyLevel = 2;
     if (experience === 'new') autonomyLevel = 1;
@@ -5467,6 +7635,8 @@ function deriveOnboardingDefaults(answers) {
         uiDensity,
         defaultMode,
         profileType,
+        animationFidelity,
+        chatPhysicsEnabled,
     };
 }
 
@@ -5500,6 +7670,9 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
                 show_token_meter: derived.showTokenMeter,
                 debug_panel_enabled: derived.debugPanelEnabled,
                 ui_density: derived.uiDensity,
+                animation_fidelity: derived.animationFidelity,
+                animations_enabled: isAnimationFidelityEnabled(derived.animationFidelity),
+                advanced_chat_physics: derived.chatPhysicsEnabled,
             },
         },
         onboarding: {
@@ -11207,6 +13380,8 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             robotStatusQueued = false;
             currentRobotCategory = 'thinking';
             robotStartTime = Date.now();
+            bubbleRow?.classList.add('message-row-inline-status');
+            bubbleMsgContent.classList.add('message-content-inline-status');
             bubbleMsgContent.innerHTML = '';
             bubbleMsgContent.appendChild(_createRobotStatus('thinking'));
 
@@ -11266,94 +13441,20 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             if (robotAnimInterval) { clearInterval(robotAnimInterval); robotAnimInterval = null; }
             const robotEl = bubbleMsgContent?.querySelector('.chat-robot-status');
             if (robotEl) robotEl.remove();
+            bubbleMsgContent?.classList.remove('message-content-inline-status', 'streaming-active');
+            bubbleRow?.classList.remove('message-row-inline-status');
         }
 
         function _robotExitRun() {
-            // Stop all intervals
             if (robotSayingInterval) { clearInterval(robotSayingInterval); robotSayingInterval = null; }
             if (robotTimerInterval) { clearInterval(robotTimerInterval); robotTimerInterval = null; }
             if (robotAnimInterval) { clearInterval(robotAnimInterval); robotAnimInterval = null; }
-
-            // Capture elapsed time, accumulated thinking text, and tool cards for the summary
-            const elapsedMs = Date.now() - robotStartTime;
-            const capturedThinkingText = thinkingText;
-            const capturedToolCards = _liveToolCards.slice();
-            let scheduledLandingFromClone = false;
-
-            // Clone the robot agent and put it on the message-row for the exit animation
-            const agentEl = bubbleMsgContent?.querySelector('.chat-robot-agent');
-            if (agentEl && bubbleRow) {
-                const clone = agentEl.cloneNode(true);
-                // Strip all activity + entrance animation classes + inline styles
-                CHAT_ROBOT_ANIMATIONS.forEach(a => clone.classList.remove('chat-robot-anim-' + a));
-                clone.classList.remove('chat-robot-enter');
-                clone.style.filter = 'none';
-                clone.style.animation = '';
-                clone.removeAttribute('data-idle-anim');
-                // Position the clone absolutely on the message-row
-                clone.style.position = 'absolute';
-                const rowRect = bubbleRow.getBoundingClientRect();
-                const agentRect = agentEl.getBoundingClientRect();
-                const fallbackTop = 6;
-                const fallbackLeft = 38;
-                const resolvedTop = Number.isFinite(agentRect.top) && Number.isFinite(rowRect.top)
-                    ? Math.round(agentRect.top - rowRect.top)
-                    : fallbackTop;
-                const resolvedLeft = Number.isFinite(agentRect.left) && Number.isFinite(rowRect.left)
-                    ? Math.round(agentRect.left - rowRect.left)
-                    : fallbackLeft;
-                const startTop = Math.max(0, resolvedTop);
-                const startLeft = Math.max(0, resolvedLeft);
-                clone.style.top = `${startTop}px`;
-                clone.style.left = `${startLeft}px`;
-                const dock = _positionRobotDock();
-                const dockRect = dock instanceof HTMLElement ? dock.getBoundingClientRect() : null;
-                const targetLeft = Number.isFinite(dockRect?.left) && Number.isFinite(rowRect.left)
-                    ? Math.round(dockRect.left - rowRect.left)
-                    : (startLeft - 46);
-                const targetTop = Number.isFinite(dockRect?.top) && Number.isFinite(rowRect.top)
-                    ? Math.round(dockRect.top - rowRect.top)
-                    : (startTop + 360);
-                const walkDx = Math.max(-CHAT_ROBOT_EXIT_WALK_MAX, Math.min(CHAT_ROBOT_EXIT_WALK_MAX, targetLeft - startLeft));
-                const fallDy = Math.max(CHAT_ROBOT_EXIT_FALL_MIN, Math.min(CHAT_ROBOT_EXIT_FALL_MAX, targetTop - startTop + 2));
-                clone.style.setProperty('--robot-exit-walk-dx', `${walkDx}px`);
-                clone.style.setProperty('--robot-exit-fall-dy', `${fallDy}px`);
-                clone.style.zIndex = '10';
-                clone.classList.add('robot-exit-run');
-                bubbleRow.appendChild(clone);
-                // Two chained animations (jump + fall)  remove after the fall ends
-                let landedFromClone = false;
-                const landClone = () => {
-                    if (landedFromClone) return;
-                    landedFromClone = true;
-                    _landRobotAtComposerDock(clone);
-                    robotLandedForThisResponse = true;
-                };
-                clone.addEventListener('animationend', (e) => {
-                    if (e.target !== clone) return;
-                    if (safeString(e.animationName) !== 'chatRobotExitFall') return;
-                    landClone();
-                });
-                setTimeout(() => landClone(), CHAT_ROBOT_EXIT_FALL_MS + 160);
-                scheduledLandingFromClone = true;
-            }
-            if (!scheduledLandingFromClone) {
-                setTimeout(() => {
-                    _landRobotAtComposerDock();
-                    robotLandedForThisResponse = true;
-                }, CHAT_ROBOT_EXIT_FALL_MS);
-            }
-            // Remove the status element so text can flow in
-            const robotEl = bubbleMsgContent?.querySelector('.chat-robot-status');
-            if (robotEl) robotEl.remove();
-
-            // Insert "Thought for X.Xs" collapsed summary at top of message content
-            if (bubbleMsgContent && elapsedMs > 500) {
-                const summaryEl = _createThinkingSummary(elapsedMs, capturedThinkingText, capturedToolCards);
-                if (summaryEl) {
-                    bubbleMsgContent.insertBefore(summaryEl, bubbleMsgContent.firstChild);
-                }
-            }
+            robotLandedForThisResponse = true;
+            const statusEl = bubbleMsgContent?.querySelector('.chat-robot-status');
+            if (statusEl) statusEl.remove();
+            bubbleRow?.classList.remove('message-row-inline-status');
+            bubbleMsgContent?.classList.remove('message-content-inline-status');
+            if (bubbleMsgContent) bubbleMsgContent.classList.add('streaming-active');
         }
 
         //  rAF-batched streaming render 
@@ -11371,6 +13472,8 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             if (!textChunk) return false;
             if (!hasRenderableText) {
                 _robotExitRun();
+                bubbleRow?.classList.remove('message-row-inline-status');
+                bubbleMsgContent?.classList.remove('message-content-inline-status');
                 if (bubbleMsgContent) bubbleMsgContent.classList.add('streaming-active');
             }
             fullText += textChunk;
@@ -11422,19 +13525,6 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 summary: promptSummary,
                 checkpoint: 'Task received. Defining what a good result looks like.',
             });
-            chatAgentPresenceUpsert(_taskContractActivityId, {
-                kind: 'primary',
-                sessionId: _taskUiSessionId,
-                bubbleId,
-                name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
-                status: 'spawning',
-                taskText: promptSummary,
-                summary: promptSummary,
-                startedAt: Date.now(),
-                color: '#9ad8ff',
-                costume: 'none',
-                officeAgentName: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
-            });
         }
 
         function _syncDelegationWorkerVisual(evt, status, taskText) {
@@ -11444,7 +13534,8 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             const terminal = _delegationIsTerminalState(status);
             const existingTaskId = safeString(_officeDelegationTaskByActivity.get(activityId));
             if (!terminal && !existingTaskId) {
-                const preferredAgent = officeFindAgentByHandle(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id);
+                const preferredIdentity = officeResolveAgentIdentity(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id, activityId);
+                const preferredAgent = officeFindAgentByHandle(preferredIdentity.name);
                 const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';
                 const queuedTask = officeQueueTask(taskText, {
                     source: `chat-delegation:${previewSessionId}:${activityId}`,
@@ -11456,7 +13547,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                     chatAgentPresenceSetOfficeContext(activityId, {
                         taskId: queuedTask.id,
                         agentId: safeString(queuedTask.assignedAgentId || preferredAgent?.id),
-                        agentName: safeString(preferredAgent?.name || evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id),
+                        agentName: safeString(preferredAgent?.name || preferredIdentity.name),
                     });
                 }
                 return;
@@ -11473,10 +13564,11 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 }
             }
             officeState.tasksDirty = true;
+            const completedIdentity = officeResolveAgentIdentity(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id, activityId);
             chatAgentPresenceSetOfficeContext(activityId, {
                 taskId: linkedTask.id,
                 agentId: linkedTask.assignedAgentId,
-                agentName: evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id,
+                agentName: safeString(linkedTask.assignedAgentId ? officeGetAgentById(linkedTask.assignedAgentId)?.name : '') || completedIdentity.name,
             });
         }
 
@@ -11565,6 +13657,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             const cacheKey = `${activityId}::${status}::${taskText}`;
             const alreadySeen = _delegationStateCache.get(activityId) === cacheKey;
             _delegationStateCache.set(activityId, cacheKey);
+            const helperIdentity = officeResolveAgentIdentity(label, activityId);
             const container = _getToolCardsContainer();
             if (evtType === 'delegation_started') {
                 container.appendChild(createDelegationBadge(badgeKey, taskText));
@@ -11575,13 +13668,15 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 kind: 'delegation',
                 sessionId: safeString(evt?.session_id) || _taskUiSessionId,
                 bubbleId,
-                name: label || 'worker',
+                name: helperIdentity.name || 'worker',
                 status,
                 taskText,
                 summary: taskText || label,
                 startedAt: missionToEpoch(safeString(evt?.created_at || evt?.updated_at)) || Date.now(),
-                color: officeFindAgentByHandle(label)?.color || '#9ad8ff',
-                costume: officeFindAgentByHandle(label)?.costume || 'none',
+                color: helperIdentity.color || '#9ad8ff',
+                costume: helperIdentity.costume || 'none',
+                officeAgentName: helperIdentity.name,
+                officeAgentId: helperIdentity.id,
             });
             _syncDelegationWorkerVisual(evt, status, taskText);
             if (!_delegationIsTerminalState(status)) {
@@ -11661,19 +13756,6 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             };
             const container = _getToolCardsContainer();
             upsertAgentActivity(container, _taskContractActivityId, status, taskText, 0);
-            chatAgentPresenceUpsert(_taskContractActivityId, {
-                kind: 'primary',
-                sessionId: sessionToken,
-                bubbleId,
-                name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
-                status,
-                taskText,
-                summary: taskText,
-                startedAt: chatTaskStripState(bubbleId)?.startedAt || Date.now(),
-                color: '#9ad8ff',
-                costume: 'none',
-                officeAgentName: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
-            });
             _syncDelegationWorkerVisual(pseudoEvt, status, taskText);
             const checkpoint = evt?.type === 'task_definition'
                 ? 'Locked the task definition.'
@@ -11771,6 +13853,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                         } else if (evt.type === 'error') {
                             if (!hasRenderableText) _clearRobotStatus();
                             if (bubbleMsgContent) bubbleMsgContent.classList.remove('streaming-active');
+                            bubbleRow?.classList.remove('message-row-inline-status');
                             const errorText = safeString(evt.error) || 'Unknown stream error.';
                             fullText += `\n\n**Error:** ${errorText}`;
                             hasRenderableText = true;
@@ -11820,6 +13903,28 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                             if (specId) {
                                 const badge = createDelegationBadge(specId, task);
                                 _getToolCardsContainer().appendChild(badge);
+                                const helperIdentity = officeResolveAgentIdentity(specId, specId);
+                                chatAgentPresenceUpsert(specId, {
+                                    kind: 'delegation',
+                                    sessionId: safeString(evt?.session_id) || _taskUiSessionId || safeString(activeChatId) || 'chat',
+                                    bubbleId,
+                                    name: helperIdentity.name || specId,
+                                    status: 'running',
+                                    taskText: task,
+                                    summary: task || `Helping with ${specId}`,
+                                    startedAt: Date.now(),
+                                    color: helperIdentity.color || '#9ad8ff',
+                                    costume: helperIdentity.costume || 'none',
+                                    officeAgentName: helperIdentity.name,
+                                    officeAgentId: helperIdentity.id,
+                                });
+                                window.setTimeout(() => {
+                                    const live = chatAgentPresenceStateByActivityId.get(specId);
+                                    if (!live || chatTaskIsTerminal(live.status)) return;
+                                    live.status = 'completed';
+                                    live.summary = safeString(live.summary || task) || `Helper ${helperIdentity.name || specId} complete.`;
+                                    chatRobotWorldRemoveHelper(specId);
+                                }, 9000);
                                 if (!hasRenderableText) {
                                     if (!robotSayingInterval) _startRobotStatus();
                                     currentRobotCategory = 'working';
@@ -11963,15 +14068,6 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 status: 'completed',
                 checkpoint: 'Assistant response finished.',
             });
-            chatAgentPresenceUpsert(_taskContractActivityId, {
-                kind: 'primary',
-                sessionId: _taskUiSessionId,
-                bubbleId,
-                name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
-                status: 'completed',
-                taskText: chatTaskStripState(bubbleId)?.summary || 'Task finished.',
-                summary: chatTaskStripState(bubbleId)?.summary || 'Task finished.',
-            });
             _taskUiTerminated = true;
         }
 
@@ -12015,21 +14111,12 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         } else if (errorMsg.includes('SyntaxError')) {
             errorMsg = "Invalid JSON returned from server.";
         }
-        if (errorMsg) {
+            if (errorMsg) {
             if (_taskUiSeeded) {
                 updateMessageTaskStrip(bubbleId, {
                     sessionId: _taskUiSessionId,
                     status: 'failed',
                     checkpoint: errorMsg,
-                });
-                chatAgentPresenceUpsert(_taskContractActivityId, {
-                    kind: 'primary',
-                    sessionId: _taskUiSessionId,
-                    bubbleId,
-                    name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
-                    status: 'failed',
-                    taskText: errorMsg,
-                    summary: errorMsg,
                 });
                 _taskUiTerminated = true;
             }
@@ -12471,9 +14558,7 @@ function setGeneratingState(generating) {
         sendBtn.classList.add('stop-state');
         sendBtn.innerHTML = '<i class="ph ph-stop"></i>';
         sendBtn.disabled = false;
-        // Hide suggestions while generating  they're distracting
         _stopSuggestionAutoScroll();
-        if (assistantSuggestionRail) assistantSuggestionRail.classList.add('hidden');
     } else {
         sendBtn.classList.remove('stop-state');
         sendBtn.innerHTML = '<i class="ph ph-arrow-up"></i>';
@@ -13284,9 +15369,20 @@ function renderAssistantAvatarVisual(el, profileMeta = {}) {
 }
 
 function applyInterfaceMotionPreference() {
-    const animationsEnabled = currentPreferences?.advanced?.interface?.animations_enabled;
-    const allowMotion = animationsEnabled === undefined ? true : Boolean(animationsEnabled);
-    if (appRoot) appRoot.classList.toggle('no-motion', !allowMotion);
+    const interfacePrefs = currentPreferences?.advanced?.interface || {};
+    const fidelity = animationFidelityFromInterfacePrefs(interfacePrefs);
+    const allowMotion = isAnimationFidelityEnabled(fidelity);
+    const worldMode = chatWorldCurrentMode(interfacePrefs);
+    if (!appRoot) return;
+    appRoot.classList.toggle('no-motion', !allowMotion);
+    appRoot.classList.toggle('motion-balanced', fidelity === ANIMATION_FIDELITY_BALANCED);
+    appRoot.classList.toggle('motion-high-fidelity', fidelity === ANIMATION_FIDELITY_HIGH);
+    appRoot.dataset.animationFidelity = fidelity;
+    appRoot.dataset.chatWorldMode = worldMode;
+    if (worldMode !== CHAT_WORLD_MODE_PHYSICS) {
+        chatPhysicsWorldDestroy();
+    }
+    chatWorldSyncRootVisibility();
 }
 
 function readThemeName() {
@@ -14819,19 +16915,22 @@ function upsertSidebarSession(sessionRaw) {
     sidebarSessions.sort((a, b) => Number(b?.updatedAt || 0) - Number(a?.updatedAt || 0));
 }
 
-function syncActiveChatSidebarEntry() {
+function syncActiveChatSidebarEntry({ touchUpdatedAt = true } = {}) {
     const chatId = safeString(activeChatId) || safeString(sessionId);
     if (!chatId) return;
     saveStoredActiveChatId(chatId);
     const normalizedMessages = normalizeConversationHistory(chatHistory);
     const now = Date.now();
     const existing = sidebarSessions.find((s) => safeString(s?.id) === chatId) || null;
+    const resolvedUpdatedAt = touchUpdatedAt
+        ? now
+        : Number(existing?.updatedAt || existing?.createdAt || now);
     const payload = {
         id: chatId,
         title: deriveChatTitleFromMessages(normalizedMessages),
         messages: normalizedMessages,
         createdAt: Number(existing?.createdAt || now),
-        updatedAt: now,
+        updatedAt: resolvedUpdatedAt,
         pinned: Boolean(existing?.pinned),
         sessionId: safeString(sessionId) || null,
         model: activeProfileNameForPersistence(),
@@ -18663,6 +20762,13 @@ function officeBeginSpawnSequence(agent, now) {
     agent.teleportUntil = 0;
     agent.bumpUntil = Math.max(Number(agent.bumpUntil) || 0, startedAt + 280);
     agent.jumpUntil = Math.max(Number(agent.jumpUntil) || 0, startedAt + 320);
+    if (!agent.speech) {
+        const intent = safeString(agent.intent);
+        const line = intent.includes('notif')
+            ? 'Heads up. New notification.'
+            : (agent.taskId ? 'On it.' : 'Back on deck.');
+        officeSpeak(agent, line, { priority: true, durationMs: 1300 });
+    }
 }
 
 function officeBeginTeleportSequence(agent, now) {
@@ -19929,6 +22035,31 @@ function officeFindAgentByHandle(handleRaw) {
     return officeState.agents.find((agent) => officeAgentHandle(agent.name) === handle)
         || officeState.agents.find((agent) => officeAgentHandle(agent.name).startsWith(handle))
         || null;
+}
+
+function officeResolveAgentIdentity(handleRaw, activityIdRaw = '') {
+    const officeAgent = officeFindAgentByHandle(handleRaw);
+    if (officeAgent) {
+        return {
+            id: safeString(officeAgent.id),
+            name: safeString(officeAgent.name) || DEFAULT_AGENT_NAME,
+            color: safeString(officeAgent.color) || '#9ad8ff',
+            costume: safeString(officeAgent.costume) || 'none',
+            tint: safeString(officeAgent.tint) || 'blue',
+            source: 'office',
+        };
+    }
+    const key = officeAgentHandle(handleRaw) || officeAgentHandle(activityIdRaw) || 'helper';
+    const seedIndex = Math.abs(officeStableHash(key)) % Math.max(1, OFFICE_AGENT_SEEDS.length);
+    const seed = OFFICE_AGENT_SEEDS[seedIndex] || OFFICE_AGENT_SEEDS[0] || {};
+    return {
+        id: '',
+        name: safeString(seed.name) || DEFAULT_AGENT_NAME,
+        color: safeString(seed.color) || '#9ad8ff',
+        costume: safeString(seed.costume) || 'none',
+        tint: safeString(seed.tint) || 'blue',
+        source: 'seed',
+    };
 }
 
 function officeParseMentionCommand(messageRaw) {
@@ -24070,18 +26201,20 @@ function moduleRefreshMarketplace({ force = false } = {}) {
     state.marketplace.error = '';
     const refreshPromise = (async () => {
         try {
-            const [catalogPayload, installedPayload] = await Promise.all([
-                moduleFetchJsonSafe('/api/marketplace/plugins?limit=600'),
-                moduleFetchJsonSafe('/api/marketplace/installed'),
-            ]);
-            const plugins = Array.isArray(catalogPayload?.plugins) ? catalogPayload.plugins : [];
-            const installedPlugins = Array.isArray(installedPayload?.plugins) ? installedPayload.plugins : [];
+            const syncPayload = await moduleFetchJsonSafe('/api/marketplace/sync?limit=600');
+            const plugins = Array.isArray(syncPayload?.plugins) ? syncPayload.plugins : [];
+            const installedPlugins = Array.isArray(syncPayload?.installed)
+                ? syncPayload.installed
+                : plugins.filter((plugin) => Boolean(plugin?.installed));
             installedPlugins.forEach((plugin) => {
                 const modeId = safeString(plugin?.mode_id).toLowerCase();
                 if (modeId) MODULE_NAV_MODE_SET.add(modeId);
             });
-            state.marketplace.generatedAt = safeString(catalogPayload?.generated_at);
-            state.marketplace.categories = Array.isArray(catalogPayload?.categories) ? catalogPayload.categories : [];
+            state.marketplace.generatedAt = safeString(syncPayload?.generated_at || syncPayload?.synced_at);
+            state.marketplace.syncedAt = safeString(syncPayload?.synced_at || syncPayload?.generated_at);
+            state.marketplace.sourceLabel = safeString(syncPayload?.source_label);
+            state.marketplace.storeUrl = safeString(syncPayload?.store_url);
+            state.marketplace.categories = Array.isArray(syncPayload?.categories) ? syncPayload.categories : [];
             state.marketplace.plugins = installedPlugins.map((plugin) => ({
                 ...plugin,
                 plugin_id: safeString(plugin?.plugin_id),
@@ -24114,8 +26247,10 @@ function moduleRefreshMarketplace({ force = false } = {}) {
                 const categoryLabel = safeString(plugin?.category_label) || safeString(plugin?.category) || 'Plugin';
                 const target = safeString(plugin?.target);
                 const mode = safeString(plugin?.mode);
-                const downloadUrl = safeString(plugin?.download_url);
+                const downloadUrl = safeString(plugin?.manual_download_url || plugin?.download_url);
                 const downloadAvailable = Boolean(plugin?.download_available || downloadUrl);
+                const storeUrl = safeString(plugin?.store_url || syncPayload?.store_url);
+                const channel = safeString(plugin?.channel || syncPayload?.channel) || 'stable';
                 return {
                     module_id: safeString(plugin?.id),
                     display_name: safeString(plugin?.display_name || plugin?.name) || safeString(plugin?.id) || 'Marketplace item',
@@ -24123,7 +26258,9 @@ function moduleRefreshMarketplace({ force = false } = {}) {
                     description: safeString(plugin?.description) || 'No description available.',
                     section: 'apps',
                     kind: safeString(plugin?.kind) || 'extension_pack',
-                    type: 'plugin',
+                    type: safeString(plugin?.marketplace_type) || 'plugin',
+                    marketplace_type: safeString(plugin?.marketplace_type) || 'plugin',
+                    marketplace_type_label: safeString(plugin?.marketplace_type_label),
                     category: categoryLabel,
                     category_id: categoryId,
                     category_label: categoryLabel,
@@ -24132,7 +26269,8 @@ function moduleRefreshMarketplace({ force = false } = {}) {
                     mode_id: safeString(plugin?.mode_id),
                     entrypoint: safeString(plugin?.entrypoint),
                     tags: [categoryLabel, target, mode].filter(Boolean),
-                    requirements: [],
+                    requirements: Array.isArray(plugin?.requires) ? plugin.requires : [],
+                    requires: Array.isArray(plugin?.requires) ? plugin.requires : [],
                     capabilities: Array.isArray(plugin?.capabilities) ? plugin.capabilities : [],
                     version: safeString(plugin?.version),
                     latest_release: { module_version: safeString(plugin?.version) },
@@ -24143,18 +26281,24 @@ function moduleRefreshMarketplace({ force = false } = {}) {
                         disable_endpoint: safeString(plugin?.disable_url),
                         release_manifest_endpoint: downloadUrl,
                         release_download_endpoint: downloadUrl,
-                        repo_url: safeString(plugin?.source) || 'extensions/catalog.json',
+                        repo_url: safeString(plugin?.source) || 'website marketplace',
+                        store_url: storeUrl,
+                        channel,
+                        detail_url: safeString(plugin?.detail_url),
+                        open_in_thomas_url: safeString(plugin?.open_in_thomas_url),
                     },
                     download_available: downloadAvailable,
                     installable: Boolean(plugin?.installable),
                     installed: Boolean(plugin?.installed),
                     enabled: Boolean(plugin?.enabled),
+                    update_available: Boolean(plugin?.update_available),
+                    installed_version: safeString(plugin?.installed_version),
                     surface_url: safeString(plugin?.surface_url),
                     surface_mode: safeString(plugin?.surface_mode),
                     surface_title: safeString(plugin?.surface?.title || plugin?.surface_title),
                     icon: safeString(plugin?.icon),
                     compatibility: { eligible: Boolean(plugin?.installable || downloadAvailable) },
-                    publisher: safeString(plugin?.publisher_name || plugin?.publisher_id || plugin?.source) || 'extensions/catalog.json',
+                    publisher: safeString(plugin?.publisher_name || plugin?.publisher_id || plugin?.source) || 'Thomas',
                     publisher_id: safeString(plugin?.publisher_id),
                     publisher_name: safeString(plugin?.publisher_name),
                 };
@@ -35274,6 +37418,8 @@ function moduleRenderMarketplaceSurface(container) {
     const searchText = safeString(marketplaceState?.search).trim();
     const activeFilter = safeString(marketplaceState?.filter).toLowerCase() || 'all';
     const generatedAt = safeString(marketplaceState?.generatedAt);
+    const syncedAt = safeString(marketplaceState?.syncedAt || generatedAt);
+    const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'thomas.dev';
     const titleCase = (value) => safeString(value)
         .replace(/[_-]+/g, ' ')
         .split(' ')
@@ -35321,6 +37467,7 @@ function moduleRenderMarketplaceSurface(container) {
     );
 
     const buildStatus = (app) => {
+        if (app?.update_available) return { label: 'Update available', tone: 'catalog' };
         if (app?.installable) {
             if (app?.installed && app?.enabled) return { label: 'Installed', tone: 'ready' };
             if (app?.installed) return { label: 'Disabled', tone: 'catalog' };
@@ -35344,6 +37491,9 @@ function moduleRenderMarketplaceSurface(container) {
 
     const buildPrimaryAction = (app) => {
         if (app?.installable) {
+            if (app?.update_available) {
+                return { id: 'install', label: 'Update' };
+            }
             if (app?.installed) {
                 return app?.enabled
                     ? { id: 'disable', label: 'Disable' }
@@ -35487,7 +37637,9 @@ function moduleRenderMarketplaceSurface(container) {
     }).join('');
 
     const installedCount = apps.filter((app) => app?.installed).length;
+    const updateCount = apps.filter((app) => app?.update_available).length;
     const generatedLabel = generatedAt ? new Date(generatedAt).toLocaleString() : '';
+    const syncedLabel = syncedAt ? new Date(syncedAt).toLocaleString() : '';
     const emptyMarkup = `
         <section class="marketplace-empty-state${error ? ' marketplace-empty-state-error' : ''}">
             <strong>${escapeHtml(loading ? 'Loading upgrades...' : (searchText ? `No results for \"${searchText}\".` : 'No upgrades match this view.'))}</strong>
@@ -35519,9 +37671,11 @@ function moduleRenderMarketplaceSurface(container) {
                     <p class="marketplace-summary-copy">
                         <strong>${escapeHtml(String(apps.length))}</strong> upgrades
                         <span>${escapeHtml(String(installedCount))} installed</span>
+                        <span>${escapeHtml(String(updateCount))} updates</span>
                         <span>${escapeHtml(String(categories.length))} categories</span>
                         <span>${escapeHtml(String(filteredApps.length))} visible</span>
-                        ${generatedLabel ? `<span>Updated ${escapeHtml(generatedLabel)}</span>` : ''}
+                        ${sourceLabel ? `<span>Synced from ${escapeHtml(sourceLabel)}</span>` : ''}
+                        ${syncedLabel ? `<span>Last sync ${escapeHtml(syncedLabel)}</span>` : (generatedLabel ? `<span>Updated ${escapeHtml(generatedLabel)}</span>` : '')}
                     </p>
                 </div>
                 <div class="marketplace-filter-rail">
@@ -35889,7 +38043,13 @@ function initModuleWorkspace() {
                     return;
                 }
                 if (actionId === 'install') {
-                    const result = await moduleInstallMarketplacePlugin(itemId);
+                    const currentApp = Array.isArray(state.marketplace?.apps)
+                        ? state.marketplace.apps.find((app) => safeString(app?.module_id) === itemId)
+                        : null;
+                    const installPayload = {};
+                    if (safeString(currentApp?.install?.store_url)) installPayload.store_url = safeString(currentApp.install.store_url);
+                    if (safeString(currentApp?.install?.channel)) installPayload.channel = safeString(currentApp.install.channel);
+                    const result = await moduleInstallMarketplacePlugin(itemId, installPayload);
                     if (!result?.ok) throw new Error(result?.error || `${actionLabel} failed.`);
                     await moduleRefreshMarketplace({ force: true });
                     if (result?.plugin?.mode_id) {
@@ -37401,7 +39561,7 @@ async function loadSessionFromHistory(sid) {
         // stay on one canonical session state for the same chat.
         sessionId = safeString(sid);
     } catch (e) { console.error("Error loading past session", e); }
-    syncActiveChatSidebarEntry();
+    syncActiveChatSidebarEntry({ touchUpdatedAt: false });
     renderSidebarChatList();
     pushDebugEvent('chat', `Loaded session ${safeString(sid)}`);
     await refreshTaskContinuity({ sessionOverride: sessionId || sid, force: true });
@@ -38403,6 +40563,54 @@ async function refreshIdentityState() {
     }
 }
 
+function ensureAdvancedChatPhysicsSettingUi() {
+    if (!(settingsSections instanceof HTMLElement)) return null;
+    let toggle = getSettingAdvChatPhysicsToggle();
+    if (toggle instanceof HTMLInputElement) return toggle;
+    const sections = Array.from(settingsSections.querySelectorAll('.settings-section'));
+    const runtimeSection = sections.find((section) => (
+        safeString(section?.querySelector('.settings-section-head h3')?.textContent).trim().toLowerCase() === 'advanced runtime + quality'
+    ));
+    if (!(runtimeSection instanceof HTMLElement)) return null;
+    const row = document.createElement('div');
+    row.className = 'switch-row';
+    row.id = 'settingAdvChatPhysicsRow';
+    row.innerHTML = `
+        <div>
+            <strong>Advanced Chat Physics</strong>
+            <p>Run the chat-world robots on a Phaser Arcade Physics layer with real colliders and grounded bodies.</p>
+        </div>
+        <label class="toggle-switch">
+            <input type="checkbox" id="settingAdvChatPhysicsEnabled">
+            <span class="slider round"></span>
+        </label>
+    `;
+    const anchor = settingAdvAnimationFidelity?.closest?.('.form-group')
+        || runtimeSection.querySelector('.settings-grid')
+        || runtimeSection.lastElementChild;
+    if (anchor?.parentNode) {
+        anchor.parentNode.insertBefore(row, anchor.nextSibling);
+    } else {
+        runtimeSection.appendChild(row);
+    }
+    return getSettingAdvChatPhysicsToggle();
+}
+
+function syncAdvancedChatPhysicsSettingUi() {
+    const toggle = ensureAdvancedChatPhysicsSettingUi();
+    if (!(toggle instanceof HTMLInputElement)) return;
+    const fidelity = normalizeAnimationFidelity(
+        settingAdvAnimationFidelity?.value,
+        animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {}),
+    );
+    const available = fidelity !== ANIMATION_FIDELITY_MINIMAL;
+    if (!available) {
+        toggle.checked = false;
+    }
+    toggle.disabled = !available;
+    toggle.closest('.switch-row')?.classList.toggle('is-disabled', !available);
+}
+
 async function loadSettings() {
     try {
         const [prefsRes, codexRes] = await Promise.all([
@@ -38584,9 +40792,16 @@ async function loadSettings() {
         if (settingAdvEventLogVerbosity) settingAdvEventLogVerbosity.value = safeString(advInterface.event_log_verbosity) || 'standard';
         if (settingAdvShowTimestamps) settingAdvShowTimestamps.checked = Boolean(advInterface.show_timestamps);
         if (settingAdvShowTokenMeter) settingAdvShowTokenMeter.checked = Boolean(advInterface.show_token_meter);
-        if (settingAdvAnimationsEnabled) settingAdvAnimationsEnabled.checked = Boolean(advInterface.animations_enabled);
+        const animationFidelity = animationFidelityFromInterfacePrefs(advInterface);
+        if (settingAdvAnimationFidelity) settingAdvAnimationFidelity.value = animationFidelity;
+        if (settingAdvAnimationsEnabled) settingAdvAnimationsEnabled.checked = isAnimationFidelityEnabled(animationFidelity);
+        const settingAdvChatPhysicsEnabled = ensureAdvancedChatPhysicsSettingUi();
+        if (settingAdvChatPhysicsEnabled instanceof HTMLInputElement) {
+            settingAdvChatPhysicsEnabled.checked = Boolean(advInterface.advanced_chat_physics);
+        }
         if (settingAdvDebugPanelEnabled) settingAdvDebugPanelEnabled.checked = Boolean(advInterface.debug_panel_enabled);
         if (settingAdvLabsFlags) settingAdvLabsFlags.value = safeString(advInterface.labs_flags);
+        syncAdvancedChatPhysicsSettingUi();
 
         applyApiKeyPlaceholders(currentPreferences.api_keys || {});
 
@@ -38712,6 +40927,11 @@ async function saveSettings() {
             : safeString(currentPreferences?.profile?.avatar_url);
         const deterministicSeedRaw = safeString(settingAdvDeterministicSeed?.value);
         const deterministicSeed = deterministicSeedRaw ? toInt(deterministicSeedRaw, 0, 0, 2147483647) : null;
+        const animationFidelity = normalizeAnimationFidelity(
+            settingAdvAnimationFidelity?.value,
+            animationFidelityFromInterfacePrefs(currentPreferences?.advanced?.interface || {}),
+        );
+        const settingAdvChatPhysicsEnabled = getSettingAdvChatPhysicsToggle();
         const patch = {
             profile: {
                 display_name: safeString(settingsDisplayName?.value),
@@ -38830,7 +41050,9 @@ async function saveSettings() {
                     ui_density: safeString(settingAdvUiDensity?.value) || 'comfortable',
                     show_timestamps: Boolean(settingAdvShowTimestamps?.checked),
                     show_token_meter: Boolean(settingAdvShowTokenMeter?.checked),
-                    animations_enabled: Boolean(settingAdvAnimationsEnabled?.checked),
+                    animation_fidelity: animationFidelity,
+                    animations_enabled: isAnimationFidelityEnabled(animationFidelity),
+                    advanced_chat_physics: isAnimationFidelityEnabled(animationFidelity) && Boolean(settingAdvChatPhysicsEnabled?.checked),
                     code_theme: safeString(settingAdvCodeTheme?.value) || 'atom-one-dark',
                     debug_panel_enabled: Boolean(settingAdvDebugPanelEnabled?.checked),
                     event_log_verbosity: safeString(settingAdvEventLogVerbosity?.value) || 'standard',

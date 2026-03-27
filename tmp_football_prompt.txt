@@ -1,0 +1,60 @@
+Build an original browser-based American football management sim prototype inside this repo.
+
+Do not copy or name any existing game. Make this its own football sim. Prioritize systems, clarity, and actual playability over visual polish.
+
+Goal:
+Create a playable single-player football sim where I control one team, make management decisions, and simulate a season from the browser.
+
+Core requirements:
+- The app must run locally in this repo and be launchable/viewable in the browser.
+- I control one team in a small league.
+- Generate at least 8 teams with distinct strengths.
+- Generate rosters with player ratings by position.
+- Include at minimum:
+  - team overview
+  - roster view
+  - schedule/standings view
+  - game or week simulation view
+  - season progression
+- I must be able to:
+  - choose or manage a team
+  - adjust lineup or depth chart
+  - set simple strategy/tendency choices
+  - simulate the next game/week
+  - simulate forward through the season
+  - see standings and results update
+- The simulation must use ratings and strategy in a believable way, not pure random.
+- Include at least one management constraint such as fatigue, injuries, morale, cap pressure, or recovery.
+- Include a championship or playoff outcome so the season resolves.
+- Persist state locally so refresh does not wipe progress.
+- No console errors during normal use.
+
+Quality bar:
+- This should feel like a real football sim prototype, not just a random stat generator.
+- The UI should make it clear why teams win or lose.
+- Show some explanation of game outcomes, such as key factors, matchup edges, or postgame summaries.
+- Interactive tasks must be judged by visible behavior first. If I click simulate, things should clearly happen in the UI.
+
+Process requirements:
+- First define what makes a good football sim prototype for this task.
+- Then build against that definition.
+- Keep scope controlled. Do not attempt a giant MMO or online game.
+- Do not ask me for clarification unless absolutely necessary.
+- Do not revert unrelated changes in the repo.
+- If you cannot complete a feature, cut scope intelligently and finish a polished smaller version.
+
+Deliverables:
+1. A short definition of what a good result is for this task.
+2. The files you changed.
+3. What systems you implemented.
+4. How the simulation works.
+5. What tradeoffs or scope cuts you made.
+6. Exact verification steps you ran locally.
+7. Final status: what is fully working and what is not.
+
+Success criteria:
+- A human can open it locally and play through a season.
+- Team management choices visibly affect outcomes.
+- The app feels coherent and intentional.
+- The explanation is grounded in the repo and the implemented result.
+- The result is completed end-to-end, not just scaffolded.

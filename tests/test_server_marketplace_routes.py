@@ -10,7 +10,9 @@ import zipfile
 from contextlib import contextmanager
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from unittest.mock import patch
 
+import httpx
 from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
@@ -103,6 +105,36 @@ def _hosted_plugin_store(bundle_paths: dict[str, Path]):
             self.send_header("X-Plugin-SHA256", bundle_sha256)
             self.end_headers()
             self.wfile.write(bundle_bytes)
+
+    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    try:
+        yield f"http://127.0.0.1:{server.server_address[1]}"
+    finally:
+        server.shutdown()
+        thread.join(timeout=5)
+        server.server_close()
+
+
+@contextmanager
+def _hosted_marketplace_catalog(payload: dict[str, object]):
+    body = json.dumps(payload).encode("utf-8")
+
+    class Handler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            return
+
+        def do_GET(self):
+            if not self.path.startswith("/api/marketplace/catalog"):
+                self.send_response(404)
+                self.end_headers()
+                return
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
 
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -307,6 +339,110 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
             installed = listed_body.get("plugins") or []
             self.assertEqual({row.get("plugin_id") for row in installed}, {"life-manager", "life-manager-foundation"})
 
+    async def test_marketplace_install_accepts_store_url_payload_for_hosted_plugins(self):
+        bundle_paths = {
+            "life-manager": ROOT / "thomas/server/plugins_registry/plugins/life-manager/bundle.zip",
+            "life-manager-foundation": ROOT
+            / "thomas/server/plugins_registry/plugins/life-manager-foundation/bundle.zip",
+        }
+        with _hosted_plugin_store(bundle_paths) as store:
+            install_resp = await self.client.post(
+                "/api/marketplace/plugins/life-manager/install",
+                json={"store_url": store, "channel": "stable"},
+            )
+            self.assertEqual(install_resp.status, 200)
+            install_body = await install_resp.json()
+            plugin = install_body.get("plugin") or {}
+            self.assertEqual(plugin.get("plugin_id"), "life-manager")
+            self.assertEqual((plugin.get("source") or {}).get("type"), "hosted")
+            self.assertEqual((plugin.get("source") or {}).get("store_url"), store)
+
+    async def test_marketplace_sync_reads_hosted_catalog_and_marks_available_updates(self):
+        install_resp = await self.client.post("/api/marketplace/plugins/life-manager/install")
+        self.assertEqual(install_resp.status, 200)
+
+        payload = {
+            "ok": True,
+            "generated_at": "2026-03-27T15:00:00Z",
+            "store_url": "https://thomas.dev",
+            "channel": "stable",
+            "plugins": [
+                {
+                    "id": "life-manager",
+                    "plugin_id": "life-manager",
+                    "name": "Life Manager",
+                    "display_name": "Life Manager",
+                    "version": "2.0.0",
+                    "subtitle": "Hosted workspace plugin",
+                    "description": "Hosted catalog row",
+                    "category": "productivity",
+                    "category_label": "Productivity",
+                    "categories": ["productivity", "automation"],
+                    "tags": ["official", "command_center"],
+                    "requires": ["life-manager-foundation"],
+                    "target": "desktop",
+                    "mode": "life_manager",
+                    "mode_id": "life_manager",
+                    "marketplace_type": "command_center",
+                    "marketplace_type_label": "Command Center",
+                    "left_nav_behavior": "workspace",
+                    "default_nav_section": "command_centers",
+                    "default_nav_order": 520,
+                    "entrypoint": "hooks.py",
+                    "capabilities": ["life_manager.tasks"],
+                    "kind": "desktop_plugin",
+                    "source": "website/hosted-plugin-store",
+                    "publisher_id": "thomas-official",
+                    "publisher_name": "Thomas",
+                    "icon": "ph-list-checks",
+                    "api_namespace": "life-manager",
+                    "download_available": True,
+                    "installable": True,
+                    "installed": False,
+                    "enabled": False,
+                    "workspace_id": "life_manager",
+                    "download_url": "https://thomas.dev/api/v1/plugins/life-manager/manual-download",
+                    "manual_download_url": "https://thomas.dev/api/v1/plugins/life-manager/manual-download",
+                    "detail_url": "https://thomas.dev/api/v1/plugins/life-manager",
+                    "open_in_thomas_url": "thomas://install-plugin?plugin_id=life-manager&store=https%3A%2F%2Fthomas.dev&channel=stable",
+                    "store_url": "https://thomas.dev",
+                    "channel": "stable",
+                    "surface": {"entry_html": "web/index.html", "title": "Life Manager", "surface_mode": "immersive"},
+                }
+            ],
+        }
+        with _hosted_marketplace_catalog(payload) as store:
+            with patch.dict("os.environ", {"THOMAS_MARKETPLACE_STORE_URL": store}):
+                sync_resp = await self.client.get("/api/marketplace/sync?limit=25")
+
+        self.assertEqual(sync_resp.status, 200)
+        sync_body = await sync_resp.json()
+        self.assertIs(sync_body.get("ok"), True)
+        self.assertEqual(sync_body.get("sync_source"), "hosted_catalog")
+        self.assertEqual(sync_body.get("source_label"), store.replace("http://", ""))
+        self.assertEqual(sync_body.get("store_url"), store)
+        self.assertEqual(sync_body.get("update_candidates"), ["life-manager"])
+        plugins = {str(row.get("plugin_id")): row for row in (sync_body.get("plugins") or [])}
+        self.assertTrue(plugins["life-manager"].get("installed"))
+        self.assertTrue(plugins["life-manager"].get("enabled"))
+        self.assertTrue(plugins["life-manager"].get("update_available"))
+        self.assertEqual(plugins["life-manager"].get("installed_version"), "1.0.0")
+
+    async def test_marketplace_sync_falls_back_to_local_catalog_on_dns_failure(self):
+        with patch(
+            "thomas.server.routes.marketplace_catalog_aiohttp._load_hosted_marketplace_catalog",
+            side_effect=httpx.ConnectError("[Errno 11001] getaddrinfo failed"),
+        ):
+            sync_resp = await self.client.get("/api/marketplace/sync?limit=25")
+
+        self.assertEqual(sync_resp.status, 200)
+        sync_body = await sync_resp.json()
+        self.assertIs(sync_body.get("ok"), True)
+        self.assertEqual(sync_body.get("sync_source"), "local_catalog_fallback")
+        self.assertIs(sync_body.get("degraded"), True)
+        self.assertIn("Unable to sync marketplace catalog from", str(sync_body.get("sync_error") or ""))
+        self.assertGreater(int(sync_body.get("total") or 0), 0)
+
     async def test_marketplace_rejects_invalid_deep_link_install_requests(self):
         install_resp = await self.client.post(
             "/api/marketplace/install-from-deep-link", json={"deep_link": "https://example.com/plugin"}
@@ -436,7 +572,7 @@ def test_marketplace_surface_uses_plugin_catalog_only() -> None:
 def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> None:
     script = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
 
-    assert "/api/marketplace/installed" in script
+    assert "/api/marketplace/sync" in script
     assert "/api/marketplace/import" in script
     assert "/api/marketplace/install-from-deep-link" in script
     assert "workspaceNavItems" in script
@@ -446,6 +582,7 @@ def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> 
     assert "requires" in script
     assert "Install From File" in script
     assert "thomas_deep_link" in script
+    assert "Synced from" in script
     assert "__THOMAS_WEB_BUILD__" in _read_text("thomas/server/web/index.html")
 
 
@@ -514,6 +651,23 @@ def test_marketplace_has_single_backend_source_of_truth() -> None:
     assert "register_plugin_hosting_routes" in app_part03
     assert "register_life_manager_routes" in app_part03
     assert _exists("thomas/server/routes/marketplace_catalog_aiohttp.py")
+
+
+def test_public_site_marketplace_routes_and_page_exist() -> None:
+    site_config = _read_text("apps/site/src/lib/site-config.ts")
+    marketplace_page = _read_text("apps/site/src/app/marketplace/page.tsx")
+    catalog_route = _read_text("apps/site/src/app/api/marketplace/catalog/route.ts")
+    versioned_catalog_route = _read_text("apps/site/src/app/api/v1/plugins/catalog/route.ts")
+    download_token_route = _read_text("apps/site/src/app/api/v1/plugins/download-token/route.ts")
+    detail_route = _read_text("apps/site/src/app/api/v1/plugins/[pluginId]/route.ts")
+
+    assert 'href: "/marketplace"' in site_config
+    assert "Website-canonical Thomas Marketplace" in marketplace_page
+    assert "catalog_only" in marketplace_page
+    assert "buildMarketplaceCatalog" in catalog_route
+    assert "buildMarketplaceCatalog" in versioned_catalog_route
+    assert "getMarketplaceInstallablePlugin" in detail_route
+    assert "X-Thomas-API-Key" in download_token_route
 
 
 if __name__ == "__main__":

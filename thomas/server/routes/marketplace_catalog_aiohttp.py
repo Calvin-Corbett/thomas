@@ -2,16 +2,18 @@ from __future__ import annotations
 
 import io
 import logging
+import os
 import zipfile
 from collections import Counter
 from collections.abc import Callable
 from pathlib import Path, PurePosixPath
 from typing import Any
-from urllib.parse import quote
+from urllib.parse import quote, urljoin, urlparse
 
 import httpx
 from aiohttp import web
 
+from thomas.marketplace.surface_policy import classify_marketplace_row, row_is_visible
 from thomas.plugins.extension_catalog_runtime import load_extension_catalog
 from thomas.server.app_keys import APP_CONFIG
 from thomas.server.desktop_plugins import (
@@ -93,6 +95,224 @@ def _disable_url(plugin_id: str) -> str:
 
 def _download_filename(plugin_id: str, version: str) -> str:
     return f"{plugin_id}-{version}.zip".replace('"', "_")
+
+
+def _default_marketplace_store_url() -> str:
+    explicit = _safe_string(os.environ.get("THOMAS_MARKETPLACE_STORE_URL")).strip()
+    if explicit:
+        return explicit.rstrip("/")
+    site_url = _safe_string(os.environ.get("SITE_URL")).strip()
+    if site_url:
+        return site_url.rstrip("/")
+    return "https://thomas.dev"
+
+
+def _source_label_from_store_url(store_url: str) -> str:
+    parsed = urlparse(_safe_string(store_url))
+    host = _safe_string(parsed.netloc or parsed.path).strip().lower()
+    if not host:
+        return "marketplace store"
+    return host
+
+
+def _overlay_installed_state(row: dict[str, Any], installed: dict[str, Any] | None) -> dict[str, Any]:
+    out = dict(row)
+    if installed is None:
+        out["installed"] = bool(out.get("installed"))
+        out["enabled"] = bool(out.get("enabled"))
+        out["update_available"] = False
+        out["installed_version"] = _safe_string(out.get("installed_version"))
+        return out
+    installed_version = _safe_string(installed.get("version"))
+    available_version = _safe_string(out.get("version"))
+    out.update(
+        {
+            "installed": True,
+            "enabled": bool(installed.get("enabled")),
+            "surface_url": _safe_string(installed.get("surface_url")),
+            "surface_mode": _safe_string(installed.get("surface_mode")),
+            "installed_version": installed_version,
+            "installed_at": _safe_string(installed.get("installed_at")),
+            "updated_at": _safe_string(installed.get("updated_at")),
+            "marketplace_type": _safe_string(installed.get("marketplace_type"))
+            or out.get("marketplace_type")
+            or "plugin",
+            "marketplace_type_label": _TYPE_LABELS.get(
+                _safe_string(installed.get("marketplace_type")) or out.get("marketplace_type") or "plugin",
+                "Plugin",
+            ),
+            "categories": list(installed.get("categories") or out.get("categories") or []),
+            "tags": list(installed.get("tags") or out.get("tags") or []),
+            "requires": list(installed.get("requires") or out.get("requires") or []),
+            "left_nav_behavior": _safe_string(installed.get("left_nav_behavior"))
+            or out.get("left_nav_behavior")
+            or "none",
+            "default_nav_section": _safe_string(installed.get("default_nav_section"))
+            or out.get("default_nav_section")
+            or "installed",
+            "default_nav_order": _safe_int(
+                installed.get("default_nav_order"), _safe_int(out.get("default_nav_order"), 900)
+            ),
+            "workspace_id": _safe_string(installed.get("workspace_id")),
+            "publisher_id": _safe_string(installed.get("publisher_id")) or out.get("publisher_id") or "",
+            "publisher_name": _safe_string(installed.get("publisher_name")) or out.get("publisher_name") or "",
+            "version_installed_only": bool(not available_version and installed_version),
+            "update_available": bool(
+                available_version and installed_version and available_version != installed_version
+            ),
+        }
+    )
+    return out
+
+
+def _build_orphan_installed_row(installed: dict[str, Any], *, store_url: str, channel: str) -> dict[str, Any]:
+    plugin_id = _safe_string(installed.get("plugin_id"))
+    marketplace_type = _safe_string(installed.get("marketplace_type")) or "plugin"
+    categories = list(installed.get("categories") or [])
+    category = _safe_string(categories[0] if categories else "installed")
+    source = installed.get("source") if isinstance(installed.get("source"), dict) else {}
+    row = {
+        "id": plugin_id,
+        "plugin_id": plugin_id,
+        "name": _safe_string(installed.get("display_name")) or plugin_id,
+        "display_name": _safe_string(installed.get("display_name")) or plugin_id,
+        "version": _safe_string(installed.get("version")),
+        "installed_version": _safe_string(installed.get("version")),
+        "subtitle": _safe_string(installed.get("subtitle")),
+        "description": _safe_string(installed.get("description")),
+        "category": category or "installed",
+        "category_label": _slug_label(category or "installed"),
+        "categories": categories,
+        "tags": list(installed.get("tags") or []),
+        "requires": list(installed.get("requires") or []),
+        "target": "desktop",
+        "mode": _safe_string(installed.get("mode_id")),
+        "mode_id": _safe_string(installed.get("mode_id")),
+        "marketplace_type": marketplace_type,
+        "marketplace_type_label": _TYPE_LABELS.get(marketplace_type, "Plugin"),
+        "left_nav_behavior": _safe_string(installed.get("left_nav_behavior")) or "none",
+        "default_nav_section": _safe_string(installed.get("default_nav_section")) or "installed",
+        "default_nav_order": _safe_int(installed.get("default_nav_order"), 900),
+        "entrypoint": _safe_string(installed.get("entrypoint")),
+        "capabilities": list(installed.get("capabilities") or []),
+        "kind": _safe_string(installed.get("kind")) or "desktop_plugin",
+        "source": _safe_string(source.get("type")) or "installed",
+        "publisher_id": _safe_string(installed.get("publisher_id")),
+        "publisher_name": _safe_string(installed.get("publisher_name")),
+        "icon": _safe_string(installed.get("icon")),
+        "api_namespace": _safe_string(installed.get("api_namespace")) or plugin_id,
+        "download_available": False,
+        "installable": False,
+        "installed": True,
+        "enabled": bool(installed.get("enabled")),
+        "workspace_id": _safe_string(installed.get("workspace_id")),
+        "download_url": "",
+        "manual_download_url": "",
+        "store_url": store_url,
+        "channel": channel,
+        "surface": {
+            "entry_html": "",
+            "title": _safe_string(installed.get("surface_title"))
+            or _safe_string(installed.get("display_name"))
+            or plugin_id,
+            "surface_mode": _safe_string(installed.get("surface_mode")) or "immersive",
+        },
+        "surface_url": _safe_string(installed.get("surface_url")),
+        "surface_mode": _safe_string(installed.get("surface_mode")),
+        "installed_at": _safe_string(installed.get("installed_at")),
+        "updated_at": _safe_string(installed.get("updated_at")),
+        "update_available": False,
+        "catalog_status": "installed_only",
+    }
+    row.update(classify_marketplace_row(row, installable_candidate=False))
+    return row
+
+
+def _sort_marketplace_rows(rows: list[dict[str, Any]]) -> None:
+    type_priority = {"command_center": 0, "plugin": 1, "integration": 2, "dependency": 3}
+    rows.sort(
+        key=lambda row: (
+            0 if row.get("installable") else 1,
+            0 if row.get("installed") else 1,
+            type_priority.get(_safe_string(row.get("marketplace_type")), 9),
+            _safe_string(row.get("category")).lower(),
+            _safe_string(row.get("display_name") or row.get("name")).lower(),
+        )
+    )
+
+
+def _summarize_marketplace_facets(rows: list[dict[str, Any]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    type_priority = {"command_center": 0, "plugin": 1, "integration": 2, "dependency": 3}
+    category_counts = Counter(
+        _safe_string(row.get("category")).lower() for row in rows if _safe_string(row.get("category")).strip()
+    )
+    type_counts = Counter(
+        _safe_string(row.get("marketplace_type")).lower()
+        for row in rows
+        if _safe_string(row.get("marketplace_type")).strip()
+    )
+    categories = [
+        {"id": slug, "label": _slug_label(slug), "count": int(count)}
+        for slug, count in sorted(category_counts.items(), key=lambda item: (-item[1], item[0]))
+    ]
+    types = [
+        {"id": slug, "label": _TYPE_LABELS.get(slug, _slug_label(slug)), "count": int(count)}
+        for slug, count in sorted(type_counts.items(), key=lambda item: (type_priority.get(item[0], 9), item[0]))
+    ]
+    return categories, types
+
+
+async def _load_hosted_marketplace_catalog(*, store_url: str, channel: str) -> dict[str, Any]:
+    catalog_url = urljoin(store_url.rstrip("/") + "/", f"api/marketplace/catalog?channel={quote(channel, safe='')}")
+    async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
+        response = await client.get(catalog_url)
+        response.raise_for_status()
+        payload = response.json()
+    if not isinstance(payload, dict) or payload.get("ok") is False:
+        raise ValueError(f"Hosted marketplace catalog is invalid: {payload!r}")
+    payload["catalog_url"] = catalog_url
+    return payload
+
+
+def _build_local_sync_payload(
+    app: web.Application,
+    *,
+    store_url: str,
+    channel: str,
+) -> dict[str, Any]:
+    catalog, extensions_root, rows = _load_marketplace_catalog()
+    rows = _augment_marketplace_rows(app, extensions_root, rows)
+    rows = [row for row in rows if row_is_visible(row, include_catalog_only=True, include_scaffold=False)]
+    _sort_marketplace_rows(rows)
+    categories, types = _summarize_marketplace_facets(rows)
+    config = app[APP_CONFIG]
+    installed = list_installed_plugins(config, include_disabled=True)
+    update_candidates = [
+        _safe_string(row.get("plugin_id"))
+        for row in rows
+        if bool(row.get("update_available")) and _safe_string(row.get("plugin_id")).strip()
+    ]
+    return {
+        "ok": True,
+        "sync_source": "local_catalog_fallback",
+        "source_label": "local marketplace catalog",
+        "store_url": store_url,
+        "catalog_url": "",
+        "channel": channel,
+        "generated_at": _safe_string(catalog.get("generated_at")),
+        "synced_at": _safe_string(catalog.get("generated_at")),
+        "count": len(rows),
+        "total": len(rows),
+        "offset": 0,
+        "limit": len(rows),
+        "categories": categories,
+        "types": types,
+        "plugins": rows,
+        "installed": installed,
+        "update_candidates": update_candidates,
+        "degraded": True,
+        "warning": f"Hosted marketplace sync failed for {store_url}; using local catalog fallback.",
+    }
 
 
 def _infer_marketplace_type(raw: dict[str, Any], *, target: str, mode: str) -> str:
@@ -344,6 +564,19 @@ def _augment_marketplace_rows(
                     "workspace_id": _safe_string(installed.get("workspace_id")),
                 }
             )
+        row.update(
+            classify_marketplace_row(
+                row,
+                installable_candidate=bool(manifest is not None),
+                installable_reason="bundled_runtime_present",
+            )
+        )
+        if _safe_string(row.get("availability")).lower() != "installable":
+            row["installable"] = False
+            row["install_url"] = ""
+            row["uninstall_url"] = ""
+            row["enable_url"] = ""
+            row["disable_url"] = ""
         out.append(row)
     return out
 
@@ -383,24 +616,9 @@ def register_marketplace_catalog_routes(
                 status=500,
             )
 
-        type_priority = {"command_center": 0, "plugin": 1, "integration": 2, "dependency": 3}
-        rows.sort(
-            key=lambda row: (
-                0 if row.get("installable") else 1,
-                type_priority.get(_safe_string(row.get("marketplace_type")), 9),
-                _safe_string(row.get("category")).lower(),
-                _safe_string(row.get("display_name") or row.get("name")).lower(),
-            )
-        )
-
-        category_counts = Counter(
-            _safe_string(row.get("category")).lower() for row in rows if _safe_string(row.get("category")).strip()
-        )
-        type_counts = Counter(
-            _safe_string(row.get("marketplace_type")).lower()
-            for row in rows
-            if _safe_string(row.get("marketplace_type")).strip()
-        )
+        rows = [row for row in rows if row_is_visible(row, include_catalog_only=True, include_scaffold=False)]
+        _sort_marketplace_rows(rows)
+        categories, types = _summarize_marketplace_facets(rows)
         filtered = [
             row
             for row in rows
@@ -414,14 +632,6 @@ def register_marketplace_catalog_routes(
         ]
 
         paginated = filtered[offset : offset + limit]
-        categories = [
-            {"id": slug, "label": _slug_label(slug), "count": int(count)}
-            for slug, count in sorted(category_counts.items(), key=lambda item: (-item[1], item[0]))
-        ]
-        types = [
-            {"id": slug, "label": _TYPE_LABELS.get(slug, _slug_label(slug)), "count": int(count)}
-            for slug, count in sorted(type_counts.items(), key=lambda item: (type_priority.get(item[0], 9), item[0]))
-        ]
 
         return web.json_response(
             {
@@ -435,6 +645,117 @@ def register_marketplace_catalog_routes(
                 "categories": categories,
                 "types": types,
                 "plugins": paginated,
+            }
+        )
+
+    async def api_marketplace_sync(request: web.Request) -> web.Response:
+        require_api_access(request)
+
+        query = _safe_string(request.query.get("q")).strip().lower()
+        category = _safe_string(request.query.get("category")).strip().lower()
+        marketplace_type = _safe_string(request.query.get("type")).strip().lower()
+        offset = _parse_int(_safe_string(request.query.get("offset")), 0, minimum=0, maximum=100000)
+        limit = _parse_int(_safe_string(request.query.get("limit")), 600, minimum=1, maximum=2000)
+        store_url = (
+            _safe_string(request.query.get("store") or request.query.get("store_url")).strip()
+            or _default_marketplace_store_url()
+        )
+        channel = _safe_string(request.query.get("channel")).strip() or "stable"
+
+        try:
+            remote_payload = await _load_hosted_marketplace_catalog(store_url=store_url, channel=channel)
+        except (httpx.HTTPError, ValueError) as exc:
+            log.warning("Hosted marketplace sync failed for %s: %s", store_url, exc)
+            fallback_payload = _build_local_sync_payload(app, store_url=store_url, channel=channel)
+            fallback_payload["sync_error"] = f"Unable to sync marketplace catalog from {store_url}: {exc}"
+            filtered = [
+                row
+                for row in fallback_payload["plugins"]
+                if (not category or category == "all" or _safe_string(row.get("category")).lower() == category)
+                and (
+                    not marketplace_type
+                    or marketplace_type == "all"
+                    or _safe_string(row.get("marketplace_type")).lower() == marketplace_type
+                )
+                and _matches_query(row, query)
+            ]
+            fallback_payload["count"] = len(filtered)
+            fallback_payload["total"] = len(fallback_payload["plugins"])
+            fallback_payload["offset"] = offset
+            fallback_payload["limit"] = limit
+            fallback_payload["plugins"] = filtered[offset : offset + limit]
+            return web.json_response(fallback_payload)
+
+        raw_rows = remote_payload.get("plugins")
+        rows = [dict(item) for item in raw_rows if isinstance(item, dict)] if isinstance(raw_rows, list) else []
+        config = app[APP_CONFIG]
+        installed = list_installed_plugins(config, include_disabled=True)
+        installed_by_id = {row["plugin_id"]: row for row in installed}
+        merged_rows: list[dict[str, Any]] = []
+        seen_ids: set[str] = set()
+        for row in rows:
+            plugin_id = _safe_string(row.get("id") or row.get("plugin_id")).strip()
+            if not plugin_id:
+                continue
+            row["id"] = plugin_id
+            row["plugin_id"] = plugin_id
+            merged_row = _overlay_installed_state(row, installed_by_id.get(plugin_id))
+            merged_row.update(
+                classify_marketplace_row(
+                    merged_row,
+                    installable_candidate=bool(merged_row.get("installable")),
+                )
+            )
+            if _safe_string(merged_row.get("availability")).lower() != "installable":
+                merged_row["installable"] = False
+            merged_rows.append(merged_row)
+            seen_ids.add(plugin_id)
+        for plugin_id, installed_row in installed_by_id.items():
+            if plugin_id in seen_ids:
+                continue
+            merged_rows.append(_build_orphan_installed_row(installed_row, store_url=store_url, channel=channel))
+        merged_rows = [
+            row for row in merged_rows if row_is_visible(row, include_catalog_only=True, include_scaffold=False)
+        ]
+        _sort_marketplace_rows(merged_rows)
+        categories, types = _summarize_marketplace_facets(merged_rows)
+        filtered = [
+            row
+            for row in merged_rows
+            if (not category or category == "all" or _safe_string(row.get("category")).lower() == category)
+            and (
+                not marketplace_type
+                or marketplace_type == "all"
+                or _safe_string(row.get("marketplace_type")).lower() == marketplace_type
+            )
+            and _matches_query(row, query)
+        ]
+        paginated = filtered[offset : offset + limit]
+        update_candidates = [
+            _safe_string(row.get("plugin_id"))
+            for row in merged_rows
+            if bool(row.get("update_available")) and _safe_string(row.get("plugin_id")).strip()
+        ]
+        return web.json_response(
+            {
+                "ok": True,
+                "sync_source": "hosted_catalog",
+                "source_label": _source_label_from_store_url(store_url),
+                "store_url": store_url,
+                "catalog_url": _safe_string(remote_payload.get("catalog_url")),
+                "channel": channel,
+                "generated_at": _safe_string(remote_payload.get("generated_at")),
+                "synced_at": _safe_string(remote_payload.get("generated_at"))
+                or _safe_string(remote_payload.get("synced_at")),
+                "count": len(filtered),
+                "total": len(merged_rows),
+                "offset": offset,
+                "limit": limit,
+                "categories": categories,
+                "types": types,
+                "plugins": paginated,
+                "installed": installed,
+                "update_candidates": update_candidates,
             }
         )
 
@@ -622,6 +943,7 @@ def register_marketplace_catalog_routes(
         return web.FileResponse(asset, headers={"Cache-Control": "no-store"})
 
     app.router.add_get("/api/marketplace/plugins", api_marketplace_plugins)
+    app.router.add_get("/api/marketplace/sync", api_marketplace_sync)
     app.router.add_get("/api/marketplace/plugins/{plugin_id}/download", api_marketplace_plugin_download)
     app.router.add_get("/api/marketplace/installed", api_marketplace_installed)
     app.router.add_post("/api/marketplace/plugins/{plugin_id}/install", api_marketplace_install)
