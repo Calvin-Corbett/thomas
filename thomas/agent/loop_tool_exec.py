@@ -13,6 +13,7 @@ from collections.abc import AsyncIterator
 from pathlib import Path
 from typing import Any
 
+from thomas.benchmarks.benchmark_lane import audit_benchmark_event, get_benchmark_context
 from thomas.core.events import AgentEvent, EventType
 
 try:
@@ -69,7 +70,12 @@ def _is_write_tool(name: str, file_audit_module: Any) -> bool:
     return any(kw in name_lower for kw in _WRITE_TOOL_KEYWORDS)
 
 
-def _validate_filesystem_path(path_value: Any) -> tuple[str | None, str | None]:
+def _validate_filesystem_path(
+    path_value: Any,
+    *,
+    sandbox_root: Path | None = None,
+    benchmark_root: Path | None = None,
+) -> tuple[str | None, str | None]:
     if path_value is None:
         return None, "missing path value"
 
@@ -93,7 +99,19 @@ def _validate_filesystem_path(path_value: Any) -> tuple[str | None, str | None]:
         return None, "path cannot contain control characters"
 
     if os.path.isabs(path_text) or path_text.startswith(("/", "\\")):
-        return None, "absolute paths are not allowed"
+        if benchmark_root is None:
+            return None, "absolute paths are not allowed"
+        try:
+            resolved = Path(path_text).expanduser().resolve()
+        except OSError as exc:
+            return None, f"absolute path could not be resolved: {exc}"
+        try:
+            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(resolved)]))
+        except ValueError:
+            return None, "absolute path is outside the benchmark root"
+        if common.resolve() != benchmark_root.resolve():
+            return None, "absolute path is outside the benchmark root"
+        return str(resolved), None
 
     if re.match(r"^[A-Za-z]:", path_text) or re.match(r"^[/\\]{2,}", path_text):
         return None, "disallowed root/path prefix in file path"
@@ -112,6 +130,20 @@ def _validate_filesystem_path(path_value: Any) -> tuple[str | None, str | None]:
     if ".." in Path(path_text).parts:
         return None, "path traversal via parent directory reference is not allowed"
 
+    if benchmark_root is not None:
+        if sandbox_root is None:
+            return None, "sandbox root is required for benchmark path validation"
+        try:
+            candidate = (sandbox_root.resolve() / path_text).resolve()
+        except OSError as exc:
+            return None, f"path could not be resolved: {exc}"
+        try:
+            common = Path(os.path.commonpath([str(benchmark_root.resolve()), str(candidate)]))
+        except ValueError:
+            return None, "path is outside the benchmark root"
+        if common.resolve() != benchmark_root.resolve():
+            return None, "path is outside the benchmark root"
+
     return path_text, None
 
 
@@ -119,6 +151,8 @@ def _sanitize_write_tool_path(
     args: dict[str, Any],
     *,
     require_path: bool = True,
+    sandbox_root: Path | None = None,
+    benchmark_root: Path | None = None,
 ) -> tuple[str | None, str | None]:
     if not isinstance(args, dict):
         return None, "tool arguments must be an object"
@@ -133,7 +167,11 @@ def _sanitize_write_tool_path(
         path_value = args.get(key)
         if not isinstance(path_value, (str, os.PathLike)):
             return None, f"{key} must be a string or path-like value"
-        checked_path, error = _validate_filesystem_path(path_value)
+        checked_path, error = _validate_filesystem_path(
+            path_value,
+            sandbox_root=sandbox_root,
+            benchmark_root=benchmark_root,
+        )
         if error is not None:
             return None, f"invalid {key}: {error}"
         args[key] = checked_path
@@ -205,6 +243,9 @@ async def execute_tools(
         name = tc["name"]
         tc_id = tc["id"]
         raw_args = tc["arguments"]
+        sandbox_root = Path(loop.config.tools.sandbox_path).resolve()
+        benchmark_context, benchmark_error = get_benchmark_context(sandbox_root)
+        benchmark_root = Path(str(benchmark_context.get("root") or "")).resolve() if benchmark_context else None
 
         args, parse_error = parse_tool_args(raw_args)
         if parse_error is not None or args is None:
@@ -238,12 +279,8 @@ async def execute_tools(
         is_write_tool_call = _is_write_tool(name, file_audit_module)
         should_sanitize_paths = is_write_tool_call or any(key in args for key in _WRITE_TOOL_PATH_KEYS)
         if should_sanitize_paths:
-            validated_path, path_error = _sanitize_write_tool_path(
-                args,
-                require_path=is_write_tool_call,
-            )
-            if path_error is not None:
-                msg = f"Invalid file path argument for write tool {name}: {path_error}"
+            if is_write_tool_call and benchmark_error:
+                msg = f"Benchmark write lane is invalid for write tool {name}: {benchmark_error}"
                 await loop._audit_action(
                     kind="tool_action_invalid_args",
                     tool_call_id=tc_id,
@@ -263,6 +300,59 @@ async def execute_tools(
                         "duration_ms": 0,
                     },
                     iteration=iteration,
+                )
+            validated_path, path_error = _sanitize_write_tool_path(
+                args,
+                require_path=is_write_tool_call,
+                sandbox_root=sandbox_root,
+                benchmark_root=benchmark_root if is_write_tool_call else None,
+            )
+            if path_error is not None:
+                msg = f"Invalid file path argument for write tool {name}: {path_error}"
+                if is_write_tool_call:
+                    audit_benchmark_event(
+                        benchmark_context,
+                        event="write_path_check",
+                        decision="BLOCKED",
+                        payload={
+                            "tool_call_id": tc_id,
+                            "tool_name": name,
+                            "attempted_path": str((args or {}).get("path") or ""),
+                            "blocked_path": str((args or {}).get("path") or ""),
+                            "error": path_error,
+                        },
+                    )
+                await loop._audit_action(
+                    kind="tool_action_invalid_args",
+                    tool_call_id=tc_id,
+                    tool_name=name,
+                    decision="FAILED",
+                    reason=msg,
+                    payload={"arguments": args},
+                )
+                return AgentEvent(
+                    type=EventType.TOOL_RESULT,
+                    data={
+                        "tool_id": tc_id,
+                        "tool_name": name,
+                        "result": msg,
+                        "result_text": msg,
+                        "ok": False,
+                        "duration_ms": 0,
+                    },
+                    iteration=iteration,
+                )
+            if is_write_tool_call:
+                audit_benchmark_event(
+                    benchmark_context,
+                    event="write_path_check",
+                    decision="APPROVED",
+                    payload={
+                        "tool_call_id": tc_id,
+                        "tool_name": name,
+                        "attempted_path": str(validated_path or ""),
+                        "approved_path": str(validated_path or ""),
+                    },
                 )
 
         start = time.monotonic()
@@ -470,6 +560,18 @@ async def execute_tools(
                 "result_preview": str(result_text)[:1000],
             },
         )
+        if is_write_tool_call:
+            audit_benchmark_event(
+                benchmark_context,
+                event="write_tool_result",
+                decision="EXECUTED" if ok else "FAILED",
+                payload={
+                    "tool_call_id": tc_id,
+                    "tool_name": name,
+                    "approved_path": str(validated_path or ""),
+                    "final_outcome": "success" if ok else "failure",
+                },
+            )
 
         # --- Post-action verification hooks ---
         verification_feedback = None

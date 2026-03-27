@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import secrets
+from dataclasses import replace
 from typing import Any
 
 from aiohttp import web
@@ -204,6 +205,7 @@ async def execute_chat_request(
 
     session = setup["session"]
     profile = setup["profile"]
+    requested_mode = str(setup.get("requested_mode") or setup["mode"] or "auto").strip().lower()
     mode = setup["mode"]
     run_cfg = setup["run_cfg"]
     run_max_iterations = setup["run_max_iterations"]
@@ -224,6 +226,8 @@ async def execute_chat_request(
     resolved_review_depth = setup["resolved_review_depth"]
     runtime_prefs_saved = setup["runtime_prefs_saved"]
     applied_token_economy = setup["applied_token_economy"]
+    requested_token_economy = setup["requested_token_economy"]
+    payload_requested_token_economy = setup["payload_requested_token_economy"]
     token_economy_meta = setup["token_economy_meta"]
     memory_enabled_for_turn = setup["memory_enabled_for_turn"]
     memory_retrieval_scope = setup["memory_retrieval_scope"]
@@ -315,8 +319,8 @@ async def execute_chat_request(
         from thomas.server.routes.task_events import watch_task
 
         dispatch_decision = should_dispatch(text)
-        force_inline = _as_bool(payload.get("force_inline"))
-        if dispatch_decision.action == "dispatch" and not force_inline:
+        force_dispatch = _as_bool(payload.get("force_dispatch"))
+        if force_dispatch and dispatch_decision.action == "dispatch":
             async with session_lock:
                 if not isinstance(session.conversation, list):
                     session.conversation = []
@@ -430,6 +434,23 @@ async def execute_chat_request(
         )
     if getattr(session, "reasoning_effort", None):
         model_cfg = replace(model_cfg, reasoning_effort=session.reasoning_effort)
+
+    if requested_mode == "batch":
+        from thomas.server.chat_batch_mode import maybe_execute_batch_chat
+
+        batch_response = await maybe_execute_batch_chat(
+            request=request,
+            sid=sid,
+            session=session,
+            mode=requested_mode,
+            model_cfg=model_cfg,
+            prompt_text=text,
+            token_economy_meta=token_economy_meta,
+            apply_usage_budget=apply_usage_budget,
+            start_t=start_t,
+        )
+        if batch_response is not None:
+            return batch_response
 
     fallback_cfgs = deps.failover_cfgs_with_secrets(profile)
     if advanced_cost is not None:
@@ -731,6 +752,7 @@ async def execute_chat_request(
         raw_user_text=raw_user_text,
         requested_job_type=requested_job_type,
         applied_token_economy=applied_token_economy,
+        requested_token_economy=payload_requested_token_economy,
         token_economy_meta=token_economy_meta,
         advanced_tools=advanced_tools,
         advanced_memory=advanced_memory,

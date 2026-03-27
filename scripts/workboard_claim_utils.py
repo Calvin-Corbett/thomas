@@ -432,7 +432,7 @@ def _sanitize_field(label: str, value: str) -> str:
         return ""
     if not value:
         return ""
-    if "`" in value or ";" in value or "[" in value or "]" in value:
+    if "`" in value or ";" in value:
         return ""
     return value
 
@@ -531,32 +531,35 @@ def _format_claim(
     role: str | None = None,
     parent: str | None = None,
 ) -> str:
-    fields: list[str] = [f"agent=`{agent}`"]
+    fields: list[str] = [f"agent={agent}"]
     if name:
-        fields.append(f"name=`{name}`")
+        fields.append(f"name={name}")
     if role:
-        fields.append(f"role=`{role}`")
+        fields.append(f"role={role}")
     if parent:
-        fields.append(f"parent=`{parent}`")
-    fields.append(f"scope=`{scope}`")
-    fields.append(f"task=`{task}`")
+        fields.append(f"parent={parent}")
+    fields.append(f"scope={scope}")
+    fields.append(f"task={task}")
     return "- " + "; ".join(fields)
 
 
 def _format_active_task(
     task_id: str,
+    *,
+    agent: str,
+    scope: str,
     summary: str = "",
-    notes: str = "",
+    status: str = "active",
 ) -> str:
-    fields: list[str] = [f"task=`{task_id}`"]
-    if summary:
-        summary = _sanitize_field("summary", summary)
-        if summary:
-            fields.append(f"summary=`{summary}`")
-    if notes:
-        notes = _sanitize_field("notes", notes)
-        if notes:
-            fields.append(f"notes=`{notes}`")
+    summary_value = _sanitize_field("summary", summary) or str(task_id or "").strip()
+    status_value = _sanitize_field("status", status) or "active"
+    fields: list[str] = [
+        f"task_id={task_id}",
+        f"agent={agent}",
+        f"scope={scope}",
+        f"summary={summary_value}",
+        f"status={status_value}",
+    ]
     return "- " + "; ".join(fields)
 
 
@@ -582,6 +585,20 @@ def _find_section(
 
 
 def _find_claim_section(lines: Sequence[str]) -> tuple[int, int]:
+    for idx, line in enumerate(lines):
+        normalized = line.strip().lower()
+        if normalized.startswith("## agent claims") or normalized.startswith("## active claims"):
+            end = len(lines)
+            for follow_idx in range(idx + 1, len(lines)):
+                next_line = lines[follow_idx].strip().lower()
+                if (
+                    next_line.startswith("## ")
+                    and not next_line.startswith("## agent claims")
+                    and not next_line.startswith("## active claims")
+                ):
+                    end = follow_idx
+                    break
+            return idx + 1, end
     return _find_section(lines, heading_prefix="active claims", heading_label="Active Claims")
 
 
@@ -653,9 +670,9 @@ def _parse_active_task_line(line_no: int, line: str) -> tuple[str | None, dict[s
         key = key.strip()
         value = value.strip().strip("`").strip("'").strip('"')
         fields[key] = value
-    task_id = fields.get("task", "")
+    task_id = fields.get("task_id", "") or fields.get("task", "")
     if not task_id:
-        return None, {}, f"active task line {line_no} is missing task"
+        return None, {}, f"active task line {line_no} is missing task_id"
     return task_id, fields, ""
 
 
@@ -686,8 +703,9 @@ def _upsert_active_task(
     task_id: str,
     *,
     agent: str,
+    scope: str,
     summary: str = "",
-    notes: str = "",
+    status: str = "active",
 ) -> tuple[bool, str]:
     task_id_key = _normalize_task_id(task_id)
     if not task_id_key:
@@ -703,7 +721,7 @@ def _upsert_active_task(
         if entry and _normalize_task_id(entry) == task_id_key:
             existing_idx = idx
             break
-    formatted = _format_active_task(task_id, summary, notes)
+    formatted = _format_active_task(task_id, agent=agent, scope=scope, summary=summary, status=status)
     if existing_idx is not None:
         lines[existing_idx] = formatted + "\n"
     else:
@@ -725,25 +743,23 @@ def _upsert_active_task(
 
 def _release_active_task(lines: list[str], *, agent: str) -> tuple[bool, str]:
     section = _find_active_tasks_section(lines)
-    task_ids: list[str] = []
+    matching: list[tuple[int, str]] = []
     for idx in _bullet_indices(lines, section[0], section[1]):
         entry, fields, err = _parse_active_task_line(idx + 1, lines[idx])
         if err:
             return False, err
-        if entry is not None:
-            task_ids.append(entry)
-    if not task_ids:
+        if entry is None:
+            continue
+        entry_agent = str(fields.get("agent", "") or "")
+        if entry_agent and _agent_key(entry_agent) != _agent_key(agent):
+            continue
+        matching.append((idx, entry))
+    if not matching:
         return False, "no active tasks found"
-    if len(task_ids) > 1:
-        return False, f"multiple active tasks found for agent {agent}: {task_ids}"
-    task_id = task_ids[0]
-    for idx in _bullet_indices(lines, section[0], section[1]):
-        entry, fields, err = _parse_active_task_line(idx + 1, lines[idx])
-        if err:
-            return False, err
-        if entry == task_id:
-            del lines[idx]
-            break
+    if len(matching) > 1:
+        return False, f"multiple active tasks found for agent {agent}: {[task_id for _, task_id in matching]}"
+    idx, task_id = matching[0]
+    del lines[idx]
     section = _find_active_tasks_section(lines)
     if section[0] < section[1]:
         bullets = _bullet_indices(lines, section[0], section[1])

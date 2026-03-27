@@ -10,6 +10,7 @@
 
 </head>
 <body>
+  <form id="legacySettingsCredentialForm" class="hidden" aria-hidden="true"></form>
   <div class="settings-header">
     <div class="header-top">
       <h1>Settings</h1>
@@ -205,7 +206,7 @@
               </div>
               <div class="setting-control">
                 <div class="key-input-group">
-                  <input type="password" id="openaiKey" class="text-input key-input" placeholder="sk-..." aria-label="OpenAI API key" />
+                  <input type="password" id="openaiKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-..." aria-label="OpenAI API key" />
                   <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
                     <i class="ph ph-eye"></i>
                   </button>
@@ -236,7 +237,7 @@
               </div>
               <div class="setting-control">
                 <div class="key-input-group">
-                  <input type="password" id="anthropicKey" class="text-input key-input" placeholder="sk-ant-..." aria-label="Anthropic API key" />
+                  <input type="password" id="anthropicKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-ant-..." aria-label="Anthropic API key" />
                   <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
                     <i class="ph ph-eye"></i>
                   </button>
@@ -267,7 +268,7 @@
               </div>
               <div class="setting-control">
                 <div class="key-input-group">
-                  <input type="password" id="googleKey" class="text-input key-input" placeholder="AIza..." aria-label="Google API key" />
+                  <input type="password" id="googleKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="AIza..." aria-label="Google API key" />
                   <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
                     <i class="ph ph-eye"></i>
                   </button>

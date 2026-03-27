@@ -40,7 +40,7 @@
     color: var(--text-secondary);
     display: flex;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
 }
 
 .attachment-chip .remove-btn {
@@ -57,8 +57,8 @@
     background:
         linear-gradient(165deg, rgba(37, 43, 56, 0.92), rgba(29, 35, 47, 0.9));
     border: 1px solid rgba(160, 193, 238, 0.12);
-    border-radius: var(--radius-xl);
-    padding: 8px 10px 7px;
+    border-radius: 14px;
+    padding: 6px 8px 5px;
     display: flex;
     flex-direction: column;
     box-shadow: 0 8px 22px rgba(0, 0, 0, 0.28);
@@ -76,9 +76,9 @@
 .composer-input-row {
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
     width: 100%;
-    min-height: 28px;
+    min-height: 24px;
 }
 
 /* Status bar below the input row ÃƒÂ¢Ã¢â€šÂ¬Ã¢â‚¬Â shows model, mode, route badges */
@@ -174,8 +174,8 @@
     max-height: 140px;
     overflow-y: auto;
     line-height: 1.4;
-    padding: 2px 0;
-    min-height: 22px;
+    padding: 1px 0;
+    min-height: 20px;
 }
 
 .composer-textarea::placeholder {
@@ -185,9 +185,9 @@
 
 /* Action Buttons */
 .btn-icon {
-    width: 28px;
-    height: 28px;
-    border-radius: 10px;
+    width: 26px;
+    height: 26px;
+    border-radius: 8px;
     border: 1px solid transparent;
     background: rgba(255, 255, 255, 0.03);
     color: var(--text-secondary);

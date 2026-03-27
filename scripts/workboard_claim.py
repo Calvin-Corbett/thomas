@@ -18,6 +18,7 @@ try:
         DEFAULT_WORKBOARD,
         _resolve_agent,
         _resolve_task,
+        agent_presence,
         claims_gate,
     )
 except ImportError:  # pragma: no cover

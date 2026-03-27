@@ -65,3 +65,11 @@ class ChatSession:
     system_prompt: str | None = None
     reasoning_effort: str | None = None
     session_token_spend: int = 0
+    conversation_mode: str = "default"
+    active_plan: dict[str, Any] | None = None
+    task_definition_status: str = "idle"
+    task_definition: dict[str, Any] | None = None
+    task_evaluation: dict[str, Any] | None = None
+    benchmark_session: dict[str, Any] | None = None
+    last_user_message: str = ""
+    last_assistant_message: str = ""

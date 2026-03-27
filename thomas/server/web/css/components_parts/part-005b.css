@@ -36,6 +36,46 @@
     84%      { transform: translateY(4px) scaleX(0.92); opacity: 0.9; }
 }
 
+.chat-robot-anim-scanning {
+    animation: chatRobotScanning 3.1s ease-in-out infinite;
+}
+.chat-robot-anim-scanning::after {
+    content: '';
+    position: absolute;
+    left: -3px;
+    top: 8px;
+    width: 36px;
+    height: 2px;
+    border-radius: 999px;
+    background: linear-gradient(90deg, rgba(108, 205, 255, 0), rgba(108, 205, 255, 0.92), rgba(108, 205, 255, 0));
+    opacity: 0.86;
+    animation: chatRobotScannerSweep 3.1s ease-in-out infinite;
+}
+@keyframes chatRobotScanning {
+    0%, 100% { transform: translateY(0) rotate(0deg); }
+    18%      { transform: translateY(-1px) rotate(-1deg); }
+    48%      { transform: translateY(0) rotate(1deg); }
+    74%      { transform: translateY(-1px) rotate(-0.6deg); }
+}
+@keyframes chatRobotScannerSweep {
+    0%, 100% { transform: translateX(-4px); opacity: 0.24; }
+    28%      { transform: translateX(2px); opacity: 0.9; }
+    56%      { transform: translateX(-1px); opacity: 0.72; }
+    78%      { transform: translateX(4px); opacity: 0.82; }
+}
+
+.chat-robot-anim-shimmy {
+    animation: chatRobotShimmy 2.8s ease-in-out infinite;
+}
+@keyframes chatRobotShimmy {
+    0%, 100% { transform: translateX(0) translateY(0); }
+    18%      { transform: translateX(-1px) translateY(-1px); }
+    34%      { transform: translateX(1px) translateY(0); }
+    50%      { transform: translateX(-1px) translateY(-1px); }
+    66%      { transform: translateX(1px) translateY(0); }
+    82%      { transform: translateX(0) translateY(-1px); }
+}
+
 
 /* Ã¢â€â‚¬Ã¢â€â‚¬ Robot Exit (startled jump LEFT Ã¢â€ â€™ tumble fall) Ã¢â€â‚¬Ã¢â€â‚¬ */
 .robot-exit-run {
@@ -191,8 +231,6 @@
 }
 @keyframes chatRobotIdle {
     0%, 100% { transform: translateY(0); }
-    50%      { transform: translateY(-1px); }
-}
     50%      { transform: translateY(-1px); }
 }
 

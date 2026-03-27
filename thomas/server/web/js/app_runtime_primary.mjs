@@ -659,6 +659,9 @@ let taskContinuityLatestEvents = [];
 let taskContinuityLatestSessionId = '';
 let taskContinuityLatestActivity = null;
 let taskContinuityLatestError = '';
+let taskContinuityLatestTaskDefinition = null;
+let taskContinuityLatestTaskEvaluation = null;
+let taskContinuityLatestTaskDefinitionStatus = 'idle';
 let taskContinuityCollapseOverride = null;
 let taskContinuityMissionPayload = null;
 let taskContinuityMissionJobs = null;
@@ -689,6 +692,16 @@ let robotAlertShowing = false;
 let robotAlertLastMessage = '';
 let robotAlertLastAt = 0;
 let officeState = null;
+let officeChatPreviewUntil = 0;
+let officeChatPreviewTimer = 0;
+let officeChatPreviewSessionId = '';
+let chatTaskRuntimeTimer = 0;
+const chatTaskStripStateByMessageId = new Map();
+const chatTaskMessageBySessionId = new Map();
+const chatAgentPresenceStateByActivityId = new Map();
+let chatRobotWorldRaf = 0;
+let chatRobotWorldLastFrameAt = 0;
+let chatPrimaryPresenceState = null;
 let missionState = null;
 let contentState = null;
 const spendState = { payload: null, lastFetchedAt: 0 };
@@ -707,7 +720,24 @@ const SIDEBAR_ANIMATION_LOCK_MS = 280;
 const DEBUG_DOCK_ANIMATION_LOCK_MS = 300;
 const TASK_CONTINUITY_REFRESH_INTERVAL_MS = 2800;
 const TASK_CONTINUITY_HEARTBEAT_STALE_MS = 18000;
+const OFFICE_CHAT_PREVIEW_GRACE_MS = 9000;
 const TASK_CONTINUITY_HEARTBEAT_DEAD_MS = 45000;
+const CHAT_TASK_STRIP_CHECKPOINT_LIMIT = 5;
+const CHAT_AGENT_PRESENCE_EXIT_MS = 760;
+const CHAT_PRIMARY_ROBOT_LINGER_MS = 10_000;
+const CHAT_PRIMARY_ROBOT_MIN_ACTION_MS = 2_600;
+const CHAT_PRIMARY_ROBOT_MAX_ACTION_MS = 5_600;
+const CHAT_PRIMARY_ROBOT_WORLD_HEIGHT = 150;
+const CHAT_PRIMARY_ROBOT_WORLD_PADDING_X = 18;
+const CHAT_PRIMARY_ROBOT_GROUND_OFFSET = 22;
+const CHAT_PRIMARY_ROBOT_PERCH_LIFT = 36;
+const CHAT_PRIMARY_ROBOT_GRAVITY = 0.62;
+const CHAT_PRIMARY_ROBOT_FALL_SPEED_MAX = 11.5;
+const CHAT_PRIMARY_ROBOT_WALK_SPEED = 1.15;
+const CHAT_PRIMARY_ROBOT_JUMP_SPEED = -7.6;
+const CHAT_AGENT_PRESENCE_FLOAT_PAD_X = 26;
+const CHAT_AGENT_PRESENCE_FLOAT_PAD_TOP = 92;
+const CHAT_AGENT_PRESENCE_FLOAT_PAD_BOTTOM = 168;
 const EVOLVE_TERMINAL_JOB_STATUSES = new Set(['succeeded', 'failed', 'cancelled', 'dead']);
 const DEBUG_EVENT_LIMIT = 80;
 const DEBUG_CONSOLE_LIMIT = 120;
@@ -1139,28 +1169,28 @@ const OFFICE_PERSONA_LIBRARY = {
 //  Chat Robot Status Sayings 
 const CHAT_ROBOT_SAYINGS = {
     thinking: [
-        'Spinning up robots...',
-        'Beep boop beep...',
-        'Consulting the hive mind...',
-        'Warming up neurons...',
-        'Loading clever thoughts...',
-        'Connecting synapses...',
-        'Brewing fresh ideas...',
-        'Calibrating brain waves...',
-        'Pondering possibilities...',
-        'Initializing thought engine...',
+        'Booting response core...',
+        'Checking the queue...',
+        'Routing context...',
+        'Lining up the reply...',
+        'Calibrating output...',
+        'Preparing a clean answer...',
+        'Syncing the workspace...',
+        'Warming up the channel...',
+        'Staging the response...',
+        'Checking what matters...',
     ],
     working: [
-        'Building something cool...',
-        'Robots are on it...',
-        'Turbo mode engaged...',
-        'Compiling awesomeness...',
-        'Making magic happen...',
-        'Crunching the numbers...',
-        'Assembling the pieces...',
-        'Putting it all together...',
-        'Almost there, hang tight...',
-        'Cooking up a response...',
+        'Dispatching workers...',
+        'Moving tasks into queue...',
+        'Checking files and tools...',
+        'Coordinating the task lane...',
+        'Keeping the reply tight...',
+        'Working through the steps...',
+        'Wrapping the handoff...',
+        'Locking in the result...',
+        'Finishing the response...',
+        'Keeping things moving...',
     ],
 };
 
@@ -1230,7 +1260,7 @@ function isThinkingUiEnabled() {
         return false;
     }
 }
-const CHAT_THINKING_UI_ENABLED = isThinkingUiEnabled();
+const CHAT_THINKING_UI_ENABLED = false;
 
 /**
  * Create a collapsible tool call card DOM element.
@@ -1290,7 +1320,7 @@ function pickChatSaying(category) {
     return arr[idx];
 }
 
-const CHAT_ROBOT_ANIMATIONS = ['fishing', 'bouncing', 'looking', 'napping', 'waving', 'lifting'];
+const CHAT_ROBOT_ANIMATIONS = ['fishing', 'bouncing', 'looking', 'napping', 'waving', 'lifting', 'scanning', 'shimmy'];
 const CHAT_ROBOT_DOCK_ID = 'chatRobotDock';
 const CHAT_ROBOT_DOCK_WIDTH = 31;
 const CHAT_ROBOT_DOCK_HEIGHT = 29;
@@ -1320,6 +1350,15 @@ function _pickRobotAnimation() {
     return pick;
 }
 
+function _applyRobotIdleAnimation(target) {
+    if (!(target instanceof HTMLElement)) return '';
+    CHAT_ROBOT_ANIMATIONS.forEach((anim) => target.classList.remove('chat-robot-anim-' + anim));
+    const idleAnim = _pickRobotAnimation();
+    target.dataset.idleAnim = idleAnim;
+    target.classList.add('chat-robot-anim-' + idleAnim);
+    return idleAnim;
+}
+
 function _createLandedRobotElement() {
     const landed = document.createElement('div');
     landed.className = 'chat-robot-landed pixel-agent pixel-agent-blue';
@@ -1336,35 +1375,11 @@ function _createLandedRobotElement() {
 }
 
 function _ensureRobotDock() {
-    let dock = document.getElementById(CHAT_ROBOT_DOCK_ID);
-    if (!(dock instanceof HTMLElement)) {
-        dock = document.createElement('div');
-        dock.id = CHAT_ROBOT_DOCK_ID;
-        dock.className = 'chat-robot-dock is-hidden';
-        document.body.appendChild(dock);
-    }
-    return dock;
+    return chatWorldEnsureDock();
 }
 
 function _positionRobotDock() {
-    const dock = _ensureRobotDock();
-    const anchorRect = attachBtn instanceof HTMLElement ? attachBtn.getBoundingClientRect() : null;
-    if (!anchorRect || anchorRect.width < 2 || anchorRect.height < 2) {
-        dock.classList.add('is-hidden');
-        return dock;
-    }
-    const leftRaw = Math.round(anchorRect.left - CHAT_ROBOT_DOCK_WIDTH - CHAT_ROBOT_DOCK_OUTSIDE_GAP);
-    const topRaw = Math.round(anchorRect.top + ((anchorRect.height - CHAT_ROBOT_DOCK_HEIGHT) * 0.5));
-    const viewportWidth = Math.max(0, Number(window.innerWidth) || 0);
-    const maxLeft = Math.max(4, viewportWidth - CHAT_ROBOT_DOCK_WIDTH - 4);
-    const viewportHeight = Math.max(0, Number(window.innerHeight) || 0);
-    const maxTop = Math.max(CHAT_ROBOT_DOCK_SAFE_TOP_OFFSET, viewportHeight - CHAT_ROBOT_DOCK_HEIGHT - CHAT_ROBOT_DOCK_TOP_MARGIN);
-    const left = Math.max(4, Math.min(maxLeft, leftRaw));
-    const top = Math.max(CHAT_ROBOT_DOCK_SAFE_TOP_OFFSET, Math.min(maxTop, topRaw));
-    dock.style.left = `${left}px`;
-    dock.style.top = `${top}px`;
-    dock.classList.remove('is-hidden');
-    return dock;
+    return chatWorldPositionDock();
 }
 
 function _asLandedRobotElement(sourceNode = null) {
@@ -1382,96 +1397,16 @@ function _asLandedRobotElement(sourceNode = null) {
     landed.style.transform = '';
     landed.style.opacity = '';
     landed.style.pointerEvents = '';
+    _applyRobotIdleAnimation(landed);
     return landed;
 }
 
 function _landRobotAtComposerDock(sourceNode = null) {
-    document.querySelectorAll('.chat-robot-landed').forEach((node) => {
-        if (node !== sourceNode) node.remove();
-    });
-    const dock = _positionRobotDock();
-    dock.innerHTML = '';
-    const landed = _asLandedRobotElement(sourceNode);
-    landed.classList.add('chat-robot-landed-entry');
-
-    const entryWrap = document.createElement('div');
-    entryWrap.className = 'chat-robot-landed-entry-wrap';
-    entryWrap.innerHTML = `
-        <span class="chat-robot-portal portal-opening">
-            <span class="chat-game-portal-ring"></span>
-            <span class="chat-game-portal-ring ring-inner"></span>
-            <span class="chat-game-portal-core"></span>
-        </span>
-    `;
-    entryWrap.appendChild(landed);
-    dock.appendChild(entryWrap);
-
-    const entryPortal = entryWrap.querySelector('.chat-robot-portal');
-    const revealRobot = () => landed.classList.add('is-visible');
-    setTimeout(revealRobot, CHAT_ROBOT_ENTRY_PORTAL_LEAD_MS);
-
-    if (entryPortal) {
-        entryPortal.addEventListener('animationend', function onOpen(e) {
-            if (e.animationName !== 'chatPortalOpen') return;
-            entryPortal.classList.remove('portal-opening');
-            entryPortal.classList.add('portal-closing');
-            entryPortal.removeEventListener('animationend', onOpen);
-            entryPortal.addEventListener('animationend', () => entryPortal.remove(), { once: true });
-        });
-    }
-
-    setTimeout(() => {
-        if (!(entryWrap.parentNode instanceof HTMLElement)) return;
-        const staticRobot = _asLandedRobotElement(landed);
-        staticRobot.classList.add('chat-robot-landed-steady');
-        staticRobot.classList.remove('chat-robot-landed-entry', 'is-visible');
-        entryWrap.replaceWith(staticRobot);
-    }, CHAT_ROBOT_ENTRY_PORTAL_LEAD_MS + CHAT_ROBOT_ENTRY_STEP_MS + 420);
+    return chatWorldLandAtDock(sourceNode);
 }
 
 function _portalOutLandedRobot() {
-    return new Promise((resolve) => {
-        const existingLanded = document.querySelector('.chat-robot-landed');
-        if (!existingLanded || !(existingLanded.parentNode instanceof HTMLElement)) {
-            resolve();
-            return;
-        }
-        const parent = existingLanded.parentNode;
-        const exitWrap = document.createElement('div');
-        exitWrap.className = 'chat-robot-landed-exit';
-        exitWrap.innerHTML = `
-            <span class="chat-robot-portal portal-opening">
-                <span class="chat-game-portal-ring"></span>
-                <span class="chat-game-portal-ring ring-inner"></span>
-                <span class="chat-game-portal-core"></span>
-            </span>
-        `;
-        parent.insertBefore(exitWrap, existingLanded);
-        exitWrap.appendChild(existingLanded);
-        let settled = false;
-        const done = () => {
-            if (settled) return;
-            settled = true;
-            resolve();
-        };
-        const exitPortal = exitWrap.querySelector('.chat-robot-portal');
-        if (exitPortal) {
-            exitPortal.addEventListener('animationend', function onOpen(e) {
-                if (e.animationName !== 'chatPortalOpen') return;
-                exitPortal.classList.remove('portal-opening');
-                exitPortal.classList.add('portal-closing');
-                exitPortal.removeEventListener('animationend', onOpen);
-                exitPortal.addEventListener('animationend', () => {
-                    exitWrap.remove();
-                    done();
-                }, { once: true });
-            });
-        }
-        setTimeout(() => {
-            if (exitWrap.parentNode) exitWrap.remove();
-            done();
-        }, 1700);
-    });
+    return chatWorldPortalOutLanded();
 }
 
 window.addEventListener('resize', () => _positionRobotDock());
@@ -1485,9 +1420,6 @@ function _createRobotStatus(category) {
     const anim = _pickRobotAnimation();
     const wrapper = document.createElement('div');
     wrapper.className = 'chat-robot-status chat-robot-status-staging';
-    if (!CHAT_THINKING_UI_ENABLED) {
-        wrapper.classList.add('chat-robot-no-thinking');
-    }
     wrapper.innerHTML = `
         <span class="chat-robot-portal-wrap">
             <span class="chat-robot-portal portal-opening">
@@ -1510,32 +1442,10 @@ function _createRobotStatus(category) {
         <span class="chat-robot-text-wrap">
             <span class="chat-robot-saying-row">
                 <span class="chat-robot-saying">${pickChatSaying(category)}</span>
-                <button type="button" class="chat-robot-thinking-toggle" title="Show thinking details" aria-expanded="false">
-                    <svg width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-                </button>
             </span>
             <span class="chat-robot-timer">0.0s</span>
         </span>
-        <div class="chat-robot-thinking-details">
-            <div class="thinking-text-content"></div>
-            <div class="thinking-tool-cards"></div>
-        </div>
     `;
-
-    // Wire toggle button
-    const toggleBtn = wrapper.querySelector('.chat-robot-thinking-toggle');
-    const detailsEl = wrapper.querySelector('.chat-robot-thinking-details');
-    if (CHAT_THINKING_UI_ENABLED && toggleBtn && detailsEl) {
-        toggleBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            const expanding = !detailsEl.classList.contains('expanded');
-            detailsEl.classList.toggle('expanded', expanding);
-            toggleBtn.classList.toggle('expanded', expanding);
-            toggleBtn.setAttribute('aria-expanded', String(expanding));
-            // Auto-scroll to bottom when expanding
-            if (expanding) detailsEl.scrollTop = detailsEl.scrollHeight;
-        });
-    }
 
     // Stagger: entrance first, THEN idle animation after materialize finishes
     const agentEl = wrapper.querySelector('.chat-robot-agent');
@@ -1570,15 +1480,8 @@ function _createRobotStatus(category) {
  * Called whenever new thinking tokens arrive during streaming.
  */
 function _updateThinkingDisplay(container, text) {
-    if (!CHAT_THINKING_UI_ENABLED) return;
-    if (!container) return;
-    const contentEl = container.querySelector('.thinking-text-content');
-    if (!contentEl) return;
-    contentEl.textContent = text;
-    // Auto-scroll if the details panel is expanded
-    if (container.classList.contains('expanded')) {
-        container.scrollTop = container.scrollHeight;
-    }
+    void container;
+    void text;
 }
 
 /**
@@ -1587,53 +1490,35 @@ function _updateThinkingDisplay(container, text) {
  * Returns the summary element or null if no thinking data was available.
  */
 function _createThinkingSummary(elapsedMs, capturedThinkingText, capturedToolCards) {
-    if (!CHAT_THINKING_UI_ENABLED) return null;
-    const seconds = (elapsedMs / 1000).toFixed(1);
-    const text = (capturedThinkingText || '').trim();
-    const hasToolCards = capturedToolCards && capturedToolCards.length > 0;
-    if (!text && !hasToolCards) return null;
+    void elapsedMs;
+    void capturedThinkingText;
+    void capturedToolCards;
+    return null;
+}
 
-    const summary = document.createElement('div');
-    summary.className = 'thinking-summary';
-
-    summary.innerHTML = `
-        <button type="button" class="thinking-summary-toggle" aria-expanded="false">
-            <span class="thinking-summary-label">Thought for ${seconds}s</span>
-            <svg class="thinking-summary-arrow" width="10" height="10" viewBox="0 0 10 10"><path d="M2 3.5L5 6.5L8 3.5" stroke="currentColor" stroke-width="1.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>
-        </button>
-        <div class="thinking-summary-details">
-            <div class="thinking-text-content"></div>
-            <div class="thinking-tool-cards"></div>
-        </div>
-    `;
-
-    // Set text content via DOM (safe, no innerHTML injection)
-    if (text) {
-        const contentEl = summary.querySelector('.thinking-text-content');
-        if (contentEl) contentEl.textContent = text;
+function chatMessageTimestampText(valueRaw) {
+    const value = Number(valueRaw);
+    const stamp = Number.isFinite(value) && value > 0 ? value : Date.now();
+    try {
+        return new Intl.DateTimeFormat(undefined, {
+            month: 'short',
+            day: 'numeric',
+            hour: 'numeric',
+            minute: '2-digit',
+        }).format(new Date(stamp));
+    } catch {
+        return new Date(stamp).toLocaleTimeString();
     }
+}
 
-    // Move captured tool card elements into the summary
-    if (hasToolCards) {
-        const toolContainer = summary.querySelector('.thinking-tool-cards');
-        if (toolContainer) {
-            for (const tc of capturedToolCards) {
-                toolContainer.appendChild(tc.card);
-            }
-        }
-    }
-
-    const toggleBtn = summary.querySelector('.thinking-summary-toggle');
-    const detailsEl = summary.querySelector('.thinking-summary-details');
-    toggleBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const expanding = !detailsEl.classList.contains('expanded');
-        detailsEl.classList.toggle('expanded', expanding);
-        toggleBtn.classList.toggle('expanded', expanding);
-        toggleBtn.setAttribute('aria-expanded', String(expanding));
-    });
-
-    return summary;
+function robotAmbientStatusText(channel = 'thinking') {
+    const normalized = safeString(channel).toLowerCase();
+    if (normalized.includes('memory')) return 'Refreshing memory...';
+    if (normalized.includes('tool')) return 'Checking tools...';
+    if (normalized.includes('delegation') || normalized.includes('background')) return 'Dispatching background work...';
+    if (normalized.includes('route')) return 'Routing the task...';
+    if (normalized.includes('working')) return pickChatSaying('working');
+    return pickChatSaying('thinking');
 }
 
 function createDelegationBadge(specialistId, task) {
@@ -2034,6 +1919,59 @@ function missionBuildRuntimeState(payload, jobsPayload = null, { sessionId = '',
     };
 }
 
+function delegationStatusIsLive(stateRaw) {
+    const state = safeString(stateRaw).toLowerCase();
+    return ['requested', 'queued', 'pending', 'classified', 'claimed', 'executing', 'running', 'in_progress'].includes(state);
+}
+
+function delegationStatusLabel(stateRaw) {
+    const state = safeString(stateRaw).toLowerCase();
+    if (!state) return 'idle';
+    if (state === 'completed') return 'completed';
+    if (state === 'failed') return 'failed';
+    if (state === 'abandoned') return 'abandoned';
+    return state.replace(/_/g, ' ');
+}
+
+function delegationHeartbeatState(updatedAtRaw, hasLiveAgents) {
+    if (!hasLiveAgents) return 'idle';
+    const updatedEpoch = missionToEpoch(updatedAtRaw);
+    if (!updatedEpoch) return 'starting';
+    const age = Math.max(0, Date.now() - updatedEpoch);
+    if (age <= TASK_CONTINUITY_HEARTBEAT_STALE_MS) return 'live';
+    if (age <= TASK_CONTINUITY_HEARTBEAT_DEAD_MS) return 'quiet';
+    return 'stalled';
+}
+
+function buildDelegationRuntimeState(delegations, { sessionId = '' } = {}) {
+    const requestedSessionId = safeString(sessionId);
+    const agents = Array.isArray(delegations)
+        ? delegations.filter((item) => item && typeof item === 'object')
+        : [];
+    const liveAgents = agents.filter((item) => delegationStatusIsLive(item?.state));
+    const primary = liveAgents[0] || agents[0] || null;
+    const startedAt = safeString(primary?.created_at || primary?.updated_at);
+    const updatedAt = safeString(primary?.updated_at || primary?.created_at);
+    const elapsedMs = startedAt ? Math.max(0, Date.now() - missionToEpoch(startedAt)) : 0;
+    return {
+        requestedSessionId,
+        sessionId: requestedSessionId,
+        sessionScoped: Boolean(requestedSessionId),
+        agents,
+        liveAgents,
+        primary,
+        primaryJob: null,
+        activeCount: liveAgents.length,
+        workerCount: liveAgents.length,
+        startedAt,
+        updatedAt,
+        elapsedMs,
+        runtimeLabel: missionFormatDurationMs(elapsedMs),
+        progressPct: null,
+        heartbeat: delegationHeartbeatState(updatedAt, liveAgents.length > 0),
+    };
+}
+
 function missionPreferredSessionId() {
     return safeString(taskContinuityLatestSessionId || activeChatId || sessionId);
 }
@@ -2110,29 +2048,50 @@ function ensureTaskContinuityRuntimeUi() {
 function renderTaskContinuitySessionActivity(activity) {
     const ui = ensureTaskContinuityRuntimeUi();
     if (!ui) return;
+    const allAgents = activity && Array.isArray(activity?.agents) ? activity.agents.slice(0, 3) : [];
+    const hasRecentAgents = allAgents.length > 0;
     const hasActivity = Boolean(activity && activity.activeCount > 0);
     const heartbeat = hasActivity ? safeString(activity?.heartbeat) : 'idle';
-    const primary = hasActivity ? activity?.primary : null;
-    const primaryName = safeString(primary?.name) || 'No background workers active';
-    const workerCount = hasActivity ? Number(activity?.workerCount || activity?.activeCount || 0) : 0;
-    const workerLabel = `${workerCount} agent${workerCount === 1 ? '' : 's'}`;
+    const primary = hasActivity ? activity?.primary : (hasRecentAgents ? allAgents[0] : null);
+    const primaryName = hasActivity
+        ? (safeString(primary?.summary) || safeString(primary?.name) || 'Background work in progress')
+        : (safeString(primary?.summary) || safeString(primary?.last_progress) || 'No background workers active');
+    const workerCount = hasActivity
+        ? Number(activity?.workerCount || activity?.activeCount || 0)
+        : allAgents.length;
+    const workerLabel = hasActivity
+        ? `${workerCount} active worker${workerCount === 1 ? '' : 's'}`
+        : hasRecentAgents
+            ? `${workerCount} background task${workerCount === 1 ? '' : 's'}`
+            : '0 agents';
+    const terminalStatus = delegationStatusLabel(primary?.state || primary?.status);
     const metaLabel = hasActivity
-        ? `${missionStatusLabel(primary?.status)} | updated ${missionRelativeTime(activity?.updatedAt)}`
-        : 'waiting for work';
-    ui.root.classList.toggle('is-active', hasActivity);
-    ui.root.dataset.state = heartbeat || 'idle';
+        ? `${delegationStatusLabel(primary?.state || primary?.status)} | updated ${missionRelativeTime(activity?.updatedAt)}`
+        : hasRecentAgents
+            ? `${terminalStatus} | updated ${missionRelativeTime(primary?.updated_at || primary?.updatedAt)}`
+            : 'waiting for work';
+    const pillState = hasActivity
+        ? (heartbeat || 'idle')
+        : (terminalStatus === 'failed' || terminalStatus === 'abandoned' ? 'stalled' : (hasRecentAgents ? 'quiet' : 'idle'));
+    const pillLabel = hasActivity ? missionHeartbeatLabel(heartbeat || 'idle') : (hasRecentAgents ? terminalStatus : 'idle');
+    ui.root.classList.toggle('is-active', hasActivity || hasRecentAgents);
+    ui.root.dataset.state = pillState || 'idle';
     if (ui.pill instanceof HTMLElement) {
-        ui.pill.className = `task-continuity-runtime-pill state-${hasActivity ? heartbeat : 'idle'}`;
-        ui.pill.textContent = missionHeartbeatLabel(hasActivity ? heartbeat : 'idle');
+        ui.pill.className = `task-continuity-runtime-pill state-${pillState || 'idle'}`;
+        ui.pill.textContent = pillLabel;
     }
     if (ui.label instanceof HTMLElement) {
-        ui.label.textContent = hasActivity ? primaryName : 'No background workers active';
+        ui.label.textContent = hasActivity || hasRecentAgents ? primaryName : 'No background workers active';
     }
     if (ui.agents instanceof HTMLElement) {
-        ui.agents.textContent = hasActivity ? workerLabel : '0 agents';
+        ui.agents.textContent = workerLabel;
     }
     if (ui.elapsed instanceof HTMLElement) {
-        ui.elapsed.textContent = hasActivity ? `running ${safeString(activity?.runtimeLabel) || '--'}` : 'standby';
+        ui.elapsed.textContent = hasActivity
+            ? `running ${safeString(activity?.runtimeLabel) || '--'}`
+            : hasRecentAgents
+                ? `last update ${missionRelativeTime(primary?.updated_at || primary?.updatedAt)}`
+                : 'standby';
     }
     if (ui.heartbeat instanceof HTMLElement) {
         ui.heartbeat.textContent = metaLabel;
@@ -2142,44 +2101,1116 @@ function renderTaskContinuitySessionActivity(activity) {
         ui.bar.classList.toggle('is-indeterminate', hasActivity && !hasProgress);
     }
     if (ui.fill instanceof HTMLElement) {
-        ui.fill.style.width = hasProgress ? `${activity.progressPct}%` : (hasActivity ? '28%' : '0%');
+        ui.fill.style.width = hasProgress ? `${activity.progressPct}%` : ((hasActivity || hasRecentAgents) ? '28%' : '0%');
     }
     if (ui.list instanceof HTMLElement) {
         const rows = hasActivity && Array.isArray(activity?.liveAgents)
             ? activity.liveAgents.slice(0, 3)
-            : [];
+            : allAgents;
         ui.list.classList.toggle('hidden', rows.length === 0);
         ui.list.innerHTML = rows.map((item) => {
-            const title = safeString(item?.name) || 'worker';
+            const title = safeString(item?.bot_name || item?.name || item?.specialist_id || item?.bot_id) || 'worker';
             const detail = [
-                missionStatusLabel(item?.status),
-                safeString(item?.room).replace(/_/g, ' '),
-                `updated ${missionRelativeTime(item?.updated_at)}`,
+                delegationStatusLabel(item?.state || item?.status),
+                safeString(item?.last_progress || item?.summary),
+                `updated ${missionRelativeTime(item?.updated_at || item?.updatedAt)}`,
             ].filter(Boolean).join(' | ');
             return `<li><strong>${escapeHtml(title)}</strong><span>${escapeHtml(detail)}</span></li>`;
         }).join('');
     }
 }
 
-function removeChatAgentPresenceUi() {
-    const root = document.getElementById('chatAgentPresence');
-    if (root instanceof HTMLElement) {
-        root.remove();
+function ensureTaskDefinitionUi() {
+    if (!taskContinuityPanel) return null;
+    let root = taskContinuityPanel.querySelector('.task-definition-panel');
+    if (!(root instanceof HTMLElement)) {
+        root = document.createElement('section');
+        root.className = 'task-definition-panel hidden';
+        root.innerHTML = `
+            <div class="task-definition-head">
+                <strong data-role="title">Task contract</strong>
+                <span class="task-continuity-status" data-role="phase">idle</span>
+            </div>
+            <p class="task-definition-summary" data-role="summary"></p>
+            <p class="task-definition-good hidden" data-role="good"></p>
+            <div class="task-definition-meta hidden" data-role="type"></div>
+            <div class="task-definition-section hidden" data-role="acceptance-wrap">
+                <span class="task-definition-section-title">Acceptance</span>
+                <ul data-role="acceptance"></ul>
+            </div>
+            <div class="task-definition-section hidden" data-role="visible-wrap">
+                <span class="task-definition-section-title">Visible success</span>
+                <ul data-role="visible"></ul>
+            </div>
+            <div class="task-definition-eval hidden" data-role="evaluation"></div>
+        `;
+        const anchor = taskContinuityBlockersWrap || taskContinuityEventsList || taskContinuityPanel.lastElementChild;
+        if (anchor && anchor.parentNode === taskContinuityPanel) {
+            taskContinuityPanel.insertBefore(root, anchor);
+        } else {
+            taskContinuityPanel.appendChild(root);
+        }
+    }
+    return {
+        root,
+        phase: root.querySelector('[data-role="phase"]'),
+        summary: root.querySelector('[data-role="summary"]'),
+        good: root.querySelector('[data-role="good"]'),
+        type: root.querySelector('[data-role="type"]'),
+        acceptanceWrap: root.querySelector('[data-role="acceptance-wrap"]'),
+        acceptance: root.querySelector('[data-role="acceptance"]'),
+        visibleWrap: root.querySelector('[data-role="visible-wrap"]'),
+        visible: root.querySelector('[data-role="visible"]'),
+        evaluation: root.querySelector('[data-role="evaluation"]'),
+    };
+}
+
+function taskDefinitionPhaseLabel(statusRaw) {
+    const status = safeString(statusRaw).toLowerCase();
+    if (status === 'defining') return 'Defining task';
+    if (status === 'executing') return 'Executing';
+    if (status === 'evaluating') return 'Evaluating result';
+    if (status === 'complete') return 'Evaluated';
+    return 'idle';
+}
+
+function renderTaskDefinitionUi(definition, evaluation, statusRaw) {
+    const ui = ensureTaskDefinitionUi();
+    if (!ui) return;
+    const hasDefinition = Boolean(definition && typeof definition === 'object');
+    const hasEvaluation = Boolean(evaluation && typeof evaluation === 'object');
+    ui.root.classList.toggle('hidden', !hasDefinition && !hasEvaluation);
+    if (!hasDefinition && !hasEvaluation) return;
+
+    const phaseLabel = taskDefinitionPhaseLabel(statusRaw);
+    if (ui.phase instanceof HTMLElement) {
+        ui.phase.textContent = phaseLabel;
+        ui.phase.classList.remove('is-complete', 'is-blocked');
+        if (safeString(evaluation?.status) === 'passed') ui.phase.classList.add('is-complete');
+        if (safeString(evaluation?.status) === 'failed') ui.phase.classList.add('is-blocked');
+    }
+    if (ui.summary instanceof HTMLElement) {
+        ui.summary.textContent = safeString(definition?.task_summary || evaluation?.summary || 'Task contract pending.');
+    }
+    if (ui.good instanceof HTMLElement) {
+        const good = safeString(definition?.good_result_definition);
+        ui.good.classList.toggle('hidden', !good);
+        ui.good.textContent = good ? `Good result: ${good}` : '';
+    }
+    if (ui.type instanceof HTMLElement) {
+        const typeLabel = safeString(definition?.deliverable_type).replace(/_/g, ' ');
+        ui.type.classList.toggle('hidden', !typeLabel);
+        ui.type.textContent = typeLabel ? `Deliverable: ${typeLabel}` : '';
+    }
+    if (ui.acceptanceWrap instanceof HTMLElement && ui.acceptance instanceof HTMLElement) {
+        const acceptance = Array.isArray(definition?.acceptance_checks) ? definition.acceptance_checks.slice(0, 4) : [];
+        ui.acceptanceWrap.classList.toggle('hidden', acceptance.length === 0);
+        ui.acceptance.innerHTML = acceptance.map((item) => `<li>${escapeHtml(safeString(item))}</li>`).join('');
+    }
+    if (ui.visibleWrap instanceof HTMLElement && ui.visible instanceof HTMLElement) {
+        const visible = Array.isArray(definition?.visible_success_criteria)
+            ? definition.visible_success_criteria.slice(0, 3)
+            : [];
+        ui.visibleWrap.classList.toggle('hidden', visible.length === 0);
+        ui.visible.innerHTML = visible.map((item) => `<li>${escapeHtml(safeString(item))}</li>`).join('');
+    }
+    if (ui.evaluation instanceof HTMLElement) {
+        const summary = safeString(evaluation?.summary);
+        const failed = Array.isArray(evaluation?.failed_checks) ? evaluation.failed_checks.slice(0, 3) : [];
+        const passed = Array.isArray(evaluation?.passed_checks) ? evaluation.passed_checks.slice(0, 2) : [];
+        const parts = [];
+        if (summary) parts.push(`<strong>${escapeHtml(summary)}</strong>`);
+        if (failed.length > 0) {
+            parts.push(`Failed: ${escapeHtml(failed.join(' | '))}`);
+        } else if (passed.length > 0) {
+            parts.push(`Passed: ${escapeHtml(passed.join(' | '))}`);
+        }
+        ui.evaluation.className = `task-definition-eval${safeString(evaluation?.status) === 'failed' ? ' is-failed' : (safeString(evaluation?.status) === 'passed' ? ' is-passed' : '')}`;
+        ui.evaluation.classList.toggle('hidden', parts.length === 0);
+        ui.evaluation.innerHTML = parts.join('<br>');
     }
 }
 
-function ensureChatAgentPresenceUi() {
-    removeChatAgentPresenceUi();
-    return null;
+function chatTaskStatusTone(statusRaw) {
+    const status = safeString(statusRaw).toLowerCase();
+    if (['completed', 'complete', 'passed', 'succeeded'].includes(status)) return 'completed';
+    if (['failed', 'blocked', 'abandoned', 'cancelled', 'dead'].includes(status)) return 'failed';
+    if (['defining', 'spawning', 'starting', 'pending', 'queued'].includes(status)) return 'starting';
+    if (['quiet', 'waiting', 'paused', 'idle'].includes(status)) return 'quiet';
+    return 'running';
+}
+
+function chatTaskStatusLabel(statusRaw) {
+    const status = safeString(statusRaw).toLowerCase();
+    if (status === 'defining') return 'Defining task';
+    if (status === 'executing') return 'Executing';
+    if (status === 'evaluating') return 'Evaluating result';
+    if (status === 'spawning' || status === 'starting') return 'Spawning';
+    if (status === 'quiet' || status === 'waiting') return 'Waiting';
+    if (status === 'paused') return 'Paused';
+    if (['completed', 'complete', 'passed', 'succeeded'].includes(status)) return 'Completed';
+    if (['failed', 'blocked', 'abandoned', 'cancelled', 'dead'].includes(status)) return 'Failed';
+    return 'Running';
+}
+
+function chatTaskIsTerminal(statusRaw) {
+    return ['completed', 'complete', 'passed', 'succeeded', 'failed', 'blocked', 'abandoned', 'cancelled', 'dead']
+        .includes(safeString(statusRaw).toLowerCase());
+}
+
+function chatTaskFormatElapsed(startedAtRaw, endedAtRaw = 0) {
+    const startedAt = Number(startedAtRaw || 0);
+    if (!Number.isFinite(startedAt) || startedAt <= 0) return '--';
+    const endedAt = Number(endedAtRaw || 0);
+    const now = endedAt > 0 ? endedAt : Date.now();
+    return missionFormatDurationMs(Math.max(1000, now - startedAt));
+}
+
+function chatTaskStableHash(inputRaw) {
+    const input = safeString(inputRaw) || 'task';
+    let hash = 0;
+    for (let i = 0; i < input.length; i += 1) {
+        hash = ((hash * 31) + input.charCodeAt(i)) >>> 0;
+    }
+    return hash >>> 0;
+}
+
+function chatAgentPresenceViewportBounds() {
+    const sidebarRect = sidebar instanceof HTMLElement ? sidebar.getBoundingClientRect() : null;
+    const composerRect = composerContainer instanceof HTMLElement ? composerContainer.getBoundingClientRect() : null;
+    const left = Math.max(CHAT_AGENT_PRESENCE_FLOAT_PAD_X, Math.round((sidebarRect?.right || 0) + 10));
+    const right = Math.max(left + 120, Math.round(window.innerWidth - CHAT_AGENT_PRESENCE_FLOAT_PAD_X - 84));
+    const top = CHAT_AGENT_PRESENCE_FLOAT_PAD_TOP;
+    const bottomLimit = composerRect ? composerRect.top - 78 : (window.innerHeight - CHAT_AGENT_PRESENCE_FLOAT_PAD_BOTTOM);
+    const bottom = Math.max(top + 120, Math.round(bottomLimit));
+    return {
+        left,
+        top,
+        width: Math.max(120, right - left),
+        height: Math.max(120, bottom - top),
+    };
+}
+
+function chatAgentPresencePoint(activityId, indexHint = 0) {
+    const bounds = chatAgentPresenceViewportBounds();
+    const seed = chatTaskStableHash(`${activityId}|${indexHint}`);
+    const xRatio = ((seed % 997) / 997);
+    const yRatio = (((Math.floor(seed / 997) % 991)) / 991);
+    return {
+        x: Math.round(bounds.left + (Math.max(0, bounds.width - 88) * xRatio)),
+        y: Math.round(bounds.top + (Math.max(0, bounds.height - 104) * yRatio)),
+    };
+}
+
+function chatTaskCheckpointText(textRaw) {
+    const clean = safeString(textRaw).replace(/\s+/g, ' ').trim();
+    return clean.length > 180 ? `${clean.slice(0, 177)}...` : clean;
+}
+
+function chatPromptLooksTaskLike(promptRaw) {
+    const prompt = safeString(promptRaw);
+    if (!prompt || prompt.startsWith('/') || prompt.startsWith('@')) return false;
+    const lower = prompt.toLowerCase();
+    const hasAction = /\b(build|create|fix|implement|write|make|ship|verify|edit|refactor|investigate|diagnose|generate|design)\b/i.test(lower);
+    const hasDeliverable = /\b(file|page|app|game|plan|task|prototype|ui|repo|project|output|html|css|js|md|report)\b/i.test(lower);
+    return hasAction && (hasDeliverable || (typeof OFFICE_TASK_KEYWORDS !== 'undefined' && OFFICE_TASK_KEYWORDS.test(prompt)));
+}
+
+function chatShouldSeedTaskUi(promptRaw) {
+    const autonomy = Number(activeAutonomyLevel || 0);
+    const economy = safeString(activeTokenEconomy).toLowerCase();
+    const reasoning = normalizeReasoningEffort(activeReasoningEffort);
+    const highAutonomy = autonomy >= 4 || economy === 'maximum' || reasoning === 'xhigh';
+    return highAutonomy && chatPromptLooksTaskLike(promptRaw);
+}
+
+function chatTaskStripState(messageId) {
+    const normalizedId = safeString(messageId);
+    if (!normalizedId) return null;
+    if (!chatTaskStripStateByMessageId.has(normalizedId)) {
+        chatTaskStripStateByMessageId.set(normalizedId, {
+            messageId: normalizedId,
+            sessionId: '',
+            status: 'spawning',
+            summary: '',
+            latestCheckpoint: '',
+            checkpoints: [],
+            startedAt: 0,
+            endedAt: 0,
+        });
+    }
+    return chatTaskStripStateByMessageId.get(normalizedId) || null;
+}
+
+function ensureMessageTaskStrip(messageId) {
+    const row = document.getElementById(safeString(messageId));
+    if (!(row instanceof HTMLElement)) return null;
+    const stack = row.querySelector('.message-stack');
+    if (!(stack instanceof HTMLElement)) return null;
+
+    let strip = stack.querySelector('.message-task-strip');
+    if (!(strip instanceof HTMLElement)) {
+        strip = document.createElement('section');
+        strip.className = 'message-task-strip hidden';
+        strip.innerHTML = `
+            <div class="message-task-strip-head">
+                <span class="message-task-strip-badge" data-role="badge">Running</span>
+                <span class="message-task-strip-elapsed" data-role="elapsed">--</span>
+                <button type="button" class="message-task-strip-open" data-role="open">Open Office</button>
+            </div>
+            <p class="message-task-strip-summary" data-role="summary"></p>
+            <p class="message-task-strip-latest" data-role="latest"></p>
+            <ul class="message-task-strip-checkpoints" data-role="checkpoints"></ul>
+        `;
+        const footer = stack.querySelector('.message-footer');
+        if (footer instanceof HTMLElement) {
+            stack.insertBefore(strip, footer);
+        } else {
+            stack.appendChild(strip);
+        }
+        const openBtn = strip.querySelector('[data-role="open"]');
+        if (openBtn instanceof HTMLButtonElement) {
+            openBtn.addEventListener('click', () => {
+                const state = chatTaskStripState(messageId);
+                if (!state) return;
+                openOfficeForTaskContext({
+                    sessionId: state.sessionId,
+                    messageId,
+                });
+            });
+        }
+    }
+
+    return {
+        root: strip,
+        badge: strip.querySelector('[data-role="badge"]'),
+        elapsed: strip.querySelector('[data-role="elapsed"]'),
+        summary: strip.querySelector('[data-role="summary"]'),
+        latest: strip.querySelector('[data-role="latest"]'),
+        checkpoints: strip.querySelector('[data-role="checkpoints"]'),
+    };
+}
+
+function renderMessageTaskStrip(messageId) {
+    const state = chatTaskStripState(messageId);
+    const ui = ensureMessageTaskStrip(messageId);
+    if (!state || !ui) return;
+    const tone = chatTaskStatusTone(state.status);
+    const summaryText = chatTaskCheckpointText(state.summary) || 'Task accepted.';
+    const latestText = chatTaskCheckpointText(state.latestCheckpoint)
+        || (tone === 'completed'
+            ? 'Task finished.'
+            : tone === 'failed'
+                ? 'Task hit a failure state.'
+                : 'Waiting for the next checkpoint.');
+    if (ui.root instanceof HTMLElement) {
+        ui.root.classList.remove('hidden');
+        ui.root.dataset.state = tone;
+    }
+    if (ui.badge instanceof HTMLElement) {
+        ui.badge.className = `message-task-strip-badge tone-${tone}`;
+        ui.badge.textContent = chatTaskStatusLabel(state.status);
+    }
+    if (ui.elapsed instanceof HTMLElement) {
+        ui.elapsed.textContent = chatTaskFormatElapsed(state.startedAt, state.endedAt);
+    }
+    if (ui.summary instanceof HTMLElement) {
+        ui.summary.textContent = summaryText;
+    }
+    if (ui.latest instanceof HTMLElement) {
+        ui.latest.textContent = latestText;
+    }
+    if (ui.checkpoints instanceof HTMLElement) {
+        const points = Array.isArray(state.checkpoints) ? state.checkpoints.slice(-3) : [];
+        ui.checkpoints.classList.toggle('hidden', points.length === 0);
+        ui.checkpoints.innerHTML = points.map((item) => {
+            const label = chatTaskCheckpointText(item?.text);
+            const when = Number(item?.at || 0) > 0 ? new Date(Number(item.at)).toLocaleTimeString() : '';
+            return `<li><span>${escapeHtml(label)}</span>${when ? `<time>${escapeHtml(when)}</time>` : ''}</li>`;
+        }).join('');
+    }
+}
+
+function updateMessageTaskStrip(messageId, patch = {}) {
+    const state = chatTaskStripState(messageId);
+    if (!state) return null;
+    const sessionId = safeString(patch.sessionId || state.sessionId);
+    if (sessionId) {
+        state.sessionId = sessionId;
+        chatTaskMessageBySessionId.set(sessionId, state.messageId);
+    }
+    const nextStatus = safeString(patch.status || state.status || 'running').toLowerCase() || 'running';
+    state.status = nextStatus;
+    if (!state.startedAt) {
+        state.startedAt = Number(patch.startedAt || Date.now());
+    } else if (Number(patch.startedAt) > 0) {
+        state.startedAt = Number(patch.startedAt);
+    }
+    if (chatTaskIsTerminal(nextStatus)) {
+        state.endedAt = Number(patch.endedAt || state.endedAt || Date.now());
+    } else if (Number(patch.endedAt) > 0) {
+        state.endedAt = Number(patch.endedAt);
+    } else {
+        state.endedAt = 0;
+    }
+    if (safeString(patch.summary)) {
+        state.summary = safeString(patch.summary);
+    }
+    const checkpointText = chatTaskCheckpointText(patch.checkpoint);
+    if (checkpointText) {
+        state.latestCheckpoint = checkpointText;
+        const last = state.checkpoints[state.checkpoints.length - 1];
+        if (!last || safeString(last.text) !== checkpointText) {
+            state.checkpoints.push({
+                text: checkpointText,
+                at: Number(patch.checkpointAt || Date.now()),
+            });
+            state.checkpoints = state.checkpoints.slice(-CHAT_TASK_STRIP_CHECKPOINT_LIMIT);
+        }
+    }
+    renderMessageTaskStrip(messageId);
+    chatTaskRuntimeEnsureTick();
+    return state;
+}
+
+function chatTaskRobotAgentMarkup() {
+    return `
+        <span class="office-pixel-agent looking-user">
+            <span class="office-agent-head">
+                <span class="office-agent-eye office-agent-eye-left"></span>
+                <span class="office-agent-eye office-agent-eye-right"></span>
+            </span>
+            <span class="office-agent-body"></span>
+            <span class="office-agent-leg office-agent-leg-left"></span>
+            <span class="office-agent-leg office-agent-leg-right"></span>
+        </span>
+    `;
+}
+
+function chatAgentPresenceSyncRootVisibility() {
+    chatWorldSyncRootVisibility();
+}
+
+function chatAgentPresenceRemove(activityId, { immediate = false } = {}) {
+    chatWorldRemoveHelperPublic(activityId, { immediate });
+}
+
+function removeChatAgentPresenceUi() {
+    chatWorldRemoveAllHelpers();
+}
+
+function chatWorldEnsureUi() {
+    let root = document.getElementById('chatAgentPresence');
+    if (!(root instanceof HTMLElement)) {
+        root = document.createElement('div');
+        root.id = 'chatAgentPresence';
+        root.className = 'chat-robot-world is-hidden';
+        root.innerHTML = `
+            <div class="chat-robot-world-stage" data-role="stage"></div>
+            <div class="chat-robot-world-ground" aria-hidden="true"></div>
+        `;
+        document.body.appendChild(root);
+    }
+    return root;
 }
 
 function chatAgentPresenceShouldBeVisible() {
-    return false;
+    return sidebarNavMode === 'chat' || sidebarNavMode === 'search';
+}
+
+function chatAgentPresenceSetOfficeContext(activityId, context = {}) {
+    chatWorldSetOfficeContext(activityId, context);
+}
+
+function openOfficeForTaskContext(context = {}) {
+    const activityId = safeString(context.activityId);
+    const robotState = activityId ? chatAgentPresenceStateByActivityId.get(activityId) : null;
+    const requestedAgentId = safeString(context.agentId || robotState?.officeAgentId);
+    const requestedAgentName = safeString(context.agentName || robotState?.officeAgentName || robotState?.name || DEFAULT_AGENT_NAME);
+    setSidebarNavMode('office');
+    if (!officeEnsureState()) return;
+    const targetAgent = officeGetAgentById(requestedAgentId)
+        || officeFindAgentByHandle(requestedAgentName)
+        || officeGetAgentById(officeState?.selectedAgentId)
+        || officeState?.agents?.[0]
+        || null;
+    if (targetAgent) {
+        officeState.selectedAgentId = targetAgent.id;
+        if (typeof officeRenderAgentSelector === 'function') {
+            officeRenderAgentSelector(targetAgent.id);
+        }
+        if (typeof officeSetFollowMode === 'function') {
+            officeSetFollowMode(true, targetAgent.id);
+        }
+    }
+}
+
+function chatAgentPresenceRender(state) {
+    chatWorldRenderPresence(state);
+}
+
+function chatAgentPresenceUpsert(activityId, patch = {}) {
+    return chatWorldUpsertPresence(activityId, patch);
+}
+
+function chatTaskRuntimeTick() {
+    chatWorldTaskRuntimeTick();
+}
+
+function chatTaskRuntimeEnsureTick() {
+    if (chatTaskRuntimeTimer) return;
+    chatTaskRuntimeTimer = window.setInterval(() => {
+        chatTaskRuntimeTick();
+    }, 1000);
+}
+
+function chatTaskRuntimeStopIfIdle() {
+    chatWorldTaskRuntimeStopIfIdle();
 }
 
 function setChatAgentPresence(activity) {
-    void activity;
-    removeChatAgentPresenceUi();
+    chatWorldSetPresence(activity);
+}
+
+function chatRobotWorldShouldBeVisible() {
+    return sidebarNavMode === 'chat' || sidebarNavMode === 'search';
+}
+
+function chatRobotWorldAmbientLine(state) {
+    if (!state) return '';
+    const mode = safeString(state.mode);
+    if (mode === 'sleep') return 'Power nap while the task strip keeps score.';
+    if (mode === 'workout') return 'Training while the background work cooks.';
+    if (mode === 'inspect') return 'Inspecting the chat controls.';
+    if (mode === 'perch') return 'Perched on the interface and watching the run.';
+    if (chatTaskIsTerminal(state.status)) {
+        return safeString(state.status) === 'failed'
+            ? 'Run failed. Portal exit queued.'
+            : 'All done here. Portal exit queued.';
+    }
+    return safeString(state.summary || state.taskText) || 'Standing by.';
+}
+
+function chatRobotWorldBounds() {
+    const mainRect = mainContent instanceof HTMLElement
+        ? mainContent.getBoundingClientRect()
+        : { left: 0, right: window.innerWidth, width: window.innerWidth, top: 0 };
+    const composerRect = composerContainer instanceof HTMLElement
+        ? composerContainer.getBoundingClientRect()
+        : null;
+    const width = Math.max(220, Math.round((mainRect.width || window.innerWidth) - (CHAT_PRIMARY_ROBOT_WORLD_PADDING_X * 2)));
+    const height = CHAT_PRIMARY_ROBOT_WORLD_HEIGHT;
+    const left = Math.round((mainRect.left || 0) + CHAT_PRIMARY_ROBOT_WORLD_PADDING_X);
+    const top = composerRect
+        ? Math.round(Math.max(72, composerRect.top - height - 12))
+        : Math.round(Math.max(72, window.innerHeight - height - 152));
+    return {
+        left,
+        top,
+        width,
+        height,
+        groundY: height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET,
+    };
+}
+
+function chatRobotWorldStage() {
+    const root = chatWorldEnsureUi();
+    return root.querySelector('[data-role="stage"]');
+}
+
+function chatWorldSyncRootVisibility() {
+    const root = chatWorldEnsureUi();
+    const hasHelpers = chatAgentPresenceStateByActivityId.size > 0;
+    const show = chatRobotWorldShouldBeVisible() && (Boolean(chatPrimaryPresenceState?.element) || hasHelpers);
+    root.classList.toggle('is-hidden', !show);
+    root.classList.toggle('is-active', show);
+    const bounds = chatRobotWorldBounds();
+    root.style.left = `${bounds.left}px`;
+    root.style.top = `${bounds.top}px`;
+    root.style.width = `${bounds.width}px`;
+    root.style.height = `${bounds.height}px`;
+    root.style.setProperty('--chat-robot-ground-y', `${bounds.groundY}px`);
+}
+
+function chatRobotWorldOfficeButtonHandler(activityId, state) {
+    return (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        openOfficeForTaskContext({
+            activityId,
+            agentId: safeString(state?.officeAgentId),
+            agentName: safeString(state?.officeAgentName || state?.name || DEFAULT_AGENT_NAME),
+        });
+    };
+}
+
+function chatRobotWorldActorMarkup(name = 'Thomas', helper = false) {
+    return `
+        <span class="chat-robot-world-portal chat-robot-portal hidden" data-role="portal">
+            <span class="chat-game-portal-ring"></span>
+            <span class="chat-game-portal-ring ring-inner"></span>
+            <span class="chat-game-portal-core"></span>
+        </span>
+        <span class="chat-robot-world-shadow" aria-hidden="true"></span>
+        <span class="chat-robot-world-bot ${helper ? 'is-helper' : 'is-primary'} chat-robot-landed" data-role="bot">
+            ${chatTaskRobotAgentMarkup()}
+        </span>
+        <span class="chat-robot-world-label" data-role="label">${escapeHtml(name)}</span>
+        <span class="chat-robot-world-speech hidden" data-role="speech"></span>
+        <span class="chat-robot-world-bubble" data-role="bubble">
+            <strong data-role="name">${escapeHtml(name)}</strong>
+            <p data-role="summary"></p>
+            <div class="chat-robot-world-bubble-meta">
+                <span data-role="status">Standing by</span>
+                <button type="button" data-role="open">Open Office</button>
+            </div>
+        </span>
+    `;
+}
+
+function chatRobotWorldCreateActorElement(activityId, state) {
+    const stage = chatRobotWorldStage();
+    if (!(stage instanceof HTMLElement)) return null;
+    const el = document.createElement('button');
+    el.type = 'button';
+    el.className = `chat-robot-world-actor${state?.kind === 'delegation' ? ' is-helper' : ' is-primary'}`;
+    el.dataset.activityId = safeString(activityId);
+    el.innerHTML = chatRobotWorldActorMarkup(safeString(state?.name) || DEFAULT_AGENT_NAME, state?.kind === 'delegation');
+    const openBtn = el.querySelector('[data-role="open"]');
+    if (openBtn instanceof HTMLButtonElement) {
+        openBtn.addEventListener('click', chatRobotWorldOfficeButtonHandler(activityId, state));
+    }
+    el.addEventListener('click', (event) => {
+        if (event.target instanceof Element && event.target.closest('[data-role="open"]')) return;
+        state.paused = !state.paused;
+        el.classList.toggle('is-expanded', Boolean(state.paused));
+    });
+    stage.appendChild(el);
+    return el;
+}
+
+function chatRobotWorldSetSpeech(state, textRaw, holdMs = 2600) {
+    if (!state?.element) return;
+    const speechEl = state.element.querySelector('[data-role="speech"]');
+    if (!(speechEl instanceof HTMLElement)) return;
+    const text = chatTaskCheckpointText(textRaw);
+    if (!text) {
+        speechEl.classList.add('hidden');
+        speechEl.textContent = '';
+        state.speechUntil = 0;
+        return;
+    }
+    state.speechUntil = Date.now() + Math.max(1200, Number(holdMs) || 2600);
+    speechEl.textContent = text;
+    speechEl.classList.remove('hidden');
+    state.element.classList.add('is-speaking');
+}
+
+function chatRobotWorldPlayPortal(state, mode = 'open') {
+    if (!state?.element) return;
+    const portal = state.element.querySelector('[data-role="portal"]');
+    if (!(portal instanceof HTMLElement)) return;
+    portal.classList.remove('hidden', 'portal-opening', 'portal-closing', 'portal-idle');
+    if (mode === 'close') {
+        portal.classList.add('portal-opening');
+        window.setTimeout(() => {
+            portal.classList.remove('portal-opening');
+            portal.classList.add('portal-closing');
+        }, 120);
+        window.setTimeout(() => {
+            portal.classList.add('hidden');
+            portal.classList.remove('portal-closing');
+        }, 720);
+        return;
+    }
+    portal.classList.add('portal-opening');
+    window.setTimeout(() => {
+        portal.classList.remove('portal-opening');
+        portal.classList.add('portal-closing');
+    }, 420);
+    window.setTimeout(() => {
+        portal.classList.add('hidden');
+        portal.classList.remove('portal-closing');
+    }, 980);
+}
+
+function chatRobotWorldApplyPalette(state) {
+    if (!state?.element) return;
+    const palette = officeAgentPalette({ color: state.color || '#9ad8ff' });
+    state.element.style.setProperty('--agent-primary', palette.primary);
+    state.element.style.setProperty('--agent-secondary', palette.secondary);
+    state.element.style.setProperty('--agent-glow', palette.glow);
+    const agentEl = state.element.querySelector('.office-pixel-agent');
+    if (!(agentEl instanceof HTMLElement)) return;
+    agentEl.classList.toggle('facing-left', Number(state.facing || 1) < 0);
+    agentEl.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
+    const costume = safeString(state.costume || 'none').toLowerCase();
+    if (costume && costume !== 'none') {
+        agentEl.classList.add(`costume-${costume}`);
+    }
+}
+
+function chatRobotWorldPerchTarget(state) {
+    const bounds = chatRobotWorldBounds();
+    const anchor = sendBtn instanceof HTMLElement
+        ? sendBtn.getBoundingClientRect()
+        : attachBtn instanceof HTMLElement
+            ? attachBtn.getBoundingClientRect()
+            : null;
+    if (!anchor) {
+        return { x: Math.round(bounds.width * 0.72), y: bounds.groundY - CHAT_PRIMARY_ROBOT_PERCH_LIFT };
+    }
+    return {
+        x: Math.max(22, Math.min(bounds.width - 22, Math.round(anchor.left - bounds.left + (anchor.width * 0.5)))),
+        y: bounds.groundY - CHAT_PRIMARY_ROBOT_PERCH_LIFT - (state?.kind === 'delegation' ? 10 : 0),
+    };
+}
+
+function chatRobotWorldChooseMode(state) {
+    const terminal = chatTaskIsTerminal(state?.status);
+    if (terminal) return 'idle';
+    const roll = Math.random();
+    if (roll < 0.18) return 'sleep';
+    if (roll < 0.34) return 'workout';
+    if (roll < 0.54) return 'inspect';
+    if (roll < 0.72) return 'perch';
+    if (roll < 0.9) return 'idle';
+    return 'roam';
+}
+
+function chatRobotWorldRetarget(state) {
+    const bounds = chatRobotWorldBounds();
+    const mode = chatRobotWorldChooseMode(state);
+    state.mode = mode;
+    state.modeUntil = Date.now() + CHAT_PRIMARY_ROBOT_MIN_ACTION_MS + Math.random() * (CHAT_PRIMARY_ROBOT_MAX_ACTION_MS - CHAT_PRIMARY_ROBOT_MIN_ACTION_MS);
+    if (mode === 'perch' || mode === 'inspect') {
+        const perch = chatRobotWorldPerchTarget(state);
+        state.targetX = perch.x;
+        state.targetY = perch.y;
+        if (Math.abs((state.y || bounds.groundY) - perch.y) > 4) {
+            state.vy = CHAT_PRIMARY_ROBOT_JUMP_SPEED;
+        }
+    } else {
+        state.targetY = bounds.groundY;
+        state.targetX = 24 + Math.random() * Math.max(40, bounds.width - 48);
+    }
+    if (mode === 'sleep') {
+        chatRobotWorldSetSpeech(state, 'Tiny recharge cycle.');
+    } else if (mode === 'workout') {
+        chatRobotWorldSetSpeech(state, 'Strength training.');
+    } else if (mode === 'inspect') {
+        chatRobotWorldSetSpeech(state, 'Checking the controls.');
+    } else if (mode === 'perch') {
+        chatRobotWorldSetSpeech(state, 'Perched on the UI.');
+    } else if (!safeString(state.summary) && state.kind !== 'delegation') {
+        chatRobotWorldSetSpeech(state, 'Standing by.');
+    }
+}
+
+function chatRobotWorldEnsurePrimaryState() {
+    if (chatPrimaryPresenceState) return chatPrimaryPresenceState;
+    chatPrimaryPresenceState = {
+        activityId: 'primary',
+        kind: 'primary',
+        element: null,
+        status: 'idle',
+        summary: 'Standing by.',
+        taskText: '',
+        startedAt: 0,
+        endedAt: 0,
+        visibleSince: Date.now(),
+        lingerUntil: 0,
+        x: 46,
+        y: -52,
+        targetX: 46,
+        targetY: 0,
+        vx: 0,
+        vy: 0,
+        facing: 1,
+        paused: false,
+        mode: 'falling',
+        modeUntil: 0,
+        officeTaskId: '',
+        officeAgentId: '',
+        officeAgentName: DEFAULT_AGENT_NAME,
+        name: DEFAULT_AGENT_NAME,
+        color: '#9ad8ff',
+        costume: 'none',
+    };
+    chatPrimaryPresenceState.element = chatRobotWorldCreateActorElement('primary', chatPrimaryPresenceState);
+    chatRobotWorldPlayPortal(chatPrimaryPresenceState, 'open');
+    chatWorldSyncRootVisibility();
+    chatRobotWorldEnsureLoop();
+    return chatPrimaryPresenceState;
+}
+
+function chatRobotWorldSyncRootVisibility() {
+    chatAgentPresenceSyncRootVisibility();
+}
+
+function chatRobotWorldLatestTaskState() {
+    const states = [...chatTaskStripStateByMessageId.values()]
+        .filter(Boolean)
+        .sort((a, b) => Number(b?.startedAt || b?.endedAt || 0) - Number(a?.startedAt || a?.endedAt || 0));
+    return states.find((item) => !chatTaskIsTerminal(item?.status))
+        || states.find((item) => Date.now() - Number(item?.endedAt || 0) < CHAT_PRIMARY_ROBOT_LINGER_MS)
+        || null;
+}
+
+function chatRobotWorldSyncPrimaryFromTasks() {
+    const primary = chatRobotWorldEnsurePrimaryState();
+    const task = chatRobotWorldLatestTaskState();
+    primary.name = resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME;
+    primary.officeAgentName = primary.name;
+    if (!task) {
+        if (!chatTaskIsTerminal(primary.status) && primary.status !== 'idle') {
+            primary.status = 'idle';
+            primary.summary = 'Standing by.';
+        }
+        chatRobotWorldRenderActor(primary);
+        return;
+    }
+    primary.sessionId = safeString(task.sessionId || primary.sessionId);
+    primary.startedAt = Number(task.startedAt || primary.startedAt || Date.now());
+    primary.endedAt = Number(task.endedAt || primary.endedAt || 0);
+    primary.status = safeString(task.status || 'running');
+    primary.summary = safeString(task.latestCheckpoint || task.summary || primary.summary);
+    primary.taskText = safeString(task.summary || primary.taskText);
+    if (chatTaskIsTerminal(primary.status)) {
+        primary.lingerUntil = Math.max(Number(primary.lingerUntil || 0), Date.now() + CHAT_PRIMARY_ROBOT_LINGER_MS);
+    }
+    chatRobotWorldRenderActor(primary);
+}
+
+function chatRobotWorldRenderActor(state) {
+    if (!state?.element) return;
+    const bounds = chatRobotWorldBounds();
+    state.element.style.transform = `translate(${Math.round(Number(state.x) || 0)}px, ${Math.round(Number(state.y) || 0)}px)`;
+    state.element.classList.toggle('is-paused', Boolean(state.paused));
+    state.element.classList.toggle('is-sleeping', state.mode === 'sleep');
+    state.element.classList.toggle('is-working-out', state.mode === 'workout');
+    state.element.classList.toggle('is-perched', state.mode === 'perch' || state.mode === 'inspect');
+    state.element.classList.toggle('is-terminal', chatTaskIsTerminal(state.status));
+    state.element.classList.toggle('is-active-task', !chatTaskIsTerminal(state.status) && safeString(state.status) !== 'idle');
+    const label = state.element.querySelector('[data-role="label"]');
+    if (label instanceof HTMLElement) {
+        label.textContent = safeString(state.name) || DEFAULT_AGENT_NAME;
+    }
+    const bubbleName = state.element.querySelector('[data-role="name"]');
+    if (bubbleName instanceof HTMLElement) {
+        bubbleName.textContent = safeString(state.name) || DEFAULT_AGENT_NAME;
+    }
+    const bubbleSummary = state.element.querySelector('[data-role="summary"]');
+    if (bubbleSummary instanceof HTMLElement) {
+        bubbleSummary.textContent = chatRobotWorldAmbientLine(state);
+    }
+    const bubbleStatus = state.element.querySelector('[data-role="status"]');
+    if (bubbleStatus instanceof HTMLElement) {
+        bubbleStatus.textContent = chatTaskStatusLabel(state.status || 'idle');
+    }
+    if (Date.now() > Number(state.speechUntil || 0)) {
+        const speechEl = state.element.querySelector('[data-role="speech"]');
+        if (speechEl instanceof HTMLElement) {
+            speechEl.classList.add('hidden');
+            speechEl.textContent = '';
+        }
+        state.element.classList.remove('is-speaking');
+    }
+    chatRobotWorldApplyPalette(state);
+    const maxX = Math.max(22, bounds.width - 24);
+    state.x = Math.max(16, Math.min(maxX, Number(state.x) || 0));
+}
+
+function chatRobotWorldRemoveHelper(activityId, { immediate = false } = {}) {
+    const key = safeString(activityId);
+    if (!key || !chatAgentPresenceStateByActivityId.has(key)) return;
+    const state = chatAgentPresenceStateByActivityId.get(key);
+    if (!state?.element || immediate) {
+        state?.element?.remove();
+        chatAgentPresenceStateByActivityId.delete(key);
+        chatRobotWorldSyncRootVisibility();
+        return;
+    }
+    state.exiting = true;
+    state.exitAt = Date.now() + (CHAT_AGENT_PRESENCE_EXIT_MS + 120);
+    chatRobotWorldSetSpeech(state, safeString(state.status) === 'failed' ? 'Task failed.' : 'Helper complete.', 1800);
+    chatRobotWorldPlayPortal(state, 'close');
+}
+
+function chatWorldRemoveHelperPublic(activityId, { immediate = false } = {}) {
+    chatRobotWorldRemoveHelper(activityId, { immediate });
+}
+
+function chatWorldRemoveAllHelpers() {
+    chatAgentPresenceStateByActivityId.forEach((_, activityId) => {
+        chatRobotWorldRemoveHelper(activityId, { immediate: true });
+    });
+    chatWorldSyncRootVisibility();
+}
+
+function chatWorldRenderPresence(state) {
+    chatRobotWorldRenderActor(state);
+}
+
+function chatRobotWorldEnsureLoop() {
+    if (chatRobotWorldRaf) return;
+    const step = (now) => {
+        chatRobotWorldRaf = window.requestAnimationFrame(step);
+        const frameNow = Number(now || performance.now());
+        const last = Number(chatRobotWorldLastFrameAt || frameNow);
+        const dt = Math.min(32, Math.max(10, frameNow - last));
+        chatRobotWorldLastFrameAt = frameNow;
+        if (!chatRobotWorldShouldBeVisible()) {
+            chatWorldSyncRootVisibility();
+            return;
+        }
+        const bounds = chatRobotWorldBounds();
+        chatWorldSyncRootVisibility();
+        const actors = [chatPrimaryPresenceState, ...chatAgentPresenceStateByActivityId.values()].filter(Boolean);
+        actors.forEach((state) => {
+            if (!state?.element || state.paused) {
+                chatRobotWorldRenderActor(state);
+                return;
+            }
+            if ((Number(state.modeUntil || 0) <= Date.now()) && !chatTaskIsTerminal(state.status)) {
+                chatRobotWorldRetarget(state);
+            }
+            const targetX = Number(state.targetX ?? state.x ?? 0);
+            const targetY = Number(state.targetY ?? bounds.groundY);
+            const dx = targetX - Number(state.x || 0);
+            if (Math.abs(dx) > 6) {
+                state.facing = dx >= 0 ? 1 : -1;
+                state.vx = state.facing * CHAT_PRIMARY_ROBOT_WALK_SPEED * (state.kind === 'delegation' ? 0.92 : 1);
+            } else {
+                state.vx *= 0.84;
+            }
+            state.vy = Math.min(CHAT_PRIMARY_ROBOT_FALL_SPEED_MAX, Number(state.vy || 0) + CHAT_PRIMARY_ROBOT_GRAVITY * (dt / 16));
+            state.x += state.vx * (dt / 16);
+            state.y += state.vy * (dt / 16);
+            const desiredGround = Math.min(bounds.groundY, targetY);
+            if (state.y >= desiredGround) {
+                state.y = desiredGround;
+                state.vy = 0;
+                if ((state.mode === 'perch' || state.mode === 'inspect') && Math.abs(targetY - desiredGround) < 1) {
+                    state.y = targetY;
+                }
+            }
+            if (state.mode === 'sleep' || state.mode === 'workout') {
+                state.vx *= 0.75;
+            }
+            if (chatTaskIsTerminal(state.status) && safeString(state.kind) === 'primary' && Date.now() >= Number(state.lingerUntil || 0)) {
+                state.status = 'idle';
+                state.summary = 'Standing by.';
+                state.taskText = '';
+                state.endedAt = Date.now();
+                state.lingerUntil = 0;
+                chatRobotWorldSetSpeech(state, 'All done here. Back on standby.', 2800);
+            }
+            if (safeString(state.kind) === 'delegation' && state.exiting && Date.now() >= Number(state.exitAt || 0)) {
+                state.element?.remove();
+                chatAgentPresenceStateByActivityId.delete(state.activityId);
+            }
+            chatRobotWorldRenderActor(state);
+        });
+    };
+    chatRobotWorldRaf = window.requestAnimationFrame(step);
+}
+
+function chatWorldUpsertPresence(activityId, patch = {}) {
+    const key = safeString(activityId);
+    if (!key) return null;
+    if (safeString(patch.kind) === 'primary') {
+        const state = chatRobotWorldEnsurePrimaryState();
+        Object.assign(state, patch);
+        state.activityId = key;
+        state.kind = 'primary';
+        state.status = safeString(state.status || 'running').toLowerCase() || 'running';
+        state.startedAt = Number(state.startedAt || Date.now());
+        state.summary = safeString(state.summary || state.taskText) || 'Working the task.';
+        if (!state.visibleSince) state.visibleSince = Date.now();
+        if (chatTaskIsTerminal(state.status)) {
+            state.endedAt = Number(state.endedAt || Date.now());
+            state.lingerUntil = Math.max(Number(state.lingerUntil || 0), Date.now() + CHAT_PRIMARY_ROBOT_LINGER_MS);
+            chatRobotWorldSetSpeech(state, safeString(state.status) === 'failed' ? 'Task failed.' : 'All done here.', 3200);
+        } else {
+            state.endedAt = 0;
+            state.lingerUntil = 0;
+            if (!state.modeUntil) {
+                chatRobotWorldRetarget(state);
+            }
+        }
+        chatRobotWorldRenderActor(state);
+        chatWorldSyncRootVisibility();
+        chatRobotWorldEnsureLoop();
+        return state;
+    }
+    if (!chatRobotWorldShouldBeVisible()) return null;
+    const existing = chatAgentPresenceStateByActivityId.get(key);
+    const state = existing || {
+        activityId: key,
+        kind: 'delegation',
+        element: null,
+        x: 36 + (chatAgentPresenceStateByActivityId.size * 28),
+        y: -48,
+        targetX: 120,
+        targetY: chatRobotWorldBounds().groundY,
+        vx: 0,
+        vy: 0,
+        facing: 1,
+        paused: false,
+        startedAt: Date.now(),
+        endedAt: 0,
+        mode: 'falling',
+        modeUntil: 0,
+        officeTaskId: '',
+        officeAgentId: '',
+        officeAgentName: '',
+        summary: '',
+        taskText: '',
+        status: 'running',
+        color: '#9ad8ff',
+        costume: 'none',
+        visibleSince: Date.now(),
+        lingerUntil: 0,
+        exiting: false,
+        exitAt: 0,
+    };
+    Object.assign(state, patch);
+    state.activityId = key;
+    state.kind = 'delegation';
+    state.status = safeString(state.status || 'running').toLowerCase();
+    state.summary = safeString(state.summary || state.taskText) || 'Helper active.';
+    if (!state.element) {
+        state.element = chatRobotWorldCreateActorElement(key, state);
+        chatRobotWorldPlayPortal(state, 'open');
+        state.targetX = 40 + Math.random() * Math.max(80, chatRobotWorldBounds().width - 80);
+        state.targetY = chatRobotWorldBounds().groundY;
+        state.vy = 0;
+        state.modeUntil = 0;
+    }
+    if (chatTaskIsTerminal(state.status)) {
+        state.endedAt = Number(state.endedAt || Date.now());
+        state.lingerUntil = Date.now() + CHAT_AGENT_PRESENCE_EXIT_MS;
+        chatRobotWorldRemoveHelper(key);
+    } else {
+        state.endedAt = 0;
+        state.exiting = false;
+        if (!state.modeUntil) {
+            chatRobotWorldRetarget(state);
+        }
+    }
+    chatAgentPresenceStateByActivityId.set(key, state);
+    chatRobotWorldRenderActor(state);
+    chatWorldSyncRootVisibility();
+    chatRobotWorldEnsureLoop();
+    return state;
+}
+
+function chatWorldSetOfficeContext(activityId, context = {}) {
+    const key = safeString(activityId);
+    const state = key === safeString(chatPrimaryPresenceState?.activityId)
+        ? chatPrimaryPresenceState
+        : chatAgentPresenceStateByActivityId.get(key);
+    if (!state) return;
+    state.officeTaskId = safeString(context.taskId || state.officeTaskId);
+    state.officeAgentId = safeString(context.agentId || state.officeAgentId);
+    state.officeAgentName = safeString(context.agentName || state.officeAgentName || state.name || DEFAULT_AGENT_NAME);
+}
+
+function chatWorldTaskRuntimeTick() {
+    chatTaskStripStateByMessageId.forEach((state, messageId) => {
+        if (!state) return;
+        renderMessageTaskStrip(messageId);
+    });
+    chatRobotWorldSyncPrimaryFromTasks();
+    chatAgentPresenceStateByActivityId.forEach((state) => {
+        chatRobotWorldRenderActor(state);
+    });
+    chatTaskRuntimeStopIfIdle();
+}
+
+function chatWorldTaskRuntimeStopIfIdle() {
+    const hasLiveStrip = [...chatTaskStripStateByMessageId.values()].some((state) => state && !chatTaskIsTerminal(state.status));
+    if (hasLiveStrip || chatAgentPresenceStateByActivityId.size > 0) return;
+    if (chatTaskRuntimeTimer) {
+        window.clearInterval(chatTaskRuntimeTimer);
+        chatTaskRuntimeTimer = 0;
+    }
+}
+
+function chatWorldSetPresence(activity) {
+    chatRobotWorldEnsurePrimaryState();
+    if (!chatRobotWorldShouldBeVisible()) {
+        chatWorldSyncRootVisibility();
+        return;
+    }
+    const sessionId = safeString(activity?.sessionId || taskContinuityLatestSessionId || activeChatId);
+    const liveRows = Array.isArray(activity?.agents)
+        ? activity.agents.filter((item) => delegationStatusIsLive(item?.state || item?.status))
+        : [];
+    const nextIds = new Set();
+    liveRows.forEach((row) => {
+        const activityId = safeString(row?.execution_id || row?.task_id || row?.bot_id || row?.bot_name || row?.agent_id || row?.specialist_id);
+        if (!activityId) return;
+        nextIds.add(activityId);
+        chatAgentPresenceUpsert(activityId, {
+            sessionId,
+            bubbleId: chatTaskMessageBySessionId.get(sessionId) || '',
+            name: safeString(row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id || 'worker'),
+            status: safeString(row?.state || row?.status || 'running'),
+            taskText: safeString(row?.summary || row?.last_progress || row?.task || row?.current_task),
+            summary: safeString(row?.summary || row?.last_progress || row?.task || row?.current_task),
+            startedAt: missionToEpoch(safeString(row?.created_at || row?.updated_at)) || Date.now(),
+            color: officeFindAgentByHandle(row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id)?.color || '#9ad8ff',
+            costume: officeFindAgentByHandle(row?.bot_name || row?.bot_id || row?.agent_id || row?.specialist_id)?.costume || 'none',
+        });
+    });
+    [...chatAgentPresenceStateByActivityId.entries()].forEach(([activityId, state]) => {
+        const stateSessionId = safeString(state?.sessionId);
+        if (sessionId && stateSessionId && stateSessionId !== sessionId) {
+            chatRobotWorldRemoveHelper(activityId);
+            return;
+        }
+        if (!nextIds.has(activityId)) {
+            chatRobotWorldRemoveHelper(activityId);
+        }
+    });
+    chatRobotWorldSyncPrimaryFromTasks();
+    chatWorldSyncRootVisibility();
+    chatRobotWorldEnsureLoop();
+}
+
+function chatWorldEnsureDock() {
+    return chatWorldEnsureUi();
+}
+
+function chatWorldPositionDock() {
+    chatWorldSyncRootVisibility();
+    return chatWorldEnsureUi();
+}
+
+function chatWorldLandAtDock(sourceNode = null) {
+    void sourceNode;
+    const primary = chatRobotWorldEnsurePrimaryState();
+    primary.status = chatTaskIsTerminal(primary.status) ? 'idle' : primary.status;
+    primary.summary = safeString(primary.summary) || 'Standing by.';
+    if (!primary.modeUntil) {
+        chatRobotWorldRetarget(primary);
+    }
+    chatRobotWorldRenderActor(primary);
+    chatWorldSyncRootVisibility();
+    chatRobotWorldEnsureLoop();
+}
+
+function chatWorldPortalOutLanded() {
+    const primary = chatRobotWorldEnsurePrimaryState();
+    primary.status = safeString(primary.status) === 'idle' ? 'running' : primary.status;
+    primary.summary = safeString(primary.summary) || 'On it.';
+    primary.mode = 'inspect';
+    primary.modeUntil = Date.now() + 1800;
+    chatRobotWorldSetSpeech(primary, 'On it.', 1800);
+    chatRobotWorldRenderActor(primary);
+    return Promise.resolve();
 }
 
 function ensureMissionRuntimeHero() {
@@ -2381,6 +3412,22 @@ function renderMissionRuntimeHero(payload, jobsPayload = null) {
 async function fetchTaskContinuitySessionActivity(sessionToken) {
     const sid = safeString(sessionToken || taskContinuityLatestSessionId);
     if (!sid) return taskContinuityLatestActivity;
+
+    try {
+        const delegationResp = await fetchJsonSafe(`/api/v2/chat/session/${encodeURIComponent(sid)}/delegations`);
+        if (delegationResp.ok && delegationResp.data && typeof delegationResp.data === 'object') {
+            const delegationPayload = delegationResp.data;
+            const delegations = Array.isArray(delegationPayload.delegations) ? delegationPayload.delegations : [];
+            if (delegations.length > 0) {
+                const activity = buildDelegationRuntimeState(delegations, { sessionId: sid });
+                taskContinuityLatestActivity = activity;
+                return activity;
+            }
+        }
+    } catch (error) {
+        console.warn('Task continuity delegation fetch failed', error);
+    }
+
     const [missionResp, jobsResp] = await Promise.all([
         fetchJsonSafe('/api/mission/control'),
         fetchJsonSafe(`/api/mission/jobs?session_id=${encodeURIComponent(sid)}&limit=36`),
@@ -2401,17 +3448,17 @@ async function fetchTaskContinuitySessionActivity(sessionToken) {
 // RECOVERED (2026-03-18): Was in dead app_parts/part-002b.js, never made it to live runtime.
 function taskContinuityStatusTone(statusRaw) {
     const status = safeString(statusRaw).toLowerCase();
-    if (status === 'complete' || status === 'done') return 'complete';
-    if (status === 'blocked' || status === 'error') return 'blocked';
+    if (['complete', 'done', 'completed', 'succeeded'].includes(status)) return 'complete';
+    if (['blocked', 'error', 'failed', 'abandoned', 'cancelled', 'dead'].includes(status)) return 'blocked';
     if (!status || status === 'idle') return 'idle';
     return 'working';
 }
 
 function taskContinuityStatusLabel(statusRaw) {
     const status = safeString(statusRaw).toLowerCase();
-    if (status === 'complete' || status === 'done') return 'complete';
-    if (status === 'blocked' || status === 'error') return 'blocked';
-    if (status === 'idle') return 'idle';
+    if (['complete', 'done', 'completed', 'succeeded'].includes(status)) return 'complete';
+    if (['blocked', 'error', 'failed', 'abandoned', 'cancelled', 'dead'].includes(status)) return 'blocked';
+    if (!status || status === 'idle') return 'idle';
     return 'in_progress';
 }
 
@@ -2452,17 +3499,22 @@ function ensureTaskContinuityToggleUi() {
     return toggleBtn;
 }
 
-function taskContinuityHasDisplayContent({ state = null, activity = null, error = '' } = {}) {
+function taskContinuityHasDisplayContent({ state = null, activity = null, error = '', taskDefinition = null, taskEvaluation = null } = {}) {
     const normalizedError = safeString(error).trim();
     const normalizedStatus = taskContinuityStatusLabel(state?.status);
     const activeGoal = safeString(state?.active_goal).trim();
     const progress = safeString(state?.last_progress).trim();
     const missingInputs = Array.isArray(state?.missing_inputs) ? state.missing_inputs.filter(Boolean) : [];
     const activeWorkers = Number(activity?.activeCount || 0) > 0;
+    const recentBackground = Array.isArray(activity?.agents) && activity.agents.length > 0;
+    const hasTaskDefinition = Boolean(taskDefinition && typeof taskDefinition === 'object');
+    const hasTaskEvaluation = Boolean(taskEvaluation && typeof taskEvaluation === 'object');
 
     if (normalizedError) return true;
     if (missingInputs.length > 0) return true;
     if (activeWorkers) return true;
+    if (recentBackground) return true;
+    if (hasTaskDefinition || hasTaskEvaluation) return true;
     if (normalizedStatus === 'blocked') return true;
     if (normalizedStatus === 'in_progress') {
         return Boolean(activeGoal || progress);
@@ -2503,6 +3555,8 @@ function syncTaskContinuityPanelVisibility() {
         state: taskContinuityLatestState,
         activity: taskContinuityLatestActivity,
         error: taskContinuityLatestError,
+        taskDefinition: taskContinuityLatestTaskDefinition,
+        taskEvaluation: taskContinuityLatestTaskEvaluation,
     });
     const show = visibleInNav && hasDisplayContent;
     taskContinuityPanel.classList.toggle('hidden', !show);
@@ -2532,19 +3586,28 @@ function startTaskContinuityAutoRefresh() {
     }, TASK_CONTINUITY_REFRESH_INTERVAL_MS);
 }
 
-function renderTaskContinuity(state, events, sessionToken, { error = '', activity = null } = {}) {
+function renderTaskContinuity(
+    state,
+    events,
+    sessionToken,
+    { error = '', activity = null, taskDefinition = null, taskEvaluation = null, taskDefinitionStatus = '' } = {},
+) {
     if (!taskContinuityPanel) return;
 
     const hasState = Boolean(state && typeof state === 'object');
     const normalizedEvents = Array.isArray(events) ? events.slice(0, 6) : [];
-    const status = taskContinuityStatusLabel(hasState ? state.status : (error ? 'blocked' : 'in_progress'));
+    const runtimeActivity = activity && typeof activity === 'object' ? activity : taskContinuityLatestActivity;
+    const runtimePrimary = runtimeActivity && typeof runtimeActivity === 'object' ? runtimeActivity.primary : null;
+    const runtimeStatus = safeString(runtimePrimary?.state || runtimePrimary?.status);
+    const status = taskContinuityStatusLabel(hasState ? state.status : (runtimeStatus || (error ? 'blocked' : 'in_progress')));
     const activeGoal = hasState ? safeString(state.active_goal) : '';
     const progress = hasState ? safeString(state.last_progress) : '';
+    const backgroundSummary = safeString(runtimePrimary?.summary || runtimePrimary?.name || runtimePrimary?.bot_name);
+    const backgroundProgress = safeString(runtimePrimary?.last_progress || runtimePrimary?.summary || runtimePrimary?.name || runtimePrimary?.bot_name);
     const missingInputs = hasState && Array.isArray(state.missing_inputs) ? state.missing_inputs.filter(Boolean) : [];
     const updatedAtRaw = hasState ? safeString(state.updated_at) : '';
     const sessionLabelRaw = safeString(sessionToken);
     const sessionLabel = sessionLabelRaw.length > 16 ? `${sessionLabelRaw.slice(0, 16)}` : (sessionLabelRaw || '--');
-    const runtimeActivity = activity && typeof activity === 'object' ? activity : taskContinuityLatestActivity;
 
     if (hasState) {
         taskContinuityLatestState = state;
@@ -2559,6 +3622,15 @@ function renderTaskContinuity(state, events, sessionToken, { error = '', activit
         taskContinuityLatestActivity = runtimeActivity;
     }
     taskContinuityLatestError = safeString(error);
+    if (taskDefinition && typeof taskDefinition === 'object') {
+        taskContinuityLatestTaskDefinition = taskDefinition;
+    }
+    if (taskEvaluation && typeof taskEvaluation === 'object') {
+        taskContinuityLatestTaskEvaluation = taskEvaluation;
+    }
+    if (safeString(taskDefinitionStatus)) {
+        taskContinuityLatestTaskDefinitionStatus = safeString(taskDefinitionStatus);
+    }
 
     if (taskContinuityStatusPill) {
         taskContinuityStatusPill.textContent = status;
@@ -2570,6 +3642,8 @@ function renderTaskContinuity(state, events, sessionToken, { error = '', activit
     if (taskContinuityGoal) {
         if (activeGoal) {
             taskContinuityGoal.textContent = activeGoal;
+        } else if (backgroundSummary) {
+            taskContinuityGoal.textContent = backgroundSummary;
         } else if (error) {
             taskContinuityGoal.textContent = 'Task continuity is temporarily unavailable.';
         } else {
@@ -2580,6 +3654,8 @@ function renderTaskContinuity(state, events, sessionToken, { error = '', activit
     if (taskContinuityProgress) {
         if (progress) {
             taskContinuityProgress.textContent = progress;
+        } else if (backgroundProgress) {
+            taskContinuityProgress.textContent = backgroundProgress;
         } else if (error) {
             taskContinuityProgress.textContent = error;
         } else {
@@ -2618,10 +3694,18 @@ function renderTaskContinuity(state, events, sessionToken, { error = '', activit
         taskContinuitySession.textContent = `Session: ${sessionLabel}`;
     }
 
+    renderTaskDefinitionUi(
+        taskContinuityLatestTaskDefinition,
+        taskContinuityLatestTaskEvaluation,
+        taskContinuityLatestTaskDefinitionStatus,
+    );
+
     const hasDisplayContent = taskContinuityHasDisplayContent({
         state,
         activity: runtimeActivity,
         error,
+        taskDefinition: taskContinuityLatestTaskDefinition,
+        taskEvaluation: taskContinuityLatestTaskEvaluation,
     });
     const forceExpand = taskContinuityShouldForceExpand({
         state,
@@ -2761,19 +3845,32 @@ async function refreshTaskContinuity({ sessionOverride = '', force = false } = {
             fetchJsonSafe(historyUrl),
             fetchTaskContinuitySessionActivity(sid),
         ]);
-        if (!currentResp.ok) {
-            throw new Error(currentResp.text || `Task continuity HTTP ${currentResp.status}`);
-        }
-        if (!historyResp.ok) {
-            throw new Error(historyResp.text || `Task history HTTP ${historyResp.status}`);
-        }
-        const currentPayload = currentResp.data && typeof currentResp.data === 'object' ? currentResp.data : {};
-        const historyPayload = historyResp.data && typeof historyResp.data === 'object' ? historyResp.data : {};
+        const currentPayload = currentResp.ok && currentResp.data && typeof currentResp.data === 'object' ? currentResp.data : {};
+        const historyPayload = historyResp.ok && historyResp.data && typeof historyResp.data === 'object' ? historyResp.data : {};
         const state = currentPayload.state && typeof currentPayload.state === 'object' ? currentPayload.state : null;
         const events = Array.isArray(historyPayload.events) ? historyPayload.events : [];
+        const taskDefinition = currentPayload.task_definition && typeof currentPayload.task_definition === 'object'
+            ? currentPayload.task_definition
+            : null;
+        const taskEvaluation = currentPayload.task_evaluation && typeof currentPayload.task_evaluation === 'object'
+            ? currentPayload.task_evaluation
+            : null;
+        const taskDefinitionStatus = safeString(currentPayload.task_definition_status) || taskContinuityLatestTaskDefinitionStatus;
         const resolvedSid = safeString(currentPayload.session_id || historyPayload.session_id || sid);
         evolveReplySessionId = resolvedSid || sid;
-        renderTaskContinuity(state, events, resolvedSid, { activity });
+        const hasDelegationActivity = Boolean(Array.isArray(activity?.agents) && activity.agents.length > 0);
+        if (!currentResp.ok && !hasDelegationActivity) {
+            throw new Error(currentResp.text || `Task continuity HTTP ${currentResp.status}`);
+        }
+        if (!historyResp.ok && !hasDelegationActivity) {
+            throw new Error(historyResp.text || `Task history HTTP ${historyResp.status}`);
+        }
+        renderTaskContinuity(state, events, resolvedSid, {
+            activity,
+            taskDefinition,
+            taskEvaluation,
+            taskDefinitionStatus,
+        });
     } catch (error) {
         const fallbackState = taskContinuityLatestState;
         const fallbackEvents = taskContinuityLatestEvents;
@@ -2782,6 +3879,9 @@ async function refreshTaskContinuity({ sessionOverride = '', force = false } = {
         renderTaskContinuity(fallbackState, fallbackEvents, fallbackSid, {
             error: safeString(error?.message) || 'Sync failed.',
             activity: taskContinuityLatestActivity,
+            taskDefinition: taskContinuityLatestTaskDefinition,
+            taskEvaluation: taskContinuityLatestTaskEvaluation,
+            taskDefinitionStatus: taskContinuityLatestTaskDefinitionStatus,
         });
     } finally {
         taskContinuityInFlight = false;
@@ -4903,7 +6003,7 @@ function init() {
         settingsModal.classList.add('hidden');
     }
     initComposer();
-    _initThinkingDropdown();
+    initChatComposerSubbar();
     configureComposerSurface();
     initActions();
     initChatSearch();
@@ -4963,127 +6063,232 @@ function composerSyncSendButtonState() {
     syncSendButtonA11y();
 }
 
-/*  Thinking / Reasoning Effort Dropdown  */
-function _initThinkingDropdown() {
+/*  Chat Composer Controls  */
+function resolveProfileChatControls(profileName = '') {
+    const targetProfile = safeString(profileName);
+    const profile = targetProfile && Array.isArray(availableModelProfiles)
+        ? availableModelProfiles.find((entry) => safeString(entry?.name) === targetProfile)
+        : null;
+    const controls = profile?.chat_controls;
+    return controls && typeof controls === 'object'
+        ? controls
+        : { model: {}, thomas: {} };
+}
+
+function profileSupportsReasoningEffort(profileName = '') {
+    return Boolean(resolveProfileChatControls(profileName)?.model?.reasoning_effort?.supported);
+}
+
+function resolveChatPayloadReasoningEffort(profileName = '') {
+    if (!profileSupportsReasoningEffort(profileName)) return undefined;
+    const effort = normalizeReasoningEffort(activeReasoningEffort);
+    return effort || undefined;
+}
+
+function resolveChatPayloadTokenEconomy() {
+    const value = safeString(activeTokenEconomy).toLowerCase();
+    if (value === 'cheap' || value === 'max') return value;
+    return 'optimal';
+}
+
+function syncSetupReasoningVisibility(profileName = '') {
+    const reasoningGroup = document.getElementById('setupReasoningGroup');
+    const supported = profileSupportsReasoningEffort(profileName);
+    const current = supported ? resolveProfileReasoningEffort(profileName) : '';
+    if (reasoningGroup) reasoningGroup.style.display = supported ? '' : 'none';
+    activeReasoningEffort = current;
+    setSegmentedControlSelection('setupReasoningEffortGroup', current);
+    if (settingAdvReasoningEffort) {
+        settingAdvReasoningEffort.value = current || 'medium';
+    }
+}
+
+function ensureChatComposerSubbar() {
     const inputRow = composerTextarea?.closest('.composer-input-row');
-    if (!inputRow) return;
-    const micBtn = document.getElementById('micBtn');
+    if (!(inputRow instanceof HTMLElement)) return null;
+    const shell = composerBox instanceof HTMLElement ? composerBox : inputRow.parentElement;
+    if (!(shell instanceof HTMLElement)) return null;
 
-    // Create the thinking toggle button
-    const thinkBtn = document.createElement('button');
-    thinkBtn.className = 'btn-icon thinking-effort-btn';
-    thinkBtn.id = 'thinkingEffortBtn';
-    thinkBtn.type = 'button';
-    thinkBtn.setAttribute('aria-haspopup', 'menu');
-    thinkBtn.setAttribute('aria-expanded', 'false');
-    thinkBtn.innerHTML = '<i class="ph ph-brain"></i>';
-
-    // Create the dropdown
-    const dropdown = document.createElement('div');
-    dropdown.className = 'thinking-effort-dropdown hidden';
-    dropdown.id = 'thinkingEffortDropdown';
-    dropdown.setAttribute('role', 'menu');
-    dropdown.innerHTML = `
-        <div class="thinking-effort-dropdown-title">Thinking Mode</div>
-        <button class="thinking-effort-option" data-effort="" type="button">
-            <i class="ph ph-lightning"></i>
-            <div><strong>Auto</strong><span class="thinking-effort-desc">Model decides when to think</span></div>
-        </button>
-        <button class="thinking-effort-option" data-effort="low" type="button">
-            <i class="ph ph-minus-circle"></i>
-            <div><strong>Quick</strong><span class="thinking-effort-desc">Fast, less reasoning</span></div>
-        </button>
-        <button class="thinking-effort-option" data-effort="medium" type="button">
-            <i class="ph ph-equals"></i>
-            <div><strong>Balanced</strong><span class="thinking-effort-desc">Default reasoning depth</span></div>
-        </button>
-        <button class="thinking-effort-option" data-effort="high" type="button">
-            <i class="ph ph-brain"></i>
-            <div><strong>Deep Think</strong><span class="thinking-effort-desc">Maximum reasoning, slower</span></div>
-        </button>
-    `;
-
-    // Insert before mic button
-    if (micBtn) {
-        inputRow.insertBefore(thinkBtn, micBtn);
-    } else {
-        inputRow.insertBefore(thinkBtn, sendBtn);
+    let style = document.getElementById('chatComposerSubbarStyle');
+    if (!(style instanceof HTMLStyleElement)) {
+        style = document.createElement('style');
+        style.id = 'chatComposerSubbarStyle';
+        style.textContent = `
+            .chat-composer-subbar {
+                display: flex;
+                flex-wrap: wrap;
+                align-items: center;
+                gap: 6px 10px;
+                padding: 6px 8px 0;
+                border-top: 1px solid var(--border-light, rgba(255,255,255,0.08));
+                margin-top: 4px;
+            }
+            .chat-composer-control {
+                display: flex;
+                align-items: center;
+                gap: 6px;
+                min-width: 0;
+            }
+            .chat-composer-control[hidden] { display: none !important; }
+            .chat-composer-control-label {
+                font-size: 10px;
+                letter-spacing: 0.08em;
+                text-transform: uppercase;
+                color: var(--text-muted, #929bb0);
+                white-space: nowrap;
+            }
+            .chat-composer-control-select {
+                min-width: 108px;
+                padding: 5px 8px;
+                border-radius: 8px;
+                border: 1px solid var(--border-light, rgba(255,255,255,0.12));
+                background: rgba(19, 22, 30, 0.82);
+                color: var(--text-primary, #ececf1);
+                font-size: 11px;
+                font-weight: 600;
+                outline: none;
+            }
+            .chat-composer-control-select:focus {
+                border-color: var(--accent, #58a6ff);
+                box-shadow: 0 0 0 2px rgba(88, 166, 255, 0.18);
+            }
+            @media (max-width: 760px) {
+                .chat-composer-subbar {
+                    align-items: stretch;
+                    gap: 8px;
+                }
+                .chat-composer-control {
+                    width: 100%;
+                    justify-content: space-between;
+                }
+                .chat-composer-control-select {
+                    flex: 1 1 auto;
+                    min-width: 0;
+                }
+            }
+        `;
+        document.head.appendChild(style);
     }
-    thinkBtn.insertAdjacentElement('afterend', dropdown);
 
-    // Inject styles
-    const style = document.createElement('style');
-    style.textContent = `
-        .thinking-effort-btn { position: relative; }
-        .thinking-effort-btn.active { color: var(--accent) !important; }
-        .thinking-effort-dropdown {
-            position: absolute; bottom: calc(100% + 8px); right: 0;
-            background: var(--bg-surface, #1f232c); border: 1px solid var(--border-light, rgba(255,255,255,0.12));
-            border-radius: var(--radius-lg, 12px); padding: 8px; min-width: 220px;
-            box-shadow: var(--shadow-strong, 0 22px 60px rgba(0,0,0,0.45));
-            z-index: var(--z-dropdown, 20);
-        }
-        .thinking-effort-dropdown.hidden { display: none; }
-        .thinking-effort-dropdown-title {
-            font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
-            color: var(--text-muted, #929bb0); padding: 4px 8px 8px; border-bottom: 1px solid var(--border-light, rgba(255,255,255,0.12));
-            margin-bottom: 4px;
-        }
-        .thinking-effort-option {
-            display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 10px;
-            background: none; border: none; border-radius: var(--radius-md, 8px);
-            color: var(--text-primary, #ececf1); cursor: pointer; text-align: left; font-size: 13px;
-        }
-        .thinking-effort-option:hover { background: var(--bg-surface-hover, #242936); }
-        .thinking-effort-option.selected { background: rgba(88, 166, 255, 0.12); color: var(--accent, #58a6ff); }
-        .thinking-effort-option i { font-size: 18px; width: 20px; text-align: center; flex-shrink: 0; }
-        .thinking-effort-option div { display: flex; flex-direction: column; }
-        .thinking-effort-desc { font-size: 11px; color: var(--text-muted, #929bb0); margin-top: 1px; }
-        .thinking-effort-option.selected .thinking-effort-desc { color: var(--accent, #58a6ff); opacity: 0.7; }
+    let root = document.getElementById('chatComposerSubbar');
+    if (!(root instanceof HTMLElement)) {
+        root = document.createElement('div');
+        root.id = 'chatComposerSubbar';
+        root.className = 'chat-composer-subbar';
+        inputRow.insertAdjacentElement('afterend', root);
+    }
+    return root;
+}
+
+function renderChatComposerSubbar() {
+    const root = ensureChatComposerSubbar();
+    if (!(root instanceof HTMLElement)) return;
+
+    const profileName = safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
+    const controls = resolveProfileChatControls(profileName);
+    const reasoningControl = controls?.model?.reasoning_effort;
+    const autonomyControl = controls?.thomas?.autonomy_level;
+    const tokenControl = controls?.thomas?.token_economy;
+    const reasoningOptions = Array.isArray(reasoningControl?.options) ? reasoningControl.options : [];
+    const autonomyOptions = Array.isArray(autonomyControl?.options) ? autonomyControl.options : [];
+    const tokenOptions = Array.isArray(tokenControl?.options) ? tokenControl.options : [];
+
+    const renderOptions = (options, selectedValue = '') => options.map((option) => {
+        const value = safeString(option?.value);
+        const label = safeString(option?.label) || value;
+        const selected = value === safeString(selectedValue) ? ' selected' : '';
+        return `<option value="${escapeHtml(value)}"${selected}>${escapeHtml(label)}</option>`;
+    }).join('');
+
+    root.innerHTML = `
+        <div class="chat-composer-control" data-control="reasoning"${reasoningControl?.supported ? '' : ' hidden'}>
+            <span class="chat-composer-control-label">${escapeHtml(safeString(reasoningControl?.label) || 'Reasoning')}</span>
+            <select id="chatComposerReasoningSelect" class="chat-composer-control-select">
+                ${renderOptions(reasoningOptions, normalizeReasoningEffort(activeReasoningEffort))}
+            </select>
+        </div>
+        <div class="chat-composer-control" data-control="autonomy">
+            <span class="chat-composer-control-label">${escapeHtml(safeString(autonomyControl?.label) || 'Autonomy')}</span>
+            <select id="chatComposerAutonomySelect" class="chat-composer-control-select">
+                ${renderOptions(autonomyOptions.length ? autonomyOptions : [
+                    { value: '1', label: 'L1 Chat' },
+                    { value: '2', label: 'L2 Assist' },
+                    { value: '3', label: 'L3 Auto' },
+                    { value: '4', label: 'L4 Agent' },
+                ], String(activeAutonomyLevel || 1))}
+            </select>
+        </div>
+        <div class="chat-composer-control" data-control="token_economy">
+            <span class="chat-composer-control-label">${escapeHtml(safeString(tokenControl?.label) || 'Token Economy')}</span>
+            <select id="chatComposerTokenEconomySelect" class="chat-composer-control-select">
+                ${renderOptions(tokenOptions.length ? tokenOptions : [
+                    { value: 'cheap', label: 'Cheap' },
+                    { value: 'balanced', label: 'Balanced' },
+                    { value: 'max', label: 'Maximum' },
+                ], safeString(activeTokenEconomy) || 'balanced')}
+            </select>
+        </div>
     `;
-    document.head.appendChild(style);
 
-    // Sync selection UI
-    function syncSelection() {
-        dropdown.querySelectorAll('.thinking-effort-option').forEach(opt => {
-            opt.classList.toggle('selected', (opt.dataset.effort || '') === (activeReasoningEffort || ''));
+    const reasoningSelect = document.getElementById('chatComposerReasoningSelect');
+    if (reasoningSelect instanceof HTMLSelectElement) {
+        reasoningSelect.value = normalizeReasoningEffort(activeReasoningEffort);
+        reasoningSelect.addEventListener('change', (event) => {
+            activeReasoningEffort = normalizeReasoningEffort(event.target.value);
+            setSegmentedControlSelection('setupReasoningEffortGroup', activeReasoningEffort);
+            if (settingAdvReasoningEffort) settingAdvReasoningEffort.value = activeReasoningEffort || 'medium';
         });
-        thinkBtn.classList.toggle('active', !!activeReasoningEffort);
-        const selectedLabel = dropdown.querySelector('.thinking-effort-option.selected strong')?.textContent || 'Auto';
-        const buttonLabel = `Thinking mode: ${selectedLabel}`;
-        setElementA11y(thinkBtn, { title: buttonLabel, label: buttonLabel });
     }
 
-    function syncDropdownExpandedState() {
-        thinkBtn.setAttribute('aria-expanded', dropdown.classList.contains('hidden') ? 'false' : 'true');
+    const autonomySelect = document.getElementById('chatComposerAutonomySelect');
+    if (autonomySelect instanceof HTMLSelectElement) {
+        autonomySelect.value = String(activeAutonomyLevel || 1);
+        autonomySelect.addEventListener('change', (event) => {
+            autonomyLevelManuallySet = true;
+            activeAutonomyLevel = parseInt(event.target.value, 10) || 1;
+            setSegmentedControlSelection('setupAutonomyGroup', String(activeAutonomyLevel));
+            if (settingAutonomy) settingAutonomy.value = `L${activeAutonomyLevel}`;
+        });
     }
-    syncSelection();
-    syncDropdownExpandedState();
 
-    // Toggle dropdown
-    thinkBtn.addEventListener('click', (e) => {
-        e.stopPropagation();
-        dropdown.classList.toggle('hidden');
-        syncDropdownExpandedState();
-    });
+    const tokenSelect = document.getElementById('chatComposerTokenEconomySelect');
+    if (tokenSelect instanceof HTMLSelectElement) {
+        tokenSelect.value = safeString(activeTokenEconomy) || 'balanced';
+        tokenSelect.addEventListener('change', (event) => {
+            activeTokenEconomy = safeString(event.target.value) || 'balanced';
+            setSegmentedControlSelection('setupEconomyGroup', activeTokenEconomy);
+            const runtimeValue = activeTokenEconomy === 'balanced' ? 'optimal' : activeTokenEconomy;
+            if (settingAdvDefaultTokenEconomy) settingAdvDefaultTokenEconomy.value = runtimeValue;
+        });
+    }
+}
 
-    // Handle option clicks
-    dropdown.addEventListener('click', (e) => {
-        const opt = e.target.closest('.thinking-effort-option');
-        if (!opt) return;
-        activeReasoningEffort = normalizeReasoningEffort(opt.dataset.effort);
-        syncSelection();
-        dropdown.classList.add('hidden');
-        syncDropdownExpandedState();
-    });
+function initChatComposerSubbar() {
+    ensureChatComposerSubbar();
+    renderChatComposerSubbar();
+}
 
-    // Close on outside click
-    document.addEventListener('click', (e) => {
-        if (!thinkBtn.contains(e.target) && !dropdown.contains(e.target)) {
-            dropdown.classList.add('hidden');
-            syncDropdownExpandedState();
-        }
-    });
+function buildChatRequestPayload(message, { docs = [], images = [], systemPrompt = '', resolvedProfile = '', studioChatContext = null } = {}) {
+    const profile = safeString(resolvedProfile) || safeString(modelSelector?.value) || safeString(setupProviderSelector?.value);
+    const payload = {
+        message: message,
+        docs: Array.isArray(docs) ? docs : [],
+        images: Array.isArray(images) ? images : [],
+        session_id: sessionId,
+        profile: profile,
+        model: profile,
+        model_id: resolveActiveModelIdForProfile(profile) || undefined,
+        autonomy_level: Math.max(1, parseInt(String(activeAutonomyLevel || 1), 10) || 1),
+        token_economy: resolveChatPayloadTokenEconomy(),
+        system_prompt: systemPrompt || undefined,
+    };
+    const reasoningEffort = resolveChatPayloadReasoningEffort(profile);
+    if (reasoningEffort) payload.reasoning_effort = reasoningEffort;
+    if (studioChatContext?.enabled) {
+        payload.asset_studio_mode = 'comfy_studio';
+        payload.asset_studio_context = studioChatContext.context || {};
+    }
+    return payload;
 }
 
 function initComposer() {
@@ -8121,6 +9326,29 @@ function initActions() {
     let micSuppressTranscriptUntil = 0;
     let micBaseText = '';
     let micFinalText = '';
+    let micMediaRecorder = null;
+    let micMediaStream = null;
+    let micRecorderMimeType = '';
+    let micRecordedChunks = [];
+    let micIsTranscribing = false;
+    let micPreferServerCapture = true;
+    const micTranscribeEndpoint = '/api/v2/chat/transcribe';
+
+    function setMicButtonState(state = 'idle') {
+        if (!(micBtn instanceof HTMLElement)) return;
+        if (state === 'listening') {
+            micBtn.style.color = 'var(--danger-ink)';
+            setElementA11y(micBtn, { title: 'Stop microphone capture', label: 'Stop microphone capture' });
+            return;
+        }
+        if (state === 'transcribing') {
+            micBtn.style.color = 'var(--accent, #58a6ff)';
+            setElementA11y(micBtn, { title: 'Transcribing microphone input', label: 'Transcribing microphone input' });
+            return;
+        }
+        micBtn.style.color = 'var(--text-secondary)';
+        setElementA11y(micBtn, { title: 'Use microphone', label: 'Use microphone' });
+    }
 
     function suppressMicTranscript(ms = 1200) {
         micSuppressTranscriptUntil = Date.now() + Math.max(0, Number(ms) || 0);
@@ -8136,7 +9364,7 @@ function initActions() {
     }
 
     function renderMicTranscript(interimRaw = '') {
-        if (!micShouldListen && !micIsListening) return;
+        if (!micShouldListen && !micIsListening && !micIsTranscribing) return;
         if (Date.now() < micSuppressTranscriptUntil || Date.now() < composerInputLockUntil) return;
         const spokenText = joinSpeechText(micFinalText, interimRaw);
         composerTextarea.value = joinSpeechText(micBaseText, spokenText);
@@ -8146,6 +9374,36 @@ function initActions() {
     function resetMicDraftState() {
         micBaseText = '';
         micFinalText = '';
+        micRecordedChunks = [];
+    }
+
+    function stopMicMediaStream() {
+        if (micMediaStream?.getTracks) {
+            micMediaStream.getTracks().forEach((track) => {
+                try {
+                    track.stop();
+                } catch {
+                    // Ignore track shutdown errors.
+                }
+            });
+        }
+        micMediaStream = null;
+    }
+
+    async function transcribeMicBlob(blob) {
+        const form = new FormData();
+        const blobType = safeString(blob?.type).toLowerCase();
+        const ext = blobType.includes('ogg') ? 'ogg' : blobType.includes('mp4') ? 'm4a' : 'webm';
+        form.append('audio', blob, `thomas-mic.${ext}`);
+        const response = await fetch(micTranscribeEndpoint, {
+            method: 'POST',
+            body: form,
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) {
+            throw new Error(safeString(payload?.error) || `Transcription failed (${response.status})`);
+        }
+        return safeString(payload?.text);
     }
 
     function flushPendingMicSend() {
@@ -8156,12 +9414,77 @@ function initActions() {
         void handleSend();
     }
 
-    function stopMicCapture({ send = false } = {}) {
-        if (!recognition) return;
+    async function finalizeServerMicCapture() {
+        const mimeType = safeString(micRecorderMimeType) || 'audio/webm';
+        const parts = micRecordedChunks.slice();
+        micRecordedChunks = [];
+        let transcript = '';
+        if (parts.length > 0) {
+            micIsTranscribing = true;
+            setMicButtonState('transcribing');
+            try {
+                transcript = await transcribeMicBlob(new Blob(parts, { type: mimeType }));
+            } catch (error) {
+                console.warn('Microphone transcription failed', error);
+                micPendingSend = false;
+                const errorText = safeString(error?.message);
+                if (recognition && /no stt provider available/i.test(errorText)) {
+                    micPreferServerCapture = false;
+                    notifyUser('Server transcription is unavailable right now. Falling back to browser speech recognition.', {
+                        tone: 'warning',
+                        debugKind: 'warning',
+                        durationMs: 3600,
+                    });
+                } else {
+                    notifyUser(errorText || 'Microphone transcription failed.', {
+                        tone: 'warning',
+                        debugKind: 'warning',
+                        durationMs: 3200,
+                    });
+                }
+            } finally {
+                micIsTranscribing = false;
+            }
+        }
+
         micShouldListen = false;
-        micPendingSend = Boolean(send);
+        micIsListening = false;
+        setMicButtonState('idle');
+
+        if (transcript) {
+            micFinalText = joinSpeechText(micFinalText, transcript);
+            renderMicTranscript('');
+        }
+        flushPendingMicSend();
+    }
+
+    function stopMicCapture({ send = false } = {}) {
+        micPendingSend = Boolean(send) || micPendingSend;
+        micShouldListen = false;
+
+        if (micMediaRecorder) {
+            if (micIsTranscribing) return;
+            if (micMediaRecorder.state !== 'inactive') {
+                try {
+                    micMediaRecorder.stop();
+                    return;
+                } catch {
+                    micMediaRecorder = null;
+                    stopMicMediaStream();
+                }
+            }
+            setMicButtonState('idle');
+            flushPendingMicSend();
+            return;
+        }
+
+        if (!recognition) {
+            setMicButtonState('idle');
+            flushPendingMicSend();
+            return;
+        }
         if (!micIsListening) {
-            micBtn.style.color = 'var(--text-secondary)';
+            setMicButtonState('idle');
             flushPendingMicSend();
             return;
         }
@@ -8169,23 +9492,95 @@ function initActions() {
             recognition.stop();
         } catch {
             micIsListening = false;
-            micBtn.style.color = 'var(--text-secondary)';
+            setMicButtonState('idle');
             flushPendingMicSend();
         }
     }
 
-    function startMicCapture() {
+    async function startServerMicCapture() {
+        let stream = null;
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                audio: {
+                    echoCancellation: true,
+                    noiseSuppression: true,
+                    autoGainControl: true,
+                },
+            });
+        } catch {
+            notifyUser('Microphone permission was denied or unavailable.', {
+                tone: 'warning',
+                debugKind: 'warning',
+                durationMs: 2800,
+            });
+            return false;
+        }
+
+        try {
+            const preferredMimeTypes = [
+                'audio/webm;codecs=opus',
+                'audio/webm',
+                'audio/ogg;codecs=opus',
+                'audio/ogg',
+            ];
+            const supportedMimeType = preferredMimeTypes.find((candidate) => {
+                return typeof MediaRecorder.isTypeSupported === 'function' && MediaRecorder.isTypeSupported(candidate);
+            }) || '';
+            const recorder = supportedMimeType
+                ? new MediaRecorder(stream, { mimeType: supportedMimeType })
+                : new MediaRecorder(stream);
+            micMediaStream = stream;
+            micMediaRecorder = recorder;
+            micRecorderMimeType = supportedMimeType || safeString(recorder.mimeType) || 'audio/webm';
+            micRecordedChunks = [];
+            micShouldListen = true;
+
+            recorder.onstart = () => {
+                micIsListening = true;
+                setMicButtonState('listening');
+            };
+            recorder.ondataavailable = (event) => {
+                if (event?.data?.size) micRecordedChunks.push(event.data);
+            };
+            recorder.onerror = () => {
+                micIsListening = false;
+                micShouldListen = false;
+                micMediaRecorder = null;
+                stopMicMediaStream();
+                setMicButtonState('idle');
+                notifyUser('Microphone capture stopped unexpectedly.', {
+                    tone: 'warning',
+                    debugKind: 'warning',
+                    durationMs: 2800,
+                });
+            };
+            recorder.onstop = () => {
+                micMediaRecorder = null;
+                stopMicMediaStream();
+                void finalizeServerMicCapture();
+            };
+            recorder.start(250);
+            return true;
+        } catch {
+            stopMicMediaStream();
+            notifyUser('Unable to start microphone capture right now.', {
+                tone: 'warning',
+                debugKind: 'warning',
+                durationMs: 2800,
+            });
+            return false;
+        }
+    }
+
+    function startSpeechRecognitionCapture() {
         if (!recognition || micShouldListen || micIsListening) return;
-        resetMicDraftState();
-        micBaseText = safeString(composerTextarea.value);
-        micPendingSend = false;
         micShouldListen = true;
         try {
             recognition.start();
         } catch {
             micShouldListen = false;
             micIsListening = false;
-            micBtn.style.color = 'var(--text-secondary)';
+            setMicButtonState('idle');
             notifyUser('Unable to start microphone capture right now.', {
                 tone: 'warning',
                 debugKind: 'warning',
@@ -8193,10 +9588,33 @@ function initActions() {
             });
         }
     }
+
+    async function startMicCapture() {
+        if (micShouldListen || micIsListening || micIsTranscribing) return;
+        resetMicDraftState();
+        micBaseText = safeString(composerTextarea.value);
+        micPendingSend = false;
+
+        if (micPreferServerCapture && navigator.mediaDevices?.getUserMedia && typeof window.MediaRecorder !== 'undefined') {
+            const started = await startServerMicCapture();
+            if (started) return;
+        }
+
+        if (recognition) {
+            startSpeechRecognitionCapture();
+            return;
+        }
+
+        notifyUser("Speech recognition isn't supported in this browser.", {
+            tone: 'warning',
+            debugKind: 'warning',
+            durationMs: 2800,
+        });
+    }
+
     window.__thomasStopMicCapture = ({ send = false } = {}) => {
         stopMicCapture({ send });
         suppressMicTranscript(2200);
-        resetMicDraftState();
     };
 
     document.addEventListener('keydown', (event) => {
@@ -8248,7 +9666,7 @@ function initActions() {
             && !event.metaKey
             && !event.altKey
             && !event.shiftKey
-            && (micShouldListen || micIsListening)
+            && (micShouldListen || micIsListening || micIsTranscribing)
         ) {
             event.preventDefault();
             stopMicCapture({ send: true });
@@ -8285,7 +9703,7 @@ function initActions() {
 
         recognition.onstart = () => {
             micIsListening = true;
-            micBtn.style.color = 'var(--danger-ink)';
+            setMicButtonState('listening');
         };
 
         recognition.onresult = (e) => {
@@ -8313,7 +9731,7 @@ function initActions() {
                     micShouldListen = false;
                 }
             }
-            micBtn.style.color = 'var(--text-secondary)';
+            setMicButtonState('idle');
             flushPendingMicSend();
         };
 
@@ -8328,23 +9746,15 @@ function initActions() {
                     durationMs: 2800,
                 });
             }
-            micBtn.style.color = 'var(--text-secondary)';
+            setMicButtonState('idle');
         };
     }
 
     micBtn.addEventListener('click', () => {
-        if (recognition) {
-            if (micShouldListen || micIsListening) {
-                stopMicCapture({ send: false });
-            } else {
-                startMicCapture();
-            }
+        if (micShouldListen || micIsListening || micIsTranscribing) {
+            stopMicCapture({ send: false });
         } else {
-            notifyUser("Speech recognition isn't supported in this browser.", {
-                tone: 'warning',
-                debugKind: 'warning',
-                durationMs: 2800,
-            });
+            void startMicCapture();
         }
     });
 
@@ -8548,27 +9958,13 @@ async function runChatSendJob(sendJob) {
     pushDebugEvent('chat', 'Started chat request');
 
     const modelMessage = composerBuildMessageForModel(text, sendMode);
-    const requestedMode = normalizeChatMode(activeChatMode) || 'auto';
-    const fastMode = requestedMode !== 'thinking';
-    const payload = {
-        message: modelMessage || text,
+    const payload = buildChatRequestPayload(modelMessage || text, {
         docs: docsToSend,
         images: imagesToSend,
-        session_id: sessionId,
-        profile: resolvedProfile,
-        model: resolvedProfile,
-        model_id: resolveActiveModelIdForProfile(resolvedProfile) || undefined,
-        mode: requestedMode,
-        autonomy_level: autonomyLevelManuallySet ? activeAutonomyLevel : 1,
-        token_economy: activeTokenEconomy,
-        reasoning_effort: normalizeReasoningEffort(activeReasoningEffort) || undefined,
-        system_prompt: finalPrompt || undefined,
-        fast_mode: fastMode,
-    };
-    if (studioChatContext.enabled) {
-        payload.asset_studio_mode = 'comfy_studio';
-        payload.asset_studio_context = studioChatContext.context || {};
-    }
+        systemPrompt: finalPrompt || undefined,
+        resolvedProfile,
+        studioChatContext,
+    });
 
     await streamChatResponse(payload, { userContext: suggestionUserContext });
 }
@@ -9733,6 +11129,9 @@ function vibeCodeHandleTraceEvent(evt) {
  * @param {string} [opts.existingBubbleId] - Reuse an existing assistant bubble instead of creating one
  */
 async function streamChatResponse(payload, { userContext = '', existingBubbleId = '' } = {}) {
+    let bubbleId = existingBubbleId || ('msg-' + Date.now());
+    let bubbleRow = null;
+    let bubbleMsgContent = null;
     try {
         const landedRobotExit = _portalOutLandedRobot();
         vibeCodePrepareForRequest(payload);
@@ -9755,14 +11154,12 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             sessionOverride: safeString(payload?.session_id) || sessionId,
         });
 
-        const bubbleId = existingBubbleId || ('msg-' + Date.now());
-
         // Render an empty assistant bubble with typing indicator (or reuse existing)
         if (!existingBubbleId) {
             renderMessage({ role: 'assistant', content: '', id: bubbleId });
         }
-        const bubbleRow = document.getElementById(bubbleId);
-        const bubbleMsgContent = bubbleRow ? bubbleRow.querySelector('.message-content') : null;
+        bubbleRow = document.getElementById(bubbleId);
+        bubbleMsgContent = bubbleRow ? bubbleRow.querySelector('.message-content') : null;
         if (bubbleMsgContent) {
             bubbleMsgContent.innerHTML = '';
         }
@@ -9782,6 +11179,11 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         let robotLandedForThisResponse = false;
         let robotStatusQueued = false;
         let robotStatusCanStartAt = Date.now();
+        const _officeDelegationTaskByActivity = new Map();
+        const _taskContractActivityId = `task-contract:${bubbleId}`;
+        const _taskUiSessionId = safeString(payload?.session_id) || safeString(activeChatId) || safeString(sessionId) || bubbleId;
+        let _taskUiSeeded = false;
+        let _taskUiTerminated = false;
         landedRobotExit.finally(() => {
             robotStatusCanStartAt = Date.now() + 240;
             if (!robotStatusQueued) return;
@@ -9852,7 +11254,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             if (sayingEl) {
                 sayingEl.classList.add('saying-fade');
                 setTimeout(() => {
-                    sayingEl.textContent = text;
+                    sayingEl.textContent = robotAmbientStatusText(text);
                     sayingEl.classList.remove('saying-fade');
                 }, 200);
             }
@@ -9965,7 +11367,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             });
         }
         function _consumeAssistantChunk(chunk, { renderNow = false } = {}) {
-            const textChunk = safeString(chunk);
+            const textChunk = streamChunkString(chunk);
             if (!textChunk) return false;
             if (!hasRenderableText) {
                 _robotExitRun();
@@ -9986,22 +11388,312 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         const _liveToolCards = [];
         // Container for tool cards  lives inside the thinking dropdown
         function _getToolCardsContainer() {
-            // Look for the thinking-tool-cards container inside the robot status
-            const existing = bubbleMsgContent?.querySelector('.thinking-tool-cards');
-            if (existing) return existing;
-            // Fallback: create one in the thinking details if present
-            const detailsEl = bubbleMsgContent?.querySelector('.chat-robot-thinking-details');
-            if (detailsEl) {
-                const container = document.createElement('div');
-                container.className = 'thinking-tool-cards';
-                detailsEl.appendChild(container);
-                return container;
+            let container = bubbleRow?.querySelector('.message-runtime-cards');
+            if (container) return container;
+            container = document.createElement('div');
+            container.className = 'message-runtime-cards hidden';
+            if (bubbleRow) {
+                bubbleRow.appendChild(container);
+            } else if (bubbleMsgContent) {
+                bubbleMsgContent.appendChild(container);
             }
-            // Last resort: append to message content (shouldn't happen normally)
-            const container = document.createElement('div');
-            container.className = 'thinking-tool-cards';
-            if (bubbleMsgContent) bubbleMsgContent.appendChild(container);
             return container;
+        }
+
+        function _ensureTaskUi(summaryText = '') {
+            if (!_taskUiSeeded) {
+                _taskUiSeeded = true;
+                chatTaskMessageBySessionId.set(_taskUiSessionId, bubbleId);
+                updateMessageTaskStrip(bubbleId, {
+                    sessionId: _taskUiSessionId,
+                    status: 'spawning',
+                    summary: summaryText || 'Task accepted.',
+                    checkpoint: 'Task accepted.',
+                });
+            }
+        }
+        const _promptTaskSeed = chatShouldSeedTaskUi(safeString(payload?.message || userContext));
+        if (_promptTaskSeed) {
+            const promptSummary = officeTaskTitle(safeString(payload?.message || userContext));
+            _ensureTaskUi(promptSummary);
+            updateMessageTaskStrip(bubbleId, {
+                sessionId: _taskUiSessionId,
+                status: 'defining',
+                summary: promptSummary,
+                checkpoint: 'Task received. Defining what a good result looks like.',
+            });
+            chatAgentPresenceUpsert(_taskContractActivityId, {
+                kind: 'primary',
+                sessionId: _taskUiSessionId,
+                bubbleId,
+                name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
+                status: 'spawning',
+                taskText: promptSummary,
+                summary: promptSummary,
+                startedAt: Date.now(),
+                color: '#9ad8ff',
+                costume: 'none',
+                officeAgentName: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
+            });
+        }
+
+        function _syncDelegationWorkerVisual(evt, status, taskText) {
+            if (!officeEnsureState()) return;
+            officeStartLoop();
+            const activityId = _delegationActivityId(evt);
+            const terminal = _delegationIsTerminalState(status);
+            const existingTaskId = safeString(_officeDelegationTaskByActivity.get(activityId));
+            if (!terminal && !existingTaskId) {
+                const preferredAgent = officeFindAgentByHandle(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id);
+                const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';
+                const queuedTask = officeQueueTask(taskText, {
+                    source: `chat-delegation:${previewSessionId}:${activityId}`,
+                    announce: false,
+                    preferredAgentId: preferredAgent?.id || '',
+                });
+                if (queuedTask?.id) {
+                    _officeDelegationTaskByActivity.set(activityId, queuedTask.id);
+                    chatAgentPresenceSetOfficeContext(activityId, {
+                        taskId: queuedTask.id,
+                        agentId: safeString(queuedTask.assignedAgentId || preferredAgent?.id),
+                        agentName: safeString(preferredAgent?.name || evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id),
+                    });
+                }
+                return;
+            }
+            if (!terminal || !existingTaskId || !officeState) return;
+            const linkedTask = officeState.tasks.find((task) => task.id === existingTaskId);
+            if (!linkedTask) return;
+            linkedTask.status = 'done';
+            linkedTask.completedAt = Date.now();
+            if (linkedTask.assignedAgentId) {
+                const agent = officeGetAgentById(linkedTask.assignedAgentId);
+                if (agent) {
+                    officeBeginTeleportSequence(agent, performance.now());
+                }
+            }
+            officeState.tasksDirty = true;
+            chatAgentPresenceSetOfficeContext(activityId, {
+                taskId: linkedTask.id,
+                agentId: linkedTask.assignedAgentId,
+                agentName: evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id,
+            });
+        }
+
+        function _delegationActivityId(evt) {
+            return safeString(evt.execution_id || evt.task_id || evt.bot_id || evt.bot_name || evt.agent_id || evt.specialist_id || evt.backend_type || 'worker');
+        }
+        function _delegationLabel(evt) {
+            return safeString(evt.bot_name || evt.bot_id || evt.agent_id || evt.specialist_id || evt.backend_type || 'worker');
+        }
+        function _delegationTask(evt) {
+            const detail = safeString(evt.summary || evt.last_progress || evt.text || evt.task || evt.current_task);
+            const backend = safeString(evt.backend_type);
+            if (backend && detail) return `[${backend}] ${detail}`;
+            return detail || backend || '';
+        }
+        const _delegationStateCache = new Map();
+        const _delegationSessionId = safeString(sessionId || activeChatId || taskContinuityLatestSessionId);
+        let _delegationPollTimer = 0;
+        let _delegationPolling = false;
+        let _delegationShouldPollAfterStream = false;
+
+        function _delegationIsTerminalState(state) {
+            const normalized = safeString(state).toLowerCase();
+            return normalized === 'completed' || normalized === 'failed' || normalized === 'abandoned';
+        }
+        function _delegationEventTypeForState(state) {
+            return _delegationIsTerminalState(state)
+                ? (safeString(state).toLowerCase() === 'completed' ? 'delegation_completed' : 'delegation_failed')
+                : 'delegation_progress';
+        }
+        function _stopDelegationPolling() {
+            if (_delegationPollTimer) {
+                clearTimeout(_delegationPollTimer);
+                _delegationPollTimer = 0;
+            }
+        }
+        function _scheduleDelegationPoll(delayMs = 2500) {
+            _stopDelegationPolling();
+            if (!_delegationSessionId) return;
+            _delegationPollTimer = setTimeout(() => {
+                void _pollDelegationStatus();
+            }, Math.max(250, Number(delayMs) || 2500));
+        }
+        async function _pollDelegationStatus() {
+            if (_delegationPolling || !_delegationSessionId) return;
+            _delegationPolling = true;
+            try {
+                const resp = await fetchJsonSafe(`/api/v2/chat/session/${encodeURIComponent(_delegationSessionId)}/delegations`);
+                if (!resp.ok) {
+                    _scheduleDelegationPoll(4000);
+                    return;
+                }
+                const payload = resp.data && typeof resp.data === 'object' ? resp.data : {};
+                const delegations = Array.isArray(payload.delegations) ? payload.delegations : [];
+                delegations.forEach((row) => {
+                    if (!row || typeof row !== 'object') return;
+                    _handleDelegationLifecycle({
+                        ...row,
+                        type: _delegationEventTypeForState(row.state),
+                        bot_name: safeString(row.bot_name || row.bot_id),
+                    });
+                });
+                if (delegations.some((row) => !_delegationIsTerminalState(row?.state))) {
+                    _scheduleDelegationPoll(2500);
+                } else {
+                    _stopDelegationPolling();
+                }
+            } catch (error) {
+                console.warn('Delegation status poll failed', error);
+                _scheduleDelegationPoll(4000);
+            } finally {
+                _delegationPolling = false;
+            }
+        }
+        function _handleDelegationLifecycle(evt) {
+            const evtType = safeString(evt.type);
+            const label = _delegationLabel(evt);
+            const badgeKey = safeString(evt.specialist_id || label || 'worker').toLowerCase().replace(/\s+/g, '_');
+            const activityId = _delegationActivityId(evt);
+            const taskText = _delegationTask(evt) || label;
+            const status = evtType === 'delegation_completed'
+                ? 'completed'
+                : evtType === 'delegation_failed'
+                    ? 'failed'
+                    : safeString(evt.state) || 'running';
+            const cacheKey = `${activityId}::${status}::${taskText}`;
+            const alreadySeen = _delegationStateCache.get(activityId) === cacheKey;
+            _delegationStateCache.set(activityId, cacheKey);
+            const container = _getToolCardsContainer();
+            if (evtType === 'delegation_started') {
+                container.appendChild(createDelegationBadge(badgeKey, taskText));
+            }
+            upsertAgentActivity(container, activityId, status, taskText, 0);
+            _ensureTaskUi(taskText || label);
+            chatAgentPresenceUpsert(activityId, {
+                kind: 'delegation',
+                sessionId: safeString(evt?.session_id) || _taskUiSessionId,
+                bubbleId,
+                name: label || 'worker',
+                status,
+                taskText,
+                summary: taskText || label,
+                startedAt: missionToEpoch(safeString(evt?.created_at || evt?.updated_at)) || Date.now(),
+                color: officeFindAgentByHandle(label)?.color || '#9ad8ff',
+                costume: officeFindAgentByHandle(label)?.costume || 'none',
+            });
+            _syncDelegationWorkerVisual(evt, status, taskText);
+            if (!_delegationIsTerminalState(status)) {
+                _delegationShouldPollAfterStream = true;
+            }
+            void refreshTaskContinuity({ sessionOverride: _delegationSessionId, force: true });
+            if (!hasRenderableText) {
+                if (!robotSayingInterval) _startRobotStatus();
+                currentRobotCategory = 'working';
+                _setRobotSaying(evtType === 'delegation_started' ? 'delegation-started' : 'delegation-progress');
+            }
+            if (!alreadySeen) {
+                const prefix = evtType === 'delegation_completed'
+                    ? 'Background task completed'
+                    : evtType === 'delegation_failed'
+                        ? 'Background task failed'
+                        : 'Background task';
+                updateMessageTaskStrip(bubbleId, {
+                    sessionId: safeString(evt?.session_id) || _taskUiSessionId,
+                    status: _taskUiTerminated ? 'completed' : 'executing',
+                    summary: taskText || label,
+                    checkpoint: `${prefix}: ${taskText || label}`,
+                });
+                thinkingText += `\n${prefix}: ${taskText}`;
+            }
+        }
+
+        function _taskContractStatusForEvent(evt) {
+            const evtType = safeString(evt?.type);
+            if (evtType === 'task_evaluation') {
+                const evaluationStatus = safeString(evt?.evaluation?.status).toLowerCase();
+                if (evaluationStatus === 'passed') return 'completed';
+                if (evaluationStatus === 'failed') return 'failed';
+                return 'completed';
+            }
+            const phase = safeString(evt?.phase || evt?.status || evt?.task_definition_status).toLowerCase();
+            if (phase === 'defining') return 'defining';
+            if (phase === 'executing') return 'executing';
+            if (phase === 'evaluating') return 'evaluating';
+            if (phase === 'complete' || phase === 'completed' || phase === 'passed') return 'completed';
+            if (phase === 'failed' || phase === 'blocked') return 'failed';
+            return 'running';
+        }
+        function _taskContractSummaryForEvent(evt) {
+            const evtType = safeString(evt?.type);
+            if (evtType === 'task_definition') {
+                return safeString(evt?.definition?.task_summary)
+                    || safeString(evt?.definition?.good_result_definition)
+                    || 'Defining what a good result looks like.';
+            }
+            if (evtType === 'task_evaluation') {
+                return safeString(evt?.evaluation?.summary)
+                    || (safeString(evt?.evaluation?.status).toLowerCase() === 'failed'
+                        ? 'Task failed the visible quality bar.'
+                        : 'Task evaluation completed.');
+            }
+            const phase = safeString(evt?.phase).toLowerCase();
+            if (phase === 'defining') return 'Defining what a good result looks like.';
+            if (phase === 'executing') return 'Working the task in the background.';
+            if (phase === 'evaluating') return 'Evaluating the result against the task contract.';
+            return safeString(evt?.label) || 'Working the task in the background.';
+        }
+        function _handleTaskContractLifecycle(evt) {
+            const sessionToken = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';
+            const status = _taskContractStatusForEvent(evt);
+            const taskText = _taskContractSummaryForEvent(evt);
+            if (!taskText) return;
+            _ensureTaskUi(taskText);
+            const pseudoEvt = {
+                execution_id: _taskContractActivityId,
+                session_id: sessionToken,
+                bot_name: 'Task Bot',
+                backend_type: 'task-contract',
+                state: status,
+                summary: taskText,
+                last_progress: taskText,
+            };
+            const container = _getToolCardsContainer();
+            upsertAgentActivity(container, _taskContractActivityId, status, taskText, 0);
+            chatAgentPresenceUpsert(_taskContractActivityId, {
+                kind: 'primary',
+                sessionId: sessionToken,
+                bubbleId,
+                name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
+                status,
+                taskText,
+                summary: taskText,
+                startedAt: chatTaskStripState(bubbleId)?.startedAt || Date.now(),
+                color: '#9ad8ff',
+                costume: 'none',
+                officeAgentName: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
+            });
+            _syncDelegationWorkerVisual(pseudoEvt, status, taskText);
+            const checkpoint = evt?.type === 'task_definition'
+                ? 'Locked the task definition.'
+                : evt?.type === 'task_evaluation'
+                    ? `Evaluation ${safeString(evt?.evaluation?.status).toLowerCase() === 'failed' ? 'failed' : 'completed'}.`
+                    : chatTaskStatusLabel(status);
+            updateMessageTaskStrip(bubbleId, {
+                sessionId: sessionToken,
+                status,
+                summary: taskText,
+                checkpoint,
+            });
+            if (chatTaskIsTerminal(status)) {
+                _taskUiTerminated = true;
+            }
+            if (!hasRenderableText && status !== 'completed' && status !== 'failed') {
+                if (!robotSayingInterval) _startRobotStatus();
+                currentRobotCategory = 'working';
+                _setRobotSaying('delegation-progress');
+            }
         }
 
         try {
@@ -10018,7 +11710,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                     try {
                         const evt = JSON.parse(line);
                         const evtType = safeString(evt.type);
-                        const evtText = safeString(evt.text || evt.delta || evt.content);
+                        const evtText = streamChunkString(evt.text || evt.delta || evt.content);
                         if (evt.type === 'timing') {
                             console.log(`[timing] ${evt.label}: ${evt.elapsed_ms}ms`);
                         } else if (evt.type === 'ui_state_patch') {
@@ -10031,6 +11723,35 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                         } else if (evt.type === 'journal_status') {
                             const status = safeString(evt.status) || 'unknown';
                             pushDebugEvent('chat', `Journal status: ${status}`);
+                        } else if (evt.type === 'task_phase') {
+                            _handleTaskContractLifecycle(evt);
+                            taskContinuityLatestTaskDefinitionStatus = safeString(evt.phase) || taskContinuityLatestTaskDefinitionStatus;
+                            renderTaskContinuity(taskContinuityLatestState, taskContinuityLatestEvents, safeString(evt.session_id) || taskContinuityLatestSessionId, {
+                                activity: taskContinuityLatestActivity,
+                                taskDefinition: taskContinuityLatestTaskDefinition,
+                                taskEvaluation: taskContinuityLatestTaskEvaluation,
+                                taskDefinitionStatus: taskContinuityLatestTaskDefinitionStatus,
+                            });
+                        } else if (evt.type === 'task_definition') {
+                            _handleTaskContractLifecycle(evt);
+                            taskContinuityLatestTaskDefinition = evt.definition && typeof evt.definition === 'object' ? evt.definition : null;
+                            taskContinuityLatestTaskDefinitionStatus = safeString(evt.status) || 'defining';
+                            renderTaskContinuity(taskContinuityLatestState, taskContinuityLatestEvents, safeString(evt.session_id) || taskContinuityLatestSessionId, {
+                                activity: taskContinuityLatestActivity,
+                                taskDefinition: taskContinuityLatestTaskDefinition,
+                                taskEvaluation: taskContinuityLatestTaskEvaluation,
+                                taskDefinitionStatus: taskContinuityLatestTaskDefinitionStatus,
+                            });
+                        } else if (evt.type === 'task_evaluation') {
+                            _handleTaskContractLifecycle(evt);
+                            taskContinuityLatestTaskEvaluation = evt.evaluation && typeof evt.evaluation === 'object' ? evt.evaluation : null;
+                            taskContinuityLatestTaskDefinitionStatus = safeString(evt.task_definition_status) || 'complete';
+                            renderTaskContinuity(taskContinuityLatestState, taskContinuityLatestEvents, safeString(evt.session_id) || taskContinuityLatestSessionId, {
+                                activity: taskContinuityLatestActivity,
+                                taskDefinition: taskContinuityLatestTaskDefinition,
+                                taskEvaluation: taskContinuityLatestTaskEvaluation,
+                                taskDefinitionStatus: taskContinuityLatestTaskDefinitionStatus,
+                            });
                         } else if (evt.type === 'vibe_graph') {
                             vibeCodeHandleGraphEvent(evt);
                         } else if (evt.type === 'vibe_trace') {
@@ -10044,7 +11765,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                         } else if (evt.type === 'done') {
                             streamDone = true;
                             if (!fullText.trim()) {
-                                const doneText = safeString(evt.text || evt.final || evt.output_text);
+                                const doneText = streamChunkString(evt.text || evt.final || evt.output_text);
                                 if (doneText) _consumeAssistantChunk(doneText);
                             }
                         } else if (evt.type === 'error') {
@@ -10062,12 +11783,10 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                             const tc = createToolCallCard(safeString(evt.name));
                             _liveToolCards.push(tc);
                             _getToolCardsContainer().appendChild(tc.card);
-                            // Show descriptive tool saying immediately
-                            const toolDesc = describeToolName(safeString(evt.name));
                             if (!hasRenderableText) {
                                 if (!robotSayingInterval) _startRobotStatus();
                                 currentRobotCategory = 'working';
-                                if (toolDesc) _setRobotSaying(toolDesc);
+                                _setRobotSaying('tool');
                             }
                         } else if (evt.type === 'tool_args' && collectedToolCalls.length > 0) {
                             const last = collectedToolCalls[collectedToolCalls.length - 1];
@@ -10094,9 +11813,6 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                             const chunk = safeString(evt.text);
                             if (chunk) {
                                 thinkingText += chunk;
-                                // Update the live thinking display inside the robot status
-                                const detailsEl = bubbleMsgContent?.querySelector('.chat-robot-thinking-details');
-                                if (detailsEl) _updateThinkingDisplay(detailsEl, thinkingText);
                             }
                         } else if (evt.type === 'delegation') {
                             const specId = safeString(evt.specialist_id);
@@ -10107,11 +11823,9 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                                 if (!hasRenderableText) {
                                     if (!robotSayingInterval) _startRobotStatus();
                                     currentRobotCategory = 'working';
-                                    _setRobotSaying(`Delegating to ${specId}...`);
+                                    _setRobotSaying('delegation');
                                 }
                                 thinkingText += `\nDelegated to ${specId}: ${task}`;
-                                const detailsEl = bubbleMsgContent?.querySelector('.chat-robot-thinking-details');
-                                if (detailsEl) _updateThinkingDisplay(detailsEl, thinkingText);
                             }
                         } else if (evt.type === 'agent_activity') {
                             const agentId = safeString(evt.agent_id);
@@ -10123,15 +11837,16 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                                 upsertAgentActivity(container, agentId, agentStatus, agentTask, agentMs);
                                 if (!hasRenderableText && agentStatus === 'running') {
                                     currentRobotCategory = 'working';
-                                    if (agentTask) _setRobotSaying(agentTask);
+                                    _setRobotSaying('working');
                                 }
                             }
+                        } else if (['delegation_started', 'delegation_progress', 'delegation_completed', 'delegation_failed'].includes(evtType)) {
+                            _handleDelegationLifecycle(evt);
                         } else if (evt.type === 'memory_refresh') {
                             const layer = safeString(evt.layer);
                             if (layer && !hasRenderableText) {
                                 thinkingText += `\nMemory refresh: ${layer}`;
-                                const detailsEl = bubbleMsgContent?.querySelector('.chat-robot-thinking-details');
-                                if (detailsEl) _updateThinkingDisplay(detailsEl, thinkingText);
+                                _setRobotSaying('memory');
                             }
                         } else if (evt.type === 'orchestrator_ack') {
                             // Orchestrator acknowledged  show status immediately
@@ -10139,7 +11854,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                             if (ackMsg && !hasRenderableText) {
                                 if (robotSayingInterval) _clearRobotStatus();
                                 _startRobotStatus();
-                                _setRobotSaying(ackMsg);
+                                _setRobotSaying('working');
                             }
                         } else if (evt.type === 'route' || evt.type === 'task_update') {
                             if (!hasRenderableText) _startRobotStatus();
@@ -10173,7 +11888,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             try {
                 const evt = JSON.parse(buffer);
                 const evtType = safeString(evt.type);
-                const evtText = safeString(evt.text || evt.delta || evt.content);
+                const evtText = streamChunkString(evt.text || evt.delta || evt.content);
                 if (evt.type === 'ui_state_patch') {
                     applyUiStatePatchEvent(evt);
                 } else if (evt.type === 'model_switch') {
@@ -10184,6 +11899,35 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 } else if (evt.type === 'journal_status') {
                     const status = safeString(evt.status) || 'unknown';
                     pushDebugEvent('chat', `Journal status: ${status}`);
+                } else if (evt.type === 'task_phase') {
+                    _handleTaskContractLifecycle(evt);
+                    taskContinuityLatestTaskDefinitionStatus = safeString(evt.phase) || taskContinuityLatestTaskDefinitionStatus;
+                    renderTaskContinuity(taskContinuityLatestState, taskContinuityLatestEvents, safeString(evt.session_id) || taskContinuityLatestSessionId, {
+                        activity: taskContinuityLatestActivity,
+                        taskDefinition: taskContinuityLatestTaskDefinition,
+                        taskEvaluation: taskContinuityLatestTaskEvaluation,
+                        taskDefinitionStatus: taskContinuityLatestTaskDefinitionStatus,
+                    });
+                } else if (evt.type === 'task_definition') {
+                    _handleTaskContractLifecycle(evt);
+                    taskContinuityLatestTaskDefinition = evt.definition && typeof evt.definition === 'object' ? evt.definition : null;
+                    taskContinuityLatestTaskDefinitionStatus = safeString(evt.status) || 'defining';
+                    renderTaskContinuity(taskContinuityLatestState, taskContinuityLatestEvents, safeString(evt.session_id) || taskContinuityLatestSessionId, {
+                        activity: taskContinuityLatestActivity,
+                        taskDefinition: taskContinuityLatestTaskDefinition,
+                        taskEvaluation: taskContinuityLatestTaskEvaluation,
+                        taskDefinitionStatus: taskContinuityLatestTaskDefinitionStatus,
+                    });
+                } else if (evt.type === 'task_evaluation') {
+                    _handleTaskContractLifecycle(evt);
+                    taskContinuityLatestTaskEvaluation = evt.evaluation && typeof evt.evaluation === 'object' ? evt.evaluation : null;
+                    taskContinuityLatestTaskDefinitionStatus = safeString(evt.task_definition_status) || 'complete';
+                    renderTaskContinuity(taskContinuityLatestState, taskContinuityLatestEvents, safeString(evt.session_id) || taskContinuityLatestSessionId, {
+                        activity: taskContinuityLatestActivity,
+                        taskDefinition: taskContinuityLatestTaskDefinition,
+                        taskEvaluation: taskContinuityLatestTaskEvaluation,
+                        taskDefinitionStatus: taskContinuityLatestTaskDefinitionStatus,
+                    });
                 } else if (evt.type === 'vibe_graph') {
                     vibeCodeHandleGraphEvent(evt);
                 } else if (evt.type === 'vibe_trace') {
@@ -10199,7 +11943,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
                 } else if (evt.type === 'done') {
                     streamDone = true;
                     if (!fullText.trim()) {
-                        const doneText = safeString(evt.text || evt.final || evt.output_text);
+                        const doneText = streamChunkString(evt.text || evt.final || evt.output_text);
                         if (doneText) _consumeAssistantChunk(doneText, { renderNow: true });
                     }
                 }
@@ -10212,6 +11956,23 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
         if (hasRenderableText) {
             updateMessage(bubbleId, fullText, false);
             if (!robotLandedForThisResponse) _landRobotAtComposerDock();
+        }
+        if (_taskUiSeeded && !_taskUiTerminated && !_delegationShouldPollAfterStream) {
+            updateMessageTaskStrip(bubbleId, {
+                sessionId: _taskUiSessionId,
+                status: 'completed',
+                checkpoint: 'Assistant response finished.',
+            });
+            chatAgentPresenceUpsert(_taskContractActivityId, {
+                kind: 'primary',
+                sessionId: _taskUiSessionId,
+                bubbleId,
+                name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
+                status: 'completed',
+                taskText: chatTaskStripState(bubbleId)?.summary || 'Task finished.',
+                summary: chatTaskStripState(bubbleId)?.summary || 'Task finished.',
+            });
+            _taskUiTerminated = true;
         }
 
         let assistantFinalText = fullText;
@@ -10255,6 +12016,23 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             errorMsg = "Invalid JSON returned from server.";
         }
         if (errorMsg) {
+            if (_taskUiSeeded) {
+                updateMessageTaskStrip(bubbleId, {
+                    sessionId: _taskUiSessionId,
+                    status: 'failed',
+                    checkpoint: errorMsg,
+                });
+                chatAgentPresenceUpsert(_taskContractActivityId, {
+                    kind: 'primary',
+                    sessionId: _taskUiSessionId,
+                    bubbleId,
+                    name: resolveAgentName(currentPreferences) || DEFAULT_AGENT_NAME,
+                    status: 'failed',
+                    taskText: errorMsg,
+                    summary: errorMsg,
+                });
+                _taskUiTerminated = true;
+            }
             const renderedError = `**Error connecting to ${escapeHtml(getAgentName())} backend.**\n\n\`${escapeHtml(errorMsg)}\``;
             renderMessage({ role: 'assistant', content: renderedError });
             chatHistory.push({
@@ -10323,7 +12101,9 @@ function beginEditMessage(row) {
     if (row.classList.contains('message-editing')) return; // already editing
 
     const contentDiv = row.querySelector('.message-content');
+    const stack = row.querySelector('.message-stack');
     if (!contentDiv) return;
+    if (!stack) return;
 
     // Find this message in chatHistory by row id
     const msgId = row.id;
@@ -10333,7 +12113,6 @@ function beginEditMessage(row) {
     const editText = originalText.replace(/\n\n\*\(Attached \d+ (?:document|image)\(s\)\)\*/g, '').trim();
 
     row.classList.add('message-editing');
-    row.dataset.originalContent = contentDiv.innerHTML;
     row.dataset.originalText = originalText;
 
     const textarea = document.createElement('textarea');
@@ -10348,9 +12127,15 @@ function beginEditMessage(row) {
         <button class="msg-edit-cancel" title="Cancel editing">Cancel</button>
     `;
 
-    contentDiv.innerHTML = '';
-    contentDiv.appendChild(textarea);
-    contentDiv.appendChild(btnBar);
+    const panel = document.createElement('div');
+    panel.className = 'message-edit-panel';
+    panel.appendChild(textarea);
+    panel.appendChild(btnBar);
+    stack.appendChild(panel);
+
+    btnBar.querySelector('.msg-edit-save')?.addEventListener('click', () => void commitEditMessage(row));
+    btnBar.querySelector('.msg-edit-cancel')?.addEventListener('click', () => cancelEditMessage(row));
+
     textarea.focus();
     textarea.setSelectionRange(textarea.value.length, textarea.value.length);
 
@@ -10371,14 +12156,8 @@ function beginEditMessage(row) {
  */
 function cancelEditMessage(row) {
     if (!row.classList.contains('message-editing')) return;
-    const contentDiv = row.querySelector('.message-content');
-    if (contentDiv && row.dataset.originalContent) {
-        contentDiv.innerHTML = row.dataset.originalContent;
-        contentDiv.querySelectorAll('pre code').forEach(el => { try { hljs.highlightElement(el); } catch (_e) { /* ignore unknown lang */ } });
-        addCodeBlockControls(contentDiv);
-    }
+    row.querySelector('.message-edit-panel')?.remove();
     row.classList.remove('message-editing');
-    delete row.dataset.originalContent;
     delete row.dataset.originalText;
 }
 
@@ -10388,8 +12167,7 @@ function cancelEditMessage(row) {
  */
 async function commitEditMessage(row) {
     if (!row.classList.contains('message-editing')) return;
-    const contentDiv = row.querySelector('.message-content');
-    const textarea = contentDiv ? contentDiv.querySelector('.msg-edit-textarea') : null;
+    const textarea = row.querySelector('.msg-edit-textarea');
     if (!textarea) return;
 
     const newText = textarea.value.trim();
@@ -10448,27 +12226,13 @@ async function commitEditMessage(row) {
     if (preferredProfile && preferredProfile !== safeString(selectedProfile) && typeof applyProfileSelection === 'function') {
         applyProfileSelection(preferredProfile);
     }
-    const requestedMode = normalizeChatMode(activeChatMode) || 'auto';
-    const fastMode = requestedMode !== 'thinking';
-    const payload = {
-        message: newText,
+    const payload = buildChatRequestPayload(newText, {
         docs: [],
         images: [],
-        session_id: sessionId,
-        profile: resolvedProfile,
-        model: resolvedProfile,
-        model_id: resolveActiveModelIdForProfile(resolvedProfile) || undefined,
-        mode: requestedMode,
-        autonomy_level: autonomyLevelManuallySet ? activeAutonomyLevel : 1,
-        token_economy: activeTokenEconomy,
-        reasoning_effort: normalizeReasoningEffort(activeReasoningEffort) || undefined,
-        system_prompt: finalPrompt || undefined,
-        fast_mode: fastMode,
-    };
-    if (studioChatContext.enabled) {
-        payload.asset_studio_mode = 'comfy_studio';
-        payload.asset_studio_context = studioChatContext.context || {};
-    }
+        systemPrompt: finalPrompt || undefined,
+        resolvedProfile,
+        studioChatContext,
+    });
 
     await streamChatResponse(payload, { userContext: newText });
 }
@@ -10527,27 +12291,13 @@ async function regenerateResponse(row) {
     if (preferredProfile && preferredProfile !== safeString(selectedProfile) && typeof applyProfileSelection === 'function') {
         applyProfileSelection(preferredProfile);
     }
-    const requestedMode = normalizeChatMode(activeChatMode) || 'auto';
-    const fastMode = requestedMode !== 'thinking';
-    const payload = {
-        message: userMsg.content,
+    const payload = buildChatRequestPayload(userMsg.content, {
         docs: [],
         images: [],
-        session_id: sessionId,
-        profile: resolvedProfile,
-        model: resolvedProfile,
-        model_id: resolveActiveModelIdForProfile(resolvedProfile) || undefined,
-        mode: requestedMode,
-        autonomy_level: autonomyLevelManuallySet ? activeAutonomyLevel : 1,
-        token_economy: activeTokenEconomy,
-        reasoning_effort: normalizeReasoningEffort(activeReasoningEffort) || undefined,
-        system_prompt: finalPrompt || undefined,
-        fast_mode: fastMode,
-    };
-    if (studioChatContext.enabled) {
-        payload.asset_studio_mode = 'comfy_studio';
-        payload.asset_studio_context = studioChatContext.context || {};
-    }
+        systemPrompt: finalPrompt || undefined,
+        resolvedProfile,
+        studioChatContext,
+    });
 
     await streamChatResponse(payload, { userContext: userMsg.content });
 }
@@ -10816,11 +12566,14 @@ function addCodeBlockControls(container) {
  */
 function renderMessage(msg) {
     const isUser = msg.role === 'user';
+    const createdAt = Number(msg?.createdAt) || Date.now();
     const row = document.createElement('div');
     row.className = `message-row ${isUser ? 'is-user' : 'is-assistant'}`;
     if (msg.id) {
         row.id = String(msg.id);
     }
+    row.dataset.messageTimestamp = String(createdAt);
+    row.title = chatMessageTimestampText(createdAt);
 
     const profileMeta = resolveActiveChatProfileMeta();
 
@@ -10864,11 +12617,18 @@ function renderMessage(msg) {
     const content = document.createElement('div');
     content.className = isUser ? 'message-content user-bubble' : 'message-content assistant-bubble';
     content.innerHTML = formatMarkdown(msg.content);
+    content.setAttribute('data-message-timestamp', chatMessageTimestampText(createdAt));
 
     stack.appendChild(content);
-    row.appendChild(stack);
 
-    // Message action buttons (hover-visible)
+    const footer = document.createElement('div');
+    footer.className = 'message-footer';
+
+    const timestamp = document.createElement('span');
+    timestamp.className = 'message-timestamp';
+    timestamp.textContent = chatMessageTimestampText(createdAt);
+    timestamp.setAttribute('aria-label', `Sent ${timestamp.textContent}`);
+
     const actions = document.createElement('div');
     actions.className = 'message-actions';
     if (isUser) {
@@ -10884,7 +12644,10 @@ function renderMessage(msg) {
             '<button class="msg-action-btn" data-action="pin" title="Pin message"><i class="ph ph-push-pin"></i></button>',
         ].join('');
     }
-    row.appendChild(actions);
+    footer.appendChild(timestamp);
+    footer.appendChild(actions);
+    stack.appendChild(footer);
+    row.appendChild(stack);
 
     chatMessagesInner.appendChild(row);
 
@@ -11019,6 +12782,10 @@ function safeString(value) {
     return String(value || '').trim();
 }
 
+function streamChunkString(value) {
+    return value === undefined || value === null ? '' : String(value);
+}
+
 function normalizeReasoningEffort(valueRaw) {
     const value = safeString(valueRaw).toLowerCase();
     if (!value) return '';
@@ -11066,11 +12833,17 @@ function resolveProfileReasoningEffort(profileName = '') {
     const profile = Array.isArray(availableModelProfiles)
         ? availableModelProfiles.find((entry) => safeString(entry?.name) === targetProfile)
         : null;
+    const reasoningControl = profile?.chat_controls?.model?.reasoning_effort;
     const persistedEffort = getPersistedReasoningEffort(targetProfile);
-    const defaultEffort = normalizeReasoningEffort(profile?.reasoning_effort);
+    const defaultEffort = normalizeReasoningEffort(
+        reasoningControl?.default_value
+        || profile?.reasoning_effort
+        || (safeString(profile?.provider) === 'codex' ? 'medium' : '')
+    );
+    if (!reasoningControl?.supported && !defaultEffort && !persistedEffort) return '';
     if (persistedEffort) return persistedEffort;
     if (defaultEffort) return defaultEffort;
-    return safeString(profile?.provider) === 'codex' ? 'medium' : '';
+    return '';
 }
 
 function resolveActiveModelIdForProfile(profileName = '') {
@@ -14568,15 +16341,21 @@ function officeUpdateRoomMeta() {
 function officeRenderTaskList() {
     if (!officeState || !officeTaskList) return;
     officeTaskList.innerHTML = '';
-    if (!officeState.tasks.length) {
+    const previewScoped = Boolean(officeWorkspace?.classList.contains('chat-preview-active'));
+    const visibleTasks = previewScoped
+        ? officeState.tasks.filter((task) => officeTaskMatchesChatPreview(task))
+        : officeState.tasks;
+    if (!visibleTasks.length) {
         const empty = document.createElement('div');
         empty.className = 'office-task-item';
-        empty.textContent = 'No tasks yet. Add one below to dispatch your agents.';
+        empty.textContent = previewScoped
+            ? 'Background workers for this chat will appear here.'
+            : 'No tasks yet. Add one below to dispatch your agents.';
         officeTaskList.appendChild(empty);
         return;
     }
 
-    const rows = [...officeState.tasks]
+    const rows = [...visibleTasks]
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, OFFICE_MAX_TASKS);
 
@@ -14643,6 +16422,7 @@ function officeCreateAgentElement(agent) {
 
 function officeRenderAgents(now = performance.now()) {
     if (!officeState?.agentLayerEl) return;
+    const selectedId = safeString(officeState.selectedAgentId);
     officeState.agents.forEach((agent) => {
         let el = officeState.agentElements.get(agent.id);
         if (!el) {
@@ -14660,6 +16440,7 @@ function officeRenderAgents(now = performance.now()) {
         el.classList.toggle('is-working', agent.state === 'working');
         el.classList.toggle('is-colliding', now < agent.bumpUntil);
         el.classList.toggle('is-jumping', now < agent.jumpUntil);
+        el.classList.toggle('is-selected', agent.id === selectedId);
         el.dataset.state = safeString(agent.state) || 'idle';
         ['idle', 'walking', 'working', 'break', 'yield', 'runaway'].forEach((stateName) => {
             el.classList.toggle(`state-${stateName}`, agent.state === stateName);
@@ -14704,6 +16485,7 @@ function officeRenderAgents(now = performance.now()) {
             }
         }
     });
+    officeRenderRosterPanel();
     officeRenderMinimap();
     composerSyncSendButtonState();
 }
@@ -16346,39 +18128,142 @@ function officeDrawTilemap(canvas, rooms, corridors) {
     ctx.restore();
 }
 
+function officeEnsureNativeSceneLayers() {
+    if (!officeScene || !officeState) return null;
+    officeScene.classList.add('office-scene-native');
+
+    let worldEl = officeScene.querySelector('.office-world');
+    if (!worldEl) {
+        officeScene.innerHTML = '';
+        worldEl = document.createElement('div');
+        worldEl.className = 'office-world';
+        worldEl.innerHTML = `
+            <canvas class="office-tilemap-canvas" aria-hidden="true"></canvas>
+            <div class="office-room-layer" aria-hidden="true"></div>
+            <div class="office-agent-layer" aria-label="Active office agents"></div>
+            <aside class="office-roster-panel" aria-label="Office roster"></aside>
+        `;
+        officeScene.appendChild(worldEl);
+    }
+
+    const tilemapCanvas = worldEl.querySelector('.office-tilemap-canvas');
+    const roomLayer = worldEl.querySelector('.office-room-layer');
+    const agentLayer = worldEl.querySelector('.office-agent-layer');
+    const rosterPanel = worldEl.querySelector('.office-roster-panel');
+    if (!tilemapCanvas || !roomLayer || !agentLayer || !rosterPanel) {
+        return null;
+    }
+
+    officeState.tilemapCanvas = tilemapCanvas;
+    officeState.roomLayerEl = roomLayer;
+    officeState.agentLayerEl = agentLayer;
+    officeState.rosterPanelEl = rosterPanel;
+    officeState.agentElements = officeState.agentElements || new Map();
+    return { worldEl, tilemapCanvas, roomLayer, agentLayer, rosterPanel };
+}
+
+function officeRoomAgents(room) {
+    if (!officeState || !room) return [];
+    return officeState.agents.filter((agent) => officeCurrentRoomForAgent(agent)?.id === room.id);
+}
+
+function officeRenderRoomOverlays() {
+    if (!officeState?.roomLayerEl) return;
+    const roomLayer = officeState.roomLayerEl;
+    roomLayer.innerHTML = '';
+
+    officeState.rooms.forEach((room) => {
+        const roomEl = document.createElement('article');
+        roomEl.className = `office-room overlay theme-${safeString(room.theme || room.kind).toLowerCase() || 'default'}`;
+        roomEl.dataset.roomId = room.id;
+        roomEl.style.left = `${room.x}%`;
+        roomEl.style.top = `${room.y}%`;
+        roomEl.style.width = `${room.w}%`;
+        roomEl.style.height = `${room.h}%`;
+
+        const assignedAgents = officeRoomAgents(room);
+        const rosterMarkup = assignedAgents.slice(0, 3).map((agent) => (
+            `<span class="office-room-roster-chip">${escapeHtml(agent.name)}</span>`
+        )).join('');
+        const deskSummary = assignedAgents.length
+            ? `${assignedAgents.length} active in zone`
+            : safeString(room.meta || 'Reserved desk zone');
+
+        roomEl.innerHTML = `
+            <header class="office-room-title">${escapeHtml(room.label)}</header>
+            <div class="office-room-meta">${escapeHtml(deskSummary)}</div>
+            <div class="office-room-roster">${rosterMarkup || '<span class="office-room-roster-empty">Reserved desks ready</span>'}</div>
+        `;
+        roomLayer.appendChild(roomEl);
+    });
+}
+
+function officeRenderRosterPanel() {
+    if (!officeState?.rosterPanelEl) return;
+    const panel = officeState.rosterPanelEl;
+    const selectedId = safeString(officeState.selectedAgentId);
+    panel.innerHTML = '';
+
+    const head = document.createElement('div');
+    head.className = 'office-roster-head';
+    head.innerHTML = `
+        <strong>Active Roster</strong>
+        <span>${officeState.agents.length} agents</span>
+    `;
+    panel.appendChild(head);
+
+    const list = document.createElement('div');
+    list.className = 'office-roster-list';
+
+    officeState.agents.forEach((agent) => {
+        const card = document.createElement('button');
+        card.type = 'button';
+        card.className = 'office-roster-card';
+        if (agent.id === selectedId) card.classList.add('is-selected');
+        const room = officeCurrentRoomForAgent(agent);
+        const palette = officeAgentPalette(agent);
+        card.style.setProperty('--agent-primary', palette.primary);
+        card.style.setProperty('--agent-secondary', palette.secondary);
+        card.style.setProperty('--agent-glow', palette.glow);
+        card.innerHTML = `
+            <span class="office-roster-avatar">
+                <span class="office-pixel-agent${agent.facing < 0 ? ' facing-left' : ''}">
+                    <span class="office-agent-head">
+                        <span class="office-agent-eye office-agent-eye-left"></span>
+                        <span class="office-agent-eye office-agent-eye-right"></span>
+                    </span>
+                    <span class="office-agent-body"></span>
+                    <span class="office-agent-leg office-agent-leg-left"></span>
+                    <span class="office-agent-leg office-agent-leg-right"></span>
+                </span>
+            </span>
+            <span class="office-roster-copy">
+                <strong>${escapeHtml(agent.name)}</strong>
+                <span>${escapeHtml(room?.label || 'Roaming')}</span>
+            </span>
+            <span class="office-roster-state">${escapeHtml(safeString(agent.state || 'idle'))}</span>
+        `;
+        card.addEventListener('click', () => officeHandleAgentTap(agent.id));
+        list.appendChild(card);
+    });
+
+    panel.appendChild(list);
+}
+
 function officeRenderScene() {
     if (!officeScene) return;
-    /*  New Virtual Office (iframe-based replacement)  */
-    if (!document.getElementById('virtualOfficeFrame')) {
-        officeScene.innerHTML = '';
-        const wrap = document.createElement('div');
-        wrap.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:hidden;';
-        const iframe = document.createElement('iframe');
-        iframe.id = 'virtualOfficeFrame';
-        iframe.src = '/static/virtual_office.html';
-        iframe.style.cssText = 'border:none;width:100%;height:100%;display:block;background:#0a0e1a;';
-        iframe.setAttribute('allowfullscreen', '');
-        wrap.appendChild(iframe);
-        officeScene.appendChild(wrap);
-        /* Pass agent/room state into iframe when ready */
-        iframe.addEventListener('load', () => {
-            try {
-                if (officeState && iframe.contentWindow) {
-                    iframe.contentWindow.postMessage({
-                        type: 'thomas-office-state',
-                        agents: officeState.agents || [],
-                        rooms: officeState.rooms || [],
-                    }, '*');
-                }
-            } catch(e) { /* cross-origin safety */ }
-        });
-    }
-    /* Legacy layers for compatibility (hidden behind iframe) */
-    if (officeState) {
-        officeState.roomLayerEl = officeState.roomLayerEl || document.createElement('div');
-        officeState.agentLayerEl = officeState.agentLayerEl || document.createElement('div');
-        officeState.agentElements = officeState.agentElements || new Map();
-    }
+    if (!officeState) return;
+
+    const mounted = officeEnsureNativeSceneLayers();
+    if (!mounted) return;
+
+    const { tilemapCanvas } = mounted;
+    tilemapCanvas.width = Math.max(1, Math.round(officeState.mapWidth || OFFICE_MAP_WIDTH));
+    tilemapCanvas.height = Math.max(1, Math.round(officeState.mapHeight || OFFICE_MAP_HEIGHT));
+    officeDrawTilemap(tilemapCanvas, officeState.rooms, officeState.corridors || []);
+    officeRenderRoomOverlays();
+    officeRenderRosterPanel();
+    officeUpdateRoomMeta();
 }
 
 function officeSetEditorOpen(open) {
@@ -17771,6 +19656,65 @@ function officeStartLoop() {
     officeState.rafId = window.requestAnimationFrame(officeAnimationLoop);
 }
 
+function officeChatPreviewSessionKey() {
+    const sessionKey = safeString(officeChatPreviewSessionId || activeChatId || taskContinuityLatestSessionId || 'chat');
+    return sessionKey || 'chat';
+}
+
+function officeHasChatPreviewTasks() {
+    if (!officeState || !Array.isArray(officeState.tasks)) return false;
+    if (!chatMessagesInner || !chatMessagesInner.querySelector('.message-row')) return false;
+    const previewSessionId = officeChatPreviewSessionKey();
+    const prefix = `chat-delegation:${previewSessionId}:`;
+    return officeState.tasks.some((task) => safeString(task?.source).startsWith(prefix));
+}
+
+function officeTaskMatchesChatPreview(task) {
+    const previewSessionId = officeChatPreviewSessionKey();
+    return safeString(task?.source).startsWith(`chat-delegation:${previewSessionId}:`);
+}
+
+function officeShouldShowChatPreview() {
+    return false;
+}
+
+function officeShowChatPreviewNow() {
+    return;
+}
+
+function officeScheduleChatPreviewRefresh() {
+    if (officeChatPreviewTimer) {
+        window.clearTimeout(officeChatPreviewTimer);
+        officeChatPreviewTimer = 0;
+    }
+    if (!officeShouldShowChatPreview()) return;
+    const delay = Math.max(160, officeChatPreviewUntil - Date.now() + 120);
+    officeChatPreviewTimer = window.setTimeout(() => {
+        officeChatPreviewTimer = 0;
+        officeRefreshSurfaceVisibility();
+    }, delay);
+}
+
+function officeRefreshSurfaceVisibility() {
+    const isOffice = sidebarNavMode === 'office';
+    const showPreview = false;
+    if (officeWorkspace) {
+        officeWorkspace.classList.toggle('hidden', !(isOffice || showPreview));
+        officeWorkspace.classList.toggle('chat-preview-active', showPreview && !isOffice);
+    }
+    if (appRoot) {
+        appRoot.classList.toggle('office-active', isOffice);
+        appRoot.classList.toggle('office-preview-active', showPreview && !isOffice);
+    }
+    if (sidebar) {
+        sidebar.classList.toggle('mode-office', isOffice);
+    }
+    if (officeState) {
+        officeState.active = isOffice || showPreview;
+    }
+    officeScheduleChatPreviewRefresh();
+}
+
 function officeNearestHallId(doorX, doorY) {
     let bestId = 'hall-south-mid';
     let bestDistance = Number.POSITIVE_INFINITY;
@@ -18471,6 +20415,12 @@ function officePanelResizeEnd(event) {
 
 function officeEnablePanelResizing() {
     if (!officeState || !officeWorkspace) return;
+    const existingHandles = officeWorkspace.querySelectorAll('.office-resize-handle');
+    existingHandles.forEach((handle) => handle.remove());
+    officeWorkspace.querySelectorAll('.office-resizable').forEach((panel) => {
+        panel.classList.remove('office-resizable', 'is-resizing');
+    });
+    return;
     if (!officeState.panelResize || typeof officeState.panelResize !== 'object') {
         officeState.panelResize = {
             active: false,
@@ -33380,6 +35330,18 @@ function moduleRenderMarketplaceSurface(container) {
         return { label: 'Catalog Only', tone: 'catalog' };
     };
 
+    const typeLabel = (app) => titleCase(app?.marketplace_type_label || app?.marketplace_type || app?.kind) || 'Plugin';
+
+    const installBehaviorLabel = (app) => {
+        if (app?.installable) {
+            if (app?.installed && app?.enabled) return 'Enabled';
+            if (app?.installed) return 'Installed';
+            return 'Installable';
+        }
+        if (app?.download_available) return 'Downloadable';
+        return 'Catalog Only';
+    };
+
     const buildPrimaryAction = (app) => {
         if (app?.installable) {
             if (app?.installed) {
@@ -34868,12 +36830,14 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const isSearch = sidebarNavMode === 'search';
     const isChat = sidebarNavMode === 'chat' || isSearch;
     const isOffice = sidebarNavMode === 'office';
+    const showOfficePreview = false;
     const isMission = sidebarNavMode === 'mission';
     const isContent = sidebarNavMode === 'content';
     const isModule = MODULE_NAV_MODE_SET.has(sidebarNavMode);
 
     if (navChatBtn) navChatBtn.classList.toggle('active', isChat);
-    if (navOfficeBtn) navOfficeBtn.classList.toggle('active', isOffice);
+    const navOfficeBtnLive = document.getElementById('navOfficeBtn');
+    if (navOfficeBtnLive) navOfficeBtnLive.classList.toggle('active', isOffice);
     if (navMissionBtn) navMissionBtn.classList.toggle('active', isMission);
     if (navContentBtn) navContentBtn.classList.toggle('active', isContent);
     sidebarModeButtons.forEach((button) => {
@@ -34886,12 +36850,16 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
         sidebarChatPanel.classList.toggle('hidden', !isChat);
         sidebarChatPanel.classList.toggle('chat-list-collapsed', !chatListExpanded);
     }
-    if (officeWorkspace) officeWorkspace.classList.toggle('hidden', !isOffice);
+    if (officeWorkspace) {
+        officeWorkspace.classList.toggle('hidden', !(isOffice || showOfficePreview));
+        officeWorkspace.classList.toggle('chat-preview-active', showOfficePreview);
+    }
     if (missionWorkspace) missionWorkspace.classList.toggle('hidden', !isMission);
     if (contentWorkspace) contentWorkspace.classList.toggle('hidden', !isContent);
     if (moduleWorkspace) moduleWorkspace.classList.toggle('hidden', !isModule);
     if (appRoot) {
         appRoot.classList.toggle('office-active', isOffice);
+        appRoot.classList.toggle('office-preview-active', showOfficePreview);
         appRoot.classList.toggle('mission-active', isMission);
         appRoot.classList.toggle('content-active', isContent);
         appRoot.classList.toggle('module-active', isModule);
@@ -34905,15 +36873,20 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
         sidebar.classList.toggle('mode-content', isContent);
         sidebar.classList.toggle('mode-module', isModule);
     }
+    officeScheduleChatPreviewRefresh();
 
-    if (isOffice && officeEnsureState()) {
+    if ((isOffice || showOfficePreview) && officeEnsureState()) {
         officeState.active = true;
-        officeResetViewport();
-        void officeStartMissionStream();
-        if (officeChatInput) {
-            window.setTimeout(() => {
-                officeChatInput.focus();
-            }, 0);
+        if (isOffice) {
+            officeResetViewport();
+            void officeStartMissionStream();
+            if (officeChatInput) {
+                window.setTimeout(() => {
+                    officeChatInput.focus();
+                }, 0);
+            }
+        } else {
+            officeStopMissionStream();
         }
     } else if (officeState) {
         officeState.active = false;
@@ -35473,6 +37446,7 @@ async function fetchModels() {
 
             applyProfileSelection(targetProfile, { allowLocalBackup: !hasPersistedProfile });
             renderSetupProviderPickerMenu(targetProfile, { preserveExpanded: false });
+            renderChatComposerSubbar();
 
             refreshEasySetupProfileOptions();
             updateDebugDockSnapshot();
@@ -35481,6 +37455,26 @@ async function fetchModels() {
 }
 
 function initFeatures() {
+    if (!document.getElementById('navOfficeBtn')) {
+        const navWrap = document.getElementById('workspaceNavItems');
+        if (navWrap instanceof HTMLElement) {
+            const button = document.createElement('button');
+            button.className = 'nav-item';
+            button.id = 'navOfficeBtn';
+            button.dataset.navMode = 'office';
+            button.innerHTML = '<i class="ph ph-buildings"></i> Virtual Office ';
+            navWrap.insertBefore(button, navWrap.firstChild);
+        }
+    }
+    if (officeWorkspace instanceof HTMLElement) {
+        const title = officeWorkspace.querySelector('.office-toolbar-title span:last-child');
+        if (title instanceof HTMLElement) {
+            title.textContent = 'Virtual Office';
+        }
+    }
+    if (officeEditorToggleBtn instanceof HTMLButtonElement) {
+        officeEditorToggleBtn.textContent = 'Edit Roster';
+    }
     initOfficeWorkspace();
     initMissionWorkspace();
     initContentWorkspace();
@@ -35571,8 +37565,9 @@ function initFeatures() {
         });
     }
 
-    if (navOfficeBtn) {
-        navOfficeBtn.addEventListener('click', () => {
+    const navOfficeBtnLive = document.getElementById('navOfficeBtn');
+    if (navOfficeBtnLive) {
+        navOfficeBtnLive.addEventListener('click', () => {
             ensureSettingsUiClosed();
             setSidebarNavMode('office');
         });
@@ -35865,9 +37860,16 @@ function initModelSetup() {
     bindSegmentedControl('setupAutonomyGroup', val => {
         autonomyLevelManuallySet = true;
         activeAutonomyLevel = parseInt(val, 10);
+        renderChatComposerSubbar();
     });
-    bindSegmentedControl('setupEconomyGroup', val => activeTokenEconomy = val);
-    bindSegmentedControl('setupReasoningEffortGroup', val => { activeReasoningEffort = normalizeReasoningEffort(val); });
+    bindSegmentedControl('setupEconomyGroup', val => {
+        activeTokenEconomy = val;
+        renderChatComposerSubbar();
+    });
+    bindSegmentedControl('setupReasoningEffortGroup', val => {
+        activeReasoningEffort = normalizeReasoningEffort(val);
+        renderChatComposerSubbar();
+    });
 
     if (setupProviderPickerBtn) {
         setupProviderPickerBtn.addEventListener('click', (event) => {
@@ -35929,7 +37931,6 @@ function initModelSetup() {
     // Provider change: sync model select and reasoning effort.
     const _syncProviderUI = (profileName) => {
         const p = availableModelProfiles.find(m => m.name === profileName);
-        const reasoningGroup = document.getElementById('setupReasoningGroup');
         const allowLocalBackup = !safeString(currentPreferences?.advanced?.model?.active_profile);
 
         renderSetupProviderPickerMenu(profileName, { preserveExpanded: true });
@@ -35945,19 +37946,8 @@ function initModelSetup() {
         }
 
         // --- Reasoning effort ---
-        const profileEffort = normalizeReasoningEffort(p?.reasoning_effort);
-        const persistedEffort = getPersistedReasoningEffort(profileName);
-        const shouldShowReasoning = Boolean(p && (p.provider === 'codex' || profileEffort || persistedEffort));
-        if (shouldShowReasoning) {
-            if (reasoningGroup) reasoningGroup.style.display = '';
-            const cur = persistedEffort || profileEffort || (p?.provider === 'codex' ? 'medium' : '');
-            activeReasoningEffort = cur;
-            setSegmentedControlSelection('setupReasoningEffortGroup', cur);
-        } else {
-            if (reasoningGroup) reasoningGroup.style.display = 'none';
-            activeReasoningEffort = '';
-            setSegmentedControlSelection('setupReasoningEffortGroup', '');
-        }
+        syncSetupReasoningVisibility(profileName);
+        renderChatComposerSubbar();
     };
 
     // Populate model <select> with deduped options
@@ -36312,7 +38302,7 @@ function applyProfileSelection(profileRaw, { allowLocalBackup = false } = {}) {
             setupModelSelector.value = modelId;
         }
     }
-    activeReasoningEffort = resolveProfileReasoningEffort(profile);
+    syncSetupReasoningVisibility(profile);
     renderSetupProviderPickerMenu(profile, { preserveExpanded: false });
     try { window.localStorage.setItem('thomas_active_profile', profile); } catch (_) {}
     if (modelId) {
@@ -36321,6 +38311,7 @@ function applyProfileSelection(profileRaw, { allowLocalBackup = false } = {}) {
         try { window.localStorage.removeItem('thomas_active_model_id'); } catch (_) {}
     }
     if (modelSetupCurrentLabel) modelSetupCurrentLabel.textContent = _profileHeaderLabel(profile);
+    renderChatComposerSubbar();
 }
 
 function setSegmentedControlSelection(groupId, levelRaw) {
@@ -40640,10 +42631,14 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         const posTop = parseFloat(element.style.top);
         const width = parseFloat(element.style.width);
         const height = parseFloat(element.style.height);
-        fieldX.input.value = Number.isFinite(posLeft) ? String(Math.round(posLeft)) : String(boundsX);
-        fieldY.input.value = Number.isFinite(posTop) ? String(Math.round(posTop)) : String(boundsY);
-        fieldW.input.value = Number.isFinite(width) ? String(Math.round(width)) : String(boundsW);
-        fieldH.input.value = Number.isFinite(height) ? String(Math.round(height)) : String(boundsH);
+        const safeNumberInputValue = (value, fallback) => {
+            const numeric = Number.isFinite(value) ? value : fallback;
+            return Number.isFinite(numeric) ? String(Math.round(numeric)) : '';
+        };
+        fieldX.input.value = safeNumberInputValue(posLeft, boundsX);
+        fieldY.input.value = safeNumberInputValue(posTop, boundsY);
+        fieldW.input.value = safeNumberInputValue(width, boundsW);
+        fieldH.input.value = safeNumberInputValue(height, boundsH);
         fieldZ.input.value = safeString(element.style.zIndex) || (computed ? safeString(computed.zIndex) : '') || '10';
         noteInput.value = safeString(notes[0] && notes[0].text);
         selectionStatus.textContent = 'Selected ' + (safeString(meta.targetId) || safeString(meta.tag) || 'element') + '. Use fields for exact edits.';

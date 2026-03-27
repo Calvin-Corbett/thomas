@@ -15,7 +15,15 @@ from typing import Any, Optional
 
 import click
 
-from thomas.channels.p087_channel_auth_validation_helper import (
+try:
+    from thomas.marketplace.channels.p087_channel_auth_validation_helper import (
+        ChannelAuthValidationError,
+        ChannelAuthValidationRequest,
+        ChannelAuthValidationResult,
+        validate_channel_auth,
+    )
+except ImportError:  # pragma: no cover
+    from thomas.channels.p087_channel_auth_validation_helper import (
     ChannelAuthValidationRequest,
     ChannelAuthValidationResult,
     ChannelAuthValidationError,

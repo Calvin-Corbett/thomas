@@ -11,6 +11,8 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from thomas.benchmarks.benchmark_lane import get_benchmark_context
+
 ROOT = Path(__file__).resolve().parent.parent
 REPO_MARKERS = (
     "pyproject.toml",
@@ -333,6 +335,22 @@ def _check_worktree_clean(root: Path) -> dict[str, str]:
         if staged:
             summary_parts.append(f"{staged} staged")
         summary = ", ".join(summary_parts) if summary_parts else f"{len(dirty_lines)} changed"
+        benchmark_context, benchmark_error = get_benchmark_context(root)
+        if benchmark_context is not None:
+            allowed_root = str(benchmark_context.get("root") or "")
+            return _result(
+                "worktree-clean",
+                "degraded",
+                f"Worktree is dirty but benchmark lane is enabled: {summary}. Allowed benchmark root: {allowed_root}.",
+                user_action=("Limit writes to the audited benchmark root and report that benchmark lane is active."),
+            )
+        if benchmark_error:
+            return _result(
+                "worktree-clean",
+                "blocked",
+                f"Worktree is dirty and benchmark mode is invalid: {benchmark_error}.",
+                user_action=("Fix the benchmark env contract or disable benchmark mode before editing."),
+            )
         if _dirty_worktree_override_enabled():
             return _result(
                 "worktree-clean",

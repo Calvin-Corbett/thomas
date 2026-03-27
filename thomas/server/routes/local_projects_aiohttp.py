@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+import os
+import shutil
+import subprocess
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
 from aiohttp import web
 
+from thomas.server.routes import local_projects_helpers_aiohttp as _helpers
 from thomas.server.routes.local_projects_helpers_aiohttp import (
     _MAX_PROJECTS,
     _build_project_dossier,
@@ -27,6 +31,35 @@ from thomas.server.routes.local_projects_helpers_aiohttp import (
 
 RequireAccessFn = Callable[[web.Request], None]
 ReadJsonFn = Callable[[web.Request], Awaitable[Any]]
+
+
+def _run_command(command: list[str], cwd: Path) -> dict[str, Any]:
+    if not command:
+        return {"kind": "error", "error": "missing command", "command": []}
+
+    launched_command = list(command)
+    creation_kwargs: dict[str, Any] = {"cwd": str(cwd)}
+    if os.name == "nt":
+        executable = shutil.which(command[0]) or ""
+        if executable.lower().endswith((".cmd", ".bat")):
+            launched_command = ["cmd.exe", "/c", *command]
+        creation_flags = getattr(subprocess, "CREATE_NEW_CONSOLE", 0)
+        if creation_flags:
+            creation_kwargs["creationflags"] = creation_flags
+
+    proc = subprocess.Popen(launched_command, **creation_kwargs)
+    return {
+        "kind": "command_started",
+        "pid": int(getattr(proc, "pid", 0) or 0),
+        "command": list(command),
+        "launched_command": launched_command,
+    }
+
+
+_helpers.os = os
+_helpers.shutil = shutil
+_helpers.subprocess = subprocess
+_helpers._run_command = _run_command
 
 
 def register_local_project_routes(

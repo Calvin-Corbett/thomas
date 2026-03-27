@@ -129,6 +129,12 @@ def _to_bool(value: bool | int | None) -> bool:
     return bool(value)
 
 
+def _bytecode_suppressed_env() -> dict[str, str]:
+    env = dict(os.environ)
+    env["PYTHONDONTWRITEBYTECODE"] = "1"
+    return env
+
+
 def _spawn_worker_loop(
     *,
     workboard_path: Path,
@@ -160,7 +166,7 @@ def _spawn_worker_loop(
             creation_flags |= subprocess.DETACHED_PROCESS
         close_fds = False
     try:
-        env = dict(os.environ)
+        env = _bytecode_suppressed_env()
         for key in agent_presence.SESSION_ENV_KEYS:
             env.pop(str(key), None)
         process = subprocess.Popen(
@@ -217,7 +223,7 @@ def _spawn_task_manager_loop(
             creation_flags |= subprocess.DETACHED_PROCESS
         close_fds = False
     try:
-        env = dict(os.environ)
+        env = _bytecode_suppressed_env()
         for key in agent_presence.SESSION_ENV_KEYS:
             env.pop(str(key), None)
         process = subprocess.Popen(
@@ -348,7 +354,7 @@ def _start_task_manager_loop(
         task_manager_agent,
     ]
     try:
-        process = subprocess.run(command, cwd=str(ROOT), check=False)
+        process = subprocess.run(command, cwd=str(ROOT), env=_bytecode_suppressed_env(), check=False)
     except FileNotFoundError as exc:
         return False, str(exc), 1
     return True, "", int(process.returncode or 0)
@@ -374,7 +380,7 @@ def _start_worker_loop(
         str(float(poll_seconds)),
     ]
     try:
-        process = subprocess.run(command, cwd=str(ROOT), check=False)
+        process = subprocess.run(command, cwd=str(ROOT), env=_bytecode_suppressed_env(), check=False)
     except FileNotFoundError as exc:
         return False, str(exc), 1
     return True, "", int(process.returncode or 0)

@@ -541,6 +541,9 @@ async def stream_agent_events(
         run_done["usage"] = usage_obj
 
         assistant_text = str(event.data.get("text") or "")
+        session.last_assistant_message = assistant_text
+        run_done["text"] = assistant_text
+        run_done["token_report"] = token_report
         await emit_vibe(
             "llm.generate",
             "success",

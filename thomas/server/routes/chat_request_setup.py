@@ -350,11 +350,12 @@ async def setup_chat_request(
     default_token_economy = ""
     if not fast_mode and advanced_runtime is not None:
         default_token_economy = str(getattr(advanced_runtime, "default_token_economy", "") or "").strip().lower()
-    requested_token_economy = str(payload.get("token_economy") or default_token_economy).strip().lower()
+    payload_requested_token_economy = str(payload.get("token_economy") or "").strip().lower()
+    requested_token_economy = str(payload_requested_token_economy or default_token_economy).strip().lower()
 
     from dataclasses import replace
 
-    from thomas.core.runtime import apply_token_economy_policy, build_token_economy_meta
+    from thomas.core.token_economy import apply_token_economy_policy, build_token_economy_meta
 
     applied_token_economy, mode, run_cfg, run_max_iterations = apply_token_economy_policy(
         cfg=cfg,
@@ -434,6 +435,7 @@ async def setup_chat_request(
 
     text = str(payload.get("text") or payload.get("message") or payload.get("prompt") or "")
     raw_user_text = str(text or "")
+    session.last_user_message = raw_user_text
     requested_job_type = str(payload.get("job_type") or "").strip().lower() or None
     docs = payload.get("docs") or []
     images = payload.get("images") or []
@@ -456,7 +458,7 @@ async def setup_chat_request(
     ledger = _resolve_app_value(request.app, APP_TASK_LEDGER)
     if ledger is not None:
         try:
-            from thomas.agent.goals import derive_active_goal
+            from thomas.observability.task_ledger import derive_active_goal
 
             current_state = ledger.get_current(sid)
             next_goal = derive_active_goal(
@@ -479,6 +481,7 @@ async def setup_chat_request(
     return {
         "session": session,
         "profile": profile,
+        "requested_mode": requested_mode,
         "mode": mode,
         "run_cfg": run_cfg,
         "run_max_iterations": run_max_iterations,
@@ -499,6 +502,8 @@ async def setup_chat_request(
         "resolved_review_depth": resolved_review_depth,
         "runtime_prefs_saved": runtime_prefs_saved,
         "applied_token_economy": applied_token_economy,
+        "requested_token_economy": requested_token_economy,
+        "payload_requested_token_economy": payload_requested_token_economy,
         "token_economy_meta": token_economy_meta,
         "memory_enabled_for_turn": memory_enabled_for_turn,
         "memory_retrieval_scope": memory_retrieval_scope,

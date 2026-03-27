@@ -51,7 +51,8 @@ def _load_dispatch():
             return sys.modules[mod_name]
         import pathlib
 
-        dp = str(pathlib.Path(__file__).resolve().parent.parent / "agent" / "dispatch.py")
+        repo_thomas = pathlib.Path(__file__).resolve().parents[2]
+        dp = str(repo_thomas / "agent" / "dispatch.py")
         spec = ilu.spec_from_file_location(mod_name, dp)
         if spec and spec.loader:
             mod = ilu.module_from_spec(spec)

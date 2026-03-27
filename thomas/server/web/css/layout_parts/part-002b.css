@@ -177,7 +177,8 @@
 
 .office-toolbar {
     grid-area: toolbar;
-    justify-content: flex-end;
+    justify-content: space-between;
+    align-items: center;
     min-width: 0;
     min-height: 0;
     border-radius: 16px;
@@ -188,11 +189,17 @@
 }
 
 .office-toolbar-title {
-    display: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: #eef6ff;
+    font-size: 13px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
 }
 
 #officeEditorToggleBtn {
-    display: none;
+    display: inline-flex;
 }
 
 .office-stage {
@@ -206,10 +213,92 @@
     min-height: 0;
     display: grid;
     grid-template-columns: 1fr;
-    grid-template-rows: auto auto;
+    grid-template-rows: minmax(0, 1fr);
     align-content: start;
     gap: 12px;
     overflow: visible;
+}
+
+.office-workspace.chat-preview-active {
+    inset: auto 16px 124px auto;
+    z-index: 9;
+    width: min(560px, calc(100% - 28px));
+    height: 248px;
+    padding: 10px;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "stage dock";
+    background:
+        radial-gradient(circle at 14% 14%, rgba(255, 141, 87, 0.16), rgba(255, 141, 87, 0) 38%),
+        radial-gradient(circle at 82% 22%, rgba(94, 204, 255, 0.18), rgba(94, 204, 255, 0) 42%),
+        linear-gradient(180deg, rgba(10, 18, 31, 0.92), rgba(10, 18, 31, 0.9));
+    border: 1px solid rgba(168, 205, 246, 0.24);
+    border-radius: 18px;
+    box-shadow: 0 18px 42px rgba(5, 10, 18, 0.34);
+    backdrop-filter: blur(10px);
+}
+
+.office-workspace.chat-preview-active .office-toolbar,
+.office-workspace.chat-preview-active .office-minimap,
+.office-workspace.chat-preview-active .office-map-controls,
+.office-workspace.chat-preview-active .office-debug-overlay,
+.office-workspace.chat-preview-active .office-editor-modal,
+.office-workspace.chat-preview-active .office-chatbar {
+    display: none !important;
+}
+
+.office-workspace.chat-preview-active .office-stage,
+.office-workspace.chat-preview-active .office-bottom-dock,
+.office-workspace.chat-preview-active .office-live-panel {
+    min-height: 0;
+}
+
+.office-workspace.chat-preview-active .office-scene-wrap {
+    min-height: 0;
+    height: 100%;
+    border-radius: 16px;
+}
+
+.office-workspace.chat-preview-active .office-bottom-dock {
+    grid-template-rows: minmax(0, 1fr);
+    gap: 0;
+    overflow: hidden;
+}
+
+.office-workspace.chat-preview-active .office-live-panel {
+    min-height: 0;
+    border-radius: 16px;
+}
+
+.office-workspace.chat-preview-active .office-live-panel h3 {
+    gap: 4px;
+}
+
+.office-workspace.chat-preview-active .office-task-list {
+    max-height: none;
+    min-height: 0;
+}
+
+.office-workspace.chat-preview-active .office-task-item {
+    padding: 8px 10px;
+}
+
+.office-workspace.chat-preview-active .office-task-meta {
+    font-size: 10px;
+}
+
+@media (max-width: 900px) {
+    .office-workspace.chat-preview-active {
+        inset: auto 12px 112px 12px;
+        width: auto;
+        height: 208px;
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr) 92px;
+        grid-template-areas:
+            "stage"
+            "dock";
+    }
 }
 
 .office-live-panel,
@@ -217,6 +306,10 @@
 .office-task-list,
 .office-chat-log {
     min-height: 0;
+}
+
+.office-chatbar {
+    display: none;
 }
 
 .office-task-list,
@@ -237,9 +330,10 @@
 
 .office-live-panel h3 {
     display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 7px;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
 }
 
 .office-editor-dock-btn {
@@ -255,7 +349,7 @@
 
 .office-scene-wrap {
     min-width: 0;
-    min-height: 340px;
+    min-height: 420px;
     border-radius: 22px;
     border-color: rgba(169, 204, 245, 0.38);
     background:
@@ -263,6 +357,32 @@
         linear-gradient(180deg, #111f31, #0e1a2b);
     box-shadow: inset 0 0 0 1px rgba(230, 240, 255, 0.08), 0 18px 34px rgba(0, 0, 0, 0.32);
     overflow: hidden;
+}
+
+.office-scene-panzoom {
+    position: absolute;
+    inset: 0;
+    transform:
+        translate3d(var(--office-pan-x, 0px), var(--office-pan-y, 0px), 0)
+        scale(var(--office-zoom, 1));
+    transform-origin: 0 0;
+    will-change: transform;
+}
+
+.office-scene {
+    position: absolute;
+    inset: 0;
+    overflow: visible;
+}
+
+.office-scene-native,
+.office-world {
+    position: absolute;
+    inset: 0;
+}
+
+.office-world {
+    isolation: isolate;
 }
 
 .office-scene-wrap::before {
@@ -298,6 +418,167 @@
 .office-room-title,
 .office-room-meta {
     opacity: 1;
+}
+
+.office-tilemap-canvas,
+.office-room-layer,
+.office-agent-layer,
+.office-roster-panel {
+    position: absolute;
+}
+
+.office-tilemap-canvas,
+.office-room-layer,
+.office-agent-layer {
+    inset: 0;
+}
+
+.office-agent-layer {
+    z-index: 3;
+    pointer-events: none;
+}
+
+.office-agent-layer .office-agent {
+    pointer-events: auto;
+}
+
+.office-roster-panel {
+    top: 16px;
+    left: 16px;
+    z-index: 4;
+    width: min(280px, calc(100% - 32px));
+    max-height: calc(100% - 32px);
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+    border: 1px solid rgba(168, 206, 245, 0.32);
+    border-radius: 18px;
+    background: rgba(7, 15, 24, 0.72);
+    box-shadow: 0 20px 34px rgba(0, 0, 0, 0.3);
+    backdrop-filter: blur(14px);
+    overflow: hidden;
+}
+
+.office-roster-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    color: #edf6ff;
+    font-size: 11px;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.office-roster-head strong {
+    font-size: 12px;
+}
+
+.office-roster-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    overflow: auto;
+    padding-right: 2px;
+}
+
+.office-roster-card {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 11px;
+    border: 1px solid rgba(165, 203, 241, 0.18);
+    border-radius: 14px;
+    background: rgba(14, 26, 39, 0.72);
+    color: #ebf5ff;
+    text-align: left;
+    cursor: pointer;
+    transition: transform 140ms ease, border-color 140ms ease, background 140ms ease;
+}
+
+.office-roster-card:hover,
+.office-roster-card:focus-visible,
+.office-roster-card.is-selected {
+    transform: translateY(-1px);
+    border-color: rgba(132, 194, 255, 0.42);
+    background: rgba(18, 34, 52, 0.88);
+}
+
+.office-roster-avatar {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    border-radius: 10px;
+    background: radial-gradient(circle at 30% 20%, rgba(255, 255, 255, 0.18), rgba(255, 255, 255, 0) 60%), rgba(12, 22, 34, 0.74);
+    box-shadow: inset 0 0 0 1px rgba(200, 224, 248, 0.08);
+}
+
+.office-roster-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    gap: 2px;
+}
+
+.office-roster-copy strong,
+.office-roster-copy span {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.office-roster-copy span {
+    color: rgba(213, 232, 252, 0.72);
+    font-size: 12px;
+}
+
+.office-roster-state {
+    font-size: 11px;
+    letter-spacing: 0.03em;
+    text-transform: capitalize;
+    color: #9bd2ff;
+}
+
+.office-room {
+    position: absolute;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 12px 12px 10px;
+    border-radius: 16px;
+    pointer-events: none;
+}
+
+.office-room-roster {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 22px;
+}
+
+.office-room-roster-chip,
+.office-room-roster-empty {
+    display: inline-flex;
+    align-items: center;
+    min-height: 20px;
+    padding: 0 8px;
+    border-radius: 999px;
+    border: 1px solid rgba(117, 156, 199, 0.32);
+    background: rgba(255, 255, 255, 0.72);
+    color: rgba(27, 47, 76, 0.88);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+}
+
+.office-room-roster-empty {
+    background: rgba(243, 249, 255, 0.56);
+    color: rgba(51, 71, 99, 0.76);
 }
 
 .office-room.overlay .office-room-title {

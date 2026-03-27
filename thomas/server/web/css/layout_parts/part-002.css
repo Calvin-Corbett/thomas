@@ -26,6 +26,76 @@
     gap: 10px;
 }
 
+.office-workspace.chat-preview-active {
+    inset: auto 16px 124px auto;
+    z-index: 9;
+    width: min(560px, calc(100% - 28px));
+    height: 248px;
+    padding: 10px;
+    gap: 10px;
+    grid-template-columns: minmax(0, 1fr) 220px;
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-areas: "stage dock";
+    background:
+        radial-gradient(circle at 14% 14%, rgba(255, 141, 87, 0.16), rgba(255, 141, 87, 0) 38%),
+        radial-gradient(circle at 82% 22%, rgba(94, 204, 255, 0.18), rgba(94, 204, 255, 0) 42%),
+        linear-gradient(180deg, rgba(10, 18, 31, 0.92), rgba(10, 18, 31, 0.9));
+    border: 1px solid rgba(168, 205, 246, 0.24);
+    border-radius: 18px;
+    box-shadow: 0 18px 42px rgba(5, 10, 18, 0.34);
+    backdrop-filter: blur(10px);
+}
+
+.office-workspace.chat-preview-active .office-toolbar,
+.office-workspace.chat-preview-active .office-minimap,
+.office-workspace.chat-preview-active .office-map-controls,
+.office-workspace.chat-preview-active .office-debug-overlay,
+.office-workspace.chat-preview-active .office-editor-modal,
+.office-workspace.chat-preview-active .office-chatbar {
+    display: none !important;
+}
+
+.office-workspace.chat-preview-active .office-stage,
+.office-workspace.chat-preview-active .office-bottom-dock,
+.office-workspace.chat-preview-active .office-live-panel {
+    min-height: 0;
+}
+
+.office-workspace.chat-preview-active .office-scene-wrap {
+    min-height: 0;
+    height: 100%;
+    border-radius: 16px;
+}
+
+.office-workspace.chat-preview-active .office-bottom-dock {
+    grid-template-columns: 1fr;
+    gap: 0;
+    overflow: hidden;
+}
+
+.office-workspace.chat-preview-active .office-live-panel {
+    min-height: 0;
+    border-radius: 16px;
+}
+
+.office-workspace.chat-preview-active .office-task-list {
+    max-height: none;
+    min-height: 0;
+}
+
+@media (max-width: 900px) {
+    .office-workspace.chat-preview-active {
+        inset: auto 12px 112px 12px;
+        width: auto;
+        height: 208px;
+        grid-template-columns: 1fr;
+        grid-template-rows: minmax(0, 1fr) 92px;
+        grid-template-areas:
+            "stage"
+            "dock";
+    }
+}
+
 .office-live-panel {
     min-height: 0;
 }

@@ -26,6 +26,7 @@ try:
         _resolve_display_name,
         _sample_paths,
         _scope_guard_supported,
+        _upsert_active_task,
         _validate_and_write,
         _validate_dirty_claim_reason,
         _validate_dirty_release_reason,
@@ -188,8 +189,19 @@ def claim(
             else:
                 lines.append(formatted + "\n")
 
-        new_text = "".join(lines)
         scope_norm = _normalize_scope_value(scope)
+        active_ok, active_message = _upsert_active_task(
+            lines,
+            task,
+            agent=agent,
+            scope=scope_norm,
+            summary=task,
+            status="active",
+        )
+        if not active_ok:
+            return False, active_message
+
+        new_text = "".join(lines)
         try:
             ok, violations = _validate_and_write(
                 workboard_path,

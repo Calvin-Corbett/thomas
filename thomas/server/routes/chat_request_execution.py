@@ -15,11 +15,18 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.agent.task_definition import (
+    augment_prompt_with_task_definition,
+    derive_task_definition,
+    evaluate_task_result,
+    should_activate_task_definition,
+)
 from thomas.agent.loop import AgentLoop
 from thomas.server.app_keys import (
     APP_ACTION_AUDIT,
     APP_GUARDED_TOOL_RUNNER,
     APP_GUARDRAILS_ENABLED,
+    APP_TASK_LEDGER,
     ChatSession,
 )
 
@@ -53,6 +60,7 @@ async def execute_agent_loop(
     raw_user_text: str,
     requested_job_type: str | None,
     applied_token_economy: str,
+    requested_token_economy: str,
     token_economy_meta: dict[str, Any],
     advanced_tools: Any,
     advanced_memory: Any,
@@ -173,13 +181,22 @@ async def execute_agent_loop(
     agent_cls = AgentLoop
     if agent_cls is _DEFAULT_AGENT_LOOP:
         try:
-            from thomas.server import app as server_app
+            from thomas.server.routes import chat_aiohttp as chat_route_compat
 
-            candidate = getattr(server_app, "AgentLoop", _DEFAULT_AGENT_LOOP)
-            if candidate is not None:
+            candidate = getattr(chat_route_compat, "AgentLoop", _DEFAULT_AGENT_LOOP)
+            if candidate is not None and candidate is not _DEFAULT_AGENT_LOOP:
                 agent_cls = candidate
         except Exception:
-            agent_cls = AgentLoop
+            pass
+        if agent_cls is _DEFAULT_AGENT_LOOP:
+            try:
+                from thomas.server import app as server_app
+
+                candidate = getattr(server_app, "AgentLoop", _DEFAULT_AGENT_LOOP)
+                if candidate is not None:
+                    agent_cls = candidate
+            except Exception:
+                agent_cls = AgentLoop
 
     agent_base_kwargs = {
         "system_prompt": session.system_prompt,
@@ -247,6 +264,8 @@ async def execute_agent_loop(
         "iterations": None,
         "tool_calls": None,
         "usage": None,
+        "text": None,
+        "token_report": None,
     }
 
     try:
@@ -254,6 +273,60 @@ async def execute_agent_loop(
             for seed_event in start_seed_events:
                 if isinstance(seed_event, dict):
                     await send(seed_event)
+
+        task_definition_payload: dict[str, Any] | None = None
+        if should_activate_task_definition(
+            prompt_text=raw_user_text,
+            applied_token_economy=requested_token_economy,
+            requested_job_type=requested_job_type,
+        ):
+            derived_definition = derive_task_definition(raw_user_text)
+            task_definition_payload = derived_definition.to_dict()
+            session.task_definition = dict(task_definition_payload)
+            session.task_evaluation = None
+            session.task_definition_status = "defining"
+            prompt = augment_prompt_with_task_definition(prompt, task_definition_payload)
+            deps.task_ledger_update(
+                sid,
+                status="in_progress",
+                missing_inputs=[],
+                last_progress="Defining what a good result looks like before execution.",
+                source="chat.task_definition",
+                force_event=True,
+            )
+            await send(
+                {
+                    "type": "task_phase",
+                    "phase": "defining",
+                    "label": "Defining task",
+                    "session_id": sid,
+                }
+            )
+            await send(
+                {
+                    "type": "task_definition",
+                    "session_id": sid,
+                    "status": "ready",
+                    "definition": task_definition_payload,
+                }
+            )
+            session.task_definition_status = "executing"
+            deps.task_ledger_update(
+                sid,
+                status="in_progress",
+                missing_inputs=[],
+                last_progress="Task definition ready. Executing against the defined success contract.",
+                source="chat.task_execution",
+                force_event=True,
+            )
+            await send(
+                {
+                    "type": "task_phase",
+                    "phase": "executing",
+                    "label": "Executing",
+                    "session_id": sid,
+                }
+            )
 
         from thomas.server.routes.vibe import build_vibe_graph_event
 
@@ -316,7 +389,7 @@ async def execute_agent_loop(
             session=session,
             sid=sid,
             raw_user_text=raw_user_text,
-            ledger=_resolve_app_value(request.app, "ledger"),
+            ledger=_resolve_app_value(request.app, APP_TASK_LEDGER),
             deps=deps,
             run_id=run_id,
             model_cfg=llm.config,
@@ -337,6 +410,50 @@ async def execute_agent_loop(
             apply_usage_budget=apply_usage_budget,
             normalize_usage_payload=normalize_usage_payload,
         )
+        if task_definition_payload is not None:
+            session.task_definition_status = "evaluating"
+            await send(
+                {
+                    "type": "task_phase",
+                    "phase": "evaluating",
+                    "label": "Evaluating result",
+                    "session_id": sid,
+                }
+            )
+            evaluation = evaluate_task_result(
+                task_definition_payload,
+                response_text=str(run_done.get("text") or ""),
+                token_report=run_done.get("token_report") if isinstance(run_done.get("token_report"), dict) else {},
+                run_ok=run_done.get("ok"),
+            )
+            session.task_evaluation = dict(evaluation)
+            session.task_definition_status = "complete"
+            if str(evaluation.get("status") or "") == "failed":
+                deps.task_ledger_update(
+                    sid,
+                    status="blocked",
+                    missing_inputs=[],
+                    last_progress=str(evaluation.get("summary") or "Task evaluation failed."),
+                    source="chat.task_evaluation",
+                    force_event=True,
+                )
+            else:
+                deps.task_ledger_update(
+                    sid,
+                    status="complete",
+                    missing_inputs=[],
+                    last_progress=str(evaluation.get("summary") or "Task evaluation passed."),
+                    source="chat.task_evaluation",
+                    force_event=True,
+                )
+            await send(
+                {
+                    "type": "task_evaluation",
+                    "session_id": sid,
+                    "evaluation": evaluation,
+                    "task_definition_status": session.task_definition_status,
+                }
+            )
     except Exception as e:
         from thomas.server.routes.chat_aiohttp_streaming import extract_missing_inputs
 

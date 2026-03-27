@@ -230,6 +230,10 @@ def register_chat_routes(
                 "session_id": sid,
                 "conversation_mode": str(getattr(session, "conversation_mode", "default") or "default"),
                 "plan": build_plan_payload(plan) if plan is not None else None,
+                "task_definition_status": str(getattr(session, "task_definition_status", "idle") or "idle"),
+                "task_definition": getattr(session, "task_definition", None),
+                "task_evaluation": getattr(session, "task_evaluation", None),
+                "benchmark_session": getattr(session, "benchmark_session", None),
             }
         )
 

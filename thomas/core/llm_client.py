@@ -516,7 +516,7 @@ class LLMClient:
 
     async def _get_codex_provider(self) -> Any:
         if self._codex_provider is None:
-            from thomas.codex.provider import CodexProvider
+            from thomas.marketplace.codex.provider import CodexProvider
 
             self._codex_provider = CodexProvider(self.config)
         return self._codex_provider
