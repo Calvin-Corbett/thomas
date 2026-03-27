@@ -1647,6 +1647,96 @@
       "fingerprint": "731ba5b3e0ebf35798d3d610677b44de33a9fe5a7e5001d5a53623dfe7a3149f",
       "query": "make a sub agent to research trey corbett windom tx",
       "auto_captured": true
+    },
+    {
+      "id": "1774616127-read-c-users-corbe-thomas-readme.md-and-write-exactly-3-flat-bullet-points-to-c-",
+      "title": "Read C:\\Users\\corbe\\Thomas\\README.md and write exactly 3 flat bullet points to C:\\Users\\corbe\\Thomas\\output\\bench_common",
+      "category": "research-notes",
+      "summary": "I’m following the repo startup and guardrail flow first, then I’ll read `README.md` and write the three-bullet artifact exactly as requested.The worktree is already dirty with many unrelated changes, so I’m limiting scope to the requested output artifact and r",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1774616127-read-c-users-corbe-thomas-readme.md-and-write-exactly-3-flat-bullet-points-to-c-.md",
+      "created_ts_utc": 1774616127,
+      "updated_ts_utc": 1774616127,
+      "fingerprint": "ba89d58ea4988de95e9689c2da131a52d87c10eeb679bdd8df1e77f20504e82a",
+      "query": "Read C:\\Users\\corbe\\Thomas\\README.md and write exactly 3 flat bullet points to C:\\Users\\corbe\\Thomas\\output\\bench_common_readme_artifact_thomas.md. Rules: - each bullet must be at most 14 words - no intro or outro text in the file - do the work yourself Reply only with the exact file path.",
+      "auto_captured": true
+    },
+    {
+      "id": "1774616643-assess-your-own-thomas-project-and-live-runtime.-read-c-users-corbe-thomas-readm",
+      "title": "Assess your own Thomas project and live runtime. Read C:\\Users\\corbe\\Thomas\\README.md, C:\\Users\\corbe\\Thomas\\pyproject.t",
+      "category": "research-notes",
+      "summary": "I’m assessing the repo and live runtime, then I’ll write the memo to the requested path with the required sections. First step is the startup router and required guardrail docs so I stay inside the repo’s operating rules.The startup router flagged a dirty work",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1774616643-assess-your-own-thomas-project-and-live-runtime.-read-c-users-corbe-thomas-readm.md",
+      "created_ts_utc": 1774616643,
+      "updated_ts_utc": 1774616643,
+      "fingerprint": "e7adef4558fcd02f9ba5909e82c61bd8210073fd867d4ae049a8d15f5b3fd053",
+      "query": "Assess your own Thomas project and live runtime. Read C:\\Users\\corbe\\Thomas\\README.md, C:\\Users\\corbe\\Thomas\\pyproject.toml, and http://127.0.0.1:8899/api/health, then write a prioritized memo to C:\\Users\\corbe\\Thomas\\output\\bench_targeted_self_work_thomas.md. Required sections: ## What Thomas already does well ## Top 3 weaknesses blocking the product ## Highest-leverage next fix Keep it grounded and specific. Reply only with the exact file path and the highest-leverage next fix.",
+      "auto_captured": true
+    },
+    {
+      "id": "1774619432-benchmark-mode-is-enabled-for-this-run.-the-repo-may-be-dirty-but-you-are-author",
+      "title": "Benchmark mode is enabled for this run. The repo may be dirty, but you are authorized to write only inside the output ro",
+      "category": "research-notes",
+      "summary": "Building the Snake game entirely under the benchmark output root. I’m checking the target directory and then I’ll create the required static files with deterministic test hooks and a short proof log.The output root is clean enough for this task and only contai",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1774619432-benchmark-mode-is-enabled-for-this-run.-the-repo-may-be-dirty-but-you-are-author.md",
+      "created_ts_utc": 1774619432,
+      "updated_ts_utc": 1774619432,
+      "fingerprint": "f48be06dba09cfa6c6b4c1045a56473001ef0cbf534463fc47b33e67895027e1",
+      "query": "Benchmark mode is enabled for this run. The repo may be dirty, but you are authorized to write only inside the output root below. Build a complete static Snake game inside C:\\Users\\corbe\\Thomas\\output\\benchmarks\\snake\\snake-20260327-134551\\thomas. Rules: - Work only inside that output root. - Do not modify product code, configs, or any path outside the output root. - Use only plain HTML, CSS, and JavaScript. No frameworks. No build step. - Required files: index.html, game.js, style.css, progress.md, proof.json. - progress.md must start with: Original prompt: Build a complete static Snake game - proof.json must contain these keys: status, local_url, finish_timestamp, claimed_features, known_limitations. - proof.json local_url must be exactly: http://127.0.0.1:8891 - UI contract: canvas#game, #score, #status, button#start-btn, and button#restart-btn if you use a separate restart control. - Game contract: single centered canvas, start screen, arrow keys and WASD, live score, food spawning, wall collision, self collision, restart flow, and no console errors. - Deterministic hooks are mandatory. - window.render_game_to_text() must return a concise JSON string with mode, score, direction, snake, food, width, height, and a coordinate_note. - window.advanceTime(ms) must advance the game deterministically without relying on requestAnimationFrame. - Leave a short build/test log in progress.md. - This is the Thomas side of a head-to-head benchmark. Reply only when finished with the absolute path to proof.json and a one-line verdict.",
+      "auto_captured": true
+    },
+    {
+      "id": "1774622983-build-an-original-browser-based-american-football-management-sim-prototype-insid",
+      "title": "Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any exi",
+      "category": "research-notes",
+      "summary": "I’m routing the task and checking the repo guardrails first, then I’ll identify the correct browser app surface to implement the football sim without touching the wrong files.The router hard-blocked implementation because this worktree is already dirty with a",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1774622983-build-an-original-browser-based-american-football-management-sim-prototype-insid.md",
+      "created_ts_utc": 1774622983,
+      "updated_ts_utc": 1774622983,
+      "fingerprint": "c331f4e2f681bd16f92127a965e0f2f97c0760eac3729e3ff4938ccfcc03c077",
+      "query": "Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any existing game. Make this its own football sim. Prioritize systems, clarity, and actual playability over visual polish. Goal: Create a playable single-player football sim where I control one team, make management decisions, and simulate a season from the browser. Core requirements: - The app must run locally in this repo and be launchable/viewable in the browser. - I control one team in a small league. - Generate at least 8 teams with distinct strengths. - Generate rosters with player ratings by position. - Include at minimum: - team overview - roster view - schedule/standings view - game or week simulation view - season progression - I must be able to: - choose or manage a team - adjust lineup or depth chart - set simple strategy/tendency choices - simulate the next game/week - simulate forward through the season - see standings and results update - The simulation must use ratings and strategy in a believable way, not pure random. - Include at least one management constraint such as fatigue, injuries, morale, cap pressure, or recovery. - Include a championship or playoff outcome so the season resolves. - Persist state locally so refresh does not wipe progress. - No console errors during normal use. Quality bar: - This should feel like a real football sim prototype, not just a random stat generator. - The UI should make it clear why teams win or lose. - Show some explanation of game outcomes, such as key factors, matchup edges, or postgame summaries. - Interactive tasks must be judged by visible behavior first. If I click simulate, things should clearly happen in the UI. Process requirements: - First define what makes a good football sim prototype for this task. - Then build against that definition. - Keep scope controlled. Do not attempt a giant MMO or online game. - Do not ask me for clarification unless absolutely necessary. - Do not revert unrelated changes in the repo. - If you cannot complete a feature, cut scope intelligently and finish a polished smaller version. Deliverables: 1. A short definition of what a good result is for this task. 2. The files you changed. 3. What systems you implemented. 4. How the simulation works. 5. What tradeoffs or scope cuts you made. 6. Exact verification steps you ran locally. 7. Final status: what is fully working and what is not. Success criteria: - A human can open it locally and play through a season. - Team management choices visibly affect outcomes. - The app feels coherent and intentional. - The explanation is grounded in the repo and the implemented result. - The result is completed end-to-end, not just scaffolded. [Task Definition Contract] Task summary: Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any existing game. Make... Deliverable type: interactive_game What a good result looks like: A good interactive game is immediately playable, responsive to controls, and visibly demonstrates its main loop without requiring hidden test hooks. Required outputs: - A playable browser game artifact. - Clear controls and obvious start/restart flow. - Verification evidence that the visible gameplay loop works. Acceptance checks: - The page loads cleanly with the requested game mechanics. - Core gameplay visibly runs after normal user interaction. - Controls, score/state updates, and failure/restart flow behave as expected. - The app must run locally in this repo and be launchable/viewable in the browser. - I must be able to: - The simulation must use ratings and strategy in a believable way, not pure random. - No console errors during normal use. - This should feel like a real football sim prototype, not just a random stat generator. - The UI should make it clear why teams win or lose. - Interactive tasks must be judged by visible behavior first. If I click simulate, things should clearly happen in the UI. Visible success criteria: - After a normal start action, the game visibly advances on screen. - Human-visible playability outranks internal hook correctness. - Do not claim success unless the live behavior was directly verified. Failure conditions: - The artifact only works through test-only APIs such as manual time advancement. - The game is static, stalled, or only theoretically correct. - The response claims completion without visible verification evidence. Use this contract for planning, execution, and self-checking. Do not silently narrow the task. For interactive work, visible success outranks internal-only hooks.",
+      "auto_captured": true
+    },
+    {
+      "id": "1774622984-build-an-original-browser-based-american-football-management-sim-prototype-insid",
+      "title": "Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any exi",
+      "category": "research-notes",
+      "summary": "I’m defining the implementation lane and checking the repo guardrails first, then I’ll identify the correct browser app surface to build the football sim into so the result is actually runnable in this repo.The startup router hard-blocked normal implementation",
+      "source": "thomas:codex",
+      "tags": [
+        "research",
+        "auto",
+        "route-coding_task"
+      ],
+      "path": "entries/research-notes/1774622984-build-an-original-browser-based-american-football-management-sim-prototype-insid.md",
+      "created_ts_utc": 1774622984,
+      "updated_ts_utc": 1774622984,
+      "fingerprint": "a99a821f0b86c6f00f00996d9bbc4095d8688dbc5b986945af6e0429f4ab262f",
+      "query": "Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any existing game. Make this its own football sim. Prioritize systems, clarity, and actual playability over visual polish. Goal: Create a playable single-player football sim where I control one team, make management decisions, and simulate a season from the browser. Core requirements: - The app must run locally in this repo and be launchable/viewable in the browser. - I control one team in a small league. - Generate at least 8 teams with distinct strengths. - Generate rosters with player ratings by position. - Include at minimum: - team overview - roster view - schedule/standings view - game or week simulation view - season progression - I must be able to: - choose or manage a team - adjust lineup or depth chart - set simple strategy/tendency choices - simulate the next game/week - simulate forward through the season - see standings and results update - The simulation must use ratings and strategy in a believable way, not pure random. - Include at least one management constraint such as fatigue, injuries, morale, cap pressure, or recovery. - Include a championship or playoff outcome so the season resolves. - Persist state locally so refresh does not wipe progress. - No console errors during normal use. Quality bar: - This should feel like a real football sim prototype, not just a random stat generator. - The UI should make it clear why teams win or lose. - Show some explanation of game outcomes, such as key factors, matchup edges, or postgame summaries. - Interactive tasks must be judged by visible behavior first. If I click simulate, things should clearly happen in the UI. Process requirements: - First define what makes a good football sim prototype for this task. - Then build against that definition. - Keep scope controlled. Do not attempt a giant MMO or online game. - Do not ask me for clarification unless absolutely necessary. - Do not revert unrelated changes in the repo. - If you cannot complete a feature, cut scope intelligently and finish a polished smaller version. Deliverables: 1. A short definition of what a good result is for this task. 2. The files you changed. 3. What systems you implemented. 4. How the simulation works. 5. What tradeoffs or scope cuts you made. 6. Exact verification steps you ran locally. 7. Final status: what is fully working and what is not. Success criteria: - A human can open it locally and play through a season. - Team management choices visibly affect outcomes. - The app feels coherent and intentional. - The explanation is grounded in the repo and the implemented result. - The result is completed end-to-end, not just scaffolded. [Task Definition Contract] Task summary: Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any existing game. Make... Deliverable type: interactive_game What a good result looks like: A good interactive game is immediately playable, responsive to controls, and visibly demonstrates its main loop without requiring hidden test hooks. Required outputs: - A playable browser game artifact. - Clear controls and obvious start/restart flow. - Verification evidence that the visible gameplay loop works. Acceptance checks: - The page loads cleanly with the requested game mechanics. - Core gameplay visibly runs after normal user interaction. - Controls, score/state updates, and failure/restart flow behave as expected. - The app must run locally in this repo and be launchable/viewable in the browser. - I must be able to: - The simulation must use ratings and strategy in a believable way, not pure random. - No console errors during normal use. - This should feel like a real football sim prototype, not just a random stat generator. - The UI should make it clear why teams win or lose. - Interactive tasks must be judged by visible behavior first. If I click simulate, things should clearly happen in the UI. Visible success criteria: - After a normal start action, the game visibly advances on screen. - Human-visible playability outranks internal hook correctness. - Do not claim success unless the live behavior was directly verified. Failure conditions: - The artifact only works through test-only APIs such as manual time advancement. - The game is static, stalled, or only theoretically correct. - The response claims completion without visible verification evidence. Use this contract for planning, execution, and self-checking. Do not silently narrow the task. For interactive work, visible success outranks internal-only hooks.",
+      "auto_captured": true
     }
   ]
 }

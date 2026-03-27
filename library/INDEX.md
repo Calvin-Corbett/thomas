@@ -49,6 +49,31 @@ Durable research/reference library for Thomas.
   - File: `entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md`
 
 ## research-notes
+- `1774622984-build-an-original-browser-based-american-football-management-sim-prototype-insid`: Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any exi
+  - Summary: I’m defining the implementation lane and checking the repo guardrails first, then I’ll identify the correct browser app surface to build the football sim into so the result is actually runnable in this repo.The startup router hard-blocked normal implementation
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774622984-build-an-original-browser-based-american-football-management-sim-prototype-insid.md`
+- `1774622983-build-an-original-browser-based-american-football-management-sim-prototype-insid`: Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any exi
+  - Summary: I’m routing the task and checking the repo guardrails first, then I’ll identify the correct browser app surface to implement the football sim without touching the wrong files.The router hard-blocked implementation because this worktree is already dirty with a
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774622983-build-an-original-browser-based-american-football-management-sim-prototype-insid.md`
+- `1774619432-benchmark-mode-is-enabled-for-this-run.-the-repo-may-be-dirty-but-you-are-author`: Benchmark mode is enabled for this run. The repo may be dirty, but you are authorized to write only inside the output ro
+  - Summary: Building the Snake game entirely under the benchmark output root. I’m checking the target directory and then I’ll create the required static files with deterministic test hooks and a short proof log.The output root is clean enough for this task and only contai
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774619432-benchmark-mode-is-enabled-for-this-run.-the-repo-may-be-dirty-but-you-are-author.md`
+- `1774616643-assess-your-own-thomas-project-and-live-runtime.-read-c-users-corbe-thomas-readm`: Assess your own Thomas project and live runtime. Read C:\Users\corbe\Thomas\README.md, C:\Users\corbe\Thomas\pyproject.t
+  - Summary: I’m assessing the repo and live runtime, then I’ll write the memo to the requested path with the required sections. First step is the startup router and required guardrail docs so I stay inside the repo’s operating rules.The startup router flagged a dirty work
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774616643-assess-your-own-thomas-project-and-live-runtime.-read-c-users-corbe-thomas-readm.md`
+- `1774616127-read-c-users-corbe-thomas-readme.md-and-write-exactly-3-flat-bullet-points-to-c-`: Read C:\Users\corbe\Thomas\README.md and write exactly 3 flat bullet points to C:\Users\corbe\Thomas\output\bench_common
+  - Summary: I’m following the repo startup and guardrail flow first, then I’ll read `README.md` and write the three-bullet artifact exactly as requested.The worktree is already dirty with many unrelated changes, so I’m limiting scope to the requested output artifact and r
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774616127-read-c-users-corbe-thomas-readme.md-and-write-exactly-3-flat-bullet-points-to-c-.md`
 - `1773755964-make-a-sub-agent-to-research-trey-corbett-windom-tx`: make a sub agent to research trey corbett windom tx
   - Summary: I’m creating a bounded research sub-agent for “Trey Corbett” in Windom, Texas and asking it to return only publicly available, high-confidence findings with sources.The sub-agent is running now. I’m waiting for its first pass so I can hand back the findings in
   - Source: thomas:codex
@@ -460,4 +485,4 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md`
 
-_Total entries: 90_
+_Total entries: 95_

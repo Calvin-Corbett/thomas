@@ -70,6 +70,47 @@ def test_check_worktree_clean_degrades_with_explicit_override(monkeypatch, tmp_p
     assert "cleanup/remediation" in result["user_action"]
 
 
+def test_check_worktree_clean_degrades_for_valid_benchmark_lane(monkeypatch, tmp_path: Path) -> None:
+    benchmark_root = tmp_path / "output" / "benchmarks" / "snake" / "run-1" / "thomas"
+    benchmark_root.mkdir(parents=True)
+    monkeypatch.setattr(mod.shutil, "which", lambda name: "git")
+    monkeypatch.delenv("THOMAS_ALLOW_DIRTY_WORKTREE", raising=False)
+    monkeypatch.delenv("THOMAS_DIRTY_WORKTREE_OVERRIDE", raising=False)
+    monkeypatch.setenv("THOMAS_BENCHMARK_MODE", "1")
+    monkeypatch.setenv("THOMAS_BENCHMARK_RUN_ID", "run-1")
+    monkeypatch.setenv("THOMAS_BENCHMARK_REASON", "snake benchmark")
+    monkeypatch.setenv("THOMAS_BENCHMARK_ROOT", str(benchmark_root))
+
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=0, stdout=" M foo.py\n", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    result = mod._check_worktree_clean(tmp_path)
+
+    assert result["status"] == "degraded"
+    assert "benchmark lane is enabled" in result["message"]
+    assert str(benchmark_root) in result["message"]
+
+
+def test_check_worktree_clean_blocks_invalid_benchmark_lane(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(mod.shutil, "which", lambda name: "git")
+    monkeypatch.setenv("THOMAS_BENCHMARK_MODE", "1")
+    monkeypatch.setenv("THOMAS_BENCHMARK_RUN_ID", "run-1")
+    monkeypatch.delenv("THOMAS_BENCHMARK_REASON", raising=False)
+    monkeypatch.delenv("THOMAS_BENCHMARK_ROOT", raising=False)
+
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=0, stdout=" M foo.py\n", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+
+    result = mod._check_worktree_clean(tmp_path)
+
+    assert result["status"] == "blocked"
+    assert "benchmark mode is invalid" in result["message"]
+
+
 def test_evaluate_preflight_blocks_when_repo_markers_missing(tmp_path: Path) -> None:
     payload = mod.evaluate_preflight(root=tmp_path, cwd=tmp_path)
 

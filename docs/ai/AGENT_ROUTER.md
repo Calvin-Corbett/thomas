@@ -17,6 +17,7 @@ What the router does:
 
 Lane names:
 - `chat`
+- `benchmark`
 - `simple-edit`
 - `risky-edit`
 - `multi-file`
