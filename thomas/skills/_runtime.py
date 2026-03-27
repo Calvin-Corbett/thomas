@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 from typing import Any
@@ -49,9 +50,19 @@ def resolve_builtin_promotion_root(*, cwd: Path | None = None) -> Path:
     return Path(sys.prefix).resolve() / 'skills'
 
 
+def _codex_home_skill_root() -> Path | None:
+    raw = str(os.environ.get('CODEX_HOME') or '').strip()
+    if not raw:
+        return None
+    return Path(raw).expanduser() / 'skills'
+
+
 def discover_native_skill_roots(*, cwd: Path | None = None) -> list[tuple[Path, str]]:
     root_cwd = Path(cwd) if cwd is not None else Path.cwd()
     candidates: list[tuple[Path, str]] = [(path, 'builtin') for path in builtin_skill_roots(cwd=root_cwd)]
+    codex_home_root = _codex_home_skill_root()
+    if codex_home_root is not None:
+        candidates.append((codex_home_root, 'user'))
     candidates.extend(
         [
             (Path.home() / '.thomas' / 'skills', 'user'),

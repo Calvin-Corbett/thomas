@@ -21,7 +21,18 @@ import json
 import sys
 from typing import Any, Sequence
 
-from thomas.nodes.p040_nodes_notify_action import (
+try:
+    from thomas.marketplace.nodes.p040_nodes_notify_action import (
+        NodesNotifyActionConfigError,
+        NodesNotifyActionError,
+        NodesNotifyActionExternalError,
+        NodesNotifyActionInput,
+        NodesNotifyActionInvalidInputError,
+        notify_action,
+        payload_from_json,
+    )
+except ImportError:  # pragma: no cover
+    from thomas.nodes.p040_nodes_notify_action import (
     NodesNotifyActionConfigError,
     NodesNotifyActionError,
     NodesNotifyActionExternalError,

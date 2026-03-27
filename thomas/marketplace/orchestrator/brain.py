@@ -26,6 +26,7 @@ from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.memory_layers import MemoryContext, MemoryCoordinator
 from thomas.chat.thinking import ThinkingTracker
+from thomas.agent.dispatch import DispatchDecision, should_dispatch
 from thomas.marketplace.orchestrator.protocol import (
     CapabilityToken,
     DelegationContract,
@@ -37,6 +38,89 @@ from thomas.marketplace.orchestrator.protocol import (
 from thomas.marketplace.orchestrator.registry import SpecialistRegistry
 
 log = logging.getLogger(__name__)
+
+_STATUS_FOLLOWUP_RE = (
+    r"\b(?:status|progress|update|done yet|finished|still running|"
+    r"what'?s happening|where are we|how(?:'s| is) (?:that|it|this|the task|the project|the background work) going)\b"
+)
+_BACKGROUND_REFERENCE_RE = r"\b(?:background|worker|delegat|parallel)\b"
+
+
+def _wants_background_status(prompt: str) -> bool:
+    import re
+
+    return bool(re.search(_STATUS_FOLLOWUP_RE, str(prompt or ""), re.I))
+
+
+def _should_answer_background_status_directly(prompt: str, active_tasks: list[dict[str, Any]] | None) -> bool:
+    import re
+
+    text = str(prompt or "").strip().lower()
+    if not _wants_background_status(text):
+        return False
+    if active_tasks:
+        return True
+    return bool(re.search(_BACKGROUND_REFERENCE_RE, text, re.I))
+
+
+def _summarize_background_status(active_tasks: list[dict[str, Any]] | None) -> str:
+    rows = [dict(row or {}) for row in list(active_tasks or []) if isinstance(row, dict)]
+    if not rows:
+        return "No background work is running in this thread."
+
+    active_rows: list[dict[str, Any]] = []
+    completed_rows: list[dict[str, Any]] = []
+    failed_rows: list[dict[str, Any]] = []
+    other_rows: list[dict[str, Any]] = []
+    for row in rows:
+        state = str(row.get("state") or "").strip().lower()
+        if state in {"queued", "requested", "classified", "claimed", "executing", "running", "in_progress"}:
+            active_rows.append(row)
+        elif state == "completed":
+            completed_rows.append(row)
+        elif state in {"failed", "abandoned", "cancelled"}:
+            failed_rows.append(row)
+        else:
+            other_rows.append(row)
+
+    def _detail(row: dict[str, Any]) -> str:
+        summary = str(row.get("summary") or "").strip()
+        progress = str(row.get("last_progress") or "").strip()
+        state = str(row.get("state") or "unknown").replace("_", " ").strip()
+        if summary and progress and progress != summary:
+            return f"{summary} ({state}: {progress})"
+        if summary:
+            return f"{summary} ({state})"
+        if progress:
+            return f"{progress} ({state})"
+        return state
+
+    if active_rows:
+        lead = "Background work is still running in this thread."
+        lines = [lead]
+        for row in active_rows[:2]:
+            lines.append(f"- {_detail(row)}")
+        return "\n".join(lines)
+
+    if completed_rows and not failed_rows:
+        lead = "Background work has completed in this thread."
+        lines = [lead]
+        for row in completed_rows[:2]:
+            lines.append(f"- {_detail(row)}")
+        return "\n".join(lines)
+
+    if failed_rows and not completed_rows:
+        lead = "Background work finished with issues in this thread."
+        lines = [lead]
+        for row in failed_rows[:2]:
+            lines.append(f"- {_detail(row)}")
+        return "\n".join(lines)
+
+    lines = ["Background work in this thread has mixed outcomes."]
+    for row in (active_rows + completed_rows + failed_rows + other_rows)[:3]:
+        lines.append(f"- {_detail(row)}")
+    return "\n".join(lines)
+
 
 # Default token budgets by mode
 _MODE_BUDGETS = {
@@ -83,79 +167,49 @@ class OrchestratorBrain:
         *,
         mode: str = "auto",
         autonomy_level: int = 3,
+        token_economy: str = "optimal",
         images: list[dict[str, Any]] | None = None,
         is_first_message: bool = False,
+        active_task_digest: str = "",
+        active_tasks: list[dict[str, Any]] | None = None,
+        dispatch_actionable: bool = True,
     ) -> ConversationManager:
-        """Process a user message through the dispatch-first pipeline.
+        """Process a user message.
 
-        DISPATCH-FIRST ARCHITECTURE (2026-03-18):
-        Thomas uses a fast binary classification to decide:
-
-          CASUAL (greetings, thanks, filler):
-            → Skip routing LLM call, go straight to reasoning specialist
-            → Stream reply immediately. Thomas is fast.
-
-          ACTIONABLE (anything needing tools, research, code, or heavy work):
-            → Stream a quick Thomas acknowledgment IMMEDIATELY
-            → Fire off specialist work as a background task
-            → Stream specialist results back as they complete
-            → Thomas stays free for more conversation
-
-        The key: Thomas is NEVER blocked. He replies fast because he's
-        not the one doing the heavy lifting.
-
-        See docs/CHAT_EXECUTION_MODEL.md for the full architecture.
+        In V2 chat Thomas should remain the only visible speaker. The route can
+        still start background work in parallel, but the user-facing reply stays
+        conversational here.
         """
+        _ = images
+        _ = is_first_message
         turn_start = time.monotonic()
 
-        # ── Step 1: Append user message ──────────────────────────
         conversation = conversation.append_message("user", prompt)
 
-        # ── Step 2: Fast classify — casual or actionable? ────────
-        # Use dispatch module for instant classification (no LLM call).
-        # Direct file import avoids triggering thomas.agent.__init__ which
-        # pulls in AgentLoop → httpx and may fail in some environments.
-        is_casual = False
         try:
-            import importlib.util as _ilu
-            import sys as _sys
+            decision = should_dispatch(
+                prompt,
+                recent_messages=conversation.get_context_window(max_tokens=8_000),
+                active_tasks=active_tasks,
+                mode=mode,
+            )
+        except Exception as dispatch_err:
+            log.warning("Dispatch classification failed, treating turn as conversational: %s", dispatch_err)
+            decision = DispatchDecision(action="casual", reason="classifier_error")
 
-            _dp = str(__import__("pathlib").Path(__file__).resolve().parent.parent / "agent" / "dispatch.py")
-            # FIX (2026-03-18): Use a proper module name that matches what
-            # gets registered in sys.modules. The @dataclass decorator needs
-            # to find the module via cls.__module__ → sys.modules lookup.
-            # Using "_dispatch" as the name but registering as "thomas.agent.dispatch"
-            # caused a crash in the dataclass decorator.
-            _mod_name = "thomas.agent.dispatch"
-            if _mod_name in _sys.modules:
-                _mod = _sys.modules[_mod_name]
-            else:
-                _spec = _ilu.spec_from_file_location(_mod_name, _dp)
-                if _spec and _spec.loader:
-                    _mod = _ilu.module_from_spec(_spec)
-                    _sys.modules[_mod_name] = _mod
-                    _spec.loader.exec_module(_mod)
-                else:
-                    raise ImportError(f"Cannot load {_dp}")
-            decision = _mod.should_dispatch(prompt)
-            is_casual = decision.action == "casual"
-            log.debug("Dispatch: %s -> %s (%s)", prompt[:40], decision.action, decision.reason)
-        except Exception as _dispatch_err:
-            log.warning("Dispatch classification failed (all messages go to actionable): %s", _dispatch_err)
+        log.debug("Dispatch: %s -> %s (%s)", prompt[:40], decision.action, decision.reason)
 
-        if is_casual:
-            # ── CASUAL PATH: reply directly, fast ────────────────
-            return await self._handle_casual(
+        if _should_answer_background_status_directly(prompt, active_tasks):
+            return await self._handle_background_status(
                 session_id=session_id,
                 conversation=conversation,
                 prompt=prompt,
                 dispatcher=dispatcher,
-                mode=mode,
-                autonomy_level=autonomy_level,
                 turn_start=turn_start,
+                active_tasks=active_tasks,
             )
-        else:
-            # ── ACTIONABLE PATH: acknowledge + dispatch ──────────
+
+        if decision.action == "dispatch" and dispatch_actionable:
             return await self._handle_actionable(
                 session_id=session_id,
                 conversation=conversation,
@@ -163,9 +217,76 @@ class OrchestratorBrain:
                 dispatcher=dispatcher,
                 mode=mode,
                 autonomy_level=autonomy_level,
+                token_economy=token_economy,
                 turn_start=turn_start,
                 images=images,
             )
+
+        reply_kind = "casual" if decision.action == "casual" else "conversation"
+        return await self._handle_casual(
+            session_id=session_id,
+            conversation=conversation,
+            prompt=prompt,
+            dispatcher=dispatcher,
+            mode=mode,
+            autonomy_level=autonomy_level,
+            token_economy=token_economy,
+            turn_start=turn_start,
+            reply_kind=reply_kind,
+            active_task_digest=active_task_digest,
+        )
+
+    async def _handle_background_status(
+        self,
+        session_id: str,
+        conversation: ConversationManager,
+        prompt: str,
+        dispatcher: EventDispatcher,
+        turn_start: float,
+        active_tasks: list[dict[str, Any]] | None = None,
+    ) -> ConversationManager:
+        final_text = _summarize_background_status(active_tasks)
+        chunk_size = 80
+        for i in range(0, len(final_text), chunk_size):
+            await dispatcher.emit_text(final_text[i : i + chunk_size])
+
+        conversation = conversation.append_message(
+            "assistant",
+            final_text,
+            metadata={"specialists": ["reasoning"], "mode": "background_status"},
+        )
+
+        try:
+            memory_coord = MemoryCoordinator(
+                self.memory_engine,
+                session_id,
+                context_budget=_MODE_BUDGETS.get("fast", 1_500),
+            )
+            await memory_coord.capture_episode(
+                turn_number=conversation.length // 2,
+                user_message=prompt,
+                assistant_response=final_text[:500],
+                thinking="background_status",
+                tool_calls=[],
+                specialist="reasoning",
+            )
+        except Exception as exc:
+            log.debug("Background status episode capture skipped: %s", exc)
+
+        elapsed = int((time.monotonic() - turn_start) * 1000)
+        await dispatcher.emit_done(
+            session_id=session_id,
+            conversation_version=conversation.version,
+            thinking_summary="background_status",
+            total_thinking_ms=0,
+            iterations=1,
+            tool_calls=0,
+            tokens_used=0,
+            specialists_used=["reasoning"],
+            total_elapsed_ms=elapsed,
+        )
+
+        return conversation
 
     async def _handle_casual(
         self,
@@ -175,27 +296,26 @@ class OrchestratorBrain:
         dispatcher: EventDispatcher,
         mode: str,
         autonomy_level: int,
+        token_economy: str,
         turn_start: float,
+        reply_kind: str = "casual",
+        active_task_digest: str = "",
     ) -> ConversationManager:
-        """Handle casual messages — reply directly, no delegation overhead.
-
-        Skips routing LLM call, skips thinking events, goes straight to
-        the reasoning specialist with full conversation context.
-        """
+        """Handle direct Thomas replies without visible delegation."""
         memory_coord = MemoryCoordinator(
             self.memory_engine,
             session_id,
             context_budget=_MODE_BUDGETS.get("fast", 1_500),
         )
 
-        # Quick memory refresh (lightweight)
         memory_ctx = await memory_coord.refresh(
             prompt=prompt,
             conversation=conversation,
             iteration=0,
         )
+        if active_task_digest and _wants_background_status(prompt):
+            memory_ctx.working = f"{memory_ctx.working}\n\n{active_task_digest}".strip()
 
-        # Go straight to reasoning specialist — no routing LLM call
         result = await self._dispatch_single(
             session_id=session_id,
             specialist_id="reasoning",
@@ -204,39 +324,38 @@ class OrchestratorBrain:
             memory_ctx=memory_ctx,
             dispatcher=dispatcher,
             thinking=ThinkingTracker(),
-            mode="fast",
+            mode=mode,
             autonomy_level=autonomy_level,
+            token_economy=token_economy,
+            stream_text_events=True,
         )
 
-        # Synthesize and stream
         final_text = result.content if result.ok else "Sorry, I had trouble with that."
-        chunk_size = 80
-        for i in range(0, len(final_text), chunk_size):
-            await dispatcher.emit_text(final_text[i : i + chunk_size])
+        if not result.ok:
+            chunk_size = 80
+            for i in range(0, len(final_text), chunk_size):
+                await dispatcher.emit_text(final_text[i : i + chunk_size])
 
-        # Update conversation
         conversation = conversation.append_message(
             "assistant",
             final_text,
-            metadata={"specialists": ["reasoning"], "mode": "casual"},
+            metadata={"specialists": ["reasoning"], "mode": reply_kind},
         )
 
-        # Capture episode
         await memory_coord.capture_episode(
             turn_number=conversation.length // 2,
             user_message=prompt,
             assistant_response=final_text[:500],
-            thinking="casual_reply",
+            thinking=reply_kind,
             tool_calls=[],
             specialist="reasoning",
         )
 
-        # Emit done
         elapsed = int((time.monotonic() - turn_start) * 1000)
         await dispatcher.emit_done(
             session_id=session_id,
             conversation_version=conversation.version,
-            thinking_summary="casual",
+            thinking_summary=reply_kind,
             total_thinking_ms=0,
             iterations=1,
             tool_calls=0,
@@ -255,6 +374,7 @@ class OrchestratorBrain:
         dispatcher: EventDispatcher,
         mode: str,
         autonomy_level: int,
+        token_economy: str,
         turn_start: float,
         images: list[dict[str, Any]] | None = None,
     ) -> ConversationManager:
@@ -320,6 +440,7 @@ class OrchestratorBrain:
                 thinking=thinking,
                 mode=mode,
                 autonomy_level=autonomy_level,
+                token_economy=token_economy,
             )
         else:
             for specialist_id in route.specialists:
@@ -333,6 +454,7 @@ class OrchestratorBrain:
                     thinking=thinking,
                     mode=mode,
                     autonomy_level=autonomy_level,
+                    token_economy=token_economy,
                 )
                 all_results.append(result)
                 if result.ok:
@@ -374,6 +496,7 @@ class OrchestratorBrain:
                 "specialists": specialists_used,
                 "thinking_ms": thinking.total_ms,
                 "mode": mode,
+                "token_economy": str(token_economy or "optimal"),
             },
         )
 
@@ -487,6 +610,8 @@ class OrchestratorBrain:
         thinking: ThinkingTracker,
         mode: str,
         autonomy_level: int,
+        token_economy: str,
+        stream_text_events: bool = False,
     ) -> DelegationResult:
         """Dispatch to a single specialist with contract + token."""
         specialist = self.registry.get(specialist_id)
@@ -507,6 +632,7 @@ class OrchestratorBrain:
             input_context={
                 "memory": memory_ctx.to_system_injection(),
                 "mode": mode,
+                "token_economy": str(token_economy or "optimal"),
             },
         )
 
@@ -557,7 +683,10 @@ class OrchestratorBrain:
 
                 # Pass through events to frontend
                 if event_type == "text":
-                    content_parts.append(event.get("text", ""))
+                    chunk = str(event.get("text", "") or "")
+                    content_parts.append(chunk)
+                    if stream_text_events and chunk:
+                        await dispatcher.emit_text(chunk)
                 elif event_type == "thinking":
                     specialist_thinking.append(event.get("text", ""))
                 elif event_type in ("tool_start", "tool_result", "tool_args"):
@@ -619,6 +748,7 @@ class OrchestratorBrain:
         thinking: ThinkingTracker,
         mode: str,
         autonomy_level: int,
+        token_economy: str,
     ) -> list[DelegationResult]:
         """Dispatch to multiple specialists in parallel."""
         thinking.start(DelegationPhase.DELEGATING.value)
@@ -636,6 +766,7 @@ class OrchestratorBrain:
                 thinking=thinking,
                 mode=mode,
                 autonomy_level=autonomy_level,
+                token_economy=token_economy,
             )
             for sid in specialists
         ]

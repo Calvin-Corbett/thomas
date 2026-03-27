@@ -168,7 +168,9 @@ class OpenAISTTProvider(STTProvider):
 
         try:
             async with httpx.AsyncClient() as client:
-                files = {"file": ("audio.wav", audio.data, "audio/wav")}
+                audio_format = str(getattr(audio, "format", "") or "wav").strip().lower()
+                filename, mime_type = _stt_upload_media_metadata(audio_format)
+                files = {"file": (filename, audio.data, mime_type)}
                 data = {"model": "whisper-1"}
                 headers = {"Authorization": f"Bearer {self.api_key}"}
 

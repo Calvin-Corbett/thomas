@@ -1,344 +1,284 @@
 #!/usr/bin/env python3
 """
-Agent Safety Gate: Validate that AI agent changes don't break the codebase.
-
-This script prevents common mistakes by AI agents:
-- Editing dead code (app_parts/)
-- Breaking JavaScript syntax (app_runtime_primary.mjs)
-- Creating invalid Python files
-- Editing monolith stub files
-- Committing .pyc files
-- Accidentally modifying placeholder files
+Agent Safety Gate: validate that staged changes do not violate core safety rules.
 
 Exit codes:
-  0 = All checks passed
-  1 = One or more checks failed
+  0 = all checks passed
+  1 = one or more checks failed
 """
+
+from __future__ import annotations
 
 import ast
 import subprocess
 import sys
 
-
-def check_dead_code_not_edited(staged_files: list[str]) -> tuple[bool, list[str]]:
-    """
-    Check that NO changes were made to thomas/server/web/js/app_parts/ (dead code).
-
-    Returns: (passed, errors)
-    """
-    errors = []
-    dead_code_dir = "thomas/server/web/js/app_parts/"
-
-    edited_dead_files = [f for f in staged_files if f.startswith(dead_code_dir)]
-
-    if edited_dead_files:
-        errors.append("\n❌ SAFETY GATE FAILED: Dead Code Files Edited")
-        errors.append("=" * 70)
-        errors.append(f"You edited {len(edited_dead_files)} files in {dead_code_dir}")
-        errors.append("These are DEAD CODE being migrated to modules.")
-        errors.append("")
-        errors.append("WHAT YOU DID WRONG:")
-        for f in edited_dead_files:
-            errors.append(f"  - {f}")
-        errors.append("")
-        errors.append("HOW TO FIX IT:")
-        errors.append("1. Undo your changes to app_parts/ files:")
-        errors.append("   git checkout -- thomas/server/web/js/app_parts/")
-        errors.append("")
-        errors.append("2. If you need to update app functionality, edit:")
-        errors.append("   thomas/server/web/js/app_runtime_primary.mjs")
-        errors.append("")
-        errors.append("3. If adding new features, follow the module migration plan in GUARDRAILS.md")
-        errors.append("=" * 70)
-        return False, errors
-
-    return True, []
+from agent_safety_config import load_config
 
 
-def check_javascript_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:
-    """
-    Check that app_runtime_primary.mjs still has valid JS (no syntax errors).
-
-    Returns: (passed, errors)
-    """
-    errors = []
-    js_file = "thomas/server/web/js/app_runtime_primary.mjs"
-
-    # Only check if the file was edited
-    if js_file not in staged_files:
-        return True, []
-
-    # Use node.js to check syntax if available
-    try:
-        result = subprocess.run(["node", "--check", js_file], capture_output=True, text=True, timeout=5)
-        if result.returncode != 0:
-            errors.append("\n❌ SAFETY GATE FAILED: JavaScript Syntax Error")
-            errors.append("=" * 70)
-            errors.append(f"File: {js_file}")
-            errors.append("")
-            errors.append("WHAT YOU DID WRONG:")
-            errors.append("Your changes introduced JavaScript syntax errors.")
-            errors.append("")
-            errors.append("Error output:")
-            errors.append(result.stderr)
-            errors.append("")
-            errors.append("HOW TO FIX IT:")
-            errors.append("1. Review your changes to app_runtime_primary.mjs")
-            errors.append("2. Check for:")
-            errors.append("   - Missing semicolons")
-            errors.append("   - Unmatched brackets or parentheses")
-            errors.append("   - Invalid import/export syntax")
-            errors.append("   - Typos in function or variable names")
-            errors.append("3. Run: node --check thomas/server/web/js/app_runtime_primary.mjs")
-            errors.append("4. Fix all errors until the check passes")
-            errors.append("=" * 70)
-            return False, errors
-    except FileNotFoundError:
-        # node.js not available, skip this check
-        pass
-    except subprocess.TimeoutExpired:
-        errors.append("\n⚠️  WARNING: JavaScript syntax check timed out (node.js took too long)")
-        pass
-
-    return True, []
+def _default_dead_code_dirs() -> list[str]:
+    return ["thomas/server/web/js/app_parts/"]
 
 
-def check_python_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:
-    """
-    Check that all modified Python files parse correctly.
-
-    Returns: (passed, errors)
-    """
-    errors = []
-    python_files = [f for f in staged_files if f.endswith(".py")]
-
-    if not python_files:
-        return True, []
-
-    failed_files = []
-    for py_file in python_files:
-        try:
-            with open(py_file, encoding="utf-8") as f:
-                code = f.read()
-            ast.parse(code)
-        except SyntaxError as e:
-            failed_files.append((py_file, str(e)))
-        except Exception as e:
-            failed_files.append((py_file, f"Parse error: {str(e)}"))
-
-    if failed_files:
-        errors.append("\n❌ SAFETY GATE FAILED: Python Syntax Errors")
-        errors.append("=" * 70)
-        errors.append(f"Found {len(failed_files)} Python file(s) with syntax errors:")
-        errors.append("")
-        errors.append("WHAT YOU DID WRONG:")
-        for py_file, error_msg in failed_files:
-            errors.append(f"  - {py_file}")
-            errors.append(f"    {error_msg}")
-        errors.append("")
-        errors.append("HOW TO FIX IT:")
-        errors.append("1. Review each file listed above")
-        errors.append("2. Check for:")
-        errors.append("   - Indentation errors (Python is strict about whitespace)")
-        errors.append("   - Missing colons after if/def/class/for/while statements")
-        errors.append("   - Unclosed parentheses, brackets, or braces")
-        errors.append("   - Invalid import statements")
-        errors.append("3. Test each file with: python -m py_compile <filename>")
-        errors.append("4. Fix all errors until compile succeeds")
-        errors.append("=" * 70)
-        return False, errors
-
-    return True, []
+def _default_dead_code_redirect() -> str:
+    return "thomas/server/web/js/app_runtime_primary.mjs"
 
 
-def check_no_pyc_files(staged_files: list[str]) -> tuple[bool, list[str]]:
-    """
-    Check that .pyc files aren't committed.
-
-    Returns: (passed, errors)
-    """
-    errors = []
-    pyc_files = [f for f in staged_files if f.endswith(".pyc")]
-
-    if pyc_files:
-        errors.append("\n❌ SAFETY GATE FAILED: Compiled Python Files Staged")
-        errors.append("=" * 70)
-        errors.append(f"Found {len(pyc_files)} .pyc file(s) in staging:")
-        errors.append("")
-        errors.append("WHAT YOU DID WRONG:")
-        for f in pyc_files:
-            errors.append(f"  - {f}")
-        errors.append("")
-        errors.append("HOW TO FIX IT:")
-        errors.append("1. Remove compiled files from staging:")
-        errors.append("   git reset HEAD -- '*.pyc'")
-        errors.append("")
-        errors.append("2. Delete local compiled files:")
-        errors.append("   find . -name '__pycache__' -type d -exec rm -rf {} +")
-        errors.append("   find . -name '*.pyc' -delete")
-        errors.append("")
-        errors.append("3. Ensure .gitignore includes:")
-        errors.append("   __pycache__/")
-        errors.append("   *.pyc")
-        errors.append("=" * 70)
-        return False, errors
-
-    return True, []
-
-
-def check_monolith_stubs_not_edited(staged_files: list[str]) -> tuple[bool, list[str]]:
-    """
-    Check that no monolith stub files were directly edited (only parts should be edited).
-
-    Monolith stub files are like __init__.py files that aggregate from parts.
-    They should not be manually edited for feature work.
-
-    Returns: (passed, errors)
-    """
-    errors = []
-
-    # Monolith stub patterns (these are aggregation files, not feature files)
-    monolith_stubs = [
+def _default_build_output_files() -> list[str]:
+    return [
         "thomas/server/web/js/app.js",
         "thomas/server/web/css/app.css",
     ]
 
-    edited_stubs = [f for f in staged_files if f in monolith_stubs]
 
-    if edited_stubs:
-        errors.append("\n⚠️  WARNING: Monolith Stub Files Edited")
-        errors.append("=" * 70)
-        errors.append(f"You edited {len(edited_stubs)} monolith stub file(s):")
-        errors.append("")
-        errors.append("FILES EDITED:")
-        for f in edited_stubs:
-            errors.append(f"  - {f}")
-        errors.append("")
-        errors.append("WHAT THIS MEANS:")
-        errors.append("These are aggregation/stub files that combine multiple modules.")
-        errors.append("Direct edits to these files may be overwritten by build processes.")
-        errors.append("")
-        errors.append("RECOMMENDED APPROACH:")
-        errors.append("1. If you're adding new features: create new module files")
-        errors.append("2. If editing existing logic: find the appropriate module file")
-        errors.append("3. Let the build system regenerate the stub files")
-        errors.append("")
-        errors.append("If you REALLY need to edit these, make sure you understand the build system.")
-        errors.append("=" * 70)
-        # Note: This is a warning, not a failure
-
-    return True, []
-
-
-def check_placeholder_files_not_modified(staged_files: list[str]) -> tuple[bool, list[str]]:
-    """
-    Warn if placeholder files (episodic.py, etc.) were modified.
-
-    These are stub implementations that agents often accidentally "fix".
-
-    Returns: (passed, errors) - Returns True because this is a warning, not a failure
-    """
-    errors = []
-
-    placeholder_files = [
+def _default_placeholder_files() -> list[str]:
+    return [
         "thomas/memory/episodic.py",
         "thomas/memory/episodic_store.py",
         "thomas/memory/summarization.py",
     ]
 
-    modified_placeholders = [f for f in staged_files if f in placeholder_files]
 
-    if modified_placeholders:
-        errors.append("\n⚠️  WARNING: Placeholder Files Modified")
-        errors.append("=" * 70)
-        errors.append(f"You modified {len(modified_placeholders)} placeholder file(s):")
-        errors.append("")
-        errors.append("FILES MODIFIED:")
-        for f in modified_placeholders:
-            errors.append(f"  - {f}")
-        errors.append("")
-        errors.append("WHAT THIS MEANS:")
-        errors.append("These files are PLACEHOLDER STUBS. They are not real implementations.")
-        errors.append("They are intentionally minimal and should not be developed into real features.")
-        errors.append("")
-        errors.append("If you need to implement this functionality:")
-        errors.append("1. Create a NEW file with a descriptive name (not in this list)")
-        errors.append("2. Implement the full feature")
-        errors.append("3. Update imports to use your new implementation")
-        errors.append("4. Ask the user before deleting the placeholder file")
-        errors.append("")
-        errors.append("If you accidentally modified these, undo with:")
-        errors.append("  git checkout HEAD -- " + " ".join(modified_placeholders))
-        errors.append("=" * 70)
-        # Note: Warning only, returns True
+def check_dead_code_not_edited(staged_files: list[str]) -> tuple[bool, list[str]]:
+    """Fail when staged changes touch configured dead-code paths."""
+    cfg = load_config()
+    dead_code_dirs = list(cfg.dead_code_dirs() or _default_dead_code_dirs())
+    redirect_target = str(cfg.dead_code_redirect() or _default_dead_code_redirect())
+    edited_dead_files = [path for path in staged_files if any(path.startswith(prefix) for prefix in dead_code_dirs)]
 
-    return True, errors
+    if not edited_dead_files:
+        return True, []
+
+    errors = [
+        "",
+        "SAFETY GATE FAILED: Dead Code Files Edited",
+        "=" * 70,
+        f"You edited {len(edited_dead_files)} file(s) in configured dead-code directories.",
+        "These paths are marked as dead code or generated surfaces.",
+        "",
+        "WHAT YOU DID WRONG:",
+    ]
+    errors.extend(f"  - {path}" for path in edited_dead_files)
+    errors.extend(
+        [
+            "",
+            "HOW TO FIX IT:",
+            "1. Undo your changes to the configured dead-code paths.",
+            "2. If you need to update live behavior, edit:",
+            f"   {redirect_target}",
+            "=" * 70,
+        ]
+    )
+    return False, errors
+
+
+def check_javascript_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:
+    """Validate the live frontend runtime when it is part of the change set."""
+    js_file = "thomas/server/web/js/app_runtime_primary.mjs"
+    if js_file not in staged_files:
+        return True, []
+
+    try:
+        result = subprocess.run(["node", "--check", js_file], capture_output=True, text=True, timeout=5)
+    except FileNotFoundError:
+        return True, []
+    except subprocess.TimeoutExpired:
+        return True, []
+
+    if result.returncode == 0:
+        return True, []
+
+    errors = [
+        "",
+        "SAFETY GATE FAILED: JavaScript Syntax Error",
+        "=" * 70,
+        f"File: {js_file}",
+        "",
+        "WHAT YOU DID WRONG:",
+        "Your changes introduced JavaScript syntax errors.",
+        "",
+        "Error output:",
+        result.stderr.rstrip(),
+        "",
+        "HOW TO FIX IT:",
+        f"1. Run: node --check {js_file}",
+        "2. Fix all reported syntax errors.",
+        "=" * 70,
+    ]
+    return False, errors
+
+
+def check_python_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:
+    """Validate that all modified Python files parse."""
+    python_files = [path for path in staged_files if path.endswith(".py")]
+    if not python_files:
+        return True, []
+
+    failed_files: list[tuple[str, str]] = []
+    for py_file in python_files:
+        try:
+            with open(py_file, encoding="utf-8") as handle:
+                ast.parse(handle.read())
+        except SyntaxError as exc:
+            failed_files.append((py_file, str(exc)))
+        except Exception as exc:  # pragma: no cover - defensive
+            failed_files.append((py_file, f"Parse error: {exc}"))
+
+    if not failed_files:
+        return True, []
+
+    errors = [
+        "",
+        "SAFETY GATE FAILED: Python Syntax Errors",
+        "=" * 70,
+        f"Found {len(failed_files)} Python file(s) with syntax errors:",
+        "",
+        "WHAT YOU DID WRONG:",
+    ]
+    for py_file, error_msg in failed_files:
+        errors.append(f"  - {py_file}")
+        errors.append(f"    {error_msg}")
+    errors.extend(
+        [
+            "",
+            "HOW TO FIX IT:",
+            "1. Review each file listed above.",
+            "2. Test each file with: python -m py_compile <filename>",
+            "3. Fix all syntax errors until compile succeeds.",
+            "=" * 70,
+        ]
+    )
+    return False, errors
+
+
+def check_no_pyc_files(staged_files: list[str]) -> tuple[bool, list[str]]:
+    """Reject staged compiled Python artifacts."""
+    pyc_files = [path for path in staged_files if path.endswith(".pyc")]
+    if not pyc_files:
+        return True, []
+
+    errors = [
+        "",
+        "SAFETY GATE FAILED: Compiled Python Files Staged",
+        "=" * 70,
+        f"Found {len(pyc_files)} .pyc file(s) in staging:",
+        "",
+        "WHAT YOU DID WRONG:",
+    ]
+    errors.extend(f"  - {path}" for path in pyc_files)
+    errors.extend(
+        [
+            "",
+            "HOW TO FIX IT:",
+            "1. Remove compiled files from staging.",
+            "2. Delete local __pycache__ directories and .pyc files.",
+            "=" * 70,
+        ]
+    )
+    return False, errors
+
+
+def check_monolith_stubs_not_edited(staged_files: list[str]) -> tuple[bool, list[str]]:
+    """Fail when configured build-output files are edited directly."""
+    cfg = load_config()
+    build_output_files = list(cfg.build_output_files() or _default_build_output_files())
+    edited_stubs = [path for path in staged_files if path in build_output_files]
+
+    if not edited_stubs:
+        return True, []
+
+    errors = [
+        "",
+        "SAFETY GATE FAILED: Build Output Files Edited",
+        "=" * 70,
+        f"You edited {len(edited_stubs)} configured build-output file(s):",
+        "",
+        "WHAT YOU DID WRONG:",
+    ]
+    errors.extend(f"  - {path}" for path in edited_stubs)
+    errors.extend(
+        [
+            "",
+            "HOW TO FIX IT:",
+            "1. Revert direct edits to generated or aggregation surfaces.",
+            "2. Update the source inputs that produce these files instead.",
+            "=" * 70,
+        ]
+    )
+    return False, errors
+
+
+def check_placeholder_files_not_modified(staged_files: list[str]) -> tuple[bool, list[str]]:
+    """Fail when configured placeholder files are modified directly."""
+    cfg = load_config()
+    placeholder_files = list(cfg.placeholder_files() or _default_placeholder_files())
+    modified_placeholders = [path for path in staged_files if path in placeholder_files]
+
+    if not modified_placeholders:
+        return True, []
+
+    errors = [
+        "",
+        "SAFETY GATE FAILED: Placeholder Files Modified",
+        "=" * 70,
+        f"You modified {len(modified_placeholders)} configured placeholder file(s):",
+        "",
+        "WHAT YOU DID WRONG:",
+    ]
+    errors.extend(f"  - {path}" for path in modified_placeholders)
+    errors.extend(
+        [
+            "",
+            "HOW TO FIX IT:",
+            "1. Keep intentional placeholder files stubbed.",
+            "2. Implement the real behavior in a live module and update imports there.",
+            "=" * 70,
+        ]
+    )
+    return False, errors
 
 
 def get_staged_files() -> list[str]:
-    """Get list of files currently staged for commit."""
+    """Return currently staged file paths."""
     try:
         result = subprocess.run(["git", "diff", "--cached", "--name-only"], capture_output=True, text=True, timeout=5)
-        if result.returncode == 0:
-            return [f.strip() for f in result.stdout.strip().split("\n") if f.strip()]
-    except Exception:
-        pass
-    return []
+    except Exception:  # pragma: no cover - defensive
+        return []
+    if result.returncode != 0:
+        return []
+    return [path.strip() for path in result.stdout.splitlines() if path.strip()]
 
 
 def main() -> int:
-    """Run all safety checks. Return exit code."""
+    """Run the safety gate against staged files."""
     staged_files = get_staged_files()
-
     if not staged_files:
         print("No staged files to check.")
         return 0
 
     print(f"Validating {len(staged_files)} staged file(s)...\n")
 
-    all_errors = []
-    all_warnings = []
+    all_errors: list[str] = []
+    checks = (
+        check_dead_code_not_edited,
+        check_javascript_syntax,
+        check_python_syntax,
+        check_no_pyc_files,
+        check_monolith_stubs_not_edited,
+        check_placeholder_files_not_modified,
+    )
+    for check in checks:
+        passed, errors = check(staged_files)
+        if not passed:
+            all_errors.extend(errors)
 
-    # Run all checks
-    passed, errors = check_dead_code_not_edited(staged_files)
-    if not passed:
-        all_errors.extend(errors)
-
-    passed, errors = check_javascript_syntax(staged_files)
-    if not passed:
-        all_errors.extend(errors)
-
-    passed, errors = check_python_syntax(staged_files)
-    if not passed:
-        all_errors.extend(errors)
-
-    passed, errors = check_no_pyc_files(staged_files)
-    if not passed:
-        all_errors.extend(errors)
-
-    passed, errors = check_monolith_stubs_not_edited(staged_files)
-    if errors:
-        all_warnings.extend(errors)
-
-    passed, errors = check_placeholder_files_not_modified(staged_files)
-    if errors:
-        all_warnings.extend(errors)
-
-    # Print warnings
-    if all_warnings:
-        for line in all_warnings:
-            print(line)
-        print()
-
-    # Print errors
     if all_errors:
         for line in all_errors:
             print(line)
         print()
         return 1
 
-    if not all_warnings:
-        print("✅ All safety checks passed!")
+    print("All safety checks passed!")
     return 0
 
 

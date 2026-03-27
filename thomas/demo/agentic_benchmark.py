@@ -26,6 +26,12 @@ from thomas.demo.agentic_benchmark_core import (
     load_agentic_task_pack,
     render_task,
 )
+from thomas.demo.agentic_benchmark_helpers import (
+    _pass_budget_for_mode,
+    _pipeline_topology,
+    _review_decision_for_candidate,
+    _should_use_coding_pipeline,
+)
 
 # Import helpers for re-export
 from thomas.demo.agentic_benchmark_runners import (
@@ -56,11 +62,15 @@ __all__ = [
     "_estimate_text_tokens",
     "_extract_reported_first_token_ms",
     "_extract_usage_from_token_report",
+    "_pass_budget_for_mode",
+    "_pipeline_topology",
     "_resolve_config_path",
+    "_review_decision_for_candidate",
     "_run_thomas_api_task",
     "_safe_float",
     "_select_elapsed_seconds",
     "_select_optional_elapsed_seconds",
+    "_should_use_coding_pipeline",
 ]
 
 

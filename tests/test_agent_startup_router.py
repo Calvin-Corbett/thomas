@@ -38,6 +38,7 @@ def test_router_classifies_chat_lane(tmp_path: Path) -> None:
         summary="Answer a repo question",
         paths=[],
         edit_intent=False,
+        benchmark_mode=False,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
@@ -55,6 +56,7 @@ def test_router_classifies_simple_edit_lane(tmp_path: Path) -> None:
         summary="Patch a small bug",
         paths=["thomas/core/config.py"],
         edit_intent=True,
+        benchmark_mode=False,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
@@ -72,6 +74,7 @@ def test_router_classifies_ui_proof_lane(tmp_path: Path) -> None:
         summary="Update the website hero",
         paths=["apps/site/src/app/page.tsx"],
         edit_intent=True,
+        benchmark_mode=False,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
@@ -93,6 +96,7 @@ def test_router_escalates_claim_conflict_to_risky_lane(tmp_path: Path) -> None:
         summary="Patch config flow",
         paths=["thomas/core/config.py"],
         edit_intent=True,
+        benchmark_mode=False,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
@@ -104,6 +108,24 @@ def test_router_escalates_claim_conflict_to_risky_lane(tmp_path: Path) -> None:
     assert payload["workboard_required"] is True
     assert payload["workboard"]["claim_conflict"] is True
     assert payload["workboard"]["matching_claims"][0]["agent"] == "Codex 7"
+
+
+def test_router_classifies_benchmark_lane(tmp_path: Path) -> None:
+    payload = mod.classify_task(
+        summary="Run snake benchmark",
+        paths=["output/benchmarks/snake/run-1/thomas/index.html"],
+        edit_intent=True,
+        benchmark_mode=True,
+        tracked_work=False,
+        multi_agent=False,
+        long_running=False,
+        workflow_mode="guided",
+        workboard_path=_write_workboard(tmp_path),
+    )
+
+    assert payload["lane"] == "benchmark"
+    assert payload["flags"]["benchmark_mode"] is True
+    assert "docs/ai/CHECKLISTS/agent-lane-benchmark.md" in payload["required_reads"]
 
 
 def test_build_startup_payload_includes_preflight(monkeypatch, tmp_path: Path) -> None:
@@ -136,6 +158,7 @@ def test_build_startup_payload_includes_preflight(monkeypatch, tmp_path: Path) -
         summary="Patch a small bug",
         paths=["thomas/core/config.py"],
         edit_intent=True,
+        benchmark_mode=False,
         tracked_work=False,
         multi_agent=False,
         long_running=False,
@@ -165,6 +188,7 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
         },
         "flags": {
             "ui_proof": False,
+            "benchmark_mode": False,
             "tracked_work": False,
             "multi_agent": False,
             "long_running": False,

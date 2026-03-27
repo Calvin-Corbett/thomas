@@ -22,7 +22,15 @@ import os
 from collections.abc import Mapping
 from typing import Any, TextIO
 
-from thomas.channels.p084_channel_resolve_command import (
+try:
+    from thomas.marketplace.channels.p084_channel_resolve_command import (
+        ChannelResolveError,
+        ChannelResolveRequest,
+        resolve_channel,
+        result_json_schema,
+    )
+except ImportError:  # pragma: no cover
+    from thomas.channels.p084_channel_resolve_command import (
     ChannelResolveError,
     ChannelResolveRequest,
     resolve_channel,

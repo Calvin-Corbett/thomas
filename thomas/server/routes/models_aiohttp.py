@@ -175,6 +175,8 @@ def register_models_routes(
         cfg: AppConfig = _resolve_runtime_config(request.app)
         resolved_default, _resolved_default_model_id = _resolve_default_model(cfg)
         secrets: SecretStore = _resolve_app_value(request.app, APP_SECRETS, required=True)
+        from thomas.models.chat_capabilities import profile_chat_control_map
+
         profiles = []
         for name, m in cfg.models.items():
             has_key = m.provider == "codex" or bool(secrets.get(name) or m.api_key)
@@ -186,6 +188,7 @@ def register_models_routes(
                 "context_window": m.context_window,
                 "max_tokens": m.max_tokens,
                 "has_api_key": has_key,
+                "chat_controls": profile_chat_control_map(m),
             }
             if m.reasoning_effort:
                 profile_info["reasoning_effort"] = m.reasoning_effort
@@ -200,12 +203,15 @@ def register_models_routes(
         require_api_access(request)
         cfg: AppConfig = _resolve_runtime_config(request.app)
         from thomas.models.capabilities import profile_capability_map
+        from thomas.models.chat_capabilities import profile_chat_control_map
 
-        result: dict = {}
+        result: dict[str, Any] = {}
+        chat_controls: dict[str, Any] = {}
         for name, m in cfg.models.items():
             result[name] = profile_capability_map(m)
+            chat_controls[name] = profile_chat_control_map(m)
         return web.json_response(
-            {"profiles": result},
+            {"profiles": result, "chat_controls": {"profiles": chat_controls}},
             dumps=lambda x: json.dumps(x, ensure_ascii=False),
         )
 

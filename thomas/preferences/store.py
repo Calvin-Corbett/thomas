@@ -29,8 +29,10 @@ if _LOADER_ROOT is not None:
 
     del load_monolith_source
 else:
+    from ._db import *  # noqa: F401,F403
     from ._patches import *  # noqa: F401,F403
     from ._prefs import *  # noqa: F401,F403
+    from ._utils import *  # noqa: F401,F403
 
     __all__ = sorted(name for name in globals() if not name.startswith("_"))
 

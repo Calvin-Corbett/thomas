@@ -91,7 +91,9 @@ def profile_capability_map(cfg: ModelConfig) -> Dict[str, bool]:
 
     # Conservative provider-specific refinements for openai-compatible profiles.
     if str(getattr(cfg, "provider", "") or "").lower() == "openai_compat":
-        if "groq" in text_hint:
+        if any(token in base_url for token in ("127.0.0.1", "localhost", "11434")):
+            out["batch"] = False
+        elif "groq" in text_hint:
             # Groq supports batch + speech APIs, but embeddings/fine-tuning
             # support is not broadly exposed as first-class today.
             out["embeddings"] = False

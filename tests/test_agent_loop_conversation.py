@@ -264,6 +264,20 @@ class TestAgentLoopConversation(unittest.TestCase):
         assert specs is not None
         self.assertGreaterEqual(len(specs), 1)
 
+    def test_reply_first_casual_turn_omits_tool_specs_from_llm_call(self) -> None:
+        cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
+        tools = ToolRegistry()
+        tools.register(DummyTool())
+        llm = CaptureLLM("hello")
+        agent = AgentLoop(cfg, llm, tools, conversation=[])
+
+        async def run_once():
+            async for _ in agent.run("hey there", tools_policy="auto"):
+                pass
+
+        asyncio.run(run_once())
+        self.assertEqual(llm.last_tools, [])
+
     def test_sanitize_removes_premature_what_next_on_continuation(self) -> None:
         cfg = AppConfig(models={"local": ModelConfig(name="local", model="dummy")}, default_model="local")
         tools = ToolRegistry()

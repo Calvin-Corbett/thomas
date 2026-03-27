@@ -85,8 +85,25 @@ class ReasoningSpecialist(BaseSpecialist):
             messages.append(msg)
         messages.append({"role": "user", "content": prompt})
 
+        response = ""
         try:
-            response = await self._call_llm(messages, max_tokens=4_000)
+            if hasattr(self.llm, "stream_chat"):
+                streamed_parts: list[str] = []
+                async for stream_event in self.llm.stream_chat(messages=messages, tools=None):
+                    event_type = str(getattr(stream_event, "type", "") or "")
+                    data = getattr(stream_event, "data", {}) or {}
+                    if event_type == "token":
+                        token_text = str(data.get("text", "") or "")
+                        if token_text:
+                            streamed_parts.append(token_text)
+                            yield {"type": "text", "text": token_text}
+                    elif event_type == "error":
+                        error_text = str(data.get("error") or "Unknown streaming error")
+                        yield {"type": "error", "error": f"Reasoning failed: {error_text}"}
+                        return
+                response = "".join(streamed_parts).strip()
+            else:
+                response = await self._call_llm(messages, max_tokens=4_000)
         except Exception as exc:
             yield {"type": "error", "error": f"Reasoning failed: {exc}"}
             return
@@ -95,5 +112,6 @@ class ReasoningSpecialist(BaseSpecialist):
             yield {"type": "error", "error": "Model returned an empty response"}
             return
 
-        yield {"type": "text", "text": response}
+        if not hasattr(self.llm, "stream_chat"):
+            yield {"type": "text", "text": response}
         yield {"type": "done", "content": response, "iterations": 1}

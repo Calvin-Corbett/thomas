@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from thomas.agent.response_tone import (
@@ -20,8 +22,10 @@ from thomas.agent.skills_runtime import (
     resolve_runtime_skills,
 )
 from thomas.core.autonomy import autonomy_spec
+from thomas.core.config import load_config
 from thomas.core.events import AgentEvent, EventType
 from thomas.core.llm import LLMError
+from thomas.core.rules_of_road import evaluate_rules
 from thomas.core.token_economy import (
     build_token_economy_meta,
     loop_context_budgets,
@@ -55,6 +59,28 @@ log = logging.getLogger(__name__)
 _MAX_TOOL_RESULT_CHARS = 5_000
 _TPM_WINDOW_SECONDS = 60.0
 _TPM_MAX_AUTO_WAIT_S = 20.0
+_REPLY_FIRST_ROUTE_PATHS = frozenset({"casual_chat", "personal_context", "assistant_meta", "general", "planning"})
+_STREAM_HOLDBACK_CHARS = 32
+
+
+def _is_reply_first_route(*, route_path: str, project_related: bool, explicit_action: bool) -> bool:
+    path = str(route_path or "").strip().lower()
+    if path == "planning":
+        return True
+    if path not in _REPLY_FIRST_ROUTE_PATHS:
+        return False
+    return not (project_related and explicit_action)
+
+
+def _stable_text_emit_length(text: str) -> int:
+    src = str(text or "")
+    if not src:
+        return 0
+    if src.endswith(("\n", ".", "!", "?", ":")):
+        return len(src)
+    if len(src) <= _STREAM_HOLDBACK_CHARS:
+        return 0
+    return len(src) - _STREAM_HOLDBACK_CHARS
 
 
 async def _agent_loop_run(
@@ -142,6 +168,16 @@ async def _agent_loop_run(
         requested_tools_policy=tools_policy,
         is_followup=is_followup,
     )
+    route_path = str(route.path or "")
+    project_related = self._is_project_related_prompt(prompt_text)
+    explicit_action = self._has_explicit_action_intent(prompt_text)
+    low_intent_route = self._is_low_intent_route(route_path)
+    continuation_turn = bool(route_input_source == "history_augmented")
+    reply_first_route = _is_reply_first_route(
+        route_path=route_path,
+        project_related=project_related,
+        explicit_action=explicit_action,
+    )
     autonomy = autonomy_spec(self._autonomy_level)
     autonomy_name = str(autonomy.name)
     effective_mode = route.mode
@@ -176,12 +212,11 @@ async def _agent_loop_run(
         "roots": [],
         "selected": [],
     }
-    # Skip skills resolution for low-intent routes — casual chat doesn't
-    # need runtime skill discovery and it saves latency.
-    _low_intent_skip = {"casual_chat", "personal_context", "assistant_meta", "general"}
+    # Skip runtime skill discovery on reply-first turns unless the user
+    # explicitly asks for a skill.
     prompt_lower = str(prompt_text or "").lower()
     explicit_skill_hint = ("$" in str(prompt_text or "")) or ("skill " in prompt_lower)
-    if str(route.path or "") not in _low_intent_skip or explicit_skill_hint:
+    if not reply_first_route or explicit_skill_hint:
         try:
             runtime_skills = resolve_runtime_skills(
                 self.config,
@@ -382,16 +417,11 @@ async def _agent_loop_run(
             max_iter = max(max_iter, min(max(self.config.max_agent_iterations, 2), 6))
         else:
             max_iter = max(max_iter, min(self.config.max_agent_iterations * 3, 32))
-
-    project_related = self._is_project_related_prompt(prompt_text)
-    explicit_action = self._has_explicit_action_intent(prompt_text)
-    low_intent_route = self._is_low_intent_route(route.path)
-    action_route = str(route.path or "") in ("coding_task", "debug_audit", "planning", "research")
+    action_route = route_path in ("coding_task", "debug_audit", "planning", "research")
     full_auto_action_turn = bool(
         int(self._autonomy_level) == 4 and (project_related or explicit_action or action_route)
     )
     clarification_budget_active = bool(project_related or explicit_action or action_route)
-    continuation_turn = bool(route_input_source == "history_augmented")
     clarification_question_cap = 2
     if clarification_budget_active:
         clarification_question_cap = 1
@@ -411,7 +441,7 @@ async def _agent_loop_run(
             effective_tools_policy = "never"
         elif effective_mode == "thinking":
             effective_tools_policy = "always"
-    if tools_policy == "auto" and low_intent_route and not explicit_action and not project_related:
+    if tools_policy == "auto" and reply_first_route and not explicit_action and not project_related:
         effective_tools_policy = "never"
 
     # API/cloud providers should always have tools available unless the
@@ -432,7 +462,7 @@ async def _agent_loop_run(
         effective_tools_policy = "auto"
     if autonomy.force_tools_policy in ("never", "auto", "always"):
         forced = str(autonomy.force_tools_policy)
-        if forced == "always" and low_intent_route and not explicit_action and not project_related:
+        if forced == "always" and reply_first_route and not explicit_action and not project_related:
             # Only downgrade "always" to "never" when truly conversational
             # (no action verbs AND no project signals).
             effective_tools_policy = "never"
@@ -553,25 +583,30 @@ async def _agent_loop_run(
     if prompt_text:
         self._record_event("user_message", prompt_text)
         self._capture_profile_hints(prompt_text)
-
-    # Always retrieve memory context for continuity.
+    # Keep reply-first turns lean unless continuity or policy signals need extra context.
     if prompt_text:
-        memory_mode = self.config.memory.mode or "auto"
-        if effective_mode == "fast":
-            memory_mode = "fast"
-        if effective_mode == "thinking":
-            memory_mode = "thorough"
-        memory_text = self._retrieve_memory(
-            prompt_text,
-            mode=memory_mode,
-            budget_override=route.memory_budget_tokens,
+        should_retrieve_memory = bool(
+            not reply_first_route
+            or continuation_turn
+            or user_is_confused
+            or best_practice_gate_active
+            or code_output_validation_enabled
         )
-        continuity_hint = self._input_continuity_hint(prompt_text)
-        test_visibility_hint = live_test_default_hint(prompt_text)
+        if should_retrieve_memory:
+            memory_mode = self.config.memory.mode or "auto"
+            if effective_mode == "fast":
+                memory_mode = "fast"
+            if effective_mode == "thinking":
+                memory_mode = "thorough"
+            memory_text = self._retrieve_memory(
+                prompt_text,
+                mode=memory_mode,
+                budget_override=route.memory_budget_tokens,
+            )
+        continuity_hint = self._input_continuity_hint(prompt_text) if (continuation_turn or user_is_confused) else ""
+        test_visibility_hint = "" if reply_first_route else live_test_default_hint(prompt_text)
         library_text = ""
-        # Keep coding turns lean by default; reserve library context for
-        # deep-thinking coding sessions and non-coding routes.
-        if str(route.path or "") != "coding_task" or str(effective_mode or "").strip().lower() == "thinking":
+        if (not reply_first_route) and (route_path != "coding_task" or str(effective_mode or "").strip().lower() == "thinking"):
             library_text = self._retrieve_library(prompt_text, route)
         extra_context_parts: list[str] = []
         if memory_text:
@@ -697,11 +732,10 @@ async def _agent_loop_run(
         # Collect this iteration's response
         text_chunks: list[str] = []
         pending_tool_calls: list[dict[str, Any]] = []
-        # Always buffer text tokens so the sanitization pass runs before
-        # anything reaches the client.  This prevents internal-reasoning
-        # leakage, tool-artifact noise, and robotic-opener pollution on
-        # *every* route — not just the subset we previously enumerated.
-        buffer_text_tokens = True
+        # Reply-first routes can stream once a sanitized prefix is stable.
+        # Execution-first routes still buffer the full answer for stronger hygiene.
+        buffer_text_tokens = not reply_first_route
+        streamed_visible_text = ""
         iter_prompt_start_total = int(stream_usage.get("prompt_tokens", 0) or 0)
 
         try:
@@ -720,12 +754,24 @@ async def _agent_loop_run(
                         data={"text": event.data.get("text", "")},
                         iteration=iteration,
                     )
-
                 elif event.type == "token":
                     text = event.data.get("text", "")
                     text_chunks.append(text)
                     if not buffer_text_tokens:
-                        yield AgentEvent.text_delta(text, iteration=iteration)
+                        visible_text, _ = self._sanitize_assistant_text(
+                            "".join(text_chunks),
+                            prompt_text=prompt_text,
+                            route=route,
+                            route_input_source=route_input_source,
+                            pending_tool_calls=0,
+                        )
+                        flush_len = _stable_text_emit_length(visible_text)
+                        visible_prefix = visible_text[:flush_len]
+                        if visible_prefix.startswith(streamed_visible_text):
+                            delta = visible_prefix[len(streamed_visible_text):]
+                            if delta:
+                                streamed_visible_text = visible_prefix
+                                yield AgentEvent.text_delta(delta, iteration=iteration)
 
                 elif event.type == "tool_call_start":
                     tc_id = event.data.get("id", "")
@@ -893,10 +939,18 @@ async def _agent_loop_run(
             self._conversation.append({"role": "user", "content": nudge})
             self._sync_user_message_to_intelligence(nudge)
             continue
-
         if buffer_text_tokens and iter_text:
             # Flush buffered text after full-auto guardrails accept it.
             yield AgentEvent.text_delta(iter_text, iteration=iteration)
+        elif iter_text:
+            if iter_text.startswith(streamed_visible_text):
+                tail = iter_text[len(streamed_visible_text):]
+                if tail:
+                    yield AgentEvent.text_delta(tail, iteration=iteration)
+                    streamed_visible_text = iter_text
+            elif not streamed_visible_text:
+                yield AgentEvent.text_delta(iter_text, iteration=iteration)
+                streamed_visible_text = iter_text
 
         if provider_tpm_budget > 0:
             stream_prompt_now = int(stream_usage.get("prompt_tokens", 0) or 0)

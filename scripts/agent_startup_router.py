@@ -17,6 +17,7 @@ DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 ROUTER_DOC = "docs/ai/AGENT_ROUTER.md"
 LANE_CARD_PATHS = {
     "chat": "docs/ai/CHECKLISTS/agent-lane-chat.md",
+    "benchmark": "docs/ai/CHECKLISTS/agent-lane-benchmark.md",
     "simple-edit": "docs/ai/CHECKLISTS/agent-lane-simple-edit.md",
     "risky-edit": "docs/ai/CHECKLISTS/agent-lane-risky-edit.md",
     "multi-file": "docs/ai/CHECKLISTS/agent-lane-multi-file.md",
@@ -225,6 +226,7 @@ def classify_task(
     summary: str,
     paths: list[str],
     edit_intent: bool,
+    benchmark_mode: bool,
     tracked_work: bool,
     multi_agent: bool,
     long_running: bool,
@@ -242,7 +244,9 @@ def classify_task(
         token in summary_lower for token in ("delegate", "swarm", "parallel", "multi-agent", "handoff", "workers")
     )
 
-    if not edit_intent and not paths:
+    if benchmark_mode:
+        lane = "benchmark"
+    elif not edit_intent and not paths:
         lane = "chat"
     elif ui_proof:
         lane = "ui-proof"
@@ -271,6 +275,11 @@ def classify_task(
 
     checks = {
         "chat": [],
+        "benchmark": [
+            "Verify benchmark env is complete: THOMAS_BENCHMARK_MODE, RUN_ID, REASON, and ROOT.",
+            "Limit writes to the benchmark root only.",
+            "Capture proof artifacts and benchmark audit output before handoff.",
+        ],
         "simple-edit": [
             "Run a file-level syntax or compile check for edited code.",
             "Run focused regression tests for changed behavior.",
@@ -301,6 +310,10 @@ def classify_task(
         "chat": [
             "You start editing files.",
             "The task becomes multi-file, risky, or multi-agent.",
+        ],
+        "benchmark": [
+            "The task needs product-code edits outside the benchmark root.",
+            "UI-proof or release-critical gates become required.",
         ],
         "simple-edit": [
             "Scope expands beyond a small isolated change.",
@@ -337,6 +350,7 @@ def classify_task(
         },
         "flags": {
             "ui_proof": bool(ui_proof),
+            "benchmark_mode": bool(benchmark_mode),
             "tracked_work": bool(tracked_work),
             "multi_agent": bool(multi_agent),
             "long_running": bool(long_running),
@@ -354,6 +368,7 @@ def build_startup_payload(
     summary: str,
     paths: list[str],
     edit_intent: bool,
+    benchmark_mode: bool,
     tracked_work: bool,
     multi_agent: bool,
     long_running: bool,
@@ -365,6 +380,7 @@ def build_startup_payload(
         summary=summary,
         paths=paths,
         edit_intent=edit_intent,
+        benchmark_mode=benchmark_mode,
         tracked_work=tracked_work,
         multi_agent=multi_agent,
         long_running=long_running,
@@ -380,6 +396,7 @@ def _build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--summary", default="", help="Short task summary.")
     parser.add_argument("--path", action="append", default=[], help="Repo-relative path the task will touch.")
     parser.add_argument("--edit-intent", action="store_true", help="Set when the task will edit files.")
+    parser.add_argument("--benchmark", action="store_true", help="Set when the task is a benchmark-lane run.")
     parser.add_argument(
         "--tracked-work", action="store_true", help="Set when the task should be tracked on the workboard."
     )
@@ -457,6 +474,7 @@ def run(argv: list[str] | None = None) -> int:
         summary=str(args.summary or ""),
         paths=list(args.path or []),
         edit_intent=bool(args.edit_intent),
+        benchmark_mode=bool(args.benchmark),
         tracked_work=bool(args.tracked_work),
         multi_agent=bool(args.multi_agent),
         long_running=bool(args.long_running),

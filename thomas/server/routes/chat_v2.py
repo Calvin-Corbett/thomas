@@ -1,21 +1,18 @@
-"""Unified Chat V2 Endpoint — Brain/Orchestrator architecture.
+"""Unified /api/v2/chat route.
 
-Replaces the fragmented chat_aiohttp + chat_modes + chat_stream_events
-pipeline with a single clean endpoint.
-
-Key changes from V1:
-    1. ConversationManager (COW) — no more shared mutable references
-    2. Auto-save after every turn — no frontend PUT dependency
-    3. 3-layer memory — refreshes every iteration, not just #0
-    4. Single endpoint — no more batch/swarm/control/quick fragmentation
-    5. Orchestrator brain — delegates to specialists, never executes directly
-    6. Thinking events — exposed at every decision point
+Thomas remains the only conversational voice on this route. In Max mode we
+can launch silent background delegation in parallel, but user-visible text is
+still streamed only from Thomas.
 """
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
+import re
 import secrets
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any
 
@@ -25,21 +22,20 @@ from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.session_store import SessionMeta, SessionStore
 from thomas.core.llm import LLMClient
+from thomas.marketplace.orchestrator.brain import OrchestratorBrain
+from thomas.marketplace.orchestrator.registry import SpecialistRegistry
+from thomas.marketplace.specialists.coding import CodingSpecialist
+from thomas.marketplace.specialists.reasoning import ReasoningSpecialist
+from thomas.marketplace.specialists.research import ResearchSpecialist
+from thomas.marketplace.specialists.synthesis import SynthesisSpecialist
+from thomas.marketplace.specialists.tools import ToolSpecialist
+from thomas.server.chat_delegation import (
+    build_active_task_digest,
+    session_active_delegations,
+    start_background_delegation,
+)
+from thomas.tools.voice import AudioData, VoiceBridge, VoiceProviderException
 
-# V3 brain swap (2026-03-18): Use V3 brain with named bots and async dispatch.
-# Falls back to V2 brain if V3 import fails.
-try:
-    from thomas.orchestrator.brain_v3 import OrchestratorBrainV3 as OrchestratorBrain
-except ImportError:
-    from thomas.orchestrator.brain import OrchestratorBrain
-from thomas.orchestrator.registry import SpecialistRegistry
-from thomas.specialists.coding import CodingSpecialist
-from thomas.specialists.reasoning import ReasoningSpecialist
-from thomas.specialists.research import ResearchSpecialist
-from thomas.specialists.synthesis import SynthesisSpecialist
-from thomas.specialists.tools import ToolSpecialist
-
-# Import app keys for proper config/memory/tools access
 try:
     from thomas.server.app_keys import APP_CONFIG, APP_MEMORY, APP_TOOLS
 except ImportError:
@@ -47,14 +43,298 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
-# ── app keys ─────────────────────────────────────────────────────
-# These are registered in app.py during startup
-
 APP_SESSION_STORE = web.AppKey("chat_v2_session_store", SessionStore)
 APP_SPECIALIST_REGISTRY = web.AppKey("chat_v2_specialist_registry", SpecialistRegistry)
+APP_SESSION_LLM_CACHE = web.AppKey("chat_v2_session_llm_cache", dict)
+APP_WARM_CODEX_POOL = web.AppKey("chat_v2_warm_codex_pool", dict)
+APP_WARM_CODEX_TASKS = web.AppKey("chat_v2_warm_codex_tasks", dict)
+APP_VOICE_BRIDGE = web.AppKey("chat_v2_voice_bridge", VoiceBridge)
+
+_MAX_TRANSCRIBE_BYTES = 10 * 1024 * 1024
 
 
-# ── route registration ───────────────────────────────────────────
+@dataclass
+class _CachedSessionLLM:
+    llm: Any
+    signature: tuple[str, str, str, str, str]
+    lock: asyncio.Lock
+
+
+_BACKGROUND_REPLY_NOW_RE = (
+    r"(?:answer|reply|respond)\s+(?:now|first|quickly|fast)"
+    r"|(?:quick|fast)\s+(?:reply|answer|response)"
+    r"|don't wait"
+)
+_BACKGROUND_DELEGATION_RE = (
+    r"(?:background|delegate|delegation|parallel|while you work|in the background)"
+    r"|(?:rest|deeper work|longer work)\s+(?:in|into)?\s*background"
+)
+
+
+def _requests_reply_first_background(prompt: str) -> bool:
+    text = str(prompt or "").strip().lower()
+    if not text:
+        return False
+    return bool(re.search(_BACKGROUND_REPLY_NOW_RE, text) and re.search(_BACKGROUND_DELEGATION_RE, text))
+
+
+_BACKGROUND_SPLIT_PATTERNS = (
+    r"\bthen,?\s+in the background\b",
+    r"\bin the background\b",
+    r"\bwhile you work\b",
+    r"\bdelegate the rest\b",
+)
+
+
+def _foreground_reply_prompt(prompt: str) -> str:
+    text = str(prompt or "").strip()
+    if not text:
+        return text
+    cut_idx: int | None = None
+    for pattern in _BACKGROUND_SPLIT_PATTERNS:
+        match = re.search(pattern, text, re.I)
+        if match:
+            start = int(match.start())
+            cut_idx = start if cut_idx is None else min(cut_idx, start)
+    visible_prompt = text[:cut_idx].rstrip(" ,.;:") if cut_idx is not None else text
+    if not visible_prompt:
+        visible_prompt = text
+    return (
+        visible_prompt
+        + "\n\n[Visible reply constraint]\n"
+        + "Give only the immediate user-facing answer in one or two sentences. "
+        + "Do not include the deferred background work, long-form deliverable, or any narration about delegation."
+    )
+
+
+def _uploaded_audio_format(filename: str = "", content_type: str = "") -> str:
+    name = str(filename or "").strip().lower()
+    mime = str(content_type or "").strip().lower()
+    if "." in name:
+        ext = name.rsplit(".", 1)[-1]
+        if ext in {"wav", "wave", "mp3", "mpeg", "ogg", "oga", "flac", "webm", "m4a", "mp4"}:
+            return "wav" if ext == "wave" else ("ogg" if ext == "oga" else ("mp3" if ext == "mpeg" else ext))
+    if "webm" in mime:
+        return "webm"
+    if "ogg" in mime:
+        return "ogg"
+    if "mpeg" in mime or "mp3" in mime:
+        return "mp3"
+    if "flac" in mime:
+        return "flac"
+    if "mp4" in mime or "m4a" in mime:
+        return "m4a"
+    return "wav"
+
+
+async def _voice_bridge_for_request(app: web.Application) -> VoiceBridge:
+    bridge = app.get(APP_VOICE_BRIDGE)
+    if isinstance(bridge, VoiceBridge):
+        return bridge
+    bridge = VoiceBridge()
+    app[APP_VOICE_BRIDGE] = bridge
+    return bridge
+
+
+def _normalize_reasoning_effort(value: str) -> str:
+    level = str(value or "").strip().lower()
+    if level in {"low", "medium", "high", "xhigh"}:
+        return level
+    return ""
+
+
+def _llm_signature(model_cfg: Any) -> tuple[str, str, str, str, str]:
+    return (
+        str(getattr(model_cfg, "provider", "") or "").strip().lower(),
+        str(getattr(model_cfg, "base_url", "") or "").strip(),
+        str(getattr(model_cfg, "api_key", "") or "").strip(),
+        str(getattr(model_cfg, "api_key_header", "") or "").strip(),
+        str(getattr(model_cfg, "api_key_prefix", "") or "").strip(),
+    )
+
+
+def _warm_codex_pool_key(model_cfg: Any) -> tuple[str, str, str, str, str, str]:
+    return (
+        str(getattr(model_cfg, "provider", "") or "").strip().lower(),
+        str(getattr(model_cfg, "model", "") or "").strip(),
+        str(getattr(model_cfg, "base_url", "") or "").strip(),
+        str(getattr(model_cfg, "api_key", "") or "").strip(),
+        str(getattr(model_cfg, "api_key_header", "") or "").strip(),
+        str(getattr(model_cfg, "api_key_prefix", "") or "").strip(),
+    )
+
+
+def _is_codex_model_cfg(model_cfg: Any) -> bool:
+    return str(getattr(model_cfg, "provider", "") or "").strip().lower() == "codex"
+
+
+async def _warm_codex_provider(model_cfg: Any) -> Any:
+    from thomas.marketplace.codex.provider import CodexProvider
+
+    provider = CodexProvider(model_cfg)
+    messages = [
+        {
+            "role": "system",
+            "content": "You are Thomas. This is an internal warmup turn. Reply with exactly OK.",
+        },
+        {
+            "role": "user",
+            "content": "Internal warmup ping. This is not part of any user conversation. Reply with exactly OK.",
+        },
+    ]
+    async for _event in provider.stream_chat(messages=messages, tools=None):
+        pass
+    return provider
+
+
+def _schedule_codex_prewarm(app: web.Application, model_cfg: Any) -> None:
+    if not _is_codex_model_cfg(model_cfg):
+        return
+    pool = app.get(APP_WARM_CODEX_POOL)
+    tasks = app.get(APP_WARM_CODEX_TASKS)
+    if not isinstance(pool, dict) or not isinstance(tasks, dict):
+        return
+    key = _warm_codex_pool_key(model_cfg)
+    if key in pool:
+        return
+    task = tasks.get(key)
+    if task is not None and not task.done():
+        return
+
+    async def _runner() -> None:
+        provider = None
+        try:
+            provider = await _warm_codex_provider(model_cfg)
+            active_pool = app.get(APP_WARM_CODEX_POOL)
+            if isinstance(active_pool, dict) and key not in active_pool:
+                active_pool[key] = provider
+                provider = None
+        except Exception as exc:
+            log.warning("Codex prewarm failed for %s: %s", str(getattr(model_cfg, "model", "") or "codex"), exc)
+        finally:
+            active_tasks = app.get(APP_WARM_CODEX_TASKS)
+            if isinstance(active_tasks, dict):
+                active_tasks.pop(key, None)
+            if provider is not None:
+                with contextlib.suppress(Exception):
+                    await provider.close()
+
+    tasks[key] = asyncio.create_task(_runner())
+
+
+def _take_warm_codex_provider(app: web.Application, model_cfg: Any) -> Any | None:
+    if not _is_codex_model_cfg(model_cfg):
+        return None
+    pool = app.get(APP_WARM_CODEX_POOL)
+    if not isinstance(pool, dict):
+        return None
+    key = _warm_codex_pool_key(model_cfg)
+    provider = pool.pop(key, None)
+    _schedule_codex_prewarm(app, model_cfg)
+    return provider
+
+
+def _refresh_cached_llm(
+    entry: _CachedSessionLLM,
+    *,
+    model_cfg: Any,
+    fallback_cfgs: list[Any],
+    failover_enabled: bool,
+) -> Any:
+    llm = entry.llm
+    llm.config = model_cfg
+    if hasattr(llm, "_primary_config"):
+        llm._primary_config = model_cfg
+    if hasattr(llm, "_fallback_configs"):
+        llm._fallback_configs = list(fallback_cfgs or [])
+    if hasattr(llm, "_failover_enabled"):
+        llm._failover_enabled = bool(failover_enabled and fallback_cfgs)
+    if hasattr(llm, "_codex_provider") and getattr(llm, "_codex_provider", None) is not None:
+        with contextlib.suppress(Exception):
+            llm._codex_provider.config = model_cfg
+    return llm
+
+
+async def _close_cached_llm(llm: Any) -> None:
+    close = getattr(llm, "close", None)
+    if callable(close):
+        await close()
+
+
+async def _get_or_create_session_llm(
+    app: web.Application,
+    *,
+    session_id: str,
+    model_cfg: Any,
+    fallback_cfgs: list[Any],
+    failover_enabled: bool,
+) -> tuple[Any, asyncio.Lock]:
+    cache = app[APP_SESSION_LLM_CACHE]
+    signature = _llm_signature(model_cfg)
+    entry = cache.get(session_id)
+    if entry is not None and entry.signature == signature:
+        return _refresh_cached_llm(
+            entry,
+            model_cfg=model_cfg,
+            fallback_cfgs=fallback_cfgs,
+            failover_enabled=failover_enabled,
+        ), entry.lock
+
+    preserved_lock = entry.lock if entry is not None else asyncio.Lock()
+    if entry is not None:
+        with contextlib.suppress(Exception):
+            await _close_cached_llm(entry.llm)
+
+    llm = LLMClient(
+        model_cfg,
+        fallback_configs=fallback_cfgs,
+        failover_enabled=failover_enabled,
+    )
+    warm_provider = _take_warm_codex_provider(app, model_cfg)
+    if warm_provider is not None and hasattr(llm, "_codex_provider"):
+        llm._codex_provider = warm_provider
+    new_entry = _CachedSessionLLM(llm=llm, signature=signature, lock=preserved_lock)
+    cache[session_id] = new_entry
+    return _refresh_cached_llm(
+        new_entry,
+        model_cfg=model_cfg,
+        fallback_cfgs=fallback_cfgs,
+        failover_enabled=failover_enabled,
+    ), new_entry.lock
+
+
+async def _evict_session_llm(app: web.Application, session_id: str) -> None:
+    cache = app.get(APP_SESSION_LLM_CACHE) or {}
+    entry = cache.pop(session_id, None)
+    if entry is None:
+        return
+    with contextlib.suppress(Exception):
+        await _close_cached_llm(entry.llm)
+
+
+async def _cleanup_cached_session_llms(app: web.Application) -> None:
+    cache = app.get(APP_SESSION_LLM_CACHE) or {}
+    entries = list(cache.values())
+    cache.clear()
+    for entry in entries:
+        with contextlib.suppress(Exception):
+            await _close_cached_llm(entry.llm)
+
+
+async def _cleanup_warm_codex_pool(app: web.Application) -> None:
+    pool = app.get(APP_WARM_CODEX_POOL) or {}
+    providers = list(pool.values())
+    pool.clear()
+    tasks = app.get(APP_WARM_CODEX_TASKS) or {}
+    running = list(tasks.values())
+    tasks.clear()
+    for task in running:
+        task.cancel()
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await task
+    for provider in providers:
+        with contextlib.suppress(Exception):
+            await provider.close()
 
 
 def register_chat_v2_routes(
@@ -66,20 +346,29 @@ def register_chat_v2_routes(
     tools: Any,
     chat_store_dir: Path | None = None,
 ) -> None:
-    """Register the V2 chat routes and initialise supporting infrastructure.
-
-    Call this from ``app.py`` during server startup.
-    """
-    # Initialise session store
     store_dir = chat_store_dir or Path(".thomas") / "sessions_v2"
     session_store = SessionStore(store_dir)
     app[APP_SESSION_STORE] = session_store
+    app[APP_SESSION_LLM_CACHE] = {}
+    app[APP_WARM_CODEX_POOL] = {}
+    app[APP_WARM_CODEX_TASKS] = {}
+    app[APP_VOICE_BRIDGE] = VoiceBridge()
+    app.on_cleanup.append(_cleanup_cached_session_llms)
+    app.on_cleanup.append(_cleanup_warm_codex_pool)
 
-    # Build specialist registry
+    if config is not None and getattr(config, "models", None):
+        async def _startup_prewarm(app_ref: web.Application) -> None:
+            for profile_name, model_cfg in list(getattr(config, "models", {}).items()):
+                try:
+                    resolved_cfg = config.get_model(profile_name) if hasattr(config, "get_model") else model_cfg
+                except Exception:
+                    resolved_cfg = model_cfg
+                _schedule_codex_prewarm(app_ref, resolved_cfg)
+
+        app.on_startup.append(_startup_prewarm)
+
     registry = SpecialistRegistry()
-
-    # Register built-in specialists (graceful fallback — never block boot)
-    for SpecialistClass in [
+    for specialist_cls in [
         ReasoningSpecialist,
         CodingSpecialist,
         ResearchSpecialist,
@@ -87,47 +376,23 @@ def register_chat_v2_routes(
         SynthesisSpecialist,
     ]:
         try:
-            specialist = SpecialistClass(config=config, llm=llm, tools=tools)
+            specialist = specialist_cls(config=config, llm=llm, tools=tools)
             registry.register(specialist)
         except Exception as exc:
-            log.warning(
-                "Failed to register specialist %s: %s",
-                SpecialistClass.__name__,
-                exc,
-            )
+            log.warning("Failed to register specialist %s: %s", specialist_cls.__name__, exc)
 
     app[APP_SPECIALIST_REGISTRY] = registry
-
-    # Register V2 chat API route and session helpers.
     app.router.add_post("/api/v2/chat", handle_chat_v2)
+    app.router.add_post("/api/v2/chat/transcribe", handle_chat_transcribe)
     app.router.add_get("/api/v2/chat/session/{session_id}", handle_session_get)
+    app.router.add_get("/api/v2/chat/session/{session_id}/delegations", handle_session_delegations)
     app.router.add_delete("/api/v2/chat/session/{session_id}", handle_session_delete)
     app.router.add_get("/api/v2/chat/specialists", handle_specialists_list)
 
-    log.info(
-        "Chat V2 routes registered (%d specialists available)",
-        len(registry.specialist_ids),
-    )
-
-
-# ── main chat handler ────────────────────────────────────────────
+    log.info("Chat V2 routes registered (%d specialists available)", len(registry.specialist_ids))
 
 
 async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
-    """POST /api/v2/chat — Unified chat endpoint.
-
-    Request body (JSON):
-        message:          str   — User's message text
-        session_id:       str   — Session ID (auto-generated if missing)
-        mode:             str   — "auto" | "fast" | "thinking" | "max"
-        autonomy_level:   int   — 1-4
-        profile:          str   — LLM profile name
-        model_id:         str   — Specific model ID (optional)
-
-    Response: NDJSON stream with events:
-        thinking, delegation, agent_activity, tool_start, tool_result,
-        text, memory_refresh, done, error
-    """
     try:
         payload = await request.json()
     except Exception:
@@ -139,17 +404,16 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     if not prompt:
         return web.json_response({"error": "Empty message"}, status=400)
 
-    # ── File attachments (match V1 behaviour) ───────────────────
     docs = payload.get("docs") or []
     images = payload.get("images") or []
 
     if isinstance(docs, list) and docs:
         blocks: list[str] = []
-        for d in docs[:6]:  # max 6 documents
-            if not isinstance(d, dict):
+        for doc in docs[:6]:
+            if not isinstance(doc, dict):
                 continue
-            name = str(d.get("name") or "document")
-            content = str(d.get("text") or "")
+            name = str(doc.get("name") or "document")
+            content = str(doc.get("text") or "")
             if not content.strip():
                 continue
             if len(content) > 50_000:
@@ -158,66 +422,64 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
         if blocks:
             prompt = (prompt.rstrip() + "\n\n[Attached documents]\n" + "\n\n".join(blocks)).strip()
 
-    # Images: pass through for multimodal-capable models
     image_data: list[dict[str, Any]] = []
     if isinstance(images, list) and images:
-        for img in images[:4]:  # max 4 images
+        for img in images[:4]:
             if isinstance(img, dict) and img.get("data_url"):
                 image_data.append({"type": "image_url", "image_url": {"url": str(img["data_url"])}})
 
     sid = str(payload.get("session_id", "") or secrets.token_urlsafe(18))
     mode = str(payload.get("mode", "auto"))
     autonomy_level = int(payload.get("autonomy_level", 3))
+    token_economy = str(payload.get("token_economy", "optimal") or "optimal")
 
-    # Get infrastructure from app
     session_store: SessionStore = request.app[APP_SESSION_STORE]
     registry: SpecialistRegistry = request.app[APP_SPECIALIST_REGISTRY]
 
-    # Load or create conversation
     conversation = await session_store.load(sid)
     if conversation is None:
         conversation = ConversationManager()
 
-    # Create orchestrator brain with proper app-key access
     app_config = None
     app_memory = None
     if APP_CONFIG is not None:
         try:
             app_config = request.app.get(APP_CONFIG)
         except Exception:
-            pass
+            app_config = None
     if APP_MEMORY is not None:
         try:
             app_memory = request.app.get(APP_MEMORY)
         except Exception:
-            pass
+            app_memory = None
 
-    # ── Create per-request LLM client ────────────────────────────
-    # V1 creates an LLMClient on every request from the live config.
-    # V2 must do the same — specialists and the brain both need a
-    # working LLM client to call the model.
     llm: Any = None
+    llm_lock: asyncio.Lock | None = None
     if app_config is not None:
         try:
             model_profile = str(payload.get("profile", "") or "")
             if not model_profile or not hasattr(app_config, "models") or model_profile not in app_config.models:
                 model_profile = getattr(app_config, "default_model", "")
             model_cfg = app_config.get_model(model_profile)
+            requested_reasoning_effort = _normalize_reasoning_effort(str(payload.get("reasoning_effort", "") or ""))
+            if requested_reasoning_effort:
+                model_cfg = replace(model_cfg, reasoning_effort=requested_reasoning_effort)
             failover_cfgs = app_config.failover_chain(model_profile) if hasattr(app_config, "failover_chain") else []
             failover_enabled = bool(
                 getattr(app_config, "failover", None)
                 and getattr(app_config.failover, "enabled", False)
                 and getattr(app_config.failover, "chat_auto_failover", False)
             )
-            llm = LLMClient(
-                model_cfg,
-                fallback_configs=failover_cfgs,
+            llm, llm_lock = await _get_or_create_session_llm(
+                request.app,
+                session_id=sid,
+                model_cfg=model_cfg,
+                fallback_cfgs=list(failover_cfgs or []),
                 failover_enabled=failover_enabled,
             )
         except Exception as exc:
             log.warning("Failed to create LLM client for V2 chat: %s", exc)
 
-    # Inject live LLM into every specialist for this request
     if llm is not None:
         for specialist in registry.all_specialists:
             specialist.llm = llm
@@ -229,7 +491,6 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
         registry=registry,
     )
 
-    # Prepare streaming response
     response = web.StreamResponse(
         status=200,
         headers={
@@ -241,43 +502,142 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     await response.prepare(request)
 
     dispatcher = EventDispatcher(response.write)
-
-    # Detect first message in session (for welcome hint)
     is_first_message = conversation.length == 0
+    recent_messages = conversation.get_context_window(max_tokens=8_000)
+    launcher_task: asyncio.Task[Any] | None = None
+    launch_background = bool(mode == "max" or (mode == "auto" and _requests_reply_first_background(prompt)))
+    force_background = bool(mode == "auto" and launch_background)
+    visible_prompt = _foreground_reply_prompt(prompt) if launch_background else prompt
 
     try:
-        # Process through orchestrator
-        conversation = await brain.process_message(
-            session_id=sid,
-            conversation=conversation,
-            prompt=prompt,
-            dispatcher=dispatcher,
-            mode=mode,
-            autonomy_level=autonomy_level,
-            images=image_data if image_data else None,
-            is_first_message=is_first_message,
-        )
+        if launch_background:
+            launcher_task = asyncio.create_task(
+                start_background_delegation(
+                    request.app,
+                    session_id=sid,
+                    prompt=prompt,
+                    mode=mode,
+                    recent_messages=recent_messages,
+                    emit_event=dispatcher.emit,
+                    force=force_background,
+                )
+            )
+            await asyncio.sleep(0)
 
-        # Auto-save conversation (CRITICAL FIX for bug #2)
-        meta = SessionMeta(
-            session_id=sid,
-            autonomy_level=autonomy_level,
-        )
-        await session_store.save(sid, conversation, meta, force=True)
+        active_tasks = session_active_delegations(sid)
+        active_task_digest = build_active_task_digest(sid) if active_tasks or launch_background else ""
+
+        async def _run_brain_turn() -> ConversationManager:
+            return await brain.process_message(
+                session_id=sid,
+                conversation=conversation,
+                prompt=visible_prompt,
+                dispatcher=dispatcher,
+                mode=mode,
+                autonomy_level=autonomy_level,
+                token_economy=token_economy,
+                images=image_data if image_data else None,
+                is_first_message=is_first_message,
+                active_task_digest=active_task_digest,
+                active_tasks=active_tasks,
+                dispatch_actionable=False,
+            )
+
+        if llm_lock is not None:
+            async with llm_lock:
+                conversation = await _run_brain_turn()
+                meta = SessionMeta(session_id=sid, autonomy_level=autonomy_level)
+                await session_store.save(sid, conversation, meta, force=True)
+        else:
+            conversation = await _run_brain_turn()
+            meta = SessionMeta(session_id=sid, autonomy_level=autonomy_level)
+            await session_store.save(sid, conversation, meta, force=True)
+
+        if launcher_task is not None:
+            try:
+                await asyncio.wait_for(asyncio.shield(launcher_task), timeout=0.75)
+            except asyncio.TimeoutError:
+                pass
+            except Exception as exc:
+                log.warning("Max-mode delegation launcher failed for session %s: %s", sid[:12], exc, exc_info=True)
+                await dispatcher.emit(
+                    {
+                        "type": "delegation_failed",
+                        "session_id": sid,
+                        "backend_type": "task_manager",
+                        "state": "failed",
+                        "summary": prompt[:160],
+                        "last_progress": f"Background delegation failed to start: {exc}",
+                    }
+                )
 
     except Exception as exc:
-        log.error("Chat V2 failed for session %s: %s", sid[:12], exc)
+        log.error("Chat V2 failed for session %s: %s", sid[:12], exc, exc_info=True)
         await dispatcher.emit_error(str(exc))
 
     await response.write_eof()
     return response
 
 
-# ── session management ───────────────────────────────────────────
+async def handle_chat_transcribe(request: web.Request) -> web.Response:
+    if not str(request.content_type or "").lower().startswith("multipart/"):
+        return web.json_response({"error": "Expected multipart/form-data"}, status=400)
+
+    try:
+        reader = await request.multipart()
+    except Exception:
+        return web.json_response({"error": "Unable to read upload"}, status=400)
+
+    audio_bytes = b""
+    audio_name = "audio.webm"
+    audio_content_type = "audio/webm"
+
+    while True:
+        field = await reader.next()
+        if field is None:
+            break
+        if str(getattr(field, "name", "") or "") != "audio":
+            with contextlib.suppress(Exception):
+                await field.release()
+            continue
+        audio_name = str(getattr(field, "filename", "") or "audio.webm")
+        audio_content_type = str(field.headers.get("Content-Type", "audio/webm") or "audio/webm")
+        parts = []
+        total = 0
+        while True:
+            chunk = await field.read_chunk()
+            if not chunk:
+                break
+            total += len(chunk)
+            if total > _MAX_TRANSCRIBE_BYTES:
+                return web.json_response({"error": "Audio upload too large"}, status=413)
+            parts.append(chunk)
+        audio_bytes = b"".join(parts)
+        break
+
+    if not audio_bytes:
+        return web.json_response({"error": "Missing audio upload"}, status=400)
+
+    bridge = await _voice_bridge_for_request(request.app)
+    audio = AudioData(
+        data=audio_bytes,
+        format=_uploaded_audio_format(audio_name, audio_content_type),
+        sample_rate=16000,
+        duration_ms=0,
+    )
+    try:
+        text = await bridge.transcribe(audio)
+    except VoiceProviderException as exc:
+        return web.json_response({"error": str(exc)}, status=503)
+    except Exception as exc:
+        log.warning("Chat transcription failed: %s", exc, exc_info=True)
+        return web.json_response({"error": f"Transcription failed: {exc}"}, status=500)
+
+    provider = getattr(getattr(bridge, "_current_stt", None), "get_provider_name", lambda: "")()
+    return web.json_response({"ok": True, "text": str(text or ""), "provider": str(provider or "")})
 
 
 async def handle_session_get(request: web.Request) -> web.Response:
-    """GET /api/v2/chat/session/{session_id} — Load session history."""
     sid = request.match_info["session_id"]
     session_store: SessionStore = request.app[APP_SESSION_STORE]
 
@@ -285,42 +645,37 @@ async def handle_session_get(request: web.Request) -> web.Response:
     if conversation is None:
         return web.json_response({"error": "Session not found"}, status=404)
 
-    return web.json_response(
-        {
-            "session_id": sid,
-            "conversation": conversation.to_dict(),
-        }
-    )
+    return web.json_response({"session_id": sid, "conversation": conversation.to_dict()})
 
 
 async def handle_session_delete(request: web.Request) -> web.Response:
-    """DELETE /api/v2/chat/session/{session_id} — Delete a session."""
     sid = request.match_info["session_id"]
     session_store: SessionStore = request.app[APP_SESSION_STORE]
 
     deleted = await session_store.delete(sid)
-    return web.json_response(
-        {
-            "deleted": deleted,
-            "session_id": sid,
-        }
-    )
+    await _evict_session_llm(request.app, sid)
+    return web.json_response({"deleted": deleted, "session_id": sid})
+
+
+async def handle_session_delegations(request: web.Request) -> web.Response:
+    sid = request.match_info["session_id"]
+    delegations = session_active_delegations(sid)
+    return web.json_response({"session_id": sid, "delegations": delegations})
 
 
 async def handle_specialists_list(request: web.Request) -> web.Response:
-    """GET /api/v2/chat/specialists — List available specialists."""
     registry: SpecialistRegistry = request.app[APP_SPECIALIST_REGISTRY]
 
     specialists = []
-    for s in registry.all_specialists:
-        health = await s.check_health()
+    for specialist in registry.all_specialists:
+        health = await specialist.check_health()
         specialists.append(
             {
-                "id": s.specialist_id,
-                "description": s.description,
-                "capabilities": sorted(s.capabilities),
+                "id": specialist.specialist_id,
+                "description": specialist.description,
                 "healthy": health.healthy,
-                "executions": health.total_executions,
+                "message": health.message,
+                "capabilities": sorted(specialist.capabilities),
             }
         )
 

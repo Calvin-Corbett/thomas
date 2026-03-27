@@ -32,6 +32,8 @@ from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
+
+from thomas.core.py_compile_safe import compile_no_repo_pyc
 from typing import Any
 
 # ---------------------------------------------------------------------------
@@ -520,7 +522,7 @@ def _check_python_compile() -> CheckResult:
             continue
         count += 1
         try:
-            py_compile.compile(str(py_file), doraise=True)
+            compile_no_repo_pyc(py_file, doraise=True)
         except py_compile.PyCompileError as exc:
             rel = py_file.relative_to(ROOT)
             errors.append(f"{rel}: {exc.msg}")

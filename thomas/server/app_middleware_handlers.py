@@ -506,7 +506,7 @@ def setup_middleware_and_handlers(
         if len(requested_id) > 160:
             raise web.HTTPBadRequest(text="chat id is too long")
 
-        resolved_id = secrets.token_urlsafe(16) if chat_id else requested_id
+        resolved_id = str(chat_id or requested_id).strip()
         if not resolved_id:
             raise web.HTTPBadRequest(text="missing chat id")
         if len(resolved_id) > 160:

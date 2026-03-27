@@ -1,23 +1,7 @@
-"""Dispatch router: decides whether Thomas replies directly or dispatches to task manager.
+"""Dispatch router for deciding when background delegation should start.
 
-THIS IS THE FRONT DOOR FOR ALL CHAT MESSAGES.
-
-Two outcomes:
-  - CASUAL: Thomas replies directly with personality, no tools, fast.
-    Examples: "hey", "thanks", "lol", "what's up", "good morning"
-  - ACTIONABLE: Thomas acknowledges instantly, dispatches to the workboard
-    task manager pipeline. The task manager breaks it down, assigns workers.
-    Examples: "fix the login bug", "create a new endpoint", "research X"
-
-The old IntentRouter had 8 paths with confidence scoring. This replaces it
-with a simple binary decision. The task manager handles all the nuance after
-dispatch.
-
-Architecture context for AI agents:
-  - This module is called from the /api/chat route (chat_aiohttp_part02.py)
-  - Casual → fast LLM call with Thomas personality (chat_modes.py)
-  - Actionable → chat_dispatcher.py → WORKBOARD.md → workers
-  - See docs/CHAT_EXECUTION_MODEL.md for the full picture
+This classifier is intentionally conservative. Thomas should stay in the
+conversation unless the user is clearly asking for execution.
 """
 
 from __future__ import annotations
@@ -25,10 +9,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 from typing import Any
-
-# ── Casual detection patterns ─────────────────────────────────────────────
-# These are SHORT, LOW-INTENT messages where Thomas should just reply directly.
-# Anything that doesn't match these patterns gets dispatched.
 
 _GREETING_RE = re.compile(
     r"^\s*(?:hi|hello|hey|yo|sup|what'?s up|wassup|howdy|hola|good\s+"
@@ -50,7 +30,8 @@ _FILLER_RE = re.compile(
 )
 
 _LIVENESS_RE = re.compile(
-    r"^\s*(?:are you (?:there|working|alive|awake)|you there|still there|" r"ping|status|hello\??)\s*[!?.]*\s*$",
+    r"^\s*(?:are you (?:there|working|alive|awake)|you there|still there|"
+    r"ping|status|hello\??)\s*[!?.]*\s*$",
     re.I,
 )
 
@@ -60,13 +41,51 @@ _HOW_ARE_YOU_RE = re.compile(
     re.I,
 )
 
-# Meta-about-Thomas questions that he should answer directly
 _META_RE = re.compile(
     r"^\s*(?:what (?:are|can) you|who are you|what do you do|"
     r"tell me about yourself|what'?s your name)\s*[!?.]*\s*$",
     re.I,
 )
 
+_STATUS_RE = re.compile(
+    r"\b(?:status|progress|update|done yet|finished|still running|any news|"
+    r"what'?s happening|where are we|how(?:'s| is) (?:that|it|this|the task|the project) going)\b",
+    re.I,
+)
+
+_EXPLORATORY_RE = re.compile(
+    r"(?:\blet'?s think(?: this)? through\b|\bbrainstorm\b|\bwhat do you think\b|"
+    r"\bhow could\b|\bmaybe i should\b|\bshould i\b|\bcould we\b|\bcan we\b|"
+    r"\bhelp me think\b|\btalk (?:me )?through\b|\bwalk me through\b|"
+    r"\bfigure out how\b|\bi guess\b|\bi wonder\b)",
+    re.I,
+)
+
+_DIRECTIVE_PREFIX_RE = re.compile(
+    r"^\s*(?:please\s+)?(?:can you|could you|would you|will you|i want you to|"
+    r"you need to|please|go|do|implement|fix|build|create|write|update|debug|"
+    r"review|research|investigate|analyze|inspect|find|search|run|deploy|make)\b",
+    re.I,
+)
+
+_ACTION_VERB_RE = re.compile(
+    r"\b(?:run|execute|edit|write|create|delete|remove|install|build|deploy|"
+    r"fix|debug|test|search|find|read|make|change|update|modify|add|set|"
+    r"implement|refactor|rename|replace|merge|revert|configure|setup|"
+    r"check|scan|analyze|inspect|start|stop|restart|enable|disable|"
+    r"download|upload|fetch|pull|push|sync|copy|convert|generate|"
+    r"scaffold|migrate|optimize|clean|format|send|connect|open|"
+    r"research|compare|investigate|plan|design|review|audit)\b",
+    re.I,
+)
+
+_DELIVERABLE_RE = re.compile(
+    r"\b(?:file|files|endpoint|api|route|component|bug|test|tests|plan|report|"
+    r"doc|documentation|spec|project|task|ticket|issue|code|repo|repository)\b",
+    re.I,
+)
+
+_SHORT_MESSAGE_WORD_LIMIT = 4
 _CASUAL_PATTERNS = [
     _GREETING_RE,
     _THANKS_RE,
@@ -76,77 +95,70 @@ _CASUAL_PATTERNS = [
     _META_RE,
 ]
 
-# Messages under this token count that match no action verbs are likely casual
-_SHORT_MESSAGE_WORD_LIMIT = 4
-
-# Action verbs that signal "this is a task, not small talk"
-_ACTION_VERB_RE = re.compile(
-    r"\b(?:run|execute|edit|write|create|delete|remove|install|build|deploy|"
-    r"fix|debug|test|search|find|read|make|change|update|modify|add|set|"
-    r"implement|refactor|rename|replace|merge|revert|configure|setup|"
-    r"check|scan|analyze|inspect|start|stop|restart|enable|disable|"
-    r"download|upload|fetch|pull|push|sync|copy|convert|generate|"
-    r"scaffold|migrate|optimize|clean|format|send|connect|open|"
-    r"research|compare|investigate|plan|design|review|audit|help me)\b",
-    re.I,
-)
-
 
 @dataclass(frozen=True)
 class DispatchDecision:
-    """Result of the dispatch router.
-
-    Attributes:
-        action: Either "casual" or "dispatch"
-        reason: Short explanation of why this decision was made (for logging)
-    """
-
-    action: str  # "casual" or "dispatch"
+    action: str
     reason: str
 
 
-def should_dispatch(text: str) -> DispatchDecision:
-    """Decide whether a user message should be dispatched to the task manager.
+def _has_active_tasks(active_tasks: list[dict[str, Any]] | None) -> bool:
+    if not active_tasks:
+        return False
+    for item in active_tasks:
+        state = str((item or {}).get("state") or "").strip().lower()
+        if state and state not in {"completed", "failed", "abandoned"}:
+            return True
+    return False
 
-    Returns DispatchDecision with action="casual" or action="dispatch".
 
-    This is intentionally simple. When in doubt, dispatch. The task manager
-    can always decide a task is trivial and handle it quickly. But if Thomas
-    tries to handle a real task inline, the user gets a slow, blocking experience.
-    """
+def should_dispatch(
+    text: str,
+    *,
+    recent_messages: list[dict[str, Any]] | None = None,
+    active_tasks: list[dict[str, Any]] | None = None,
+    mode: str = "",
+) -> DispatchDecision:
     src = str(text or "").strip()
-
-    # Empty messages are casual
     if not src:
         return DispatchDecision(action="casual", reason="empty_message")
 
-    # Check explicit casual patterns
     for pattern in _CASUAL_PATTERNS:
         if pattern.match(src):
-            return DispatchDecision(action="casual", reason=f"pattern:{pattern.pattern[:30]}")
+            return DispatchDecision(action="casual", reason=f"pattern:{pattern.pattern[:24]}")
 
-    # Very short messages without action verbs are probably casual
     words = src.split()
     if len(words) <= _SHORT_MESSAGE_WORD_LIMIT and not _ACTION_VERB_RE.search(src):
         return DispatchDecision(action="casual", reason="short_no_action_verb")
 
-    # Everything else gets dispatched
-    return DispatchDecision(action="dispatch", reason="actionable_content")
+    if _has_active_tasks(active_tasks) and _STATUS_RE.search(src):
+        return DispatchDecision(action="casual", reason="active_task_status_followup")
 
+    if _EXPLORATORY_RE.search(src) and not _DIRECTIVE_PREFIX_RE.search(src):
+        return DispatchDecision(action="casual", reason="exploratory_conversation")
 
-# ── Compatibility shim ────────────────────────────────────────────────────
-# The old routing.py RouteDecision is still referenced by loop_core.py and
-# other modules. We keep a minimal version here so imports don't break during
-# the transition. The full IntentRouter is in routing.py (deprecated but not
-# deleted yet).
+    recent_assistant = ""
+    if recent_messages:
+        for msg in reversed(recent_messages):
+            if str(msg.get("role") or "") == "assistant":
+                recent_assistant = str(msg.get("content") or "")
+                break
+    if recent_assistant and _STATUS_RE.search(src) and "background work" in recent_assistant.lower():
+        return DispatchDecision(action="casual", reason="delegation_status_followup")
+
+    if _DIRECTIVE_PREFIX_RE.search(src) and (_ACTION_VERB_RE.search(src) or _DELIVERABLE_RE.search(src)):
+        return DispatchDecision(action="dispatch", reason="explicit_execution_request")
+
+    if _ACTION_VERB_RE.search(src) and _DELIVERABLE_RE.search(src):
+        return DispatchDecision(action="dispatch", reason="action_verb_with_deliverable")
+
+    if mode == "max" and _ACTION_VERB_RE.search(src):
+        return DispatchDecision(action="dispatch", reason="max_mode_actionable")
+
+    return DispatchDecision(action="casual", reason="default_conversation")
 
 
 def casual_route_decision() -> Any:
-    """Return a RouteDecision-compatible object for casual chat.
-
-    Used by the fast-reply path so existing code that expects a RouteDecision
-    still works (memory policy, token budgets, etc).
-    """
     from thomas.agent.routing import RouteDecision
 
     return RouteDecision(
@@ -164,10 +176,6 @@ def casual_route_decision() -> Any:
 
 
 def actionable_route_decision() -> Any:
-    """Return a RouteDecision-compatible object for dispatched tasks.
-
-    Used by the dispatch path so logging/telemetry still gets a route object.
-    """
     from thomas.agent.routing import RouteDecision
 
     return RouteDecision(

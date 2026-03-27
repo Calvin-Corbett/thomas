@@ -30,6 +30,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
+from thomas.core.py_compile_safe import compile_no_repo_pyc
+
 log = logging.getLogger(__name__)
 
 # File size limits from GUARDRAILS.md
@@ -116,7 +118,7 @@ class SyntaxVerifier(Verifier):
             return VerificationResult(True, "SyntaxVerifier", "Skipped (file not found)")
 
         try:
-            py_compile.compile(str(path), doraise=True)
+            compile_no_repo_pyc(path, doraise=True)
             return VerificationResult(True, "SyntaxVerifier", f"{path.name}: Syntax OK")
         except py_compile.PyCompileError as e:
             return VerificationResult(
@@ -642,7 +644,7 @@ async def verify_after_tool(
     # Python syntax check
     if path.suffix.lower() == ".py":
         try:
-            py_compile.compile(str(path), doraise=True)
+            compile_no_repo_pyc(path, doraise=True)
         except py_compile.PyCompileError as pce:
             issues.append(
                 {

@@ -8,7 +8,17 @@ from typing import Any
 
 import typer
 
-from thomas.nodes.p052_nodes_cli_integration_and_parity_tests import (
+try:
+    from thomas.marketplace.nodes.p052_nodes_cli_integration_and_parity_tests import (
+        NodesCliIntegrationError,
+        NodesCliRequest,
+        fetch_nodes_sync,
+        format_result_human,
+        format_result_json,
+        run_parity_tests_sync,
+    )
+except ImportError:  # pragma: no cover
+    from thomas.nodes.p052_nodes_cli_integration_and_parity_tests import (
     NodesCliIntegrationError,
     NodesCliRequest,
     fetch_nodes_sync,

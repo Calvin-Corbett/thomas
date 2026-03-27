@@ -17,6 +17,11 @@ from thomas.demo.agent_comparison_suite_scoring import (
     _focus_gaps,
 )
 from thomas.demo.agent_comparison_suite_shared import (
+    MetricSpec,
+    _assertion_ok,
+    _collect_git_version_info,
+    _collect_model_snapshot,
+    _resolve_path_value,
     DEFAULT_CATEGORY_WEIGHTS,
     DEFAULT_EXECUTION_POLICY,
     DEFAULT_GATEWAY_PATTERNS,
@@ -33,6 +38,13 @@ from thomas.demo.agent_comparison_suite_shared import (
     _read_json,
     _update_competitor_registry,
     _write_json,
+)
+from thomas.demo.agent_comparison_suite_strict_checks import (
+    _collect_benchmark_evidence,
+    _collect_benchmark_summary,
+    _compute_token_efficiency,
+    _count_regex_hits,
+    _run_probe_suite,
 )
 from thomas.plugins.benchmark_program import evaluate_benchmark_program
 from thomas.plugins.competitor_evo_scope import build_prediction_evo_scope

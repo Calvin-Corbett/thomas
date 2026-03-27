@@ -13,7 +13,14 @@ from typing import Any
 
 import typer
 
-from thomas.nodes.p042_nodes_camera_action import (
+try:
+    from thomas.marketplace.nodes.p042_nodes_camera_action import (
+        NodesCameraActionError,
+        NodesCameraActionRequest,
+        execute_nodes_camera_action,
+    )
+except ImportError:  # pragma: no cover
+    from thomas.nodes.p042_nodes_camera_action import (
     NodesCameraActionError,
     NodesCameraActionRequest,
     execute_nodes_camera_action,

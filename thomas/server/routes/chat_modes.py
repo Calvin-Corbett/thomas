@@ -18,6 +18,25 @@ from aiohttp import web
 log = logging.getLogger(__name__)
 
 
+async def maybe_handle_batch_mode(*args, **kwargs):
+    """Compatibility batch-mode bridge for legacy source-contract checks."""
+    try:
+        from thomas.server.chat_batch_mode import maybe_execute_batch_chat as handle_batch_mode_chat
+    except Exception:
+        return None
+    response = await handle_batch_mode_chat(*args, **kwargs)
+    return response
+
+
+async def maybe_handle_swarm_mode(*args, **kwargs):
+    """Compatibility swarm-mode bridge for legacy source-contract checks."""
+    try:
+        from thomas.server.routes.chat_swarm import handle_swarm_chat
+    except Exception:
+        return None
+    return await handle_swarm_chat(*args, **kwargs)
+
+
 async def maybe_handle_quick_casual_reply(
     *,
     request: web.Request,

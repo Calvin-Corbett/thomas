@@ -35,6 +35,13 @@ Last updated: 2026-03-01
 
 
 - task_id=audit-24h-backstop; scope=thomas; summary=ensure every major module is audited in last 24h and fix findings; reported_by=workboard-bot
+- task_id=chat-reply-with-the-single-e516e3; scope=chat; summary=Reply with the single word OK.; status=up_for_grabs; created_at=2026-03-25T13:21:48+00:00; source=chat_dispatch
+- task_id=chat-reply-with-the-single-091586; scope=chat; summary=Reply with the single word OK.; status=up_for_grabs; created_at=2026-03-25T13:21:57+00:00; source=chat_dispatch
+- task_id=chat-reply-with-the-single-2d59ad; scope=chat; summary=Reply with the single word OK.; status=up_for_grabs; created_at=2026-03-25T13:31:18+00:00; source=chat_dispatch
+- task_id=chat-run-fast-e74a10; scope=chat; summary=run fast; status=up_for_grabs; created_at=2026-03-25T16:37:47+00:00; source=chat_dispatch
+- task_id=chat-run-this-in-swarm-651704; scope=chat; summary=run this in swarm mode; status=up_for_grabs; created_at=2026-03-25T16:37:47+00:00; source=chat_dispatch
+- task_id=chat-run-the-task-b30e78; scope=chat; summary=run the task; status=up_for_grabs; created_at=2026-03-25T16:37:47+00:00; source=chat_dispatch
+- task_id=chat-run-batch-2874de; scope=chat; summary=run batch; status=up_for_grabs; created_at=2026-03-25T16:37:47+00:00; source=chat_dispatch
 ## Issues / Blockers
 
 - none

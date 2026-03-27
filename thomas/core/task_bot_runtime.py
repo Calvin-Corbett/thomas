@@ -177,6 +177,7 @@ def _new_record(
     visibility: str,
     parent_execution_id: str,
     bot_id: str,
+    backend_type: str,
     actor: str,
     created_at: str,
 ) -> dict[str, Any]:
@@ -189,6 +190,7 @@ def _new_record(
         "summary": str(summary or "").strip(),
         "execution_intent": str(intent or "").strip() or "task",
         "visibility": str(visibility or "").strip() or "background",
+        "backend_type": str(backend_type or "").strip() or "task_manager",
         "bot_id": str(bot_id or "").strip(),
         "scope": list(scope),
         "claimed_owner": "",
@@ -229,6 +231,7 @@ def _summary_row(record: dict[str, Any], *, stale_after_minutes: float) -> dict[
         "conversation_id": str(record.get("conversation_id") or ""),
         "bot_id": str(record.get("bot_id") or ""),
         "visibility": str(record.get("visibility") or ""),
+        "backend_type": str(record.get("backend_type") or "task_manager"),
         "state": str(record.get("state") or ""),
         "claimed_owner": str(record.get("claimed_owner") or ""),
         "scope": list(record.get("scope") or []),
@@ -315,6 +318,7 @@ def create_execution(
     visibility: str = "background",
     parent_execution_id: str = "",
     bot_id: str = "",
+    backend_type: str = "task_manager",
     actor: str = "task-manager",
     repo_root: str | Path | None = None,
 ) -> dict[str, Any]:
@@ -330,6 +334,7 @@ def create_execution(
         visibility=visibility,
         parent_execution_id=str(parent_execution_id or "").strip(),
         bot_id=bot_id,
+        backend_type=backend_type,
         actor=str(actor or "").strip(),
         created_at=created_at,
     )
@@ -359,6 +364,7 @@ def update_execution(
     blocker: str | None = None,
     proof_status: str | None = None,
     bot_id: str | None = None,
+    backend_type: str | None = None,
     visibility: str | None = None,
     heartbeat: bool = False,
     actor: str = "",
@@ -390,6 +396,8 @@ def update_execution(
         payload["blocker"] = str(blocker or "").strip()
     if bot_id is not None:
         payload["bot_id"] = str(bot_id or "").strip()
+    if backend_type is not None:
+        payload["backend_type"] = str(backend_type or "").strip() or "task_manager"
     if visibility is not None:
         payload["visibility"] = str(visibility or "").strip() or "background"
 

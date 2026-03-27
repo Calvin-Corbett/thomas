@@ -16,7 +16,15 @@ import json
 import os
 from typing import Any, Mapping, Optional
 
-from thomas.channels.p090_channel_webhook_bridge_adapter import (
+try:
+    from thomas.marketplace.channels.p090_channel_webhook_bridge_adapter import (
+        WebhookBridgeAdapterError,
+        WebhookBridgeSendRequest,
+        send_via_webhook_bridge,
+        webhook_bridge_payload_schema,
+    )
+except ImportError:  # pragma: no cover
+    from thomas.channels.p090_channel_webhook_bridge_adapter import (
     WebhookBridgeAdapterError,
     WebhookBridgeSendRequest,
     send_via_webhook_bridge,

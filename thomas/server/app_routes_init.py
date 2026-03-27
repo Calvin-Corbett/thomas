@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from thomas.core.config import AppConfig
 from thomas.server.app_keys import (
+    APP_CODEX_BRIDGE,
     APP_ENGINE_MANAGER,
     APP_MEMORY,
     APP_MUTATING_ROUTE_POLICY_SNAPSHOT,
@@ -19,9 +20,11 @@ from thomas.server.app_keys import (
     APP_RUN_STORE_ENABLED,
     APP_RUN_STORE_MODULE,
     APP_RUNTIME_GUARD_TASK,
+    APP_SESSIONS,
     APP_SHUTDOWN_EVENT,
     APP_TASK_LEDGER,
     APP_TOOLS,
+    ChatSession,
 )
 from thomas.tools.registry import ToolRegistry
 
@@ -87,9 +90,74 @@ def _setup_routes_and_handlers(
         if not ledger:
             raise web.HTTPNotFound(text="task ledger unavailable")
 
-        session_id = str(request.query.get("session_id", "")).strip() or None
-        snapshot = ledger.snapshot(session_id)
-        return web.json_response({"snapshot": snapshot})
+        session_id = str(request.query.get("session_id", "")).strip()
+        snapshot_obj = ledger.get_current(session_id) if session_id else ledger.get_latest()
+        snapshot = snapshot_obj.to_dict() if snapshot_obj and hasattr(snapshot_obj, "to_dict") else None
+        resolved_session_id = str(
+            session_id
+            or getattr(snapshot_obj, "session_id", "")
+            or (snapshot or {}).get("session_id")
+            or ""
+        ).strip()
+        sessions = app.get(APP_SESSIONS, {})
+        session_obj = sessions.get(resolved_session_id) if isinstance(sessions, dict) and resolved_session_id else None
+        task_definition = (
+            dict(getattr(session_obj, "task_definition", {}) or {})
+            if isinstance(session_obj, ChatSession)
+            else None
+        )
+        task_evaluation = (
+            dict(getattr(session_obj, "task_evaluation", {}) or {})
+            if isinstance(session_obj, ChatSession)
+            else None
+        )
+        benchmark_session = (
+            dict(getattr(session_obj, "benchmark_session", {}) or {})
+            if isinstance(session_obj, ChatSession)
+            else None
+        )
+        task_definition_status = (
+            str(getattr(session_obj, "task_definition_status", "idle") or "idle")
+            if isinstance(session_obj, ChatSession)
+            else "idle"
+        )
+        if isinstance(snapshot, dict):
+            fallback_user_text = str(getattr(session_obj, "last_user_message", "") or "") if isinstance(session_obj, ChatSession) else ""
+            fallback_assistant_text = str(getattr(session_obj, "last_assistant_message", "") or "") if isinstance(session_obj, ChatSession) else ""
+            if isinstance(session_obj, ChatSession) and isinstance(session_obj.conversation, list):
+                for message in reversed(session_obj.conversation):
+                    if not fallback_assistant_text and str(message.get("role") or "") == "assistant":
+                        fallback_assistant_text = str(message.get("content") or "")
+                    if not fallback_user_text and str(message.get("role") or "") == "user":
+                        fallback_user_text = str(message.get("content") or "")
+                    if fallback_user_text and fallback_assistant_text:
+                        break
+            try:
+                from thomas.marketplace.observability.task_ledger import derive_active_goal, extract_missing_inputs
+
+                if not str(snapshot.get("active_goal") or "").strip() and fallback_user_text:
+                    snapshot["active_goal"] = derive_active_goal(fallback_user_text, current_goal="")
+                progress_text = str(snapshot.get("last_progress") or fallback_assistant_text or "").strip()
+                inferred_missing = extract_missing_inputs(progress_text)
+                if inferred_missing:
+                    snapshot["status"] = "blocked"
+                    snapshot["missing_inputs"] = inferred_missing
+                    if not str(snapshot.get("last_progress") or "").strip():
+                        snapshot["last_progress"] = progress_text
+            except Exception:
+                pass
+        return web.json_response(
+            {
+                "ok": True,
+                "session_id": resolved_session_id,
+                "state": snapshot,
+                "snapshot": snapshot,
+                "task_definition_status": task_definition_status,
+                "task_definition": task_definition,
+                "task_evaluation": task_evaluation,
+                "benchmark_session": benchmark_session,
+            }
+        )
 
     async def api_task_ledger_history(request: web.Request) -> web.Response:
         """Return task ledger history for a session (or latest session)."""
@@ -98,9 +166,24 @@ def _setup_routes_and_handlers(
         if not ledger:
             raise web.HTTPNotFound(text="task ledger unavailable")
 
-        session_id = str(request.query.get("session_id", "")).strip() or None
-        history = ledger.history(session_id)
-        return web.json_response({"history": history})
+        session_id = str(request.query.get("session_id", "")).strip()
+        if not session_id:
+            latest = ledger.get_latest()
+            session_id = str(getattr(latest, "session_id", "") or "").strip()
+        try:
+            limit = max(1, min(int(str(request.query.get("limit", "50") or "50")), 200))
+        except (TypeError, ValueError) as e:
+            raise web.HTTPBadRequest(text="invalid limit") from e
+
+        history = ledger.get_history(session_id, limit=limit) if session_id else []
+        return web.json_response(
+            {
+                "ok": True,
+                "session_id": session_id,
+                "events": history,
+                "history": history,
+            }
+        )
 
     async def api_security_mutating_routes(request: web.Request) -> web.Response:
         """Return security policy snapshot for mutating routes."""
@@ -362,12 +445,13 @@ def _setup_routes_and_handlers(
 
     _register_third_party_access_routes(app)
 
-    def _register_preferences_and_onboarding_routes(app_ref: web.Application) -> None:
-        """Register preferences and onboarding APIs once runtime guards exist."""
+    def _register_preferences_and_memory_routes(app_ref: web.Application) -> None:
+        """Register preferences, onboarding, and memory APIs once runtime guards exist."""
         if not callable(_require_api_access):
-            log.warning("Preferences/onboarding route registration skipped: missing runtime dependencies")
+            log.warning("Preferences/memory route registration skipped: missing runtime dependencies")
             return
         try:
+            from thomas.server.routes.memory_aiohttp import register_memory_routes
             from thomas.server.routes.onboarding_aiohttp import register_onboarding_routes
             from thomas.server.routes.preferences_aiohttp import register_preferences_routes
 
@@ -380,10 +464,111 @@ def _setup_routes_and_handlers(
                 app_ref,
                 require_api_access=_require_api_access,
             )
+            register_memory_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+            )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
-            log.warning("Preferences/onboarding routes unavailable: %s", e)
+            log.warning("Preferences/memory routes unavailable: %s", e)
 
-    _register_preferences_and_onboarding_routes(app)
+    _register_preferences_and_memory_routes(app)
+
+    def _register_search_routes(app_ref: web.Application) -> None:
+        """Register conversation search APIs used by web search surfaces."""
+        if not callable(_require_api_access):
+            log.warning("Search route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.search import register_search_routes
+
+            register_search_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Search routes unavailable: %s", e)
+
+    _register_search_routes(app)
+
+    def _register_secrets_routes(app_ref: web.Application) -> None:
+        """Register API-key and secret rotation APIs."""
+        if not callable(_require_api_access) or not callable(_read_json):
+            log.warning("Secrets route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.secrets_aiohttp import register_secrets_routes
+
+            register_secrets_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Secrets routes unavailable: %s", e)
+
+    _register_secrets_routes(app)
+
+    def _register_local_project_routes(app_ref: web.Application) -> None:
+        """Register local project APIs used by the My Stuff workspace."""
+        if not all(callable(dep) for dep in (_require_api_access, _require_loopback, _read_json)):
+            log.warning("Local project route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.local_projects_aiohttp import register_local_project_routes
+
+            register_local_project_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                require_loopback=_require_loopback,
+                read_json=_read_json,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Local project routes unavailable: %s", e)
+
+    _register_local_project_routes(app)
+
+    def _register_marketplace_routes(app_ref: web.Application) -> None:
+        """Register marketplace catalog, hosted plugin-store, and Life Manager routes."""
+        if not callable(_require_api_access):
+            log.warning("Marketplace route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.life_manager_aiohttp import register_life_manager_routes
+            from thomas.server.routes.marketplace_catalog_aiohttp import register_marketplace_catalog_routes
+            from thomas.server.routes.plugin_hosting import register_plugin_hosting_routes
+
+            register_marketplace_catalog_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+            register_plugin_hosting_routes(app_ref)
+            register_life_manager_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Marketplace routes unavailable: %s", e)
+
+    _register_marketplace_routes(app)
+
+    def _register_codex_routes(app_ref: web.Application) -> None:
+        """Register Codex bridge APIs used by onboarding and identity UI."""
+        if not callable(_require_api_access):
+            log.warning("Codex route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.codex_aiohttp import register_codex_routes
+
+            register_codex_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+                codex_bridge_key=APP_CODEX_BRIDGE,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Codex routes unavailable: %s", e)
+
+    _register_codex_routes(app)
 
     def _register_mission_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
         """Register Mission Control APIs used by the main Thomas shell."""
@@ -403,6 +588,34 @@ def _setup_routes_and_handlers(
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Mission routes unavailable: %s", e)
 
+    def _register_observability_routes(app_ref: web.Application) -> None:
+        """Register system monitoring APIs used by the main shell."""
+        try:
+            from thomas.server.routes.observability import register_observability_routes
+
+            register_observability_routes(app_ref)
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Observability routes unavailable: %s", e)
+
+    _register_observability_routes(app)
+
+    def _register_chat_v2_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
+        """Register the unified V2 chat routes when the supporting modules are available."""
+        try:
+            from thomas.server.routes.chat_v2 import register_chat_v2_routes
+
+            register_chat_v2_routes(
+                app_ref,
+                config=cfg_ref,
+                llm=None,
+                memory=app_ref.get(APP_MEMORY),
+                tools=app_ref.get(APP_TOOLS),
+                chat_store_dir=cfg_ref.memory.root_path / '.thomas' / 'sessions_v2',
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
+            log.warning("Chat V2 routes unavailable: %s", e)
+
+    _register_chat_v2_routes(app, config)
     _register_mission_routes(app, config)
 
     # Server restart endpoint
@@ -424,14 +637,17 @@ def _setup_routes_and_handlers(
     app.router.add_get("/landing", landing)
 
     app.router.add_get("/api/task_ledger/current", api_task_ledger_current)
+    app.router.add_get("/api/task-ledger/current", api_task_ledger_current)
     app.router.add_get("/api/task_ledger/history", api_task_ledger_history)
+    app.router.add_get("/api/task-ledger/history", api_task_ledger_history)
     app.router.add_get("/api/security/mutating_routes", api_security_mutating_routes)
+    app.router.add_get("/api/security/mutating-routes", api_security_mutating_routes)
     app.router.add_get("/api/engines", api_engines)
     app.router.add_get("/api/tools", api_tools)
     app.router.add_get("/api/chats", api_chats)
     app.router.add_put("/api/chats", api_chat_put)
+    app.router.add_put("/api/chats/{chat_id}", api_chat_put)
     app.router.add_delete("/api/chats/{chat_id}", api_chat_delete)
-
     async def static_compat(request: web.Request) -> web.StreamResponse:
         """Serve both modern shell assets and legacy module files under /static/."""
         raw_path = str(request.match_info.get("path", "") or "").replace("\\", "/").lstrip("/")

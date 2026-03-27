@@ -134,8 +134,20 @@ def _normalize_board_position(raw: Any, *, index: int = 0) -> dict[str, int]:
 
 
 def _registry_path(app: web.Application) -> Path:
-    cfg: AppConfig = app.get(APP_CONFIG)
-    return cfg.home_dir / _REGISTRY_RELATIVE_PATH
+    cfg: AppConfig | None = app.get(APP_CONFIG)
+
+    # Prefer the active runtime/state directories used by the modern config loader.
+    for raw in (
+        os.environ.get("THOMAS_HOME"),
+        os.environ.get("THOMAS_STATE_DIR"),
+        getattr(cfg, "home_dir", None),
+        getattr(cfg, "data_dir", None),
+    ):
+        value = str(raw or "").strip()
+        if value:
+            return Path(value).expanduser().resolve() / _REGISTRY_RELATIVE_PATH
+
+    return (Path.cwd() / _REGISTRY_RELATIVE_PATH).resolve()
 
 
 def _sort_projects(projects: list[dict[str, Any]]) -> list[dict[str, Any]]:
@@ -415,38 +427,81 @@ def _build_test_candidates(root: Path, profile: dict[str, Any]) -> list[dict[str
     return candidates
 
 
-def _build_scope_summary(root: Path, profile: dict[str, Any], project_type: str) -> str:
+def _friendly_framework_label(kind: str, framework: str, package_json: dict[str, Any]) -> str:
+    framework_key = _safe_text(framework).lower()
+    deps = _merged_dependencies(package_json) if package_json else set()
+    if kind == "static_site":
+        return "Static HTML"
+    if framework_key == "react" and "vite" in deps:
+        return "React + Vite"
+    if framework_key == "next":
+        return "Next.js"
+    if framework_key == "vue":
+        return "Vue"
+    if framework_key == "astro":
+        return "Astro"
+    if framework_key == "svelte":
+        return "Svelte"
+    if framework_key == "node_backend":
+        return "Node Backend"
+    if framework_key:
+        return framework_key.replace("_", " ").replace("-", " ").title()
+    if package_json:
+        return "Node Workspace"
+    return "Workspace"
+
+
+def _classify_project(root: Path, package_json: dict[str, Any], framework: str) -> tuple[str, str]:
+    if (root / "index.html").exists() and not package_json:
+        return "static_site", "web_app"
+    if package_json:
+        return "node_app", "web_app"
+    return "linked_folder", "workspace"
+
+
+def _build_scope_summary(root: Path, framework_label: str, project_type: str) -> str:
     file_count = _count_files(root)
     top_level = _top_level_entries(root)
-    summary = f"{project_type.replace('_', ' ').title()} with {file_count} files"
+    summary = f"{framework_label} {project_type.replace('_', ' ')} with {file_count} files"
     if top_level:
         summary += f", includes: {', '.join(top_level[:3])}"
     return summary
 
 
-def _build_readiness(profile: dict[str, Any], prepare: dict[str, Any]) -> dict[str, Any]:
-    launch_available = profile.get("available", False)
-    install_available = prepare.get("available", False)
-    readiness_score = 0
-    status = "unknown"
-    if launch_available:
-        readiness_score += 50
-    if install_available:
-        readiness_score += 30
-    if readiness_score >= 80:
-        status = "ready"
-    elif readiness_score >= 50:
-        status = "likely_ready"
-    elif readiness_score >= 20:
-        status = "partially_ready"
-    else:
-        status = "unknown"
+def _build_readiness(root: Path, kind: str, profile: dict[str, Any], prepare: dict[str, Any]) -> dict[str, Any]:
+    has_readme = bool(_read_readme_excerpt(root))
+    if kind == "static_site":
+        return {
+            "state": "open_ready",
+            "label": "Open Ready",
+            "has_launch": True,
+            "has_prepare": False,
+            "has_readme": has_readme,
+        }
+
+    prepare_needed = bool(prepare.get("needed"))
+    if kind == "node_app" and prepare_needed:
+        return {
+            "state": "preparation_required",
+            "label": "Preparation Required",
+            "has_launch": bool(profile.get("available", False)),
+            "has_prepare": bool(prepare.get("available", False)),
+            "has_readme": has_readme,
+        }
+    if bool(profile.get("available", False)):
+        return {
+            "state": "launch_ready",
+            "label": "Launch Ready",
+            "has_launch": True,
+            "has_prepare": bool(prepare.get("available", False)),
+            "has_readme": has_readme,
+        }
     return {
-        "status": status,
-        "score": readiness_score,
-        "has_launch": launch_available,
-        "has_prepare": install_available,
-        "has_readme": bool(_read_readme_excerpt(root)),
+        "state": "review_needed",
+        "label": "Needs Review",
+        "has_launch": False,
+        "has_prepare": bool(prepare.get("available", False)),
+        "has_readme": has_readme,
     }
 
 
@@ -454,66 +509,98 @@ def _build_findings_preview(
     root: Path,
     profile: dict[str, Any],
     prepare: dict[str, Any],
-    project_type: str,
-) -> dict[str, Any]:
-    findings = []
+    kind: str,
+) -> list[dict[str, Any]]:
+    findings: list[dict[str, Any]] = []
     readme = _read_readme_excerpt(root)
     if readme:
-        findings.append({"category": "readme", "excerpt": readme[:500]})
-    launch_cmd = profile.get("command_display", "")
+        findings.append({"label": "README", "detail": readme[:220], "level": "info"})
+    if kind == "node_app" and bool(prepare.get("needed")):
+        findings.append(
+            {
+                "label": "Dependencies missing",
+                "detail": prepare.get("command_display") or "Install dependencies before launch.",
+                "level": "warn",
+            }
+        )
+    launch_cmd = _safe_text(profile.get("command_display"))
     if launch_cmd:
-        findings.append({"category": "launch_command", "excerpt": launch_cmd})
-    test_candidates = _build_test_candidates(root, profile)
-    if test_candidates:
-        findings.append({"category": "testing", "excerpt": f"{len(test_candidates)} test suite(s) found"})
-    return {"findings": findings, "has_findings": bool(findings)}
+        findings.append({"label": "Launch command", "detail": launch_cmd, "level": "info"})
+    return findings
 
 
 def _build_launch_candidates(
     root: Path,
-    profile: dict[str, Any],
-    project_type: str,
-) -> list[dict[str, Any]]:
-    candidates = []
-    if profile.get("available", False):
-        cmd = profile.get("command", [])
-        candidates.append(
-            {
-                "name": profile.get("script", "dev"),
-                "framework": profile.get("framework", ""),
-                "command": cmd,
-                "command_display": profile.get("command_display", ""),
-                "target": profile.get("target", ""),
-            }
-        )
-    if "python" in project_type.lower():
-        candidates.append(
-            {
-                "name": "python",
-                "framework": "python",
-                "command": ["python", "-m", "http.server", "8000"],
-                "command_display": "python -m http.server 8000",
-                "target": "",
-            }
-        )
-    return candidates
-
-
-def _build_actions(
-    project_type: str,
+    kind: str,
     profile: dict[str, Any],
     prepare: dict[str, Any],
     test_candidates: list[dict[str, Any]],
-) -> list[str]:
-    actions = []
-    if profile.get("available", False):
-        actions.append("launch")
-    if prepare.get("available", False):
-        actions.append("prepare")
+) -> list[dict[str, Any]]:
+    candidates: list[dict[str, Any]] = []
+    entry_target = _safe_text(profile.get("target"))
+    if kind == "static_site" and entry_target:
+        candidates.append(
+            {
+                "action": "open_entry",
+                "label": "Open Entry",
+                "available": True,
+                "target": entry_target,
+                "command_display": f"Open {Path(entry_target).name}",
+            }
+        )
+    if kind == "node_app" and bool(prepare.get("needed")):
+        candidates.append(
+            {
+                "action": "prepare",
+                "label": "Prepare",
+                "available": bool(prepare.get("available", False)),
+                "command": list(prepare.get("command") or []),
+                "command_display": _safe_text(prepare.get("command_display")),
+            }
+        )
+    if bool(profile.get("available", False)):
+        candidates.append(
+            {
+                "action": "launch",
+                "label": "Launch",
+                "available": True,
+                "command": list(profile.get("command") or []),
+                "command_display": _safe_text(profile.get("command_display")),
+                "target": entry_target,
+            }
+        )
     if test_candidates:
-        actions.append("test")
-    actions.extend(["open_entry", "open_folder"])
-    return actions
+        first_test = test_candidates[0]
+        candidates.append(
+            {
+                "action": "test",
+                "label": "Verify",
+                "available": True,
+                "command": list(first_test.get("command") or []),
+                "command_display": _safe_text(first_test.get("command_display")),
+            }
+        )
+    candidates.append(
+        {
+            "action": "open_folder",
+            "label": "Open Folder",
+            "available": True,
+            "target": str(root),
+            "command_display": "Open project folder",
+        }
+    )
+    return candidates
+
+
+def _build_actions(launch_candidates: list[dict[str, Any]]) -> dict[str, Any]:
+    ordered = [
+        _safe_text(candidate.get("action"))
+        for candidate in launch_candidates
+        if _safe_text(candidate.get("action"))
+    ]
+    primary = ordered[0] if ordered else "open_folder"
+    secondary = [action for action in ordered[1:] if action != primary]
+    return {"primary": primary, "secondary": secondary}
 
 
 def _build_project_dossier(
@@ -529,51 +616,90 @@ def _build_project_dossier(
     project_id = existing.get("id") or _project_id_for_path(root)
     display_name = name or existing.get("name") or root.name
     package_json = _read_json_file(root / "package.json")
-    framework = _detect_framework(root, package_json) if package_json else ""
-    project_type = _detect_project_type(existing.get("kind", ""), framework, root.name)
-    kind = project_type
+    framework_key = _detect_framework(root, package_json) if package_json else ""
+    kind, project_type = _classify_project(root, package_json, framework_key)
+    framework_label = _friendly_framework_label(kind, framework_key, package_json)
     launch_profile = _build_launch_profile(root)
     prepare_profile = _build_prepare_profile(root, launch_profile)
+    if kind == "node_app":
+        prepare_profile = dict(prepare_profile)
+        prepare_profile["needed"] = not (root / "node_modules").exists()
+        if prepare_profile.get("candidates"):
+            first_prepare = prepare_profile["candidates"][0]
+            prepare_profile["command"] = list(first_prepare.get("command") or [])
+            prepare_profile["command_display"] = _safe_text(first_prepare.get("command_display"))
+        else:
+            prepare_profile["command"] = []
+            prepare_profile["command_display"] = ""
+    else:
+        prepare_profile = {"available": False, "needed": False, "command": [], "command_display": ""}
     test_candidates = _build_test_candidates(root, launch_profile)
-    readiness = _build_readiness(launch_profile, prepare_profile)
-    findings = _build_findings_preview(root, launch_profile, prepare_profile, kind)
-    launch_candidates = _build_launch_candidates(root, launch_profile, kind)
-    actions = _build_actions(kind, launch_profile, prepare_profile, test_candidates)
-    scope_summary = _build_scope_summary(root, launch_profile, kind)
+    readiness = _build_readiness(root, kind, launch_profile, prepare_profile)
+    findings_preview = _build_findings_preview(root, launch_profile, prepare_profile, kind)
+    launch_candidates = _build_launch_candidates(root, kind, launch_profile, prepare_profile, test_candidates)
+    actions = _build_actions(launch_candidates)
+    scope_summary = _build_scope_summary(root, framework_label, project_type)
     board_position = existing.get("board_position") or _normalize_board_position({}, index=index)
     now = _utc_now_iso()
     entry_path = ""
-    if launch_profile.get("available", False):
-        target = launch_profile.get("target", "")
-        if target:
-            entry_path = str(Path(target).relative_to(root)) if Path(target).is_relative_to(root) else target
+    target = _safe_text(launch_profile.get("target"))
+    if target:
+        target_path = Path(target)
+        entry_path = str(target_path.relative_to(root)) if target_path.is_relative_to(root) else target
+    top_level = _top_level_entries(root)
+    summary = (
+        f"{framework_label} project ready to open in Thomas."
+        if readiness.get("state") == "open_ready"
+        else f"{framework_label} project that needs Thomas to prepare the workspace before launch."
+        if readiness.get("state") == "preparation_required"
+        else f"{framework_label} project linked into Thomas."
+    )
+    package_manager = _safe_text(launch_profile.get("package_manager"))
     dossier = {
         "id": project_id,
         "name": display_name,
         "root_path": str(root),
-        "import_method": import_method,
         "kind": kind,
-        "emoji": _emoji_for_project(kind, framework, root.name),
-        "accent_color": _accent_for_id(project_id),
-        "framework": framework,
+        "project_type": project_type,
+        "framework": framework_label,
+        "package_manager": package_manager,
         "created_at": existing.get("created_at") or (now if touch else ""),
         "updated_at": now if touch else existing.get("updated_at", ""),
         "launch_count": _safe_int(existing.get("launch_count"), 0),
         "last_launched_at": existing.get("last_launched_at", ""),
         "last_prepared_at": existing.get("last_prepared_at", ""),
         "board_position": board_position,
+        "board_icon": {
+            "emoji": _emoji_for_project(kind, framework_label, root.name),
+            "accent": existing.get("board_icon", {}).get("accent") if isinstance(existing.get("board_icon"), dict) else "",
+        },
         "entry_path": entry_path,
+        "summary": summary,
         "scope_summary": scope_summary,
+        "readiness": readiness,
+        "prepare": {
+            "needed": bool(prepare_profile.get("needed")),
+            "available": bool(prepare_profile.get("available")),
+            "command": list(prepare_profile.get("command") or []),
+            "command_display": _safe_text(prepare_profile.get("command_display")),
+        },
+        "analysis": {
+            "import_method": import_method,
+            "top_level": top_level,
+            "file_count": _count_files(root),
+        },
         "profile": {
             "launch": launch_profile,
             "prepare": prepare_profile,
             "test_candidates": test_candidates,
             "readiness": readiness,
         },
-        "findings": findings.get("findings", []),
+        "findings_preview": findings_preview,
         "launch_candidates": launch_candidates,
         "actions": actions,
     }
+    accent = _safe_text(dossier["board_icon"].get("accent")) or _accent_for_id(project_id)
+    dossier["board_icon"]["accent"] = accent
     return dossier
 
 

@@ -56,6 +56,9 @@ def _parse_query_int(
 
 
 async def _read_object_payload(request: web.Request, read_json: ReadJsonFn) -> dict[str, Any]:
+    content_type = str(request.content_type or "").strip().lower()
+    if "json" not in content_type:
+        raise web.HTTPUnsupportedMediaType(text="Content-Type must be application/json")
     payload = await read_json(request)
     if not isinstance(payload, dict):
         raise web.HTTPBadRequest(text="json body must be an object")

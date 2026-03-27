@@ -25,7 +25,14 @@ try:  # Typer is optional; Click is the hard dependency here.
 except ImportError:  # pragma: no cover
     typer = None  # type: ignore
 
-from thomas.nodes.p035_node_command_stop import (
+try:
+    from thomas.marketplace.nodes.p035_node_command_stop import (
+        NodeCommandStopError,
+        NodeCommandStopInput,
+        node_command_stop,
+    )
+except ImportError:  # pragma: no cover
+    from thomas.nodes.p035_node_command_stop import (
     NodeCommandStopError,
     NodeCommandStopInput,
     node_command_stop,

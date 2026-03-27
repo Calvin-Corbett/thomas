@@ -29,6 +29,7 @@ import importlib
 import inspect
 import json
 import re
+import types
 from collections.abc import Mapping, Sequence
 from dataclasses import MISSING, dataclass, fields, is_dataclass
 from types import ModuleType
@@ -464,7 +465,7 @@ def _type_to_schema(t: Any) -> dict[str, Any]:
         inner = args[0] if args else Any
         return _type_to_schema(inner)
 
-    if origin is Union:
+    if origin in (Union, types.UnionType):
         # Optional / Union
         has_null = any(a is type(None) for a in args)  # noqa: E721
         non_null = [a for a in args if a is not type(None)]  # noqa: E721
@@ -492,14 +493,14 @@ def _type_to_schema(t: Any) -> dict[str, Any]:
     if t is type(None):  # noqa: E721
         return {"type": "null"}
 
-    if origin in (list, set, tuple, Sequence := __import__("collections.abc").Sequence):
+    if origin in (list, set, tuple, Sequence):
         item_t = args[0] if args else Any
         schema: dict[str, Any] = {"type": "array", "items": _type_to_schema(item_t)}
         if origin is set:
             schema["uniqueItems"] = True
         return schema
 
-    if origin in (dict, Mapping := __import__("collections.abc").Mapping):
+    if origin in (dict, Mapping):
         # JSON object keys are strings; ignore key type and map values.
         val_t = args[1] if len(args) == 2 else Any
         return {"type": "object", "additionalProperties": _type_to_schema(val_t)}
@@ -516,7 +517,7 @@ def _type_to_schema(t: Any) -> dict[str, Any]:
 
 def _is_optional_type(t: Any) -> bool:
     origin = get_origin(t)
-    if origin is Union:
+    if origin in (Union, types.UnionType):
         return any(a is type(None) for a in get_args(t))  # noqa: E721
     return False
 

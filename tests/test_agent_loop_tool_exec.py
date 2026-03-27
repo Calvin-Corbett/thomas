@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
@@ -127,3 +128,45 @@ def test_sanitize_write_tool_path_allows_and_rejects_extended_keys() -> None:
     assert rejected_path is None
     assert error is not None
     assert "path traversal" in error
+
+
+def test_sanitize_write_tool_path_restricts_benchmark_relative_paths(tmp_path: Path) -> None:
+    sandbox_root = tmp_path
+    benchmark_root = tmp_path / "output" / "benchmarks" / "snake" / "run-1" / "thomas"
+    benchmark_root.mkdir(parents=True)
+
+    approved, approved_error = _sanitize_write_tool_path(
+        {"path": "output/benchmarks/snake/run-1/thomas/index.html"},
+        require_path=True,
+        sandbox_root=sandbox_root,
+        benchmark_root=benchmark_root,
+    )
+    blocked, blocked_error = _sanitize_write_tool_path(
+        {"path": "README.md"},
+        require_path=True,
+        sandbox_root=sandbox_root,
+        benchmark_root=benchmark_root,
+    )
+
+    assert approved == "output/benchmarks/snake/run-1/thomas/index.html"
+    assert approved_error is None
+    assert blocked is None
+    assert blocked_error is not None
+    assert "outside the benchmark root" in blocked_error
+
+
+def test_sanitize_write_tool_path_allows_benchmark_absolute_paths(tmp_path: Path) -> None:
+    sandbox_root = tmp_path
+    benchmark_root = tmp_path / "output" / "benchmarks" / "snake" / "run-1" / "thomas"
+    benchmark_root.mkdir(parents=True)
+    target = benchmark_root / "proof.json"
+
+    approved, error = _sanitize_write_tool_path(
+        {"path": str(target)},
+        require_path=True,
+        sandbox_root=sandbox_root,
+        benchmark_root=benchmark_root,
+    )
+
+    assert approved == str(target.resolve())
+    assert error is None
