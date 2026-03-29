@@ -23,6 +23,7 @@ DEFAULT_IGNORE_PATTERNS = ("plans/thomas/WORKBOARD.md",)
 DEFAULT_MAX_CHANGED_FILES = 200
 DEFAULT_BULK_ALLOW_ENV = "THOMAS_ALLOW_BULK_CHANGED_FILES"
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
+FALLBACK_REASON_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON"
 AGENT_ENV_KEYS: tuple[str, ...] = (
     "THOMAS_AGENT_ID",
     "AGENT_ID",
@@ -135,6 +136,10 @@ def _is_truthy(value: str) -> bool:
 
 def _fallback_scopes_from_env() -> tuple[str, ...]:
     return tuple(_split_patterns([os.getenv(FALLBACK_SCOPE_ENV, "")]))
+
+
+def _fallback_reason_from_env() -> str:
+    return str(os.getenv(FALLBACK_REASON_ENV, "") or "").strip()
 
 
 def _fallback_agent_from_env() -> str | None:
@@ -311,7 +316,30 @@ def run(argv: Sequence[str] | None = None) -> int:
     bulk_allow_env = str(args.bulk_allow_env or DEFAULT_BULK_ALLOW_ENV).strip() or DEFAULT_BULK_ALLOW_ENV
     bulk_override = _is_truthy(os.getenv(bulk_allow_env, ""))
     fallback_scopes = _fallback_scopes_from_env()
+    fallback_reason = _fallback_reason_from_env()
     fallback_agent = _fallback_agent_from_env()
+    if fallback_scopes and not fallback_reason:
+        payload = {
+            "gate": "workboard_changed_files",
+            "ok": False,
+            "error": (
+                f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} "
+                "so fallback scope use is explicitly audited"
+            ),
+            "workboard": str(workboard_path),
+            "require_identity_metadata": bool(args.require_identity_metadata),
+            "fallback_scope_count": len(fallback_scopes),
+            "fallback_scopes": list(fallback_scopes),
+            "fallback_agent": fallback_agent or "",
+            "fallback_reason": "",
+            "scope_source": "explicit_fallback",
+        }
+        if args.json:
+            print(json.dumps(payload, sort_keys=True))
+        else:
+            print("Workboard changed-files gate: FAIL")
+            print(f"- {payload['error']}")
+        return 1
     if len(changed_files) > max_changed_files and not bulk_override:
         payload = {
             "gate": "workboard_changed_files",
@@ -329,6 +357,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             "fallback_scope_count": len(fallback_scopes),
             "fallback_scopes": list(fallback_scopes),
             "fallback_agent": fallback_agent or "",
+            "fallback_reason": fallback_reason,
         }
         if args.json:
             print(json.dumps(payload, sort_keys=True))
@@ -348,6 +377,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     payload["bulk_override"] = bool(bulk_override)
     payload["bulk_allow_env"] = bulk_allow_env
     payload["max_changed_files"] = max_changed_files
+    payload["fallback_reason"] = fallback_reason
 
     if args.json:
         print(json.dumps(payload, sort_keys=True))

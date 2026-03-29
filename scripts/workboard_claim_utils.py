@@ -267,7 +267,7 @@ def _presence_gate(
     override_reason: str = "",
 ) -> tuple[bool, str]:
     if agent_presence is None:
-        return True, ""
+        return False, "presence gate unavailable: agent_presence backend is not loaded"
     repo_root = _presence_repo_root(workboard_path)
     try:
         result = agent_presence.evaluate_soft_gate(
@@ -279,8 +279,8 @@ def _presence_gate(
             allow_override=bool(allow_override),
             override_reason=str(override_reason or ""),
         )
-    except Exception:
-        return True, ""
+    except Exception as exc:
+        return False, f"presence gate failed: {exc}"
     if bool(result.get("ok", False)):
         return True, ""
     return False, str(result.get("message") or "presence gate requires override")

@@ -21,6 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+from pathlib import PurePosixPath
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -86,6 +87,32 @@ def _staged_files() -> list[str]:
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
+def _normalize_repo_path(path: str) -> str:
+    normalized = str(path or "").strip().replace("\\", "/")
+    while normalized.startswith("./"):
+        normalized = normalized[2:]
+    while "//" in normalized:
+        normalized = normalized.replace("//", "/")
+    return normalized.strip("/")
+
+
+def _is_protected_path(path: str, protected: set[str]) -> bool:
+    normalized = _normalize_repo_path(path)
+    if not normalized:
+        return False
+    if normalized in protected:
+        return True
+    return _is_immutable_policy_doc(path)
+
+
+def _is_immutable_policy_doc(path: str) -> bool:
+    normalized = _normalize_repo_path(path)
+    if not normalized:
+        return False
+    basename = PurePosixPath(normalized).name
+    return basename in {"AGENTS.md", "GUARDRAILS.md"}
+
+
 def _drop_precommit_breadcrumb() -> None:
     """Signal to post-commit audit that pre-commit hooks ran."""
     try:
@@ -104,7 +131,7 @@ def run(argv: list[str] | None = None) -> int:
 
     staged = _staged_files()
     all_protected = set(PROTECTED_FILES) | set(PROTECTED_ENFORCEMENT_SCRIPTS)
-    violations = [path for path in staged if path in all_protected]
+    violations = [path for path in staged if _is_protected_path(path, all_protected)]
     ok = len(violations) == 0
 
     if args.json:
@@ -129,7 +156,7 @@ def run(argv: list[str] | None = None) -> int:
             print()
             print("WHAT YOU DID WRONG:")
             for path in violations:
-                if path.endswith("GUARDRAILS.md") or path == "AGENTS.md":
+                if _is_immutable_policy_doc(path):
                     print(f"  - {path}  (immutable policy document)")
                 elif path == "tests/test_architecture.py":
                     print(f"  - {path}  (architecture enforcement - fix your code, not the test)")

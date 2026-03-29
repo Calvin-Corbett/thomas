@@ -19,6 +19,7 @@ from check_duplicate_filename_gate import FORBIDDEN_PREFIXES, FORBIDDEN_SUFFIXES
 from check_exception_handler_gate import (
     _find_broad_handlers,
 )
+import check_protected_files_gate as protected_gate
 from check_protected_files_gate import PROTECTED_ENFORCEMENT_SCRIPTS, PROTECTED_FILES
 
 # ──────────────────────────────────────────────
@@ -265,6 +266,44 @@ class TestProtectedFilesGate:
         assert "thomas/server/app.py" not in all_protected
         assert "thomas/agent/loop.py" not in all_protected
         assert "README.md" not in all_protected
+
+    def test_run_blocks_mixed_staged_protected_and_regular_files(self, monkeypatch, capsys):
+        """The live gate should fail when any staged path is protected, even in a mixed batch."""
+        monkeypatch.setattr(
+            protected_gate,
+            "_staged_files",
+            lambda: ["thomas/server/app.py", "agent_safety.toml", "scripts/agent_safety_config.py"],
+        )
+
+        rc = protected_gate.run([])
+        out = capsys.readouterr().out
+
+        assert rc == 1
+        assert "SAFETY GATE FAILED: Protected Policy Files Modified" in out
+        assert "agent_safety.toml" in out
+        assert "scripts/agent_safety_config.py" in out
+        assert "thomas/server/app.py" not in out
+
+    def test_run_passes_when_only_regular_files_are_staged(self, monkeypatch, capsys):
+        """The live gate should pass when staged files stay outside the protected set."""
+        monkeypatch.setattr(protected_gate, "_staged_files", lambda: ["thomas/server/app.py", "README.md"])
+
+        rc = protected_gate.run([])
+        out = capsys.readouterr().out
+
+        assert rc == 0
+        assert "Protected files gate: PASS" in out
+
+    def test_run_blocks_nested_agents_file(self, monkeypatch, capsys):
+        """Nested AGENTS.md files should be protected even if config forgot the exact path."""
+        monkeypatch.setattr(protected_gate, "_staged_files", lambda: ["apps/site/AGENTS.md"])
+
+        rc = protected_gate.run([])
+        out = capsys.readouterr().out
+
+        assert rc == 1
+        assert "apps/site/AGENTS.md" in out
+        assert "immutable policy document" in out
 
 
 # ──────────────────────────────────────────────
