@@ -172,6 +172,8 @@ def test_build_startup_payload_includes_preflight(monkeypatch, tmp_path: Path) -
     assert payload["lane"] == "simple-edit"
     assert payload["preflight"]["status"] == "degraded"
     assert payload["preflight"]["policy"]["report_before_fallback"] is True
+    assert payload["gate_handling"]["auto_remediate"]
+    assert payload["gate_handling"]["hard_stop"]
 
 
 def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
@@ -189,6 +191,11 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
             "updated_at": "2026-03-18",
         },
         "bootstrap_command": 'python scripts/agent_bootstrap_claim.py --agent "<agent-id>" --scope "thomas/core/config.py" --task "Patch a small bug" --no-auto-dispatch',
+        "gate_handling": {
+            "summary": "Structural/quality gates should trigger remediation and retry; integrity/ownership/security gates remain hard stops.",
+            "auto_remediate": ["monolith_guard"],
+            "hard_stop": ["protected_files"],
+        },
         "flags": {
             "ui_proof": False,
             "benchmark_mode": False,
@@ -232,3 +239,6 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
     )
     assert "preflight_checks:" in text
     assert "bootstrap_command:" in text
+    assert "gate_handling:" in text
+    assert "auto_remediate_gates:" in text
+    assert "hard_stop_gates:" in text

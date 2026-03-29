@@ -8,11 +8,20 @@ import importlib.util
 import json
 import re
 import sqlite3
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    from scripts import gate_response_policy
+except (ImportError, ModuleNotFoundError):  # pragma: no cover
+    import gate_response_policy  # type: ignore
+
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 ROUTER_DOC = "docs/ai/AGENT_ROUTER.md"
 LANE_CARD_PATHS = {
@@ -268,7 +277,9 @@ def classify_task(
     else:
         lane = "simple-edit"
 
-    workboard_required = bool(edit_intent) or lane in WORKBOARD_REQUIRED_LANES or tracked_work or long_running or conflict or multi_agent
+    workboard_required = (
+        bool(edit_intent) or lane in WORKBOARD_REQUIRED_LANES or tracked_work or long_running or conflict or multi_agent
+    )
     reads: list[str] = [ROUTER_DOC, LANE_CARD_PATHS[lane]]
     if lane != "chat":
         reads.extend(["docs/AGENT_FILE_EDITING_RULES.md", "GUARDRAILS.md"])
@@ -354,6 +365,7 @@ def classify_task(
         "workflow_mode": workflow_mode,
         "edit_intent": bool(edit_intent),
         "workboard_required": bool(workboard_required),
+        "gate_handling": gate_response_policy.startup_gate_guidance(),
         "workboard": {
             "path": str(workboard_path),
             "active_claims": int(workboard.get("active_claims", 0) or 0),
@@ -468,6 +480,17 @@ def _text_output(payload: dict[str, Any]) -> str:
     )
     if payload.get("bootstrap_command"):
         lines.append(f"bootstrap_command: {payload['bootstrap_command']}")
+    gate_handling = dict(payload.get("gate_handling") or {})
+    if gate_handling:
+        lines.append(f"gate_handling: {gate_handling.get('summary', '')}")
+        auto_remediate = list(gate_handling.get("auto_remediate") or [])
+        hard_stop = list(gate_handling.get("hard_stop") or [])
+        if auto_remediate:
+            lines.append("auto_remediate_gates:")
+            lines.extend([f"  - {item}" for item in auto_remediate])
+        if hard_stop:
+            lines.append("hard_stop_gates:")
+            lines.extend([f"  - {item}" for item in hard_stop])
     if payload["paths"]:
         lines.append("paths:")
         lines.extend([f"  - {path}" for path in payload["paths"]])
