@@ -14,7 +14,7 @@ Versioning: Semantic Versioning.
 ### Changed
 - tooling: `scripts/agent_commit.py` now passes the exact selected path list into `check_release_update_gate.py`, so scoped agent dry runs and commits stop inheriting unrelated diff history from earlier snapshot commits.
 - tooling: `scripts/check_release_update_gate.py` now keeps commit-time release-update enforcement focused on version/changelog coverage by default, while still allowing an explicit `--enforce-release-hygiene` follow-up when a broader release audit is actually intended.
-- safety: Repo hygiene and agent preflight now enforce a configurable uncommitted-change budget (`max_uncommitted_changed_lines`, default `300`) so oversized WIP must be checkpointed with a commit or stash before more work stacks on top of it.
+- safety: Repo hygiene and agent preflight now enforce a configurable uncommitted-change budget (`max_uncommitted_changed_lines`, default `800`) so oversized WIP must be checkpointed with a commit or stash before more work stacks on top of it.
 - observability: Onboarding release gating now requires a minimum onboarding-start sample before treating completion-rate misses as hard failures, preventing event-noise or single-journey telemetry from blocking unrelated release work.
 - security: The aiohttp server now registers webhook receive routes in the main route setup, treats `/openai-compat/*` as a guarded mutating API surface, and keeps the mutating-route policy snapshot aligned with the real authz/CSRF behavior for root compat routes and webhook receivers.
 

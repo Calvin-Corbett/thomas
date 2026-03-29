@@ -25,7 +25,9 @@ source_dirs = [
 test_dirs = ["tests/"]
 
 [worktree_hygiene]
-max_uncommitted_changed_lines = 300
+# Default to one medium feature-sized checkpoint: enough room for code + tests,
+# but still low enough to stop silent snapshot-sized drift.
+max_uncommitted_changed_lines = 800
 change_budget_ignore_prefixes = [
     "output/",
     "runtime/",

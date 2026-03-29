@@ -125,8 +125,8 @@ def test_check_worktree_clean_blocks_when_change_budget_is_exceeded(monkeypatch,
         "evaluate_worktree_change_budget",
         lambda *_args, **_kwargs: {
             "ok": False,
-            "threshold": 300,
-            "total_changed_lines": 451,
+            "threshold": 800,
+            "total_changed_lines": 951,
             "violations": ["uncommitted change budget exceeded"],
         },
     )
@@ -135,7 +135,7 @@ def test_check_worktree_clean_blocks_when_change_budget_is_exceeded(monkeypatch,
 
     assert result["status"] == "blocked"
     assert "checkpoint required" in result["message"].lower()
-    assert "451 changed lines" in result["message"]
+    assert "951 changed lines" in result["message"]
     assert "Commit or stash" in result["user_action"]
 
 
