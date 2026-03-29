@@ -14,8 +14,10 @@ from pathlib import Path
 
 try:
     from agent_safety_config import load_config
+    from breakglass_auth import authorize_breakglass
 except ImportError:  # pragma: no cover
     from scripts.agent_safety_config import load_config  # type: ignore
+    from scripts.breakglass_auth import authorize_breakglass  # type: ignore
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_AUDIT_LOG = ROOT / ".git" / "thomas_skip_audit.jsonl"
@@ -29,6 +31,7 @@ AGENT_ENV_KEYS: tuple[str, ...] = (
 BROAD_SKIP_TOKENS = {"*", "all", "any"}
 BREAKGLASS_ENV = "THOMAS_SKIP_BREAKGLASS"
 BREAKGLASS_TICKET_ENV = "THOMAS_SKIP_TICKET"
+BREAKGLASS_REASON_ENV = "THOMAS_SKIP_REASON"
 DEFAULT_MAX_SKIP_HOOKS = 4
 DEFAULT_MAX_STAGED_FILES_WITH_SKIP = 200
 DEFAULT_MAX_STAGED_FILES_WITH_BREAKGLASS = 60
@@ -40,6 +43,7 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-agent-safety-validation",
     "thomas-active-folder-guard",
     "thomas-precommit-skip-policy-gate",
+    "thomas-protected-files-gate",
     "thomas-plan-structure-gate",
     "thomas-core-overhead-guard",
     "thomas-worktree-rules-gate",
@@ -105,18 +109,6 @@ def _sanitize_reason(raw: str) -> str:
     return " ".join(str(raw or "").split()).strip()
 
 
-def _auto_breakglass_ticket(*, now: datetime, agent: str) -> str:
-    stamp = now.strftime("%Y%m%d%H%M%S")
-    slug = "".join(ch for ch in str(agent or "").lower() if ch.isalnum())[:6] or "agent"
-    return f"AUTO-{stamp}-{slug}"
-
-
-def _auto_breakglass_reason(*, agent: str, skip_hooks: Sequence[str], branch: str) -> str:
-    hook_list = ",".join(str(item) for item in list(skip_hooks)[:4]) or "unknown-hook"
-    branch_clean = str(branch or "").strip() or "unknown-branch"
-    return f"auto-generated breakglass for {agent} on {branch_clean}; skip hooks={hook_list}; follow-up fix required"
-
-
 def _find_broad_skip_tokens(tokens: Sequence[str]) -> list[str]:
     broad: list[str] = []
     for token in tokens:
@@ -175,8 +167,9 @@ def _append_audit_log(
     breakglass_used: bool,
     skip_ticket: str,
     protected_hooks_skipped: Sequence[str],
-    breakglass_ticket_auto: bool,
-    breakglass_reason_auto: bool,
+    breakglass_human_verified: bool,
+    breakglass_auth_method: str,
+    breakglass_authorized_by: str,
 ) -> None:
     payload: dict[str, object] = {
         "gate": "precommit_skip_policy",
@@ -186,8 +179,9 @@ def _append_audit_log(
         "reason": reason,
         "breakglass_used": bool(breakglass_used),
         "skip_ticket": skip_ticket,
-        "breakglass_ticket_auto": bool(breakglass_ticket_auto),
-        "breakglass_reason_auto": bool(breakglass_reason_auto),
+        "breakglass_human_verified": bool(breakglass_human_verified),
+        "breakglass_auth_method": breakglass_auth_method,
+        "breakglass_authorized_by": breakglass_authorized_by,
         "protected_hooks_skipped": list(protected_hooks_skipped),
         "branch": _run_git(["rev-parse", "--abbrev-ref", "HEAD"]) or "",
         "head": _run_git(["rev-parse", "HEAD"]) or "",
@@ -411,20 +405,44 @@ def run(argv: Sequence[str] | None = None) -> int:
             print(f"- protected hooks: {', '.join(protected_skipped)}")
         return 1
 
-    branch = _run_git(["rev-parse", "--abbrev-ref", "HEAD"]) or ""
-    now_for_meta = _now_utc()
     reason = _sanitize_reason(os.getenv("THOMAS_SKIP_REASON", ""))
     skip_ticket = str(os.getenv(BREAKGLASS_TICKET_ENV, "")).strip()
-    breakglass_reason_auto = False
-    breakglass_ticket_auto = False
     if breakglass_enabled and len(reason) < 12:
-        reason = _auto_breakglass_reason(
-            agent=_resolve_agent() or "unknown-agent", skip_hooks=skip_hooks, branch=branch
-        )
-        breakglass_reason_auto = True
+        message = f"breakglass requires {BREAKGLASS_REASON_ENV} with at least 12 characters"
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "gate": "precommit_skip_policy",
+                        "ok": False,
+                        "skip_hooks": list(skip_hooks),
+                        "error": message,
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            print("Pre-commit skip policy gate: FAIL")
+            print(f"- {message}")
+        return 1
     if breakglass_enabled and len(skip_ticket) < 6:
-        skip_ticket = _auto_breakglass_ticket(now=now_for_meta, agent=_resolve_agent() or "unknown-agent")
-        breakglass_ticket_auto = True
+        message = f"breakglass requires {BREAKGLASS_TICKET_ENV} with at least 6 characters"
+        if args.json:
+            print(
+                json.dumps(
+                    {
+                        "gate": "precommit_skip_policy",
+                        "ok": False,
+                        "skip_hooks": list(skip_hooks),
+                        "error": message,
+                    },
+                    sort_keys=True,
+                )
+            )
+        else:
+            print("Pre-commit skip policy gate: FAIL")
+            print(f"- {message}")
+        return 1
 
     staged_files = _staged_files()
     max_staged_files_with_skip = max(1, int(args.max_staged_files_with_skip))
@@ -493,6 +511,8 @@ def run(argv: Sequence[str] | None = None) -> int:
             print("Pre-commit skip policy gate: FAIL")
             print(f"- {message}")
         return 1
+    auth_method = ""
+    authorized_by = ""
     if breakglass_enabled:
         now = _now_utc()
         history = _load_breakglass_history(audit_log=audit_log, agent=agent, now=now)
@@ -546,6 +566,35 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print("Pre-commit skip policy gate: FAIL")
                 print(f"- {message}")
             return 1
+        auth = authorize_breakglass(
+            purpose="pre-commit hook skip authorization",
+            agent=agent,
+            ticket=skip_ticket,
+            reason=reason,
+            skip_hooks=list(skip_hooks),
+        )
+        if not auth.ok:
+            message = auth.message or "human breakglass authorization failed"
+            if args.json:
+                print(
+                    json.dumps(
+                        {
+                            "gate": "precommit_skip_policy",
+                            "ok": False,
+                            "skip_hooks": list(skip_hooks),
+                            "error": message,
+                            "breakglass_human_verified": False,
+                            "breakglass_cancelled": bool(auth.cancelled),
+                        },
+                        sort_keys=True,
+                    )
+                )
+            else:
+                print("Pre-commit skip policy gate: FAIL")
+                print(f"- {message}")
+            return 1
+        auth_method = str(auth.method or "").strip()
+        authorized_by = str(auth.actor or "").strip()
 
     try:
         _append_audit_log(
@@ -557,8 +606,9 @@ def run(argv: Sequence[str] | None = None) -> int:
             breakglass_used=breakglass_enabled,
             skip_ticket=skip_ticket,
             protected_hooks_skipped=protected_skipped,
-            breakglass_ticket_auto=breakglass_ticket_auto,
-            breakglass_reason_auto=breakglass_reason_auto,
+            breakglass_human_verified=breakglass_enabled,
+            breakglass_auth_method=auth_method,
+            breakglass_authorized_by=authorized_by,
         )
     except Exception as exc:
         message = f"failed to write skip audit log: {exc}"
@@ -589,8 +639,9 @@ def run(argv: Sequence[str] | None = None) -> int:
                     "skip_hooks": list(skip_hooks),
                     "skip_hook_count": len(skip_hooks),
                     "breakglass_used": breakglass_enabled,
-                    "breakglass_ticket_auto": breakglass_ticket_auto,
-                    "breakglass_reason_auto": breakglass_reason_auto,
+                    "breakglass_human_verified": breakglass_enabled,
+                    "breakglass_auth_method": auth_method,
+                    "breakglass_authorized_by": authorized_by,
                     "protected_hooks_skipped": protected_skipped,
                     "staged_file_count": len(staged_files),
                     "audit_log": str(audit_log),
@@ -603,8 +654,10 @@ def run(argv: Sequence[str] | None = None) -> int:
         print(f"- recorded {len(skip_hooks)} skipped hook(s) for `{agent}`")
         if breakglass_enabled:
             print(f"- breakglass enabled via {BREAKGLASS_ENV}")
-            if breakglass_ticket_auto or breakglass_reason_auto:
-                print("- breakglass metadata auto-generated")
+            if auth_method:
+                print(f"- human authorization verified via {auth_method}")
+            if authorized_by:
+                print(f"- authorized by: {authorized_by}")
             if protected_skipped:
                 print(f"- protected hooks skipped: {', '.join(protected_skipped)}")
         print(f"- audit log: {audit_log}")

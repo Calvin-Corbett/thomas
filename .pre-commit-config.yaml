@@ -26,6 +26,12 @@ repos:
         language: system
         pass_filenames: false
 
+      - id: thomas-protected-files-gate
+        name: Thomas Protected Files Gate
+        entry: python scripts/check_protected_files_gate.py
+        language: system
+        pass_filenames: false
+
       - id: thomas-plan-structure-gate
         name: Thomas Plan Structure Gate
         entry: python scripts/check_plan_structure_gate.py

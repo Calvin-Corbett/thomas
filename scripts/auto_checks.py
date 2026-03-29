@@ -18,6 +18,14 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 PY = sys.executable
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+try:
+    from scripts.breakglass_auth import authorize_breakglass
+except ImportError:  # pragma: no cover
+    from breakglass_auth import authorize_breakglass  # type: ignore
+
 CLEAN_DEV_VERIFY_PRESETS: tuple[str, ...] = ("strict-worktree",)
 DEFAULT_PROBLEM_TASK_ID = "audit-24h-backstop"
 BREAKGLASS_ENV = "THOMAS_SKIP_BREAKGLASS"
@@ -191,17 +199,33 @@ def _ensure_breakglass_metadata(*, skip_gates: bool, skip_tests: bool) -> tuple[
         notes.append("agent id auto-filled")
     ticket = str(os.getenv(BREAKGLASS_TICKET_ENV, "")).strip()
     if len(ticket) < 6:
-        auto_ticket = f"AUTO-{int(time.time())}-{agent[:6].lower() or 'agent'}"
-        os.environ[BREAKGLASS_TICKET_ENV] = auto_ticket
-        notes.append("ticket auto-generated")
+        return (f"breakglass requires {BREAKGLASS_TICKET_ENV} with at least 6 characters.", notes)
     reason = " ".join(str(os.getenv(BREAKGLASS_REASON_ENV, "")).split()).strip()
     if len(reason) < 12:
-        reason = (
-            f"auto-generated breakglass for runner skip flags; "
-            f"skip_gates={bool(skip_gates)} skip_tests={bool(skip_tests)}"
+        return (f"breakglass requires {BREAKGLASS_REASON_ENV} with at least 12 characters.", notes)
+    auth = authorize_breakglass(
+        purpose="auto_checks skip override",
+        agent=agent or "unknown-agent",
+        ticket=ticket,
+        reason=reason,
+        skip_hooks=[
+            item
+            for item, enabled in (
+                ("auto_checks:skip-gates", bool(skip_gates)),
+                ("auto_checks:skip-tests", bool(skip_tests)),
+            )
+            if enabled
+        ],
+    )
+    if not auth.ok:
+        return (
+            auth.message or "human breakglass authorization failed for auto_checks skip override.",
+            notes,
         )
-        os.environ[BREAKGLASS_REASON_ENV] = reason
-        notes.append("reason auto-generated")
+    if auth.method:
+        notes.append(f"human authorization verified via {auth.method}")
+    if auth.actor:
+        notes.append(f"authorized by {auth.actor}")
     return None, notes
 
 
