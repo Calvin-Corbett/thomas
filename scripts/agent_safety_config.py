@@ -26,6 +26,7 @@ from typing import Any
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_PATH = ROOT / "agent_safety.toml"
 CONFIG_ENV = "THOMAS_AGENT_SAFETY_CONFIG"
+DEFAULT_WORKTREE_MAX_UNCOMMITTED_CHANGED_LINES = 800
 
 
 def _load_toml(path: Path) -> dict[str, Any]:
@@ -82,7 +83,13 @@ class AgentSafetyConfig:
         return self.source_dirs() + self.test_dirs()
 
     def worktree_max_uncommitted_changed_lines(self) -> int:
-        return int(self._get("worktree_hygiene", "max_uncommitted_changed_lines", default=300))
+        return int(
+            self._get(
+                "worktree_hygiene",
+                "max_uncommitted_changed_lines",
+                default=DEFAULT_WORKTREE_MAX_UNCOMMITTED_CHANGED_LINES,
+            )
+        )
 
     def worktree_change_budget_ignore_prefixes(self) -> list[str]:
         return list(

@@ -129,20 +129,20 @@ def test_worktree_change_budget_flags_large_uncommitted_changes(tmp_path: Path) 
     subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
     subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
 
-    tracked_file.write_text("".join(f"line_{idx} = {idx}\n" for idx in range(240)), encoding="utf-8")
+    tracked_file.write_text("".join(f"line_{idx} = {idx}\n" for idx in range(520)), encoding="utf-8")
     new_file = repo / "tests" / "test_generated.py"
     new_file.parent.mkdir(parents=True, exist_ok=True)
-    new_file.write_text("".join(f"assert {idx} == {idx}\n" for idx in range(80)), encoding="utf-8")
+    new_file.write_text("".join(f"assert {idx} == {idx}\n" for idx in range(320)), encoding="utf-8")
 
     result = evaluate_worktree_change_budget(
         repo,
         [" M thomas/core/config.py", "?? tests/test_generated.py"],
-        max_changed_lines=300,
+        max_changed_lines=800,
         ignore_prefixes=["output/"],
     )
 
     assert result["ok"] is False
-    assert result["total_changed_lines"] > 300
+    assert result["total_changed_lines"] > 800
     assert result["tracked_total_changed_lines"] > 0
     assert result["untracked_total_changed_lines"] > 0
     assert "uncommitted change budget exceeded" in result["violations"][0]

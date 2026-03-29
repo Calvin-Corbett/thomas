@@ -437,7 +437,9 @@ def _sanitize_field(label: str, value: str) -> str:
 def _resolve_display_name(name: str | None, agent: str) -> str:
     if name:
         return str(name).strip()
-    return ""
+    if virtual_office_identity is not None:
+        return str(virtual_office_identity.default_display_name(agent)).strip()
+    return str(agent or "").strip()
 
 
 def _normalize_parent_token(parent: str | None) -> str:
@@ -528,13 +530,16 @@ def _format_claim(
     role: str | None = None,
     parent: str | None = None,
 ) -> str:
-    fields: list[str] = [f"agent={agent}"]
-    if name:
-        fields.append(f"name={name}")
-    if role:
-        fields.append(f"role={role}")
-    if parent:
-        fields.append(f"parent={parent}")
+    claim_name = _sanitize_field("name", name or "") or _sanitize_field("name", agent) or "unknown-agent"
+    claim_role = _sanitize_field("role", role or "") or "solo"
+    claim_parent = _sanitize_field("parent", parent or "") or "none"
+
+    fields: list[str] = [
+        f"agent={agent}",
+        f"name={claim_name}",
+        f"role={claim_role}",
+        f"parent={claim_parent}",
+    ]
     fields.append(f"scope={scope}")
     fields.append(f"task={task}")
     return "- " + "; ".join(fields)
