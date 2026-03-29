@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from functools import lru_cache
 from typing import Any
 
@@ -31,6 +32,21 @@ def _get_user_id(request: web.Request) -> str:
     return raw if raw else "default"
 
 
+def _security_payload(security: Any) -> dict[str, Any]:
+    if security is None:
+        return {}
+    if hasattr(security, "model_dump"):
+        try:
+            dumped = security.model_dump()
+            if isinstance(dumped, dict):
+                return dumped
+        except (AttributeError, TypeError, ValueError):
+            return {}
+    if isinstance(security, dict):
+        return dict(security)
+    return {}
+
+
 def register_third_party_agent_access_routes(
     app: web.Application,
     *,
@@ -58,7 +74,7 @@ def register_third_party_agent_access_routes(
         if provider is None:
             reason = "local_step_up_auth_unavailable"
             if audit is not None:
-                try:
+                with suppress(Exception):
                     await audit.log_async(
                         kind="third_party_agent_access_toggle",
                         session_id=user_id,
@@ -66,8 +82,6 @@ def register_third_party_agent_access_routes(
                         reason=reason,
                         payload={"requested_enabled": enabled},
                     )
-                except Exception:
-                    pass
             return web.json_response(
                 {
                     "ok": False,
@@ -88,7 +102,7 @@ def register_third_party_agent_access_routes(
         )
         if not auth_result.authorized:
             if audit is not None:
-                try:
+                with suppress(Exception):
                     await audit.log_async(
                         kind="third_party_agent_access_toggle",
                         session_id=user_id,
@@ -100,8 +114,6 @@ def register_third_party_agent_access_routes(
                             "auth_platform": auth_result.platform,
                         },
                     )
-                except Exception:
-                    pass
             return web.json_response(
                 {
                     "ok": False,
@@ -126,7 +138,7 @@ def register_third_party_agent_access_routes(
                 log.warning("Could not refresh protected internals gate: %s", exc)
 
         if audit is not None:
-            try:
+            with suppress(Exception):
                 await audit.log_async(
                     kind="third_party_agent_access_toggle",
                     session_id=user_id,
@@ -140,8 +152,6 @@ def register_third_party_agent_access_routes(
                         "last_changed_by": updated.advanced.security.last_changed_by,
                     },
                 )
-            except Exception:
-                pass
 
         return web.json_response(
             {
@@ -150,7 +160,112 @@ def register_third_party_agent_access_routes(
                 "enforcement_mode": updated.advanced.security.enforcement_mode,
                 "auth_verified": True,
                 "reason": None,
+                "security": _security_payload(updated.advanced.security),
+            }
+        )
+
+    async def api_breakglass_opt_in(request: web.Request) -> web.Response:
+        require_api_access(request)
+        require_loopback(request)
+        payload = await read_json(request)
+        if not isinstance(payload, dict):
+            raise web.HTTPBadRequest(text="payload must be a JSON object")
+        if "enabled" not in payload or not isinstance(payload.get("enabled"), bool):
+            raise web.HTTPBadRequest(text="enabled must be a boolean")
+
+        enabled = bool(payload.get("enabled"))
+        store = _get_store()
+        user_id = _get_user_id(request)
+        current = store.get(user_id=user_id)
+        provider = request.app.get(APP_LOCAL_STEP_UP_AUTH_PROVIDER)
+        audit = request.app.get(APP_ACTION_AUDIT)
+        action_label = "enable_human_breakglass" if enabled else "disable_human_breakglass"
+
+        if provider is None:
+            reason = "local_step_up_auth_unavailable"
+            if audit is not None:
+                with suppress(AttributeError, RuntimeError, TypeError, ValueError):
+                    await audit.log_async(
+                        kind="human_breakglass_toggle",
+                        session_id=user_id,
+                        decision="DENIED",
+                        reason=reason,
+                        payload={"requested_enabled": enabled},
+                    )
+            return web.json_response(
+                {
+                    "ok": False,
+                    "enabled": bool(current.advanced.security.human_breakglass_enabled),
+                    "auth_verified": False,
+                    "reason": reason,
+                    "security": _security_payload(current.advanced.security),
+                },
+                status=503,
+            )
+
+        auth_result = provider.authorize(
+            action=action_label,
+            reason=(
+                "Thomas will change whether protected override approvals are available. "
+                "When enabled, protected breakglass overrides require a fresh local authorization check."
+            ),
+        )
+        if not auth_result.authorized:
+            if audit is not None:
+                with suppress(AttributeError, RuntimeError, TypeError, ValueError):
+                    await audit.log_async(
+                        kind="human_breakglass_toggle",
+                        session_id=user_id,
+                        decision="DENIED",
+                        reason=auth_result.error_code or "auth_denied",
+                        payload={
+                            "requested_enabled": enabled,
+                            "auth_method": auth_result.method,
+                            "auth_platform": auth_result.platform,
+                        },
+                    )
+            return web.json_response(
+                {
+                    "ok": False,
+                    "enabled": bool(current.advanced.security.human_breakglass_enabled),
+                    "auth_verified": False,
+                    "reason": auth_result.error_code or "auth_denied",
+                    "security": _security_payload(current.advanced.security),
+                },
+                status=403,
+            )
+
+        updated = store.set_human_breakglass_enabled(
+            enabled,
+            user_id=user_id,
+            changed_by=current_local_actor(),
+        )
+
+        if audit is not None:
+            with suppress(AttributeError, RuntimeError, TypeError, ValueError):
+                await audit.log_async(
+                    kind="human_breakglass_toggle",
+                    session_id=user_id,
+                    decision="ALLOWED",
+                    reason="toggle_applied",
+                    payload={
+                        "requested_enabled": enabled,
+                        "auth_method": auth_result.method,
+                        "auth_platform": auth_result.platform,
+                        "changed_at": updated.advanced.security.human_breakglass_changed_at,
+                        "changed_by": updated.advanced.security.human_breakglass_changed_by,
+                    },
+                )
+
+        return web.json_response(
+            {
+                "ok": True,
+                "enabled": bool(updated.advanced.security.human_breakglass_enabled),
+                "auth_verified": True,
+                "reason": None,
+                "security": _security_payload(updated.advanced.security),
             }
         )
 
     app.router.add_post("/api/security/third-party-agent-access", api_toggle)
+    app.router.add_post("/api/security/breakglass-opt-in", api_breakglass_opt_in)

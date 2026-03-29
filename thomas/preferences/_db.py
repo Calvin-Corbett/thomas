@@ -339,6 +339,25 @@ class PreferencesStore:
             self._save_base_prefs(conn, user_id, base)
         return self.get(user_id=user_id)
 
+    def set_human_breakglass_enabled(
+        self,
+        enabled: bool,
+        *,
+        user_id: str = "default",
+        changed_by: str = "system",
+    ) -> PreferencesResponse:
+        with self._lock, self._connect() as conn, conn:
+            base = self._get_or_create_base_prefs(conn, user_id)
+            advanced = dict(base.get("advanced") or {})
+            security = AdvancedSecurityPrefs(**(advanced.get("security") or {})).model_dump()
+            security["human_breakglass_enabled"] = bool(enabled)
+            security["human_breakglass_changed_at"] = utc_now_iso()
+            security["human_breakglass_changed_by"] = str(changed_by or "system")
+            advanced["security"] = security
+            base["advanced"] = advanced
+            self._save_base_prefs(conn, user_id, base)
+        return self.get(user_id=user_id)
+
     def get(self, user_id: str = "default", thread_id: str | None = None) -> PreferencesResponse:
         with self._lock, self._connect() as conn:
             base = self._get_or_create_base_prefs(conn, user_id)

@@ -90,17 +90,34 @@ class TestServerSettingsPage(AioHTTPTestCase):
     async def test_settings_script_uses_preferences_api_contract(self):
         root = Path(__file__).resolve().parents[1]
         script = (root / "thomas" / "server" / "web" / "settings.script01.js").read_text(encoding="utf-8")
+        isolated_desktop_script = (root / "thomas" / "server" / "web" / "settings.isolated-desktop.js").read_text(
+            encoding="utf-8"
+        )
 
         self.assertIn("const PREFERENCES_API = '/api/preferences';", script)
         self.assertIn("buildPreferencesPatch", script)
         self.assertIn("method: 'PATCH'", script)
-        self.assertIn("/api/onboarding/desktop/status", script)
-        self.assertIn("/api/onboarding/desktop/install", script)
-        self.assertIn("/api/onboarding/desktop/trust", script)
-        self.assertIn("/api/onboarding/desktop/open-viewer", script)
-        self.assertIn("saveIsolatedDesktopSettings", script)
-        self.assertIn("installIsolatedDesktopMode", script)
+        self.assertIn("settings.isolated-desktop.js", script)
+        self.assertIn("/api/onboarding/desktop/status", isolated_desktop_script)
+        self.assertIn("/api/onboarding/desktop/install", isolated_desktop_script)
+        self.assertIn("/api/onboarding/desktop/trust", isolated_desktop_script)
+        self.assertIn("/api/onboarding/desktop/open-viewer", isolated_desktop_script)
+        self.assertIn("saveIsolatedDesktopSettings", isolated_desktop_script)
+        self.assertIn("installIsolatedDesktopMode", isolated_desktop_script)
         self.assertNotIn("/api/settings", script)
+
+    async def test_legacy_settings_expose_breakglass_opt_in_controls(self):
+        root = Path(__file__).resolve().parents[1]
+        settings_script = (root / "thomas" / "server" / "web" / "settings.script01.js").read_text(encoding="utf-8")
+        isolated_desktop_script = (root / "thomas" / "server" / "web" / "settings.isolated-desktop.js").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertIn("/api/security/breakglass-opt-in", settings_script)
+        self.assertIn("protectedOverrideApproval", settings_script)
+        self.assertIn("saveBreakglassOptIn", settings_script)
+        self.assertIn("Protected Override Approval", isolated_desktop_script)
+        self.assertIn('id="protectedOverrideApproval"', isolated_desktop_script)
 
 
 if __name__ == "__main__":

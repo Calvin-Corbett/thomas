@@ -136,9 +136,7 @@ def _is_scan_candidate(path: str) -> bool:
     lower_path = normalized.lower()
     if any(lower_path.startswith(prefix) for prefix in SCAN_SKIP_PREFIXES):
         return False
-    if any(lower_path.endswith(suffix) for suffix in SCAN_SKIP_SUFFIXES):
-        return False
-    return True
+    return not any(lower_path.endswith(suffix) for suffix in SCAN_SKIP_SUFFIXES)
 
 
 def _scan_for_live_secrets(repo_root: Path, tracked: Sequence[str]) -> list[dict[str, Any]]:
@@ -260,7 +258,7 @@ def _check_toml_safety(repo_root: Path) -> list[str]:
 def _run_optional_deep_checks(repo_root: Path) -> list[str]:
     failures: list[str] = []
     commands = [
-        [sys.executable, "scripts/check_repo_hygiene.py", "--require-clean-worktree", "--json"],
+        [sys.executable, "scripts/check_repo_hygiene.py", "--require-clean-worktree", "--strict", "--json"],
         [sys.executable, "scripts/check_release_hygiene.py"],
         [sys.executable, "scripts/check_claim_integrity.py", "--json"],
         [sys.executable, "scripts/security_audit.py", "--repo-root", ".", "--json", "--strict"],

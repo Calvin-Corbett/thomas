@@ -276,6 +276,9 @@ class AdvancedPrivacyPrefs(BaseModel):
 
 class AdvancedSecurityPrefs(BaseModel):
     allow_third_party_agent_access: bool = True
+    human_breakglass_enabled: bool = False
+    human_breakglass_changed_at: str | None = None
+    human_breakglass_changed_by: str | None = None
     enforcement_mode: str = "development"
     last_changed_at: str | None = None
     last_changed_by: str | None = None

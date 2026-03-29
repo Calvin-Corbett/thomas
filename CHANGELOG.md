@@ -9,7 +9,15 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.14.55] - 2026-03-29
+
+### Added
+- settings: The legacy settings flow now loads a dedicated `settings.isolated-desktop.js` extension so isolated desktop controls and the new Protected Override Approval toggle can ship without growing the main settings monolith.
+
 ### Changed
+- security: Protected Override Approval is now a dedicated persisted preference that must be toggled through the `/api/security/breakglass-opt-in` route, keeping generic preferences patches from silently changing advanced security state.
+- safety: Breakglass authorization now fails closed unless the local user has explicitly opted in, and the opt-in can be managed from the legacy settings surface without editing protected policy files.
+- governance: Repo hygiene now reports warning vs error severity, while publish/release lanes keep strict blocking behavior so ordinary dirty-worktree drift no longer looks like the same class of failure as a blown checkpoint budget.
 - runtime: Token-economy now scales prompt/context overhead as well as pass counts, so `cheap` strips most optional scaffolding, `balanced`/`optimal` keeps only the highest-impact extras, and `max` retains the fuller autonomy/skills/test-visibility stack.
 - workflow: Added shared gate-response policy metadata and startup-router output so agents can distinguish remediation-and-retry gates from hard-stop integrity/ownership/security gates before they start work.
 - governance: Breakglass now requires local human authorization on Windows via a credential prompt, the helper runners no longer auto-generate breakglass metadata, and the live pre-commit chain now includes the protected-files gate.

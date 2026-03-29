@@ -113,6 +113,16 @@ def test_run_json_success_payload_and_no_require_clean_worktree(monkeypatch, tmp
     )
     monkeypatch.setattr(mod, "_git_ls_files", lambda _root: ["thomas/pkg.py"])
     monkeypatch.setattr(mod, "_git_status_porcelain", lambda _root: [" M dirty.py"])
+    monkeypatch.setattr(
+        mod,
+        "evaluate_worktree_change_budget",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "threshold": 800,
+            "total_changed_lines": 42,
+            "violations": [],
+        },
+    )
 
     rc = mod.run(
         [
@@ -131,6 +141,156 @@ def test_run_json_success_payload_and_no_require_clean_worktree(monkeypatch, tmp
     assert payload["gate"] == "repo_hygiene"
     assert payload["require_clean_worktree"] is False
     assert payload["worktree"]["ok"] is False
+    assert payload["status"] == "ok"
+
+
+def test_run_json_dirty_worktree_is_warning_not_failure(monkeypatch, tmp_path: Path, capsys) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        mod,
+        "_load_baseline",
+        lambda _p: {
+            "max_tracked_root_files": 100,
+            "allowed_tracked_root_files": [],
+            "forbidden_tracked_prefixes": [],
+            "blocked_tracked_suffixes": [],
+            "forbidden_untracked_prefixes": [],
+            "blocked_untracked_suffixes": [],
+        },
+    )
+    monkeypatch.setattr(mod, "_git_ls_files", lambda _root: ["thomas/pkg.py"])
+    monkeypatch.setattr(mod, "_git_status_porcelain", lambda _root: [" M dirty.py"])
+    monkeypatch.setattr(
+        mod,
+        "evaluate_worktree_change_budget",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "threshold": 800,
+            "total_changed_lines": 42,
+            "violations": [],
+        },
+    )
+
+    rc = mod.run(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--baseline",
+            str(baseline),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["status"] == "warning"
+    assert payload["warning_count"] == 1
+    assert payload["error_count"] == 0
+    assert payload["blocking_warnings"] == []
+    assert "dirty worktree:" in payload["warnings"][0]
+
+
+def test_run_json_strict_escalates_warning_to_failure(monkeypatch, tmp_path: Path, capsys) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        mod,
+        "_load_baseline",
+        lambda _p: {
+            "max_tracked_root_files": 100,
+            "allowed_tracked_root_files": [],
+            "forbidden_tracked_prefixes": [],
+            "blocked_tracked_suffixes": [],
+            "forbidden_untracked_prefixes": [],
+            "blocked_untracked_suffixes": [],
+        },
+    )
+    monkeypatch.setattr(mod, "_git_ls_files", lambda _root: ["thomas/pkg.py"])
+    monkeypatch.setattr(mod, "_git_status_porcelain", lambda _root: [" M dirty.py"])
+    monkeypatch.setattr(
+        mod,
+        "evaluate_worktree_change_budget",
+        lambda *_args, **_kwargs: {
+            "ok": True,
+            "threshold": 800,
+            "total_changed_lines": 42,
+            "violations": [],
+        },
+    )
+
+    rc = mod.run(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--baseline",
+            str(baseline),
+            "--json",
+            "--strict",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["status"] == "error"
+    assert payload["warning_count"] == 1
+    assert payload["error_count"] == 0
+    assert len(payload["blocking_warnings"]) == 1
+    assert "dirty worktree:" in payload["blocking_warnings"][0]
+
+
+def test_run_json_change_budget_is_error_even_without_strict(monkeypatch, tmp_path: Path, capsys) -> None:
+    baseline = tmp_path / "baseline.json"
+    baseline.write_text("{}", encoding="utf-8")
+
+    monkeypatch.setattr(
+        mod,
+        "_load_baseline",
+        lambda _p: {
+            "max_tracked_root_files": 100,
+            "allowed_tracked_root_files": [],
+            "forbidden_tracked_prefixes": [],
+            "blocked_tracked_suffixes": [],
+            "forbidden_untracked_prefixes": [],
+            "blocked_untracked_suffixes": [],
+        },
+    )
+    monkeypatch.setattr(mod, "_git_ls_files", lambda _root: ["thomas/pkg.py"])
+    monkeypatch.setattr(mod, "_git_status_porcelain", lambda _root: [" M dirty.py"])
+    monkeypatch.setattr(
+        mod,
+        "evaluate_worktree_change_budget",
+        lambda *_args, **_kwargs: {
+            "ok": False,
+            "threshold": 800,
+            "total_changed_lines": 1201,
+            "violations": [
+                "uncommitted change budget exceeded: 1201 changed lines exceeds max_uncommitted_changed_lines=800"
+            ],
+        },
+    )
+
+    rc = mod.run(
+        [
+            "--repo-root",
+            str(tmp_path),
+            "--baseline",
+            str(baseline),
+            "--json",
+        ]
+    )
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["status"] == "error"
+    assert payload["warning_count"] == 1
+    assert payload["error_count"] == 1
+    assert "uncommitted change budget exceeded" in payload["errors"][0]
 
 
 def test_run_sync_baseline_json_writes_updated_baseline(tmp_path: Path, monkeypatch, capsys) -> None:
