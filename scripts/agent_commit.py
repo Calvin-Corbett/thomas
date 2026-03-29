@@ -9,9 +9,9 @@ import os
 import subprocess
 import sys
 import tempfile
+from collections.abc import Sequence
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Sequence
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent
 if str(_REPO_ROOT) not in sys.path:
@@ -313,13 +313,17 @@ def _selected_paths(repo_root: Path, scope_selection: ScopeSelection, include_pa
     include_norm = [_normalize_path(item) for item in include_paths if _normalize_path(item)]
     if include_norm:
         outside = [
-            path for path in include_norm if not any(_scope_matches_path(scope, path) for scope in scope_selection.scopes)
+            path
+            for path in include_norm
+            if not any(_scope_matches_path(scope, path) for scope in scope_selection.scopes)
         ]
         if outside:
             raise ValueError("requested include path(s) are outside the selected commit scope: " + ", ".join(outside))
         in_scope = [path for path in include_norm if path in changed_set]
     else:
-        in_scope = [path for path in changed if any(_scope_matches_path(scope, path) for scope in scope_selection.scopes)]
+        in_scope = [
+            path for path in changed if any(_scope_matches_path(scope, path) for scope in scope_selection.scopes)
+        ]
 
     selected = sorted(dict.fromkeys(in_scope))
     if selected:
@@ -363,6 +367,21 @@ def _gate_applies(gate_name: str, selected_paths: Sequence[str]) -> bool:
     return any(_normalize_path(path).startswith(prefix) for path in selected_paths for prefix in prefixes)
 
 
+def _resolved_gate_command(
+    gate_name: str,
+    command: Sequence[str],
+    *,
+    selected_paths: Sequence[str],
+) -> list[str]:
+    resolved = list(command)
+    if gate_name == "release_update":
+        for path in selected_paths:
+            normalized = _normalize_path(path)
+            if normalized:
+                resolved.extend(["--changed-file", normalized])
+    return resolved
+
+
 def _prepare_temp_index(
     repo_root: Path,
     *,
@@ -395,8 +414,13 @@ def _run_local_gates(
     for gate_name, command in local_gate_commands:
         if not _gate_applies(gate_name, selected_paths):
             continue
+        resolved_command = _resolved_gate_command(
+            gate_name,
+            command,
+            selected_paths=selected_paths,
+        )
         proc = subprocess.run(
-            list(command),
+            resolved_command,
             cwd=repo_root,
             env=env,
             capture_output=True,
@@ -438,7 +462,7 @@ def _fallback_suggested_command(include_paths: Sequence[str]) -> str:
     parts = ['python scripts/agent_commit.py --agent <agent-id> --message "<message>"']
     for path in [_normalize_path(item) for item in include_paths if _normalize_path(item)]:
         parts.append(f'--include "{path}"')
-    parts.extend(['--allow-scope-fallback', '--fallback-reason "<approved reason>"'])
+    parts.extend(["--allow-scope-fallback", '--fallback-reason "<approved reason>"'])
     return " ".join(parts)
 
 
@@ -577,7 +601,9 @@ def commit_scoped_changes(
 
     claimed_changed = [path for path in selected_paths if path not in RELEASE_METADATA_FILES]
     if not claimed_changed:
-        scope_label = "selected explicit fallback scope" if scope_selection.source == FALLBACK_SOURCE else "active claim scope"
+        scope_label = (
+            "selected explicit fallback scope" if scope_selection.source == FALLBACK_SOURCE else "active claim scope"
+        )
         return CommitResult(
             ok=False,
             blocker_class="no_claimed_changes",

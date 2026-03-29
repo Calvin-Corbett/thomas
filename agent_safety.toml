@@ -24,6 +24,17 @@ source_dirs = [
 ]
 test_dirs = ["tests/"]
 
+[worktree_hygiene]
+max_uncommitted_changed_lines = 300
+change_budget_ignore_prefixes = [
+    "output/",
+    "runtime/",
+    "artifacts/",
+    "tmp/",
+    ".venv/",
+    "node_modules/",
+]
+
 # ── File Size Limits ────────────────────────────────────────────────────────
 
 [limits]

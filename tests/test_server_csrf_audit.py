@@ -36,7 +36,7 @@ def _iter_mutating_routes(app, *, prefixes: tuple[str, ...] | None = None) -> li
 
 
 def _iter_guarded_mutating_routes(app) -> list[tuple[str, str]]:
-    return _iter_mutating_routes(app, prefixes=("/api/", "/gateway/"))
+    return _iter_mutating_routes(app, prefixes=("/api/", "/gateway/", "/openai-compat/", "/v1/"))
 
 
 def _iter_all_mutating_routes(app) -> list[tuple[str, str]]:
@@ -103,6 +103,7 @@ class TestServerCsrfAuditLocal(_BaseServerMutatingAudit):
             ("POST", "/api/workspaces/audit/invites"),
             ("PATCH", "/api/workspaces/audit/members/audit"),
             ("DELETE", "/api/workspaces/audit/members/audit"),
+            ("POST", "/openai-compat/v1/chat/completions"),
         }
         for row in expected:
             self.assertIn(row, routes)
@@ -121,7 +122,12 @@ class TestServerCsrfAuditLocal(_BaseServerMutatingAudit):
             authz = str(row.get("authz") or "")
             csrf = str(row.get("csrf") or "")
             enforced_by = list(row.get("enforced_by") or [])
-            if sample.startswith("/api/") or sample.startswith("/gateway/"):
+            if (
+                sample.startswith("/api/")
+                or sample.startswith("/gateway/")
+                or sample.startswith("/openai-compat/")
+                or sample.startswith("/v1/")
+            ):
                 self.assertEqual(authz, "require_api_access")
                 self.assertEqual(csrf, "same_origin_or_optional_custom_header")
                 self.assertIn("authz_guard_mutating_api", enforced_by)
@@ -133,8 +139,8 @@ class TestServerCsrfAuditLocal(_BaseServerMutatingAudit):
             else:
                 self.fail(f"Unexpected mutating policy route surfaced in snapshot: {sample}")
 
-        expected = _iter_all_mutating_routes(self.app)
-        got = _iter_policy_snapshot_routes(payload)
+        expected = set(_iter_all_mutating_routes(self.app))
+        got = set(_iter_policy_snapshot_routes(payload))
         self.assertEqual(got, expected)
 
     async def test_public_webhook_receivers_are_explicitly_tracked_in_policy_snapshot(self):

@@ -649,4 +649,18 @@ def _client_ip(request: Request) -> str:
     return "unknown"
 
 
+def _emit_event(event_type: str, payload: dict[str, Any] | None = None) -> None:
+    """Best-effort webhook audit event emission."""
+    try:
+        log_payload = dict(payload or {})
+    except Exception:
+        log_payload = {}
+    try:
+        import logging
+
+        logging.getLogger(__name__).info("webhook.event %s %s", str(event_type or "").strip(), log_payload)
+    except Exception:
+        pass
+
+
 from thomas.server.routes import webhooks_routes  # noqa: F401,E402

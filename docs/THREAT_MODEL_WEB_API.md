@@ -1,8 +1,8 @@
 # Web/API Threat Model (Baseline)
 
-Date: 2026-02-22  
-Last reviewed: 2026-02-22  
-Scope: `thomas/server/app.py`, `thomas/server/web/**`, browser chat UI, and mutating `/api/*` routes.
+Date: 2026-03-29  
+Last reviewed: 2026-03-29  
+Scope: `thomas/server/app.py`, `thomas/server/web/**`, browser chat UI, mutating `/api/*` and `/gateway/*` routes, the root OpenAI-compatible `/openai-compat/*` proxy surface, and public webhook receivers.
 
 ## Assets
 
@@ -31,9 +31,10 @@ Scope: `thomas/server/app.py`, `thomas/server/web/**`, browser chat UI, and muta
 - Markdown rendering now escapes raw HTML and sanitizes rendered HTML.
 - Attachment names render via `textContent` (no direct HTML interpolation).
 - Mutating local `/api/*` requests receive same-origin CSRF checks via middleware.
+- Mutating local `/gateway/*`, `/openai-compat/*`, and `/v1/*` requests receive the same API-access and CSRF middleware enforcement as the core `/api/*` surface.
 - Per-session run guards now fail fast on concurrent same-session requests across normal chat, control, batch, quick-reply, and swarm modes.
 - Mutating-route policy snapshot endpoint (`/api/security/mutating-routes`) exposes route-level authz/CSRF metadata and is regression-tested against all mutating `/api/*` routes.
-- Public webhook receive routes are explicitly tracked in the mutating-route policy snapshot and default to strict signature enforcement in remote mode.
+- Public webhook receive routes are explicitly registered in the aiohttp server, tracked in the mutating-route policy snapshot, and default to provider-signature or shared-secret enforcement in remote mode.
 - Atomic temp-file + replace state writes for core persistence.
 - Workspace file corruption quarantine with backup restore attempt.
 - Expanded HTTP security headers, including CSP and permissions policy.

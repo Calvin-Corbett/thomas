@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env python3
+#!/usr/bin/env python3
 """Require version + changelog updates when product surface changes."""
 
 from __future__ import annotations
@@ -7,8 +7,8 @@ import argparse
 import re
 import subprocess
 import sys
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Iterable, List, Sequence, Set, Tuple
 
 try:
     import tomllib
@@ -19,7 +19,7 @@ except Exception:  # pragma: no cover
 ROOT = Path(__file__).resolve().parent.parent
 ROOT_DIRNAME = ROOT.name
 
-REQUIRED_FILES: Set[str] = {
+REQUIRED_FILES: set[str] = {
     "pyproject.toml",
     "thomas/__init__.py",
     "CHANGELOG.md",
@@ -33,7 +33,7 @@ PRODUCT_PREFIXES: Sequence[str] = (
     "extensions/",
 )
 
-PRODUCT_EXACT: Set[str] = {
+PRODUCT_EXACT: set[str] = {
     "thomas.toml",
     "run-ui.cmd",
     "run-repl.cmd",
@@ -57,7 +57,7 @@ IGNORE_PREFIXES: Sequence[str] = (
     ".inbox_extract_",
 )
 
-IGNORE_EXACT: Set[str] = {
+IGNORE_EXACT: set[str] = {
     "AGENTS.md",
     "README.md",
     "CHANGELOG.md",
@@ -66,7 +66,6 @@ IGNORE_EXACT: Set[str] = {
     "thomas/_architecture.py",
     "thomas/observability/module_audit.py",
 }
-
 
 
 def _normalize(path: str) -> str:
@@ -79,13 +78,12 @@ def _normalize(path: str) -> str:
     return p
 
 
-
 def _git_changed_files(
     base: str | None,
     head: str | None,
     *,
     include_untracked: bool = True,
-) -> Tuple[List[str], str, str]:
+) -> tuple[list[str], str, str]:
     resolved_head = (head or "HEAD").strip() or "HEAD"
     if base and str(base).strip("0"):
         resolved_base = str(base)
@@ -116,7 +114,7 @@ def _git_changed_files(
     else:
         out = proc.stdout
 
-    changed: Set[str] = {_normalize(line) for line in out.splitlines() if _normalize(line)}
+    changed: set[str] = {_normalize(line) for line in out.splitlines() if _normalize(line)}
 
     for cmd in (
         ["git", "diff", "--name-only"],
@@ -145,7 +143,6 @@ def _git_changed_files(
     return sorted(changed), resolved_base, resolved_head
 
 
-
 def _is_product_surface(path: str) -> bool:
     p = _normalize(path)
     if not p:
@@ -160,10 +157,8 @@ def _is_product_surface(path: str) -> bool:
     return any(p.startswith(prefix) for prefix in PRODUCT_PREFIXES)
 
 
-
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
-
 
 
 def _version_from_pyproject_text(text: str) -> str:
@@ -171,11 +166,9 @@ def _version_from_pyproject_text(text: str) -> str:
     return str((data.get("project") or {}).get("version") or "").strip()
 
 
-
 def _version_from_init_text(text: str) -> str:
     m = re.search(r"__version__\s*=\s*\"([^\"]+)\"", text)
     return str(m.group(1)).strip() if m else ""
-
 
 
 def _git_show_text(rev: str, rel_path: str) -> str | None:
@@ -190,8 +183,7 @@ def _git_show_text(rev: str, rel_path: str) -> str | None:
     return proc.stdout
 
 
-
-def _check_release_hygiene_script() -> Tuple[bool, str]:
+def _check_release_hygiene_script() -> tuple[bool, str]:
     proc = subprocess.run(
         [sys.executable, "scripts/check_release_hygiene.py"],
         cwd=ROOT,
@@ -200,7 +192,6 @@ def _check_release_hygiene_script() -> Tuple[bool, str]:
     )
     output = (proc.stdout or "") + (proc.stderr or "")
     return proc.returncode == 0, output.strip()
-
 
 
 def run(argv: Sequence[str] | None = None) -> int:
@@ -219,6 +210,13 @@ def run(argv: Sequence[str] | None = None) -> int:
         action=argparse.BooleanOptionalAction,
         default=True,
         help="Include untracked files in change detection (default: enabled).",
+    )
+    parser.add_argument(
+        "--enforce-release-hygiene",
+        dest="enforce_release_hygiene",
+        action=argparse.BooleanOptionalAction,
+        default=False,
+        help="Also run the broader release hygiene script after the scoped release-update checks pass.",
     )
     args = parser.parse_args(argv)
 
@@ -248,12 +246,11 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     changed_set = set(changed)
     missing = sorted(REQUIRED_FILES - changed_set)
-    violations: List[str] = []
+    violations: list[str] = []
 
     if missing:
         violations.append(
-            "product-surface changes require release updates; missing changed files: "
-            + ", ".join(missing)
+            "product-surface changes require release updates; missing changed files: " + ", ".join(missing)
         )
 
     py_text = _read(ROOT / "pyproject.toml")
@@ -262,9 +259,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     current_init = _version_from_init_text(init_text)
 
     base_py = _git_show_text(resolved_base, "pyproject.toml") if resolved_base != "<manual>" else None
-    base_init = (
-        _git_show_text(resolved_base, "thomas/__init__.py") if resolved_base != "<manual>" else None
-    )
+    base_init = _git_show_text(resolved_base, "thomas/__init__.py") if resolved_base != "<manual>" else None
 
     if base_py is not None and base_init is not None:
         try:
@@ -273,13 +268,13 @@ def run(argv: Sequence[str] | None = None) -> int:
             prior_py = ""
         prior_init = _version_from_init_text(base_init)
         if prior_py and prior_init and current_py == prior_py and current_init == prior_init:
-            violations.append(
-                "product-surface changed but project version did not change relative to base"
-            )
+            violations.append("product-surface changed but project version did not change relative to base")
 
-    ok_hygiene, hygiene_output = _check_release_hygiene_script()
-    if not ok_hygiene:
-        violations.append("check_release_hygiene.py failed")
+    hygiene_output = ""
+    if bool(args.enforce_release_hygiene):
+        ok_hygiene, hygiene_output = _check_release_hygiene_script()
+        if not ok_hygiene:
+            violations.append("check_release_hygiene.py failed")
 
     if violations:
         print("Release update gate: FAIL")

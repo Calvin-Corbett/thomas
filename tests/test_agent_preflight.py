@@ -111,6 +111,34 @@ def test_check_worktree_clean_blocks_invalid_benchmark_lane(monkeypatch, tmp_pat
     assert "benchmark mode is invalid" in result["message"]
 
 
+def test_check_worktree_clean_blocks_when_change_budget_is_exceeded(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(mod.shutil, "which", lambda name: "git")
+    monkeypatch.delenv("THOMAS_ALLOW_DIRTY_WORKTREE", raising=False)
+    monkeypatch.delenv("THOMAS_DIRTY_WORKTREE_OVERRIDE", raising=False)
+
+    def fake_run(*args, **kwargs):
+        return SimpleNamespace(returncode=0, stdout=" M foo.py\n?? bar.py\n", stderr="")
+
+    monkeypatch.setattr(mod.subprocess, "run", fake_run)
+    monkeypatch.setattr(
+        mod,
+        "evaluate_worktree_change_budget",
+        lambda *_args, **_kwargs: {
+            "ok": False,
+            "threshold": 300,
+            "total_changed_lines": 451,
+            "violations": ["uncommitted change budget exceeded"],
+        },
+    )
+
+    result = mod._check_worktree_clean(tmp_path)
+
+    assert result["status"] == "blocked"
+    assert "checkpoint required" in result["message"].lower()
+    assert "451 changed lines" in result["message"]
+    assert "Commit or stash" in result["user_action"]
+
+
 def test_evaluate_preflight_blocks_when_repo_markers_missing(tmp_path: Path) -> None:
     payload = mod.evaluate_preflight(root=tmp_path, cwd=tmp_path)
 

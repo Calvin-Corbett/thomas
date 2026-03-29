@@ -316,7 +316,13 @@ def setup_middleware_and_handlers(
         path = str(request.path or "")
         if path.startswith("/webhooks/receive/"):
             return False
-        return path.startswith("/api/") or path.startswith("/gateway/") or path.startswith("/v1/") or path == "/probe"
+        return (
+            path.startswith("/api/")
+            or path.startswith("/gateway/")
+            or path.startswith("/openai-compat/")
+            or path.startswith("/v1/")
+            or path == "/probe"
+        )
 
     def _is_local_browser_origin_host(host: str) -> bool:
         token = str(host or "").strip().lower()

@@ -1,6 +1,14 @@
 from __future__ import annotations
 
-from scripts.check_repo_hygiene import evaluate_generated_artifacts, evaluate_hygiene, evaluate_worktree_clean
+import subprocess
+from pathlib import Path
+
+from scripts.check_repo_hygiene import (
+    evaluate_generated_artifacts,
+    evaluate_hygiene,
+    evaluate_worktree_change_budget,
+    evaluate_worktree_clean,
+)
 
 
 def test_repo_hygiene_detects_unexpected_root_and_forbidden_prefix() -> None:
@@ -106,3 +114,35 @@ def test_repo_hygiene_generated_artifacts_no_patterns_noop() -> None:
     result = evaluate_generated_artifacts(["docs/notes.md", "README.md"], {})
     assert result["ok"] is True
     assert result["offenders"] == []
+
+
+def test_worktree_change_budget_flags_large_uncommitted_changes(tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    subprocess.run(["git", "init", "-q", "-b", "master"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.name", "Test User"], cwd=repo, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=repo, check=True)
+
+    tracked_file = repo / "thomas" / "core" / "config.py"
+    tracked_file.parent.mkdir(parents=True, exist_ok=True)
+    tracked_file.write_text("value = 1\n", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=repo, check=True)
+    subprocess.run(["git", "commit", "-qm", "init"], cwd=repo, check=True)
+
+    tracked_file.write_text("".join(f"line_{idx} = {idx}\n" for idx in range(240)), encoding="utf-8")
+    new_file = repo / "tests" / "test_generated.py"
+    new_file.parent.mkdir(parents=True, exist_ok=True)
+    new_file.write_text("".join(f"assert {idx} == {idx}\n" for idx in range(80)), encoding="utf-8")
+
+    result = evaluate_worktree_change_budget(
+        repo,
+        [" M thomas/core/config.py", "?? tests/test_generated.py"],
+        max_changed_lines=300,
+        ignore_prefixes=["output/"],
+    )
+
+    assert result["ok"] is False
+    assert result["total_changed_lines"] > 300
+    assert result["tracked_total_changed_lines"] > 0
+    assert result["untracked_total_changed_lines"] > 0
+    assert "uncommitted change budget exceeded" in result["violations"][0]

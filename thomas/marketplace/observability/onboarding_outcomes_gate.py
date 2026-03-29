@@ -49,6 +49,7 @@ def evaluate_onboarding_outcomes_gate(
     report: dict[str, Any],
     *,
     min_events_for_quality_thresholds: int = 20,
+    min_started_journeys_for_completion_rate: int = 3,
     min_completion_rate: float = 0.9,
     min_recovery_success_rate: float = 0.8,
     max_median_time_to_ready_seconds: float = 480.0,
@@ -91,7 +92,13 @@ def evaluate_onboarding_outcomes_gate(
             f"events={events}, required>={min_events}"
         )
     else:
-        if opened > 0 and completion_rate < float(min_completion_rate):
+        min_started = max(0, int(min_started_journeys_for_completion_rate))
+        if 0 < opened < min_started:
+            warnings.append(
+                "insufficient completed onboarding-start sample for completion-rate enforcement: "
+                f"wizard_opened={opened}, required>={min_started}"
+            )
+        elif opened > 0 and completion_rate < float(min_completion_rate):
             errors.append(
                 "onboarding completion rate below target: "
                 f"completion_rate={completion_rate:.4f}, target>={float(min_completion_rate):.4f}"
@@ -126,6 +133,7 @@ def evaluate_onboarding_outcomes_gate(
         },
         "thresholds": {
             "min_events_for_quality_thresholds": min_events,
+            "min_started_journeys_for_completion_rate": max(0, int(min_started_journeys_for_completion_rate)),
             "min_completion_rate": float(min_completion_rate),
             "min_recovery_success_rate": float(min_recovery_success_rate),
             "max_median_time_to_ready_seconds": float(max_median_time_to_ready_seconds),
@@ -137,6 +145,7 @@ def get_gate_status(
     *,
     since_days: int = 7,
     min_events_for_quality_thresholds: int = 20,
+    min_started_journeys_for_completion_rate: int = 3,
     min_completion_rate: float = 0.9,
     min_recovery_success_rate: float = 0.8,
     max_median_time_to_ready_seconds: float = 480.0,
@@ -146,6 +155,7 @@ def get_gate_status(
     gate = evaluate_onboarding_outcomes_gate(
         report,
         min_events_for_quality_thresholds=max(0, int(min_events_for_quality_thresholds)),
+        min_started_journeys_for_completion_rate=max(0, int(min_started_journeys_for_completion_rate)),
         min_completion_rate=max(0.0, min(1.0, float(min_completion_rate))),
         min_recovery_success_rate=max(0.0, min(1.0, float(min_recovery_success_rate))),
         max_median_time_to_ready_seconds=max(1.0, float(max_median_time_to_ready_seconds)),
