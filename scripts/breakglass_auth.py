@@ -9,7 +9,8 @@ from dataclasses import dataclass
 from typing import Final
 
 WINDOWS_CREDENTIAL_METHOD: Final[str] = "windows-credential-dialog"
-WINDOWS_CREDENTIAL_CAPTION: Final[str] = "Thomas Breakglass Approval"
+WINDOWS_CREDENTIAL_CAPTION: Final[str] = "Thomas Windows Sign-In"
+WINDOWS_CONFIRMATION_CAPTION: Final[str] = "Thomas Security Approval"
 
 ERROR_CANCELLED: Final[int] = 1223
 ERROR_INSUFFICIENT_BUFFER: Final[int] = 122
@@ -23,6 +24,12 @@ LOGON32_LOGON_NETWORK: Final[int] = 3
 LOGON32_PROVIDER_DEFAULT: Final[int] = 0
 
 SECURITY_LOGON_TYPE_NETWORK: Final[int] = 3
+
+TDCBF_OK_BUTTON: Final[int] = 0x0001
+TDCBF_CANCEL_BUTTON: Final[int] = 0x0008
+IDOK: Final[int] = 1
+IDCANCEL: Final[int] = 2
+TD_SHIELD_ICON_RESOURCE_ID: Final[int] = -4
 
 
 @dataclass(frozen=True)
@@ -123,37 +130,33 @@ def _current_windows_sam_name() -> str:
     return username
 
 
+def _human_breakglass_enabled() -> bool:
+    try:
+        from thomas.preferences.store import PreferencesStore, get_db_path
+    except ImportError:
+        return False
+
+    try:
+        prefs = PreferencesStore(get_db_path()).get(user_id="default")
+    except (OSError, RuntimeError, ValueError):
+        return False
+
+    security = getattr(getattr(prefs, "advanced", None), "security", None)
+    return bool(getattr(security, "human_breakglass_enabled", False))
+
+
 def _build_windows_prompt_message(
     *,
-    purpose: str,
-    agent: str,
-    ticket: str,
-    reason: str,
-    skip_hooks: list[str],
     current_user: str,
 ) -> str:
-    hook_lines = [f"  - {hook}" for hook in (skip_hooks[:6] or ["none"])]
-    lines = [
-        "Thomas needs your approval to bypass protected repository safeguards on this computer.",
-        "",
-        f"Windows account: {current_user or 'current signed-in user'}",
-        f"Requested by agent: {agent}",
-        f"Ticket: {ticket}",
-        f"Requested action: {purpose}",
-        "Requested hook overrides:",
-        *hook_lines,
-        "",
-        "Why this is being requested:",
-        reason,
-        "",
-        "Approve only if you expected this protected change.",
-        "Use your normal Windows sign-in method for this account.",
-        "PIN, password, or Windows Hello may be offered by Windows.",
-    ]
-    return "\n".join(lines)
+    return (
+        "Confirm this protected Thomas action with your Windows sign-in.\n"
+        f"Account: {current_user or 'current signed-in user'}\n"
+        "Windows may offer PIN, password, or Windows Hello."
+    )
 
 
-def _build_windows_prompt_copy(
+def _build_windows_confirmation_copy(
     *,
     purpose: str,
     agent: str,
@@ -162,17 +165,63 @@ def _build_windows_prompt_copy(
     skip_hooks: list[str],
     current_user: str,
 ) -> tuple[str, str]:
+    hooks_preview = ", ".join(skip_hooks[:2]) if skip_hooks else "none"
+    content = "\n".join(
+        [
+            f"Account: {current_user or 'current signed-in user'}",
+            f"Requested by: {agent}",
+            f"Ticket: {ticket}",
+            f"Action: {purpose}",
+            f"Hooks: {hooks_preview}",
+            "",
+            "Continue to open the Windows sign-in prompt.",
+        ]
+    )
+    if reason:
+        content = f"{content}\n\n{reason}"
+    return WINDOWS_CONFIRMATION_CAPTION, "Approve protected Thomas change?", content
+
+
+def _build_windows_prompt_copy(*, current_user: str) -> tuple[str, str]:
     return (
         WINDOWS_CREDENTIAL_CAPTION,
-        _build_windows_prompt_message(
-            purpose=purpose,
-            agent=agent,
-            ticket=ticket,
-            reason=reason,
-            skip_hooks=skip_hooks,
-            current_user=current_user,
-        ),
+        _build_windows_prompt_message(current_user=current_user),
     )
+
+
+def _task_dialog_icon(resource_id: int) -> ctypes.c_void_p:
+    return ctypes.c_void_p(resource_id & 0xFFFF)
+
+
+def _show_breakglass_confirmation_dialog(*, window_title: str, main_instruction: str, content: str) -> bool:
+    comctl32 = _ctypes_lib("comctl32", use_last_error=True)
+    task_dialog = comctl32.TaskDialog
+    task_dialog.argtypes = [
+        wintypes.HWND,
+        wintypes.HANDLE,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.LPCWSTR,
+        wintypes.UINT,
+        ctypes.c_void_p,
+        ctypes.POINTER(ctypes.c_int),
+    ]
+    task_dialog.restype = wintypes.LONG
+
+    button = ctypes.c_int(0)
+    hr = task_dialog(
+        None,
+        None,
+        window_title,
+        main_instruction,
+        content,
+        TDCBF_OK_BUTTON | TDCBF_CANCEL_BUTTON,
+        _task_dialog_icon(TD_SHIELD_ICON_RESOURCE_ID),
+        ctypes.byref(button),
+    )
+    if hr != 0:
+        raise OSError(int(hr), f"TaskDialog failed: {_format_windows_error(hr)}")
+    return int(button.value) == IDOK
 
 
 def _pack_current_user(credui, current_user: str):
@@ -573,6 +622,12 @@ def authorize_breakglass(
             message="human breakglass authorization is only supported on Windows interactive sessions",
             method="unsupported-platform",
         )
+    if not _human_breakglass_enabled():
+        return BreakglassAuthorization(
+            ok=False,
+            message="human breakglass authorization is disabled. Enable Protected Override Approval in Thomas Settings or Easy Setup first.",
+            method="disabled-by-preference",
+        )
     current_user = _current_windows_sam_name()
     if not current_user:
         return BreakglassAuthorization(
@@ -581,7 +636,7 @@ def authorize_breakglass(
             method=WINDOWS_CREDENTIAL_METHOD,
         )
 
-    prompt_caption, prompt_message = _build_windows_prompt_copy(
+    confirm_title, confirm_instruction, confirm_content = _build_windows_confirmation_copy(
         purpose=str(purpose or "").strip() or "breakglass override",
         agent=str(agent or "").strip() or "unknown-agent",
         ticket=str(ticket or "").strip(),
@@ -589,6 +644,29 @@ def authorize_breakglass(
         skip_hooks=hooks,
         current_user=current_user,
     )
+    try:
+        approved = _show_breakglass_confirmation_dialog(
+            window_title=confirm_title,
+            main_instruction=confirm_instruction,
+            content=confirm_content,
+        )
+    except OSError as exc:
+        return BreakglassAuthorization(
+            ok=False,
+            message=str(exc),
+            actor=current_user,
+            method=WINDOWS_CREDENTIAL_METHOD,
+        )
+    if not approved:
+        return BreakglassAuthorization(
+            ok=False,
+            message="breakglass approval cancelled before Windows sign-in",
+            actor=current_user,
+            method=WINDOWS_CREDENTIAL_METHOD,
+            cancelled=True,
+        )
+
+    prompt_caption, prompt_message = _build_windows_prompt_copy(current_user=current_user)
     return _run_windows_credential_prompt(
         prompt_caption=prompt_caption,
         prompt_message=prompt_message,

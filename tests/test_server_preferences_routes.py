@@ -159,6 +159,7 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
         data = await resp.json()
         security = (data.get("advanced") or {}).get("security") or {}
         self.assertIs(bool(security.get("allow_third_party_agent_access", False)), True)
+        self.assertIs(bool(security.get("human_breakglass_enabled", True)), False)
         self.assertEqual(str(security.get("enforcement_mode") or ""), "development")
 
     async def test_generic_preferences_patch_cannot_change_advanced_security(self):
@@ -167,7 +168,7 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
             json={"advanced": {"security": {"allow_third_party_agent_access": False}}},
         )
         self.assertEqual(resp.status, 400)
-        self.assertIn("third-party-agent-access", await resp.text())
+        self.assertIn("dedicated /api/security/* routes", await resp.text())
 
     async def test_dedicated_toggle_route_updates_security_pref_and_live_health(self):
         self.app[APP_LOCAL_STEP_UP_AUTH_PROVIDER] = _AllowAuthProvider()
@@ -210,6 +211,44 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
         prefs = await prefs_resp.json()
         security = (prefs.get("advanced") or {}).get("security") or {}
         self.assertTrue(bool(security.get("allow_third_party_agent_access", False)))
+
+    async def test_breakglass_opt_in_route_updates_security_pref(self):
+        self.app[APP_LOCAL_STEP_UP_AUTH_PROVIDER] = _AllowAuthProvider()
+        resp = await self.client.post(
+            "/api/security/breakglass-opt-in",
+            json={"enabled": True},
+        )
+        self.assertEqual(resp.status, 200)
+        payload = await resp.json()
+        self.assertTrue(bool(payload.get("ok")))
+        self.assertTrue(bool(payload.get("enabled", False)))
+        self.assertTrue(bool(payload.get("auth_verified", False)))
+        security_payload = payload.get("security") or {}
+        self.assertTrue(bool(security_payload.get("human_breakglass_enabled", False)))
+
+        prefs_resp = await self.client.get("/api/preferences")
+        prefs = await prefs_resp.json()
+        security = (prefs.get("advanced") or {}).get("security") or {}
+        self.assertTrue(bool(security.get("human_breakglass_enabled", False)))
+        self.assertTrue(bool(security.get("human_breakglass_changed_at")))
+        self.assertTrue(bool(security.get("human_breakglass_changed_by")))
+
+    async def test_breakglass_opt_in_route_denies_when_local_auth_fails(self):
+        self.app[APP_LOCAL_STEP_UP_AUTH_PROVIDER] = _DenyAuthProvider()
+        resp = await self.client.post(
+            "/api/security/breakglass-opt-in",
+            json={"enabled": True},
+        )
+        self.assertEqual(resp.status, 403)
+        payload = await resp.json()
+        self.assertFalse(bool(payload.get("ok", True)))
+        self.assertFalse(bool(payload.get("auth_verified", True)))
+        self.assertEqual(str(payload.get("reason") or ""), "auth_denied")
+
+        prefs_resp = await self.client.get("/api/preferences")
+        prefs = await prefs_resp.json()
+        security = (prefs.get("advanced") or {}).get("security") or {}
+        self.assertFalse(bool(security.get("human_breakglass_enabled", True)))
 
 
 class TestServerPreferencesRoutesRemote(AioHTTPTestCase):

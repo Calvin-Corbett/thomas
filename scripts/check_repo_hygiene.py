@@ -1,21 +1,26 @@
-"""Guard repo hygiene (tracked layout + dirty worktree checks)."""
+"""Guard repo hygiene with warning/error severity tiers."""
 
 from __future__ import annotations
 
 import argparse
 import json
 import subprocess
-import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
+try:
+    from scripts.agent_safety_config import load_config
+except ImportError:  # pragma: no cover
+    import sys
+
+    ROOT = Path(__file__).resolve().parent.parent
+    if str(ROOT) not in sys.path:
+        sys.path.insert(0, str(ROOT))
+    from scripts.agent_safety_config import load_config
+
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASELINE = "docs/repo_hygiene_baseline.json"
-if str(ROOT) not in sys.path:
-    sys.path.insert(0, str(ROOT))
-
-from scripts.agent_safety_config import load_config
 
 
 def _normalize(path: str) -> str:
@@ -98,6 +103,13 @@ def _sample_paths(paths: Sequence[str], *, limit: int = 5) -> str:
     if len(paths) > cap:
         sample += f", ... (+{len(paths) - cap} more)"
     return sample
+
+
+def _append_unique(bucket: list[str], messages: Iterable[str]) -> None:
+    for raw in messages:
+        message = str(raw or "").strip()
+        if message and message not in bucket:
+            bucket.append(message)
 
 
 def _git_diff_numstat(repo_root: Path, args: Sequence[str]) -> list[tuple[str, int, int]]:
@@ -337,7 +349,7 @@ def evaluate_hygiene(tracked_paths: Sequence[str], baseline: dict[str, Any]) -> 
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Fail when repo layout hygiene constraints are violated.")
+    parser = argparse.ArgumentParser(description="Report repo hygiene warnings/errors with optional strict blocking.")
     parser.add_argument("--repo-root", default=None, help="Repository root (default: inferred from script path).")
     parser.add_argument(
         "--baseline",
@@ -349,7 +361,12 @@ def run(argv: Sequence[str] | None = None) -> int:
         dest="require_clean_worktree",
         action=argparse.BooleanOptionalAction,
         default=True,
-        help="Fail when git status reports staged/unstaged/untracked files (default: enabled).",
+        help="Report dirty worktree state when git status reports staged/unstaged/untracked files (default: enabled).",
+    )
+    parser.add_argument(
+        "--strict",
+        action="store_true",
+        help="Escalate hygiene warnings to blocking failures for merge/publish lanes.",
     )
     parser.add_argument(
         "--sync-baseline",
@@ -398,20 +415,37 @@ def run(argv: Sequence[str] | None = None) -> int:
             ignore_prefixes=config.worktree_change_budget_ignore_prefixes(),
         )
         result["change_budget"] = change_budget
-        if not bool(change_budget.get("ok", True)):
-            for msg in list(change_budget.get("violations") or []):
-                result["violations"].append(msg)
-            result["ok"] = False
         generated_artifacts = evaluate_generated_artifacts(list(worktree.get("untracked_paths") or []), baseline)
         result["generated_artifacts"] = generated_artifacts
+
+        warnings: list[str] = []
+        errors: list[str] = []
+        _append_unique(warnings, list(result.get("violations") or []))
         if not bool(generated_artifacts.get("ok", True)):
-            for msg in list(generated_artifacts.get("violations") or []):
-                result["violations"].append(msg)
-            result["ok"] = False
+            _append_unique(warnings, list(generated_artifacts.get("violations") or []))
         if bool(args.require_clean_worktree) and not bool(worktree.get("ok", False)):
-            for msg in list(worktree.get("violations") or []):
-                result["violations"].append(f"dirty worktree: {msg}")
-            result["ok"] = False
+            _append_unique(warnings, [f"dirty worktree: {msg}" for msg in list(worktree.get("violations") or [])])
+        if not bool(change_budget.get("ok", True)):
+            _append_unique(errors, list(change_budget.get("violations") or []))
+
+        blocking_warnings: list[str] = []
+        if bool(args.strict):
+            _append_unique(blocking_warnings, warnings)
+
+        result["warnings"] = warnings
+        result["errors"] = errors
+        result["blocking_warnings"] = blocking_warnings
+        result["warning_count"] = len(warnings)
+        result["error_count"] = len(errors)
+        result["has_warnings"] = bool(warnings)
+        result["strict"] = bool(args.strict)
+        result["ok"] = not errors and not blocking_warnings
+        if errors or blocking_warnings:
+            result["status"] = "error"
+        elif warnings:
+            result["status"] = "warning"
+        else:
+            result["status"] = "ok"
     except Exception as exc:
         message = f"Repo hygiene gate failed: {exc}"
         if args.json:
@@ -440,12 +474,13 @@ def run(argv: Sequence[str] | None = None) -> int:
                 "repo_root": str(repo_root),
                 "baseline_path": str(baseline_path),
                 "require_clean_worktree": bool(args.require_clean_worktree),
+                "strict": bool(args.strict),
             }
         )
         print(json.dumps(payload, ensure_ascii=False, indent=2))
         return 0 if result["ok"] else 1
 
-    if result["ok"]:
+    if result["status"] == "ok":
         worktree_summary = dict((result.get("worktree") or {}).get("summary") or {})
         print(
             "Repo hygiene gate: OK "
@@ -457,9 +492,19 @@ def run(argv: Sequence[str] | None = None) -> int:
         )
         return 0
 
+    if result["status"] == "warning":
+        print("Repo hygiene gate: WARNING")
+        for msg in result["warnings"]:
+            print(f"- {msg}")
+        return 0
+
     print("Repo hygiene gate FAILED:")
-    for msg in result["violations"]:
-        print(f"- {msg}")
+    if result["errors"]:
+        for msg in result["errors"]:
+            print(f"- {msg}")
+    if result["blocking_warnings"]:
+        for msg in result["blocking_warnings"]:
+            print(f"- warning escalated by --strict: {msg}")
     return 1
 
 

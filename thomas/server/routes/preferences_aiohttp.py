@@ -118,9 +118,7 @@ def register_preferences_routes(
 
         advanced_payload = payload.get("advanced")
         if isinstance(advanced_payload, dict) and "security" in advanced_payload:
-            raise web.HTTPBadRequest(
-                text="advanced.security must be changed via /api/security/third-party-agent-access"
-            )
+            raise web.HTTPBadRequest(text="advanced.security must be changed via dedicated /api/security/* routes")
 
         try:
             patch = PreferencesPatch(**payload)

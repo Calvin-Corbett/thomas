@@ -81,3 +81,7 @@ def test_run_optional_deep_checks_includes_claim_integrity(monkeypatch, tmp_path
 
     assert failures == []
     assert any(len(command) >= 2 and command[1] == "scripts/check_claim_integrity.py" for command in commands)
+    assert any(
+        len(command) >= 2 and command[1] == "scripts/check_repo_hygiene.py" and "--strict" in command
+        for command in commands
+    )
