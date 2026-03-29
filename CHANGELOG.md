@@ -69,6 +69,7 @@ Versioning: Semantic Versioning.
 - safety: Meta-test `test_all_local_hooks_are_skip_protected` ensures every hook in `.pre-commit-config.yaml` has a PROTECTED_SKIP_HOOKS entry — prevents future drift
 
 ### Fixed
+- tooling: Repaired malformed `plans/thomas/WORKBOARD.md` up-for-grabs metadata, fixed literal bracket-path scope handling in `scripts/agent_commit.py`, `scripts/check_workboard_agent_claim.py`, `scripts/check_workboard_changed_files.py`, and `scripts/workboard_claim_utils.py`, and restored direct-script bootstrap/workboard-claim imports in `scripts/workboard_claim_ops.py`, bringing snapshot-commit, workboard-gate, and bootstrap-claim behavior back for Next.js-style paths like `apps/site/src/app/[locale]/page.tsx`.
 - safety: `scripts/post_commit_audit.py` now treats Codex session environments as agent contexts and records post-commit missing-changelog bypasses, so hook-bypassed agent commits are soft-reverted even when only Codex runtime env markers are present.
 - ui: Restored the tools API payload, fixed settings-back interaction isolation, re-bound UI Editor selection to the live DOM, and made Mission Control disable job creation when autonomy storage is unavailable.
 - tooling: Thomas launcher/runtime startup now exports `PYTHONDONTWRITEBYTECODE=1` early enough to keep repo-local `__pycache__` debris from breaking the safety gate during pytest and local UI runs.
