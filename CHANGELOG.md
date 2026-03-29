@@ -9,6 +9,18 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+## [0.14.54] - 2026-03-29
+
+### Changed
+- tooling: `scripts/agent_commit.py` now passes the exact selected path list into `check_release_update_gate.py`, so scoped agent dry runs and commits stop inheriting unrelated diff history from earlier snapshot commits.
+- tooling: `scripts/check_release_update_gate.py` now keeps commit-time release-update enforcement focused on version/changelog coverage by default, while still allowing an explicit `--enforce-release-hygiene` follow-up when a broader release audit is actually intended.
+- safety: Repo hygiene and agent preflight now enforce a configurable uncommitted-change budget (`max_uncommitted_changed_lines`, default `300`) so oversized WIP must be checkpointed with a commit or stash before more work stacks on top of it.
+- observability: Onboarding release gating now requires a minimum onboarding-start sample before treating completion-rate misses as hard failures, preventing event-noise or single-journey telemetry from blocking unrelated release work.
+- security: The aiohttp server now registers webhook receive routes in the main route setup, treats `/openai-compat/*` as a guarded mutating API surface, and keeps the mutating-route policy snapshot aligned with the real authz/CSRF behavior for root compat routes and webhook receivers.
+
+### Fixed
+- release: Refreshed the web/API threat model review metadata and policy notes so security audit cadence and mutating-route policy documentation match the current server surface again.
+
 ### Added
 - channels: Added source-backed provider wrappers plus marketplace adapters for Discord, Telegram, WebChat, WhatsApp, and Slack, and expanded `thomas channels` to surface/configure/test those five channels instead of the old three-provider stub.
 - channels: Added a second OpenClaw-parity tranche for Google Chat, Microsoft Teams, Matrix, Signal, and iMessage, replacing the remaining placeholder marketplace adapters with source-backed provider integrations.

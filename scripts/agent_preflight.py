@@ -8,12 +8,19 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 from typing import Any
 
 from thomas.benchmarks.benchmark_lane import get_benchmark_context
 
 ROOT = Path(__file__).resolve().parent.parent
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.agent_safety_config import load_config
+from scripts.check_repo_hygiene import evaluate_worktree_change_budget
+
 REPO_MARKERS = (
     "pyproject.toml",
     "thomas/__init__.py",
@@ -323,6 +330,21 @@ def _check_worktree_clean(root: Path) -> dict[str, str]:
         )
     dirty_lines = [line for line in result.stdout.splitlines() if line.strip()]
     if dirty_lines:
+        config = load_config()
+        try:
+            change_budget = evaluate_worktree_change_budget(
+                root,
+                dirty_lines,
+                max_changed_lines=config.worktree_max_uncommitted_changed_lines(),
+                ignore_prefixes=config.worktree_change_budget_ignore_prefixes(),
+            )
+        except Exception:
+            change_budget = {
+                "ok": True,
+                "threshold": config.worktree_max_uncommitted_changed_lines(),
+                "total_changed_lines": 0,
+                "violations": [],
+            }
         # Categorize the dirty state
         modified = sum(1 for line in dirty_lines if line[0:2].strip() in ("M", "MM", "AM"))
         untracked = sum(1 for line in dirty_lines if line.startswith("??"))
@@ -335,6 +357,22 @@ def _check_worktree_clean(root: Path) -> dict[str, str]:
         if staged:
             summary_parts.append(f"{staged} staged")
         summary = ", ".join(summary_parts) if summary_parts else f"{len(dirty_lines)} changed"
+        total_changed_lines = int(change_budget.get("total_changed_lines", 0) or 0)
+        threshold = int(change_budget.get("threshold", 0) or 0)
+        if total_changed_lines > threshold:
+            return _result(
+                "worktree-clean",
+                "blocked",
+                (
+                    "Worktree checkpoint required: "
+                    f"{summary}, {total_changed_lines} changed lines exceeds "
+                    f"max_uncommitted_changed_lines={threshold}."
+                ),
+                user_action=(
+                    "Commit or stash the current branch state before continuing. "
+                    "Use a checkpoint/WIP commit if needed so the next agent does not build on hidden uncommitted work."
+                ),
+            )
         benchmark_context, benchmark_error = get_benchmark_context(root)
         if benchmark_context is not None:
             allowed_root = str(benchmark_context.get("root") or "")

@@ -135,3 +135,40 @@ def test_onboarding_outcomes_gate_fails_when_median_time_to_ready_is_too_high() 
     assert gate["ok"] is False
     errors = " | ".join(gate["errors"])
     assert "median time-to-ready above target" in errors
+
+
+def test_onboarding_outcomes_gate_warns_when_completion_sample_is_too_small() -> None:
+    report = {
+        "ok": True,
+        "window_days": 7,
+        "summary": {
+            "events": 25,
+            "runs": 1,
+            "unique_users": 0,
+            "wizard_opened": 1,
+            "onboarding_completed": 0,
+            "completion_rate": 0.0,
+            "recovery_attempts": 0,
+            "recovery_succeeded": 0,
+            "recovery_success_rate": 0.0,
+            "completed_journeys_with_timing": 0,
+            "median_time_to_ready_seconds": 0.0,
+        },
+        "stage_counts": {},
+        "event_counts": {},
+        "top_failures": [],
+        "top_failure_reasons": [],
+    }
+
+    gate = evaluate_onboarding_outcomes_gate(
+        report,
+        min_events_for_quality_thresholds=20,
+        min_started_journeys_for_completion_rate=3,
+        min_completion_rate=0.9,
+        min_recovery_success_rate=0.8,
+        max_median_time_to_ready_seconds=480.0,
+    )
+
+    assert gate["ok"] is True
+    assert gate["errors"] == []
+    assert any("insufficient completed onboarding-start sample" in msg for msg in gate["warnings"])

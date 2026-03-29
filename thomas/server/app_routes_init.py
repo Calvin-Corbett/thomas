@@ -6,6 +6,7 @@ import asyncio
 import contextlib
 import logging
 import mimetypes
+import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
@@ -568,6 +569,41 @@ def _setup_routes_and_handlers(
 
     _register_secrets_routes(app)
 
+    def _register_webhooks_routes(app_ref: web.Application) -> None:
+        """Register webhook management and public receive routes."""
+        if not callable(_require_api_access):
+            log.warning("Webhook route registration skipped: missing API access guard")
+            return
+        try:
+            from thomas.server.routes.webhooks_aiohttp import register_webhooks_routes
+
+            register_webhooks_routes(
+                app_ref,
+                require_api_access=_require_api_access,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Webhook routes unavailable: %s", e)
+
+    _register_webhooks_routes(app)
+
+    def _register_workspace_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
+        """Register multi-tenant workspace APIs."""
+        if not callable(_require_api_access):
+            log.warning("Workspace route registration skipped: missing API access guard")
+            return
+        try:
+            from thomas.server.workspace.router import setup as setup_workspace_router
+
+            setup_workspace_router(
+                app_ref,
+                cfg_ref,
+                require_api_access=_require_api_access,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Workspace routes unavailable: %s", e)
+
+    _register_workspace_routes(app, config)
+
     def _register_local_project_routes(app_ref: web.Application) -> None:
         """Register local project APIs used by the My Stuff workspace."""
         if not all(callable(dep) for dep in (_require_api_access, _require_loopback, _read_json)):
@@ -741,7 +777,7 @@ def _setup_routes_and_handlers(
                     continue
 
                 raw_path = str(resource.canonical or "")
-                sample_path = raw_path.replace("{", ":").replace("}", "")
+                sample_path = re.sub(r"\{[^}]+\}", "audit", raw_path)
 
                 if raw_path.startswith("/webhooks/receive/"):
                     policies.append(
@@ -749,7 +785,7 @@ def _setup_routes_and_handlers(
                             "method": method,
                             "path": raw_path,
                             "sample_path": sample_path,
-                            "authz": "optional_signature_or_secret",
+                            "authz": "webhook_provider_signature_or_secret",
                             "csrf": "not_applicable_webhook_receiver",
                             "enforced_by": ["webhook_provider_signature_validation"],
                         }
@@ -758,6 +794,7 @@ def _setup_routes_and_handlers(
                 if (
                     sample_path.startswith("/api/")
                     or sample_path.startswith("/gateway/")
+                    or sample_path.startswith("/openai-compat/")
                     or sample_path.startswith("/v1/")
                     or sample_path == "/probe"
                 ):

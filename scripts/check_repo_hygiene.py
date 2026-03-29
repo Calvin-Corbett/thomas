@@ -5,12 +5,17 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import sys
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 from typing import Any
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_BASELINE = "docs/repo_hygiene_baseline.json"
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from scripts.agent_safety_config import load_config
 
 
 def _normalize(path: str) -> str:
@@ -95,6 +100,44 @@ def _sample_paths(paths: Sequence[str], *, limit: int = 5) -> str:
     return sample
 
 
+def _git_diff_numstat(repo_root: Path, args: Sequence[str]) -> list[tuple[str, int, int]]:
+    proc = subprocess.run(
+        ["git", *args],
+        cwd=repo_root,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(proc.stderr.strip() or f"git {' '.join(args)} failed")
+    rows: list[tuple[str, int, int]] = []
+    for raw in proc.stdout.splitlines():
+        parts = raw.split("\t")
+        if len(parts) < 3:
+            continue
+        added_raw, deleted_raw = parts[0].strip(), parts[1].strip()
+        path = _normalize(parts[-1])
+        if not path:
+            continue
+        if added_raw.isdigit() and deleted_raw.isdigit():
+            rows.append((path, int(added_raw), int(deleted_raw)))
+        else:
+            rows.append((path, 0, 0))
+    return rows
+
+
+def _count_file_lines(path: Path) -> int:
+    try:
+        data = path.read_bytes()
+    except OSError:
+        return 0
+    if not data or b"\x00" in data:
+        return 0
+    count = data.count(b"\n")
+    if not data.endswith(b"\n"):
+        count += 1
+    return count
+
+
 def _tracked_root_files(tracked_paths: Sequence[str]) -> list[str]:
     return sorted(
         {
@@ -160,6 +203,63 @@ def evaluate_worktree_clean(status_lines: Sequence[str]) -> dict[str, Any]:
             "unstaged_count": len(unstaged_paths),
             "untracked_count": len(untracked_paths),
         },
+        "violations": violations,
+    }
+
+
+def evaluate_worktree_change_budget(
+    repo_root: Path,
+    status_lines: Sequence[str],
+    *,
+    max_changed_lines: int,
+    ignore_prefixes: Sequence[str] = (),
+) -> dict[str, Any]:
+    threshold = max(0, int(max_changed_lines))
+    prefixes = [_normalize(prefix) for prefix in ignore_prefixes if _normalize(prefix)]
+    worktree = evaluate_worktree_clean(status_lines)
+    tracked_rows = [
+        (path, added, deleted)
+        for path, added, deleted in _git_diff_numstat(repo_root, ["diff", "--numstat", "HEAD"])
+        if not any(_normalize(path).startswith(prefix) for prefix in prefixes)
+    ]
+    tracked_added = sum(added for _path, added, _deleted in tracked_rows)
+    tracked_deleted = sum(deleted for _path, _added, deleted in tracked_rows)
+    tracked_total = tracked_added + tracked_deleted
+
+    untracked_rows: list[dict[str, Any]] = []
+    untracked_total = 0
+    for raw_path in list(worktree.get("untracked_paths") or []):
+        path = _normalize(raw_path)
+        if not path or any(path.startswith(prefix) for prefix in prefixes):
+            continue
+        file_path = repo_root / path
+        if not file_path.is_file():
+            continue
+        line_count = _count_file_lines(file_path)
+        untracked_total += line_count
+        untracked_rows.append({"path": path, "lines": line_count})
+
+    total_changed_lines = tracked_total + untracked_total
+    violations: list[str] = []
+    if total_changed_lines > threshold:
+        violations.append(
+            "uncommitted change budget exceeded: "
+            f"{total_changed_lines} changed lines exceeds max_uncommitted_changed_lines={threshold}"
+        )
+
+    return {
+        "ok": not violations,
+        "threshold": threshold,
+        "ignore_prefixes": prefixes,
+        "tracked_total_changed_lines": tracked_total,
+        "tracked_added_lines": tracked_added,
+        "tracked_deleted_lines": tracked_deleted,
+        "tracked_path_count": len(tracked_rows),
+        "tracked_rows": [{"path": path, "added": added, "deleted": deleted} for path, added, deleted in tracked_rows],
+        "untracked_total_changed_lines": untracked_total,
+        "untracked_path_count": len(untracked_rows),
+        "untracked_rows": untracked_rows,
+        "total_changed_lines": total_changed_lines,
         "violations": violations,
     }
 
@@ -267,6 +367,7 @@ def run(argv: Sequence[str] | None = None) -> int:
 
     try:
         baseline = _load_baseline(baseline_path)
+        config = load_config()
         tracked = _git_ls_files(repo_root)
         if args.sync_baseline:
             synced = build_synced_baseline(baseline, tracked)
@@ -285,10 +386,22 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print("Repo hygiene baseline synced: " f"tracked_root_file_count={payload['tracked_root_file_count']}")
             return 0
 
-        worktree = evaluate_worktree_clean(_git_status_porcelain(repo_root))
+        status_lines = _git_status_porcelain(repo_root)
+        worktree = evaluate_worktree_clean(status_lines)
         result = evaluate_hygiene(tracked, baseline)
         result["worktree"] = worktree
         result["worktree_clean"] = bool(worktree.get("ok", False))
+        change_budget = evaluate_worktree_change_budget(
+            repo_root,
+            status_lines,
+            max_changed_lines=config.worktree_max_uncommitted_changed_lines(),
+            ignore_prefixes=config.worktree_change_budget_ignore_prefixes(),
+        )
+        result["change_budget"] = change_budget
+        if not bool(change_budget.get("ok", True)):
+            for msg in list(change_budget.get("violations") or []):
+                result["violations"].append(msg)
+            result["ok"] = False
         generated_artifacts = evaluate_generated_artifacts(list(worktree.get("untracked_paths") or []), baseline)
         result["generated_artifacts"] = generated_artifacts
         if not bool(generated_artifacts.get("ok", True)):

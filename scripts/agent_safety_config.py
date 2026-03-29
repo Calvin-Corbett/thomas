@@ -81,6 +81,18 @@ class AgentSafetyConfig:
     def all_code_dirs(self) -> list[str]:
         return self.source_dirs() + self.test_dirs()
 
+    def worktree_max_uncommitted_changed_lines(self) -> int:
+        return int(self._get("worktree_hygiene", "max_uncommitted_changed_lines", default=300))
+
+    def worktree_change_budget_ignore_prefixes(self) -> list[str]:
+        return list(
+            self._get(
+                "worktree_hygiene",
+                "change_budget_ignore_prefixes",
+                default=["output/", "runtime/", "artifacts/", "tmp/", ".venv/", "node_modules/"],
+            )
+        )
+
     # ── File Size Limits ─────────────────────────────────────────────────
 
     def python_soft_limit(self) -> int:

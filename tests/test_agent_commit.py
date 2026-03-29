@@ -84,6 +84,37 @@ def test_site_visual_proof_gate_only_runs_for_site_paths() -> None:
     assert mod._gate_applies("boot_smoke", ["scripts/agent_commit.py"]) is True
 
 
+def test_release_update_gate_command_is_scoped_to_selected_paths() -> None:
+    command = mod._resolved_gate_command(
+        "release_update",
+        (sys.executable, "scripts/check_release_update_gate.py", "--no-include-untracked"),
+        selected_paths=("thomas/server/app.py", "CHANGELOG.md"),
+    )
+
+    assert command == [
+        sys.executable,
+        "scripts/check_release_update_gate.py",
+        "--no-include-untracked",
+        "--changed-file",
+        "thomas/server/app.py",
+        "--changed-file",
+        "CHANGELOG.md",
+    ]
+
+
+def test_non_release_gate_command_is_unchanged() -> None:
+    command = mod._resolved_gate_command(
+        "boot_smoke",
+        (sys.executable, "scripts/check_boot_smoke_gate.py"),
+        selected_paths=("thomas/server/app.py",),
+    )
+
+    assert command == [
+        sys.executable,
+        "scripts/check_boot_smoke_gate.py",
+    ]
+
+
 def test_agent_commit_succeeds_with_unrelated_dirty_paths(tmp_path: Path) -> None:
     repo, workboard = _init_repo(
         tmp_path,
