@@ -25,13 +25,14 @@ from thomas.core.autonomy import autonomy_spec
 from thomas.core.config import load_config
 from thomas.core.events import AgentEvent, EventType
 from thomas.core.llm import LLMError
-from thomas.core.rules_of_road import evaluate_rules
+from thomas.core.rules_of_road import build_remediation_prompt, evaluate_rules
 from thomas.core.token_economy import (
     build_token_economy_meta,
     loop_context_budgets,
     loop_iteration_prompt_caps,
     loop_tool_spec_budgets,
     normalize_token_economy_level,
+    runtime_overhead_policy,
 )
 from thomas.core.tokens import estimate_tokens, estimate_tools_tokens
 
@@ -171,7 +172,6 @@ async def _agent_loop_run(
     route_path = str(route.path or "")
     project_related = self._is_project_related_prompt(prompt_text)
     explicit_action = self._has_explicit_action_intent(prompt_text)
-    low_intent_route = self._is_low_intent_route(route_path)
     continuation_turn = bool(route_input_source == "history_augmented")
     reply_first_route = _is_reply_first_route(
         route_path=route_path,
@@ -183,24 +183,32 @@ async def _agent_loop_run(
     effective_mode = route.mode
     applied_token_economy = normalize_token_economy_level(token_economy)
     token_economy_meta = build_token_economy_meta(token_economy, applied_token_economy)
+    overhead_policy = runtime_overhead_policy(applied_token_economy)
+    self._memory_include_profile_economy_cap = bool(overhead_policy.include_memory_profile)
     _budget_economy = applied_token_economy
     strict_issue_ownership = bool(
         self._non_coder_profile
         or str(self._profile_type or "").strip().lower() == "non_coder"
         or str(self._profile_type or "").strip().lower() == "non-coder"
     )
-    best_practice_gate_active = bool(self._non_coder_profile) or bool(best_practice_gate_hint(prompt_text))
+    best_practice_gate_active = bool(overhead_policy.include_best_practice_hint) and (
+        bool(self._non_coder_profile) or bool(best_practice_gate_hint(prompt_text))
+    )
     best_practice_gate_source = "profile_non_coder" if bool(self._non_coder_profile) else ""
     if not best_practice_gate_source and best_practice_gate_hint(prompt_text):
         best_practice_gate_source = "prompt"
 
-    review_quality_hint = simplified_review_default_hint(
-        self._review_depth,
-        non_coder_profile=bool(self._non_coder_profile),
-    )
-    best_practice_hint = (
-        best_practice_default_hint() if bool(self._non_coder_profile) else best_practice_gate_hint(prompt_text)
-    )
+    review_quality_hint = ""
+    if overhead_policy.include_review_quality_hint:
+        review_quality_hint = simplified_review_default_hint(
+            self._review_depth,
+            non_coder_profile=bool(self._non_coder_profile),
+        )
+    best_practice_hint = ""
+    if overhead_policy.include_best_practice_hint:
+        best_practice_hint = (
+            best_practice_default_hint() if bool(self._non_coder_profile) else best_practice_gate_hint(prompt_text)
+        )
     code_output_validation_enabled = bool(prompt_requests_code_output(prompt_text))
     runtime_skills_context = ""
     runtime_skills_payload: dict[str, Any] = {
@@ -216,7 +224,13 @@ async def _agent_loop_run(
     # explicitly asks for a skill.
     prompt_lower = str(prompt_text or "").lower()
     explicit_skill_hint = ("$" in str(prompt_text or "")) or ("skill " in prompt_lower)
-    if not reply_first_route or explicit_skill_hint:
+    skills_mode = str(overhead_policy.runtime_skills_mode or "off").strip().lower()
+    should_resolve_runtime_skills = False
+    if skills_mode == "auto":
+        should_resolve_runtime_skills = (not reply_first_route) or explicit_skill_hint
+    elif skills_mode == "explicit":
+        should_resolve_runtime_skills = explicit_skill_hint
+    if should_resolve_runtime_skills:
         try:
             runtime_skills = resolve_runtime_skills(
                 self.config,
@@ -604,10 +618,16 @@ async def _agent_loop_run(
                 budget_override=route.memory_budget_tokens,
             )
         continuity_hint = self._input_continuity_hint(prompt_text) if (continuation_turn or user_is_confused) else ""
-        test_visibility_hint = "" if reply_first_route else live_test_default_hint(prompt_text)
-        library_text = ""
-        if (not reply_first_route) and (route_path != "coding_task" or str(effective_mode or "").strip().lower() == "thinking"):
-            library_text = self._retrieve_library(prompt_text, route)
+    test_visibility_hint = ""
+    if overhead_policy.include_test_visibility_hint and not reply_first_route:
+        test_visibility_hint = live_test_default_hint(prompt_text)
+    library_text = ""
+    if (
+        overhead_policy.include_library_context
+        and (not reply_first_route)
+        and (route_path != "coding_task" or str(effective_mode or "").strip().lower() == "thinking")
+    ):
+        library_text = self._retrieve_library(prompt_text, route)
         extra_context_parts: list[str] = []
         if memory_text:
             extra_context_parts.append(str(memory_text))
@@ -668,12 +688,15 @@ async def _agent_loop_run(
             state,
             memory_text=mem,
             tool_specs=tool_specs,
-            include_purpose=route.include_purpose,
+            include_purpose=bool(route.include_purpose) and bool(overhead_policy.include_purpose_brief),
             preserve_first=preserve_first,
             preserve_last=preserve_last,
             history_token_cap=history_token_cap,
             route_path=str(route.path or ""),
             skills_context=runtime_skills_context,
+            include_autonomy_profile=bool(overhead_policy.include_autonomy_profile),
+            include_editing_policy=bool(overhead_policy.include_editing_policy),
+            include_project_instructions=bool(overhead_policy.include_project_instructions),
         )
         iter_token_estimates.append(int(state.token_estimate))
         cumulative_context_tokens += int(state.token_estimate)
@@ -768,7 +791,7 @@ async def _agent_loop_run(
                         flush_len = _stable_text_emit_length(visible_text)
                         visible_prefix = visible_text[:flush_len]
                         if visible_prefix.startswith(streamed_visible_text):
-                            delta = visible_prefix[len(streamed_visible_text):]
+                            delta = visible_prefix[len(streamed_visible_text) :]
                             if delta:
                                 streamed_visible_text = visible_prefix
                                 yield AgentEvent.text_delta(delta, iteration=iteration)
@@ -944,7 +967,7 @@ async def _agent_loop_run(
             yield AgentEvent.text_delta(iter_text, iteration=iteration)
         elif iter_text:
             if iter_text.startswith(streamed_visible_text):
-                tail = iter_text[len(streamed_visible_text):]
+                tail = iter_text[len(streamed_visible_text) :]
                 if tail:
                     yield AgentEvent.text_delta(tail, iteration=iteration)
                     streamed_visible_text = iter_text

@@ -207,6 +207,9 @@ def apply_memory_policy(agent: AgentLoop, route: RouteDecision) -> None:
     pref_include_profile = getattr(agent, "_memory_include_profile_pref", None)
     if pref_include_profile is not None:
         include_profile = bool(pref_include_profile)
+    economy_include_profile_cap = getattr(agent, "_memory_include_profile_economy_cap", None)
+    if economy_include_profile_cap is not None:
+        include_profile = bool(include_profile) and bool(economy_include_profile_cap)
 
     pref_pins_only = getattr(agent, "_memory_pins_only_pref", None)
     pins_only = bool(pref_pins_only) if pref_pins_only is not None else False

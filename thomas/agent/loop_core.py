@@ -265,6 +265,9 @@ class AgentLoop:
         include_purpose: bool = True,
         route_path: str = "",
         skills_context: str = "",
+        include_autonomy_profile: bool = True,
+        include_editing_policy: bool = True,
+        include_project_instructions: bool = True,
     ) -> dict[str, Any]:
         """Build the system prompt for an LLM call."""
         import sys
@@ -296,7 +299,7 @@ class AgentLoop:
         # For casual/low-intent routes, the autonomy directive ("execute tasks
         # autonomously…") confuses the LLM into agent-speak instead of
         # natural conversation.
-        if route not in _low_intent_paths:
+        if include_autonomy_profile and route not in _low_intent_paths:
             autonomy_lv = self._autonomy_level
             autonomy_name = autonomy_level_name(autonomy_lv)
             autonomy_directive = autonomy_system_directive(autonomy_lv)
@@ -309,7 +312,7 @@ class AgentLoop:
             )
 
         # Editing policy is only needed on routes that are likely to mutate files.
-        if route in _editing_policy_paths:
+        if include_editing_policy and route in _editing_policy_paths:
             prompt = (
                 prompt.rstrip() + "\n\n--- Editing Policy ---\n"
                 "When editing existing files, prefer diff.create (find-and-replace) over fs.write_file.\n"
@@ -319,7 +322,7 @@ class AgentLoop:
             )
 
         # Per-project instructions (THOMAS.md) are only injected for execution routes.
-        if route in _project_instruction_paths:
+        if include_project_instructions and route in _project_instruction_paths:
             try:
                 sandbox_root = Path(os.getcwd())
                 project_content = discover_project_instructions(sandbox_root)
@@ -346,6 +349,9 @@ class AgentLoop:
         history_token_cap: int | None = None,
         route_path: str = "",
         skills_context: str = "",
+        include_autonomy_profile: bool = True,
+        include_editing_policy: bool = True,
+        include_project_instructions: bool = True,
     ) -> list[dict[str, Any]]:
         """Build the message list for an LLM call, with context window management."""
         system_msg = self._build_system_message(
@@ -353,6 +359,9 @@ class AgentLoop:
             include_purpose=include_purpose,
             route_path=route_path,
             skills_context=skills_context,
+            include_autonomy_profile=include_autonomy_profile,
+            include_editing_policy=include_editing_policy,
+            include_project_instructions=include_project_instructions,
         )
         system_tokens = estimate_message_tokens(system_msg)
 
@@ -711,9 +720,7 @@ class AgentLoop:
             return True
 
         # File-ish patterns (paths, extensions)
-        if _FILE_PATH_PATTERN.search(prompt):
-            return True
-        return False
+        return bool(_FILE_PATH_PATTERN.search(prompt))
 
     def _sync_user_message_to_intelligence(self, text: str) -> None:
         """Sync a user message to the conversation intelligence tracker.
