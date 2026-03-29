@@ -9,6 +9,9 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+### Changed
+- runtime: Token-economy now scales prompt/context overhead as well as pass counts, so `cheap` strips most optional scaffolding, `balanced`/`optimal` keeps only the highest-impact extras, and `max` retains the fuller autonomy/skills/test-visibility stack.
+
 ## [0.14.54] - 2026-03-29
 
 ### Changed

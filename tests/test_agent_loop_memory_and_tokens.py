@@ -2,6 +2,7 @@ import asyncio
 import unittest
 from dataclasses import dataclass
 from typing import Any
+from unittest.mock import patch
 
 from thomas.agent.loop import AgentLoop
 from thomas.agent.loop_streaming import apply_memory_policy, validate_memory_relevance
@@ -9,6 +10,7 @@ from thomas.agent.routing import RouteDecision
 from thomas.core.config import AppConfig, ModelConfig
 from thomas.core.events import EventType
 from thomas.core.llm import StreamEvent, TokenUsage
+from thomas.core.token_economy import normalize_token_economy_level, runtime_overhead_policy
 from thomas.tools.registry import ToolRegistry
 
 
@@ -80,11 +82,11 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         agent = AgentLoop(cfg, DummyLLM(), tools, conversation=[], memory=memory, thread_id="t1")
         return agent, memory
 
-    def test_memory_retrieval_is_always_on_for_general_chat(self) -> None:
+    def test_memory_retrieval_runs_for_actionable_prompt(self) -> None:
         agent, memory = self._build_agent()
 
         async def run_once():
-            async for _ in agent.run("hello how are you", tools_policy="never", mode="auto"):
+            async for _ in agent.run("find the bug in main.py", tools_policy="never", mode="auto"):
                 pass
             await asyncio.sleep(0.02)
 
@@ -97,7 +99,7 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         agent, memory = self._build_agent()
 
         async def run_once():
-            async for _ in agent.run("just a quick answer", tools_policy="never", mode="fast"):
+            async for _ in agent.run("inspect server.py and fix the bug", tools_policy="never", mode="fast"):
                 pass
             await asyncio.sleep(0.02)
 
@@ -146,7 +148,7 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         policy = memory.thread_memory_policy("t1")
         self.assertTrue(policy.get("enabled"))
         self.assertTrue(policy.get("include_global"))
-        self.assertTrue(policy.get("include_profile"))
+        self.assertFalse(policy.get("include_profile"))
 
     def test_memory_policy_pref_overrides_apply_to_thread_settings(self) -> None:
         agent, memory = self._build_agent()
@@ -192,6 +194,85 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
         self.assertTrue(bool(policy.get("auto_optimize_enabled")))
         self.assertAlmostEqual(float(policy.get("auto_optimize_waste_threshold") or 0.0), 0.33, places=6)
         self.assertAlmostEqual(float(policy.get("auto_optimize_min_interval_hours") or 0.0), 1.25, places=6)
+
+    def test_memory_policy_respects_token_economy_profile_cap(self) -> None:
+        agent, memory = self._build_agent()
+        agent._memory_include_profile_economy_cap = False
+
+        route = RouteDecision(
+            path="general",
+            confidence=1.0,
+            reasons=["test"],
+            mode="auto",
+            tools_policy="auto",
+            include_purpose=False,
+            memory_include_global=True,
+            memory_include_profile=True,
+            memory_budget_tokens=800,
+        )
+        apply_memory_policy(agent, route)
+
+        policy = memory.thread_memory_policy("t1")
+        self.assertFalse(policy.get("include_profile"))
+
+    def test_runtime_overhead_policy_balances_prompt_extras(self) -> None:
+        self.assertEqual(normalize_token_economy_level("balanced"), "optimal")
+
+        cheap = runtime_overhead_policy("cheap")
+        optimal = runtime_overhead_policy("balanced")
+        max_policy = runtime_overhead_policy("max")
+
+        self.assertFalse(cheap.include_autonomy_profile)
+        self.assertFalse(cheap.include_library_context)
+        self.assertEqual(cheap.runtime_skills_mode, "off")
+
+        self.assertTrue(optimal.include_autonomy_profile)
+        self.assertTrue(optimal.include_project_instructions)
+        self.assertFalse(optimal.include_memory_profile)
+        self.assertEqual(optimal.runtime_skills_mode, "explicit")
+
+        self.assertTrue(max_policy.include_memory_profile)
+        self.assertTrue(max_policy.include_test_visibility_hint)
+        self.assertEqual(max_policy.runtime_skills_mode, "auto")
+
+    def test_build_system_message_can_omit_optional_overhead_sections(self) -> None:
+        agent, _memory = self._build_agent()
+        with (
+            patch("thomas.agent.loop_core._load_purpose_text", return_value="purpose text"),
+            patch("thomas.agent.loop_core.discover_project_instructions", return_value="project instructions"),
+            patch("thomas.agent.loop_core.format_project_instructions", return_value="--- Project Instructions ---"),
+        ):
+            disabled = agent._build_system_message(
+                "",
+                include_purpose=False,
+                route_path="coding_task",
+                skills_context="",
+                include_autonomy_profile=False,
+                include_editing_policy=False,
+                include_project_instructions=False,
+            )
+            enabled = agent._build_system_message(
+                "",
+                include_purpose=True,
+                route_path="coding_task",
+                skills_context="SKILLS",
+                include_autonomy_profile=True,
+                include_editing_policy=True,
+                include_project_instructions=True,
+            )
+
+        disabled_text = str(disabled.get("content") or "")
+        enabled_text = str(enabled.get("content") or "")
+        self.assertNotIn("Autonomy Profile", disabled_text)
+        self.assertNotIn("Editing Policy", disabled_text)
+        self.assertNotIn("Purpose Brief", disabled_text)
+        self.assertNotIn("Project Instructions", disabled_text)
+
+        self.assertIn("Autonomy Profile", enabled_text)
+        self.assertIn("Editing Policy", enabled_text)
+        self.assertIn("Purpose Brief", enabled_text)
+        self.assertIn("Project Instructions", enabled_text)
+        self.assertIn("SKILLS", enabled_text)
 
     def test_validate_memory_relevance_prefers_query_term_coverage(self) -> None:
         strong = validate_memory_relevance(

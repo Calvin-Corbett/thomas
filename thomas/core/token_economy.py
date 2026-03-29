@@ -11,12 +11,15 @@ Levels:
 
 from __future__ import annotations
 
-from dataclasses import replace
+from dataclasses import dataclass, replace
 from typing import Any
 
 from thomas.core.config import AppConfig
 
 TOKEN_ECONOMY_LEVELS = ("cheap", "optimal", "max")
+TOKEN_ECONOMY_ALIASES = {
+    "balanced": "optimal",
+}
 RUN_MODES = ("auto", "fast", "thinking")
 
 # Number of passes (iterations) per economy level.
@@ -40,8 +43,71 @@ _MAX_PASSES = {
 }
 
 
+@dataclass(frozen=True)
+class RuntimeOverheadPolicy:
+    """Controls prompt/context extras by token-economy level.
+
+    These settings are about runtime prompt overhead, not repo-integrity hooks.
+    Cheap mode should stay lean; optimal keeps the highest-signal extras; max keeps
+    the fuller context stack.
+    """
+
+    include_purpose_brief: bool
+    include_autonomy_profile: bool
+    include_editing_policy: bool
+    include_project_instructions: bool
+    include_best_practice_hint: bool
+    include_review_quality_hint: bool
+    include_test_visibility_hint: bool
+    include_library_context: bool
+    include_memory_profile: bool
+    runtime_skills_mode: str
+
+
+_RUNTIME_OVERHEAD_POLICIES: dict[str, RuntimeOverheadPolicy] = {
+    "cheap": RuntimeOverheadPolicy(
+        include_purpose_brief=False,
+        include_autonomy_profile=False,
+        include_editing_policy=False,
+        include_project_instructions=False,
+        include_best_practice_hint=False,
+        include_review_quality_hint=False,
+        include_test_visibility_hint=False,
+        include_library_context=False,
+        include_memory_profile=False,
+        runtime_skills_mode="off",
+    ),
+    "optimal": RuntimeOverheadPolicy(
+        include_purpose_brief=False,
+        include_autonomy_profile=True,
+        include_editing_policy=True,
+        include_project_instructions=True,
+        include_best_practice_hint=True,
+        include_review_quality_hint=True,
+        include_test_visibility_hint=False,
+        include_library_context=True,
+        include_memory_profile=False,
+        runtime_skills_mode="explicit",
+    ),
+    "max": RuntimeOverheadPolicy(
+        include_purpose_brief=True,
+        include_autonomy_profile=True,
+        include_editing_policy=True,
+        include_project_instructions=True,
+        include_best_practice_hint=True,
+        include_review_quality_hint=True,
+        include_test_visibility_hint=True,
+        include_library_context=True,
+        include_memory_profile=True,
+        runtime_skills_mode="auto",
+    ),
+}
+
+
 def normalize_token_economy_level(raw: Any) -> str:
     level = str(raw or "").strip().lower()
+    if level in TOKEN_ECONOMY_ALIASES:
+        level = TOKEN_ECONOMY_ALIASES[level]
     if level in TOKEN_ECONOMY_LEVELS:
         return level
     return "optimal"
@@ -61,6 +127,12 @@ def build_token_economy_meta(requested_level: Any, applied_level: str | None = N
         "requested": requested or "optimal",
         "applied": applied,
     }
+
+
+def runtime_overhead_policy(level: Any) -> RuntimeOverheadPolicy:
+    """Return runtime prompt/context overhead policy for the economy level."""
+    applied = normalize_token_economy_level(level)
+    return _RUNTIME_OVERHEAD_POLICIES[applied]
 
 
 def compute_max_passes(level: Any, base_iterations: int) -> int:

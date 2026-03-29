@@ -23,7 +23,7 @@ def test_router_detects_casual_path_and_keeps_tools_available() -> None:
     assert d.path == PATH_CASUAL
     assert d.tools_policy == "auto"
     assert d.include_purpose is False
-    assert d.memory_include_global is False
+    assert d.memory_include_global is True
 
 
 def test_router_detects_debug_path_without_forced_reasoning_mode() -> None:

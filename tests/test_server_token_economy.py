@@ -43,9 +43,7 @@ class _FakeAgentLoopTokenEconomy:
         _ = job_type
         _ = token_economy
         _FakeAgentLoopTokenEconomy.last_mode = str(mode)
-        _FakeAgentLoopTokenEconomy.last_max_iterations = (
-            int(max_iterations) if max_iterations is not None else None
-        )
+        _FakeAgentLoopTokenEconomy.last_max_iterations = int(max_iterations) if max_iterations is not None else None
         yield AgentEvent(
             type=EventType.AGENT_START,
             data={
@@ -114,7 +112,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         route = [e for e in events if e.get("type") == "route"][0]
         self.assertEqual(str(route.get("mode") or ""), "fast")
         self.assertEqual(_FakeAgentLoopTokenEconomy.last_mode, "fast")
-        self.assertIsNone(_FakeAgentLoopTokenEconomy.last_max_iterations)
+        self.assertEqual(_FakeAgentLoopTokenEconomy.last_max_iterations, 25)
         done = [e for e in events if e.get("type") == "done"][0]
         self.assertEqual((done.get("token_economy") or {}).get("applied"), "max")
         self.assertEqual(
@@ -142,7 +140,7 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         route = [e for e in events if e.get("type") == "route"][0]
         self.assertEqual(str(route.get("mode") or ""), "thinking")
         self.assertEqual(_FakeAgentLoopTokenEconomy.last_mode, "thinking")
-        self.assertIsNone(_FakeAgentLoopTokenEconomy.last_max_iterations)
+        self.assertEqual(_FakeAgentLoopTokenEconomy.last_max_iterations, 3)
         done = [e for e in events if e.get("type") == "done"][0]
         self.assertEqual((done.get("token_economy") or {}).get("applied"), "cheap")
 
@@ -166,8 +164,29 @@ class TestServerTokenEconomy(AioHTTPTestCase):
         route = [e for e in events if e.get("type") == "route"][0]
         self.assertEqual(str(route.get("mode") or ""), "auto")
         self.assertEqual(_FakeAgentLoopTokenEconomy.last_mode, "auto")
-        self.assertIsNone(_FakeAgentLoopTokenEconomy.last_max_iterations)
+        self.assertEqual(_FakeAgentLoopTokenEconomy.last_max_iterations, 10)
         done = [e for e in events if e.get("type") == "done"][0]
+        self.assertEqual((done.get("token_economy") or {}).get("applied"), "optimal")
+
+    async def test_balanced_alias_maps_to_optimal(self):
+        sid = await self._new_session_id()
+        with patch("thomas.server.app.AgentLoop", _FakeAgentLoopTokenEconomy):
+            resp = await self.client.post(
+                "/api/chat",
+                json={
+                    "session_id": sid,
+                    "profile": "local",
+                    "mode": "auto",
+                    "token_economy": "balanced",
+                    "text": "run",
+                },
+            )
+
+        self.assertEqual(resp.status, 200)
+        events = _parse_ndjson(await resp.text())
+        self.assertTrue(events)
+        done = [e for e in events if e.get("type") == "done"][0]
+        self.assertEqual((done.get("token_economy") or {}).get("requested"), "balanced")
         self.assertEqual((done.get("token_economy") or {}).get("applied"), "optimal")
 
 
