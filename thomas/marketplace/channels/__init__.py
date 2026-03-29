@@ -42,16 +42,19 @@ from ._base import (
     DeliveryReceipt,
     UnifiedMessage,
 )
-from ._delivery import (
-    DeadLetterEntry,
-    DeliveryPolicy,
-    DeliveryQueue,
-)
-from ._registry import (
-    ChannelRegistry,
-    get_registry,
-)
+from ._delivery import DeadLetterEntry, DeliveryPolicy, DeliveryQueue
+from ._registry import ChannelRegistry, get_registry
 from ._router import ChannelRouter
+from .discord import DiscordChannelAdapter
+from .google_chat import GoogleChatChannelAdapter
+from .imessage import IMessageChannelAdapter
+from .matrix_adapter import MatrixChannelAdapter
+from .signal_adapter import SignalChannelAdapter
+from .slack import SlackChannelAdapter
+from .teams import MSTeamsChannelAdapter
+from .telegram import TelegramChannelAdapter
+from .webchat import WebChatChannelAdapter
+from .whatsapp import WhatsAppChannelAdapter
 
 __all__ = [
     # Base classes and data structures
@@ -66,6 +69,16 @@ __all__ = [
     # Registry
     "ChannelRegistry",
     "get_registry",
+    "DiscordChannelAdapter",
+    "GoogleChatChannelAdapter",
+    "IMessageChannelAdapter",
+    "MatrixChannelAdapter",
+    "MSTeamsChannelAdapter",
+    "SignalChannelAdapter",
+    "SlackChannelAdapter",
+    "TelegramChannelAdapter",
+    "WebChatChannelAdapter",
+    "WhatsAppChannelAdapter",
     # Delivery
     "DeliveryQueue",
     "DeliveryPolicy",

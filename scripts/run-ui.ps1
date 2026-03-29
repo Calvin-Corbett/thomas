@@ -17,6 +17,7 @@ $ErrorActionPreference = "Stop"
 
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
+$env:PYTHONDONTWRITEBYTECODE = "1"
 
 if ($Tray) {
   $NoTray = $false

@@ -65,7 +65,9 @@ def test_router_classifies_simple_edit_lane(tmp_path: Path) -> None:
     )
 
     assert payload["lane"] == "simple-edit"
-    assert payload["workboard_required"] is False
+    assert payload["workboard_required"] is True
+    assert "plans/thomas/WORKBOARD.md" in payload["required_reads"]
+    assert payload["required_checks"][0] == "Bootstrap a workboard claim before implementation."
     assert "docs/AGENT_FILE_EDITING_RULES.md" in payload["required_reads"]
 
 
@@ -177,7 +179,7 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
         "lane": "simple-edit",
         "workflow_mode": "guided",
         "edit_intent": True,
-        "workboard_required": False,
+        "workboard_required": True,
         "workboard": {
             "path": str(tmp_path / "WORKBOARD.md"),
             "active_claims": 0,
@@ -186,6 +188,7 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
             "stale": False,
             "updated_at": "2026-03-18",
         },
+        "bootstrap_command": 'python scripts/agent_bootstrap_claim.py --agent "<agent-id>" --scope "thomas/core/config.py" --task "Patch a small bug" --no-auto-dispatch',
         "flags": {
             "ui_proof": False,
             "benchmark_mode": False,
@@ -228,3 +231,4 @@ def test_router_text_output_surfaces_preflight(tmp_path: Path) -> None:
         in text
     )
     assert "preflight_checks:" in text
+    assert "bootstrap_command:" in text

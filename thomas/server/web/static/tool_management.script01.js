@@ -9,10 +9,34 @@
         };
 
         // API Functions
+        function normalizeToolList(payload) {
+            const rawTools = Array.isArray(payload)
+                ? payload
+                : (Array.isArray(payload?.tools) ? payload.tools : []);
+
+            return rawTools.map((tool) => {
+                const params = tool?.params && typeof tool.params === 'object'
+                    ? tool.params
+                    : (tool?.parameters && typeof tool.parameters === 'object' ? tool.parameters : {});
+                return {
+                    id: tool?.id || tool?.name || '',
+                    name: tool?.name || tool?.id || 'Unnamed tool',
+                    description: tool?.description || '',
+                    category: tool?.category || 'general',
+                    status: tool?.status || 'active',
+                    params,
+                    avgLatency: Number(tool?.avgLatency || 0),
+                    successRate: Number(tool?.successRate || 0),
+                    icon: tool?.icon || '',
+                    examples: tool?.examples || '',
+                };
+            });
+        }
+
         async function fetchTools() {
             try {
                 const response = await fetch('/api/tools');
-                state.tools = await response.json();
+                state.tools = normalizeToolList(await response.json());
                 updateStats();
                 renderTools();
                 return true;
@@ -84,7 +108,7 @@
             return state.tools.filter(tool => {
                 const matchCategory = state.selectedCategory === 'all' || tool.category === state.selectedCategory;
                 const matchSearch = tool.name.toLowerCase().includes(state.searchQuery.toLowerCase()) ||
-                                  tool.description.toLowerCase().includes(state.searchQuery.toLowerCase());
+                                  (tool.description || '').toLowerCase().includes(state.searchQuery.toLowerCase());
                 return matchCategory && matchSearch;
             });
         }

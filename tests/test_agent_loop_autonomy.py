@@ -85,14 +85,14 @@ def test_autonomy_level_4_keeps_casual_turns_lightweight() -> None:
     start = _collect_start("hey how are you", autonomy_level=4)
     assert start is not None
     assert start.data.get("tools_policy") == "never"
-    assert str(start.data.get("autonomy_name") or "").lower() == "agent"
+    assert str(start.data.get("autonomy_name") or "").lower() == "full autonomy"
 
 
 def test_autonomy_level_4_forces_full_auto_on_action_turns() -> None:
     start = _collect_start("fix this bug in app.py", autonomy_level=4)
     assert start is not None
     assert start.data.get("tools_policy") == "always"
-    assert str(start.data.get("autonomy_name") or "").lower() == "agent"
+    assert str(start.data.get("autonomy_name") or "").lower() == "full autonomy"
 
 
 def test_autonomy_level_2_keeps_guarded_auto_policy() -> None:

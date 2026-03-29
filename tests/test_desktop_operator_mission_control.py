@@ -93,3 +93,64 @@ def test_mission_control_payload_includes_desktop_operator(monkeypatch) -> None:
     assert "vmconnect.exe" in desktop_agents[0]["viewer_command"]
     assert desktop_agents[0]["installation_state"] == "local_vm_ready"
     assert desktop_agents[0]["trust_mode"] == "ask_every_time"
+
+
+class _IdleStubManager:
+    def status_snapshot(self) -> dict:
+        return {
+            "service_id": "desktop.operator",
+            "running": False,
+            "vm": {"vm_id": "vm-idle-01", "isolated": True},
+            "viewer": {
+                "available": True,
+                "mode": "hyperv_console",
+                "label": "Hyper-V console",
+                "url": "",
+                "command": "",
+                "takeover_supported": True,
+            },
+            "host_posture": {
+                "installation_state": "host_service_ready",
+                "session_target": "local_vm",
+                "trust_mode": "ask_every_time",
+                "next_action": "Managed local VM creation requires THOMAS_DESKTOP_VM_TEMPLATE_VHDX.",
+                "viewer": {
+                    "available": True,
+                    "mode": "hyperv_console",
+                    "label": "Hyper-V console",
+                    "url": "",
+                    "command": "",
+                    "takeover_supported": True,
+                },
+            },
+            "workflow_profiles": [{"workflow_profile": "browser-session", "adapter_name": "browser"}],
+            "active_session": None,
+        }
+
+
+def test_mission_control_hides_idle_desktop_operator_from_agent_queue(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "thomas.desktop_operator.manager.get_global_desktop_operator_manager",
+        lambda: _IdleStubManager(),
+    )
+
+    app = web.Application()
+    run_store_enabled_key = web.AppKey("run_store_enabled_test", bool)
+    run_store_module_key = web.AppKey("run_store_module_test", object)
+    app[run_store_enabled_key] = False
+    app[run_store_module_key] = None
+
+    api_mission_control, _stream, _approvals = build_mission_control_routes(
+        app,
+        require_api_access=lambda _request: None,
+        run_store_enabled_key=run_store_enabled_key,
+        run_store_module_key=run_store_module_key,
+    )
+
+    request = make_mocked_request("GET", "/api/mission/control", app=app)
+    response = __import__("asyncio").run(api_mission_control(request))
+    payload = json.loads(response.text)
+
+    assert payload["desktop_operator"]["service_id"] == "desktop.operator"
+    assert all(agent.get("id") != "desktop:operator" for agent in payload["agents"])
+    assert payload["totals"]["active_agents"] == 0

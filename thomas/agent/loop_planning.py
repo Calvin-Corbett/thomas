@@ -208,16 +208,14 @@ def looks_like_clarifying_question(text: str) -> bool:
         low,
     ):
         return False
-    if re.search(r"\b(cannot|can't|unable|impossible|missing|not available)\b", low):
-        return False
-    return True
+    return not re.search(r"\b(cannot|can't|unable|impossible|missing|not available)\b", low)
 
 
 def full_auto_nudge(prompt_text: str, retry_index: int) -> str:
     """Generate nudge for Autonomy level 4."""
     original_request = effective_prompt_text(prompt_text)
     return (
-        "Autonomy level 4 is enabled. Execute now and keep momentum unless a step is impossible or unsafe. "
+        "Full autonomy (L4) is enabled. Execute now and keep momentum unless a step is impossible or unsafe. "
         "HONESTY RULE: never claim actions were executed when they were not, and never fabricate files, outputs, or findings. "
         "If you cannot proceed because of missing credentials, missing access, or unsafe constraints, say that clearly and continue with what is possible. "
         f"(full_auto_retry={int(retry_index)}; original_request={original_request[:220]})"

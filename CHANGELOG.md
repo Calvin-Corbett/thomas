@@ -10,6 +10,13 @@ Versioning: Semantic Versioning.
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
 ### Added
+- channels: Added source-backed provider wrappers plus marketplace adapters for Discord, Telegram, WebChat, WhatsApp, and Slack, and expanded `thomas channels` to surface/configure/test those five channels instead of the old three-provider stub.
+- channels: Added a second OpenClaw-parity tranche for Google Chat, Microsoft Teams, Matrix, Signal, and iMessage, replacing the remaining placeholder marketplace adapters with source-backed provider integrations.
+- channels: Added a shared provider catalog plus a Thomas-native verification harness (`thomas channels verify`) that reports contract-level evidence for all known channels and optional live health probes for configured ones.
+- tests: Added `tests/test_channels_top5.py` coverage for top-five registry loading, provider-contract sends, login hooks, and live `thomas channels` CLI JSON output.
+- tests: Added `tests/test_channels_next5.py` coverage for the next-wave channel registry/CLI/provider-contract path, including Matrix local validation and mocked send flows for Google Chat, Teams, Matrix, Signal, and iMessage.
+- tests: Added channel verification harness coverage for the pure runner and the `channels verify` CLI entrypoint so contract-vs-live proof stays explicit.
+- site: Added localized docs routes plus generated marketplace/docs helpers so the public site can serve the new docs surface and sitemap entries from one source-backed content path.
 - tests: Added `/api/v2/chat` max-mode regression coverage plus dispatch-router heuristics coverage so the live default chat path is exercised directly.
 - tooling: New `scripts/test_stepup_protocol.py` repo-wide pytest runner that codifies the Thomas testing ladder as collect-only -> deterministic small shards -> larger shard bundles, with an optional final monolithic sweep.
 - skills: Thomas-native skill platform now ships first-party bundled skills under `skills/`, plus explicit external skill distillation drafts with review, no-copy validation, and promotion commands.
@@ -27,6 +34,26 @@ Versioning: Semantic Versioning.
 - safety: New `_check_worktree_clean()` in `agent_preflight.py` — reports dirty worktree state at session start so agents know they're working in a dirty tree (Finding 11)
 
 ### Changed
+- channels: `thomas channels list/status/configure/test` now uses a shared provider spec with token/webhook/target support and reports Discord, Telegram, WebChat, WhatsApp, and Slack as the first active OpenClaw-gap wave.
+- channels: `thomas channels list/status/configure/test` now also surfaces Google Chat, Microsoft Teams, Matrix, Signal, and iMessage, with per-provider local validation wired into the shared CLI/status path.
+- channels: The `channels` command surface now shares one provider catalog for listing, config resolution, local validation, and verification fixtures, so verification output and normal channel status cannot drift independently.
+- site: Refreshed the website footer/docs presentation, marketplace snapshot inputs, and proof artifacts so the public site and its verification baselines reflect the current catalog and docs IA.
+- ui: Removed the live Virtual Office surface from the active Thomas web runtime, turned the old office pages into reset placeholders, and forced stale office-mode boots back onto the remaining workspace slate.
+- ui: Reintroduced Virtual Office as a stripped-back draft workspace with a huge draggable/zoomable foundation grid so the Gather-style map can grow incrementally from a clean base.
+- ui: Tuned the Virtual Office draft-map camera so wheel zoom anchors correctly, the seed zone stays visually trackable, and zoomed-out views keep rendering the actual map surface instead of washed-out empty space.
+- ui: Extended the Virtual Office draft map with a much deeper zoom-out range and a floating draggable/minimizable minimap that shows the live camera viewport against the full office footprint.
+- ui: Reworked the Virtual Office draft map interactions so deep zoom-out panning stays stable, the old duplicate title bar stays hidden, and the new in-map toolbar can toggle a draggable/resizable minimap without the main camera hijacking minimap clicks.
+- ui: Refined the Virtual Office draft-map chrome so the top toolbar spans the full map width with a single minimap toggle, while the minimap stays square and exposes obvious `Move` / `Resize` controls instead of ambiguous icons.
+- ui: Simplified the Virtual Office minimap again so the whole minimap body drags directly, the hide button sits as a compact rectangular control in the top-right, and the resize affordance is reduced to a subtle bottom-right corner mark.
+- ui: Removed the draft-map seed marker and replaced it with the first actual room footprint: a simple Lounge block populated with one Thomas robot asset for scale.
+- ui: Expanded the first Lounge room to a real multi-robot footprint and added a first layered couch object so the office starts reading like furnished space instead of a placeholder box.
+- ui: Tuned the first Lounge couch down by roughly a third so it reads closer to a three-seat sofa against the Thomas robot scale instead of oversized furniture.
+- ui: Started turning the Lounge into an actual seating zone by adding a large carpet field and a second couch beside the first one instead of leaving a single floating sofa.
+- ui: Reworked the Lounge floor treatment so the whole room now reads as a lighter tan lounge floor, replacing the separate dark rug with a full-room surface.
+- ui: Added the first Virtual Office editing toolkit pass with an in-map `Office Editor` button, a right-side catalog panel, editable room floor palettes, and couch assets that can be added and dragged instead of being hardcoded decoration.
+- ui: Upgraded the draft Office Editor toward a Sims-style build flow with drag-to-place catalog furniture, grid snap, keyboard rotation controls, and room labels moved onto the outer border so assets can use the full interior.
+- ui: Tightened the draft Office Editor so catalog furniture only previews and places inside valid rooms, the couch catalog card reads as a visual asset tile, and rotation step changes stay click-only while `A` / `D` just rotate the selected item.
+- ui: Added draft-office save controls with an autosave toggle, a manual `Save` action, a visible `Back` undo action, and a richer selected-asset editor so placed couches can be restyled with color variants and scale presets instead of staying fixed-size/fixed-finish objects.
 - server: `/api/v2/chat` now keeps Thomas as the only conversational voice and treats Max mode as a silent background-delegation sidecar instead of surfacing named-bot orchestration in-band.
 - tooling: `scripts/auto_checks.py`, `scripts/agent_startup_router.py`, `docs/ai/CHECKLISTS/tests.md`, `docs/ai/CHECKLISTS/agent-lane-risky-edit.md`, `docs/ai/CHECKLISTS/agent-lane-multi-file.md`, `docs/ai/AGENT_PLAYBOOK.md`, and `README.md` now point broad repo verification at the step-up shard protocol instead of treating a single full-suite pytest command as the default path.
 - tooling: `scripts/agent_commit.py` now emits machine-readable blocker payloads and supports audited explicit-scope fallback commits when no active claim exists, while the workboard ownership gates recognize that fallback without allowing overlap with another agent's claim. Selected commit paths are now realigned to `HEAD` in the live index instead of being re-added from the worktree, so unrelated staging state stays stable.
@@ -42,6 +69,9 @@ Versioning: Semantic Versioning.
 - safety: Meta-test `test_all_local_hooks_are_skip_protected` ensures every hook in `.pre-commit-config.yaml` has a PROTECTED_SKIP_HOOKS entry — prevents future drift
 
 ### Fixed
+- safety: `scripts/post_commit_audit.py` now treats Codex session environments as agent contexts and records post-commit missing-changelog bypasses, so hook-bypassed agent commits are soft-reverted even when only Codex runtime env markers are present.
+- ui: Restored the tools API payload, fixed settings-back interaction isolation, re-bound UI Editor selection to the live DOM, and made Mission Control disable job creation when autonomy storage is unavailable.
+- tooling: Thomas launcher/runtime startup now exports `PYTHONDONTWRITEBYTECODE=1` early enough to keep repo-local `__pycache__` debris from breaking the safety gate during pytest and local UI runs.
 - chat: Tightened delegation routing so exploratory planning and status follow-ups stay conversational while explicit execution requests can start normalized background work without leaking `Got it. Sending ...` text into the transcript.
 - server: Corrected the chat runtime import in `thomas/server/routes/chat_request_setup.py` so `/api/chat` loads token-economy helpers from `thomas.core.token_economy` instead of the removed `thomas.core.runtime` module.
 - preferences: Restored the fallback `thomas.preferences.store` export surface so `PreferencesStore`, `get_db_path`, and related compatibility imports resolve when the monolith source loader is absent, allowing Thomas server startup to complete again.
@@ -70,6 +100,11 @@ Versioning: Semantic Versioning.
 - compatibility: Restored benchmark helper re-exports in `thomas/demo/agentic_benchmark.py` and the `serve_async` compatibility export in `thomas/server/app.py`, fixing collection/runtime surfaces that had drifted during the split-module refactor.
 - compatibility: Restored the agent-facing export surfaces expected by the comparison/workboard tooling, fixed the low-intent route prompt copy, and repaired the missing imports in `thomas/agent/loop_execution.py` so runtime skills and rules-of-road evaluation execute again during agent turns.
 - safety: Re-enabled explicit `THOMAS_AGENT_SAFETY_CONFIG` overrides for the safety hooks and disabled Python bytecode emission during pytest runs so alternate safety configs work without polluting `thomas/` with generated `.pyc` files.
+
+## [0.14.50] - 2026-03-27
+
+### Fixed
+- release: Restored the missing `0.14.50` changelog section header so release hygiene can map the current package version to an explicit changelog release entry.
 
 ## [0.14.47] - 2026-03-19
 

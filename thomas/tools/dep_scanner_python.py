@@ -198,6 +198,14 @@ def _python_scan(cfg: dict[str, Any], target: Path) -> list[VulnRecord]:
         else:
             data = _run_pip_audit_json(["--format", "json"], cwd=cwd)
 
+        if isinstance(data, dict):
+            dependencies = data.get("dependencies")
+            if not isinstance(dependencies, list):
+                raise DepScanError(
+                    "Unexpected pip-audit JSON structure "
+                    f"(expected list or object with `dependencies`), got: {type(data)}"
+                )
+            data = dependencies
         if not isinstance(data, list):
             raise DepScanError(f"Unexpected pip-audit JSON structure (expected list), got: {type(data)}")
 

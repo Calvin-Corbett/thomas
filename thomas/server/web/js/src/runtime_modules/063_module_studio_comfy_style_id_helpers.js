@@ -649,7 +649,7 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
     viewport.className = 'module-ui-editor-viewport';
     const frame = document.createElement('iframe');
     frame.className = 'module-ui-editor-frame';
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups allow-modals');
     frame.setAttribute('title', 'UI Editor Canvas');
     const hint = document.createElement('div');
     hint.className = 'module-ui-editor-hint';

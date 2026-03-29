@@ -1,4 +1,3 @@
-import fs from "node:fs";
 import { NextRequest, NextResponse } from "next/server";
 import { getHostedPlugin, verifyDownloadToken } from "@/lib/marketplace-catalog";
 
@@ -19,7 +18,7 @@ export async function GET(
     return NextResponse.json({ error: "Plugin not found" }, { status: 404 });
   }
 
-  const payload = fs.readFileSync(hosted.bundlePath);
+  const payload = Buffer.from(hosted.bundleBase64, "base64");
   return new NextResponse(payload, {
     status: 200,
     headers: {

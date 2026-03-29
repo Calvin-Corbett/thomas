@@ -15,6 +15,13 @@ type MetricsPayload = {
   };
 };
 
+type MetricsStripLabels = {
+  downloadIntents: string;
+  githubDownloads: string;
+  latestRelease: string;
+  unavailable: string;
+};
+
 function hasRealData(metrics: MetricsPayload): boolean {
   return (
     metrics.github.totalAssetDownloads > 0 ||
@@ -23,7 +30,7 @@ function hasRealData(metrics: MetricsPayload): boolean {
   );
 }
 
-export function MetricsStrip() {
+export function MetricsStrip({ labels }: { labels: MetricsStripLabels }) {
   const [metrics, setMetrics] = useState<MetricsPayload | null>(null);
 
   useEffect(() => {
@@ -49,16 +56,16 @@ export function MetricsStrip() {
     <section aria-label="Thomas website metrics">
       <div className="metrics-grid">
         <article className="metric-card">
-          <p className="metric-label">Download Intents (30d)</p>
+          <p className="metric-label">{labels.downloadIntents}</p>
           <p className="metric-value">{metrics.web.trackedIntentLast30Days.toLocaleString()}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">GitHub Downloads (All Time)</p>
+          <p className="metric-label">{labels.githubDownloads}</p>
           <p className="metric-value">{metrics.github.totalAssetDownloads.toLocaleString()}</p>
         </article>
         <article className="metric-card">
-          <p className="metric-label">Latest Release</p>
-          <p className="metric-value">{metrics.github.latestReleaseTag ?? "Unavailable"}</p>
+          <p className="metric-label">{labels.latestRelease}</p>
+          <p className="metric-value">{metrics.github.latestReleaseTag ?? labels.unavailable}</p>
         </article>
       </div>
     </section>

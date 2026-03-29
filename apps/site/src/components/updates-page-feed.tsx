@@ -10,6 +10,21 @@ type UpdatesPageFeedProps = {
   dataSourceLabel: string;
   showFailureNotice?: boolean;
   failureMessage?: string | null;
+  labels: {
+    releaseFeedUnavailable: string;
+    noEntriesYet: string;
+    noEntries: string;
+    noEntriesBody: string;
+    filters: string;
+    version: string;
+    allVersions: string;
+    fromDate: string;
+    toDate: string;
+    releaseSource: string;
+    noMatches: string;
+    openArtifact: string;
+    versionPrefix: string;
+  };
 };
 
 function isInRange(dateIso: string, startDate: string, endDate: string) {
@@ -26,7 +41,13 @@ function isInRange(dateIso: string, startDate: string, endDate: string) {
   return true;
 }
 
-export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, failureMessage }: UpdatesPageFeedProps) {
+export function UpdatesPageFeed({
+  releases,
+  dataSourceLabel,
+  showFailureNotice,
+  failureMessage,
+  labels,
+}: UpdatesPageFeedProps) {
   const [versionFilter, setVersionFilter] = useState("all");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -45,18 +66,18 @@ export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, 
     if (failureMessage) {
       return (
         <>
-          <CalloutBlock tone="warning" title="Release feed unavailable">
+          <CalloutBlock tone="warning" title={labels.releaseFeedUnavailable}>
             {failureMessage}
           </CalloutBlock>
-          <p className="system-metric-line">No release entries are available for this view yet.</p>
+          <p className="system-metric-line">{labels.noEntriesYet}</p>
         </>
       );
     }
 
     return (
       <>
-        <CalloutBlock tone="warning" title="No release entries">
-          No release data is available yet for this filter set.
+        <CalloutBlock tone="warning" title={labels.noEntries}>
+          {labels.noEntriesBody}
         </CalloutBlock>
       </>
     );
@@ -64,16 +85,16 @@ export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, 
 
   return (
     <>
-      <SystemSection title="Filters">
+      <SystemSection title={labels.filters}>
         <div className="system-metric-grid">
           <label className="system-metric-line">
-            Version
+            {labels.version}
             <select
               className="system-filter-select"
               value={versionFilter}
               onChange={(event) => setVersionFilter(event.target.value)}
             >
-              <option value="all">All versions</option>
+              <option value="all">{labels.allVersions}</option>
               {versionOptions.map((version) => (
                 <option key={version} value={version}>
                   {version}
@@ -82,7 +103,7 @@ export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, 
             </select>
           </label>
           <label className="system-metric-line">
-            From date
+            {labels.fromDate}
             <input
               className="system-filter-select"
               type="date"
@@ -91,7 +112,7 @@ export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, 
             />
           </label>
           <label className="system-metric-line">
-            To date
+            {labels.toDate}
             <input
               className="system-filter-select"
               type="date"
@@ -103,18 +124,18 @@ export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, 
       </SystemSection>
 
       {showFailureNotice ? (
-        <CalloutBlock tone="info" title="Release data source">
+        <CalloutBlock tone="info" title={labels.releaseSource}>
           {dataSourceLabel}
         </CalloutBlock>
       ) : (
-        <CalloutBlock tone="spec" title="Release data source">
+        <CalloutBlock tone="spec" title={labels.releaseSource}>
           {dataSourceLabel}
         </CalloutBlock>
       )}
 
       <div className="system-version-list">
         {filtered.length === 0 ? (
-          <p className="system-metric-line">No release matches the selected filters.</p>
+          <p className="system-metric-line">{labels.noMatches}</p>
         ) : (
           filtered.map((release) => (
             <details
@@ -123,7 +144,7 @@ export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, 
               data-system-detail-id={`release-${release.id}`}
             >
               <summary className="system-version-head">
-                <p className="system-section-title">Version {release.tag}</p>
+                <p className="system-section-title">{labels.versionPrefix} {release.tag}</p>
                 <p className="system-metric-value">{new Date(release.publishedAt).toLocaleDateString()}</p>
               </summary>
               <div className="system-subsection">
@@ -131,7 +152,7 @@ export function UpdatesPageFeed({ releases, dataSourceLabel, showFailureNotice, 
                 {release.htmlUrl ? (
                   <p className="system-metric-line">
                     <a className="text-link" href={release.htmlUrl} target="_blank" rel="noreferrer">
-                      Open release artifact
+                      {labels.openArtifact}
                     </a>
                   </p>
                 ) : null}

@@ -12,6 +12,9 @@ Public API:
 - create_run(metadata) -> run_id
 - append_event(run_id, event_type, payload, t_ms, seq)
 - finalize_run(run_id, ok, error, iterations, tool_calls, usage)
+- mark_run_dead(run_id, error) -> int
+- reconcile_orphaned_runs(started_before, reason) -> int
+- reconcile_stale_runs(idle_seconds, now_iso, reason) -> int
 - list_runs(limit, offset, filters)
 - get_run(run_id) -> metadata + ordered events
 - stream_replay(run_id) -> iterator of NDJSON-ready dicts
@@ -41,6 +44,7 @@ MAX_RUNS: int = 500
 MAX_DB_BYTES: int = 200 * 1024 * 1024  # ~200MB
 BUSY_TIMEOUT_MS: int = 8000
 ENABLE_FTS5: bool = True
+DEAD_RUN_ERROR_PREFIX = "dead_run:"
 
 _DB_PATH: Path | None = None
 _LOCK = threading.Lock()
@@ -164,6 +168,87 @@ def finalize_run(
             ),
         )
         _enforce_retention(conn)
+
+
+def mark_run_dead(run_id: str, error: str, *, ended_at: str | None = None) -> int:
+    db = _require_db()
+    ended_at_txt = str(ended_at or _utcnow_iso()).strip() or _utcnow_iso()
+    error_txt = str(error or "").strip() or "run was marked dead"
+    if not error_txt.lower().startswith(DEAD_RUN_ERROR_PREFIX):
+        error_txt = f"{DEAD_RUN_ERROR_PREFIX} {error_txt}"
+    with _connect(db) as conn:
+        cur = conn.execute(
+            """
+            UPDATE runs
+            SET ended_at = ?, ok = 0, error = ?
+            WHERE run_id = ?
+              AND (ended_at IS NULL OR trim(ended_at) = '')
+            """,
+            (ended_at_txt, error_txt, run_id),
+        )
+        _enforce_retention(conn)
+        return int(cur.rowcount or 0)
+
+
+def reconcile_orphaned_runs(
+    *,
+    started_before: str | None = None,
+    reason: str = "server startup reconciliation",
+    ended_at: str | None = None,
+) -> int:
+    db = _require_db()
+    ended_at_txt = str(ended_at or _utcnow_iso()).strip() or _utcnow_iso()
+    query = """
+        SELECT run_id
+        FROM runs
+        WHERE (ended_at IS NULL OR trim(ended_at) = '')
+          AND (? IS NULL OR started_at < ?)
+    """
+    with _connect(db) as conn:
+        rows = conn.execute(query, (started_before, started_before)).fetchall()
+    reconciled = 0
+    for row in rows:
+        reconciled += mark_run_dead(
+            str(row["run_id"] or "").strip(),
+            reason,
+            ended_at=ended_at_txt,
+        )
+    return int(reconciled)
+
+
+def reconcile_stale_runs(
+    *,
+    idle_seconds: int = 10 * 60,
+    now_iso: str | None = None,
+    reason: str = "stale run reconciliation",
+) -> int:
+    db = _require_db()
+    now_txt = str(now_iso or _utcnow_iso()).strip() or _utcnow_iso()
+    now_epoch = _iso_to_epoch(now_txt)
+    threshold = max(1, int(idle_seconds))
+    with _connect(db) as conn:
+        rows = conn.execute(
+            """
+            SELECT run_id, started_at
+            FROM runs
+            WHERE ended_at IS NULL OR trim(ended_at) = ''
+            """
+        ).fetchall()
+        stale_run_ids: list[str] = []
+        for row in rows:
+            run_id = str(row["run_id"] or "").strip()
+            if not run_id:
+                continue
+            started_at = str(row["started_at"] or "").strip()
+            activity_epoch = _latest_activity_epoch(conn, run_id, started_at)
+            if activity_epoch <= 0:
+                continue
+            if (now_epoch - activity_epoch) >= threshold:
+                stale_run_ids.append(run_id)
+    reconciled = 0
+    for run_id in stale_run_ids:
+        reconciled += mark_run_dead(run_id, reason, ended_at=now_txt)
+    return int(reconciled)
 
 
 def list_runs(limit: int = 50, offset: int = 0, filters: dict[str, Any] | None = None) -> list[dict[str, Any]]:
@@ -433,15 +518,13 @@ class ThreadedRunWriter:
                         flush()
                         return
                     if item == "__tick__":
-                        if batch and (now - last_flush) >= self.flush_interval_s:
-                            if not flush():
-                                return
+                        if batch and (now - last_flush) >= self.flush_interval_s and not flush():
+                            return
                         continue
                     t_ms, seq, event_type, payload_json, search_text = item
                     batch.append((int(t_ms), int(seq), str(event_type), payload_json, search_text))
-                    if len(batch) >= self.flush_every:
-                        if not flush():
-                            return
+                    if len(batch) >= self.flush_every and not flush():
+                        return
         except BaseException as e:
             if self._exc is None:
                 self._exc = e
@@ -731,6 +814,52 @@ def _row_to_run_dict(row: sqlite3.Row) -> dict[str, Any]:
 
 def _utcnow_iso() -> str:
     return _dt.datetime.now(tz=_dt.timezone.utc).isoformat(timespec="seconds")
+
+
+def _iso_to_epoch(value: Any) -> float:
+    txt = str(value or "").strip()
+    if not txt:
+        return 0.0
+    if txt.endswith("Z"):
+        txt = txt[:-1] + "+00:00"
+    try:
+        dt = _dt.datetime.fromisoformat(txt)
+    except Exception:
+        return 0.0
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_dt.timezone.utc)
+    return float(dt.timestamp())
+
+
+def _latest_activity_epoch(conn: sqlite3.Connection, run_id: str, started_at: str) -> float:
+    started_epoch = _iso_to_epoch(started_at)
+    row = conn.execute(
+        """
+        SELECT t_ms, payload_json
+        FROM events
+        WHERE run_id = ?
+        ORDER BY seq DESC, id DESC
+        LIMIT 1
+        """,
+        (run_id,),
+    ).fetchone()
+    if row is None:
+        return started_epoch
+    payload = _json_loads(row["payload_json"]) if row["payload_json"] else None
+    if isinstance(payload, dict):
+        try:
+            ts_ms = float(payload.get("ts_ms"))
+        except Exception:
+            ts_ms = 0.0
+        if ts_ms > 0:
+            return ts_ms / 1000.0
+    try:
+        t_ms = float(row["t_ms"])
+    except Exception:
+        t_ms = -1.0
+    if started_epoch > 0 and t_ms >= 0:
+        return started_epoch + (t_ms / 1000.0)
+    return started_epoch
 
 
 def _json_dumps(obj: Any) -> str:

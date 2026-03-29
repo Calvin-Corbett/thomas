@@ -7,6 +7,7 @@ import contextlib
 import logging
 import mimetypes
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -34,6 +35,8 @@ if TYPE_CHECKING:
     from aiohttp import web
 
 log = logging.getLogger(__name__)
+_RUN_STORE_JANITOR_INTERVAL_SECONDS = 120
+_RUN_STORE_STALE_IDLE_SECONDS = 10 * 60
 
 
 def _setup_routes_and_handlers(
@@ -94,27 +97,18 @@ def _setup_routes_and_handlers(
         snapshot_obj = ledger.get_current(session_id) if session_id else ledger.get_latest()
         snapshot = snapshot_obj.to_dict() if snapshot_obj and hasattr(snapshot_obj, "to_dict") else None
         resolved_session_id = str(
-            session_id
-            or getattr(snapshot_obj, "session_id", "")
-            or (snapshot or {}).get("session_id")
-            or ""
+            session_id or getattr(snapshot_obj, "session_id", "") or (snapshot or {}).get("session_id") or ""
         ).strip()
         sessions = app.get(APP_SESSIONS, {})
         session_obj = sessions.get(resolved_session_id) if isinstance(sessions, dict) and resolved_session_id else None
         task_definition = (
-            dict(getattr(session_obj, "task_definition", {}) or {})
-            if isinstance(session_obj, ChatSession)
-            else None
+            dict(getattr(session_obj, "task_definition", {}) or {}) if isinstance(session_obj, ChatSession) else None
         )
         task_evaluation = (
-            dict(getattr(session_obj, "task_evaluation", {}) or {})
-            if isinstance(session_obj, ChatSession)
-            else None
+            dict(getattr(session_obj, "task_evaluation", {}) or {}) if isinstance(session_obj, ChatSession) else None
         )
         benchmark_session = (
-            dict(getattr(session_obj, "benchmark_session", {}) or {})
-            if isinstance(session_obj, ChatSession)
-            else None
+            dict(getattr(session_obj, "benchmark_session", {}) or {}) if isinstance(session_obj, ChatSession) else None
         )
         task_definition_status = (
             str(getattr(session_obj, "task_definition_status", "idle") or "idle")
@@ -122,8 +116,14 @@ def _setup_routes_and_handlers(
             else "idle"
         )
         if isinstance(snapshot, dict):
-            fallback_user_text = str(getattr(session_obj, "last_user_message", "") or "") if isinstance(session_obj, ChatSession) else ""
-            fallback_assistant_text = str(getattr(session_obj, "last_assistant_message", "") or "") if isinstance(session_obj, ChatSession) else ""
+            fallback_user_text = (
+                str(getattr(session_obj, "last_user_message", "") or "") if isinstance(session_obj, ChatSession) else ""
+            )
+            fallback_assistant_text = (
+                str(getattr(session_obj, "last_assistant_message", "") or "")
+                if isinstance(session_obj, ChatSession)
+                else ""
+            )
             if isinstance(session_obj, ChatSession) and isinstance(session_obj.conversation, list):
                 for message in reversed(session_obj.conversation):
                     if not fallback_assistant_text and str(message.get("role") or "") == "assistant":
@@ -204,17 +204,24 @@ def _setup_routes_and_handlers(
         _require_api_access(request)
         registry: ToolRegistry | None = app.get(APP_TOOLS)
         if not registry:
-            return web.json_response({"tools": []})
+            return web.json_response({"tools": [], "count": 0})
 
         tools_list = []
-        for tool in registry.tools():
+        for tool in registry.list_tools():
+            parameters = getattr(tool, "parameters", {})
+            if not isinstance(parameters, dict):
+                parameters = {}
             tool_dict = {
+                "id": getattr(tool, "name", ""),
                 "name": getattr(tool, "name", ""),
                 "description": getattr(tool, "description", ""),
                 "category": getattr(tool, "category", ""),
+                "status": "active",
+                "params": parameters,
+                "parameters": parameters,
             }
             tools_list.append(tool_dict)
-        return web.json_response({"tools": tools_list})
+        return web.json_response({"tools": tools_list, "count": len(tools_list)})
 
     # Chat storage routes
     async def api_chats(request: web.Request) -> web.Response:
@@ -246,19 +253,71 @@ def _setup_routes_and_handlers(
             raise web.HTTPNotFound(text=f"chat {chat_id} not found")
         return web.Response(status=204)
 
+    run_store_janitor_task: asyncio.Task | None = None
+
+    async def _run_store_janitor(app_ref: web.Application) -> None:
+        while True:
+            await asyncio.sleep(_RUN_STORE_JANITOR_INTERVAL_SECONDS)
+            if not bool(app_ref.get(APP_RUN_STORE_ENABLED)):
+                continue
+            run_store_mod = app_ref.get(APP_RUN_STORE_MODULE)
+            if run_store_mod is None:
+                continue
+            try:
+                reconciled = int(
+                    run_store_mod.reconcile_stale_runs(
+                        idle_seconds=_RUN_STORE_STALE_IDLE_SECONDS,
+                        reason="stale run janitor reconciliation",
+                    )
+                    or 0
+                )
+            except Exception as janitor_exc:
+                log.debug("Run store janitor skipped: %s", janitor_exc)
+                continue
+            if reconciled:
+                log.warning("Run store janitor reconciled %d stale runs", reconciled)
+
     # Startup and cleanup
     async def on_startup(app_ref: web.Application) -> None:
         """App startup handler."""
+        nonlocal run_store_janitor_task
         guard_task = asyncio.create_task(_runtime_guard_loop(app_ref))
         app_ref[APP_RUNTIME_GUARD_TASK] = guard_task
+        if bool(app_ref.get(APP_RUN_STORE_ENABLED)) and app_ref.get(APP_RUN_STORE_MODULE) is not None:
+            run_store_mod = app_ref.get(APP_RUN_STORE_MODULE)
+            try:
+                reconciled = int(
+                    run_store_mod.reconcile_orphaned_runs(
+                        started_before=datetime.now(timezone.utc).isoformat(timespec="seconds"),
+                        reason="server startup reconciliation",
+                    )
+                    or 0
+                )
+            except Exception as startup_exc:
+                log.debug("Run store startup reconciliation skipped: %s", startup_exc)
+            else:
+                if reconciled:
+                    log.warning("Run store reconciled %d orphaned runs on startup", reconciled)
+            run_store_janitor_task = asyncio.create_task(_run_store_janitor(app_ref))
 
     async def on_cleanup(app_ref: web.Application) -> None:
         """App cleanup handler."""
+        nonlocal run_store_janitor_task
         guard_task = app_ref.get(APP_RUNTIME_GUARD_TASK)
         if guard_task:
             guard_task.cancel()
             with contextlib.suppress(asyncio.CancelledError):
                 await guard_task
+        if run_store_janitor_task is not None:
+            run_store_janitor_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await run_store_janitor_task
+            run_store_janitor_task = None
+        run_store_mod = app_ref.get(APP_RUN_STORE_MODULE)
+        shutdown_runs = getattr(run_store_mod, "shutdown", None) if run_store_mod is not None else None
+        if callable(shutdown_runs):
+            with contextlib.suppress(Exception):
+                shutdown_runs(close_timeout=5.0)
 
         memory_engine = app_ref.get(APP_MEMORY)
         close_memory = getattr(memory_engine, "close", None)
@@ -610,7 +669,7 @@ def _setup_routes_and_handlers(
                 llm=None,
                 memory=app_ref.get(APP_MEMORY),
                 tools=app_ref.get(APP_TOOLS),
-                chat_store_dir=cfg_ref.memory.root_path / '.thomas' / 'sessions_v2',
+                chat_store_dir=cfg_ref.memory.root_path / ".thomas" / "sessions_v2",
             )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError) as e:
             log.warning("Chat V2 routes unavailable: %s", e)
@@ -648,6 +707,7 @@ def _setup_routes_and_handlers(
     app.router.add_put("/api/chats", api_chat_put)
     app.router.add_put("/api/chats/{chat_id}", api_chat_put)
     app.router.add_delete("/api/chats/{chat_id}", api_chat_delete)
+
     async def static_compat(request: web.Request) -> web.StreamResponse:
         """Serve both modern shell assets and legacy module files under /static/."""
         raw_path = str(request.match_info.get("path", "") or "").replace("\\", "/").lstrip("/")

@@ -30,8 +30,7 @@ _FILLER_RE = re.compile(
 )
 
 _LIVENESS_RE = re.compile(
-    r"^\s*(?:are you (?:there|working|alive|awake)|you there|still there|"
-    r"ping|status|hello\??)\s*[!?.]*\s*$",
+    r"^\s*(?:are you (?:there|working|alive|awake)|you there|still there|" r"ping|status|hello\??)\s*[!?.]*\s*$",
     re.I,
 )
 
@@ -58,6 +57,15 @@ _EXPLORATORY_RE = re.compile(
     r"\bhow could\b|\bmaybe i should\b|\bshould i\b|\bcould we\b|\bcan we\b|"
     r"\bhelp me think\b|\btalk (?:me )?through\b|\bwalk me through\b|"
     r"\bfigure out how\b|\bi guess\b|\bi wonder\b)",
+    re.I,
+)
+
+_TOOL_OR_FILE_REQUEST_RE = re.compile(
+    r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
+    r"\b(?:file|files|tool|tools)\b.*\b(?:repo|repository|workspace|folder|directory|path)\b|"
+    r"\btop[- ]level\s+files?\b|"
+    r"\bcurrent\s+(?:repo|repository|workspace)\b|"
+    r"\bname\s+\w*\s*three\s+top[- ]level\s+files?\b)",
     re.I,
 )
 
@@ -136,6 +144,9 @@ def should_dispatch(
 
     if _EXPLORATORY_RE.search(src) and not _DIRECTIVE_PREFIX_RE.search(src):
         return DispatchDecision(action="casual", reason="exploratory_conversation")
+
+    if _TOOL_OR_FILE_REQUEST_RE.search(src):
+        return DispatchDecision(action="dispatch", reason="explicit_tool_or_file_request")
 
     recent_assistant = ""
     if recent_messages:

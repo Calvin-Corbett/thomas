@@ -23,7 +23,7 @@ from thomas.server.app_keys import (
     APP_RUN_STORE_MODULE,
     ChatSession,
 )
-from thomas.server.chat_control_mode import handle_ui_control_chat
+from thomas.server.chat_control_mode import ChatControlDeps, handle_ui_control_chat
 
 from .chat_aiohttp_helpers import (
     ChatRouteDeps,
@@ -89,18 +89,13 @@ async def _handle_plan_mode_request(
             source="chat.plan_error",
         )
         await send({"type": "error", "error": message})
-        try:
+        with contextlib.suppress(OSError):
             await resp.write_eof()
-        except OSError:
-            pass
         return resp
 
     try:
         from thomas.agent.execution_plan import ExecutionPlan
 
-        initial_state = {
-            "messages": [{"role": "user", "content": raw_user_text}],
-        }
         initial_plan = await draft_plan(
             text=raw_user_text,
             llm=llm,
@@ -135,7 +130,7 @@ async def _handle_plan_mode_request(
             await resp.write_eof()
             return resp
 
-        final_journal = await execute_plan(
+        await execute_plan(
             initial_plan,
             tools,
             send=send,
@@ -214,19 +209,15 @@ async def execute_chat_request(
     docs = setup["docs"]
     images = setup["images"]
     requested_job_type = setup["requested_job_type"]
-    advanced_privacy = setup["advanced_privacy"]
-    advanced_runtime = setup["advanced_runtime"]
     advanced_cost = setup["advanced_cost"]
     advanced_tools = setup["advanced_tools"]
     advanced_model = setup["advanced_model"]
-    advanced_failover = setup["advanced_failover"]
     advanced_memory = setup["advanced_memory"]
     resolved_profile_type = setup["resolved_profile_type"]
     non_coder_profile = setup["non_coder_profile"]
     resolved_review_depth = setup["resolved_review_depth"]
     runtime_prefs_saved = setup["runtime_prefs_saved"]
     applied_token_economy = setup["applied_token_economy"]
-    requested_token_economy = setup["requested_token_economy"]
     payload_requested_token_economy = setup["payload_requested_token_economy"]
     token_economy_meta = setup["token_economy_meta"]
     memory_enabled_for_turn = setup["memory_enabled_for_turn"]
@@ -273,11 +264,8 @@ async def execute_chat_request(
 
     control_req = resolve_control_req_fn(text, model_switch=switch_req)
     if control_req is not None:
-        from thomas.server.models import ChatControlDeps
-        from thomas.server.routes.control import handle_ui_control_chat as handle_control_chat
-
         async with session_lock:
-            return await handle_control_chat(
+            return await handle_ui_control_chat_fn(
                 request,
                 cfg=cfg,
                 session=session,

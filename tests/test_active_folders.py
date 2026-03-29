@@ -30,6 +30,23 @@ def _guard_args(**overrides) -> argparse.Namespace:
     return argparse.Namespace(**base)
 
 
+def _claim_args(**overrides) -> argparse.Namespace:
+    base: dict[str, object] = {
+        "agent": "codex-auto",
+        "path": ["thomas/server/routes"],
+        "ttl": 60,
+        "note": "",
+        "replace_agent": True,
+        "allow_conflicts": False,
+        "json": True,
+        "allow_presence_override": False,
+        "presence_override_reason": "",
+        "require_explicit_agent": True,
+    }
+    base.update(overrides)
+    return argparse.Namespace(**base)
+
+
 def test_guard_staged_auto_claim_success(monkeypatch, capsys) -> None:
     monkeypatch.setattr(mod, "_staged_paths", lambda _exclude: ["thomas/server/routes"])
     monkeypatch.setattr(mod, "_resolve_agent", lambda _agent: "codex-auto")
@@ -124,6 +141,7 @@ def test_claim_presence_gate_requires_override(monkeypatch, capsys) -> None:
             json=True,
             allow_presence_override=False,
             presence_override_reason="",
+            require_explicit_agent=False,
         )
     )
     payload = json.loads(capsys.readouterr().out)
@@ -131,3 +149,53 @@ def test_claim_presence_gate_requires_override(monkeypatch, capsys) -> None:
     assert rc == 2
     assert payload["ok"] is False
     assert payload["error"] == "presence gate requires override"
+
+
+def test_claim_requires_explicit_agent_for_coordinated_claims(capsys) -> None:
+    rc = mod._claim(_claim_args(agent=None))
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert payload["ok"] is False
+    assert "explicit agent id required" in payload["error"]
+
+
+def test_claim_syncs_workboard_and_session(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(mod, "_claiming_agent", lambda _agent, require_explicit: ("codex-auto", "--agent"))
+    monkeypatch.setattr(mod, "_ensure_session", lambda *args, **kwargs: {"session_id": "sess-1"})
+    monkeypatch.setattr(mod, "_create_claim", lambda **kwargs: ({"claim_id": "claim-1"}, []))
+    monkeypatch.setattr(mod, "_sync_workboard_claim", lambda **kwargs: (True, "ok"))
+
+    heartbeat_calls: list[dict[str, object]] = []
+    monkeypatch.setattr(
+        mod.agent_presence,
+        "heartbeat_session",
+        lambda **kwargs: heartbeat_calls.append(kwargs) or {"session_id": "sess-1"},
+    )
+
+    rc = mod._claim(_claim_args())
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 0
+    assert payload["ok"] is True
+    assert payload["workboard_synced"] is True
+    assert payload["agent_source"] == "--agent"
+    assert heartbeat_calls
+
+
+def test_claim_releases_folder_claim_when_workboard_sync_fails(monkeypatch, capsys) -> None:
+    monkeypatch.setattr(mod, "_claiming_agent", lambda _agent, require_explicit: ("codex-auto", "--agent"))
+    monkeypatch.setattr(mod, "_ensure_session", lambda *args, **kwargs: {"session_id": "sess-1"})
+    monkeypatch.setattr(mod, "_create_claim", lambda **kwargs: ({"claim_id": "claim-1"}, []))
+    monkeypatch.setattr(mod, "_sync_workboard_claim", lambda **kwargs: (False, "workboard failed"))
+
+    released: list[tuple[str | None, str | None]] = []
+    monkeypatch.setattr(mod, "_release_claim", lambda claim_id, agent=None: released.append((claim_id, agent)) or 1)
+
+    rc = mod._claim(_claim_args())
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 2
+    assert payload["ok"] is False
+    assert payload["error"] == "workboard failed"
+    assert released == [("claim-1", None)]

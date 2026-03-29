@@ -19,6 +19,7 @@ from .mission_runtime_views import (
     _mission_topology_payload,
     _objective_room_and_summary,
     _run_state_room_and_summary,
+    _run_updated_at,
     _timestamp_iso,
 )
 from .mission_support import (
@@ -141,6 +142,9 @@ def build_mission_control_routes(
         running = bool(snapshot.get("running"))
 
         review_states = {"paused_for_approval", "blocked_by_policy", "verification_failed", "needs_rebind", "blocked"}
+        has_live_desktop_work = bool(running or session or session_state in review_states)
+        if not has_live_desktop_work:
+            return snapshot, None, []
         if session_state in review_states:
             room = "review"
             status = "blocked"
@@ -236,7 +240,7 @@ def build_mission_control_routes(
                 seen_run_ids.add(run_id)
                 last_evt = _latest_run_event(run_store_mod, run_id)
                 status, room, summary = _run_state_room_and_summary(run, last_evt)
-                updated_at = str(run.get("ended_at") or run.get("started_at") or _utc_iso_now())
+                updated_at = _run_updated_at(run, last_evt)
                 created_at = _coerce_iso(run.get("created_at") or run.get("started_at"))
                 started_at = _coerce_iso(run.get("started_at")) if run.get("started_at") else created_at
                 ended_at = _coerce_iso(run.get("ended_at")) if run.get("ended_at") else ""
@@ -429,6 +433,7 @@ def build_mission_control_routes(
             "succeeded": 4,
             "completed": 4,
             "failed": 5,
+            "dead": 5,
             "cancelled": 6,
         }
         agents.sort(
@@ -484,8 +489,8 @@ def build_mission_control_routes(
         if raw_interval:
             try:
                 interval_s = float(raw_interval)
-            except Exception:
-                raise web.HTTPBadRequest(text="invalid interval")
+            except Exception as err:
+                raise web.HTTPBadRequest(text="invalid interval") from err
             if (not math.isfinite(interval_s)) or interval_s <= 0:
                 raise web.HTTPBadRequest(text="invalid interval")
         interval_s = min(30.0, max(0.35, interval_s))
@@ -495,8 +500,8 @@ def build_mission_control_routes(
         if raw_max_updates:
             try:
                 max_updates = int(raw_max_updates)
-            except Exception:
-                raise web.HTTPBadRequest(text="invalid max_updates")
+            except Exception as err:
+                raise web.HTTPBadRequest(text="invalid max_updates") from err
             if max_updates <= 0:
                 raise web.HTTPBadRequest(text="invalid max_updates")
             max_updates = min(max_updates, 500)

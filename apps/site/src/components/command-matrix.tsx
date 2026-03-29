@@ -20,6 +20,7 @@ type CommandMatrixProps = {
   rows: CommandMatrixRow[];
   lastValidatedAt: string;
   repoUrl?: string;
+  labels?: Partial<MatrixLabels>;
 };
 
 type MatrixDetailsState = Record<string, boolean>;
@@ -30,6 +31,78 @@ const matrixStatusFilters: Array<{ id: MatrixStatusFilter; label: string }> = [
   { id: "implemented", label: "Implemented" },
   { id: "declared", label: "Declared" },
 ];
+
+type MatrixLabels = {
+  summaryLine: string;
+  totalCommandCount: string;
+  lastValidated: string;
+  showingFamilies: string;
+  controlsTitle: string;
+  controlsSubtitle: string;
+  searchLabel: string;
+  searchPlaceholder: string;
+  searchAriaLabel: string;
+  statusFilter: string;
+  filterAll: string;
+  filterImplemented: string;
+  filterDeclared: string;
+  compactMode: string;
+  compactModeOn: string;
+  collapseAll: string;
+  expandAll: string;
+  noFamilies: string;
+  coverageIndicator: string;
+  routePath: string;
+  openRouteSource: string;
+  subcommands: string;
+  noSubcommands: string;
+  coveragePlanned: string;
+  coverageClean: string;
+  coverageWithIssues: string;
+  depthMetric: string;
+  commandMetric: string;
+  statusImplemented: string;
+  statusPartial: string;
+  statusPlanned: string;
+};
+
+const defaultLabels: MatrixLabels = {
+  summaryLine: "{implemented} implemented / {declared} declared",
+  totalCommandCount: "Total command count: {count}",
+  lastValidated: "Last validated snapshot: {value}",
+  showingFamilies: "Showing {visible} of {total} families.",
+  controlsTitle: "Command matrix controls",
+  controlsSubtitle: "Search, filter, and view mode",
+  searchLabel: "Search families / commands",
+  searchPlaceholder: "status, family, or command",
+  searchAriaLabel: "Search command families and subcommands",
+  statusFilter: "Status filter",
+  filterAll: "All",
+  filterImplemented: "Implemented",
+  filterDeclared: "Declared",
+  compactMode: "Compact mode",
+  compactModeOn: "Compact mode: on",
+  collapseAll: "Collapse all",
+  expandAll: "Expand all",
+  noFamilies: "No families match this search and filter.",
+  coverageIndicator: "Coverage indicator",
+  routePath: "Route path",
+  openRouteSource: "Open route source",
+  subcommands: "Subcommands",
+  noSubcommands: "No subcommands detected in this snapshot.",
+  coveragePlanned: "Not validated (implementation not present in this snapshot)",
+  coverageClean: "Parser surface validated from snapshot",
+  coverageWithIssues: "Validation surface contains {count} data-cleaning signals",
+  depthMetric: "Depth {count}",
+  commandMetric: "Commands {count}",
+  statusImplemented: "Implemented",
+  statusPartial: "Partial",
+  statusPlanned: "Declared",
+};
+
+function formatLabel(template: string, values: Record<string, number | string>) {
+  return template.replace(/\{(\w+)\}/g, (_, key: string) => String(values[key] ?? ""));
+}
 
 function isDeclared(status: StatusType): boolean {
   return status !== "implemented";
@@ -55,18 +128,29 @@ function formatCommandCopy(feature: string, commands: string[]) {
   return commands.map((cmd) => `/thomas ${feature} ${cmd}`).join("\n");
 }
 
-function coverageLine(row: CommandMatrixRow): string {
+function coverageLine(row: CommandMatrixRow, labels: MatrixLabels): string {
   if (row.status === "planned") {
-    return "Not validated (implementation not present in this snapshot)";
+    return labels.coveragePlanned;
   }
   const issueSignals = row.trimmed + row.malformed + row.duplicates;
   if (issueSignals === 0) {
-    return "Parser surface validated from snapshot";
+    return labels.coverageClean;
   }
-  return `Validation surface contains ${issueSignals} data-cleaning signals`;
+  return formatLabel(labels.coverageWithIssues, { count: issueSignals });
 }
 
-export function CommandMatrix({ rows, lastValidatedAt, repoUrl }: CommandMatrixProps) {
+function getStatusLabel(status: StatusType, labels: MatrixLabels) {
+  if (status === "implemented") {
+    return labels.statusImplemented;
+  }
+  if (status === "partial") {
+    return labels.statusPartial;
+  }
+  return labels.statusPlanned;
+}
+
+export function CommandMatrix({ rows, lastValidatedAt, repoUrl, labels: labelOverrides }: CommandMatrixProps) {
+  const labels = { ...defaultLabels, ...labelOverrides };
   const [openRows, setOpenRows] = useState<MatrixDetailsState>({});
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<MatrixStatusFilter>("all");
@@ -134,26 +218,36 @@ export function CommandMatrix({ rows, lastValidatedAt, repoUrl }: CommandMatrixP
     <section className="matrix">
       <div className="matrix-summary">
         <p className="matrix-summary-line">
-          {summary.implemented} implemented / {summary.declared} declared
+          {formatLabel(labels.summaryLine, {
+            implemented: summary.implemented,
+            declared: summary.declared,
+          })}
         </p>
-        <p className="matrix-summary-line">Total command count: {summary.totalCommands}</p>
+        <p className="matrix-summary-line">
+          {formatLabel(labels.totalCommandCount, { count: summary.totalCommands })}
+        </p>
         <p className="system-metric-line system-metric-note">
-          Last validated snapshot: {new Date(lastValidatedAt).toLocaleString()}
+          {formatLabel(labels.lastValidated, {
+            value: new Date(lastValidatedAt).toLocaleString(),
+          })}
         </p>
         <p className="system-metric-line">
-          Showing {filteredRows.length} of {sortedRows.length} families.
+          {formatLabel(labels.showingFamilies, {
+            visible: filteredRows.length,
+            total: sortedRows.length,
+          })}
         </p>
       </div>
 
       <details className="matrix-controls">
         <summary>
-          <span>Command matrix controls</span>
-          <span className="system-metric-line">Search, filter, and view mode</span>
+          <span>{labels.controlsTitle}</span>
+          <span className="system-metric-line">{labels.controlsSubtitle}</span>
         </summary>
         <div className="matrix-controls-body">
           <label className="matrix-search">
             <span className="matrix-search-label" id="deep-dive-matrix-search-label">
-              Search families / commands
+              {labels.searchLabel}
             </span>
             <input
               id="deep-dive-matrix-search"
@@ -164,14 +258,14 @@ export function CommandMatrix({ rows, lastValidatedAt, repoUrl }: CommandMatrixP
                 const next = event.currentTarget.value;
                 startTransition(() => setQuery(next));
               }}
-              placeholder="status, family, or command"
-              aria-label="Search command families and subcommands"
+              placeholder={labels.searchPlaceholder}
+              aria-label={labels.searchAriaLabel}
               aria-labelledby="deep-dive-matrix-search-label"
             />
           </label>
 
           <label className="matrix-filter-label">
-            Status filter
+            {labels.statusFilter}
             <select
               className="matrix-filter-select"
               value={statusFilter}
@@ -181,7 +275,11 @@ export function CommandMatrix({ rows, lastValidatedAt, repoUrl }: CommandMatrixP
             >
               {matrixStatusFilters.map((filter) => (
                 <option key={filter.id} value={filter.id}>
-                  {filter.label}
+                  {filter.id === "all"
+                    ? labels.filterAll
+                    : filter.id === "implemented"
+                      ? labels.filterImplemented
+                      : labels.filterDeclared}
                 </option>
               ))}
             </select>
@@ -193,21 +291,21 @@ export function CommandMatrix({ rows, lastValidatedAt, repoUrl }: CommandMatrixP
               className={`matrix-sort-button ${compactMode ? "active" : ""}`}
               onClick={() => startTransition(() => setCompactMode((current) => !current))}
             >
-              {compactMode ? "Compact mode: on" : "Compact mode"}
+              {compactMode ? labels.compactModeOn : labels.compactMode}
             </button>
             <button
               type="button"
               className="matrix-sort-button"
               onClick={() => startTransition(() => setAllRowsOpen(false))}
             >
-              Collapse all
+              {labels.collapseAll}
             </button>
             <button
               type="button"
               className="matrix-sort-button"
               onClick={() => startTransition(() => setAllRowsOpen(true))}
             >
-              Expand all
+              {labels.expandAll}
             </button>
           </div>
         </div>
@@ -215,7 +313,7 @@ export function CommandMatrix({ rows, lastValidatedAt, repoUrl }: CommandMatrixP
 
       <div className="matrix-list">
         {filteredRows.length === 0 ? (
-          <p className="system-metric-line">No families match this search and filter.</p>
+          <p className="system-metric-line">{labels.noFamilies}</p>
         ) : (
           filteredRows.map((row) => {
             const routePath = formatRoute(row.feature, row.routeHint);
@@ -244,31 +342,37 @@ export function CommandMatrix({ rows, lastValidatedAt, repoUrl }: CommandMatrixP
                 <summary className="matrix-card-head">
                   <div className="matrix-card-title">
                     <p className="matrix-feature">/{row.feature}</p>
-                    <StatusChip status={row.status} />
+                    <StatusChip status={row.status} label={getStatusLabel(row.status, labels)} />
                   </div>
                   <div className="matrix-metrics">
-                    <span className="matrix-metric">Depth {row.depth}</span>
-                    <span className="matrix-metric">Commands {row.commandCount}</span>
+                    <span className="matrix-metric">
+                      {formatLabel(labels.depthMetric, { count: row.depth })}
+                    </span>
+                    <span className="matrix-metric">
+                      {formatLabel(labels.commandMetric, { count: row.commandCount })}
+                    </span>
                   </div>
                 </summary>
                 {detailsOpen ? (
                   <div className="matrix-card-body">
-                    <p className="system-code-line">Coverage indicator: {coverageLine(row)}</p>
+                    <p className="system-code-line">
+                      {labels.coverageIndicator}: {coverageLine(row, labels)}
+                    </p>
                     <div className="matrix-subcommand-block">
-                      <p className="system-code-line">Route path</p>
+                      <p className="system-code-line">{labels.routePath}</p>
                       <p className="system-code">{routePath}</p>
                       {routeEvidenceLink ? (
                         <p className="system-metric-line">
                           <a className="text-link" href={routeEvidenceLink} target="_blank" rel="noreferrer">
-                            Open route source
+                            {labels.openRouteSource}
                           </a>
                         </p>
                       ) : null}
                     </div>
                     <div className="matrix-subcommand-block">
-                      <p className="system-code-line">Subcommands</p>
+                      <p className="system-code-line">{labels.subcommands}</p>
                       {row.commands.length === 0 ? (
-                        <p className="system-metric-line">No subcommands detected in this snapshot.</p>
+                        <p className="system-metric-line">{labels.noSubcommands}</p>
                       ) : (
                         <>
                           <div className="matrix-subcommand-grid">

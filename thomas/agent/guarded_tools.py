@@ -3,11 +3,13 @@ from __future__ import annotations
 import inspect
 import json
 from collections.abc import Awaitable, Callable
+from contextlib import suppress
 from dataclasses import dataclass
 from typing import Any
 
 from thomas.policy import PolicyContext, PolicyDecisionType, PolicyEngine
 from thomas.policy.redact import Redactor
+from thomas.tools.native_auth import request_native_authorization
 
 from .approval import ApprovalBroker
 
@@ -22,6 +24,20 @@ def _pretty_args(args: dict[str, Any], max_len: int = 4000) -> Any:
     if len(s) > max_len:
         s = s[:max_len] + "…"
     return s
+
+
+def _native_auth_action_description(tool_name: str, args: dict[str, Any]) -> str:
+    preview = _pretty_args(args, max_len=240)
+    return f"Approve sensitive Thomas tool action: {tool_name}\n\nArguments:\n{preview}"
+
+
+def _native_auth_reason(tool_name: str, decision_reason: str) -> str:
+    reason = str(decision_reason or "").strip() or "This tool action requires elevated trust."
+    return (
+        f"Thomas is about to run a sensitive tool action: {tool_name}\n\n"
+        f"{reason}\n\n"
+        "Authenticate with your operating system's native security prompt to continue."
+    )
 
 
 @dataclass
@@ -90,7 +106,7 @@ class GuardedToolRunner:
 
         # Audit policy decision
         if self.audit:
-            try:
+            with suppress(Exception):
                 await self.audit.log_async(
                     kind="policy_decision",
                     run_id=run_id,
@@ -101,8 +117,6 @@ class GuardedToolRunner:
                     reason=decision.reason,
                     payload={"meta": decision.meta, "args_preview": self.redactor.redact_obj(args)},
                 )
-            except Exception:
-                pass
 
         if decision.type == PolicyDecisionType.DENY:
             await emit_event(
@@ -126,6 +140,7 @@ class GuardedToolRunner:
             effective_no_human_mode = GuardedToolRunner._normalize_no_human_mode(
                 self.no_human_mode if no_human_mode is None else no_human_mode,
             )
+            approval_resolution: dict[str, Any] = {}
 
             if effective_no_human_mode == "allow":
                 await emit_event(
@@ -138,26 +153,29 @@ class GuardedToolRunner:
                         "args": self.redactor.redact_obj(args),
                         "args_pretty": _pretty_args(self.redactor.redact_obj(args)),
                         "reason": self.redactor.redact_text(
-                            f"Auto-approved by no-human mode (allow) for tool: {tool_name}"
+                            f"Native OS authentication required for sensitive tool: {tool_name}"
                         ),
                         "iteration": iteration,
-                        "decision": "AUTO_APPROVED_NO_HUMAN",
+                        "decision": "NATIVE_AUTH_REQUIRED",
                         "no_human_mode": effective_no_human_mode,
+                        "source": "native_auth",
                     },
                 )
-                await emit_event(
-                    "TOOL_APPROVAL_RESOLVED",
-                    {
-                        "run_id": run_id,
-                        "tool_call_id": tool_call_id,
-                        "tool_name": tool_name,
-                        "approved": True,
-                        "auto": True,
-                        "no_human_mode": effective_no_human_mode,
-                    },
+                approved = request_native_authorization(
+                    _native_auth_action_description(tool_name, self.redactor.redact_obj(args)),
+                    _native_auth_reason(tool_name, decision.reason),
                 )
-                approved = True
+                approval_resolution = {
+                    "auto": True,
+                    "no_human_mode": effective_no_human_mode,
+                    "decision": "NATIVE_AUTH_APPROVED" if approved else "NATIVE_AUTH_DENIED",
+                    "source": "native_auth",
+                }
             elif effective_no_human_mode == "deny":
+                approval_resolution = {
+                    "auto": True,
+                    "no_human_mode": effective_no_human_mode,
+                }
                 await emit_event(
                     "TOOL_APPROVAL_RESOLVED",
                     {
@@ -165,8 +183,7 @@ class GuardedToolRunner:
                         "tool_call_id": tool_call_id,
                         "tool_name": tool_name,
                         "approved": False,
-                        "auto": True,
-                        "no_human_mode": effective_no_human_mode,
+                        **approval_resolution,
                     },
                 )
                 err = "Tool execution denied by no-human policy (no-human mode=deny)."
@@ -216,11 +233,12 @@ class GuardedToolRunner:
                     "tool_call_id": tool_call_id,
                     "tool_name": tool_name,
                     "approved": bool(approved),
+                    **approval_resolution,
                 },
             )
 
             if self.audit:
-                try:
+                with suppress(Exception):
                     await self.audit.log_async(
                         kind="approval_resolved",
                         run_id=run_id,
@@ -231,11 +249,13 @@ class GuardedToolRunner:
                         reason=decision.reason,
                         payload={},
                     )
-                except Exception:
-                    pass
 
             if not approved:
-                err = "Tool execution denied (approval required)."
+                err = (
+                    "Sensitive tool execution denied. Native operating-system authorization was not granted."
+                    if effective_no_human_mode == "allow"
+                    else "Tool execution denied (approval required)."
+                )
                 await emit_event(
                     "TOOL_RESULT",
                     {
@@ -257,7 +277,7 @@ class GuardedToolRunner:
         redacted = self.redactor.redact_obj(result)
 
         if self.audit:
-            try:
+            with suppress(Exception):
                 await self.audit.log_async(
                     kind="tool_result",
                     run_id=run_id,
@@ -268,6 +288,4 @@ class GuardedToolRunner:
                     reason="",
                     payload=redacted,
                 )
-            except Exception:
-                pass
         return redacted

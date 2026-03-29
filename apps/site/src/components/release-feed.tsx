@@ -20,7 +20,20 @@ type ReleasesPayload = {
   releases: ReleaseItem[];
 };
 
-export function ReleaseFeed({ limit = 8 }: { limit?: number }) {
+type ReleaseFeedLabels = {
+  empty: string;
+  localNote: string;
+  fullNotes: string;
+  assetDownloadsSuffix: string;
+};
+
+export function ReleaseFeed({
+  limit = 8,
+  labels,
+}: {
+  limit?: number;
+  labels: ReleaseFeedLabels;
+}) {
   const [payload, setPayload] = useState<ReleasesPayload | null>(null);
 
   useEffect(() => {
@@ -41,7 +54,7 @@ export function ReleaseFeed({ limit = 8 }: { limit?: number }) {
   if (!payload || payload.releases.length === 0) {
     return (
       <div className="empty-state">
-        <p>Release data will appear after `THOMAS_GITHUB_REPO` is configured.</p>
+        <p>{labels.empty}</p>
       </div>
     );
   }
@@ -59,11 +72,11 @@ export function ReleaseFeed({ limit = 8 }: { limit?: number }) {
           <div className="release-meta">
             <span>
               {release.source === "local"
-                ? "Local update note"
-                : `${release.totalAssetDownloads.toLocaleString()} asset downloads`}
+                ? labels.localNote
+                : `${release.totalAssetDownloads.toLocaleString()} ${labels.assetDownloadsSuffix}`}
             </span>
             <a href={release.htmlUrl} target="_blank" rel="noreferrer">
-              Full notes
+              {labels.fullNotes}
             </a>
           </div>
         </article>

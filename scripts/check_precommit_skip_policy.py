@@ -37,18 +37,32 @@ DEFAULT_BREAKGLASS_COOLDOWN_MINUTES = 15
 PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "ruff",
     "ruff-format",
+    "thomas-agent-safety-validation",
+    "thomas-active-folder-guard",
+    "thomas-precommit-skip-policy-gate",
     "thomas-plan-structure-gate",
+    "thomas-core-overhead-guard",
+    "thomas-worktree-rules-gate",
+    "thomas-worktree-branch-guard",
     "thomas-workboard-claims-gate",
     "thomas-workboard-task-problems-gate",
     "thomas-workboard-changed-files-gate",
     "thomas-workboard-agent-claim-gate",
-    "thomas-workboard-audit-backstop-gate",
+    "thomas-workboard-issue-tool-smoke",
+    "thomas-workboard-problem-record-smoke",
     "thomas-monolith-guard",
-    "thomas-repo-hygiene-gate",
+    "thomas-protected-deletion-guard",
+    "thomas-feature-registry-gate",
     "thomas-repo-identity-gate",
+    "thomas-site-visual-proof-gate",
+    "thomas-merge-readiness",
+    "thomas-repo-hygiene-gate",
     "thomas-repo-clean-worktree-gate",
+    "thomas-release-hygiene-gate",
+    "thomas-release-update-gate",
     "thomas-architecture",
     "thomas-auto-checks-quick",
+    "thomas-workboard-audit-backstop-gate",
     "thomas-monolith-filename-pattern-gate",
 )
 
@@ -130,6 +144,11 @@ def _find_protected_skip_hooks(tokens: Sequence[str], *, protected_hooks: Sequen
         if normalized and normalized in protected:
             matches.append(token)
     return sorted(set(matches), key=str.lower)
+
+
+def _protected_skip_hooks() -> tuple[str, ...]:
+    """Compatibility helper for tests and other gate auditors."""
+    return tuple(PROTECTED_SKIP_HOOKS)
 
 
 def _resolve_agent() -> str | None:

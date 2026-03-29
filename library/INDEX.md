@@ -49,6 +49,31 @@ Durable research/reference library for Thomas.
   - File: `entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md`
 
 ## research-notes
+- `1774741604-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858`: Discord scope: War Machine Pro's server #general Sender: War Machine Pro (484138485867872289) Message: /voice say
+  - Summary: I’m treating this as a Thomas agent handling an inbound Discord message and I’m starting with the required repo startup checks before deciding the response behavior.I have the global guardrails loaded. I’m waiting on the startup router result now so I can see
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774741604-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858.md`
+- `1774741520-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858`: Discord scope: War Machine Pro's server #general Sender: War Machine Pro (484138485867872289) Message: voice check from
+  - Summary: I’m treating this as a Discord-response task for `War Machine Pro` in `#general`. I’ll do the required repo startup checks first, then I’ll give you the exact reply text.I’ve finished the required policy reads. I’m checking the startup router output now to con
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774741520-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858.md`
+- `1774741293-discord-scope-war-machine-pro-s-server-general-sender-gator-305345265127391232-m`: Discord scope: War Machine Pro's server #general Sender: Gator (305345265127391232) Message: (no text) Attachments: - d1
+  - Summary: I’m pulling the attachment first so I can inspect what Gator posted in `#general` and respond based on the actual image content.I’m checking the repo guardrails in parallel with the image fetch path, then I’ll inspect the attachment directly.The router put thi
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774741293-discord-scope-war-machine-pro-s-server-general-sender-gator-305345265127391232-m.md`
+- `1774740656-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858`: Discord scope: War Machine Pro's server #general Sender: War Machine Pro (484138485867872289) Message: thats not helpful
+  - Summary: I’m treating this as a live Discord-handling task in the Thomas workspace. First I’m loading the repo guardrails and startup lane, then I’ll check whether there’s an approved Discord reply path for `War Machine Pro` in `#general` and use it if available.The re
+  - Source: thomas:codex
+  - Tags: research, auto, route-coding_task
+  - File: `entries/research-notes/1774740656-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858.md`
+- `1774740290-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858`: Discord scope: War Machine Pro's server #general Sender: War Machine Pro (484138485867872289) Message: thomas are you on
+  - Summary: I’m treating this as an execution task: determine the approved response path for inbound Discord messages, check the repo guardrails first, and then send the reply if there’s an existing safe mechanism.I’ve started the repo-required startup checks and I’m veri
+  - Source: thomas:codex
+  - Tags: research, auto, route-research
+  - File: `entries/research-notes/1774740290-discord-scope-war-machine-pro-s-server-general-sender-war-machine-pro-4841384858.md`
 - `1774622984-build-an-original-browser-based-american-football-management-sim-prototype-insid`: Build an original browser-based American football management sim prototype inside this repo. Do not copy or name any exi
   - Summary: I’m defining the implementation lane and checking the repo guardrails first, then I’ll identify the correct browser app surface to build the football sim into so the result is actually runnable in this repo.The startup router hard-blocked normal implementation
   - Source: thomas:codex
@@ -485,4 +510,4 @@ Durable research/reference library for Thomas.
   - Tags: research, auto, route-research
   - File: `entries/research-notes/1770848144-REDACTED-TELEGRAM-TOKEN-SLUG-where-do-i-find-my-id.md`
 
-_Total entries: 95_
+_Total entries: 100_

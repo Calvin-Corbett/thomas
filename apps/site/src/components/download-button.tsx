@@ -14,15 +14,28 @@ function detectPlatform(): DownloadPlatform {
 type DownloadButtonProps = {
   source: string;
   className?: string;
+  labelPrefix?: string;
+  platformLabels?: {
+    windows: string;
+    macos: string;
+    linux: string;
+  };
 };
 
-export function DownloadButton({ source, className }: DownloadButtonProps) {
+export function DownloadButton({
+  source,
+  className,
+  labelPrefix = "Download for",
+  platformLabels = { windows: "Windows", macos: "Mac", linux: "Linux" },
+}: DownloadButtonProps) {
   const platform = useMemo(() => detectPlatform(), []);
   const href = `/api/download?platform=${platform}&channel=stable&source=${encodeURIComponent(source)}`;
+  const platformLabel =
+    platform === "macos" ? platformLabels.macos : platform === "linux" ? platformLabels.linux : platformLabels.windows;
 
   return (
     <a href={href} className={className ?? "cta-primary"}>
-      Download for {platform === "macos" ? "Mac" : platform === "linux" ? "Linux" : "Windows"}
+      {labelPrefix} {platformLabel}
     </a>
   );
 }

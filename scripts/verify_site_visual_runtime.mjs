@@ -369,6 +369,16 @@ async function main() {
 
     const routesToCheck = [
       "/",
+      "/docs",
+      "/ja-JP",
+      "/ja-JP/docs",
+      "/ja-JP/deep-dive",
+      "/ja-JP/journey",
+      "/ja-JP/roadmap",
+      "/zh-CN",
+      "/zh-CN/docs",
+      "/zh-CN/deep-dive",
+      "/zh-CN/marketplace",
       "/download",
       "/updates",
       "/journey",

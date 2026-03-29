@@ -113,6 +113,8 @@ def _scope_matches_path(scope: str, rel_path: str) -> bool:
         return False
     if scope_norm in {".", "*", "**"}:
         return True
+    if path_norm == scope_norm or path_norm.startswith(scope_norm + "/"):
+        return True
     if any(ch in scope_norm for ch in "*?["):
         if fnmatch.fnmatchcase(path_norm, scope_norm):
             return True
@@ -120,7 +122,7 @@ def _scope_matches_path(scope: str, rel_path: str) -> bool:
             base = scope_norm[:-3].rstrip("/")
             return bool(base) and (path_norm == base or path_norm.startswith(base + "/"))
         return False
-    return path_norm == scope_norm or path_norm.startswith(scope_norm + "/")
+    return False
 
 
 def _porcelain_path(line: str) -> str:
@@ -268,25 +270,20 @@ def _presence_gate(
         return True, ""
     repo_root = _presence_repo_root(workboard_path)
     try:
-        other_agents = agent_presence.list_agents(repo_root=repo_root)
+        result = agent_presence.evaluate_soft_gate(
+            purpose=purpose,
+            repo_root=repo_root,
+            workboard_path=workboard_path,
+            actor_agent=agent,
+            requested_scope=requested_scope,
+            allow_override=bool(allow_override),
+            override_reason=str(override_reason or ""),
+        )
     except Exception:
         return True, ""
-    active = [a for a in other_agents if a.get("status") == "active"]
-    unregistered = [a for a in other_agents if a.get("status") == "unregistered"]
-    conflicts = [a for a in active + unregistered if _agent_key(a.get("agent")) != _agent_key(agent)]
-    if not conflicts:
+    if bool(result.get("ok", False)):
         return True, ""
-    if allow_override:
-        try:
-            override_reason = _validate_dirty_release_reason(override_reason)
-        except ValueError as exc:
-            return False, str(exc)
-        return True, ""
-    conflict_msg = "; ".join([f"{a.get('agent')} ({a.get('status')})" for a in conflicts])
-    return False, (
-        f"Workboard presence check detected other agents: {conflict_msg}. "
-        f"Pass --allow-presence-override with --presence-override-reason to bypass."
-    )
+    return False, str(result.get("message") or "presence gate requires override")
 
 
 def _append_release_override_audit(

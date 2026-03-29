@@ -58,6 +58,70 @@ class ToolSpecialist(BaseSpecialist):
         conversation_context: list[dict[str, Any]],
         memory_context: str,
     ) -> AsyncIterator[dict[str, Any]]:
+        provider = str(getattr(getattr(self.llm, "config", None), "provider", "") or "").strip().lower()
+        if provider == "codex" and hasattr(self.llm, "stream_chat"):
+            direct_messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "You are Thomas's tool execution specialist. "
+                        "Use available tools when needed to complete the user's request. "
+                        "Return the final answer in plain text only."
+                    ),
+                }
+            ]
+            if memory_context:
+                direct_messages.append({"role": "system", "content": f"Context:\n{memory_context}"})
+            for msg in conversation_context:
+                if msg.get("role") == "system":
+                    continue
+                direct_messages.append(msg)
+            direct_messages.append({"role": "user", "content": prompt})
+
+            streamed_parts: list[str] = []
+            tool_results = 0
+            async for event in self.llm.stream_chat(
+                messages=direct_messages,
+                tools=[{"type": "function", "function": {"name": "codex_tools_enabled"}}],
+            ):
+                event_type = str(getattr(event, "type", "") or "")
+                data = getattr(event, "data", {}) or {}
+                if event_type == "token":
+                    token_text = str(data.get("text", "") or "")
+                    if token_text:
+                        streamed_parts.append(token_text)
+                        yield {"type": "text", "text": token_text}
+                elif event_type == "tool_call_start":
+                    yield {
+                        "type": "tool_start",
+                        "name": str(data.get("name", "") or "tool"),
+                        "id": str(data.get("id", "") or ""),
+                        "args": {},
+                    }
+                elif event_type == "tool_call_end":
+                    tool_results += 1
+                    yield {
+                        "type": "tool_result",
+                        "name": str(data.get("name", "") or "tool"),
+                        "id": str(data.get("id", "") or ""),
+                        "ok": True,
+                        "result": str(data.get("output", "") or ""),
+                        "ms": 0,
+                    }
+                elif event_type == "error":
+                    yield {"type": "error", "error": str(data.get("error") or "Tool execution failed")}
+                    return
+                elif event_type == "done":
+                    break
+
+            response = "".join(streamed_parts).strip()
+            if not response:
+                yield {"type": "error", "error": "Tool specialist returned an empty response"}
+                return
+
+            yield {"type": "done", "content": response, "iterations": 1, "tool_calls": tool_results}
+            return
+
         yield {
             "type": "thinking",
             "text": "Determining which tools to use...",

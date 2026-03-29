@@ -114,8 +114,8 @@ _THEME_VALUES: tuple[str, ...] = ("light", "dark", "system")
 _AUTONOMY_HINTS: dict[int, tuple[str, ...]] = {
     1: ("level 1", "l1", "manual review", "manual mode", "review-first"),
     2: ("level 2", "l2", "guarded assist", "guarded mode", "approved tasks"),
-    3: ("level 3", "l3", "tool-bounded auto", "bounded auto", "normal auto"),
-    4: ("level 4", "l4", "full auto", "max autonomy", "fully autonomous"),
+    3: ("level 3", "l3", "agent", "agent mode", "tool-bounded auto", "bounded auto", "normal auto"),
+    4: ("level 4", "l4", "full autonomy", "full auto", "max autonomy", "fully autonomous"),
 }
 
 _CONTROL_INTENT_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -130,6 +130,9 @@ _QUESTION_PREFIXES: tuple[re.Pattern[str], ...] = (
 )
 
 _AUTONOMY_SHORTHAND_COMMANDS: tuple[str, ...] = (
+    "agent",
+    "agent mode",
+    "full autonomy",
     "full auto",
     "max autonomy",
     "fully autonomous",
@@ -252,6 +255,8 @@ def _parse_autonomy_level(text: str, *, directive: bool) -> int | None:
     has_explicit_phrase = any(
         phrase in low
         for phrase in (
+            "agent mode",
+            "full autonomy",
             "full auto",
             "max autonomy",
             "fully autonomous",

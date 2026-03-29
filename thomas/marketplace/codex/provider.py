@@ -80,6 +80,15 @@ class CodexProvider:
         root.mkdir(parents=True, exist_ok=True)
         return str(root)
 
+    def _tools_cwd(self) -> str:
+        """Workspace used for tool-enabled turns.
+
+        Tool-enabled turns must always receive an explicit cwd. Codex threads
+        can persist across turns, and a prior no-tools turn may have started
+        the thread in the isolated temp workspace.
+        """
+        return str(Path.cwd().resolve())
+
     async def stream_chat(
         self,
         messages: list[dict[str, Any]],
@@ -129,7 +138,7 @@ class CodexProvider:
         model = self.config.model or ""
         effort = self.config.reasoning_effort or "medium"
         allow_tools = bool(tools)
-        chat_cwd = self._no_tools_cwd() if not allow_tools else None
+        chat_cwd = self._tools_cwd() if allow_tools else self._no_tools_cwd()
 
         max_bridge_attempts = 2
         for attempt in range(max_bridge_attempts):

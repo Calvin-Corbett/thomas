@@ -12,6 +12,7 @@ try:
         ROOT,
         _agent_key,
         _append_claim_override_audit,
+        _claimed_scope_dirty_paths,
         _append_release_override_audit,
         _file_lock,
         _find_claim_section,
@@ -40,6 +41,7 @@ except ImportError:  # pragma: no cover
         ROOT,
         _agent_key,
         _append_claim_override_audit,
+        _claimed_scope_dirty_paths,
         _append_release_override_audit,
         _file_lock,
         _find_claim_section,
@@ -122,8 +124,9 @@ def claim(
 
     with _file_lock(LOCK_FILE):
         dirty_paths = {"staged": [], "unstaged": [], "untracked": []}
+        scope_norm = _normalize_scope_value(scope)
         if _scope_guard_supported(workboard_path):
-            dirty_paths = _worktree_dirty_paths(ROOT)
+            dirty_paths = _claimed_scope_dirty_paths(scope_norm.split(","))
             offenders = sorted(
                 set(
                     list(dirty_paths.get("staged") or [])
@@ -136,9 +139,8 @@ def claim(
                 return (
                     False,
                     (
-                        f"repo worktree is dirty ({len(offenders)} paths): {sample}. "
-                        "Refusing to claim new work until the repo is clean. "
-                        "Run python scripts/check_repo_hygiene.py or python -m thomas status --strict-worktree, "
+                        f"claimed scope `{scope_norm}` has dirty files ({len(offenders)} paths): {sample}. "
+                        "Refusing to claim overlapping work until the scope is clean, "
                         "or pass --allow-dirty-claim with --dirty-claim-reason."
                     ),
                 )
@@ -189,7 +191,6 @@ def claim(
             else:
                 lines.append(formatted + "\n")
 
-        scope_norm = _normalize_scope_value(scope)
         active_ok, active_message = _upsert_active_task(
             lines,
             task,

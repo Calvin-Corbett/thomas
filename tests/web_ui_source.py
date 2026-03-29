@@ -4,9 +4,9 @@ import ast
 import re
 from pathlib import Path
 
-
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_JS_PATH = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app.js"
+APP_RUNTIME_PATH = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
 APP_PARTS_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_parts"
 LAYOUT_CSS_PATH = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout.css"
 LAYOUT_PARTS_DIR = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts"
@@ -43,6 +43,8 @@ def _decode_part_source(part_source: str) -> str:
 
 def read_app_js_source() -> str:
     source = APP_JS_PATH.read_text(encoding="utf-8")
+    if "app_runtime_primary.mjs" in source and APP_RUNTIME_PATH.exists():
+        return APP_RUNTIME_PATH.read_text(encoding="utf-8")
     if "APP_PART_FILES" not in source or not APP_PARTS_DIR.exists():
         return source
 

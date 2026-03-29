@@ -86,12 +86,6 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: thomas-workboard-audit-backstop-gate
-        name: Thomas Workboard Audit Backstop Gate
-        entry: python scripts/workboard_audit_backstop.py
-        language: system
-        pass_filenames: false
-
       - id: thomas-monolith-guard
         name: Thomas Monolith Guard
         entry: python scripts/check_monolith_guard.py --staged-only
@@ -116,35 +110,9 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: thomas-repo-hygiene-gate
-        name: Thomas Repo Hygiene Gate
-        entry: python scripts/check_repo_hygiene.py
-        language: system
-        pass_filenames: false
-
       - id: thomas-repo-identity-gate
         name: Thomas Repo Identity Gate
         entry: python scripts/check_repo_identity.py
-        language: system
-        pass_filenames: false
-
-      - id: thomas-repo-clean-worktree-gate
-        name: Thomas Repo Clean Worktree Gate
-        entry: python scripts/check_repo_hygiene.py
-        language: system
-        pass_filenames: false
-        always_run: true
-        stages: [pre-push]
-
-      - id: thomas-release-hygiene-gate
-        name: Thomas Release Hygiene Gate
-        entry: python scripts/check_release_hygiene.py
-        language: system
-        pass_filenames: false
-
-      - id: thomas-release-update-gate
-        name: Thomas Release Update Gate
-        entry: python scripts/check_release_update_gate.py --no-include-untracked
         language: system
         pass_filenames: false
 
@@ -154,14 +122,9 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: thomas-architecture
-        name: Architecture fitness check
-        entry: python -m pytest -p no:cacheprovider tests/test_architecture.py -x --tb=short -q
+      - id: thomas-merge-readiness
+        name: Thomas Merge Readiness
+        entry: python scripts/check_merge_readiness.py
         language: system
         pass_filenames: false
-
-      - id: thomas-auto-checks-quick
-        name: Thomas Auto Checks (Quick)
-        entry: python scripts/auto_checks.py --quick
-        language: system
-        pass_filenames: false
+        stages: [pre-push]
