@@ -12,6 +12,10 @@ class TestDispatchRouter(unittest.TestCase):
         decision = should_dispatch("please implement this plan")
         self.assertEqual(decision.action, "dispatch")
 
+    def test_explicit_file_tool_request_dispatches(self):
+        decision = should_dispatch("Use your file tools and name three top-level files in the current repo.")
+        self.assertEqual(decision.action, "dispatch")
+
     def test_status_followup_with_active_task_stays_conversational(self):
         decision = should_dispatch(
             "how's that going?",

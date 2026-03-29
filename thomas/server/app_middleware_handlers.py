@@ -205,6 +205,13 @@ def setup_middleware_and_handlers(
             srv = getattr(cfg, "server", None)
             mode = str(getattr(srv, "access_mode", "local") or "local").strip().lower()
             enabled = bool(getattr(srv, "rate_limit_enabled", True))
+            # In production + remote mode, rate limiting is mandatory.
+            if mode == "remote" and cfg.is_production and not enabled:
+                log.warning(
+                    "Rate limiting was disabled but is mandatory in production+remote mode. "
+                    "Forcing rate limiting ON."
+                )
+                enabled = True
             if mode == "remote" and enabled:
                 allowed, retry_after = await _consume_remote_rate_limit(request)
                 if not allowed:
@@ -322,6 +329,15 @@ def setup_middleware_and_handlers(
     def _require_csrf_guard(request: web.Request) -> None:
         raw_token = str(os.environ.get("THOMAS_MUTATING_CSRF_TOKEN", "") or "").strip()
         if not raw_token:
+            # In production + remote mode, CSRF protection is mandatory.
+            cfg_inner: AppConfig = _resolve_runtime_config(app)
+            srv_inner = getattr(cfg_inner, "server", None)
+            mode_inner = str(getattr(srv_inner, "access_mode", "local") or "local").strip().lower()
+            if cfg_inner.is_production and mode_inner == "remote":
+                raise web.HTTPForbidden(
+                    text="THOMAS_MUTATING_CSRF_TOKEN must be set in production+remote mode. "
+                    "Set this environment variable to a strong random token."
+                )
             return
         provided = str(request.headers.get("X-CSRF-Token") or "").strip()
         if not provided:

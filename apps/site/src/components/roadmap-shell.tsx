@@ -35,9 +35,28 @@ type RepoSnapshot = {
   signals: string[];
 };
 
+type RoadmapShellCopy = {
+  heroEyebrow: string;
+  heroTitle: string;
+  heroLead: string;
+  journeyHref: string;
+  journeyLabel: string;
+  downloadHref: string;
+  downloadLabel: string;
+  currentBuildLabel: string;
+  whereThingsStandLabel: string;
+  phasesEyebrow: string;
+  phasesTitle: string;
+  phasesAriaLabel: string;
+  openPhaseLabel: string;
+  selectedPhaseEyebrow: string;
+  whyThisPhaseMatters: string;
+};
+
 type RoadmapShellProps = {
   chapters: RoadmapChapter[];
   repoSnapshot: RepoSnapshot;
+  copy?: Partial<RoadmapShellCopy>;
 };
 
 const STATION_LAYOUT = [
@@ -46,7 +65,27 @@ const STATION_LAYOUT = [
   { left: "84%", top: "66%" },
 ] as const;
 
-export function RoadmapShell({ chapters, repoSnapshot }: RoadmapShellProps) {
+const defaultCopy: RoadmapShellCopy = {
+  heroEyebrow: "Roadmap",
+  heroTitle: "Thomas Roadmap",
+  heroLead:
+    "Thomas is still pre-alpha. The job right now is to make the core trustworthy, turn that core into a private app network you can carry on your phone, and then push all of that into a real AI-native operating system.",
+  journeyHref: "/journey",
+  journeyLabel: "Read the journey",
+  downloadHref: "/download",
+  downloadLabel: "Download current build",
+  currentBuildLabel: "Current build",
+  whereThingsStandLabel: "Where things stand",
+  phasesEyebrow: "Three phases",
+  phasesTitle: "One route, one active phase at a time.",
+  phasesAriaLabel: "Roadmap phases",
+  openPhaseLabel: "Open",
+  selectedPhaseEyebrow: "Selected phase",
+  whyThisPhaseMatters: "Why this phase matters",
+};
+
+export function RoadmapShell({ chapters, repoSnapshot, copy: copyOverrides }: RoadmapShellProps) {
+  const copy = { ...defaultCopy, ...copyOverrides };
   const [activeId, setActiveId] = useState(chapters[0]?.id ?? "");
   const [openCheckpoints, setOpenCheckpoints] = useState<Record<string, boolean>>(() =>
     Object.fromEntries(
@@ -74,30 +113,27 @@ export function RoadmapShell({ chapters, repoSnapshot }: RoadmapShellProps) {
     <div className={styles.pageShell}>
       <section className={styles.hero}>
         <div className={styles.heroCopy}>
-          <p className={styles.eyebrow}>Roadmap</p>
-          <h1 className={styles.heroTitle}>Thomas Roadmap</h1>
-          <p className={styles.heroLead}>
-            Thomas is still pre-alpha. The job right now is to make the core trustworthy, turn that core into a private
-            app network you can carry on your phone, and then push all of that into a real AI-native operating system.
-          </p>
+          <p className={styles.eyebrow}>{copy.heroEyebrow}</p>
+          <h1 className={styles.heroTitle}>{copy.heroTitle}</h1>
+          <p className={styles.heroLead}>{copy.heroLead}</p>
           <div className={styles.heroActions}>
-            <Link href="/journey" className="cta-secondary">
-              Read the journey
+            <Link href={copy.journeyHref} className="cta-secondary">
+              {copy.journeyLabel}
             </Link>
-            <Link href="/download" className="cta-primary">
-              Download current build
+            <Link href={copy.downloadHref} className="cta-primary">
+              {copy.downloadLabel}
             </Link>
           </div>
         </div>
 
         <div className={styles.heroMeta}>
           <article className={styles.metaCard}>
-            <p className={styles.metaLabel}>Current build</p>
+            <p className={styles.metaLabel}>{copy.currentBuildLabel}</p>
             <p className={styles.metaValue}>{repoSnapshot.release}</p>
             <p className={styles.metaCopy}>{repoSnapshot.stamp}</p>
           </article>
           <article className={styles.metaCard}>
-            <p className={styles.metaLabel}>Where things stand</p>
+            <p className={styles.metaLabel}>{copy.whereThingsStandLabel}</p>
             <div className={styles.metaList}>
               {repoSnapshot.signals.map((signal) => (
                 <p key={signal}>{signal}</p>
@@ -110,10 +146,10 @@ export function RoadmapShell({ chapters, repoSnapshot }: RoadmapShellProps) {
       <section className={styles.board}>
         <div className={styles.boardHeader}>
           <div>
-            <p className={styles.eyebrow}>Three phases</p>
-            <h2 className={styles.boardTitle}>One route, one active phase at a time.</h2>
+            <p className={styles.eyebrow}>{copy.phasesEyebrow}</p>
+            <h2 className={styles.boardTitle}>{copy.phasesTitle}</h2>
           </div>
-          <div className={styles.phaseTabs} role="tablist" aria-label="Roadmap phases">
+          <div className={styles.phaseTabs} role="tablist" aria-label={copy.phasesAriaLabel}>
             {chapters.map((chapter, index) => {
               const active = chapter.id === activeChapter.id;
               return (
@@ -160,7 +196,7 @@ export function RoadmapShell({ chapters, repoSnapshot }: RoadmapShellProps) {
                   style={{ left: layout.left, top: layout.top }}
                   onClick={() => setActiveId(chapter.id)}
                   aria-pressed={active}
-                  aria-label={`Open ${chapter.title}`}
+                  aria-label={`${copy.openPhaseLabel} ${chapter.title}`}
                 >
                   <span className={styles.stationDot} />
                   <span className={styles.stationCard}>
@@ -198,12 +234,12 @@ export function RoadmapShell({ chapters, repoSnapshot }: RoadmapShellProps) {
       <section className={styles.detailsSection}>
         <div className={styles.detailsHeader}>
           <div>
-            <p className={styles.eyebrow}>Selected phase</p>
+            <p className={styles.eyebrow}>{copy.selectedPhaseEyebrow}</p>
             <h2 className={styles.detailsTitle}>{activeChapter.title}</h2>
             <p className={styles.detailsCopy}>{activeChapter.outcome}</p>
           </div>
           <article className={styles.outcomeCard}>
-            <p className={styles.metaLabel}>Why this phase matters</p>
+            <p className={styles.metaLabel}>{copy.whyThisPhaseMatters}</p>
             <p className={styles.outcomeText}>{activeChapter.body}</p>
           </article>
         </div>

@@ -1,7 +1,7 @@
 ﻿const PART_FILES = [
-    "./063_module_studio_comfy_style_id_part01.js",
-    "./063_module_studio_comfy_style_id_part02.js",
-    "./063_module_studio_comfy_style_id_part03.js",
+    "./063_module_studio_comfy_style_id_bootstrap.js",
+    "./063_module_studio_comfy_style_id_helpers.js",
+    "./063_module_studio_comfy_style_id_workspace.js",
 ];
 
 if (typeof document === "undefined") {

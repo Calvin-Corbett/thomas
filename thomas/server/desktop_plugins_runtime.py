@@ -80,6 +80,47 @@ def _installed_plugin_dir(config: AppConfig, plugin_id: str) -> Path:
     return _installed_plugins_root(config) / plugin_id
 
 
+def _delete_installed_plugin_payload(config: AppConfig, plugin_id: str) -> bool:
+    destination_dir = _installed_plugin_dir(config, plugin_id)
+    existed = destination_dir.exists()
+    if destination_dir.exists():
+        shutil.rmtree(destination_dir, ignore_errors=True)
+    _remove_installed_record(config, plugin_id)
+    return existed
+
+
+def _prune_orphan_dependency_plugins(config: AppConfig) -> list[str]:
+    removed: list[str] = []
+    while True:
+        installed = list_installed_plugins(config, include_disabled=True)
+        if not installed:
+            break
+        required_ids = {
+            _safe_text(required)
+            for row in installed
+            for required in (row.get("requires") or [])
+            if _safe_text(required)
+        }
+        orphan = next(
+            (
+                row
+                for row in installed
+                if _safe_text(row.get("marketplace_type")).lower() == "dependency"
+                and _safe_text(row.get("plugin_id"))
+                and _safe_text(row.get("plugin_id")) not in required_ids
+            ),
+            None,
+        )
+        if orphan is None:
+            break
+        plugin_id = _safe_text(orphan.get("plugin_id"))
+        if not plugin_id:
+            break
+        _delete_installed_plugin_payload(config, plugin_id)
+        removed.append(plugin_id)
+    return removed
+
+
 def _build_surface_url(plugin_id: str, entry_html: str) -> str:
     return f"/plugins/{quote(plugin_id, safe='')}/{quote(_safe_rel_path(entry_html), safe='/')}"
 
@@ -390,11 +431,9 @@ def set_installed_plugin_enabled(config: AppConfig, plugin_id: str, enabled: boo
 
 
 def uninstall_plugin(config: AppConfig, plugin_id: str) -> bool:
-    destination_dir = _installed_plugin_dir(config, plugin_id)
-    existed = destination_dir.exists()
-    if destination_dir.exists():
-        shutil.rmtree(destination_dir, ignore_errors=True)
-    _remove_installed_record(config, plugin_id)
+    existed = _delete_installed_plugin_payload(config, plugin_id)
+    if existed:
+        _prune_orphan_dependency_plugins(config)
     return existed
 
 

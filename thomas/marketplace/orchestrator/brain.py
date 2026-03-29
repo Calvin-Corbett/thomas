@@ -18,15 +18,16 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import re
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
+from thomas.agent.dispatch import DispatchDecision, should_dispatch
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.memory_layers import MemoryContext, MemoryCoordinator
 from thomas.chat.thinking import ThinkingTracker
-from thomas.agent.dispatch import DispatchDecision, should_dispatch
 from thomas.marketplace.orchestrator.protocol import (
     CapabilityToken,
     DelegationContract,
@@ -44,6 +45,14 @@ _STATUS_FOLLOWUP_RE = (
     r"what'?s happening|where are we|how(?:'s| is) (?:that|it|this|the task|the project|the background work) going)\b"
 )
 _BACKGROUND_REFERENCE_RE = r"\b(?:background|worker|delegat|parallel)\b"
+_TOOLS_ROUTE_RE = re.compile(
+    r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
+    r"\b(?:file|files|tool|tools)\b.*\b(?:repo|repository|workspace|folder|directory|path)\b|"
+    r"\btop[- ]level\s+files?\b|"
+    r"\bcurrent\s+(?:repo|repository|workspace)\b|"
+    r"\b(?:shell|command|directory listing|list files)\b)",
+    re.I,
+)
 
 
 def _wants_background_status(prompt: str) -> bool:
@@ -173,6 +182,7 @@ class OrchestratorBrain:
         active_task_digest: str = "",
         active_tasks: list[dict[str, Any]] | None = None,
         dispatch_actionable: bool = True,
+        background_ack_only: bool = False,
     ) -> ConversationManager:
         """Process a user message.
 
@@ -207,6 +217,15 @@ class OrchestratorBrain:
                 dispatcher=dispatcher,
                 turn_start=turn_start,
                 active_tasks=active_tasks,
+            )
+
+        if background_ack_only:
+            return await self._handle_background_ack(
+                session_id=session_id,
+                conversation=conversation,
+                prompt=prompt,
+                dispatcher=dispatcher,
+                turn_start=turn_start,
             )
 
         if decision.action == "dispatch" and dispatch_actionable:
@@ -286,6 +305,54 @@ class OrchestratorBrain:
             total_elapsed_ms=elapsed,
         )
 
+        return conversation
+
+    async def _handle_background_ack(
+        self,
+        session_id: str,
+        conversation: ConversationManager,
+        prompt: str,
+        dispatcher: EventDispatcher,
+        turn_start: float,
+    ) -> ConversationManager:
+        final_text = "Working on that now."
+        await dispatcher.emit_text(final_text)
+
+        conversation = conversation.append_message(
+            "assistant",
+            final_text,
+            metadata={"specialists": ["reasoning"], "mode": "background_ack"},
+        )
+
+        try:
+            memory_coord = MemoryCoordinator(
+                self.memory_engine,
+                session_id,
+                context_budget=_MODE_BUDGETS.get("fast", 1_500),
+            )
+            await memory_coord.capture_episode(
+                turn_number=conversation.length // 2,
+                user_message=prompt,
+                assistant_response=final_text,
+                thinking="background_ack",
+                tool_calls=[],
+                specialist="reasoning",
+            )
+        except Exception as exc:
+            log.debug("Background ack episode capture skipped: %s", exc)
+
+        elapsed = int((time.monotonic() - turn_start) * 1000)
+        await dispatcher.emit_done(
+            session_id=session_id,
+            conversation_version=conversation.version,
+            thinking_summary="background_ack",
+            total_thinking_ms=0,
+            iterations=1,
+            tool_calls=0,
+            tokens_used=0,
+            specialists_used=["reasoning"],
+            total_elapsed_ms=elapsed,
+        )
         return conversation
 
     async def _handle_casual(
@@ -547,6 +614,14 @@ class OrchestratorBrain:
             return RouteDecision(
                 specialists=["reasoning"],
                 reasoning="No specialists available; using default reasoning.",
+            )
+
+        if "tools" in available and _TOOLS_ROUTE_RE.search(str(prompt or "")):
+            return RouteDecision(
+                specialists=["tools"],
+                parallel=False,
+                reasoning="Deterministic tools route for explicit file or tool request.",
+                confidence=0.98,
             )
 
         # Build routing prompt

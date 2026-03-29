@@ -32,11 +32,9 @@
     storeForm.appendChild(catalogTitle);
     storeForm.appendChild(catalogRow);
 
-    moduleCatalog.appendChild(storeHead);
-    moduleCatalog.appendChild(storeList);
-    moduleCatalog.appendChild(storeForm);
-    moduleStore.appendChild(workflowCard);
-    moduleStore.appendChild(selectionCard);
+    moduleStore.appendChild(storeHead);
+    moduleStore.appendChild(storeList);
+    moduleStore.appendChild(storeForm);
 
     const bottom = document.createElement('footer');
     bottom.className = 'module-ui-editor-bottom';
@@ -83,203 +81,6 @@
     container.appendChild(shell);
 
     const currentProject = () => moduleUiEditorProjectById(wb, wb.uiSelectedProjectId);
-    const currentDoc = () => {
-        try {
-            return frame.contentDocument;
-        } catch (_error) {
-            return null;
-        }
-    };
-    const setDraftStatus = (messageRaw) => {
-        const message = safeString(messageRaw).trim();
-        draftStatus.textContent = message || 'Drafts stay on this device.';
-    };
-    const persistProjects = (messageRaw) => {
-        moduleUiEditorPersistUrlProjects(wb);
-        wb.uiRuntime.savedAt = Date.now();
-        if (safeString(messageRaw)) {
-            setDraftStatus(messageRaw);
-            return;
-        }
-        setDraftStatus('Draft saved ' + new Date(wb.uiRuntime.savedAt).toLocaleTimeString());
-    };
-    const currentSelectionMeta = () => {
-        const key = safeString(wb.uiRuntime && wb.uiRuntime.selectedKey);
-        if (!key) return null;
-        const rows = Array.isArray(wb.uiRuntime && wb.uiRuntime.elements) ? wb.uiRuntime.elements : [];
-        return rows.find((row) => safeString(row && row.key) === key) || null;
-    };
-    const currentSelectionElement = () => {
-        const doc = currentDoc();
-        const project = currentProject();
-        const key = safeString(wb.uiRuntime && wb.uiRuntime.selectedKey);
-        if (!doc || !project || !key) return null;
-        const patch = project.overridesById && typeof project.overridesById === 'object'
-            ? project.overridesById[key]
-            : null;
-        return moduleUiEditorFindElementForRef(doc, patch || currentSelectionMeta(), key);
-    };
-    const updateWorkflowUi = () => {
-        const project = currentProject();
-        const selection = currentSelectionMeta();
-        if (!project) {
-            workflowStatus.textContent = 'Choose a project to start inspecting the current screen.';
-            return;
-        }
-        const type = safeString(project.type);
-        const projectLabel = safeString(project.id) === 'ui-project-thomas'
-            ? 'Live Thomas UI'
-            : (type === 'url' ? 'Live URL target' : 'Imported folder');
-        const selectionLabel = selection
-            ? ' Selected: ' + (safeString(selection.targetId) || safeString(selection.label) || safeString(selection.tag))
-            : ' No element selected yet.';
-        const editHint = type === 'url'
-            ? ' Cross-origin pages remain view-only.'
-            : ' Same-origin targets support drag and keyboard nudging.';
-        workflowStatus.textContent = projectLabel + '.' + selectionLabel + editHint;
-    };
-    const renderElementList = () => {
-        const rows = Array.isArray(wb.uiRuntime && wb.uiRuntime.elements) ? wb.uiRuntime.elements.slice(0, 120) : [];
-        const activeKey = safeString(wb.uiRuntime && wb.uiRuntime.selectedKey);
-        elementList.innerHTML = '';
-        if (!rows.length) {
-            const empty = document.createElement('div');
-            empty.className = 'module-ui-editor-selection-empty';
-            empty.textContent = 'No visible layers detected for this screen.';
-            elementList.appendChild(empty);
-            return;
-        }
-        rows.forEach((row) => {
-            const button = document.createElement('button');
-            button.type = 'button';
-            button.className = 'module-ui-editor-element-btn' + (safeString(row && row.key) === activeKey ? ' is-active' : '');
-            const title = document.createElement('strong');
-            title.textContent = safeString(row && row.label) || safeString(row && row.targetId) || safeString(row && row.tag) || 'Untitled layer';
-            const meta = document.createElement('span');
-            const bits = [
-                safeString(row && row.targetId) || safeString(row && row.selector),
-                safeString(row && row.purpose),
-                String(Math.round(Number(row && row.width) || 0)) + 'x' + String(Math.round(Number(row && row.height) || 0)),
-            ].filter(Boolean);
-            meta.textContent = bits.join(' | ');
-            button.appendChild(title);
-            button.appendChild(meta);
-            button.addEventListener('click', () => {
-                wb.uiRuntime.selectedKey = safeString(row && row.key);
-                renderElementList();
-                renderSelectionUi();
-                updateWorkflowUi();
-                const target = currentSelectionElement();
-                if (target && typeof target.scrollIntoView === 'function') {
-                    try {
-                        target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
-                    } catch (_error) {}
-                }
-            });
-            elementList.appendChild(button);
-        });
-    };
-    const renderSelectionUi = () => {
-        const project = currentProject();
-        const meta = currentSelectionMeta();
-        const element = currentSelectionElement();
-        const notes = project && meta ? moduleUiEditorReadProjectNotes(project, meta.key) : [];
-        const computed = element ? (element.ownerDocument.defaultView || window).getComputedStyle(element) : null;
-        const rect = element ? element.getBoundingClientRect() : null;
-        const disabled = !project || !meta || !moduleUiEditorIsElement(element);
-        [fieldX.input, fieldY.input, fieldW.input, fieldH.input, fieldZ.input, noteInput, applySelectionBtn, resetSelectionBtn]
-            .forEach((control) => { control.disabled = disabled; });
-        if (disabled) {
-            selectionStatus.textContent = project
-                ? 'Pick a visible layer, then use edit mode or the fields below.'
-                : 'Choose a project to inspect individual layers.';
-            selectionMeta.innerHTML = '<div class="module-ui-editor-selection-empty">Nothing selected yet.</div>';
-            fieldX.input.value = '';
-            fieldY.input.value = '';
-            fieldW.input.value = '';
-            fieldH.input.value = '';
-            fieldZ.input.value = '';
-            noteInput.value = '';
-            return;
-        }
-        const boundsX = Math.round(rect ? rect.left : Number(meta.x) || 0);
-        const boundsY = Math.round(rect ? rect.top : Number(meta.y) || 0);
-        const boundsW = Math.round(rect ? rect.width : Number(meta.width) || 0);
-        const boundsH = Math.round(rect ? rect.height : Number(meta.height) || 0);
-        const posLeft = parseFloat(element.style.left);
-        const posTop = parseFloat(element.style.top);
-        const width = parseFloat(element.style.width);
-        const height = parseFloat(element.style.height);
-        fieldX.input.value = Number.isFinite(posLeft) ? String(Math.round(posLeft)) : String(boundsX);
-        fieldY.input.value = Number.isFinite(posTop) ? String(Math.round(posTop)) : String(boundsY);
-        fieldW.input.value = Number.isFinite(width) ? String(Math.round(width)) : String(boundsW);
-        fieldH.input.value = Number.isFinite(height) ? String(Math.round(height)) : String(boundsH);
-        fieldZ.input.value = safeString(element.style.zIndex) || (computed ? safeString(computed.zIndex) : '') || '10';
-        noteInput.value = safeString(notes[0] && notes[0].text);
-        selectionStatus.textContent = 'Selected ' + (safeString(meta.targetId) || safeString(meta.tag) || 'element') + '. Use fields for exact edits.';
-        selectionMeta.innerHTML = [
-            '<div><strong>Key:</strong> <code>' + moduleUiEditorEscapeHtml(safeString(meta.key)) + '</code></div>',
-            safeString(meta.targetId)
-                ? '<div><strong>Stable ID:</strong> <code>' + moduleUiEditorEscapeHtml(safeString(meta.targetId)) + '</code></div>'
-                : '',
-            '<div><strong>Selector:</strong> <code>' + moduleUiEditorEscapeHtml(safeString(meta.selector)) + '</code></div>',
-            '<div><strong>Purpose:</strong> ' + moduleUiEditorEscapeHtml(safeString(meta.purpose) || 'content') + ' | <strong>Bounds:</strong> ' + String(boundsW) + 'x' + String(boundsH) + ' at ' + String(boundsX) + ',' + String(boundsY) + '</div>',
-        ].filter(Boolean).join('');
-    };
-    const applySelectionFields = () => {
-        const project = currentProject();
-        const meta = currentSelectionMeta();
-        const element = currentSelectionElement();
-        if (!project || !meta || !moduleUiEditorIsElement(element)) {
-            notifyUser('Select a visible layer first.', { tone: 'warn', durationMs: 1700, debugKind: 'app-builder' });
-            return;
-        }
-        const view = element.ownerDocument.defaultView || window;
-        const computed = view.getComputedStyle(element);
-        if (safeString(computed.position) === 'static') {
-            const rect = element.getBoundingClientRect();
-            element.style.position = 'absolute';
-            element.style.left = Math.round(rect.left + view.scrollX) + 'px';
-            element.style.top = Math.round(rect.top + view.scrollY) + 'px';
-            element.style.width = Math.round(rect.width) + 'px';
-            element.style.height = Math.round(rect.height) + 'px';
-            element.style.margin = '0';
-        }
-        const maybeNumber = (input) => {
-            const value = Number(input && input.value);
-            return Number.isFinite(value) ? value : null;
-        };
-        const nextX = maybeNumber(fieldX.input);
-        const nextY = maybeNumber(fieldY.input);
-        const nextW = maybeNumber(fieldW.input);
-        const nextH = maybeNumber(fieldH.input);
-        const nextZ = safeString(fieldZ.input && fieldZ.input.value).trim();
-        if (nextX !== null) element.style.left = String(Math.round(nextX)) + 'px';
-        if (nextY !== null) element.style.top = String(Math.round(nextY)) + 'px';
-        if (nextW !== null) element.style.width = String(Math.max(8, Math.round(nextW))) + 'px';
-        if (nextH !== null) element.style.height = String(Math.max(8, Math.round(nextH))) + 'px';
-        if (nextZ) element.style.zIndex = nextZ;
-        element.style.margin = '0';
-        moduleUiEditorSaveElementOverride(project, element);
-        moduleUiEditorWriteProjectNote(project, meta, noteInput.value);
-        refreshExtraction();
-        persistProjects();
-        updateWorkflowUi();
-        notifyUser('Element override saved.', { tone: 'success', durationMs: 1500, debugKind: 'app-builder' });
-    };
-    const resetSelectionOverride = () => {
-        const project = currentProject();
-        const meta = currentSelectionMeta();
-        if (!project || !meta) {
-            notifyUser('Select a layer first.', { tone: 'warn', durationMs: 1600, debugKind: 'app-builder' });
-            return;
-        }
-        moduleUiEditorDeleteElementOverride(project, meta.key);
-        moduleUiEditorWriteProjectNote(project, meta, noteInput.value);
-        persistProjects();
-        loadProject(false);
-        notifyUser('Override removed for selected element.', { tone: 'info', durationMs: 1700, debugKind: 'app-builder' });
-    };
 
     const captureViewportSize = () => {
         if (!wb.uiViewport || wb.uiViewport.fit) return;
@@ -350,7 +151,6 @@
             projectSelect.appendChild(option);
         });
         if (wb.uiSelectedProjectId) projectSelect.value = wb.uiSelectedProjectId;
-        updateWorkflowUi();
     };
 
     const syncShellModules = () => {
@@ -588,20 +388,42 @@
 
     moduleStoreToggle.addEventListener('click', () => {
         if (!wb.uiShell || typeof wb.uiShell !== 'object') wb.uiShell = {};
-        moduleCatalog.hidden = !moduleCatalog.hidden;
-        wb.uiShell.storeOpen = !moduleCatalog.hidden;
-        persistProjects();
-        moduleStoreToggle.textContent = moduleCatalog.hidden ? 'Show Shell Modules' : 'Hide Shell Modules';
+        moduleStore.hidden = !moduleStore.hidden;
+        wb.uiShell.storeOpen = !moduleStore.hidden;
+        moduleStoreToggle.textContent = moduleStore.hidden ? 'Show Modules' : 'Hide Modules';
     });
 
     const updateEditUi = () => {
         editBtn.textContent = wb.uiEditMode ? 'Done' : 'Edit';
         editBtn.classList.toggle('edit-active', wb.uiEditMode);
         if (wb.uiEditMode) {
-            hint.textContent = 'Edit mode active - click any visible element, drag it, or use arrow keys to nudge.';
+            hint.textContent = 'Edit mode active · click any visible element and drag to move.';
             return;
         }
         hint.textContent = wb.uiViewport && wb.uiViewport.fit === false ? 'View mode (resizable)' : 'View mode (fit)';
+    };
+
+    const frameSandboxValue = (project) => {
+        const type = safeString(project && project.type).toLowerCase();
+        const id = safeString(project && project.id);
+        const rawUrl = safeString(project && project.url);
+        const trustedProject = id === 'ui-project-thomas'
+            || type === 'imported'
+            || rawUrl === '/'
+            || rawUrl.startsWith('/');
+        if (trustedProject) {
+            return '';
+        }
+        return 'allow-scripts allow-forms allow-popups allow-modals';
+    };
+
+    const applyFrameSandbox = (project) => {
+        const sandbox = frameSandboxValue(project);
+        if (sandbox) {
+            frame.setAttribute('sandbox', sandbox);
+            return;
+        }
+        frame.removeAttribute('sandbox');
     };
 
     const refreshExtraction = () => {
@@ -616,9 +438,6 @@
             wb.uiRuntime.elements = [];
             count.textContent = '0 elements';
             if (project) wb.uiRuntime.lastScreenUrl = '';
-            renderElementList();
-            renderSelectionUi();
-            updateWorkflowUi();
             return;
         }
         wb.uiRuntime.elements = moduleUiEditorExtractElements(doc);
@@ -628,17 +447,12 @@
         } catch (_error) {
             wb.uiRuntime.lastScreenUrl = '';
         }
-        if (safeString(wb.uiRuntime.selectedKey) && !wb.uiRuntime.elements.some((row) => safeString(row && row.key) === safeString(wb.uiRuntime.selectedKey))) {
-            wb.uiRuntime.selectedKey = '';
-        }
-        renderElementList();
-        renderSelectionUi();
-        updateWorkflowUi();
     };
 
     const loadProject = (forceReload = false) => {
         const project = currentProject();
         moduleUiEditorClearEditRuntime(wb);
+        applyFrameSandbox(project);
         if (!project) {
             frame.srcdoc = '<html><body style="font-family:system-ui;padding:24px;background:#0f1723;color:#eaf2ff;">No project selected.</body></html>';
             count.textContent = '0 elements';
@@ -686,39 +500,17 @@
                 height: wb.uiViewport ? Number(wb.uiViewport.height) || 0 : 0,
             },
             extracted_elements: Array.isArray(wb.uiRuntime.elements) ? wb.uiRuntime.elements : [],
-            selected_key: safeString(wb.uiRuntime.selectedKey),
             position_overrides: project && typeof project.overrides === 'object' ? project.overrides : {},
-            overrides_by_target: project && typeof project.overridesById === 'object' ? project.overridesById : {},
-            notes_by_target: project && typeof project.notesById === 'object' ? project.notesById : {},
         };
-        const json = JSON.stringify(payload, null, 2);
-        const fileName = (safeString(project.name) || 'ui-editor-layout')
-            .toLowerCase()
-            .replace(/[^a-z0-9]+/g, '-')
-            .replace(/^-+|-+$/g, '') || 'ui-editor-layout';
-        try {
-            const blob = new Blob([json], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const link = document.createElement('a');
-            link.href = url;
-            link.download = fileName + '.layout.json';
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            URL.revokeObjectURL(url);
-        } catch (_error) {}
         moduleWorkbenchCopyJson(payload, 'UI Editor Layout Data');
-        persistProjects('Exported snapshot ' + new Date().toLocaleTimeString());
-        notifyUser('Layout snapshot downloaded and copied.', { tone: 'success', durationMs: 1800, debugKind: 'app-builder' });
+        notifyUser('Layout data copied.', { tone: 'success', durationMs: 1800, debugKind: 'app-builder' });
+        moduleUiEditorPersistUrlProjects(wb);
     };
 
     frame.addEventListener('load', () => {
         const project = currentProject();
         if (!project) {
             count.textContent = '0 elements';
-            renderElementList();
-            renderSelectionUi();
-            updateWorkflowUi();
             return;
         }
         let doc = null;
@@ -735,9 +527,6 @@
                 wb.uiEditMode = false;
                 updateEditUi();
             }
-            renderElementList();
-            renderSelectionUi();
-            updateWorkflowUi();
             return;
         }
         moduleUiEditorApplyOverrides(doc, project);
@@ -745,13 +534,7 @@
         if (wb.uiEditMode) {
             const attached = moduleUiEditorAttachEditMode(frame, wb, project, () => {
                 refreshExtraction();
-                persistProjects();
-            }, (target) => {
-                const ref = moduleUiEditorElementRefFromElement(target);
-                wb.uiRuntime.selectedKey = safeString(ref.key);
-                renderElementList();
-                renderSelectionUi();
-                updateWorkflowUi();
+                moduleUiEditorPersistUrlProjects(wb);
             });
             if (!attached) {
                 wb.uiEditMode = false;
@@ -764,38 +547,15 @@
     projectSelect.addEventListener('change', () => {
         wb.uiSelectedProjectId = safeString(projectSelect.value);
         wb.uiEditMode = false;
-        wb.uiRuntime.selectedKey = '';
         updateEditUi();
         loadProject(false);
-        persistProjects();
     });
 
     editBtn.addEventListener('click', () => {
         wb.uiEditMode = !wb.uiEditMode;
         updateEditUi();
-        if (!wb.uiEditMode) {
-            moduleUiEditorClearEditRuntime(wb);
-            refreshExtraction();
-            persistProjects();
-            return;
-        }
-        const project = currentProject();
-        if (!project) return;
-        const attached = moduleUiEditorAttachEditMode(frame, wb, project, () => {
-            refreshExtraction();
-            persistProjects();
-        }, (target) => {
-            const ref = moduleUiEditorElementRefFromElement(target);
-            wb.uiRuntime.selectedKey = safeString(ref.key);
-            renderElementList();
-            renderSelectionUi();
-            updateWorkflowUi();
-        });
-        if (!attached) {
-            wb.uiEditMode = false;
-            updateEditUi();
-            notifyUser('Edit mode requires same-origin content.', { tone: 'warn', durationMs: 2200, debugKind: 'app-builder' });
-        }
+        loadProject(true);
+        moduleUiEditorPersistUrlProjects(wb);
     });
 
     viewportBtn.addEventListener('click', () => {
@@ -829,20 +589,6 @@
     saveBtn.addEventListener('click', () => {
         saveLayout();
     });
-    applySelectionBtn.addEventListener('click', () => {
-        applySelectionFields();
-    });
-    resetSelectionBtn.addEventListener('click', () => {
-        resetSelectionOverride();
-    });
-    noteInput.addEventListener('change', () => {
-        const project = currentProject();
-        const meta = currentSelectionMeta();
-        if (!project || !meta) return;
-        moduleUiEditorWriteProjectNote(project, meta, noteInput.value);
-        persistProjects();
-        renderSelectionUi();
-    });
 
     reloadBtn.addEventListener('click', () => {
         wb.uiEditMode = false;
@@ -867,11 +613,9 @@
             wb.uiProjects.unshift(result.project);
             wb.uiSelectedProjectId = safeString(result.project.id);
             wb.uiEditMode = false;
-            wb.uiRuntime.selectedKey = '';
             renderProjectOptions();
             updateEditUi();
             loadProject(false);
-            persistProjects();
             notifyUser('Imported project: ' + safeString(result.project.name), { tone: 'success', durationMs: 2200, debugKind: 'app-builder' });
         } catch (error) {
             const reason = safeString(error && error.message) || 'Import failed.';
@@ -886,11 +630,17 @@
             notifyUser('Thomas project is pinned.', { tone: 'info', durationMs: 1700, debugKind: 'app-builder' });
             return;
         }
+        if (Array.isArray(project.blobUrls)) {
+            project.blobUrls.forEach((url) => {
+                try {
+                    URL.revokeObjectURL(safeString(url));
+                } catch (_error) {}
+            });
+        }
         wb.uiProjects = wb.uiProjects.filter((row) => safeString(row && row.id) !== safeString(project.id));
         wb.uiSelectedProjectId = safeString(wb.uiProjects[0] && wb.uiProjects[0].id);
         wb.uiEditMode = false;
-        wb.uiRuntime.selectedKey = '';
-        persistProjects();
+        moduleUiEditorPersistUrlProjects(wb);
         renderProjectOptions();
         updateEditUi();
         loadProject(false);
@@ -901,10 +651,7 @@
     renderProjectOptions();
     updateViewportUi();
     updateEditUi();
-    renderElementList();
-    renderSelectionUi();
-    updateWorkflowUi();
-    if (moduleCatalog.isConnected && catalogUrlInput.value) {
+    if (!moduleStore.hidden && catalogUrlInput.value) {
         void syncMarketplaceCatalog({ auto: true });
     }
     loadProject(false);

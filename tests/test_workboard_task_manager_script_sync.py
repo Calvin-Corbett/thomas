@@ -5,6 +5,7 @@ from pathlib import Path
 
 import scripts.check_workboard_claims as gate
 import scripts.workboard_task_manager as mod
+import scripts.workboard_task_manager_plans as plan_sync
 
 from thomas.preferences.store import PreferencesStore
 
@@ -156,6 +157,40 @@ def test_sync_plans_places_problem_entries_inside_task_problems_section(tmp_path
     assert any("task_id=models-lane; problem=" in line for line in section_lines)
     first_problem_idx = next(idx for idx, line in enumerate(lines) if "task_id=models-lane; problem=" in line)
     assert first_problem_idx > heading_idx
+
+
+def test_sync_plan_helpers_keep_repo_relative_paths_inside_repo(monkeypatch, tmp_path: Path) -> None:
+    monkeypatch.setattr(plan_sync, "ROOT", tmp_path)
+
+    plan_path = plan_sync._default_plan_path("models-lane", "plans/thomas/tasks")
+    problem_path = plan_sync._default_problem_path("models-lane", "plans/thomas/problems")
+
+    assert plan_path == "plans/thomas/tasks/models-lane/PLAN.md"
+    assert problem_path == "plans/thomas/problems/models-lane/PROBLEM.md"
+
+
+def test_sync_problem_template_includes_task_marker() -> None:
+    body = plan_sync._build_problem_template(
+        task_id="models-lane",
+        owner="Codex 1",
+        summary="[WIP] models lane",
+        scope="thomas/cli/main.py",
+        status="in_progress",
+        now_iso="2026-03-28T14:12:13+00:00",
+    )
+
+    assert "task_id: `models-lane`" in body
+
+
+def test_sync_problem_marker_repair_inserts_marker_after_heading(tmp_path: Path) -> None:
+    problem_path = tmp_path / "PROBLEM.md"
+    problem_path.write_text("# PROBLEM for models-lane\n\n- Owner: Codex 1\n", encoding="utf-8")
+
+    plan_sync._ensure_problem_marker(problem_path, task_id="models-lane")
+
+    body = problem_path.read_text(encoding="utf-8")
+    assert body.startswith("# PROBLEM for models-lane\n\ntask_id: `models-lane`\n\n")
+    assert "- Owner: Codex 1" in body
 
 
 def test_sweep_inactive_apply_moves_tasks_and_marks_agent_inactive(tmp_path: Path, monkeypatch, capsys) -> None:

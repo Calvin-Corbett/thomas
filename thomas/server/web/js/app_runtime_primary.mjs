@@ -705,6 +705,7 @@ let robotAlertShowing = false;
 let robotAlertLastMessage = '';
 let robotAlertLastAt = 0;
 let officeState = null;
+let officeDraftMapState = null;
 let officeChatPreviewUntil = 0;
 let officeChatPreviewTimer = 0;
 let officeChatPreviewSessionId = '';
@@ -717,6 +718,7 @@ let chatRobotWorldLastFrameAt = 0;
 let chatPrimaryPresenceState = null;
 let chatRobotWorldLatestSnapshot = null;
 let chatRobotWorldDebugSamples = [];
+let chatHelperSpawnOrdinal = 0;
 let chatRobotWorldDebugScenario = null;
 let chatPhysicsWorldState = null;
 let missionState = null;
@@ -785,6 +787,9 @@ const DEBUG_TAB_SEQUENCE = ['runtime', 'system', 'models', 'tools', 'memory', 'r
 const UI_NAV_MODE_STORAGE_KEY = 'thomas.ui.nav_mode.v1';
 const UI_WORKSPACE_NAV_ORDER_STORAGE_KEY = 'thomas.ui.workspace_nav_order.v1';
 const UI_SIDEBAR_COLLAPSED_STORAGE_KEY = 'thomas.ui.sidebar_collapsed.v1';
+const UI_MARKETPLACE_STORE_URL_STORAGE_KEY = 'thomas.ui.marketplace_store_url.v1';
+const DEFAULT_MARKETPLACE_STORE_URL = 'https://thomas-site.thomasdevhub.workers.dev';
+const LEGACY_MARKETPLACE_STORE_URL = 'https://thomas.dev';
 const UI_CHAT_LIST_EXPANDED_STORAGE_KEY = 'thomas.ui.chat_list_expanded.v1';
 const UI_ACTIVE_CHAT_STORAGE_KEY = 'thomas.ui.active_chat.v1';
 const UI_COMPACT_LAYOUT_MEDIA_QUERY = '(max-width: 760px)';
@@ -818,6 +823,88 @@ const OFFICE_CROWD_RELIEF_NEIGHBORS = 3;
 const OFFICE_CROWD_RELIEF_COOLDOWN_MS = 900;
 const OFFICE_MAP_WIDTH = 4200;
 const OFFICE_MAP_HEIGHT = 2700;
+const OFFICE_DRAFT_MAP_SIZE = 24000;
+const OFFICE_DRAFT_MAP_MIN_ZOOM = 0.015;
+const OFFICE_DRAFT_MAP_MAX_ZOOM = 2.2;
+const OFFICE_DRAFT_MAP_DEFAULT_ZOOM = 0.72;
+const OFFICE_DRAFT_MAP_MINOR_GRID = 32;
+const OFFICE_DRAFT_MAP_MAJOR_GRID = 160;
+const OFFICE_DRAFT_MINIMAP_SIZE = 220;
+const OFFICE_DRAFT_LAYOUT_STORAGE_KEY = 'thomas.office.draft.layout.v1';
+const OFFICE_DRAFT_AUTOSAVE_STORAGE_KEY = 'thomas.office.draft.autosave.v1';
+const OFFICE_DRAFT_UNDO_LIMIT = 48;
+const OFFICE_DRAFT_ASSET_SCALE_MIN = 0.8;
+const OFFICE_DRAFT_ASSET_SCALE_MAX = 1.4;
+const OFFICE_DRAFT_ASSET_SCALE_OPTIONS = Object.freeze([0.8, 1, 1.2, 1.4]);
+const OFFICE_DRAFT_ROOM_FLOOR_PALETTES = Object.freeze({
+    tan: {
+        label: 'Tan',
+        shell: 'linear-gradient(180deg, rgba(188, 160, 127, 0.98), rgba(148, 117, 88, 0.98))',
+        floor: 'linear-gradient(180deg, rgba(222, 196, 164, 0.96), rgba(180, 146, 111, 0.96))',
+        floorBorder: 'rgba(247, 228, 205, 0.18)',
+    },
+    sand: {
+        label: 'Sand',
+        shell: 'linear-gradient(180deg, rgba(202, 183, 148, 0.98), rgba(164, 141, 104, 0.98))',
+        floor: 'linear-gradient(180deg, rgba(232, 216, 188, 0.96), rgba(195, 170, 132, 0.96))',
+        floorBorder: 'rgba(255, 241, 216, 0.18)',
+    },
+    clay: {
+        label: 'Clay',
+        shell: 'linear-gradient(180deg, rgba(177, 139, 112, 0.98), rgba(135, 97, 72, 0.98))',
+        floor: 'linear-gradient(180deg, rgba(216, 181, 154, 0.95), rgba(176, 134, 105, 0.95))',
+        floorBorder: 'rgba(255, 226, 200, 0.16)',
+    },
+    slate: {
+        label: 'Slate',
+        shell: 'linear-gradient(180deg, rgba(110, 124, 148, 0.98), rgba(76, 90, 112, 0.98))',
+        floor: 'linear-gradient(180deg, rgba(161, 174, 196, 0.96), rgba(121, 136, 159, 0.96))',
+        floorBorder: 'rgba(228, 237, 252, 0.15)',
+    },
+});
+const OFFICE_DRAFT_ASSET_LIBRARY = Object.freeze({
+    couch: {
+        label: 'Couch',
+        width: 336,
+        height: 188,
+    },
+});
+const OFFICE_DRAFT_ASSET_COLORWAYS = Object.freeze({
+    couch: Object.freeze({
+        caramel: {
+            label: 'Caramel',
+            back: 'linear-gradient(180deg, rgba(212, 160, 117, 0.98), rgba(162, 105, 69, 0.98))',
+            seat: 'linear-gradient(180deg, rgba(223, 176, 132, 1), rgba(175, 117, 78, 0.98))',
+            arm: 'linear-gradient(180deg, rgba(190, 132, 92, 0.98), rgba(141, 87, 56, 0.98))',
+            seam: 'rgba(112, 63, 37, 0.34)',
+            swatch: 'linear-gradient(180deg, #d4a075, #9f6844)',
+        },
+        moss: {
+            label: 'Moss',
+            back: 'linear-gradient(180deg, rgba(146, 172, 126, 0.98), rgba(92, 118, 76, 0.98))',
+            seat: 'linear-gradient(180deg, rgba(170, 195, 147, 1), rgba(108, 138, 89, 0.98))',
+            arm: 'linear-gradient(180deg, rgba(126, 150, 106, 0.98), rgba(83, 106, 66, 0.98))',
+            seam: 'rgba(52, 74, 42, 0.34)',
+            swatch: 'linear-gradient(180deg, #9cbc81, #63814f)',
+        },
+        harbor: {
+            label: 'Harbor',
+            back: 'linear-gradient(180deg, rgba(123, 158, 198, 0.98), rgba(73, 104, 145, 0.98))',
+            seat: 'linear-gradient(180deg, rgba(153, 187, 224, 1), rgba(86, 122, 168, 0.98))',
+            arm: 'linear-gradient(180deg, rgba(100, 134, 176, 0.98), rgba(65, 94, 131, 0.98))',
+            seam: 'rgba(38, 62, 94, 0.34)',
+            swatch: 'linear-gradient(180deg, #8bb0d7, #5678a7)',
+        },
+        graphite: {
+            label: 'Graphite',
+            back: 'linear-gradient(180deg, rgba(122, 130, 143, 0.98), rgba(76, 83, 97, 0.98))',
+            seat: 'linear-gradient(180deg, rgba(153, 161, 175, 1), rgba(92, 100, 116, 0.98))',
+            arm: 'linear-gradient(180deg, rgba(106, 113, 126, 0.98), rgba(67, 74, 86, 0.98))',
+            seam: 'rgba(42, 48, 59, 0.34)',
+            swatch: 'linear-gradient(180deg, #98a0ac, #5f6773)',
+        },
+    }),
+});
 const OFFICE_VIEWPORT_MARGIN = 0;
 const OFFICE_MINIMAP_PAD_RATIO = 0.06;
 const OFFICE_COLLISION_PAIR_COOLDOWN_MIN = 1300;
@@ -1454,12 +1541,10 @@ if (window.visualViewport) {
 
 function _createRobotStatus(category) {
     const wrapper = document.createElement('div');
-    wrapper.className = 'chat-robot-status chat-robot-status-inline';
+    wrapper.className = 'chat-robot-status chat-robot-status-inline assistant-inline-thinking-status';
     wrapper.innerHTML = `
-        <span class="chat-robot-text-wrap chat-robot-text-wrap-inline">
-            <span class="chat-robot-saying-row">
-                <span class="chat-robot-saying">${pickChatSaying(category)}</span>
-            </span>
+        <span class="assistant-inline-thinking-copy">
+            <span class="chat-robot-saying">${pickChatSaying(category)}</span>
             <span class="chat-robot-timer">0.0s</span>
         </span>
     `;
@@ -1955,6 +2040,18 @@ function missionBuildRuntimeState(payload, jobsPayload = null, { sessionId = '',
 function delegationStatusIsLive(stateRaw) {
     const state = safeString(stateRaw).toLowerCase();
     return ['requested', 'queued', 'pending', 'classified', 'claimed', 'executing', 'running', 'in_progress'].includes(state);
+}
+
+function delegationRowIsRenderableLive(row) {
+    const state = safeString(row?.state || row?.status).toLowerCase();
+    if (!delegationStatusIsLive(state)) return false;
+    const updatedAt = missionToEpoch(safeString(row?.updated_at || row?.created_at));
+    if (!updatedAt) return true;
+    const ageMs = Math.max(0, Date.now() - updatedAt);
+    if (['requested', 'queued', 'pending', 'classified', 'claimed'].includes(state)) {
+        return ageMs <= TASK_CONTINUITY_HEARTBEAT_DEAD_MS;
+    }
+    return ageMs <= (TASK_CONTINUITY_HEARTBEAT_DEAD_MS * 2);
 }
 
 function delegationStatusLabel(stateRaw) {
@@ -2506,16 +2603,25 @@ function updateMessageTaskStrip(messageId, patch = {}) {
     return state;
 }
 
+function officePixelAgentMarkup(extraClass = '') {
+    const classSuffix = safeString(extraClass).trim();
+    return `
+        <span class="office-pixel-agent${classSuffix ? ` ${escapeHtml(classSuffix)}` : ''}">
+            <span class="office-agent-head">
+                <span class="office-agent-eye office-agent-eye-left"></span>
+                <span class="office-agent-eye office-agent-eye-right"></span>
+            </span>
+            <span class="office-agent-body"></span>
+            <span class="office-agent-leg office-agent-leg-left"></span>
+            <span class="office-agent-leg office-agent-leg-right"></span>
+        </span>
+    `;
+}
+
 function chatTaskRobotAgentMarkup() {
     return `
         <span class="chat-robot-agent chat-robot-world-agent">
-            <span class="agent-head office-agent-head">
-                <span class="agent-eye office-agent-eye office-agent-eye-left agent-eye-left"></span>
-                <span class="agent-eye office-agent-eye office-agent-eye-right agent-eye-right"></span>
-            </span>
-            <span class="agent-body office-agent-body"></span>
-            <span class="agent-leg office-agent-leg office-agent-leg-left agent-leg-left"></span>
-            <span class="agent-leg office-agent-leg office-agent-leg-right agent-leg-right"></span>
+            ${officePixelAgentMarkup()}
         </span>
     `;
 }
@@ -2557,26 +2663,8 @@ function chatAgentPresenceSetOfficeContext(activityId, context = {}) {
 }
 
 function openOfficeForTaskContext(context = {}) {
-    const activityId = safeString(context.activityId);
-    const robotState = activityId ? chatAgentPresenceStateByActivityId.get(activityId) : null;
-    const requestedAgentId = safeString(context.agentId || robotState?.officeAgentId);
-    const requestedAgentName = safeString(context.agentName || robotState?.officeAgentName || robotState?.name || DEFAULT_AGENT_NAME);
+    void context;
     setSidebarNavMode('office');
-    if (!officeEnsureState()) return;
-    const targetAgent = officeGetAgentById(requestedAgentId)
-        || officeFindAgentByHandle(requestedAgentName)
-        || officeGetAgentById(officeState?.selectedAgentId)
-        || officeState?.agents?.[0]
-        || null;
-    if (targetAgent) {
-        officeState.selectedAgentId = targetAgent.id;
-        if (typeof officeRenderAgentSelector === 'function') {
-            officeRenderAgentSelector(targetAgent.id);
-        }
-        if (typeof officeSetFollowMode === 'function') {
-            officeSetFollowMode(true, targetAgent.id);
-        }
-    }
 }
 
 function chatAgentPresenceRender(state) {
@@ -2612,18 +2700,44 @@ function chatRobotWorldShouldBeVisible() {
 
 function chatRobotWorldAmbientLine(state) {
     if (!state) return '';
-    if (safeString(state.kind) === 'primary' && chatRobotWorldTaskIsLive(state)) {
-        return safeString(state.summary || state.taskText) || 'Coordinating the active run while helpers work.';
-    }
     const mode = safeString(state.mode);
-    if (mode === 'sleep') return 'Power nap while the task strip keeps score.';
-    if (mode === 'workout') return 'Training while the background work cooks.';
+    if (safeString(state.kind) === 'primary' && chatRobotWorldTaskIsLive(state)) {
+        return 'Coordinating the active run while helpers work.';
+    }
+    if (mode === 'sleep') return 'Power nap on floor duty.';
+    if (mode === 'workout') return 'Strength set on standby.';
     if (mode === 'inspect') return 'Inspecting the chat controls.';
-    if (mode === 'perch') return 'Perched on the interface and watching the run.';
+    if (mode === 'perch') return 'Watching the interface from up here.';
     if (chatTaskIsTerminal(state.status)) {
         return safeString(state.status) === 'failed'
-            ? 'Run failed. Portal exit queued.'
-            : 'All done here. Portal exit queued.';
+            ? 'That run went sideways.'
+            : 'Wrapped up and cooling down.';
+    }
+    if (safeString(state.kind) === 'delegation') {
+        return officePick([
+            'On helper patrol.',
+            'Keeping watch nearby.',
+            'Standing by for the next step.',
+            'Checking the floor route.',
+        ]) || 'Standing by for the next step.';
+    }
+    return officePick([
+        'Standing by.',
+        'Watching the floor.',
+        'Keeping the chat moving.',
+        'Holding position.',
+    ]) || 'Standing by.';
+}
+
+function chatRobotWorldDetailLine(state) {
+    if (!state) return '';
+    if (chatTaskIsTerminal(state.status)) {
+        return safeString(state.status) === 'failed'
+            ? (safeString(state.summary || state.taskText) || 'This run failed before completion.')
+            : (safeString(state.summary || state.taskText) || 'This run completed successfully.');
+    }
+    if (chatRobotWorldTaskIsLive(state)) {
+        return safeString(state.summary || state.taskText) || 'Working the assigned task.';
     }
     return safeString(state.summary || state.taskText) || 'Standing by.';
 }
@@ -2694,14 +2808,28 @@ function chatRobotWorldBounds() {
         ? Math.round(Math.min(window.innerHeight - 8, composerRect.bottom + 14))
         : Math.round(Math.min(window.innerHeight - 8, top + CHAT_PRIMARY_ROBOT_WORLD_HEIGHT));
     const height = Math.max(CHAT_PRIMARY_ROBOT_WORLD_HEIGHT, bottom - top);
-    const fallbackFloorLineY = inputRowRect
-        ? Math.round(inputRowRect.bottom - top)
-        : Math.round(height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET);
-    const rawFloorLineY = statusBarRect
+    const composerTopLineY = composerRect
+        ? Math.round(composerRect.top - top)
+        : Number.NaN;
+    const inputRowTopLineY = inputRowRect
+        ? Math.round(inputRowRect.top - top)
+        : Number.NaN;
+    const statusBarTopLineY = statusBarRect
         ? Math.round(statusBarRect.top - top)
-        : inputRowRect
+        : Number.NaN;
+    const preferredFloorLineY = Number.isFinite(inputRowTopLineY)
+        ? inputRowTopLineY
+        : (Number.isFinite(statusBarTopLineY) ? statusBarTopLineY : composerTopLineY);
+    const fallbackFloorLineY = Number.isFinite(preferredFloorLineY)
+        ? preferredFloorLineY
+        : (inputRowRect
             ? Math.round(inputRowRect.bottom - top)
-            : Math.round(height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET);
+            : Math.round(height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET));
+    const rawFloorLineY = Number.isFinite(preferredFloorLineY)
+        ? preferredFloorLineY
+        : (inputRowRect
+            ? Math.round(inputRowRect.bottom - top)
+            : Math.round(height - CHAT_PRIMARY_ROBOT_GROUND_OFFSET));
     const floorLineY = chatRobotWorldClamp(
         Number.isFinite(rawFloorLineY) ? rawFloorLineY : fallbackFloorLineY,
         24,
@@ -2756,11 +2884,7 @@ function chatRobotWorldGeometry(bounds = chatRobotWorldBounds()) {
             bottomY: clampWorldY(composerBoxRect.bottom - bounds.top, bounds.floorLineY - 12, 24, Math.max(28, bounds.height - 8)),
         }
         : null;
-    const floorY = statusBarRect
-        ? clampWorldY(statusBarRect.top - bounds.top, bounds.floorLineY, 24, Math.max(28, bounds.height - 6))
-        : inputRowRect
-            ? clampWorldY(inputRowRect.bottom - bounds.top, bounds.floorLineY, 24, Math.max(28, bounds.height - 6))
-            : bounds.floorLineY;
+    const floorY = clampWorldY(bounds.floorLineY, bounds.floorLineY, 24, Math.max(28, bounds.height - 6));
     const roofY = composerBoxRect
         ? clampWorldY(composerBoxRect.top - bounds.top, floorY - 46, 18, Math.max(24, floorY - 8))
         : Math.max(18, floorY - 46);
@@ -2824,6 +2948,28 @@ function chatRobotWorldPrimaryUsesGroundedPhysics(state) {
     return chatWorldIsPhysicsMode()
         && !chatRobotWorldTaskIsLive(state)
         && safeString(state?.kind) === 'primary';
+}
+
+function chatRobotWorldHelperSlot(state, platformGraph, platforms) {
+    const ordinal = Math.max(0, Number(state?.spawnOrdinal || 0));
+    const patterns = [
+        { floorId: 'floor-left', pct: 0.18 },
+        { floorId: 'floor-right', pct: 0.2 },
+        { floorId: 'floor-right', pct: 0.76 },
+        { floorId: 'floor-left', pct: 0.74 },
+    ];
+    const pattern = patterns[ordinal % patterns.length];
+    const platform = platformGraph.platformsById?.get(pattern.floorId)
+        || platforms.find((candidate) => safeString(candidate.id) === pattern.floorId)
+        || platforms.find((candidate) => safeString(candidate.kind) === 'floor')
+        || null;
+    if (!platform) return null;
+    const minX = Number(platform.x1 || 0) + 6;
+    const maxX = Number(platform.x2 || 0) - 6;
+    return {
+        platform,
+        homeX: chatRobotWorldClamp(minX + ((maxX - minX) * Number(pattern.pct || 0.5)), minX, maxX),
+    };
 }
 
 function chatRobotWorldAddPlatformEdge(edges, fromId, toId, meta = {}) {
@@ -3299,6 +3445,8 @@ function chatPhysicsWorldSnapActorsToStableSurfaces(worldState, actors = [], gra
     (actors || []).forEach((state) => {
         if (!state) return;
         if (state.portalTransfer || state.transition) return;
+        if (safeString(state.mode) === 'falling') return;
+        if (!state.physicsNeedsSnap) return;
         const actorRecord = chatPhysicsWorldEnsureActor(worldState, state);
         if (!actorRecord?.body) return;
         const stablePlatform = chatPhysicsWorldStablePlatformForState(state, graph);
@@ -3324,6 +3472,7 @@ function chatPhysicsWorldSnapActorsToStableSurfaces(worldState, actors = [], gra
         try {
             actorRecord.body.setVelocity(0, 0);
         } catch (_) {}
+        state.physicsNeedsSnap = false;
         chatPhysicsWorldRenderActorVisual(state, actorRecord);
     });
 }
@@ -3372,8 +3521,15 @@ function chatPhysicsWorldPrime(bounds, graph, actors = []) {
     if (chatPhysicsWorldState?.ready) {
         chatPhysicsWorldState.bounds = bounds;
         chatPhysicsWorldState.graph = graph;
+        const signatureChanged = chatPhysicsWorldState.signature !== nextSignature;
         chatPhysicsWorldState.signature = nextSignature;
         chatPhysicsWorldSyncActors(chatPhysicsWorldState, actors);
+        if (signatureChanged) {
+            (actors || []).forEach((state) => {
+                if (!state || safeString(state.mode) === 'falling') return;
+                state.physicsNeedsSnap = true;
+            });
+        }
         if (chatPhysicsWorldState.signature === nextSignature) {
             chatPhysicsWorldSnapActorsToStableSurfaces(chatPhysicsWorldState, actors, graph);
         }
@@ -3448,6 +3604,26 @@ function chatPhysicsWorldAdvanceActor(worldState, state, dt, bounds, graph, walk
     if (!actorRecord?.body) return false;
     const body = actorRecord.body;
     const targetPlatform = graph?.platformsById?.get(safeString(state.targetPlatformId || state.currentPlatformId || '')) || null;
+    if (safeString(state.mode) === 'falling') {
+        chatPhysicsWorldSetActorGravity(actorRecord, true);
+        body.setVelocityX(Number(body.velocity?.x || 0) * 0.92);
+        chatPhysicsWorldSyncStateFromBody(state, actorRecord, bounds);
+        const landedPlatform = chatRobotWorldCurrentPlatform(state, graph?.platforms || []);
+        if (landedPlatform && (body.blocked?.down || body.touching?.down)) {
+            state.currentPlatformId = safeString(landedPlatform.id);
+            state.targetPlatformId = safeString(landedPlatform.id);
+            state.homeFloorId = safeString(state.homeFloorId || landedPlatform.id);
+            state.y = Number(landedPlatform.y || bounds.groundY) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+            state.targetY = state.y;
+            state.mode = 'idle';
+            state.modeUntil = Date.now() + 1800;
+            state.physicsNeedsSnap = false;
+            chatRobotWorldSetSpeech(state, chatRobotWorldAmbientLine(state) || 'Helper online.', 1600);
+            chatPhysicsWorldSyncBodyFromState(state, actorRecord);
+        }
+        chatPhysicsWorldRenderActorVisual(state, actorRecord);
+        return true;
+    }
     if (state.portalTransfer) {
         chatPhysicsWorldSetActorGravity(actorRecord, false);
         chatRobotWorldAdvancePortalTransfer(state, bounds);
@@ -3488,7 +3664,7 @@ function chatPhysicsWorldAdvanceActor(worldState, state, dt, bounds, graph, walk
     let desiredVelocityX = 0;
     if (Math.abs(dx) > 3) {
         state.facing = dx >= 0 ? 1 : -1;
-        desiredVelocityX = (dx >= 0 ? 1 : -1) * (walkSpeed * 60);
+        desiredVelocityX = (dx >= 0 ? 1 : -1) * Math.max(26, walkSpeed * 360);
         if ((state.mode === 'sleep' || state.mode === 'workout') && safeString(state.status) === 'idle') {
             desiredVelocityX *= 0.35;
         }
@@ -3679,7 +3855,7 @@ function chatRobotWorldApplyPalette(state) {
     state.element.style.setProperty('--agent-primary', palette.primary);
     state.element.style.setProperty('--agent-secondary', palette.secondary);
     state.element.style.setProperty('--agent-glow', palette.glow);
-    const agentEl = state.element.querySelector('.chat-robot-agent, .office-pixel-agent');
+    const agentEl = state.element.querySelector('.office-pixel-agent, .chat-robot-agent');
     if (!(agentEl instanceof HTMLElement)) return;
     agentEl.classList.toggle('facing-left', Number(state.facing || 1) < 0);
     CHAT_ROBOT_ANIMATIONS.forEach((anim) => agentEl.classList.remove(`chat-robot-anim-${anim}`));
@@ -4326,8 +4502,51 @@ function chatRobotWorldRetarget(state, graph = null) {
     const platforms = platformGraph.platforms || [];
     const liveTask = chatRobotWorldTaskIsLive(state);
     const isPrimary = safeString(state?.kind) === 'primary';
+    const isDelegation = safeString(state?.kind) === 'delegation';
     const physicsMode = chatWorldIsPhysicsMode();
     const groundedPrimaryPhysics = chatRobotWorldPrimaryUsesGroundedPhysics(state);
+    if (isDelegation) {
+        const helperMode = officePick(['idle', 'inspect', 'workout', 'sleep']) || 'idle';
+        const helperSlot = chatRobotWorldHelperSlot(state, platformGraph, platforms);
+        const helperPlatform = helperSlot?.platform
+            || platformGraph.platformsById?.get(safeString(state.homeFloorId || state.currentPlatformId || state.targetPlatformId || ''))
+            || chatRobotWorldCurrentPlatform(state, platforms)
+            || platforms.find((platform) => safeString(platform.kind) === 'floor')
+            || null;
+        state.mode = helperMode;
+        state.behaviorClass = chatRobotWorldBehaviorForMode(helperMode);
+        state.modeUntil = Date.now() + motion.actionMinMs + Math.random() * (motion.actionMaxMs - motion.actionMinMs);
+        if (helperPlatform) {
+            const minX = Number(helperPlatform.x1 || 0) + 6;
+            const maxX = Number(helperPlatform.x2 || 0) - 6;
+            const homeX = chatRobotWorldClamp(
+                Number.isFinite(Number(helperSlot?.homeX))
+                    ? Number(helperSlot.homeX)
+                    : (Number.isFinite(Number(state.homeX)) ? Number(state.homeX) : Number(state.x || ((minX + maxX) * 0.5))),
+                minX,
+                maxX,
+            );
+            const patrolRadius = Math.min(62, Math.max(18, (maxX - minX) * 0.14));
+            const direction = Number(state.preferredDirection || state.facing || 1) >= 0 ? 1 : -1;
+            state.homeFloorId = safeString(helperPlatform.id);
+            state.currentPlatformId = safeString(state.currentPlatformId || helperPlatform.id);
+            state.targetPlatformId = safeString(helperPlatform.id);
+            state.targetY = Number(helperPlatform.y || bounds.groundY) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+            state.targetX = chatRobotWorldClamp(homeX + (direction * patrolRadius), minX, maxX);
+            if (Math.abs(state.targetX - homeX) < 10) {
+                state.targetX = homeX;
+            }
+            state.homeX = homeX;
+            state.preferredDirection = direction * -1;
+        }
+        if (physicsMode) {
+            state.transition = null;
+            state.hiddenTransit = false;
+            state.targetPlatformId = safeString(helperPlatform?.id || state.homeFloorId || state.targetPlatformId);
+            state.physicsNeedsSnap = false;
+        }
+        return;
+    }
     if (!physicsMode && isPrimary && !liveTask) {
         const leftFloor = platformGraph.platformsById?.get('floor-left')
             || platforms.find((platform) => safeString(platform.kind) === 'floor')
@@ -4363,6 +4582,46 @@ function chatRobotWorldRetarget(state, graph = null) {
         return;
     }
     if (isPrimary && !liveTask) {
+        if (physicsMode) {
+            const primaryFloor = platformGraph.platformsById?.get(safeString(state.homeFloorId || state.currentPlatformId || ''))
+                || platforms.find((platform) => safeString(platform.kind) === 'floor')
+                || null;
+            const calmMode = officePick(['idle', 'inspect', 'workout', 'sleep']) || 'idle';
+            state.mode = calmMode;
+            state.behaviorClass = chatRobotWorldBehaviorForMode(calmMode);
+            state.modeUntil = Date.now() + motion.actionMinMs + Math.random() * (motion.actionMaxMs - motion.actionMinMs);
+            if (primaryFloor) {
+                const minX = Number(primaryFloor.x1 || 0) + 8;
+                const maxX = Number(primaryFloor.x2 || 0) - 8;
+                const homeX = chatRobotWorldClamp(
+                    Number.isFinite(Number(state.homeX)) ? Number(state.homeX) : Number(state.x || ((minX + maxX) * 0.5)),
+                    minX,
+                    maxX,
+                );
+                const patrolRadius = Math.min(88, Math.max(20, (maxX - minX) * 0.12));
+                const direction = Number(state.preferredDirection || state.facing || 1) >= 0 ? 1 : -1;
+                state.currentPlatformId = safeString(state.currentPlatformId || primaryFloor.id);
+                state.targetPlatformId = safeString(primaryFloor.id);
+                state.homeFloorId = safeString(primaryFloor.id);
+                state.homeX = homeX;
+                state.targetY = Number(primaryFloor.y || bounds.groundY) - CHAT_PRIMARY_ROBOT_FOOT_OFFSET;
+                state.targetX = chatRobotWorldClamp(homeX + (direction * patrolRadius), minX, maxX);
+                state.preferredDirection = direction * -1;
+            }
+            state.transition = null;
+            state.hiddenTransit = false;
+            state.physicsNeedsSnap = false;
+            if (calmMode === 'sleep') {
+                chatRobotWorldSetSpeech(state, 'Resting on standby.');
+            } else if (calmMode === 'workout') {
+                chatRobotWorldSetSpeech(state, 'Warmup set.');
+            } else if (calmMode === 'inspect') {
+                chatRobotWorldSetSpeech(state, 'Watching the chat.');
+            } else {
+                chatRobotWorldSetSpeech(state, 'Standing by.');
+            }
+            return;
+        }
         const nextZone = safeString(state.ambientZone) || chatRobotWorldAmbientZoneForX(state.x, bounds);
         state.ambientZone = nextZone;
         state.ambientClusterRemaining = Number.isFinite(Number(state.ambientClusterRemaining))
@@ -4432,7 +4691,7 @@ function chatRobotWorldRetarget(state, graph = null) {
         }
         state.preferredDirection = desiredDirection * -1;
         const transition = chatRobotWorldPlanTransition(state, platform, bounds, platformGraph, motion.fidelity);
-        if (transition && !(groundedPrimaryPhysics && safeString(transition.routeKind) !== 'door')) {
+        if (transition && !physicsMode && !(groundedPrimaryPhysics && safeString(transition.routeKind) !== 'door')) {
             state.transition = transition;
             state.targetX = transition.segments[transition.segments.length - 1].x;
             state.targetY = transition.segments[transition.segments.length - 1].y;
@@ -4499,6 +4758,7 @@ function chatRobotWorldEnsurePrimaryState() {
         portalTransfer: null,
         debugPropKind: '',
         debugPropPhase: '',
+        physicsNeedsSnap: true,
     };
     chatPrimaryPresenceState.element = chatRobotWorldCreateActorElement('primary', chatPrimaryPresenceState);
     chatWorldSyncRootVisibility();
@@ -4557,6 +4817,7 @@ function chatRobotWorldRenderActor(state, graph = null) {
     state.element.dataset.platformId = safeString(state.currentPlatformId || '');
     state.element.dataset.targetPlatformId = safeString(state.targetPlatformId || '');
     state.element.dataset.mode = safeString(state.mode || '');
+    state.element.dataset.identitySource = safeString(state.identitySource || '');
     const label = state.element.querySelector('[data-role="label"]');
     if (label instanceof HTMLElement) {
         label.textContent = safeString(state.name) || DEFAULT_AGENT_NAME;
@@ -4565,10 +4826,10 @@ function chatRobotWorldRenderActor(state, graph = null) {
     if (bubbleName instanceof HTMLElement) {
         bubbleName.textContent = safeString(state.name) || DEFAULT_AGENT_NAME;
     }
-    const bubbleSummary = state.element.querySelector('[data-role="summary"]');
-    if (bubbleSummary instanceof HTMLElement) {
-        bubbleSummary.textContent = chatRobotWorldAmbientLine(state);
-    }
+      const bubbleSummary = state.element.querySelector('[data-role="summary"]');
+      if (bubbleSummary instanceof HTMLElement) {
+          bubbleSummary.textContent = chatRobotWorldDetailLine(state);
+      }
     const bubbleStatus = state.element.querySelector('[data-role="status"]');
     if (bubbleStatus instanceof HTMLElement) {
         bubbleStatus.textContent = chatTaskStatusLabel(state.status || 'idle');
@@ -4587,7 +4848,7 @@ function chatRobotWorldRenderActor(state, graph = null) {
     }
     chatRobotWorldApplyPalette(state);
     chatRobotWorldRenderRoute(state);
-    const botVisual = state.element.querySelector('.chat-robot-agent');
+    const botVisual = state.element.querySelector('.office-pixel-agent, .chat-robot-agent');
     const labelEl = state.element.querySelector('[data-role="label"]');
     const actorRect = state.element.getBoundingClientRect();
     const actorCenterX = actorRect.left + (actorRect.width * 0.5);
@@ -4770,7 +5031,7 @@ function chatRobotWorldBuildDebugSnapshot(graph, actors, frameNow = Date.now()) 
         const actorEl = state?.element;
         const actorRect = actorEl instanceof HTMLElement ? actorEl.getBoundingClientRect() : null;
         const actorCenterX = actorRect ? (actorRect.left + (actorRect.width * 0.5)) : null;
-        const botRect = actorEl?.querySelector?.('.chat-robot-agent')?.getBoundingClientRect?.() || null;
+          const botRect = actorEl?.querySelector?.('.office-pixel-agent, .chat-robot-agent')?.getBoundingClientRect?.() || null;
         const labelRect = actorEl?.querySelector?.('[data-role="label"]')?.getBoundingClientRect?.() || null;
         const physicsRow = chatPhysicsWorldActorDebugRow(state?.activityId);
         return {
@@ -4859,6 +5120,7 @@ function chatRobotWorldRemoveHelper(activityId, { immediate = false } = {}) {
         chatRobotWorldSyncRootVisibility();
         return;
     }
+    if (state.exiting) return;
     state.exiting = true;
     state.exitAt = Date.now() + CHAT_AGENT_PRESENCE_EXIT_MS + CHAT_AGENT_PRESENCE_PORTAL_OUT_MS;
     state.portalCloseAt = state.exitAt - CHAT_AGENT_PRESENCE_PORTAL_OUT_MS;
@@ -5039,14 +5301,15 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
     if (!chatRobotWorldShouldBeVisible()) return null;
     const existing = chatAgentPresenceStateByActivityId.get(key);
     const bounds = chatRobotWorldBounds();
-    const helperIndex = chatAgentPresenceStateByActivityId.size;
-    const slotCount = Math.max(3, helperIndex + 2);
-    const slotWidth = Math.max(72, bounds.width / slotCount);
-    const slotCenter = (slotWidth * (helperIndex + 0.5)) + (Math.random() * 28) - 14;
+    const spawnOrdinal = existing ? Number(existing.spawnOrdinal || 0) : chatHelperSpawnOrdinal++;
+    const spawnRatios = [0.18, 0.78, 0.9, 0.28];
+    const slotCenter = (bounds.width * spawnRatios[spawnOrdinal % spawnRatios.length]) + (Math.random() * 16) - 8;
     const spawnX = chatRobotWorldClamp(slotCenter, 28, Math.max(28, bounds.width - 28));
+    const spawnFloorId = spawnX < (bounds.width * 0.5) ? 'floor-left' : 'floor-right';
     const state = existing || {
         activityId: key,
         kind: 'delegation',
+        spawnOrdinal,
         element: null,
         x: spawnX,
         y: -56 - (Math.random() * 44),
@@ -5063,11 +5326,15 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
         officeTaskId: '',
         officeAgentId: '',
         officeAgentName: '',
+        identitySource: '',
         summary: '',
         taskText: '',
         status: 'running',
         color: '#9ad8ff',
         costume: 'none',
+        tint: 'blue',
+        homeX: spawnX,
+        homeFloorId: spawnFloorId,
         visibleSince: Date.now(),
         lingerUntil: 0,
         exiting: false,
@@ -5082,10 +5349,12 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
         portalClosing: false,
         debugPropKind: '',
         debugPropPhase: '',
+        physicsNeedsSnap: false,
     };
     Object.assign(state, patch);
     state.activityId = key;
     state.kind = 'delegation';
+    state.spawnOrdinal = spawnOrdinal;
     state.status = safeString(state.status || 'running').toLowerCase();
     state.summary = safeString(state.summary || state.taskText) || 'Helper active.';
     if (!state.element) {
@@ -5095,9 +5364,11 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
         state.y = -56 - (Math.random() * 44);
         state.targetX = spawnX;
         state.targetY = bounds.groundY;
+        state.homeX = spawnX;
+        state.homeFloorId = spawnFloorId;
         state.vy = 0;
         state.modeUntil = 0;
-        chatRobotWorldSetSpeech(state, safeString(state.summary) || 'Helper online.', 1800);
+        chatRobotWorldSetSpeech(state, chatRobotWorldAmbientLine(state) || 'Helper online.', 1800);
     }
     if (chatTaskIsTerminal(state.status)) {
         state.endedAt = Number(state.endedAt || Date.now());
@@ -5108,7 +5379,7 @@ function chatWorldUpsertPresence(activityId, patch = {}) {
         state.exiting = false;
         state.portalClosing = false;
         state.portalCloseAt = 0;
-        if (!state.modeUntil) {
+        if (!state.modeUntil && safeString(state.mode) !== 'falling') {
             chatRobotWorldRetarget(state);
         }
     }
@@ -5158,9 +5429,9 @@ function chatWorldSetPresence(activity) {
         return;
     }
     const sessionId = safeString(activity?.sessionId || taskContinuityLatestSessionId || activeChatId);
-    const liveRows = Array.isArray(activity?.agents)
-        ? activity.agents.filter((item) => delegationStatusIsLive(item?.state || item?.status))
-        : [];
+      const liveRows = Array.isArray(activity?.agents)
+          ? activity.agents.filter((item) => delegationRowIsRenderableLive(item))
+          : [];
     const nextIds = new Set();
     liveRows.forEach((row) => {
         const activityId = safeString(row?.execution_id || row?.task_id || row?.bot_id || row?.bot_name || row?.agent_id || row?.specialist_id);
@@ -5180,6 +5451,8 @@ function chatWorldSetPresence(activity) {
             startedAt: missionToEpoch(safeString(row?.created_at || row?.updated_at)) || Date.now(),
             color: identity.color || '#7cd6ff',
             costume: identity.costume || 'visor',
+            tint: identity.tint || 'blue',
+            identitySource: identity.source || 'seed',
             officeAgentName: identity.name,
             officeAgentId: identity.id,
         });
@@ -8386,8 +8659,8 @@ function renderChatComposerSubbar() {
                 ${renderOptions(autonomyOptions.length ? autonomyOptions : [
                     { value: '1', label: 'L1 Chat' },
                     { value: '2', label: 'L2 Assist' },
-                    { value: '3', label: 'L3 Auto' },
-                    { value: '4', label: 'L4 Agent' },
+                    { value: '3', label: 'L3 Agent' },
+                    { value: '4', label: 'L4 Full Autonomy' },
                 ], String(activeAutonomyLevel || 1))}
             </select>
         </div>
@@ -18486,15 +18759,7 @@ function officeCreateAgentElement(agent) {
     el.tabIndex = 0;
     el.innerHTML = `
         <button type="button" class="office-agent-hitbox" aria-label="Activate ${escapeHtml(agent.name)}">
-            <span class="office-pixel-agent">
-                <span class="office-agent-head">
-                    <span class="office-agent-eye office-agent-eye-left"></span>
-                    <span class="office-agent-eye office-agent-eye-right"></span>
-                </span>
-                <span class="office-agent-body"></span>
-                <span class="office-agent-leg office-agent-leg-left"></span>
-                <span class="office-agent-leg office-agent-leg-right"></span>
-            </span>
+            ${officePixelAgentMarkup()}
         </button>
         <span class="office-agent-label"></span>
         <span class="office-agent-bubble hidden center above"></span>
@@ -23249,9 +23514,10 @@ function officeSyncReducedMotionPreference() {
 
 function initOfficeWorkspace() {
     if (!officeScene || !officeWorkspace) return;
-    officeEnsureState();
-    officeUpdateFollowUi();
-    officeRenderMinimap();
+    officeEnsureDraftMapState();
+    officePrepareDraftMapShell();
+    officeRenderDraftMapScene();
+    officeBindDraftMapControls();
     officeSyncReducedMotionPreference();
     if (!officeReducedMotionListenerBound && window.matchMedia) {
         officeReducedMotionListenerBound = true;
@@ -23269,6 +23535,1704 @@ function initOfficeWorkspace() {
             }
         });
     }
+}
+
+function officeEnsureDraftMapState() {
+    if (officeDraftMapState) return officeDraftMapState;
+    officeDraftMapState = {
+        zoom: OFFICE_DRAFT_MAP_DEFAULT_ZOOM,
+        panX: 0,
+        panY: 0,
+        pointerId: null,
+        dragStartX: 0,
+        dragStartY: 0,
+        dragPanX: 0,
+        dragPanY: 0,
+        initialized: false,
+        hasLiveViewport: false,
+        minimapMinimized: false,
+        minimapPointerId: null,
+        minimapDragStartX: 0,
+        minimapDragStartY: 0,
+        minimapOffsetX: 0,
+        minimapOffsetY: 0,
+        minimapDragOffsetX: 0,
+        minimapDragOffsetY: 0,
+        minimapSize: OFFICE_DRAFT_MINIMAP_SIZE,
+        minimapResizePointerId: null,
+        minimapResizeStartX: 0,
+        minimapResizeStartY: 0,
+        minimapResizeStartSize: OFFICE_DRAFT_MINIMAP_SIZE,
+        autosaveEnabled: officeDraftLoadAutosavePreference(),
+        editorOpen: false,
+        selectedSpaceId: 'lounge',
+        selectedAssetId: null,
+        assetPointerId: null,
+        assetDragSpaceId: '',
+        assetDragId: '',
+        assetDragOffsetX: 0,
+        assetDragOffsetY: 0,
+        assetDragSnapshot: null,
+        catalogPointerId: null,
+        catalogPendingType: '',
+        catalogPreviewSpaceId: '',
+        catalogPreviewX: 0,
+        catalogPreviewY: 0,
+        rotationStep: 15,
+        gridEnabled: true,
+        nextAssetId: 3,
+        undoStack: [],
+        spaces: [
+            {
+                id: 'lounge',
+                name: 'Lounge',
+                x: (OFFICE_DRAFT_MAP_SIZE / 2) - 1120,
+                y: (OFFICE_DRAFT_MAP_SIZE / 2) - 760,
+                width: 2240,
+                height: 1520,
+                floorPalette: 'tan',
+                robotX: 520,
+                robotY: 800,
+                assets: [
+                    { id: 'couch-1', type: 'couch', x: 980, y: 824, rotation: 0, colorVariant: 'caramel', scale: 1 },
+                    { id: 'couch-2', type: 'couch', x: 1330, y: 824, rotation: 0, colorVariant: 'caramel', scale: 1 },
+                ],
+            },
+        ],
+    };
+    officeDraftApplySnapshot(officeDraftLoadStoredLayout(), officeDraftMapState, { persist: false, resetUndo: true });
+    return officeDraftMapState;
+}
+
+function officeDraftMapViewportRect() {
+    if (!officeSceneWrap) {
+        return { width: 1280, height: 720 };
+    }
+    const rect = officeSceneWrap.getBoundingClientRect();
+    return {
+        width: Math.max(320, rect.width || officeSceneWrap.clientWidth || 1280),
+        height: Math.max(240, rect.height || officeSceneWrap.clientHeight || 720),
+    };
+}
+
+function officeClampDraftMapPan(panXRaw, panYRaw, zoomRaw) {
+    const zoom = Math.max(OFFICE_DRAFT_MAP_MIN_ZOOM, Math.min(OFFICE_DRAFT_MAP_MAX_ZOOM, Number(zoomRaw) || OFFICE_DRAFT_MAP_DEFAULT_ZOOM));
+    const viewport = officeDraftMapViewportRect();
+    const viewportWorldWidth = viewport.width / zoom;
+    const viewportWorldHeight = viewport.height / zoom;
+    const freeWorldX = Math.max(0, viewportWorldWidth - OFFICE_DRAFT_MAP_SIZE);
+    const freeWorldY = Math.max(0, viewportWorldHeight - OFFICE_DRAFT_MAP_SIZE);
+    const padX = Math.max(2400, viewportWorldWidth * 0.35, (freeWorldX / 2) + 1800);
+    const padY = Math.max(2400, viewportWorldHeight * 0.35, (freeWorldY / 2) + 1800);
+    const minPanX = -padX;
+    const minPanY = -padY;
+    const maxPanX = (OFFICE_DRAFT_MAP_SIZE - viewportWorldWidth) + padX;
+    const maxPanY = (OFFICE_DRAFT_MAP_SIZE - viewportWorldHeight) + padY;
+    return {
+        panX: Math.min(Math.max(minPanX, Number(panXRaw) || 0), maxPanX),
+        panY: Math.min(Math.max(minPanY, Number(panYRaw) || 0), maxPanY),
+    };
+}
+
+function officeCenterDraftMapViewport() {
+    const state = officeEnsureDraftMapState();
+    const viewport = officeDraftMapViewportRect();
+    state.panX = Math.max(0, (OFFICE_DRAFT_MAP_SIZE / 2) - (viewport.width / (2 * state.zoom)));
+    state.panY = Math.max(0, (OFFICE_DRAFT_MAP_SIZE / 2) - (viewport.height / (2 * state.zoom)));
+}
+
+function officeDraftMapViewportWorldRect() {
+    const state = officeEnsureDraftMapState();
+    const viewport = officeDraftMapViewportRect();
+    return {
+        x: state.panX,
+        y: state.panY,
+        width: viewport.width / state.zoom,
+        height: viewport.height / state.zoom,
+    };
+}
+
+function officeDraftRoomPalette(paletteId) {
+    return OFFICE_DRAFT_ROOM_FLOOR_PALETTES[safeString(paletteId)] || OFFICE_DRAFT_ROOM_FLOOR_PALETTES.tan;
+}
+
+function officeDraftSelectedSpace() {
+    const state = officeEnsureDraftMapState();
+    return state.spaces.find((space) => safeString(space?.id) === safeString(state.selectedSpaceId)) || state.spaces[0] || null;
+}
+
+function officeDraftFindSpace(spaceId) {
+    const state = officeEnsureDraftMapState();
+    return state.spaces.find((space) => safeString(space?.id) === safeString(spaceId)) || null;
+}
+
+function officeDraftFindAsset(assetId) {
+    const state = officeEnsureDraftMapState();
+    for (const space of state.spaces) {
+        const asset = Array.isArray(space?.assets) ? space.assets.find((item) => safeString(item?.id) === safeString(assetId)) : null;
+        if (asset) {
+            return { space, asset };
+        }
+    }
+    return null;
+}
+
+function officeDraftSpaceAtWorldPoint(worldX, worldY) {
+    const state = officeEnsureDraftMapState();
+    return state.spaces.find((space) => (
+        Number(worldX) >= Number(space?.x)
+        && Number(worldX) <= Number(space?.x) + Number(space?.width)
+        && Number(worldY) >= Number(space?.y)
+        && Number(worldY) <= Number(space?.y) + Number(space?.height)
+    )) || null;
+}
+
+function officeDraftRotationOptions() {
+    return [15, 30, 45];
+}
+
+function officeDraftNormalizeRotation(value) {
+    const normalized = Number(value) || 0;
+    const wrapped = ((normalized % 360) + 360) % 360;
+    return Math.round(wrapped);
+}
+
+function officeDraftSnap(value, gridSize, enabled = true) {
+    if (!enabled) return Math.round(Number(value) || 0);
+    const size = Math.max(1, Number(gridSize) || 1);
+    return Math.round((Number(value) || 0) / size) * size;
+}
+
+function officeDraftCloneLayoutPayload(payload) {
+    try {
+        return JSON.parse(JSON.stringify(payload));
+    } catch {
+        return null;
+    }
+}
+
+function officeDraftClampAssetScale(value) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return 1;
+    return Math.min(OFFICE_DRAFT_ASSET_SCALE_MAX, Math.max(OFFICE_DRAFT_ASSET_SCALE_MIN, Math.round(numeric * 20) / 20));
+}
+
+function officeDraftAssetDimensions(assetType, scaleRaw = 1) {
+    const descriptor = OFFICE_DRAFT_ASSET_LIBRARY[safeString(assetType)] || OFFICE_DRAFT_ASSET_LIBRARY.couch;
+    const scale = officeDraftClampAssetScale(scaleRaw);
+    return {
+        width: Math.round(descriptor.width * scale),
+        height: Math.round(descriptor.height * scale),
+        scale,
+    };
+}
+
+function officeDraftAssetColorway(assetType, colorId) {
+    const colorways = OFFICE_DRAFT_ASSET_COLORWAYS[safeString(assetType)] || OFFICE_DRAFT_ASSET_COLORWAYS.couch;
+    return colorways[safeString(colorId)] || colorways.caramel;
+}
+
+function officeDraftLayoutSnapshot(stateRaw = officeEnsureDraftMapState()) {
+    const state = stateRaw || officeEnsureDraftMapState();
+    return {
+        selectedSpaceId: safeString(state.selectedSpaceId),
+        selectedAssetId: safeString(state.selectedAssetId),
+        rotationStep: officeDraftRotationOptions().includes(Number(state.rotationStep)) ? Number(state.rotationStep) : 15,
+        gridEnabled: state.gridEnabled !== false,
+        nextAssetId: Math.max(1, Number(state.nextAssetId) || 1),
+        spaces: (Array.isArray(state.spaces) ? state.spaces : []).map((space) => ({
+            id: safeString(space?.id),
+            name: safeString(space?.name) || 'Space',
+            x: Math.round(Number(space?.x) || 0),
+            y: Math.round(Number(space?.y) || 0),
+            width: Math.max(320, Math.round(Number(space?.width) || 0)),
+            height: Math.max(240, Math.round(Number(space?.height) || 0)),
+            floorPalette: safeString(space?.floorPalette) || 'tan',
+            robotX: Math.round(Number(space?.robotX) || 0),
+            robotY: Math.round(Number(space?.robotY) || 0),
+            assets: (Array.isArray(space?.assets) ? space.assets : []).map((asset) => ({
+                id: safeString(asset?.id),
+                type: safeString(asset?.type) || 'couch',
+                x: Math.round(Number(asset?.x) || 0),
+                y: Math.round(Number(asset?.y) || 0),
+                rotation: officeDraftNormalizeRotation(asset?.rotation),
+                colorVariant: safeString(asset?.colorVariant) || 'caramel',
+                scale: officeDraftClampAssetScale(asset?.scale),
+            })),
+        })),
+    };
+}
+
+function officeDraftLoadStoredLayout() {
+    try {
+        if (!window?.localStorage) return null;
+        const raw = window.localStorage.getItem(OFFICE_DRAFT_LAYOUT_STORAGE_KEY);
+        if (!raw) return null;
+        return officeDraftCloneLayoutPayload(JSON.parse(raw));
+    } catch {
+        return null;
+    }
+}
+
+function officeDraftLoadAutosavePreference() {
+    try {
+        if (!window?.localStorage) return true;
+        return window.localStorage.getItem(OFFICE_DRAFT_AUTOSAVE_STORAGE_KEY) !== '0';
+    } catch {
+        return true;
+    }
+}
+
+function officeDraftSetAutosavePreference(enabledRaw, stateRaw = officeEnsureDraftMapState()) {
+    const state = stateRaw || officeEnsureDraftMapState();
+    const enabled = enabledRaw !== false;
+    state.autosaveEnabled = enabled;
+    try {
+        if (window?.localStorage) {
+            window.localStorage.setItem(OFFICE_DRAFT_AUTOSAVE_STORAGE_KEY, enabled ? '1' : '0');
+        }
+    } catch {
+        // Ignore preference storage failures.
+    }
+    if (enabled) {
+        officeDraftPersistLayout(state, { force: true });
+    }
+}
+
+function officeDraftPersistLayout(stateRaw = officeEnsureDraftMapState(), options = {}) {
+    const state = stateRaw || officeEnsureDraftMapState();
+    if (options.force !== true && state.autosaveEnabled === false) return;
+    try {
+        if (!window?.localStorage) return;
+        const snapshot = officeDraftLayoutSnapshot(state);
+        window.localStorage.setItem(OFFICE_DRAFT_LAYOUT_STORAGE_KEY, JSON.stringify(snapshot));
+    } catch {
+        // Ignore storage failures so the editor stays usable.
+    }
+}
+
+function officeDraftManualSaveLayout(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const state = officeEnsureDraftMapState();
+    officeDraftPersistLayout(state, { force: true });
+    officeRenderDraftMapScene();
+}
+
+function officeDraftApplySnapshot(snapshotRaw, stateRaw = officeEnsureDraftMapState(), options = {}) {
+    const state = stateRaw || officeEnsureDraftMapState();
+    if (!snapshotRaw || !Array.isArray(snapshotRaw.spaces) || !snapshotRaw.spaces.length) return false;
+    const normalizedSpaces = snapshotRaw.spaces.map((space, spaceIndex) => ({
+        id: safeString(space?.id) || `space-${spaceIndex + 1}`,
+        name: safeString(space?.name) || 'Space',
+        x: Math.round(Number(space?.x) || 0),
+        y: Math.round(Number(space?.y) || 0),
+        width: Math.max(320, Math.round(Number(space?.width) || 0)),
+        height: Math.max(240, Math.round(Number(space?.height) || 0)),
+        floorPalette: OFFICE_DRAFT_ROOM_FLOOR_PALETTES[safeString(space?.floorPalette)] ? safeString(space.floorPalette) : 'tan',
+        robotX: Math.round(Number(space?.robotX) || 0),
+        robotY: Math.round(Number(space?.robotY) || 0),
+        assets: (Array.isArray(space?.assets) ? space.assets : []).map((asset, assetIndex) => ({
+            id: safeString(asset?.id) || `asset-${spaceIndex + 1}-${assetIndex + 1}`,
+            type: OFFICE_DRAFT_ASSET_LIBRARY[safeString(asset?.type)] ? safeString(asset.type) : 'couch',
+            x: Math.round(Number(asset?.x) || 0),
+            y: Math.round(Number(asset?.y) || 0),
+            rotation: officeDraftNormalizeRotation(asset?.rotation),
+            colorVariant: safeString(asset?.colorVariant) || 'caramel',
+            scale: officeDraftClampAssetScale(asset?.scale),
+        })),
+    }));
+    state.spaces = normalizedSpaces;
+    state.nextAssetId = Math.max(1, Number(snapshotRaw.nextAssetId) || 1);
+    state.rotationStep = officeDraftRotationOptions().includes(Number(snapshotRaw.rotationStep)) ? Number(snapshotRaw.rotationStep) : 15;
+    state.gridEnabled = snapshotRaw.gridEnabled !== false;
+    state.selectedSpaceId = normalizedSpaces.some((space) => safeString(space.id) === safeString(snapshotRaw.selectedSpaceId))
+        ? safeString(snapshotRaw.selectedSpaceId)
+        : safeString(normalizedSpaces[0]?.id);
+    const assetExists = normalizedSpaces.some((space) => Array.isArray(space.assets) && space.assets.some((asset) => safeString(asset.id) === safeString(snapshotRaw.selectedAssetId)));
+    state.selectedAssetId = assetExists ? safeString(snapshotRaw.selectedAssetId) : null;
+    state.catalogPointerId = null;
+    state.catalogPendingType = '';
+    state.catalogPreviewSpaceId = '';
+    state.catalogPreviewX = 0;
+    state.catalogPreviewY = 0;
+    state.assetPointerId = null;
+    state.assetDragSpaceId = '';
+    state.assetDragId = '';
+    state.assetDragOffsetX = 0;
+    state.assetDragOffsetY = 0;
+    state.assetDragSnapshot = null;
+    if (options.resetUndo) {
+        state.undoStack = [];
+    }
+    if (options.persist !== false) {
+        officeDraftPersistLayout(state);
+    }
+    return true;
+}
+
+function officeDraftCommitLayoutChange(previousSnapshot, stateRaw = officeEnsureDraftMapState()) {
+    const state = stateRaw || officeEnsureDraftMapState();
+    if (!previousSnapshot) {
+        officeDraftPersistLayout(state);
+        return false;
+    }
+    const before = JSON.stringify(previousSnapshot);
+    const afterSnapshot = officeDraftLayoutSnapshot(state);
+    const after = JSON.stringify(afterSnapshot);
+    if (before === after) {
+        officeDraftPersistLayout(state);
+        return false;
+    }
+    if (!Array.isArray(state.undoStack)) {
+        state.undoStack = [];
+    }
+    const lastSnapshot = state.undoStack[state.undoStack.length - 1] || null;
+    if (!lastSnapshot || JSON.stringify(lastSnapshot) !== before) {
+        state.undoStack.push(officeDraftCloneLayoutPayload(previousSnapshot));
+        if (state.undoStack.length > OFFICE_DRAFT_UNDO_LIMIT) {
+            state.undoStack.splice(0, state.undoStack.length - OFFICE_DRAFT_UNDO_LIMIT);
+        }
+    }
+    officeDraftPersistLayout(state);
+    return true;
+}
+
+function officeDraftUndoLastChange(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const state = officeEnsureDraftMapState();
+    if (!Array.isArray(state.undoStack) || !state.undoStack.length) return;
+    const snapshot = state.undoStack.pop();
+    if (!snapshot) return;
+    officeDraftApplySnapshot(snapshot, state, { persist: true, resetUndo: false });
+    officeRenderDraftMapScene();
+}
+
+function officeDraftPlaceAssetInSpace(space, assetType, worldX, worldY, options = {}) {
+    if (!space || !OFFICE_DRAFT_ASSET_LIBRARY[safeString(assetType)]) return null;
+    const dimensions = officeDraftAssetDimensions(assetType, options.scale || 1);
+    const snapEnabled = options.gridEnabled !== false;
+    const rotation = officeDraftNormalizeRotation(options.rotation || 0);
+    const x = Math.max(24, Math.min(
+        Number(space.width) - dimensions.width - 24,
+        officeDraftSnap(Number(worldX) - Number(space.x) - (dimensions.width / 2), OFFICE_DRAFT_MAP_MINOR_GRID, snapEnabled),
+    ));
+    const y = Math.max(24, Math.min(
+        Number(space.height) - dimensions.height - 24,
+        officeDraftSnap(Number(worldY) - Number(space.y) - (dimensions.height / 2), OFFICE_DRAFT_MAP_MINOR_GRID, snapEnabled),
+    ));
+    return { x, y, rotation, scale: dimensions.scale };
+}
+
+function officeDraftMapClientToWorld(clientX, clientY) {
+    const state = officeEnsureDraftMapState();
+    const rect = officeSceneWrap?.getBoundingClientRect();
+    const viewport = officeDraftMapViewportRect();
+    const localX = rect ? clientX - rect.left : viewport.width / 2;
+    const localY = rect ? clientY - rect.top : viewport.height / 2;
+    return {
+        x: state.panX + (localX / state.zoom),
+        y: state.panY + (localY / state.zoom),
+    };
+}
+
+function officeDraftCreateCouchElement(space, asset, state) {
+    const descriptor = officeDraftAssetDimensions('couch', asset?.scale);
+    const couchColor = officeDraftAssetColorway('couch', asset?.colorVariant);
+    const scale = descriptor.scale;
+    const scaled = (value) => `${Math.round(Number(value) * scale)}px`;
+    const couch = document.createElement('div');
+    const isSelected = state.editorOpen && safeString(asset?.id) === safeString(state.selectedAssetId);
+    const rotation = officeDraftNormalizeRotation(asset?.rotation);
+    const isPreview = Boolean(asset?.preview);
+    couch.dataset.officeDraftAssetId = safeString(asset?.id);
+    couch.dataset.officeDraftSpaceId = safeString(space?.id);
+    couch.style.position = 'absolute';
+    couch.style.left = `${Math.round(Number(asset?.x) || 0)}px`;
+    couch.style.top = `${Math.round(Number(asset?.y) || 0)}px`;
+    couch.style.width = `${descriptor.width}px`;
+    couch.style.height = `${descriptor.height}px`;
+    couch.style.pointerEvents = isPreview ? 'none' : (state.editorOpen ? 'auto' : 'none');
+    couch.style.cursor = isPreview ? 'copy' : (state.editorOpen ? (isSelected && state.assetPointerId !== null ? 'grabbing' : 'grab') : 'default');
+    couch.style.filter = isPreview ? 'opacity(0.72) drop-shadow(0 0 0.55rem rgba(111, 169, 255, 0.38))' : (isSelected ? 'drop-shadow(0 0 0.65rem rgba(111, 169, 255, 0.45))' : 'none');
+    couch.style.outline = isPreview ? '2px dashed rgba(132, 187, 255, 0.6)' : (isSelected ? '2px solid rgba(132, 187, 255, 0.75)' : 'none');
+    couch.style.outlineOffset = scaled(4);
+    couch.style.borderRadius = scaled(22);
+    couch.style.transform = `rotate(${rotation}deg)`;
+    couch.style.transformOrigin = 'center center';
+
+    const couchShadow = document.createElement('div');
+    couchShadow.style.position = 'absolute';
+    couchShadow.style.left = scaled(18);
+    couchShadow.style.top = scaled(142);
+    couchShadow.style.width = scaled(300);
+    couchShadow.style.height = scaled(36);
+    couchShadow.style.borderRadius = '999px';
+    couchShadow.style.background = 'rgba(3, 8, 16, 0.34)';
+    couchShadow.style.filter = `blur(${Math.max(6, Math.round(12 * scale))}px)`;
+    couch.appendChild(couchShadow);
+
+    const couchBack = document.createElement('div');
+    couchBack.style.position = 'absolute';
+    couchBack.style.left = scaled(30);
+    couchBack.style.top = scaled(12);
+    couchBack.style.width = scaled(276);
+    couchBack.style.height = scaled(88);
+    couchBack.style.borderRadius = `${scaled(24)} ${scaled(24)} ${scaled(18)} ${scaled(18)}`;
+    couchBack.style.background = couchColor.back;
+    couchBack.style.boxShadow = 'inset 0 8px 12px rgba(255, 240, 224, 0.18), inset 0 -8px 12px rgba(79, 40, 17, 0.18)';
+    couch.appendChild(couchBack);
+
+    const couchSeat = document.createElement('div');
+    couchSeat.style.position = 'absolute';
+    couchSeat.style.left = scaled(18);
+    couchSeat.style.top = scaled(72);
+    couchSeat.style.width = scaled(300);
+    couchSeat.style.height = scaled(74);
+    couchSeat.style.borderRadius = scaled(22);
+    couchSeat.style.background = couchColor.seat;
+    couchSeat.style.boxShadow = 'inset 0 8px 10px rgba(255, 239, 219, 0.18), inset 0 -10px 14px rgba(105, 58, 28, 0.2)';
+    couch.appendChild(couchSeat);
+
+    const couchArmLeft = document.createElement('div');
+    couchArmLeft.style.position = 'absolute';
+    couchArmLeft.style.left = '0';
+    couchArmLeft.style.top = scaled(54);
+    couchArmLeft.style.width = scaled(58);
+    couchArmLeft.style.height = scaled(84);
+    couchArmLeft.style.borderRadius = scaled(20);
+    couchArmLeft.style.background = couchColor.arm;
+    couchArmLeft.style.boxShadow = 'inset 0 6px 9px rgba(255, 229, 209, 0.12)';
+    couch.appendChild(couchArmLeft);
+
+    const couchArmRight = document.createElement('div');
+    couchArmRight.style.position = 'absolute';
+    couchArmRight.style.right = '0';
+    couchArmRight.style.top = scaled(54);
+    couchArmRight.style.width = scaled(58);
+    couchArmRight.style.height = scaled(84);
+    couchArmRight.style.borderRadius = scaled(20);
+    couchArmRight.style.background = couchColor.arm;
+    couchArmRight.style.boxShadow = 'inset 0 6px 9px rgba(255, 229, 209, 0.12)';
+    couch.appendChild(couchArmRight);
+
+    const couchSeamLeft = document.createElement('div');
+    couchSeamLeft.style.position = 'absolute';
+    couchSeamLeft.style.left = scaled(122);
+    couchSeamLeft.style.top = scaled(82);
+    couchSeamLeft.style.width = scaled(2);
+    couchSeamLeft.style.height = scaled(48);
+    couchSeamLeft.style.background = couchColor.seam;
+    couch.appendChild(couchSeamLeft);
+
+    const couchSeamRight = document.createElement('div');
+    couchSeamRight.style.position = 'absolute';
+    couchSeamRight.style.left = scaled(214);
+    couchSeamRight.style.top = scaled(82);
+    couchSeamRight.style.width = scaled(2);
+    couchSeamRight.style.height = scaled(48);
+    couchSeamRight.style.background = couchColor.seam;
+    couch.appendChild(couchSeamRight);
+
+    return couch;
+}
+
+function officeRenderDraftMapEditorPanel() {
+    if (!(officeSceneWrap instanceof HTMLElement)) return;
+    const state = officeEnsureDraftMapState();
+    const selectedSpace = officeDraftSelectedSpace();
+    let panel = officeSceneWrap.querySelector('[data-office-editor-panel="1"]');
+    if (!(panel instanceof HTMLElement)) {
+        panel = document.createElement('aside');
+        panel.dataset.officeEditorPanel = '1';
+        officeSceneWrap.appendChild(panel);
+    }
+    if (!state.editorOpen) {
+        panel.style.display = 'none';
+        panel.innerHTML = '';
+        return;
+    }
+    panel.style.display = 'block';
+
+    const paletteButtons = Object.entries(OFFICE_DRAFT_ROOM_FLOOR_PALETTES).map(([id, palette]) => `
+        <button
+            type="button"
+            data-office-editor-floor-palette="${escapeHtml(id)}"
+            aria-pressed="${selectedSpace?.floorPalette === id ? 'true' : 'false'}"
+            style="display:inline-flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;border:1px solid ${selectedSpace?.floorPalette === id ? 'rgba(129, 182, 255, 0.72)' : 'rgba(116, 141, 181, 0.22)'};background:${selectedSpace?.floorPalette === id ? 'rgba(49, 84, 141, 0.34)' : 'rgba(15, 23, 38, 0.84)'};color:rgba(238,242,249,0.92);">
+            <span style="display:inline-block;width:14px;height:14px;border-radius:999px;background:${palette.floor};border:1px solid ${palette.floorBorder};"></span>
+            <span>${escapeHtml(palette.label)}</span>
+        </button>
+    `).join('');
+    const selectedAssetRef = state.selectedAssetId ? officeDraftFindAsset(state.selectedAssetId) : null;
+    const selectedAsset = selectedAssetRef?.asset || null;
+    const rotationStepButtons = officeDraftRotationOptions().map((value) => `
+        <button
+            type="button"
+            data-office-editor-rotation-step="${value}"
+            aria-pressed="${state.rotationStep === value ? 'true' : 'false'}"
+            style="padding:7px 10px;border-radius:12px;border:1px solid ${state.rotationStep === value ? 'rgba(129, 182, 255, 0.72)' : 'rgba(116, 141, 181, 0.22)'};background:${state.rotationStep === value ? 'rgba(49, 84, 141, 0.34)' : 'rgba(15, 23, 38, 0.84)'};color:rgba(238,242,249,0.92);">
+            ${value} deg
+        </button>
+    `).join('');
+    const selectedColorways = selectedAsset
+        ? Object.entries(OFFICE_DRAFT_ASSET_COLORWAYS[safeString(selectedAsset.type)] || {}).map(([id, colorway]) => `
+            <button
+                type="button"
+                data-office-editor-asset-color="${escapeHtml(id)}"
+                aria-pressed="${safeString(selectedAsset.colorVariant || 'caramel') === id ? 'true' : 'false'}"
+                style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:12px;border:1px solid ${safeString(selectedAsset.colorVariant || 'caramel') === id ? 'rgba(129, 182, 255, 0.72)' : 'rgba(116, 141, 181, 0.22)'};background:${safeString(selectedAsset.colorVariant || 'caramel') === id ? 'rgba(49, 84, 141, 0.34)' : 'rgba(15, 23, 38, 0.84)'};color:rgba(238,242,249,0.92);">
+                <span style="display:inline-block;width:14px;height:14px;border-radius:999px;background:${colorway.swatch};border:1px solid rgba(255,255,255,0.18);"></span>
+                <span>${escapeHtml(colorway.label)}</span>
+            </button>
+        `).join('')
+        : '';
+    const selectedScaleButtons = selectedAsset
+        ? OFFICE_DRAFT_ASSET_SCALE_OPTIONS.map((value) => `
+            <button
+                type="button"
+                data-office-editor-asset-scale="${value}"
+                aria-pressed="${officeDraftClampAssetScale(selectedAsset.scale) === value ? 'true' : 'false'}"
+                style="padding:7px 10px;border-radius:12px;border:1px solid ${officeDraftClampAssetScale(selectedAsset.scale) === value ? 'rgba(129, 182, 255, 0.72)' : 'rgba(116, 141, 181, 0.22)'};background:${officeDraftClampAssetScale(selectedAsset.scale) === value ? 'rgba(49, 84, 141, 0.34)' : 'rgba(15, 23, 38, 0.84)'};color:rgba(238,242,249,0.92);">
+                ${Math.round(value * 100)}%
+            </button>
+        `).join('')
+        : '';
+    const selectedAssetSection = selectedAsset
+        ? `
+            <section style="display:grid;gap:10px;padding:12px;border-radius:16px;border:1px solid rgba(116,141,181,0.22);background:rgba(14,22,35,0.9);">
+                <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                    <div>
+                        <div style="font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.68);">Selected Asset</div>
+                        <strong style="display:block;margin-top:4px;font-size:0.98rem;color:rgba(242,246,252,0.96);">${escapeHtml(OFFICE_DRAFT_ASSET_LIBRARY[safeString(selectedAsset.type)]?.label || safeString(selectedAsset.type))}</strong>
+                    </div>
+                    <div style="font-size:0.72rem;line-height:1.45;text-align:right;color:rgba(198,210,226,0.74);">
+                        ${escapeHtml(selectedAssetRef?.space?.name || 'Space')}
+                        <br />${officeDraftNormalizeRotation(selectedAsset.rotation)} deg
+                    </div>
+                </div>
+                <div style="font-size:0.75rem;line-height:1.5;color:rgba(198,210,226,0.74);">Use Back if you need to undo the last placement or styling change. Autosave is optional now.</div>
+                <div style="display:grid;gap:8px;">
+                    <div style="font-size:0.72rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.62);">Color</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;">${selectedColorways}</div>
+                </div>
+                <div style="display:grid;gap:8px;">
+                    <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+                        <span style="font-size:0.72rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.62);">Scale</span>
+                        <strong style="font-size:0.76rem;color:rgba(235,241,250,0.92);">${Math.round(officeDraftClampAssetScale(selectedAsset.scale) * 100)}%</strong>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px;">${selectedScaleButtons}</div>
+                </div>
+                <div style="font-size:0.74rem;line-height:1.45;color:rgba(198,210,226,0.72);">A / D rotate selected asset</div>
+            </section>
+        `
+        : `
+            <section style="display:grid;gap:8px;padding:12px;border-radius:16px;border:1px solid rgba(116,141,181,0.16);background:rgba(11,18,30,0.82);">
+                <div style="font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.68);">Selected Asset</div>
+                <div style="font-size:0.78rem;line-height:1.55;color:rgba(198,210,226,0.72);">Select a placed couch to edit its color, change its scale, and rotate it with A / D.</div>
+            </section>
+        `;
+
+    panel.innerHTML = `
+        <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;">
+            <strong style="font-size:0.92rem;letter-spacing:0.04em;text-transform:uppercase;">Office Editor</strong>
+            <span style="font-size:0.72rem;color:rgba(202,214,230,0.72);">${state.autosaveEnabled ? 'Autosave On' : 'Autosave Off'}</span>
+        </div>
+        <div style="display:grid;gap:12px;margin-top:14px;">
+            <section style="display:grid;gap:8px;">
+                <div style="font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.68);">Selected Space</div>
+                <button type="button" data-office-editor-selected-space="1" style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-radius:14px;border:1px solid rgba(116,141,181,0.22);background:rgba(14,22,35,0.9);color:rgba(240,244,250,0.94);">
+                    <span>${escapeHtml(selectedSpace?.name || 'No space')}</span>
+                    <span style="font-size:0.72rem;color:rgba(190,203,220,0.62);">click room label</span>
+                </button>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">${paletteButtons}</div>
+            </section>
+            <section style="display:grid;gap:8px;">
+                <div style="font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.68);">Catalog</div>
+                <button type="button" data-office-editor-catalog-asset="couch" style="display:grid;gap:10px;padding:12px;border-radius:16px;border:1px solid rgba(116,141,181,0.22);background:rgba(14,22,35,0.92);text-align:left;color:rgba(240,244,250,0.94);cursor:grab;">
+                    <span style="display:flex;align-items:flex-end;justify-content:center;height:76px;padding:8px 0;border-radius:12px;background:linear-gradient(180deg, rgba(19, 28, 44, 0.96), rgba(11, 17, 28, 0.96));">
+                        <span style="position:relative;display:block;width:92px;height:48px;">
+                            <span style="position:absolute;left:10px;top:4px;width:72px;height:22px;border-radius:10px 10px 7px 7px;background:linear-gradient(180deg, rgba(212, 160, 117, 0.98), rgba(162, 105, 69, 0.98));"></span>
+                            <span style="position:absolute;left:4px;top:18px;width:84px;height:20px;border-radius:10px;background:linear-gradient(180deg, rgba(223, 176, 132, 1), rgba(175, 117, 78, 0.98));"></span>
+                            <span style="position:absolute;left:0;top:14px;width:16px;height:24px;border-radius:7px;background:linear-gradient(180deg, rgba(190, 132, 92, 0.98), rgba(141, 87, 56, 0.98));"></span>
+                            <span style="position:absolute;right:0;top:14px;width:16px;height:24px;border-radius:7px;background:linear-gradient(180deg, rgba(190, 132, 92, 0.98), rgba(141, 87, 56, 0.98));"></span>
+                            <span style="position:absolute;left:12px;top:36px;width:68px;height:8px;border-radius:999px;background:rgba(3,8,16,0.34);filter:blur(4px);"></span>
+                        </span>
+                    </span>
+                    <strong style="font-size:0.9rem;">Couch</strong>
+                    <span style="font-size:0.76rem;color:rgba(198,210,226,0.72);">Click and drag into a room to place a three-seat couch.</span>
+                </button>
+            </section>
+            <section style="display:grid;gap:8px;">
+                <div style="font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.68);">Build Controls</div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;">${rotationStepButtons}</div>
+                <button type="button" data-office-editor-grid-toggle="1" aria-pressed="${state.gridEnabled ? 'true' : 'false'}" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:14px;border:1px solid rgba(116,141,181,0.22);background:${state.gridEnabled ? 'rgba(49, 84, 141, 0.34)' : 'rgba(14,22,35,0.9)'};color:rgba(240,244,250,0.94);">
+                    <span>Grid Snap</span>
+                    <strong style="font-size:0.78rem;">${state.gridEnabled ? 'On' : 'Off'}</strong>
+                </button>
+                <div style="font-size:0.74rem;line-height:1.45;color:rgba(198,210,226,0.72);">
+                    Selected asset: ${escapeHtml(selectedAsset ? `${safeString(selectedAsset.type)} · ${officeDraftNormalizeRotation(selectedAsset.rotation)} deg` : 'none')}
+                    <br />A / D rotate selected asset
+                </div>
+            </section>
+            <section style="display:grid;gap:8px;">
+                <div style="font-size:0.74rem;letter-spacing:0.08em;text-transform:uppercase;color:rgba(192,206,224,0.68);">Save Controls</div>
+                <button type="button" data-office-editor-autosave-toggle="1" aria-pressed="${state.autosaveEnabled ? 'true' : 'false'}" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:14px;border:1px solid rgba(116,141,181,0.22);background:${state.autosaveEnabled ? 'rgba(49, 84, 141, 0.34)' : 'rgba(14,22,35,0.9)'};color:rgba(240,244,250,0.94);">
+                    <span>Autosave</span>
+                    <strong style="font-size:0.78rem;">${state.autosaveEnabled ? 'On' : 'Off'}</strong>
+                </button>
+                <button type="button" data-office-editor-save="1" style="display:flex;align-items:center;justify-content:space-between;padding:9px 12px;border-radius:14px;border:1px solid rgba(116,141,181,0.22);background:rgba(16,30,50,0.92);color:rgba(240,244,250,0.94);">
+                    <span>Save Layout</span>
+                    <strong style="font-size:0.78rem;">Manual</strong>
+                </button>
+            </section>
+            ${selectedAssetSection}
+        </div>
+    `;
+}
+
+function officeToggleDraftEditor(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const state = officeEnsureDraftMapState();
+    state.editorOpen = !state.editorOpen;
+    state.selectedAssetId = null;
+    officeDraftPersistLayout(state);
+    officeRenderDraftMapScene();
+}
+
+function officeDraftAddCatalogAsset(assetType) {
+    const state = officeEnsureDraftMapState();
+    const descriptor = officeDraftAssetDimensions(assetType, 1);
+    const space = officeDraftSelectedSpace();
+    if (!descriptor || !space) return;
+    const previousSnapshot = officeDraftLayoutSnapshot(state);
+    const assetId = `${safeString(assetType)}-${state.nextAssetId++}`;
+    const offset = Math.max(0, (Array.isArray(space.assets) ? space.assets.length : 0) * 42);
+    const asset = {
+        id: assetId,
+        type: safeString(assetType),
+        x: Math.max(24, Math.min(space.width - descriptor.width - 24, Math.round((space.width - descriptor.width) / 2) + offset)),
+        y: Math.max(24, Math.min(space.height - descriptor.height - 24, Math.round((space.height - descriptor.height) / 2) + 100)),
+        rotation: 0,
+        colorVariant: 'caramel',
+        scale: 1,
+    };
+    space.assets = Array.isArray(space.assets) ? [...space.assets, asset] : [asset];
+    state.selectedAssetId = assetId;
+    officeDraftCommitLayoutChange(previousSnapshot, state);
+    officeRenderDraftMapScene();
+}
+
+function officeDraftBeginCatalogPlacement(assetType, pointerId, clientX, clientY) {
+    const state = officeEnsureDraftMapState();
+    state.catalogPointerId = pointerId;
+    state.catalogPendingType = safeString(assetType);
+    state.catalogPreviewSpaceId = '';
+    state.catalogPreviewX = 0;
+    state.catalogPreviewY = 0;
+    state.selectedAssetId = null;
+    const worldPoint = officeDraftMapClientToWorld(clientX, clientY);
+    const previewSpace = worldPoint ? officeDraftSpaceAtWorldPoint(worldPoint.x, worldPoint.y) : null;
+    const previewPlacement = previewSpace && worldPoint
+        ? officeDraftPlaceAssetInSpace(previewSpace, state.catalogPendingType, worldPoint.x, worldPoint.y, { gridEnabled: state.gridEnabled })
+        : null;
+    if (previewSpace && previewPlacement) {
+        state.catalogPreviewSpaceId = safeString(previewSpace.id);
+        state.catalogPreviewX = previewPlacement.x;
+        state.catalogPreviewY = previewPlacement.y;
+        state.selectedSpaceId = safeString(previewSpace.id);
+    }
+    officeRenderDraftMapScene();
+}
+
+function officeHandleDraftMapClick(event) {
+    if (!(event.target instanceof Element)) return;
+    const floorBtn = event.target.closest('[data-office-editor-floor-palette]');
+    if (floorBtn instanceof HTMLElement) {
+        const space = officeDraftSelectedSpace();
+        if (space) {
+            const state = officeEnsureDraftMapState();
+            const previousSnapshot = officeDraftLayoutSnapshot(state);
+            space.floorPalette = safeString(floorBtn.dataset.officeEditorFloorPalette) || 'tan';
+            officeDraftCommitLayoutChange(previousSnapshot, state);
+            officeRenderDraftMapScene();
+        }
+        event.preventDefault();
+        return;
+    }
+    const catalogBtn = event.target.closest('[data-office-editor-catalog-asset]');
+    if (catalogBtn instanceof HTMLElement) {
+        event.preventDefault();
+        return;
+    }
+    const rotationBtn = event.target.closest('[data-office-editor-rotation-step]');
+    if (rotationBtn instanceof HTMLElement) {
+        const state = officeEnsureDraftMapState();
+        state.rotationStep = Number(rotationBtn.dataset.officeEditorRotationStep) || 15;
+        officeDraftPersistLayout(state);
+        officeRenderDraftMapScene();
+        event.preventDefault();
+        return;
+    }
+    if (event.target.closest('[data-office-editor-autosave-toggle="1"]')) {
+        const state = officeEnsureDraftMapState();
+        officeDraftSetAutosavePreference(state.autosaveEnabled === false, state);
+        officeRenderDraftMapScene();
+        event.preventDefault();
+        return;
+    }
+    if (event.target.closest('[data-office-editor-save="1"]')) {
+        officeDraftManualSaveLayout(event);
+        return;
+    }
+    const colorBtn = event.target.closest('[data-office-editor-asset-color]');
+    if (colorBtn instanceof HTMLElement) {
+        const state = officeEnsureDraftMapState();
+        const assetRef = state.selectedAssetId ? officeDraftFindAsset(state.selectedAssetId) : null;
+        if (assetRef?.asset) {
+            const previousSnapshot = officeDraftLayoutSnapshot(state);
+            assetRef.asset.colorVariant = safeString(colorBtn.dataset.officeEditorAssetColor) || 'caramel';
+            officeDraftCommitLayoutChange(previousSnapshot, state);
+            officeRenderDraftMapScene();
+        }
+        event.preventDefault();
+        return;
+    }
+    const scaleBtn = event.target.closest('[data-office-editor-asset-scale]');
+    if (scaleBtn instanceof HTMLElement) {
+        const state = officeEnsureDraftMapState();
+        const assetRef = state.selectedAssetId ? officeDraftFindAsset(state.selectedAssetId) : null;
+        if (assetRef?.asset) {
+            const previousSnapshot = officeDraftLayoutSnapshot(state);
+            const dimensions = officeDraftAssetDimensions(assetRef.asset.type, Number(scaleBtn.dataset.officeEditorAssetScale) || 1);
+            assetRef.asset.scale = dimensions.scale;
+            assetRef.asset.x = Math.max(24, Math.min(Number(assetRef.space?.width) - dimensions.width - 24, Number(assetRef.asset.x) || 0));
+            assetRef.asset.y = Math.max(24, Math.min(Number(assetRef.space?.height) - dimensions.height - 24, Number(assetRef.asset.y) || 0));
+            officeDraftCommitLayoutChange(previousSnapshot, state);
+            officeRenderDraftMapScene();
+        }
+        event.preventDefault();
+        return;
+    }
+    if (event.target.closest('[data-office-editor-grid-toggle="1"]')) {
+        const state = officeEnsureDraftMapState();
+        state.gridEnabled = !state.gridEnabled;
+        officeDraftPersistLayout(state);
+        officeRenderDraftMapScene();
+        event.preventDefault();
+        return;
+    }
+    if (event.target.closest('[data-office-map-toolbar-minimap="1"]')) {
+        officeToggleDraftMinimapMinimized(event);
+        return;
+    }
+    if (event.target.closest('[data-office-map-toolbar-editor="1"]')) {
+        officeToggleDraftEditor(event);
+        return;
+    }
+    if (event.target.closest('[data-office-map-toolbar-save="1"]')) {
+        officeDraftManualSaveLayout(event);
+        return;
+    }
+    if (event.target.closest('[data-office-map-toolbar-undo="1"]')) {
+        officeDraftUndoLastChange(event);
+        return;
+    }
+    const labelBtn = event.target.closest('[data-office-draft-space-label]');
+    if (labelBtn instanceof HTMLElement) {
+        const state = officeEnsureDraftMapState();
+        state.selectedSpaceId = safeString(labelBtn.dataset.officeDraftSpaceLabel) || state.selectedSpaceId;
+        state.selectedAssetId = null;
+        officeDraftPersistLayout(state);
+        if (state.editorOpen) {
+            officeRenderDraftMapScene();
+        }
+        event.preventDefault();
+    }
+}
+
+function officePrepareDraftMapShell() {
+    const state = officeEnsureDraftMapState();
+    const toolbar = officeWorkspace?.querySelector('.office-toolbar');
+    const toolbarTitle = officeWorkspace?.querySelector('.office-toolbar-title');
+    const toolbarLabel = toolbarTitle?.querySelector('span:last-child');
+    if (toolbar instanceof HTMLElement) {
+        toolbar.style.display = 'flex';
+        toolbar.style.alignItems = 'center';
+        toolbar.style.justifyContent = 'space-between';
+        toolbar.style.gap = '16px';
+        toolbar.style.padding = '18px 22px';
+        toolbar.style.borderBottom = '1px solid rgba(104, 128, 164, 0.24)';
+        toolbar.style.background = 'linear-gradient(180deg, rgba(11, 19, 34, 0.98), rgba(8, 14, 26, 0.88))';
+    }
+    if (toolbarLabel instanceof HTMLElement) {
+        toolbarLabel.textContent = 'Virtual Office';
+    }
+    if (toolbarTitle instanceof HTMLElement && !toolbar.querySelector('[data-office-map-hint="1"]')) {
+        const hint = document.createElement('span');
+        hint.dataset.officeMapHint = '1';
+        hint.textContent = 'Base grid draft · drag to pan · wheel to zoom · rooms come later';
+        hint.style.fontSize = '0.75rem';
+        hint.style.letterSpacing = '0.08em';
+        hint.style.textTransform = 'uppercase';
+        hint.style.color = 'rgba(201, 214, 236, 0.64)';
+        hint.style.marginLeft = '14px';
+        toolbarTitle.appendChild(hint);
+    }
+    if (officeEditorToggleBtn instanceof HTMLElement) {
+        officeEditorToggleBtn.style.display = 'none';
+    }
+    [
+        officeWorkspace?.querySelector('.office-map-controls'),
+        officeWorkspace?.querySelector('.office-debug-overlay'),
+        officeWorkspace?.querySelector('.office-editor-modal'),
+        officeWorkspace?.querySelector('.office-bottom-dock'),
+    ].forEach((node) => {
+        if (node instanceof HTMLElement) {
+            node.style.display = 'none';
+        }
+    });
+    const stage = officeWorkspace?.querySelector('.office-stage');
+    if (officeWorkspace instanceof HTMLElement) {
+        officeWorkspace.style.display = officeWorkspace.classList.contains('hidden') ? '' : 'flex';
+        officeWorkspace.style.flexDirection = 'column';
+        officeWorkspace.style.minHeight = 'calc(100vh - 140px)';
+        officeWorkspace.style.background = 'linear-gradient(180deg, rgba(8, 14, 26, 0.96), rgba(6, 10, 19, 0.98))';
+        officeWorkspace.style.overflow = 'hidden';
+    }
+    if (stage instanceof HTMLElement) {
+        stage.style.display = 'flex';
+        stage.style.flex = '1';
+        stage.style.minHeight = '0';
+        stage.style.padding = '22px';
+    }
+    if (officeSceneWrap instanceof HTMLElement) {
+        officeSceneWrap.tabIndex = 0;
+        officeSceneWrap.setAttribute('aria-label', 'Virtual office base map. Drag to pan and use the mouse wheel to zoom.');
+        officeSceneWrap.style.position = 'relative';
+        officeSceneWrap.style.flex = '1';
+        officeSceneWrap.style.minHeight = 'calc(100vh - 120px)';
+        officeSceneWrap.style.borderRadius = '26px';
+        officeSceneWrap.style.overflow = 'hidden';
+        officeSceneWrap.style.cursor = state.pointerId === null ? 'grab' : 'grabbing';
+        officeSceneWrap.style.touchAction = 'none';
+        officeSceneWrap.style.background = 'radial-gradient(circle at top, rgba(58, 86, 132, 0.28), rgba(8, 14, 26, 0.94) 52%, rgba(4, 7, 14, 1) 100%)';
+        officeSceneWrap.style.boxShadow = 'inset 0 0 0 1px rgba(110, 134, 176, 0.16)';
+    }
+    if (toolbar instanceof HTMLElement) {
+        toolbar.style.display = 'none';
+        toolbar.style.padding = '0';
+        toolbar.style.margin = '0';
+        toolbar.style.minHeight = '0';
+        toolbar.style.border = '0';
+        toolbar.style.overflow = 'hidden';
+    }
+    if (officeWorkspace instanceof HTMLElement) {
+        officeWorkspace.style.minHeight = 'calc(100vh - 76px)';
+    }
+    if (stage instanceof HTMLElement) {
+        stage.style.padding = '8px';
+    }
+    const mapToolbar = officeSceneWrap?.querySelector('[data-office-map-toolbar="1"]');
+    if (mapToolbar instanceof HTMLElement) {
+        mapToolbar.style.position = 'absolute';
+        mapToolbar.style.top = '14px';
+        mapToolbar.style.left = '14px';
+        mapToolbar.style.right = '14px';
+        mapToolbar.style.display = 'flex';
+        mapToolbar.style.alignItems = 'center';
+        mapToolbar.style.justifyContent = 'flex-start';
+        mapToolbar.style.gap = '8px';
+        mapToolbar.style.padding = '8px 10px';
+        mapToolbar.style.borderRadius = '16px';
+        mapToolbar.style.background = 'rgba(6, 10, 19, 0.84)';
+        mapToolbar.style.border = '1px solid rgba(112, 139, 184, 0.28)';
+        mapToolbar.style.backdropFilter = 'blur(10px)';
+        mapToolbar.style.zIndex = '3';
+    }
+    const minimapToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-minimap="1"]');
+    if (minimapToolbarBtn instanceof HTMLButtonElement) {
+        minimapToolbarBtn.textContent = 'Minimap';
+        minimapToolbarBtn.setAttribute('aria-pressed', state.minimapMinimized ? 'false' : 'true');
+        minimapToolbarBtn.style.padding = '8px 14px';
+        minimapToolbarBtn.style.borderRadius = '12px';
+        minimapToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
+        minimapToolbarBtn.style.background = state.minimapMinimized ? 'rgba(17, 27, 44, 0.72)' : 'rgba(55, 103, 184, 0.34)';
+        minimapToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
+        minimapToolbarBtn.style.fontSize = '0.82rem';
+        minimapToolbarBtn.style.fontWeight = '600';
+    }
+    const editorToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-editor="1"]');
+    if (editorToolbarBtn instanceof HTMLButtonElement) {
+        editorToolbarBtn.textContent = 'Office Editor';
+        editorToolbarBtn.setAttribute('aria-pressed', state.editorOpen ? 'true' : 'false');
+        editorToolbarBtn.style.padding = '8px 14px';
+        editorToolbarBtn.style.borderRadius = '12px';
+        editorToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
+        editorToolbarBtn.style.background = state.editorOpen ? 'rgba(81, 125, 205, 0.34)' : 'rgba(17, 27, 44, 0.72)';
+        editorToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
+        editorToolbarBtn.style.fontSize = '0.82rem';
+        editorToolbarBtn.style.fontWeight = '600';
+    }
+    const saveToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-save="1"]');
+    if (saveToolbarBtn instanceof HTMLButtonElement) {
+        saveToolbarBtn.textContent = 'Save';
+        saveToolbarBtn.style.padding = '8px 14px';
+        saveToolbarBtn.style.borderRadius = '12px';
+        saveToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
+        saveToolbarBtn.style.background = 'rgba(20, 38, 64, 0.86)';
+        saveToolbarBtn.style.color = 'rgba(234, 242, 255, 0.92)';
+        saveToolbarBtn.style.fontSize = '0.82rem';
+        saveToolbarBtn.style.fontWeight = '600';
+    }
+    const undoToolbarBtn = officeSceneWrap?.querySelector('[data-office-map-toolbar-undo="1"]');
+    if (undoToolbarBtn instanceof HTMLButtonElement) {
+        const canUndo = Array.isArray(state.undoStack) && state.undoStack.length > 0;
+        undoToolbarBtn.textContent = 'Back';
+        undoToolbarBtn.disabled = !canUndo;
+        undoToolbarBtn.style.padding = '8px 14px';
+        undoToolbarBtn.style.borderRadius = '12px';
+        undoToolbarBtn.style.border = '1px solid rgba(112, 139, 184, 0.28)';
+        undoToolbarBtn.style.background = canUndo ? 'rgba(28, 44, 73, 0.78)' : 'rgba(17, 27, 44, 0.42)';
+        undoToolbarBtn.style.color = canUndo ? 'rgba(234, 242, 255, 0.92)' : 'rgba(168, 184, 209, 0.56)';
+        undoToolbarBtn.style.fontSize = '0.82rem';
+        undoToolbarBtn.style.fontWeight = '600';
+        undoToolbarBtn.style.cursor = canUndo ? 'pointer' : 'not-allowed';
+        undoToolbarBtn.style.opacity = canUndo ? '1' : '0.72';
+    }
+    const toolbarStatus = officeSceneWrap?.querySelector('[data-office-map-badge="1"]');
+    if (toolbarStatus instanceof HTMLElement) {
+        toolbarStatus.style.display = 'none';
+    }
+    const editorPanel = officeSceneWrap?.querySelector('[data-office-editor-panel="1"]');
+    if (editorPanel instanceof HTMLElement) {
+        editorPanel.style.position = 'absolute';
+        editorPanel.style.top = '62px';
+        editorPanel.style.right = '14px';
+        editorPanel.style.width = '292px';
+        editorPanel.style.padding = '14px';
+        editorPanel.style.borderRadius = '18px';
+        editorPanel.style.border = '1px solid rgba(112, 139, 184, 0.24)';
+        editorPanel.style.background = 'rgba(8, 14, 24, 0.92)';
+        editorPanel.style.backdropFilter = 'blur(14px)';
+        editorPanel.style.boxShadow = '0 20px 48px rgba(0, 0, 0, 0.28)';
+        editorPanel.style.zIndex = '3';
+    }
+    if (officeMinimap instanceof HTMLElement) {
+        officeMinimap.style.display = state.minimapMinimized ? 'none' : 'block';
+        officeMinimap.style.position = 'absolute';
+        officeMinimap.style.right = '34px';
+        officeMinimap.style.bottom = '34px';
+        officeMinimap.style.width = `${state.minimapSize}px`;
+        officeMinimap.style.height = `${state.minimapSize}px`;
+        officeMinimap.style.padding = '0';
+        officeMinimap.style.border = '1px solid rgba(112, 139, 184, 0.3)';
+        officeMinimap.style.borderRadius = '18px';
+        officeMinimap.style.background = 'rgba(6, 10, 19, 0.86)';
+        officeMinimap.style.backdropFilter = 'blur(12px)';
+        officeMinimap.style.boxShadow = '0 14px 40px rgba(0, 0, 0, 0.28)';
+        officeMinimap.style.overflow = 'hidden';
+        officeMinimap.style.transform = `translate3d(${state.minimapOffsetX}px, ${state.minimapOffsetY}px, 0)`;
+        officeMinimap.style.zIndex = '3';
+        officeMinimap.style.userSelect = 'none';
+        officeMinimap.style.cursor = state.minimapPointerId === null ? 'grab' : 'grabbing';
+    }
+    const minimapHead = officeMinimap?.querySelector('.office-minimap-head');
+    if (minimapHead instanceof HTMLElement) {
+        minimapHead.style.display = 'flex';
+        minimapHead.style.alignItems = 'center';
+        minimapHead.style.justifyContent = 'flex-end';
+        minimapHead.style.position = 'absolute';
+        minimapHead.style.top = '8px';
+        minimapHead.style.left = '8px';
+        minimapHead.style.right = '8px';
+        minimapHead.style.zIndex = '2';
+        minimapHead.style.gap = '6px';
+        minimapHead.style.padding = '0';
+        minimapHead.style.cursor = 'default';
+        minimapHead.style.background = 'transparent';
+        minimapHead.style.borderBottom = '0';
+        minimapHead.style.userSelect = 'none';
+    }
+    const minimapLabel = minimapHead?.querySelector('span');
+    if (minimapLabel instanceof HTMLElement) {
+        minimapLabel.textContent = '';
+        minimapLabel.style.display = 'none';
+    }
+    if (officeFollowToggleBtn instanceof HTMLElement) {
+        officeFollowToggleBtn.textContent = state.minimapMinimized ? 'Show' : 'Hide';
+        officeFollowToggleBtn.style.display = 'inline-flex';
+        officeFollowToggleBtn.style.alignItems = 'center';
+        officeFollowToggleBtn.style.justifyContent = 'center';
+        officeFollowToggleBtn.style.padding = '4px 8px';
+        officeFollowToggleBtn.style.fontSize = '0.68rem';
+        officeFollowToggleBtn.style.fontWeight = '600';
+        officeFollowToggleBtn.style.borderRadius = '8px';
+        officeFollowToggleBtn.style.border = '1px solid rgba(112, 139, 184, 0.26)';
+        officeFollowToggleBtn.style.background = 'rgba(11, 18, 32, 0.84)';
+        officeFollowToggleBtn.style.color = 'rgba(235, 243, 255, 0.92)';
+    }
+    if (officeMinimapCanvas instanceof HTMLCanvasElement) {
+        officeMinimapCanvas.style.display = 'block';
+        officeMinimapCanvas.style.width = `${state.minimapSize}px`;
+        officeMinimapCanvas.style.height = `${state.minimapSize}px`;
+        officeMinimapCanvas.style.cursor = state.minimapPointerId === null ? 'grab' : 'grabbing';
+        officeMinimapCanvas.setAttribute('aria-label', 'Virtual office minimap showing the current camera window.');
+    }
+    const resizeHandle = officeMinimap?.querySelector('[data-office-minimap-resize="1"]');
+    if (resizeHandle instanceof HTMLElement) {
+        resizeHandle.style.position = 'absolute';
+        resizeHandle.style.right = '10px';
+        resizeHandle.style.bottom = '10px';
+        resizeHandle.style.display = 'block';
+        resizeHandle.style.width = '14px';
+        resizeHandle.style.height = '14px';
+        resizeHandle.style.padding = '0';
+        resizeHandle.style.borderRadius = '0';
+        resizeHandle.style.cursor = 'nwse-resize';
+        resizeHandle.style.background = 'transparent';
+        resizeHandle.style.borderRight = '3px solid rgba(152, 193, 255, 0.92)';
+        resizeHandle.style.borderBottom = '3px solid rgba(152, 193, 255, 0.92)';
+        resizeHandle.style.boxShadow = 'none';
+        resizeHandle.style.color = 'transparent';
+        resizeHandle.style.fontSize = '0';
+    }
+    const liveRect = officeSceneWrap?.getBoundingClientRect();
+    const hasLiveViewport = Boolean(liveRect && liveRect.width > 1 && liveRect.height > 1);
+    if (!state.initialized || (hasLiveViewport && !state.hasLiveViewport)) {
+        officeCenterDraftMapViewport();
+        state.initialized = true;
+        state.hasLiveViewport = hasLiveViewport;
+    } else {
+        const clamped = officeClampDraftMapPan(state.panX, state.panY, state.zoom);
+        state.panX = clamped.panX;
+        state.panY = clamped.panY;
+    }
+}
+
+function officeDraftMapPlane() {
+    return officeScene?.querySelector('[data-office-map-plane="1"]') || null;
+}
+
+function officeRenderDraftMapMinimap() {
+    if (!(officeMinimapCanvas instanceof HTMLCanvasElement)) return;
+    const state = officeEnsureDraftMapState();
+    if (state.minimapMinimized) return;
+    const size = state.minimapSize;
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const targetSize = Math.round(size * dpr);
+    if (officeMinimapCanvas.width !== targetSize || officeMinimapCanvas.height !== targetSize) {
+        officeMinimapCanvas.width = targetSize;
+        officeMinimapCanvas.height = targetSize;
+    }
+    const ctx = officeMinimapCanvas.getContext('2d');
+    if (!ctx) return;
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, targetSize, targetSize);
+    ctx.scale(dpr, dpr);
+
+    ctx.fillStyle = '#09111d';
+    ctx.fillRect(0, 0, size, size);
+
+    const scale = size / OFFICE_DRAFT_MAP_SIZE;
+    const minor = Math.max(4, Math.round(OFFICE_DRAFT_MAP_MINOR_GRID * scale));
+    const major = Math.max(20, Math.round(OFFICE_DRAFT_MAP_MAJOR_GRID * scale));
+
+    ctx.strokeStyle = 'rgba(92, 116, 158, 0.16)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x <= size; x += minor) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, 0);
+        ctx.lineTo(x + 0.5, size);
+        ctx.stroke();
+    }
+    for (let y = 0; y <= size; y += minor) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(size, y + 0.5);
+        ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(182, 217, 255, 0.28)';
+    for (let x = 0; x <= size; x += major) {
+        ctx.beginPath();
+        ctx.moveTo(x + 0.5, 0);
+        ctx.lineTo(x + 0.5, size);
+        ctx.stroke();
+    }
+    for (let y = 0; y <= size; y += major) {
+        ctx.beginPath();
+        ctx.moveTo(0, y + 0.5);
+        ctx.lineTo(size, y + 0.5);
+        ctx.stroke();
+    }
+
+    const seedSize = 360 * scale;
+    const seedX = (OFFICE_DRAFT_MAP_SIZE / 2 * scale) - (seedSize / 2);
+    const seedY = (OFFICE_DRAFT_MAP_SIZE / 2 * scale) - (seedSize / 2);
+    ctx.fillStyle = 'rgba(88, 166, 255, 0.2)';
+    ctx.strokeStyle = 'rgba(170, 213, 255, 0.7)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.roundRect(seedX, seedY, seedSize, seedSize, 10);
+    ctx.fill();
+    ctx.stroke();
+
+    const viewport = officeDraftMapViewportWorldRect();
+    const viewX = viewport.x * scale;
+    const viewY = viewport.y * scale;
+    const viewW = Math.max(6, viewport.width * scale);
+    const viewH = Math.max(6, viewport.height * scale);
+    ctx.fillStyle = 'rgba(236, 246, 255, 0.08)';
+    ctx.strokeStyle = 'rgba(244, 250, 255, 0.92)';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.rect(viewX, viewY, Math.min(size - viewX, viewW), Math.min(size - viewY, viewH));
+    ctx.fill();
+    ctx.stroke();
+}
+
+function officeApplyDraftMapTransform() {
+    const state = officeEnsureDraftMapState();
+    const plane = officeDraftMapPlane();
+    if (!(plane instanceof HTMLElement)) return;
+    const clamped = officeClampDraftMapPan(state.panX, state.panY, state.zoom);
+    state.panX = clamped.panX;
+    state.panY = clamped.panY;
+    const offsetX = -(state.panX * state.zoom);
+    const offsetY = -(state.panY * state.zoom);
+    plane.style.transform = `translate3d(${offsetX.toFixed(2)}px, ${offsetY.toFixed(2)}px, 0) scale(${state.zoom.toFixed(4)})`;
+    const badge = officeWorkspace?.querySelector('[data-office-map-badge="1"]');
+    if (badge instanceof HTMLElement) {
+        badge.textContent = `${Math.round(state.zoom * 100)}% · ${OFFICE_DRAFT_MAP_SIZE.toLocaleString()} x ${OFFICE_DRAFT_MAP_SIZE.toLocaleString()} grid`;
+    }
+    officeRenderDraftMapMinimap();
+}
+
+function officeRenderDraftMapScene() {
+    if (!officeScene || !officeScenePanzoom) return;
+    const state = officeEnsureDraftMapState();
+    officePrepareDraftMapShell();
+    officeScenePanzoom.style.position = 'absolute';
+    officeScenePanzoom.style.inset = '0';
+    officeScenePanzoom.style.width = '100%';
+    officeScenePanzoom.style.height = '100%';
+    officeScenePanzoom.style.overflow = 'hidden';
+    officeScenePanzoom.style.transformOrigin = 'top left';
+    officeScenePanzoom.style.willChange = 'contents';
+    officeScene.style.position = 'relative';
+    officeScene.style.width = '100%';
+    officeScene.style.height = '100%';
+    officeScene.style.overflow = 'hidden';
+    officeScene.style.background = 'linear-gradient(180deg, rgba(8, 15, 27, 0.96), rgba(5, 10, 18, 1))';
+    officeScene.innerHTML = '';
+    const plane = document.createElement('div');
+    plane.dataset.officeMapPlane = '1';
+    plane.style.position = 'absolute';
+    plane.style.left = '0';
+    plane.style.top = '0';
+    plane.style.width = `${OFFICE_DRAFT_MAP_SIZE}px`;
+    plane.style.height = `${OFFICE_DRAFT_MAP_SIZE}px`;
+    plane.style.transformOrigin = 'top left';
+    plane.style.willChange = 'transform';
+    plane.style.backgroundColor = '#0a1321';
+    plane.style.backgroundImage = [
+        `linear-gradient(rgba(96, 124, 178, 0.10) 1px, transparent 1px)`,
+        `linear-gradient(90deg, rgba(96, 124, 178, 0.10) 1px, transparent 1px)`,
+        `linear-gradient(rgba(170, 205, 255, 0.20) 1px, transparent 1px)`,
+        `linear-gradient(90deg, rgba(170, 205, 255, 0.20) 1px, transparent 1px)`,
+    ].join(',');
+    plane.style.backgroundSize = [
+        `${OFFICE_DRAFT_MAP_MINOR_GRID}px ${OFFICE_DRAFT_MAP_MINOR_GRID}px`,
+        `${OFFICE_DRAFT_MAP_MINOR_GRID}px ${OFFICE_DRAFT_MAP_MINOR_GRID}px`,
+        `${OFFICE_DRAFT_MAP_MAJOR_GRID}px ${OFFICE_DRAFT_MAP_MAJOR_GRID}px`,
+        `${OFFICE_DRAFT_MAP_MAJOR_GRID}px ${OFFICE_DRAFT_MAP_MAJOR_GRID}px`,
+    ].join(',');
+    plane.style.boxShadow = 'inset 0 0 0 1px rgba(255, 255, 255, 0.04)';
+    state.spaces.forEach((space) => {
+        const palette = officeDraftRoomPalette(space?.floorPalette);
+        const isSelectedSpace = safeString(space?.id) === safeString(state.selectedSpaceId);
+        const room = document.createElement('section');
+        room.dataset.officeDraftSpaceId = safeString(space?.id);
+        room.style.position = 'absolute';
+        room.style.left = `${Math.round(Number(space?.x) || 0)}px`;
+        room.style.top = `${Math.round(Number(space?.y) || 0)}px`;
+        room.style.width = `${Math.round(Number(space?.width) || 0)}px`;
+        room.style.height = `${Math.round(Number(space?.height) || 0)}px`;
+        room.style.border = isSelectedSpace ? '4px solid rgba(122, 181, 255, 0.82)' : '4px solid rgba(158, 196, 255, 0.62)';
+        room.style.borderRadius = '46px';
+        room.style.background = palette.shell;
+        room.style.overflow = 'visible';
+        room.style.boxShadow = isSelectedSpace
+            ? 'inset 0 0 0 1px rgba(215, 232, 255, 0.08), 0 0 0 2px rgba(110, 169, 255, 0.14), 0 32px 110px rgba(0, 0, 0, 0.26)'
+            : 'inset 0 0 0 1px rgba(215, 232, 255, 0.05), 0 32px 110px rgba(0, 0, 0, 0.26)';
+
+        const roomInset = document.createElement('div');
+        roomInset.style.position = 'absolute';
+        roomInset.style.left = '24px';
+        roomInset.style.top = '24px';
+        roomInset.style.right = '24px';
+        roomInset.style.bottom = '24px';
+        roomInset.style.borderRadius = '32px';
+        roomInset.style.border = `1px solid ${palette.floorBorder}`;
+        roomInset.style.background = palette.floor;
+        room.appendChild(roomInset);
+
+        const roomLabel = document.createElement('button');
+        roomLabel.type = 'button';
+        roomLabel.dataset.officeDraftSpaceLabel = safeString(space?.id);
+        roomLabel.textContent = safeString(space?.name) || 'Space';
+        roomLabel.style.position = 'absolute';
+        roomLabel.style.left = '42px';
+        roomLabel.style.top = '-32px';
+        roomLabel.style.padding = '10px 18px';
+        roomLabel.style.borderRadius = '18px 18px 10px 10px';
+        roomLabel.style.border = isSelectedSpace ? '2px solid rgba(128, 185, 255, 0.72)' : '2px solid rgba(214, 228, 247, 0.28)';
+        roomLabel.style.background = isSelectedSpace ? 'rgba(80, 128, 205, 0.9)' : 'rgba(43, 59, 88, 0.92)';
+        roomLabel.style.color = 'rgba(245, 248, 255, 0.96)';
+        roomLabel.style.fontSize = '1.2rem';
+        roomLabel.style.fontWeight = '700';
+        roomLabel.style.letterSpacing = '0.12em';
+        roomLabel.style.textTransform = 'uppercase';
+        roomLabel.style.cursor = state.editorOpen ? 'pointer' : 'default';
+        room.appendChild(roomLabel);
+
+        const robot = document.createElement('div');
+        robot.style.position = 'absolute';
+        robot.style.left = `${Math.round(Number(space?.robotX) || 0)}px`;
+        robot.style.top = `${Math.round(Number(space?.robotY) || 0)}px`;
+        robot.style.transform = 'scale(1.7)';
+        robot.style.transformOrigin = 'top left';
+        robot.style.pointerEvents = 'none';
+        robot.innerHTML = officePixelAgentMarkup();
+        room.appendChild(robot);
+
+        (Array.isArray(space?.assets) ? space.assets : []).forEach((asset) => {
+            if (safeString(asset?.type) === 'couch') {
+                room.appendChild(officeDraftCreateCouchElement(space, asset, state));
+            }
+        });
+        if (safeString(state.catalogPreviewSpaceId) === safeString(space?.id) && safeString(state.catalogPendingType) === 'couch') {
+            room.appendChild(officeDraftCreateCouchElement(space, {
+                id: 'catalog-preview',
+                type: 'couch',
+                x: state.catalogPreviewX,
+                y: state.catalogPreviewY,
+                rotation: 0,
+                colorVariant: 'caramel',
+                scale: 1,
+                preview: true,
+            }, state));
+        }
+
+        plane.appendChild(room);
+    });
+
+    officeScene.appendChild(plane);
+    if (officeSceneWrap instanceof HTMLElement && !officeSceneWrap.querySelector('[data-office-map-toolbar="1"]')) {
+        const toolbar = document.createElement('div');
+        toolbar.dataset.officeMapToolbar = '1';
+
+        const minimapBtn = document.createElement('button');
+        minimapBtn.type = 'button';
+        minimapBtn.dataset.officeMapToolbarMinimap = '1';
+        minimapBtn.textContent = 'Minimap';
+
+        const editorBtn = document.createElement('button');
+        editorBtn.type = 'button';
+        editorBtn.dataset.officeMapToolbarEditor = '1';
+        editorBtn.textContent = 'Office Editor';
+
+        const saveBtn = document.createElement('button');
+        saveBtn.type = 'button';
+        saveBtn.dataset.officeMapToolbarSave = '1';
+        saveBtn.textContent = 'Save';
+
+        const undoBtn = document.createElement('button');
+        undoBtn.type = 'button';
+        undoBtn.dataset.officeMapToolbarUndo = '1';
+        undoBtn.textContent = 'Back';
+
+        const badge = document.createElement('span');
+        badge.dataset.officeMapBadge = '1';
+
+        toolbar.appendChild(minimapBtn);
+        toolbar.appendChild(editorBtn);
+        toolbar.appendChild(saveBtn);
+        toolbar.appendChild(undoBtn);
+        toolbar.appendChild(badge);
+        officeSceneWrap.appendChild(toolbar);
+    }
+    if (officeMinimap instanceof HTMLElement && !officeMinimap.querySelector('[data-office-minimap-resize="1"]')) {
+        const resizeHandle = document.createElement('div');
+        resizeHandle.dataset.officeMinimapResize = '1';
+        resizeHandle.setAttribute('aria-label', 'Resize minimap');
+        officeMinimap.appendChild(resizeHandle);
+    }
+    officeRenderDraftMapEditorPanel();
+    officePrepareDraftMapShell();
+    officeApplyDraftMapTransform();
+    officeRenderDraftMapMinimap();
+}
+
+function officeBindDraftMapControls() {
+    if (!(officeSceneWrap instanceof HTMLElement) || officeSceneWrap.dataset.officeDraftMapBound === '1') return;
+    officeSceneWrap.dataset.officeDraftMapBound = '1';
+    officeSceneWrap.addEventListener('pointerdown', officeHandleDraftMapPointerDown);
+    officeSceneWrap.addEventListener('pointermove', officeHandleDraftMapPointerMove);
+    officeSceneWrap.addEventListener('pointerup', officeHandleDraftMapPointerUp);
+    officeSceneWrap.addEventListener('pointercancel', officeHandleDraftMapPointerUp);
+    officeSceneWrap.addEventListener('wheel', officeHandleDraftMapWheel, { passive: false });
+    officeSceneWrap.addEventListener('keydown', officeHandleDraftMapKeydown);
+    officeSceneWrap.addEventListener('click', officeHandleDraftMapClick);
+    window.addEventListener('resize', officeHandleDraftMapResize);
+    if (officeMinimap instanceof HTMLElement) {
+        officeMinimap.addEventListener('pointerdown', officeHandleDraftMinimapPointerDown);
+        officeMinimap.addEventListener('pointermove', officeHandleDraftMinimapPointerMove);
+        officeMinimap.addEventListener('pointerup', officeHandleDraftMinimapPointerUp);
+        officeMinimap.addEventListener('pointercancel', officeHandleDraftMinimapPointerUp);
+    }
+    const minimapResizeHandle = officeMinimap?.querySelector('[data-office-minimap-resize="1"]');
+    if (minimapResizeHandle instanceof HTMLElement) {
+        minimapResizeHandle.addEventListener('pointerdown', officeHandleDraftMinimapResizePointerDown);
+        minimapResizeHandle.addEventListener('pointermove', officeHandleDraftMinimapResizePointerMove);
+        minimapResizeHandle.addEventListener('pointerup', officeHandleDraftMinimapResizePointerUp);
+        minimapResizeHandle.addEventListener('pointercancel', officeHandleDraftMinimapResizePointerUp);
+    }
+    if (officeFollowToggleBtn instanceof HTMLElement) {
+        officeFollowToggleBtn.addEventListener('click', officeToggleDraftMinimapMinimized);
+    }
+}
+
+function officeHandleDraftMapPointerDown(event) {
+    if (!(officeSceneWrap instanceof HTMLElement)) return;
+    if (event.button !== 0) return;
+    const state = officeEnsureDraftMapState();
+    if (event.target instanceof Element) {
+        if (officeMinimap instanceof HTMLElement && officeMinimap.contains(event.target)) return;
+        if (event.target.closest('[data-office-map-toolbar="1"]')) return;
+        if (event.target.closest('[data-office-editor-panel="1"]')) {
+            const catalogBtn = event.target.closest('[data-office-editor-catalog-asset]');
+            if (catalogBtn instanceof HTMLElement && state.editorOpen) {
+                officeDraftBeginCatalogPlacement(catalogBtn.dataset.officeEditorCatalogAsset, event.pointerId, event.clientX, event.clientY);
+                officeSceneWrap.style.cursor = 'grabbing';
+                officeSceneWrap.setPointerCapture(event.pointerId);
+            }
+            return;
+        }
+        if (state.editorOpen) {
+            if (event.target.closest('[data-office-draft-space-label]')) return;
+            const assetEl = event.target.closest('[data-office-draft-asset-id]');
+            if (assetEl instanceof HTMLElement) {
+                const assetRef = officeDraftFindAsset(assetEl.dataset.officeDraftAssetId);
+                const worldPoint = officeDraftMapClientToWorld(event.clientX, event.clientY);
+                if (assetRef && worldPoint) {
+                    state.assetPointerId = event.pointerId;
+                    state.assetDragSpaceId = safeString(assetRef.space?.id);
+                    state.assetDragId = safeString(assetRef.asset?.id);
+                    state.assetDragSnapshot = officeDraftLayoutSnapshot(state);
+                    state.selectedSpaceId = safeString(assetRef.space?.id);
+                    state.selectedAssetId = safeString(assetRef.asset?.id);
+                    state.assetDragOffsetX = worldPoint.x - (Number(assetRef.space?.x) + Number(assetRef.asset?.x));
+                    state.assetDragOffsetY = worldPoint.y - (Number(assetRef.space?.y) + Number(assetRef.asset?.y));
+                    officeSceneWrap.style.cursor = 'grabbing';
+                    officeSceneWrap.setPointerCapture(event.pointerId);
+                    officeRenderDraftMapScene();
+                    return;
+                }
+            }
+        }
+    }
+    state.pointerId = event.pointerId;
+    state.dragStartX = event.clientX;
+    state.dragStartY = event.clientY;
+    state.dragPanX = state.panX;
+    state.dragPanY = state.panY;
+    officeSceneWrap.style.cursor = 'grabbing';
+    officeSceneWrap.setPointerCapture(event.pointerId);
+}
+
+function officeHandleDraftMapPointerMove(event) {
+    const state = officeEnsureDraftMapState();
+    if (state.catalogPointerId === event.pointerId && safeString(state.catalogPendingType)) {
+        const worldPoint = officeDraftMapClientToWorld(event.clientX, event.clientY);
+        const previewSpace = worldPoint ? officeDraftSpaceAtWorldPoint(worldPoint.x, worldPoint.y) : null;
+        const previewPlacement = previewSpace && worldPoint
+            ? officeDraftPlaceAssetInSpace(previewSpace, state.catalogPendingType, worldPoint.x, worldPoint.y, { gridEnabled: state.gridEnabled })
+            : null;
+        if (previewSpace && previewPlacement) {
+            state.catalogPreviewSpaceId = safeString(previewSpace.id);
+            state.catalogPreviewX = previewPlacement.x;
+            state.catalogPreviewY = previewPlacement.y;
+            state.selectedSpaceId = safeString(previewSpace.id);
+            if (officeSceneWrap instanceof HTMLElement) {
+                officeSceneWrap.style.cursor = 'copy';
+            }
+        } else {
+            state.catalogPreviewSpaceId = '';
+            state.catalogPreviewX = 0;
+            state.catalogPreviewY = 0;
+            if (officeSceneWrap instanceof HTMLElement) {
+                officeSceneWrap.style.cursor = 'not-allowed';
+            }
+        }
+        officeRenderDraftMapScene();
+        return;
+    }
+    if (state.assetPointerId === event.pointerId && state.assetDragId) {
+        const assetRef = officeDraftFindAsset(state.assetDragId);
+        const worldPoint = officeDraftMapClientToWorld(event.clientX, event.clientY);
+        if (assetRef && worldPoint) {
+            const descriptor = officeDraftAssetDimensions(assetRef.asset?.type, assetRef.asset?.scale);
+            assetRef.asset.x = Math.max(24, Math.min(
+                Number(assetRef.space?.width) - descriptor.width - 24,
+                officeDraftSnap(
+                    worldPoint.x - Number(assetRef.space?.x) - state.assetDragOffsetX,
+                    OFFICE_DRAFT_MAP_MINOR_GRID,
+                    state.gridEnabled,
+                ),
+            ));
+            assetRef.asset.y = Math.max(24, Math.min(
+                Number(assetRef.space?.height) - descriptor.height - 24,
+                officeDraftSnap(
+                    worldPoint.y - Number(assetRef.space?.y) - state.assetDragOffsetY,
+                    OFFICE_DRAFT_MAP_MINOR_GRID,
+                    state.gridEnabled,
+                ),
+            ));
+            officeRenderDraftMapScene();
+        }
+        return;
+    }
+    if (state.pointerId !== event.pointerId) return;
+    const deltaX = event.clientX - state.dragStartX;
+    const deltaY = event.clientY - state.dragStartY;
+    state.panX = state.dragPanX - (deltaX / state.zoom);
+    state.panY = state.dragPanY - (deltaY / state.zoom);
+    officeApplyDraftMapTransform();
+}
+
+function officeHandleDraftMapPointerUp(event) {
+    const state = officeEnsureDraftMapState();
+    if (state.catalogPointerId !== null && event.pointerId === state.catalogPointerId) {
+        if (officeSceneWrap instanceof HTMLElement && officeSceneWrap.hasPointerCapture(event.pointerId)) {
+            officeSceneWrap.releasePointerCapture(event.pointerId);
+        }
+        const pendingType = safeString(state.catalogPendingType);
+        const previousSnapshot = officeDraftLayoutSnapshot(state);
+        const worldPoint = officeDraftMapClientToWorld(event.clientX, event.clientY);
+        const previewSpace = worldPoint ? officeDraftSpaceAtWorldPoint(worldPoint.x, worldPoint.y) : null;
+        const previewPlacement = previewSpace && worldPoint
+            ? officeDraftPlaceAssetInSpace(previewSpace, pendingType, worldPoint.x, worldPoint.y, { gridEnabled: state.gridEnabled })
+            : null;
+        if (pendingType && previewSpace && previewPlacement) {
+            const assetId = `${pendingType}-${state.nextAssetId++}`;
+            const asset = {
+                id: assetId,
+                type: pendingType,
+                x: previewPlacement.x,
+                y: previewPlacement.y,
+                rotation: previewPlacement.rotation,
+                colorVariant: 'caramel',
+                scale: previewPlacement.scale,
+            };
+            previewSpace.assets = Array.isArray(previewSpace.assets) ? [...previewSpace.assets, asset] : [asset];
+            state.selectedSpaceId = safeString(previewSpace.id);
+            state.selectedAssetId = assetId;
+        }
+        state.catalogPointerId = null;
+        state.catalogPendingType = '';
+        state.catalogPreviewSpaceId = '';
+        state.catalogPreviewX = 0;
+        state.catalogPreviewY = 0;
+        if (officeSceneWrap instanceof HTMLElement) {
+            officeSceneWrap.style.cursor = 'grab';
+        }
+        officeDraftCommitLayoutChange(previousSnapshot, state);
+        officeRenderDraftMapScene();
+        return;
+    }
+    if (state.assetPointerId !== null && event.pointerId === state.assetPointerId) {
+        if (officeSceneWrap instanceof HTMLElement && officeSceneWrap.hasPointerCapture(event.pointerId)) {
+            officeSceneWrap.releasePointerCapture(event.pointerId);
+        }
+        state.assetPointerId = null;
+        state.assetDragSpaceId = '';
+        state.assetDragId = '';
+        officeDraftCommitLayoutChange(state.assetDragSnapshot, state);
+        state.assetDragSnapshot = null;
+        if (officeSceneWrap instanceof HTMLElement) {
+            officeSceneWrap.style.cursor = 'grab';
+        }
+        officeRenderDraftMapScene();
+        return;
+    }
+    if (state.pointerId !== null && event.pointerId !== state.pointerId) return;
+    if (officeSceneWrap instanceof HTMLElement && officeSceneWrap.hasPointerCapture(event.pointerId)) {
+        officeSceneWrap.releasePointerCapture(event.pointerId);
+    }
+    state.pointerId = null;
+    if (officeSceneWrap instanceof HTMLElement) {
+        officeSceneWrap.style.cursor = 'grab';
+    }
+}
+
+function officeHandleDraftMapWheel(event) {
+    event.preventDefault();
+    const state = officeEnsureDraftMapState();
+    const viewport = officeDraftMapViewportRect();
+    const rect = officeSceneWrap?.getBoundingClientRect();
+    const pointerX = rect ? event.clientX - rect.left : viewport.width / 2;
+    const pointerY = rect ? event.clientY - rect.top : viewport.height / 2;
+    const anchorWorldX = state.panX + (pointerX / state.zoom);
+    const anchorWorldY = state.panY + (pointerY / state.zoom);
+    const clampedDelta = Math.max(-220, Math.min(220, Number(event.deltaY) || 0));
+    const zoomFactor = Math.exp(-clampedDelta * 0.00125);
+    state.zoom = Math.max(OFFICE_DRAFT_MAP_MIN_ZOOM, Math.min(OFFICE_DRAFT_MAP_MAX_ZOOM, state.zoom * zoomFactor));
+    state.panX = anchorWorldX - (pointerX / state.zoom);
+    state.panY = anchorWorldY - (pointerY / state.zoom);
+    officeApplyDraftMapTransform();
+}
+
+function officeHandleDraftMapKeydown(event) {
+    const state = officeEnsureDraftMapState();
+    if ((event.ctrlKey || event.metaKey) && safeString(event.key).toLowerCase() === 'z') {
+        officeDraftUndoLastChange(event);
+        return;
+    }
+    if (state.editorOpen && state.selectedAssetId) {
+        const assetRef = officeDraftFindAsset(state.selectedAssetId);
+        if (assetRef) {
+            if (event.key === 'a' || event.key === 'A') {
+                const previousSnapshot = officeDraftLayoutSnapshot(state);
+                assetRef.asset.rotation = officeDraftNormalizeRotation((assetRef.asset.rotation || 0) - state.rotationStep);
+                officeDraftCommitLayoutChange(previousSnapshot, state);
+                event.preventDefault();
+                officeRenderDraftMapScene();
+                return;
+            } else if (event.key === 'd' || event.key === 'D') {
+                const previousSnapshot = officeDraftLayoutSnapshot(state);
+                assetRef.asset.rotation = officeDraftNormalizeRotation((assetRef.asset.rotation || 0) + state.rotationStep);
+                officeDraftCommitLayoutChange(previousSnapshot, state);
+                event.preventDefault();
+                officeRenderDraftMapScene();
+                return;
+            }
+        }
+    }
+    const step = 160 / state.zoom;
+    if (event.key === 'ArrowLeft') state.panX -= step;
+    else if (event.key === 'ArrowRight') state.panX += step;
+    else if (event.key === 'ArrowUp') state.panY -= step;
+    else if (event.key === 'ArrowDown') state.panY += step;
+    else return;
+    event.preventDefault();
+    officeApplyDraftMapTransform();
+}
+
+function officeHandleDraftMapResize() {
+    const state = officeEnsureDraftMapState();
+    const clamped = officeClampDraftMapPan(state.panX, state.panY, state.zoom);
+    state.panX = clamped.panX;
+    state.panY = clamped.panY;
+    officeApplyDraftMapTransform();
+}
+
+function officeToggleDraftMinimapMinimized(event) {
+    if (event) {
+        event.preventDefault();
+        event.stopPropagation();
+    }
+    const state = officeEnsureDraftMapState();
+    state.minimapMinimized = !state.minimapMinimized;
+    officePrepareDraftMapShell();
+    officeRenderDraftMapMinimap();
+}
+
+function officeHandleDraftMinimapPointerDown(event) {
+    if (event.button !== 0) return;
+    if (event.target instanceof Element) {
+        if (event.target.closest('#officeFollowToggleBtn')) return;
+        if (event.target.closest('[data-office-minimap-resize="1"]')) return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    const state = officeEnsureDraftMapState();
+    state.minimapPointerId = event.pointerId;
+    state.minimapDragStartX = event.clientX;
+    state.minimapDragStartY = event.clientY;
+    state.minimapDragOffsetX = state.minimapOffsetX;
+    state.minimapDragOffsetY = state.minimapOffsetY;
+    if (event.currentTarget instanceof HTMLElement) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+    }
+    officePrepareDraftMapShell();
+}
+
+function officeHandleDraftMinimapPointerMove(event) {
+    const state = officeEnsureDraftMapState();
+    if (state.minimapPointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    state.minimapOffsetX = state.minimapDragOffsetX + (event.clientX - state.minimapDragStartX);
+    state.minimapOffsetY = state.minimapDragOffsetY + (event.clientY - state.minimapDragStartY);
+    officePrepareDraftMapShell();
+}
+
+function officeHandleDraftMinimapPointerUp(event) {
+    const state = officeEnsureDraftMapState();
+    if (state.minimapPointerId !== null && event.pointerId !== state.minimapPointerId) return;
+    if (event.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    state.minimapPointerId = null;
+    officePrepareDraftMapShell();
+}
+
+function officeHandleDraftMinimapResizePointerDown(event) {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const state = officeEnsureDraftMapState();
+    state.minimapResizePointerId = event.pointerId;
+    state.minimapResizeStartX = event.clientX;
+    state.minimapResizeStartY = event.clientY;
+    state.minimapResizeStartSize = state.minimapSize;
+    if (event.currentTarget instanceof HTMLElement) {
+        event.currentTarget.setPointerCapture(event.pointerId);
+    }
+}
+
+function officeHandleDraftMinimapResizePointerMove(event) {
+    const state = officeEnsureDraftMapState();
+    if (state.minimapResizePointerId !== event.pointerId) return;
+    event.preventDefault();
+    event.stopPropagation();
+    const delta = Math.max(event.clientX - state.minimapResizeStartX, event.clientY - state.minimapResizeStartY);
+    state.minimapSize = Math.max(150, Math.min(420, state.minimapResizeStartSize + delta));
+    officePrepareDraftMapShell();
+    officeRenderDraftMapMinimap();
+}
+
+function officeHandleDraftMinimapResizePointerUp(event) {
+    const state = officeEnsureDraftMapState();
+    if (state.minimapResizePointerId !== null && event.pointerId !== state.minimapResizePointerId) return;
+    if (event.currentTarget instanceof HTMLElement && event.currentTarget.hasPointerCapture(event.pointerId)) {
+        event.currentTarget.releasePointerCapture(event.pointerId);
+    }
+    event.preventDefault();
+    event.stopPropagation();
+    state.minimapResizePointerId = null;
 }
 
 // 
@@ -23632,7 +25596,8 @@ function missionRenderJobs(jobsPayload) {
     if (missionJobsCronCount) missionJobsCronCount.textContent = String(recurringCount);
     if (missionJobsMeta) {
         if (jobsPayload?.unavailable) {
-            missionJobsMeta.textContent = 'Autonomy is disabled';
+            const reason = safeString(jobsPayload?.reason) || 'autonomy store is not available';
+            missionJobsMeta.textContent = `Jobs unavailable · ${reason}`;
         } else {
             missionJobsMeta.textContent = `${sorted.length} total${sorted.length > 0 ? `, showing ${Math.min(sorted.length, 40)}` : ''}`;
         }
@@ -23640,7 +25605,8 @@ function missionRenderJobs(jobsPayload) {
 
     missionJobsList.innerHTML = '';
     if (jobsPayload?.unavailable) {
-        missionRenderEmpty(missionJobsList, 'Autonomy engine is disabled, so no task/cron jobs are available.');
+        const reason = safeString(jobsPayload?.reason) || 'autonomy store is not available';
+        missionRenderEmpty(missionJobsList, `Jobs are unavailable right now: ${reason}.`);
         return;
     }
     if (!sorted.length) {
@@ -24253,6 +26219,46 @@ function missionRenderHeaderAndKpis(payload) {
     }
 }
 
+function missionCreateUnavailableReason(payload, jobsPayload = null) {
+    if (jobsPayload?.unavailable) {
+        return safeString(jobsPayload?.reason) || 'autonomy store is not available';
+    }
+    const engine = payload?.engine && typeof payload.engine === 'object' ? payload.engine : {};
+    if (!Boolean(engine.run_store_enabled)) {
+        return 'run store is off';
+    }
+    if (!Boolean(engine.autonomy_enabled)) {
+        return 'autonomy is off';
+    }
+    return '';
+}
+
+function missionSyncCreateAvailability(payload, jobsPayload = null) {
+    const reason = missionCreateUnavailableReason(payload, jobsPayload);
+    const disabled = Boolean(reason);
+    if (missionJobForm) {
+        missionJobForm.dataset.missionUnavailable = disabled ? '1' : '0';
+        missionJobForm.querySelectorAll('input, select, textarea, button').forEach((node) => {
+            if (
+                node instanceof HTMLInputElement
+                || node instanceof HTMLSelectElement
+                || node instanceof HTMLTextAreaElement
+                || node instanceof HTMLButtonElement
+            ) {
+                node.disabled = disabled;
+            }
+        });
+    }
+    if (missionJobSubmitBtn) {
+        missionJobSubmitBtn.title = disabled ? `Mission runtime unavailable: ${reason}` : 'Create mission job';
+    }
+    if (disabled) {
+        missionSetCreateMeta(`creation unavailable: ${reason}`);
+        return;
+    }
+    missionUpdateScheduleFields();
+}
+
 function missionRender(payload, jobsPayload = null) {
     const rooms = Array.isArray(payload?.rooms) ? payload.rooms : [];
     const roomLabelById = new Map();
@@ -24267,6 +26273,7 @@ function missionRender(payload, jobsPayload = null) {
     missionRenderOpsStrip(payload, activeJobsPayload);
     missionRenderJobs(activeJobsPayload);
     missionRenderHeaderAndKpis(payload);
+    missionSyncCreateAvailability(payload, activeJobsPayload);
     missionRenderPriorityList(payload, roomLabelById);
     missionRenderApprovals(payload);
     missionRenderRooms(payload, roomLabelById);
@@ -24710,6 +26717,16 @@ async function missionCreateJobFromForm(event) {
     if (event) event.preventDefault();
     const state = missionEnsureState();
     if (!state || state.actionInFlight) return;
+    const unavailableReason = missionCreateUnavailableReason(state.lastPayload, state.lastJobsPayload);
+    if (unavailableReason) {
+        missionSetCreateMeta(`creation unavailable: ${unavailableReason}`);
+        notifyUser(`Mission runtime unavailable: ${unavailableReason}.`, {
+            tone: 'warning',
+            debugKind: 'warning',
+            durationMs: 2600,
+        });
+        return;
+    }
 
     let payload;
     try {
@@ -25919,8 +27936,13 @@ function moduleEnsureRuntime() {
                 generatedAt: '',
                 loading: false,
                 error: '',
+                warning: '',
+                syncError: '',
+                degraded: false,
                 search: '',
                 filter: 'all',
+                storeUrl: '',
+                pendingStoreUrl: moduleReadPreferredMarketplaceStoreUrl(),
                 lastRefreshedAt: 0,
                 refreshPromise: null,
             },
@@ -26051,6 +28073,11 @@ function moduleGetMarketplaceState() {
             modules: [],
             loading: false,
             error: '',
+            warning: '',
+            syncError: '',
+            degraded: false,
+            storeUrl: '',
+            pendingStoreUrl: '',
             lastRefreshedAt: 0,
             refreshPromise: null,
         };
@@ -26060,9 +28087,63 @@ function moduleGetMarketplaceState() {
         modules: Array.isArray(state.marketplace.modules) ? state.marketplace.modules : [],
         loading: Boolean(state.marketplace.loading),
         error: safeString(state.marketplace.error),
+        warning: safeString(state.marketplace.warning),
+        syncError: safeString(state.marketplace.syncError),
+        degraded: Boolean(state.marketplace.degraded),
+        storeUrl: safeString(state.marketplace.storeUrl),
+        pendingStoreUrl: safeString(state.marketplace.pendingStoreUrl),
         lastRefreshedAt: Number(state.marketplace.lastRefreshedAt) || 0,
         refreshPromise: state.marketplace.refreshPromise || null,
     };
+}
+
+function normalizeMarketplaceStoreUrl(urlRaw) {
+    const raw = safeString(urlRaw).trim();
+    if (!raw) return '';
+    const candidate = /^[a-z]+:\/\//i.test(raw) ? raw : `https://${raw}`;
+    try {
+        const parsed = new URL(candidate);
+        const protocol = safeString(parsed.protocol).toLowerCase();
+        if (protocol !== 'https:' && protocol !== 'http:') return '';
+        parsed.hash = '';
+        parsed.search = '';
+        return parsed.toString().replace(/\/+$/, '');
+    } catch {
+        return '';
+    }
+}
+
+function normalizePreferredMarketplaceStoreUrl(urlRaw) {
+    const normalized = normalizeMarketplaceStoreUrl(urlRaw);
+    if (!normalized) return '';
+    if (normalized === LEGACY_MARKETPLACE_STORE_URL) {
+        return DEFAULT_MARKETPLACE_STORE_URL;
+    }
+    return normalized;
+}
+
+function moduleReadPreferredMarketplaceStoreUrl() {
+    try {
+        if (!window?.localStorage) return '';
+        return normalizePreferredMarketplaceStoreUrl(window.localStorage.getItem(UI_MARKETPLACE_STORE_URL_STORAGE_KEY));
+    } catch {
+        return '';
+    }
+}
+
+function moduleWritePreferredMarketplaceStoreUrl(urlRaw) {
+    const normalized = normalizePreferredMarketplaceStoreUrl(urlRaw);
+    try {
+        if (!window?.localStorage) return normalized;
+        if (normalized) {
+            window.localStorage.setItem(UI_MARKETPLACE_STORE_URL_STORAGE_KEY, normalized);
+        } else {
+            window.localStorage.removeItem(UI_MARKETPLACE_STORE_URL_STORAGE_KEY);
+        }
+    } catch {
+        // Ignore storage failures.
+    }
+    return normalized;
 }
 
 
@@ -26182,7 +28263,7 @@ function moduleBuildMarketplaceInstalledMap(modulesRaw = []) {
     return out;
 }
 
-function moduleRefreshMarketplace({ force = false } = {}) {
+function moduleRefreshMarketplace({ force = false, storeUrl = '' } = {}) {
     const state = moduleEnsureRuntime();
     if (!state) return null;
     const now = Date.now();
@@ -26199,9 +28280,16 @@ function moduleRefreshMarketplace({ force = false } = {}) {
     }
     state.marketplace.loading = true;
     state.marketplace.error = '';
+    state.marketplace.warning = '';
+    state.marketplace.syncError = '';
+    state.marketplace.degraded = false;
+    const preferredStoreUrl = normalizePreferredMarketplaceStoreUrl(storeUrl);
     const refreshPromise = (async () => {
         try {
-            const syncPayload = await moduleFetchJsonSafe('/api/marketplace/sync?limit=600');
+            const syncUrl = preferredStoreUrl
+                ? `/api/marketplace/sync?limit=600&store=${encodeURIComponent(preferredStoreUrl)}`
+                : '/api/marketplace/sync?limit=600';
+            const syncPayload = await moduleFetchJsonSafe(syncUrl);
             const plugins = Array.isArray(syncPayload?.plugins) ? syncPayload.plugins : [];
             const installedPlugins = Array.isArray(syncPayload?.installed)
                 ? syncPayload.installed
@@ -26213,8 +28301,12 @@ function moduleRefreshMarketplace({ force = false } = {}) {
             state.marketplace.generatedAt = safeString(syncPayload?.generated_at || syncPayload?.synced_at);
             state.marketplace.syncedAt = safeString(syncPayload?.synced_at || syncPayload?.generated_at);
             state.marketplace.sourceLabel = safeString(syncPayload?.source_label);
-            state.marketplace.storeUrl = safeString(syncPayload?.store_url);
+            state.marketplace.storeUrl = normalizePreferredMarketplaceStoreUrl(syncPayload?.store_url || preferredStoreUrl);
+            state.marketplace.pendingStoreUrl = state.marketplace.storeUrl || '';
             state.marketplace.categories = Array.isArray(syncPayload?.categories) ? syncPayload.categories : [];
+            state.marketplace.warning = safeString(syncPayload?.warning);
+            state.marketplace.syncError = safeString(syncPayload?.sync_error);
+            state.marketplace.degraded = Boolean(syncPayload?.degraded);
             state.marketplace.plugins = installedPlugins.map((plugin) => ({
                 ...plugin,
                 plugin_id: safeString(plugin?.plugin_id),
@@ -26296,6 +28388,10 @@ function moduleRefreshMarketplace({ force = false } = {}) {
                     surface_url: safeString(plugin?.surface_url),
                     surface_mode: safeString(plugin?.surface_mode),
                     surface_title: safeString(plugin?.surface?.title || plugin?.surface_title),
+                    left_nav_behavior: safeString(plugin?.left_nav_behavior),
+                    default_nav_section: safeString(plugin?.default_nav_section),
+                    default_nav_order: Number(plugin?.default_nav_order) || 0,
+                    workspace_id: safeString(plugin?.workspace_id),
                     icon: safeString(plugin?.icon),
                     compatibility: { eligible: Boolean(plugin?.installable || downloadAvailable) },
                     publisher: safeString(plugin?.publisher_name || plugin?.publisher_id || plugin?.source) || 'Thomas',
@@ -26304,6 +28400,7 @@ function moduleRefreshMarketplace({ force = false } = {}) {
                 };
             }).filter((plugin) => safeString(plugin?.module_id));
             state.marketplace.error = '';
+            moduleWritePreferredMarketplaceStoreUrl(state.marketplace.storeUrl);
             moduleRenderInstalledPluginNav();
         } catch (error) {
             state.marketplace.error = safeString(error?.message) || 'Unable to refresh marketplace catalog.';
@@ -37213,6 +39310,7 @@ function moduleRenderInstalledPluginNav() {
             button.className = 'nav-item';
             button.dataset.workspaceDynamic = '1';
         }
+        button.type = 'button';
         const icon = safeString(entry.icon) || 'ph-puzzle-piece';
         const iconClass = icon.startsWith('ph-') ? icon : `ph-${icon}`;
         button.dataset.navMode = safeString(entry.mode_id).toLowerCase();
@@ -37349,7 +39447,10 @@ function moduleRenderEmbeddedSurface(container, { title, src, surfaceMode = 'sta
 
     const frame = document.createElement('iframe');
     frame.setAttribute('title', title);
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
+    const trustedEmbeddedSurface = safeString(src).startsWith('/');
+    if (!trustedEmbeddedSurface) {
+        frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups allow-modals');
+    }
     frame.dataset.moduleEmbeddedSurface = src;
     frame.dataset.moduleEmbeddedMode = surfaceMode;
     frame.loading = 'eager';
@@ -37415,11 +39516,16 @@ function moduleRenderMarketplaceSurface(container) {
     const categories = Array.isArray(marketplaceState?.categories) ? marketplaceState.categories : [];
     const loading = Boolean(marketplaceState?.loading);
     const error = safeString(marketplaceState?.error);
+    const warning = safeString(marketplaceState?.warning || marketplaceState?.syncError);
+    const degraded = Boolean(marketplaceState?.degraded);
     const searchText = safeString(marketplaceState?.search).trim();
     const activeFilter = safeString(marketplaceState?.filter).toLowerCase() || 'all';
     const generatedAt = safeString(marketplaceState?.generatedAt);
     const syncedAt = safeString(marketplaceState?.syncedAt || generatedAt);
     const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'thomas.dev';
+    const configuredStoreUrl = normalizeMarketplaceStoreUrl(
+        safeString(marketplaceState?.pendingStoreUrl || marketplaceState?.storeUrl || moduleReadPreferredMarketplaceStoreUrl())
+    );
     const titleCase = (value) => safeString(value)
         .replace(/[_-]+/g, ' ')
         .split(' ')
@@ -37479,9 +39585,14 @@ function moduleRenderMarketplaceSurface(container) {
 
     const typeLabel = (app) => titleCase(app?.marketplace_type_label || app?.marketplace_type || app?.kind) || 'Plugin';
 
+    const isWorkspaceModule = (app) => (
+        safeString(app?.left_nav_behavior).toLowerCase() === 'workspace'
+        || safeString(app?.marketplace_type).toLowerCase() === 'command_center'
+    );
+
     const installBehaviorLabel = (app) => {
         if (app?.installable) {
-            if (app?.installed && app?.enabled) return 'Enabled';
+            if (app?.installed && app?.enabled) return isWorkspaceModule(app) ? 'Installed' : 'Enabled';
             if (app?.installed) return 'Installed';
             return 'Installable';
         }
@@ -37495,6 +39606,9 @@ function moduleRenderMarketplaceSurface(container) {
                 return { id: 'install', label: 'Update' };
             }
             if (app?.installed) {
+                if (isWorkspaceModule(app)) {
+                    return { id: 'open', label: 'Open' };
+                }
                 return app?.enabled
                     ? { id: 'disable', label: 'Disable' }
                     : { id: 'enable', label: 'Enable' };
@@ -37674,10 +39788,19 @@ function moduleRenderMarketplaceSurface(container) {
                         <span>${escapeHtml(String(updateCount))} updates</span>
                         <span>${escapeHtml(String(categories.length))} categories</span>
                         <span>${escapeHtml(String(filteredApps.length))} visible</span>
+                        ${configuredStoreUrl ? `<span>Host ${escapeHtml(configuredStoreUrl)}</span>` : ''}
                         ${sourceLabel ? `<span>Synced from ${escapeHtml(sourceLabel)}</span>` : ''}
                         ${syncedLabel ? `<span>Last sync ${escapeHtml(syncedLabel)}</span>` : (generatedLabel ? `<span>Updated ${escapeHtml(generatedLabel)}</span>` : '')}
                     </p>
                 </div>
+                ${warning ? `
+                    <div class="marketplace-summary-row">
+                        <p class="marketplace-summary-copy">
+                            <strong>${escapeHtml(degraded ? 'Using fallback catalog.' : 'Marketplace notice.')}</strong>
+                            <span>${escapeHtml(warning)}</span>
+                        </p>
+                    </div>
+                ` : ''}
                 <div class="marketplace-filter-rail">
                     ${filterMarkup}
                 </div>
@@ -38036,6 +40159,32 @@ function initModuleWorkspace() {
                     if (actionId === 'enable' && result?.plugin?.mode_id) {
                         setSidebarNavMode(result.plugin.mode_id);
                     }
+                    moduleRecordActivity(mode, `${actionLabel} completed for ${itemId || 'item'}.`, 'ok');
+                    moduleTouch(mode);
+                    moduleRender(mode, { touch: false });
+                    notifyUser(`${actionLabel} completed.`, { tone: 'success', durationMs: 1500, debugKind: actionId || 'module-action' });
+                    return;
+                }
+                if (actionId === 'open') {
+                    const currentApp = Array.isArray(state.marketplace?.apps)
+                        ? state.marketplace.apps.find((app) => safeString(app?.module_id) === itemId)
+                        : null;
+                    if (!currentApp) {
+                        throw new Error('This workspace is no longer in the marketplace catalog.');
+                    }
+                    let modeId = safeString(currentApp?.mode_id);
+                    if (currentApp?.installed && !currentApp?.enabled) {
+                        const enableResult = await moduleSetMarketplacePluginEnabled(itemId, true);
+                        if (!enableResult?.ok) throw new Error(enableResult?.error || 'Open failed.');
+                        await moduleRefreshMarketplace({ force: true });
+                        modeId = safeString(enableResult?.plugin?.mode_id || modeId);
+                    } else {
+                        await moduleRefreshMarketplace({ force: true });
+                    }
+                    if (!modeId) {
+                        throw new Error('This workspace is installed, but it does not expose an app surface yet.');
+                    }
+                    setSidebarNavMode(modeId);
                     moduleRecordActivity(mode, `${actionLabel} completed for ${itemId || 'item'}.`, 'ok');
                     moduleTouch(mode);
                     moduleRender(mode, { touch: false });
@@ -39035,24 +41184,19 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     }
     officeScheduleChatPreviewRefresh();
 
-    if ((isOffice || showOfficePreview) && officeEnsureState()) {
-        officeState.active = true;
-        if (isOffice) {
-            officeResetViewport();
-            void officeStartMissionStream();
-            if (officeChatInput) {
-                window.setTimeout(() => {
-                    officeChatInput.focus();
-                }, 0);
-            }
-        } else {
-            officeStopMissionStream();
+    if (isOffice || showOfficePreview) {
+        initOfficeWorkspace();
+        if (officeSceneWrap instanceof HTMLElement && isOffice) {
+            window.setTimeout(() => {
+                officeSceneWrap.focus();
+            }, 0);
         }
-    } else if (officeState) {
-        officeState.active = false;
-        officeSetEditorOpen(false);
-        officeStopMissionStream();
-        officePersistRuntimeState(performance.now(), { force: true });
+    } else {
+        const state = officeEnsureDraftMapState();
+        state.pointerId = null;
+        if (officeSceneWrap instanceof HTMLElement) {
+            officeSceneWrap.style.cursor = 'grab';
+        }
     }
 
     if (isMission) {
@@ -39319,7 +41463,15 @@ async function maybeHandleBootPluginInstall() {
             debugKind: 'marketplace-install',
         });
         const result = await moduleInstallMarketplacePluginFromDeepLink(deepLink);
-        await moduleRefreshMarketplace({ force: true });
+        const learnedStoreUrl = moduleWritePreferredMarketplaceStoreUrl(
+            safeString(result?.request?.store || result?.plugin?.source?.store_url)
+        );
+        const runtime = moduleEnsureRuntime();
+        if (runtime?.marketplace && learnedStoreUrl) {
+            runtime.marketplace.storeUrl = learnedStoreUrl;
+            runtime.marketplace.pendingStoreUrl = learnedStoreUrl;
+        }
+        await moduleRefreshMarketplace({ force: true, storeUrl: learnedStoreUrl });
         if (!result?.ok) {
             setSidebarNavMode('marketplace');
             moduleRender('marketplace', { touch: false });
@@ -39626,15 +41778,6 @@ function initFeatures() {
             navWrap.insertBefore(button, navWrap.firstChild);
         }
     }
-    if (officeWorkspace instanceof HTMLElement) {
-        const title = officeWorkspace.querySelector('.office-toolbar-title span:last-child');
-        if (title instanceof HTMLElement) {
-            title.textContent = 'Virtual Office';
-        }
-    }
-    if (officeEditorToggleBtn instanceof HTMLButtonElement) {
-        officeEditorToggleBtn.textContent = 'Edit Roster';
-    }
     initOfficeWorkspace();
     initMissionWorkspace();
     initContentWorkspace();
@@ -39765,6 +41908,16 @@ function initFeatures() {
         });
     }
 
+    if (workspaceNavItems) {
+        workspaceNavItems.addEventListener('click', (event) => {
+            const button = event.target instanceof Element ? event.target.closest('[data-nav-mode]') : null;
+            if (!button) return;
+            const mode = normalizeNavMode(button.dataset.navMode);
+            if (!MODULE_NAV_MODE_SET.has(mode)) return;
+            ensureSettingsUiClosed();
+            setSidebarNavMode(mode);
+        });
+    }
     if (pluginNavItems) {
         pluginNavItems.addEventListener('click', (event) => {
             const button = event.target instanceof Element ? event.target.closest('[data-nav-mode]') : null;
@@ -42256,7 +44409,7 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
     viewport.className = 'module-ui-editor-viewport';
     const frame = document.createElement('iframe');
     frame.className = 'module-ui-editor-frame';
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups allow-modals');
     frame.setAttribute('title', 'UI Editor Canvas');
     const hint = document.createElement('div');
     hint.className = 'module-ui-editor-hint';
@@ -42390,6 +44543,29 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         hint.textContent = wb.uiViewport && wb.uiViewport.fit === false ? 'View mode (resizable)' : 'View mode (fit)';
     };
 
+    const frameSandboxValue = (project) => {
+        const type = safeString(project && project.type).toLowerCase();
+        const id = safeString(project && project.id);
+        const rawUrl = safeString(project && project.url);
+        const trustedProject = id === 'ui-project-thomas'
+            || type === 'imported'
+            || rawUrl === '/'
+            || rawUrl.startsWith('/');
+        if (trustedProject) {
+            return '';
+        }
+        return 'allow-scripts allow-forms allow-popups allow-modals';
+    };
+
+    const applyFrameSandbox = (project) => {
+        const sandbox = frameSandboxValue(project);
+        if (sandbox) {
+            frame.setAttribute('sandbox', sandbox);
+            return;
+        }
+        frame.removeAttribute('sandbox');
+    };
+
     const refreshExtraction = () => {
         const project = currentProject();
         let doc = null;
@@ -42416,6 +44592,7 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
     const loadProject = (forceReload = false) => {
         const project = currentProject();
         moduleUiEditorClearEditRuntime(wb);
+        applyFrameSandbox(project);
         if (!project) {
             frame.srcdoc = '<html><body style="font-family:system-ui;padding:24px;background:#0f1723;color:#eaf2ff;">No project selected.</body></html>';
             count.textContent = '0 elements';
@@ -42517,23 +44694,8 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
     editBtn.addEventListener('click', () => {
         wb.uiEditMode = !wb.uiEditMode;
         updateEditUi();
-        if (!wb.uiEditMode) {
-            moduleUiEditorClearEditRuntime(wb);
-            refreshExtraction();
-            moduleUiEditorPersistUrlProjects(wb);
-            return;
-        }
-        const project = currentProject();
-        if (!project) return;
-        const attached = moduleUiEditorAttachEditMode(frame, wb, project, () => {
-            refreshExtraction();
-            moduleUiEditorPersistUrlProjects(wb);
-        });
-        if (!attached) {
-            wb.uiEditMode = false;
-            updateEditUi();
-            notifyUser('Edit mode requires same-origin content.', { tone: 'warn', durationMs: 2200, debugKind: 'app-builder' });
-        }
+        loadProject(true);
+        moduleUiEditorPersistUrlProjects(wb);
     });
 
     viewportBtn.addEventListener('click', () => {
@@ -43209,11 +45371,11 @@ function moduleUiEditorDefaultShellPlugins() {
             id: 'office',
             name: 'Virtual Office',
             pill: 'office mode',
-            toolbarActions: ['Focus Agent', 'Follow Camera'],
+            toolbarActions: ['Pan', 'Zoom'],
             cards: [
-                { title: 'Office Map', text: 'Agents, rooms, and floor state.' },
-                { title: 'Work Queue', text: 'Active and queued tasks.' },
-                { title: 'Activity Log', text: 'Runtime movement and events.' },
+                { title: 'Foundation Grid', text: 'Massive expandable map canvas for future neighborhoods and rooms.' },
+                { title: 'Seed Zone', text: 'Central starting area for the first build pass.' },
+                { title: 'Expansion Margin', text: 'Plenty of empty terrain so the office can scale hard.' },
             ],
             removable: false,
         },
@@ -43936,6 +46098,10 @@ function moduleUiEditorFindElementForRef(doc, refRaw, keyRaw) {
     const targetId = safeString(ref.targetId);
     const selector = safeString(ref.selector);
     const key = safeString(keyRaw) || moduleUiEditorBuildTargetKey(targetId, selector);
+    if (key) {
+        const byKey = doc.querySelector('[data-ui-editor-target-key="' + moduleUiEditorCssEscape(key) + '"]');
+        if (moduleUiEditorIsElement(byKey)) return byKey;
+    }
     if (targetId) {
         const byId = doc.querySelector('[data-thomas-id="' + moduleUiEditorCssEscape(targetId) + '"]');
         if (moduleUiEditorIsElement(byId)) return byId;
@@ -44438,7 +46604,7 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
     viewport.className = 'module-ui-editor-viewport';
     const frame = document.createElement('iframe');
     frame.className = 'module-ui-editor-frame';
-    frame.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-forms allow-popups allow-modals');
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups allow-modals');
     frame.setAttribute('title', 'UI Editor Canvas');
     const hint = document.createElement('div');
     hint.className = 'module-ui-editor-hint';
@@ -44833,9 +46999,11 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         [fieldX.input, fieldY.input, fieldW.input, fieldH.input, fieldZ.input, noteInput, applySelectionBtn, resetSelectionBtn]
             .forEach((control) => { control.disabled = disabled; });
         if (disabled) {
-            selectionStatus.textContent = project
-                ? 'Pick a visible layer, then use edit mode or the fields below.'
-                : 'Choose a project to inspect individual layers.';
+            selectionStatus.textContent = project && meta
+                ? 'Selected layer could not be rebound to the live DOM. Reload the project and try again.'
+                : (project
+                    ? 'Pick a visible layer, then use edit mode or the fields below.'
+                    : 'Choose a project to inspect individual layers.');
             selectionMeta.innerHTML = '<div class="module-ui-editor-selection-empty">Nothing selected yet.</div>';
             fieldX.input.value = '';
             fieldY.input.value = '';
@@ -45251,6 +47419,29 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         hint.textContent = wb.uiViewport && wb.uiViewport.fit === false ? 'View mode (resizable)' : 'View mode (fit)';
     };
 
+    const frameSandboxValue = (project) => {
+        const type = safeString(project && project.type).toLowerCase();
+        const id = safeString(project && project.id);
+        const rawUrl = safeString(project && project.url);
+        const trustedProject = id === 'ui-project-thomas'
+            || type === 'imported'
+            || rawUrl === '/'
+            || rawUrl.startsWith('/');
+        if (trustedProject) {
+            return '';
+        }
+        return 'allow-scripts allow-forms allow-popups allow-modals';
+    };
+
+    const applyFrameSandbox = (project) => {
+        const sandbox = frameSandboxValue(project);
+        if (sandbox) {
+            frame.setAttribute('sandbox', sandbox);
+            return;
+        }
+        frame.removeAttribute('sandbox');
+    };
+
     const refreshExtraction = () => {
         const project = currentProject();
         let doc = null;
@@ -45286,6 +47477,7 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
     const loadProject = (forceReload = false) => {
         const project = currentProject();
         moduleUiEditorClearEditRuntime(wb);
+        applyFrameSandbox(project);
         if (!project) {
             frame.srcdoc = '<html><body style="font-family:system-ui;padding:24px;background:#0f1723;color:#eaf2ff;">No project selected.</body></html>';
             count.textContent = '0 elements';
@@ -45420,29 +47612,8 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
     editBtn.addEventListener('click', () => {
         wb.uiEditMode = !wb.uiEditMode;
         updateEditUi();
-        if (!wb.uiEditMode) {
-            moduleUiEditorClearEditRuntime(wb);
-            refreshExtraction();
-            persistProjects();
-            return;
-        }
-        const project = currentProject();
-        if (!project) return;
-        const attached = moduleUiEditorAttachEditMode(frame, wb, project, () => {
-            refreshExtraction();
-            persistProjects();
-        }, (target) => {
-            const ref = moduleUiEditorElementRefFromElement(target);
-            wb.uiRuntime.selectedKey = safeString(ref.key);
-            renderElementList();
-            renderSelectionUi();
-            updateWorkflowUi();
-        });
-        if (!attached) {
-            wb.uiEditMode = false;
-            updateEditUi();
-            notifyUser('Edit mode requires same-origin content.', { tone: 'warn', durationMs: 2200, debugKind: 'app-builder' });
-        }
+        loadProject(true);
+        persistProjects();
     });
 
     viewportBtn.addEventListener('click', () => {

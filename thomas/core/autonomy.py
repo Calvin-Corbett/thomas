@@ -46,11 +46,11 @@ _SPECS: dict[int, AutonomyLevelSpec] = {
     ),
     3: AutonomyLevelSpec(
         level=3,
-        name="Auto",
-        ui_label="auto",
-        summary="Autonomous execution including web actions and downloads",
+        name="Agent",
+        ui_label="agent",
+        summary="Agent mode with autonomous tool use, web actions, and downloads",
         system_directive=(
-            "Autonomy Level 3 (Auto): execute tasks autonomously. "
+            "Autonomy Level 3 (Agent): execute tasks autonomously. "
             "Use tools, browse the web, download files, and complete work "
             "without asking for permission on each step. Only stop if "
             "genuinely blocked or something is ambiguous."
@@ -60,14 +60,16 @@ _SPECS: dict[int, AutonomyLevelSpec] = {
     ),
     4: AutonomyLevelSpec(
         level=4,
-        name="Agent",
-        ui_label="agent",
+        name="Full Autonomy",
+        ui_label="full_autonomy",
         summary="Full agent mode — does whatever is needed to complete the task",
         system_directive=(
-            "Autonomy Level 4 (Agent): full agent mode. Do whatever is needed "
+            "Autonomy Level 4 (Full Autonomy): do whatever is needed "
             "to complete the task. Install dependencies, configure tools, make "
-            "decisions, and keep going until the job is done. Only stop if "
-            "something is truly impossible."
+            "decisions, keep momentum, and continue until the job is done. "
+            "Use native operating-system authentication for sensitive actions "
+            "instead of stopping for routine confirmation. Only stop if "
+            "something is truly impossible or unsafe."
         ),
         force_tools_policy="always",
         prefers_extended_iterations=True,
@@ -132,13 +134,22 @@ def parse_autonomy_level(value: object, *, default: int = DEFAULT_AUTONOMY_LEVEL
         return clamp_autonomy_level(int(s))
     except (ValueError, TypeError):
         pass
-    # Handle names: "chat", "assist", "auto", "agent"
+    # Handle names and historical aliases.
     name_map = {spec.name.lower(): spec.level for spec in _SPECS.values()}
     label_map = {spec.ui_label.lower(): spec.level for spec in _SPECS.values()}
+    alias_map = {
+        "auto": 3,
+        "agent": 3,
+        "full autonomy": 4,
+        "full_autonomy": 4,
+        "full-autonomy": 4,
+    }
     if s.lower() in name_map:
         return name_map[s.lower()]
     if s.lower() in label_map:
         return label_map[s.lower()]
+    if s.lower() in alias_map:
+        return alias_map[s.lower()]
     return clamp_autonomy_level(default)
 
 

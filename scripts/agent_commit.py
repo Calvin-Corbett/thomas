@@ -153,6 +153,8 @@ def _scope_matches_path(scope: str, rel_path: str) -> bool:
         return False
     if scope_norm in {".", "*", "**"}:
         return True
+    if path_norm == scope_norm or path_norm.startswith(scope_norm + "/"):
+        return True
     if any(ch in scope_norm for ch in "*?["):
         import fnmatch
 
@@ -162,7 +164,7 @@ def _scope_matches_path(scope: str, rel_path: str) -> bool:
             base = scope_norm[:-3].rstrip("/")
             return bool(base) and (path_norm == base or path_norm.startswith(base + "/"))
         return False
-    return path_norm == scope_norm or path_norm.startswith(scope_norm + "/")
+    return False
 
 
 def _scope_overlap(left: str, right: str) -> bool:
@@ -210,20 +212,27 @@ def _current_branch(repo_root: Path) -> str:
 
 
 def _parse_status_paths(repo_root: Path) -> list[str]:
-    proc = _run_git(repo_root, ["status", "--porcelain"])
+    proc = _run_git(repo_root, ["status", "--porcelain=v1", "-z", "-uall"])
     if proc.returncode != 0:
-        raise RuntimeError(proc.stderr.strip() or "git status --porcelain failed")
+        raise RuntimeError(proc.stderr.strip() or "git status --porcelain=v1 -z -uall failed")
     changed: list[str] = []
-    for raw in str(proc.stdout or "").splitlines():
-        line = str(raw or "").rstrip()
-        if not line:
+    entries = str(proc.stdout or "").split("\0")
+    index = 0
+    while index < len(entries):
+        entry = str(entries[index] or "")
+        if not entry:
+            index += 1
             continue
-        token = line[3:].strip() if len(line) > 3 else line.strip()
-        if " -> " in token:
-            token = token.split(" -> ", 1)[1].strip()
+        status = entry[:2]
+        token = entry[3:] if len(entry) > 3 else entry
+        if "R" in status or "C" in status:
+            if index + 1 < len(entries) and str(entries[index + 1] or ""):
+                token = str(entries[index + 1] or "")
+                index += 1
         normalized = _normalize_path(token)
         if normalized and normalized not in changed:
             changed.append(normalized)
+        index += 1
     return changed
 
 

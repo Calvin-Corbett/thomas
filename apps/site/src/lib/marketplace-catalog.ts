@@ -1,14 +1,13 @@
 import crypto from "node:crypto";
-import fs from "node:fs";
-import path from "node:path";
 import { getCanonicalSiteUrl } from "@/lib/site-config";
 import { classifyMarketplaceRow, marketplaceRowIsVisible } from "@/lib/marketplace-surface-policy";
+import { marketplaceSnapshot } from "@/lib/marketplace-snapshot.generated";
 
 type JsonRecord = Record<string, unknown>;
 
 export type HostedPluginRecord = {
   id: string;
-  bundlePath: string;
+  bundleBase64: string;
   bundleSizeBytes: number;
   sha256: string;
   manifest: JsonRecord;
@@ -172,41 +171,6 @@ function inferDefaultNavSection(raw: JsonRecord, marketplaceType: string, leftNa
   return marketplaceType === "command_center" || leftNavBehavior === "workspace" ? "command_centers" : "installed";
 }
 
-function repoRoot(): string {
-  const envRoot = safeString(process.env.THOMAS_REPO_ROOT).trim();
-  if (envRoot) {
-    return path.resolve(envRoot);
-  }
-  const cwd = process.cwd();
-  const candidates = [cwd, path.resolve(cwd, ".."), path.resolve(cwd, "../..")];
-  for (const candidate of candidates) {
-    if (fs.existsSync(path.join(candidate, "extensions", "catalog.json"))) {
-      return candidate;
-    }
-  }
-  return path.resolve(cwd, "../..");
-}
-
-function extensionsRoot(): string {
-  const envRoot = safeString(process.env.THOMAS_EXTENSIONS_ROOT).trim();
-  if (envRoot) {
-    return path.resolve(envRoot);
-  }
-  return path.join(repoRoot(), "extensions");
-}
-
-function hostedPluginsRoot(): string {
-  const envRoot = safeString(process.env.THOMAS_HOSTED_PLUGINS_ROOT).trim();
-  if (envRoot) {
-    return path.resolve(envRoot);
-  }
-  return path.join(repoRoot(), "thomas", "server", "plugins_registry", "plugins");
-}
-
-function readJsonFile(filePath: string): JsonRecord {
-  return JSON.parse(fs.readFileSync(filePath, "utf-8"));
-}
-
 function catalogStoreUrl(): string {
   return getCanonicalSiteUrl().replace(/\/+$/, "");
 }
@@ -249,31 +213,26 @@ export function verifyDownloadToken(token: string): { pluginId: string; clientKe
 }
 
 export function loadHostedPlugins(): Map<string, HostedPluginRecord> {
-  const root = hostedPluginsRoot();
   const out = new Map<string, HostedPluginRecord>();
-  if (!fs.existsSync(root)) {
-    return out;
-  }
+  const hostedPlugins = Array.isArray(marketplaceSnapshot.hostedPlugins) ? marketplaceSnapshot.hostedPlugins : [];
 
-  for (const entry of fs.readdirSync(root, { withFileTypes: true })) {
-    if (!entry.isDirectory()) continue;
-    const pluginDir = path.join(root, entry.name);
-    const manifestPath = path.join(pluginDir, "manifest.json");
-    const bundlePath = path.join(pluginDir, "bundle.zip");
-    if (!fs.existsSync(manifestPath) || !fs.existsSync(bundlePath)) continue;
-    const manifest = readJsonFile(manifestPath);
+  for (const entry of hostedPlugins) {
+    const manifest = entry && typeof entry.manifest === "object" ? (entry.manifest as JsonRecord) : {};
     const publisherId = safeString(manifest.publisher_id).trim();
     const signature = safeString(manifest.signature).trim();
     if (!TRUSTED_PUBLISHER_IDS.has(publisherId) || !signature) {
       continue;
     }
-    const stats = fs.statSync(bundlePath);
-    const bundleBytes = fs.readFileSync(bundlePath);
-    out.set(entry.name, {
-      id: entry.name,
-      bundlePath,
-      bundleSizeBytes: stats.size,
-      sha256: crypto.createHash("sha256").update(bundleBytes).digest("hex"),
+    const id = safeString(entry.id).trim();
+    const bundleBase64 = safeString(entry.bundleBase64).trim();
+    if (!id || !bundleBase64) {
+      continue;
+    }
+    out.set(id, {
+      id,
+      bundleBase64,
+      bundleSizeBytes: safeInt(entry.bundleSizeBytes, 0),
+      sha256: safeString(entry.sha256).trim() || crypto.createHash("sha256").update(Buffer.from(bundleBase64, "base64")).digest("hex"),
       manifest,
     });
   }
@@ -382,9 +341,7 @@ function normalizeCatalogRow(
 }
 
 export function buildMarketplaceCatalog(channel = "stable"): MarketplaceCatalogPayload {
-  const catalogPath = path.join(extensionsRoot(), "catalog.json");
-  const rawCatalog = readJsonFile(catalogPath);
-  const packs = Array.isArray(rawCatalog.packs) ? rawCatalog.packs : [];
+  const packs = Array.isArray(marketplaceSnapshot.packs) ? marketplaceSnapshot.packs : [];
   const hosted = loadHostedPlugins();
   const storeUrl = catalogStoreUrl();
   const seen = new Set<string>();
@@ -429,8 +386,8 @@ export function buildMarketplaceCatalog(channel = "stable"): MarketplaceCatalogP
 
   return {
     ok: true,
-    generated_at: safeString(rawCatalog.generated_at).trim() || new Date().toISOString(),
-    catalog_source: "extensions/catalog.json",
+    generated_at: safeString(marketplaceSnapshot.generatedAt).trim() || new Date().toISOString(),
+    catalog_source: safeString(marketplaceSnapshot.catalogSource).trim() || "extensions/catalog.json",
     store_url: storeUrl,
     channel,
     count: rows.length,

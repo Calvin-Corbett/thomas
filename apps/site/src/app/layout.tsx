@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
 import { Manrope, Space_Grotesk } from "next/font/google";
 import { Footer } from "@/components/footer";
+import { LocaleHtmlSync } from "@/components/locale-html-sync";
 import { Navbar } from "@/components/navbar";
-import { getCanonicalSiteUrl, siteConfig } from "@/lib/site-config";
+import { getCanonicalSiteUrl, getRepoUrl, siteConfig } from "@/lib/site-config";
 import "./globals.css";
 
 const display = Space_Grotesk({ subsets: ["latin"], variable: "--font-display" });
@@ -28,13 +29,16 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const repoUrl = getRepoUrl();
+
   return (
     <html lang="en">
       <body className={`${display.variable} ${body.variable}`}>
+        <LocaleHtmlSync />
         <div className="bg-art" />
         <Navbar />
         <main className="page-shell">{children}</main>
-        <Footer />
+        <Footer repoUrl={repoUrl} />
       </body>
     </html>
   );

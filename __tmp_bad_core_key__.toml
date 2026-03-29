@@ -1,8 +1,0 @@
-default_model = "local"
-
-[models.local]
-model = "dummy"
-
-[server]
-access_mode = "local"
-rat_limit_enabled = true

@@ -183,13 +183,13 @@ def test_release_fails_when_agent_claim_missing(tmp_path: Path, capsys) -> None:
     assert "no active claim found for `Codex 9`" in out
 
 
-def test_claim_fails_when_repo_worktree_is_dirty(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_claim_fails_when_claim_scope_has_dirty_files(tmp_path: Path, capsys, monkeypatch) -> None:
     workboard = _write_workboard(tmp_path)
     monkeypatch.setattr(mod, "_scope_guard_supported", lambda _: True)
     monkeypatch.setattr(
         mod,
-        "_worktree_dirty_paths",
-        lambda _root=mod.ROOT: {
+        "_claimed_scope_dirty_paths",
+        lambda scopes: {
             "staged": [],
             "unstaged": ["thomas/cli/main.py"],
             "untracked": ["scratch/local.txt"],
@@ -212,7 +212,7 @@ def test_claim_fails_when_repo_worktree_is_dirty(tmp_path: Path, capsys, monkeyp
     out = capsys.readouterr().out
 
     assert rc == 1
-    assert "repo worktree is dirty" in out
+    assert "claimed scope `thomas/cli/main.py` has dirty files" in out
     assert "--allow-dirty-claim" in out
 
 
@@ -223,8 +223,8 @@ def test_claim_allow_dirty_with_reason_writes_audit(tmp_path: Path, capsys, monk
     monkeypatch.setattr(mod, "CLAIM_OVERRIDE_AUDIT_LOG", audit_log)
     monkeypatch.setattr(
         mod,
-        "_worktree_dirty_paths",
-        lambda _root=mod.ROOT: {
+        "_claimed_scope_dirty_paths",
+        lambda scopes: {
             "staged": ["thomas/cli/main.py"],
             "unstaged": [],
             "untracked": [],

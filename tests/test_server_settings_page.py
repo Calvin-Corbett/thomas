@@ -78,6 +78,14 @@ class TestServerSettingsPage(AioHTTPTestCase):
             ".main-content > * {\n    min-width: 0;\n    min-height: 0;\n}",
             layout_css,
         )
+        self.assertIn(
+            ".app-layout.settings-active .main-content > :not(#settingsModal) {\n    pointer-events: none !important;\n}",
+            layout_css,
+        )
+        self.assertIn(
+            ".app-layout.settings-active #settingsModal,\n.app-layout.settings-active #settingsModal * {\n    pointer-events: auto;\n}",
+            layout_css,
+        )
 
     async def test_settings_script_uses_preferences_api_contract(self):
         root = Path(__file__).resolve().parents[1]

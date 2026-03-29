@@ -21,6 +21,7 @@ Audit reference: Adversarial Audit Finding 7 (2026-03-19)
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import subprocess
@@ -34,9 +35,29 @@ AGENT_ENV_KEYS = (
     "AGENT_ID",
     "THOMAS_AGENT_ID",
     "THOMAS_AGENT_NAME",
+    "CODEX_AGENT_ID",
     "CODEX_AGENT_NAME",
     "AGENT_NAME",
 )
+AGENT_CONTEXT_ENV_KEYS = AGENT_ENV_KEYS + (
+    "CODEX_HOME",
+    "CODEX_SESSION_ID",
+)
+
+# Keep this aligned with scripts/check_changelog_gate.py so post-commit
+# audit can detect a bypassed missing changelog and auto-revert agent commits.
+try:
+    from agent_safety_config import config as _cfg
+
+    CHANGELOG_THRESHOLD = _cfg.changelog_threshold()
+    CHANGELOG_PATH = _cfg.changelog_file()
+    CODE_PREFIXES = tuple(d if d.endswith("/") else d + "/" for d in _cfg.source_dirs())
+except ImportError:
+    CHANGELOG_THRESHOLD = 3
+    CHANGELOG_PATH = "CHANGELOG.md"
+    CODE_PREFIXES = ("src/", "scripts/")
+
+CODE_EXTENSIONS = {".py", ".js", ".mjs", ".cjs", ".jsx", ".ts", ".tsx", ".css", ".html"}
 
 
 def _now_utc() -> str:
@@ -63,6 +84,10 @@ def _resolve_agent() -> str:
     return getpass.getuser() or "unknown"
 
 
+def _is_agent_context() -> bool:
+    return any(os.getenv(key, "").strip() for key in AGENT_CONTEXT_ENV_KEYS)
+
+
 def _staged_file_count_from_commit() -> int:
     """Count files changed in the commit that just happened."""
     output = _git(["diff", "--name-only", "HEAD~1", "HEAD"])
@@ -71,16 +96,35 @@ def _staged_file_count_from_commit() -> int:
     return len([line for line in output.splitlines() if line.strip()])
 
 
+def _commit_changed_files() -> list[str]:
+    output = _git(["diff", "--name-only", "HEAD~1", "HEAD"])
+    if not output:
+        return []
+    return [line.strip().replace("\\", "/") for line in output.splitlines() if line.strip()]
+
+
+def _is_code_file(path: str) -> bool:
+    normalized = str(path or "").strip().replace("\\", "/")
+    if not any(normalized.startswith(prefix) for prefix in CODE_PREFIXES):
+        return False
+    return Path(normalized).suffix.lower() in CODE_EXTENSIONS
+
+
+def _commit_missing_required_changelog() -> bool:
+    changed = _commit_changed_files()
+    code_files = [path for path in changed if _is_code_file(path)]
+    threshold = max(1, CHANGELOG_THRESHOLD)
+    return len(code_files) >= threshold and CHANGELOG_PATH.replace("\\", "/") not in changed
+
+
 def main() -> None:
     # Check if pre-commit left its breadcrumb
     precommit_ran = BREADCRUMB_FILE.exists()
 
     if precommit_ran:
         # Pre-commit ran normally — clean up breadcrumb and exit
-        try:
+        with contextlib.suppress(OSError):
             BREADCRUMB_FILE.unlink()
-        except OSError:
-            pass
         return
 
     # Pre-commit did NOT run — this commit bypassed hooks
@@ -99,6 +143,7 @@ def main() -> None:
         "files_changed": file_count,
         "commit_message": commit_msg[:200],
         "bypass_detected": True,
+        "missing_changelog": _commit_missing_required_changelog(),
     }
 
     # Write audit log
@@ -114,7 +159,7 @@ def main() -> None:
     # the commit. Humans can bypass intentionally; agents should not.
     # The reverted commit stays in reflog for forensics.
     # Audit reference: Cowork Adversarial Audit, Layer 2 (2026-03-19)
-    is_agent = any(os.getenv(key, "").strip() for key in AGENT_ENV_KEYS)
+    is_agent = _is_agent_context()
     auto_reverted = False
 
     if is_agent:
@@ -125,6 +170,8 @@ def main() -> None:
         print()
         print(f"  Agent '{agent}' committed without pre-commit hooks.")
         print(f"  Commit {commit_hash[:12]} is being reverted automatically.")
+        if audit_record["missing_changelog"]:
+            print("  Reason: bypassed commit also skipped a required CHANGELOG update.")
         print()
 
         # Soft reset: undo the commit but keep the changes staged.

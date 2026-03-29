@@ -70,7 +70,7 @@ def test_codex_provider_allows_tool_events_when_tools_enabled() -> None:
     event_types = _collect_event_types(provider, tools=[{"type": "function", "function": {"name": "noop"}}])
 
     assert bridge.calls and bridge.calls[0].get("allow_tools") is True
-    assert bridge.calls[0].get("cwd") is None
+    assert isinstance(bridge.calls[0].get("cwd"), str) and bridge.calls[0].get("cwd")
     assert event_types == ["tool_call_start", "tool_call_end", "token", "done"]
 
 

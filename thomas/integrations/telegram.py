@@ -9,9 +9,10 @@ import asyncio
 import json
 import logging
 import os
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from thomas.agent.loop import AgentLoop
 from thomas.core.config import AppConfig
@@ -24,9 +25,10 @@ log = logging.getLogger(__name__)
 
 _TELEGRAM_MSG_LIMIT = 4096
 _SESSION_HISTORY_LIMIT = 120
+_DEFAULT_PROVIDER_TIMEOUT_SECONDS = 5.0
 
 
-def parse_allowed_chat_ids(raw: Optional[str]) -> set[int]:
+def parse_allowed_chat_ids(raw: str | None) -> set[int]:
     """Parse a comma/semicolon-separated allowlist into chat ids."""
     out: set[int] = set()
     if not raw:
@@ -43,7 +45,7 @@ def parse_allowed_chat_ids(raw: Optional[str]) -> set[int]:
     return out
 
 
-def parse_telegram_command(text: str) -> Optional[tuple[str, str]]:
+def parse_telegram_command(text: str) -> tuple[str, str] | None:
     """Return normalized command + args, or None if this is not a slash command."""
     s = str(text or "").strip()
     if not s.startswith("/"):
@@ -113,7 +115,7 @@ def _sanitize_conversation(data: Any, *, max_messages: int = _SESSION_HISTORY_LI
     return out
 
 
-def load_sessions(path: Path, *, default_model: str) -> Dict[int, _TelegramSession]:
+def load_sessions(path: Path, *, default_model: str) -> dict[int, _TelegramSession]:
     """Load Telegram chat sessions from disk."""
     if not path.exists():
         return {}
@@ -123,7 +125,7 @@ def load_sessions(path: Path, *, default_model: str) -> Dict[int, _TelegramSessi
     if not isinstance(sessions_obj, dict):
         return {}
 
-    out: Dict[int, _TelegramSession] = {}
+    out: dict[int, _TelegramSession] = {}
     for key, value in sessions_obj.items():
         try:
             chat_id = int(str(key).strip())
@@ -137,7 +139,7 @@ def load_sessions(path: Path, *, default_model: str) -> Dict[int, _TelegramSessi
     return out
 
 
-def save_sessions(path: Path, sessions: Dict[int, _TelegramSession]) -> None:
+def save_sessions(path: Path, sessions: dict[int, _TelegramSession]) -> None:
     """Persist Telegram chat sessions atomically."""
     payload = {
         "version": 1,
@@ -155,6 +157,211 @@ def save_sessions(path: Path, sessions: Dict[int, _TelegramSession]) -> None:
     os.replace(tmp, path)
 
 
+def describe(config: Mapping[str, Any] | None = None, **_: Any) -> dict[str, Any]:
+    return {
+        "provider_id": "telegram",
+        "name": "Telegram",
+        "capabilities": ["send", "health_check"],
+        "required_config_keys": ["token"],
+        "optional_config_keys": ["chat_id", "target"],
+        "native": {"send_text": True, "bot_api": True, "groups": True},
+    }
+
+
+def get_capabilities(config: Mapping[str, Any] | None = None) -> dict[str, Any]:
+    return {"send_text": True, "bot_api": True, "groups": True}
+
+
+def login(config: Mapping[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+    cfg = _provider_config(config, **kwargs)
+    chat_target = str(cfg.get("chat_id") or cfg.get("target") or "").strip()
+    return {"message": "Telegram bot credentials recorded.", "chat_id": chat_target}
+
+
+def logout(**_: Any) -> dict[str, Any]:
+    return {"message": "Telegram logout is local-state only; remove the stored bot token to disconnect."}
+
+
+def health_check(
+    config: Mapping[str, Any] | None = None,
+    *,
+    token: str | None = None,
+    timeout_seconds: float | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    cfg = _provider_config(config, **kwargs)
+    token_value = str(token or cfg.get("token") or cfg.get("bot_token") or "").strip()
+    if not token_value:
+        return {"ok": False, "details": {"reason": "missing token"}}
+    response = _telegram_api_request(
+        token_value,
+        "getMe",
+        timeout_seconds=float(timeout_seconds or _DEFAULT_PROVIDER_TIMEOUT_SECONDS),
+    )
+    payload = response.get("payload")
+    result = payload.get("result", {}) if isinstance(payload, dict) else {}
+    ok = bool(response.get("ok") and isinstance(result, dict) and str(result.get("id") or "").strip())
+    return {
+        "ok": ok,
+        "details": {
+            "status": response.get("status", 0),
+            "bot_id": str(result.get("id") or "").strip(),
+        },
+    }
+
+
+def send_message(
+    request: Any = None,
+    *,
+    config: Mapping[str, Any] | None = None,
+    recipient: str | None = None,
+    message: str | None = None,
+    text: str | None = None,
+    subject: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    timeout_seconds: float | None = None,
+    token: str | None = None,
+    chat_id: str | None = None,
+    dry_run: bool | None = None,
+    **kwargs: Any,
+) -> dict[str, Any]:
+    cfg = _provider_config(config, **kwargs)
+    token_value = str(token or cfg.get("token") or cfg.get("bot_token") or "").strip()
+    if not token_value:
+        raise ValueError("Telegram token is required.")
+
+    payload = _request_payload_dict(
+        request,
+        recipient=recipient,
+        message=message,
+        text=text,
+        subject=subject,
+        metadata=metadata,
+        timeout_seconds=timeout_seconds,
+        dry_run=dry_run,
+    )
+    target = str(payload["recipient"] or chat_id or cfg.get("chat_id") or cfg.get("target") or "").strip()
+    if not target:
+        raise ValueError("Telegram chat id is required.")
+    body_text = _message_text(payload["message"], subject=payload["subject"])
+    if not body_text:
+        raise ValueError("Telegram message body is required.")
+    if payload["dry_run"]:
+        return {"delivered": True, "message_id": "dry-run", "provider_response": {"mode": "dry_run"}}
+
+    response = _telegram_api_request(
+        token_value,
+        "sendMessage",
+        payload={"chat_id": target, "text": body_text, "disable_web_page_preview": True},
+        timeout_seconds=payload["timeout_seconds"],
+    )
+    response_payload = response.get("payload")
+    result = response_payload.get("result", {}) if isinstance(response_payload, dict) else {}
+    message_id = str(result.get("message_id") or "").strip()
+    delivered = bool(response.get("ok") and message_id)
+    return {
+        "delivered": delivered,
+        "message_id": message_id,
+        "provider_response": response_payload if isinstance(response_payload, dict) else {},
+    }
+
+
+def _provider_config(config: Mapping[str, Any] | None = None, **kwargs: Any) -> dict[str, Any]:
+    merged: dict[str, Any] = {}
+    if isinstance(config, Mapping):
+        merged.update({str(k): v for k, v in config.items()})
+    merged.update({str(k): v for k, v in kwargs.items()})
+    return merged
+
+
+def _request_payload_dict(
+    request: Any = None,
+    *,
+    recipient: str | None = None,
+    message: str | None = None,
+    text: str | None = None,
+    subject: str | None = None,
+    metadata: Mapping[str, Any] | None = None,
+    timeout_seconds: float | None = None,
+    dry_run: bool | None = None,
+) -> dict[str, Any]:
+    merged = {
+        "recipient": str(recipient or "").strip(),
+        "message": str(message or text or "").strip(),
+        "subject": str(subject or "").strip(),
+        "metadata": dict(metadata or {}),
+        "timeout_seconds": float(timeout_seconds or _DEFAULT_PROVIDER_TIMEOUT_SECONDS),
+        "dry_run": bool(dry_run),
+    }
+    if request is None:
+        return merged
+    if hasattr(request, "recipient"):
+        merged["recipient"] = str(request.recipient or merged["recipient"]).strip()
+    if hasattr(request, "message"):
+        merged["message"] = str(request.message or merged["message"]).strip()
+    if hasattr(request, "subject"):
+        merged["subject"] = str(request.subject or merged["subject"]).strip()
+    if hasattr(request, "metadata") and isinstance(request.metadata, Mapping):
+        merged["metadata"] = dict(request.metadata)
+    if hasattr(request, "timeout_seconds") and request.timeout_seconds not in (None, ""):
+        merged["timeout_seconds"] = float(request.timeout_seconds)
+    if hasattr(request, "dry_run"):
+        merged["dry_run"] = bool(request.dry_run)
+    return merged
+
+
+def _message_text(message: str, *, subject: str | None = None) -> str:
+    body = str(message or "").strip()
+    title = str(subject or "").strip()
+    if title and body:
+        return f"{title}\n\n{body}"
+    return title or body
+
+
+def _telegram_api_request(
+    token: str,
+    method: str,
+    *,
+    payload: Mapping[str, Any] | None = None,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    import urllib.error
+    import urllib.request
+
+    req = urllib.request.Request(
+        url=f"https://api.telegram.org/bot{token}/{method}",
+        data=(json.dumps(dict(payload)).encode("utf-8") if payload is not None else None),
+        headers={"Content-Type": "application/json"},
+        method="POST" if payload is not None else "GET",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_seconds) as response:  # nosec B310
+            raw = response.read().decode("utf-8", errors="replace")
+            status = int(getattr(response, "status", 0) or 0)
+    except urllib.error.HTTPError as exc:
+        raw = exc.read().decode("utf-8", errors="replace")
+        status = int(getattr(exc, "code", 0) or 0)
+        payload_obj = _decode_json_payload(raw)
+        return {"ok": False, "status": status, "payload": payload_obj, "error": f"HTTPError: {status}"}
+    except urllib.error.URLError as exc:
+        return {"ok": False, "status": 0, "payload": {}, "error": f"URLError: {exc.reason}"}
+
+    payload_obj = _decode_json_payload(raw)
+    return {"ok": bool(200 <= status < 300 and payload_obj.get("ok") is True), "status": status, "payload": payload_obj}
+
+
+def _decode_json_payload(raw: str) -> dict[str, Any]:
+    if not raw.strip():
+        return {}
+    try:
+        value = json.loads(raw)
+    except json.JSONDecodeError:
+        return {"raw": raw}
+    if isinstance(value, dict):
+        return value
+    return {"raw": value}
+
+
 class TelegramBridge:
     """Per-chat state bridge from Telegram to the Thomas agent loop."""
 
@@ -163,10 +370,10 @@ class TelegramBridge:
         *,
         config: AppConfig,
         tools: ToolRegistry,
-        memory: Optional[Any],
+        memory: Any | None,
         default_model: str,
-        allowed_chat_ids: Optional[set[int]] = None,
-        sessions_path: Optional[Path] = None,
+        allowed_chat_ids: set[int] | None = None,
+        sessions_path: Path | None = None,
         shared_memory: bool = False,
         shared_memory_thread: str = "telegram:global",
         memory_retrieval_scope: str = "thread",
@@ -189,8 +396,8 @@ class TelegramBridge:
         self._memory_retrieval_scope = scope if scope in ("thread", "all") else "thread"
         self._include_global_memory = bool(include_global_memory)
         self._include_profile_memory = bool(include_profile_memory)
-        self._sessions: Dict[int, _TelegramSession] = {}
-        self._locks: Dict[int, asyncio.Lock] = {}
+        self._sessions: dict[int, _TelegramSession] = {}
+        self._locks: dict[int, asyncio.Lock] = {}
 
         if self._sessions_path is not None:
             try:
@@ -227,9 +434,7 @@ class TelegramBridge:
 
     def _help_text(self, model_name: str) -> str:
         available = ", ".join(self._config.models.keys())
-        memory_mode = (
-            f"shared ({self._shared_memory_thread})" if self._shared_memory else "per-chat"
-        )
+        memory_mode = f"shared ({self._shared_memory_thread})" if self._shared_memory else "per-chat"
         retrieval_mode = "this chat thread only"
         if self._include_global_memory:
             retrieval_mode += " + global facts"
@@ -301,9 +506,7 @@ class TelegramBridge:
         done_text = ""
         error_text = ""
         try:
-            token_economy = normalize_token_economy_level(
-                os.environ.get("THOMAS_TOKEN_ECONOMY", "optimal")
-            )
+            token_economy = normalize_token_economy_level(os.environ.get("THOMAS_TOKEN_ECONOMY", "optimal"))
             async for event in agent.run(prompt, token_economy=token_economy):
                 if event.type == EventType.TEXT_DELTA:
                     delta = str(event.data.get("text") or "")
@@ -365,10 +568,10 @@ def run_telegram_polling(
     *,
     token: str,
     tools: ToolRegistry,
-    memory: Optional[Any] = None,
-    model_name: Optional[str] = None,
-    allowed_chat_ids: Optional[set[int]] = None,
-    sessions_path: Optional[Path] = None,
+    memory: Any | None = None,
+    model_name: str | None = None,
+    allowed_chat_ids: set[int] | None = None,
+    sessions_path: Path | None = None,
     shared_memory: bool = False,
     shared_memory_thread: str = "telegram:global",
     memory_retrieval_scope: str = "thread",
@@ -389,8 +592,7 @@ def run_telegram_polling(
         from telegram.ext import Application, MessageHandler, filters
     except ImportError as e:
         raise RuntimeError(
-            "Telegram integration requires python-telegram-bot. "
-            "Install with: pip install -e \".[telegram]\""
+            "Telegram integration requires python-telegram-bot. " 'Install with: pip install -e ".[telegram]"'
         ) from e
 
     bridge = TelegramBridge(

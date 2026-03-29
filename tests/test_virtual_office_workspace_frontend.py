@@ -1,184 +1,140 @@
 from pathlib import Path
 
-from tests.web_ui_source import read_app_js_source, read_layout_css_source
+from tests.web_ui_source import read_app_js_source
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-INDEX_HTML = REPO_ROOT / "thomas" / "server" / "web" / "index.html"
 VIRTUAL_OFFICE_HTML = REPO_ROOT / "thomas" / "server" / "web" / "virtual_office.html"
 VIRTUAL_OFFICE_STATIC_HTML = REPO_ROOT / "thomas" / "server" / "web" / "static" / "virtual_office.html"
-VIRTUAL_OFFICE_SCRIPT = REPO_ROOT / "thomas" / "server" / "web" / "virtual_office.script01.js"
-VIRTUAL_OFFICE_STATIC_SCRIPT = REPO_ROOT / "thomas" / "server" / "web" / "static" / "virtual_office.script01.js"
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
-def test_virtual_office_keyboard_and_a11y_controls_present() -> None:
-    text = _read(INDEX_HTML)
-    assert 'id="officeMinimapCanvas"' in text
-    assert 'aria-label="Office minimap. Click or drag to pan the camera."' in text
-    assert (
-        'aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning."'
-        in text
-    )
-    assert 'id="officeZoomOutBtn"' in text
-    assert 'aria-label="Zoom out"' in text
-    assert 'aria-label="Zoom in"' in text
-    assert 'aria-label="Reset zoom to fit"' in text
-
-
-def test_virtual_office_robot_editor_and_quick_actions_present() -> None:
-    html = _read(INDEX_HTML)
+def test_virtual_office_mode_is_reinserted_by_runtime() -> None:
     js = read_app_js_source()
-    assert 'id="officeEditorModal"' in html
-    assert 'id="officeAgentSelect"' in html
-    assert 'id="officeAgentNameInput"' in html
-    assert 'id="officeAgentColorInput"' in html
-    assert 'id="officeAgentCostumeSelect"' in html
-    assert 'id="officeActionSummonBtn"' in html
-    assert 'id="officeActionBreakBtn"' in html
-    assert 'id="officeActionResumeBtn"' in html
-    assert "function officeRunQuickAction(actionRaw)" in js
-    assert "officeRunQuickAction('summon');" in js
-    assert "officeRunQuickAction('break');" in js
-    assert "officeRunQuickAction('resume');" in js
-    assert "if (action.startsWith('focus:')) {" in js
+    assert "button.id = 'navOfficeBtn';" in js
+    assert "setSidebarNavMode('office');" in js
+    assert "Search office" in js
+    assert "id: 'office'" in js
 
 
-def test_virtual_office_camera_persistence_hooks_present() -> None:
-    text = read_app_js_source()
-    assert "const OFFICE_CAMERA_STORAGE_KEY = 'thomas.ui.office.camera.v1';" in text
-    assert "function loadStoredOfficeCameraState()" in text
-    assert "function saveStoredOfficeCameraState(snapshot)" in text
-    assert "function officePersistCameraState(" in text
-    assert "officePersistCameraState(now);" in text
-
-
-def test_virtual_office_walkability_and_lane_reservation_logic_present() -> None:
-    text = read_app_js_source()
-    assert "function officeIsWalkablePoint(x, y)" in text
-    assert "function officeConstrainWalkableMove(agent, fromX, fromY, toX, toY)" in text
-    assert "function officeTickLaneReservations(now)" in text
-    assert "officeTickLaneReservations(now);" in text
-    assert "function officePointInRoomDoorThreshold(room, x, y)" in text
-
-
-def test_virtual_office_traffic_and_stuck_recovery_hooks_present() -> None:
-    text = read_app_js_source()
-    assert "function officeComputeAgentAvoidance(agent)" in text
-    assert "function officeHandleAgentStuck(agent, now)" in text
-    assert "function officeSetYieldState(agent, now, awayX = 0, awayY = 0)" in text
-
-
-def test_virtual_office_reduced_motion_support_present() -> None:
-    app_text = read_app_js_source()
-    css_text = read_layout_css_source()
-    assert "function officeSyncReducedMotionPreference()" in app_text
-    assert "prefers-reduced-motion: reduce" in app_text
-    assert "prefers-contrast: more" in app_text
-    assert ".office-workspace.reduced-motion" in css_text
-    assert ".office-workspace.high-contrast" in css_text
-
-
-def test_virtual_office_debug_overlay_and_event_bus_hooks_present() -> None:
-    html = _read(INDEX_HTML)
+def test_virtual_office_draft_map_runtime_hooks_present() -> None:
     js = read_app_js_source()
-    css = read_layout_css_source()
-    assert 'id="officeDebugToggleBtn"' in html
-    assert 'id="officeDebugOverlay"' in html
-    assert "function officeRenderDebugOverlay(" in js
-    assert "function officeBusEmit(" in js
-    assert "function officeBusSubscribe(" in js
-    assert ".office-debug-overlay" in css
+    assert "const OFFICE_DRAFT_MAP_SIZE = 24000;" in js
+    assert "const OFFICE_DRAFT_MAP_MIN_ZOOM = 0.015;" in js
+    assert "const OFFICE_DRAFT_MINIMAP_SIZE = 220;" in js
+    assert "const OFFICE_DRAFT_LAYOUT_STORAGE_KEY = 'thomas.office.draft.layout.v1';" in js
+    assert "const OFFICE_DRAFT_AUTOSAVE_STORAGE_KEY = 'thomas.office.draft.autosave.v1';" in js
+    assert "const OFFICE_DRAFT_UNDO_LIMIT = 48;" in js
+    assert "const OFFICE_DRAFT_ASSET_SCALE_OPTIONS = Object.freeze([0.8, 1, 1.2, 1.4]);" in js
+    assert "const OFFICE_DRAFT_ROOM_FLOOR_PALETTES = Object.freeze({" in js
+    assert "const OFFICE_DRAFT_ASSET_LIBRARY = Object.freeze({" in js
+    assert "const OFFICE_DRAFT_ASSET_COLORWAYS = Object.freeze({" in js
+    assert "function officeEnsureDraftMapState()" in js
+    assert "function officeDraftRoomPalette(paletteId)" in js
+    assert "function officeDraftSelectedSpace()" in js
+    assert "function officeDraftFindAsset(assetId)" in js
+    assert "function officeDraftSpaceAtWorldPoint(worldX, worldY)" in js
+    assert "function officeDraftRotationOptions()" in js
+    assert "function officeDraftNormalizeRotation(value)" in js
+    assert "function officeDraftSnap(value, gridSize, enabled = true)" in js
+    assert "function officeDraftLoadStoredLayout()" in js
+    assert "function officeDraftLoadAutosavePreference()" in js
+    assert "function officeDraftSetAutosavePreference(enabledRaw, stateRaw = officeEnsureDraftMapState())" in js
+    assert "function officeDraftPersistLayout(stateRaw = officeEnsureDraftMapState(), options = {})" in js
+    assert "function officeDraftManualSaveLayout(event)" in js
+    assert "function officeDraftApplySnapshot(snapshotRaw, stateRaw = officeEnsureDraftMapState(), options = {})" in js
+    assert "function officeDraftCommitLayoutChange(previousSnapshot, stateRaw = officeEnsureDraftMapState())" in js
+    assert "function officeDraftUndoLastChange(event)" in js
+    assert "function officeDraftPlaceAssetInSpace(space, assetType, worldX, worldY, options = {})" in js
+    assert "function officeDraftCreateCouchElement(space, asset, state)" in js
+    assert "function officeRenderDraftMapEditorPanel()" in js
+    assert "function officeToggleDraftEditor(event)" in js
+    assert "function officeDraftAddCatalogAsset(assetType)" in js
+    assert "function officeDraftBeginCatalogPlacement(assetType, pointerId, clientX, clientY)" in js
+    assert "function officePrepareDraftMapShell()" in js
+    assert "function officeBindDraftMapControls()" in js
+    assert "function officeHandleDraftMapClick(event)" in js
+    assert "function officeHandleDraftMapWheel(event)" in js
+    assert "function officeRenderDraftMapMinimap()" in js
+    assert "function officeToggleDraftMinimapMinimized(event)" in js
+    assert "function officeHandleDraftMinimapPointerDown(event)" in js
+    assert "function officeHandleDraftMinimapResizePointerDown(event)" in js
+    assert "translate3d(" in js
+    assert "Math.exp(-clampedDelta * 0.00125)" in js
+    assert "Lounge" in js
+    assert "floorPalette: 'tan'" in js
+    assert "rotation: 0" in js
+    assert "assets: [" in js
+    assert "robot.innerHTML = officePixelAgentMarkup();" in js
+    assert "couch: {" in js
 
 
-def test_virtual_office_layout_and_agent_persistence_hooks_present() -> None:
+def test_virtual_office_workspace_keeps_only_the_base_map_shell() -> None:
     js = read_app_js_source()
-    assert "const OFFICE_LAYOUT_STORAGE_KEY = 'thomas.ui.office.layout.v1';" in js
-    assert "const OFFICE_AGENT_PREFS_STORAGE_KEY = 'thomas.ui.office.agent_prefs.v1';" in js
-    assert "function loadStoredOfficeLayoutState()" in js
-    assert "function saveStoredOfficeLayoutState(snapshot)" in js
-    assert "function loadStoredOfficeAgentPrefs()" in js
-    assert "function saveStoredOfficeAgentPrefs(snapshot)" in js
-    assert "function officePersistLayoutState()" in js
-    assert "function officePersistAgentPrefs()" in js
-    assert "function officeSanitizeDynamicRoomSnapshot(roomRaw, index = 0)" in js
+    assert "officeWorkspace.remove();" not in js
+    assert "officeEditorToggleBtn.style.display = 'none';" in js
+    assert "officeWorkspace?.querySelector('.office-bottom-dock')" in js
+    assert "mapToolbar.style.right = '14px';" in js
+    assert "toolbarStatus.style.display = 'none';" in js
+    assert "officeMinimap.style.height = `${state.minimapSize}px`;" in js
+    assert "officeMinimap.style.cursor = state.minimapPointerId === null ? 'grab' : 'grabbing';" in js
+    assert "officeFollowToggleBtn.textContent = state.minimapMinimized ? 'Show' : 'Hide';" in js
+    assert "Virtual office minimap showing the current camera window." in js
+    assert "minimapBtn.textContent = 'Minimap';" in js
+    assert "editorBtn.textContent = 'Office Editor';" in js
+    assert "saveBtn.textContent = 'Save';" in js
+    assert "editorToolbarBtn.textContent = 'Office Editor';" in js
+    assert "undoBtn.textContent = 'Back';" in js
+    assert "saveToolbarBtn.textContent = 'Save';" in js
+    assert "undoToolbarBtn.textContent = 'Back';" in js
+    assert "panel.dataset.officeEditorPanel = '1';" in js
+    assert "officeSceneWrap.addEventListener('click', officeHandleDraftMapClick);" in js
+    assert "officeSceneWrap.setPointerCapture(event.pointerId);" in js
+    assert "data-office-editor-catalog-asset=\"couch\"" in js
+    assert "Click and drag into a room to place a three-seat couch." in js
+    assert "data-office-editor-rotation-step" in js
+    assert "data-office-editor-grid-toggle=\"1\"" in js
+    assert "${state.autosaveEnabled ? 'Autosave On' : 'Autosave Off'}" in js
+    assert "data-office-editor-autosave-toggle=\"1\"" in js
+    assert "data-office-editor-save=\"1\"" in js
+    assert "Save Layout" in js
+    assert "data-office-editor-asset-color" in js
+    assert "data-office-editor-asset-scale" in js
+    assert "Select a placed couch to edit its color, change its scale, and rotate it with A / D." in js
+    assert "A / D rotate selected asset" in js
+    assert "space.floorPalette = safeString(floorBtn.dataset.officeEditorFloorPalette) || 'tan';" in js
+    assert "officeDraftBeginCatalogPlacement(catalogBtn.dataset.officeEditorCatalogAsset, event.pointerId, event.clientX, event.clientY);" in js
+    assert "state.gridEnabled = !state.gridEnabled;" in js
+    assert "state.rotationStep = Number(rotationBtn.dataset.officeEditorRotationStep) || 15;" in js
+    assert "state.catalogPendingType = safeString(assetType);" in js
+    assert "room.appendChild(officeDraftCreateCouchElement(space, {" in js
+    assert "id: 'catalog-preview'" in js
+    assert "officeSceneWrap.style.cursor = 'copy';" in js
+    assert "officeSceneWrap.style.cursor = 'not-allowed';" in js
+    assert "const assetId = `${pendingType}-${state.nextAssetId++}`;" in js
+    assert "state.catalogPendingType = '';" in js
+    assert "officeDraftPersistLayout(state);" in js
+    assert "officeDraftPersistLayout(state, { force: true });" in js
+    assert "officeDraftCommitLayoutChange(previousSnapshot, state);" in js
+    assert "officeDraftSetAutosavePreference(state.autosaveEnabled === false, state);" in js
+    assert "officeDraftManualSaveLayout(event);" in js
+    assert "officeDraftUndoLastChange(event);" in js
+    assert "if ((event.ctrlKey || event.metaKey) && safeString(event.key).toLowerCase() === 'z')" in js
+    assert "colorVariant: 'caramel'" in js
+    assert "scale: 1" in js
+    assert "officeMinimap.addEventListener('pointerdown', officeHandleDraftMinimapPointerDown);" in js
+    assert "resizeHandle.setAttribute('aria-label', 'Resize minimap');" in js
+    assert "resizeHandle.style.borderRight = '3px solid rgba(152, 193, 255, 0.92)';" in js
+    assert "roomLabel.style.top = '-32px';" in js
+    assert "room.style.border = isSelectedSpace ? '4px solid rgba(122, 181, 255, 0.82)' : '4px solid rgba(158, 196, 255, 0.62)';" in js
 
 
-def test_virtual_office_runtime_persistence_and_background_tick_hooks_present() -> None:
-    js = read_app_js_source()
-    assert "const OFFICE_RUNTIME_STORAGE_KEY = 'thomas.ui.office.runtime.v1';" in js
-    assert "function loadStoredOfficeRuntimeState()" in js
-    assert "function saveStoredOfficeRuntimeState(snapshot)" in js
-    assert "function officeCollectRuntimeSnapshot(now = performance.now())" in js
-    assert "function officeApplyRuntimeSnapshot(snapshotRaw, now = performance.now())" in js
-    assert "function officePersistRuntimeState(now = performance.now(), { force = false } = {})" in js
-    assert "function officeEnsureBackgroundTickTimer()" in js
-    assert "document.addEventListener('visibilitychange'" in js
-
-
-def test_virtual_office_sprite_atlas_rendering_hooks_present() -> None:
-    js = read_app_js_source()
-    assert "function officeBuildSpriteAtlas()" in js
-    assert "function officeGetSpriteAtlas()" in js
-    assert "function officeRoomThemeFloorSprite(themeRaw)" in js
-    assert "function officePaintSpriteFill(ctx, atlas, spriteId, x, y, w, h, tileSize = 20, opacity = 0.34)" in js
-
-
-def test_virtual_office_touch_gesture_and_haptic_hooks_present() -> None:
-    js = read_app_js_source()
-    css = read_layout_css_source()
-    assert "function officeTouchGestureDown(event)" in js
-    assert "function officeTouchGestureMove(event)" in js
-    assert "function officeTouchGestureEnd(event)" in js
-    assert "navigator.vibrate" in js
-    assert "event.pointerType === 'touch'" in js
-    assert "touch-action: none;" in css
-
-
-def test_virtual_office_persona_social_and_mentions_hooks_present() -> None:
-    js = read_app_js_source()
-    assert "const OFFICE_PERSONA_LIBRARY = {" in js
-    assert "function officeBanterForAgent(agent, contextRaw = 'ambient', detail = {})" in js
-    assert "function officeTickSocialIdle(now)" in js
-    assert "function officeTickBreakSchedules(now)" in js
-    assert "function officeParseMentionCommand(messageRaw)" in js
-
-
-def test_virtual_office_task_priority_routing_hooks_present() -> None:
-    js = read_app_js_source()
-    assert "function officeTaskPriorityScore(task)" in js
-    assert "function officeAgentTaskFitScore(agent, task)" in js
-    assert ".sort((a, b) => officeTaskPriorityScore(b) - officeTaskPriorityScore(a));" in js
-    assert "officeAssignTaskToAgent(nextTask, agent, now);" in js
-
-
-def test_virtual_office_stream_and_reconcile_hooks_present() -> None:
-    js = read_app_js_source()
-    assert "function officeStartMissionStream()" in js
-    assert "function officeStopMissionStream()" in js
-    assert "function officeScheduleMissionStreamReconnect(delayMs = 0)" in js
-    assert "function officeReconcileFromMissionPayload(payload, now = performance.now())" in js
-    assert "function officeHandleMissionStreamLine(lineRaw)" in js
-    assert "const url = '/api/mission/stream?interval=1.8';" in js
-
-
-def test_virtual_office_html_uses_single_combined_script() -> None:
+def test_virtual_office_entry_points_are_placeholder_shells() -> None:
     for html_path in (VIRTUAL_OFFICE_HTML, VIRTUAL_OFFICE_STATIC_HTML):
         text = _read(html_path)
-        assert 'src="virtual_office.script01.js"' in text
-        assert "virtual_office.script01_part01.js" not in text
-        assert "virtual_office.script01_part02.js" not in text
-
-
-def test_virtual_office_combined_script_exists_for_both_entry_points() -> None:
-    served_script = _read(VIRTUAL_OFFICE_SCRIPT)
-    packaged_script = _read(VIRTUAL_OFFICE_STATIC_SCRIPT)
-    assert "return [x, y];" in served_script
-    assert "class Camera" in served_script
-    assert "class OfficeRenderer" in served_script
-    assert "return [x, y];" in packaged_script
-    assert "class Camera" in packaged_script
-    assert "class OfficeRenderer" in packaged_script
-    assert served_script == packaged_script
+        assert "Virtual office reset pending rebuild" in text
+        assert "Gather-style redesign" in text
+        assert "virtual_office.script01.js" not in text
+        assert "virtual_office.style01.css" not in text

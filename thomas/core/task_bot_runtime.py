@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import secrets
+import time
+from contextlib import suppress
 from copy import deepcopy
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
@@ -91,9 +93,25 @@ def _from_iso(value: str | None) -> datetime | None:
 
 def _write_json(path: Path, payload: Any) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_suffix(path.suffix + ".tmp")
-    tmp.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
-    tmp.replace(path)
+    serialized = json.dumps(payload, indent=2, sort_keys=True) + "\n"
+    last_error: Exception | None = None
+    for attempt in range(6):
+        tmp = path.with_suffix(f"{path.suffix}.{secrets.token_hex(4)}.tmp")
+        try:
+            tmp.write_text(serialized, encoding="utf-8")
+            tmp.replace(path)
+            return
+        except PermissionError as exc:
+            last_error = exc
+            with suppress(Exception):
+                tmp.unlink(missing_ok=True)
+            time.sleep(0.02 * (attempt + 1))
+        except Exception:
+            with suppress(Exception):
+                tmp.unlink(missing_ok=True)
+            raise
+    if last_error is not None:
+        raise last_error
 
 
 def _read_json(path: Path, default: Any) -> Any:
@@ -126,7 +144,7 @@ def _normalize_proof_status(value: str | None) -> str:
         "attached": "attached",
         "failed": "failed",
     }
-    return aliases.get(raw, "missing" if not raw else raw)
+    return aliases.get(raw, raw or "missing")
 
 
 def _transition_entry(

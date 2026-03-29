@@ -40,6 +40,8 @@ _TYPE_LABELS = {
     "dependency": "Dependency",
     "integration": "Integration",
 }
+_CANONICAL_MARKETPLACE_STORE_URL = "https://thomas-site.thomasdevhub.workers.dev"
+_LEGACY_MARKETPLACE_STORE_URL = "https://thomas.dev"
 
 
 def _safe_string(value: Any) -> str:
@@ -104,7 +106,22 @@ def _default_marketplace_store_url() -> str:
     site_url = _safe_string(os.environ.get("SITE_URL")).strip()
     if site_url:
         return site_url.rstrip("/")
-    return "https://thomas.dev"
+    return _CANONICAL_MARKETPLACE_STORE_URL
+
+
+def _candidate_marketplace_store_urls(preferred_store_url: str = "") -> list[str]:
+    candidates: list[str] = []
+    for raw in (
+        preferred_store_url,
+        _safe_string(os.environ.get("THOMAS_MARKETPLACE_STORE_URL")).strip(),
+        _safe_string(os.environ.get("SITE_URL")).strip(),
+        _CANONICAL_MARKETPLACE_STORE_URL,
+        _LEGACY_MARKETPLACE_STORE_URL,
+    ):
+        candidate = _safe_string(raw).strip().rstrip("/")
+        if candidate and candidate not in candidates:
+            candidates.append(candidate)
+    return candidates
 
 
 def _source_label_from_store_url(store_url: str) -> str:
@@ -113,6 +130,56 @@ def _source_label_from_store_url(store_url: str) -> str:
     if not host:
         return "marketplace store"
     return host
+
+
+def _merge_nav_metadata(base: dict[str, Any], installed: dict[str, Any]) -> dict[str, Any]:
+    row_marketplace_type = _safe_string(base.get("marketplace_type")) or "plugin"
+    installed_marketplace_type = _safe_string(installed.get("marketplace_type"))
+    marketplace_type = (
+        row_marketplace_type
+        if row_marketplace_type == "command_center"
+        else (installed_marketplace_type or row_marketplace_type)
+    )
+
+    row_left_nav_behavior = _safe_string(base.get("left_nav_behavior")) or "none"
+    installed_left_nav_behavior = _safe_string(installed.get("left_nav_behavior"))
+    left_nav_behavior = (
+        row_left_nav_behavior
+        if row_left_nav_behavior == "workspace"
+        else (installed_left_nav_behavior or row_left_nav_behavior or "none")
+    )
+
+    row_default_nav_section = _safe_string(base.get("default_nav_section")) or (
+        "command_centers" if left_nav_behavior == "workspace" else "installed"
+    )
+    installed_default_nav_section = _safe_string(installed.get("default_nav_section"))
+    default_nav_section = (
+        row_default_nav_section
+        if row_left_nav_behavior == "workspace"
+        else (installed_default_nav_section or row_default_nav_section)
+    )
+
+    row_default_nav_order = _safe_int(
+        base.get("default_nav_order"),
+        400 if left_nav_behavior == "workspace" else 900,
+    )
+    installed_default_nav_order = _safe_int(installed.get("default_nav_order"), row_default_nav_order)
+    default_nav_order = row_default_nav_order if row_left_nav_behavior == "workspace" else installed_default_nav_order
+
+    workspace_id = _safe_string(base.get("workspace_id"))
+    if not workspace_id and left_nav_behavior == "workspace":
+        workspace_id = _safe_string(base.get("mode_id")) or _safe_string(installed.get("mode_id"))
+    if not workspace_id and left_nav_behavior != "workspace":
+        workspace_id = _safe_string(installed.get("workspace_id"))
+
+    return {
+        "marketplace_type": marketplace_type,
+        "marketplace_type_label": _TYPE_LABELS.get(marketplace_type, "Plugin"),
+        "left_nav_behavior": left_nav_behavior,
+        "default_nav_section": default_nav_section,
+        "default_nav_order": default_nav_order,
+        "workspace_id": workspace_id,
+    }
 
 
 def _overlay_installed_state(row: dict[str, Any], installed: dict[str, Any] | None) -> dict[str, Any]:
@@ -125,6 +192,7 @@ def _overlay_installed_state(row: dict[str, Any], installed: dict[str, Any] | No
         return out
     installed_version = _safe_string(installed.get("version"))
     available_version = _safe_string(out.get("version"))
+    nav_metadata = _merge_nav_metadata(out, installed)
     out.update(
         {
             "installed": True,
@@ -134,26 +202,15 @@ def _overlay_installed_state(row: dict[str, Any], installed: dict[str, Any] | No
             "installed_version": installed_version,
             "installed_at": _safe_string(installed.get("installed_at")),
             "updated_at": _safe_string(installed.get("updated_at")),
-            "marketplace_type": _safe_string(installed.get("marketplace_type"))
-            or out.get("marketplace_type")
-            or "plugin",
-            "marketplace_type_label": _TYPE_LABELS.get(
-                _safe_string(installed.get("marketplace_type")) or out.get("marketplace_type") or "plugin",
-                "Plugin",
-            ),
+            "marketplace_type": nav_metadata["marketplace_type"],
+            "marketplace_type_label": nav_metadata["marketplace_type_label"],
             "categories": list(installed.get("categories") or out.get("categories") or []),
             "tags": list(installed.get("tags") or out.get("tags") or []),
             "requires": list(installed.get("requires") or out.get("requires") or []),
-            "left_nav_behavior": _safe_string(installed.get("left_nav_behavior"))
-            or out.get("left_nav_behavior")
-            or "none",
-            "default_nav_section": _safe_string(installed.get("default_nav_section"))
-            or out.get("default_nav_section")
-            or "installed",
-            "default_nav_order": _safe_int(
-                installed.get("default_nav_order"), _safe_int(out.get("default_nav_order"), 900)
-            ),
-            "workspace_id": _safe_string(installed.get("workspace_id")),
+            "left_nav_behavior": nav_metadata["left_nav_behavior"],
+            "default_nav_section": nav_metadata["default_nav_section"],
+            "default_nav_order": nav_metadata["default_nav_order"],
+            "workspace_id": nav_metadata["workspace_id"],
             "publisher_id": _safe_string(installed.get("publisher_id")) or out.get("publisher_id") or "",
             "publisher_name": _safe_string(installed.get("publisher_name")) or out.get("publisher_name") or "",
             "version_installed_only": bool(not available_version and installed_version),
@@ -263,15 +320,26 @@ def _summarize_marketplace_facets(rows: list[dict[str, Any]]) -> tuple[list[dict
 
 
 async def _load_hosted_marketplace_catalog(*, store_url: str, channel: str) -> dict[str, Any]:
-    catalog_url = urljoin(store_url.rstrip("/") + "/", f"api/marketplace/catalog?channel={quote(channel, safe='')}")
+    catalog_urls = [
+        urljoin(store_url.rstrip("/") + "/", f"api/marketplace/catalog?channel={quote(channel, safe='')}"),
+        urljoin(store_url.rstrip("/") + "/", f"api/v1/plugins/catalog?channel={quote(channel, safe='')}"),
+    ]
+    errors: list[str] = []
     async with httpx.AsyncClient(timeout=25.0, follow_redirects=True) as client:
-        response = await client.get(catalog_url)
-        response.raise_for_status()
-        payload = response.json()
-    if not isinstance(payload, dict) or payload.get("ok") is False:
-        raise ValueError(f"Hosted marketplace catalog is invalid: {payload!r}")
-    payload["catalog_url"] = catalog_url
-    return payload
+        for catalog_url in catalog_urls:
+            try:
+                response = await client.get(catalog_url)
+                response.raise_for_status()
+                payload = response.json()
+            except (httpx.HTTPError, ValueError) as exc:
+                errors.append(f"{catalog_url}: {exc}")
+                continue
+            if not isinstance(payload, dict) or payload.get("ok") is False:
+                errors.append(f"{catalog_url}: invalid payload")
+                continue
+            payload["catalog_url"] = catalog_url
+            return payload
+    raise ValueError("Hosted marketplace catalog is invalid: " + "; ".join(errors))
 
 
 def _build_local_sync_payload(
@@ -285,8 +353,7 @@ def _build_local_sync_payload(
     rows = [row for row in rows if row_is_visible(row, include_catalog_only=True, include_scaffold=False)]
     _sort_marketplace_rows(rows)
     categories, types = _summarize_marketplace_facets(rows)
-    config = app[APP_CONFIG]
-    installed = list_installed_plugins(config, include_disabled=True)
+    installed = [dict(row) for row in rows if bool(row.get("installed"))]
     update_candidates = [
         _safe_string(row.get("plugin_id"))
         for row in rows
@@ -533,6 +600,7 @@ def _augment_marketplace_rows(
             row["category"] = primary_category or row.get("category") or "other"
             row["category_label"] = _slug_label(row["category"])
         if installed is not None:
+            nav_metadata = _merge_nav_metadata(row, installed)
             row.update(
                 {
                     "installed": True,
@@ -542,26 +610,15 @@ def _augment_marketplace_rows(
                     "installed_version": _safe_string(installed.get("version")),
                     "installed_at": _safe_string(installed.get("installed_at")),
                     "updated_at": _safe_string(installed.get("updated_at")),
-                    "marketplace_type": _safe_string(installed.get("marketplace_type"))
-                    or row.get("marketplace_type")
-                    or "plugin",
-                    "marketplace_type_label": _TYPE_LABELS.get(
-                        _safe_string(installed.get("marketplace_type")) or row.get("marketplace_type") or "plugin",
-                        "Plugin",
-                    ),
+                    "marketplace_type": nav_metadata["marketplace_type"],
+                    "marketplace_type_label": nav_metadata["marketplace_type_label"],
                     "categories": list(installed.get("categories") or row.get("categories") or []),
                     "tags": list(installed.get("tags") or row.get("tags") or []),
                     "requires": list(installed.get("requires") or row.get("requires") or []),
-                    "left_nav_behavior": _safe_string(installed.get("left_nav_behavior"))
-                    or row.get("left_nav_behavior")
-                    or "none",
-                    "default_nav_section": _safe_string(installed.get("default_nav_section"))
-                    or row.get("default_nav_section")
-                    or "installed",
-                    "default_nav_order": _safe_int(
-                        installed.get("default_nav_order"), _safe_int(row.get("default_nav_order"), 900)
-                    ),
-                    "workspace_id": _safe_string(installed.get("workspace_id")),
+                    "left_nav_behavior": nav_metadata["left_nav_behavior"],
+                    "default_nav_section": nav_metadata["default_nav_section"],
+                    "default_nav_order": nav_metadata["default_nav_order"],
+                    "workspace_id": nav_metadata["workspace_id"],
                 }
             )
         row.update(
@@ -656,18 +713,28 @@ def register_marketplace_catalog_routes(
         marketplace_type = _safe_string(request.query.get("type")).strip().lower()
         offset = _parse_int(_safe_string(request.query.get("offset")), 0, minimum=0, maximum=100000)
         limit = _parse_int(_safe_string(request.query.get("limit")), 600, minimum=1, maximum=2000)
-        store_url = (
-            _safe_string(request.query.get("store") or request.query.get("store_url")).strip()
-            or _default_marketplace_store_url()
-        )
+        requested_store_url = _safe_string(request.query.get("store") or request.query.get("store_url")).strip()
         channel = _safe_string(request.query.get("channel")).strip() or "stable"
 
-        try:
-            remote_payload = await _load_hosted_marketplace_catalog(store_url=store_url, channel=channel)
-        except (httpx.HTTPError, ValueError) as exc:
-            log.warning("Hosted marketplace sync failed for %s: %s", store_url, exc)
+        attempted_store_urls: list[str] = []
+        remote_payload: dict[str, Any] | None = None
+        store_url = requested_store_url or _default_marketplace_store_url()
+        last_error: Exception | None = None
+        for candidate_store_url in _candidate_marketplace_store_urls(requested_store_url):
+            attempted_store_urls.append(candidate_store_url)
+            try:
+                remote_payload = await _load_hosted_marketplace_catalog(store_url=candidate_store_url, channel=channel)
+                store_url = candidate_store_url
+                break
+            except (httpx.HTTPError, ValueError) as exc:
+                last_error = exc
+                log.warning("Hosted marketplace sync failed for %s: %s", candidate_store_url, exc)
+
+        if remote_payload is None:
             fallback_payload = _build_local_sync_payload(app, store_url=store_url, channel=channel)
-            fallback_payload["sync_error"] = f"Unable to sync marketplace catalog from {store_url}: {exc}"
+            if last_error is not None:
+                fallback_payload["sync_error"] = f"Unable to sync marketplace catalog from {store_url}: {last_error}"
+            fallback_payload["attempted_store_urls"] = attempted_store_urls
             filtered = [
                 row
                 for row in fallback_payload["plugins"]
@@ -742,6 +809,7 @@ def register_marketplace_catalog_routes(
                 "sync_source": "hosted_catalog",
                 "source_label": _source_label_from_store_url(store_url),
                 "store_url": store_url,
+                "attempted_store_urls": attempted_store_urls,
                 "catalog_url": _safe_string(remote_payload.get("catalog_url")),
                 "channel": channel,
                 "generated_at": _safe_string(remote_payload.get("generated_at")),
@@ -754,7 +822,7 @@ def register_marketplace_catalog_routes(
                 "categories": categories,
                 "types": types,
                 "plugins": paginated,
-                "installed": installed,
+                "installed": [dict(row) for row in merged_rows if bool(row.get("installed"))],
                 "update_candidates": update_candidates,
             }
         )

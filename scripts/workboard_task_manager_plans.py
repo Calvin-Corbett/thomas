@@ -50,12 +50,20 @@ def _artifact_root_path(root: str) -> Path:
     return base if base.is_absolute() else (ROOT / base).resolve()
 
 
+def _repo_relative_or_absolute(path: Path) -> str:
+    resolved = path.resolve()
+    try:
+        return resolved.relative_to(ROOT).as_posix()
+    except ValueError:
+        return str(resolved)
+
+
 def _default_plan_path(task_id: str, plan_root: str) -> str:
-    return str((_artifact_root_path(plan_root) / str(task_id).strip() / "PLAN.md").resolve())
+    return _repo_relative_or_absolute(_artifact_root_path(plan_root) / str(task_id).strip() / "PLAN.md")
 
 
 def _default_problem_path(task_id: str, problem_root: str) -> str:
-    return str((_artifact_root_path(problem_root) / str(task_id).strip() / "PROBLEM.md").resolve())
+    return _repo_relative_or_absolute(_artifact_root_path(problem_root) / str(task_id).strip() / "PROBLEM.md")
 
 
 def _build_plan_template(*, task_id: str, owner: str, summary: str, scope: str, status: str, now_iso: str) -> str:
@@ -73,6 +81,7 @@ def _build_plan_template(*, task_id: str, owner: str, summary: str, scope: str, 
 def _build_problem_template(*, task_id: str, owner: str, summary: str, scope: str, status: str, now_iso: str) -> str:
     return (
         f"# PROBLEM for {task_id}\n\n"
+        f"task_id: `{task_id}`\n\n"
         f"- Owner: {owner}\n"
         f"- Status: {status}\n"
         f"- Updated At: {now_iso}\n"
@@ -80,6 +89,29 @@ def _build_problem_template(*, task_id: str, owner: str, summary: str, scope: st
         f"## Current Problem\n\n{summary}\n\n"
         "## Blocking Details\n\n- Capture blockers, failures, and observations here.\n"
     )
+
+
+def _normalize_artifact_path(path: str) -> str:
+    raw = str(path or "").strip()
+    if not raw:
+        return ""
+    candidate = Path(raw).expanduser()
+    if candidate.is_absolute():
+        return _repo_relative_or_absolute(candidate)
+    return raw.replace("\\", "/")
+
+
+def _ensure_problem_marker(path: Path, *, task_id: str) -> None:
+    marker = f"task_id: `{task_id}`"
+    body = path.read_text(encoding="utf-8")
+    if marker in body:
+        return
+    lines = body.splitlines()
+    if lines:
+        updated = [lines[0], "", marker, "", *lines[1:]]
+    else:
+        updated = [marker]
+    path.write_text("\n".join(updated).rstrip() + "\n", encoding="utf-8")
 
 
 def _sync_task_plans(
@@ -175,8 +207,12 @@ def _sync_task_plans(
     for task_id in tracked_task_ids:
         plan_row = existing_plans.get(_norm(task_id), {})
         problem_row = existing_problems.get(_norm(task_id), {})
-        plan_path = str(plan_row.get("plan", "")).strip() or _default_plan_path(task_id, plan_root)
-        problem_path = str(problem_row.get("problem", "")).strip() or _default_problem_path(task_id, problem_root)
+        plan_path = _normalize_artifact_path(str(plan_row.get("plan", "")).strip()) or _default_plan_path(
+            task_id, plan_root
+        )
+        problem_path = _normalize_artifact_path(str(problem_row.get("problem", "")).strip()) or _default_problem_path(
+            task_id, problem_root
+        )
         owner = owner_by_task[task_id]
         summary = summary_by_task[task_id]
         scope = scope_by_task[task_id]
@@ -223,6 +259,8 @@ def _sync_task_plans(
                     encoding="utf-8",
                 )
                 created_problems.append(problem_path)
+        elif apply:
+            _ensure_problem_marker(problem_abs, task_id=task_id)
         updated_problem_entries.append(
             f"- task_id={_sanitize('task_id', task_id)}; problem={_sanitize('problem', problem_path)}; "
             f"owner={_sanitize('owner', owner)}; status={_sanitize('status', status)}; "

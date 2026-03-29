@@ -411,9 +411,11 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
                 }
             ],
         }
-        with _hosted_marketplace_catalog(payload) as store:
-            with patch.dict("os.environ", {"THOMAS_MARKETPLACE_STORE_URL": store}):
-                sync_resp = await self.client.get("/api/marketplace/sync?limit=25")
+        with (
+            _hosted_marketplace_catalog(payload) as store,
+            patch.dict("os.environ", {"THOMAS_MARKETPLACE_STORE_URL": store}),
+        ):
+            sync_resp = await self.client.get("/api/marketplace/sync?limit=25")
 
         self.assertEqual(sync_resp.status, 200)
         sync_body = await sync_resp.json()
@@ -423,10 +425,13 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         self.assertEqual(sync_body.get("store_url"), store)
         self.assertEqual(sync_body.get("update_candidates"), ["life-manager"])
         plugins = {str(row.get("plugin_id")): row for row in (sync_body.get("plugins") or [])}
+        installed_rows = {str(row.get("plugin_id")): row for row in (sync_body.get("installed") or [])}
         self.assertTrue(plugins["life-manager"].get("installed"))
         self.assertTrue(plugins["life-manager"].get("enabled"))
         self.assertTrue(plugins["life-manager"].get("update_available"))
         self.assertEqual(plugins["life-manager"].get("installed_version"), "1.0.0")
+        self.assertEqual(installed_rows["life-manager"].get("left_nav_behavior"), "workspace")
+        self.assertEqual(installed_rows["life-manager"].get("workspace_id"), "life_manager")
 
     async def test_marketplace_sync_falls_back_to_local_catalog_on_dns_failure(self):
         with patch(
@@ -442,6 +447,42 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         self.assertIs(sync_body.get("degraded"), True)
         self.assertIn("Unable to sync marketplace catalog from", str(sync_body.get("sync_error") or ""))
         self.assertGreater(int(sync_body.get("total") or 0), 0)
+        self.assertIn("https://thomas-site.thomasdevhub.workers.dev", sync_body.get("attempted_store_urls") or [])
+
+    async def test_marketplace_sync_automatically_falls_through_to_live_worker_host(self):
+        payload = {
+            "ok": True,
+            "generated_at": "2026-03-27T15:00:00Z",
+            "store_url": "https://thomas-site.thomasdevhub.workers.dev",
+            "channel": "stable",
+            "plugins": [],
+        }
+
+        async def fake_load_hosted_marketplace_catalog(*, store_url: str, channel: str):
+            if store_url == "https://thomas.dev":
+                raise httpx.ConnectError("[Errno 11001] getaddrinfo failed")
+            if store_url == "https://thomas-site.thomasdevhub.workers.dev":
+                return payload
+            raise AssertionError(f"Unexpected store URL {store_url!r}")
+
+        with (
+            patch.dict("os.environ", {"SITE_URL": "https://thomas.dev"}, clear=False),
+            patch(
+                "thomas.server.routes.marketplace_catalog_aiohttp._load_hosted_marketplace_catalog",
+                side_effect=fake_load_hosted_marketplace_catalog,
+            ),
+        ):
+            sync_resp = await self.client.get("/api/marketplace/sync?limit=25")
+
+        self.assertEqual(sync_resp.status, 200)
+        sync_body = await sync_resp.json()
+        self.assertIs(sync_body.get("ok"), True)
+        self.assertEqual(sync_body.get("sync_source"), "hosted_catalog")
+        self.assertEqual(sync_body.get("store_url"), "https://thomas-site.thomasdevhub.workers.dev")
+        self.assertEqual(
+            sync_body.get("attempted_store_urls"),
+            ["https://thomas.dev", "https://thomas-site.thomasdevhub.workers.dev"],
+        )
 
     async def test_marketplace_rejects_invalid_deep_link_install_requests(self):
         install_resp = await self.client.post(
@@ -485,7 +526,7 @@ class TestServerMarketplaceRoutes(AioHTTPTestCase):
         listed_resp = await self.client.get("/api/marketplace/installed")
         listed_body = await listed_resp.json()
         installed = listed_body.get("plugins") or []
-        self.assertEqual([row.get("plugin_id") for row in installed], ["life-manager-foundation"])
+        self.assertEqual(installed, [])
 
         removed_bootstrap = await self.client.get("/api/plugins/life-manager/bootstrap")
         self.assertEqual(removed_bootstrap.status, 404)
@@ -581,9 +622,22 @@ def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> 
     assert "marketplace_type" in script
     assert "requires" in script
     assert "Install From File" in script
+    assert "actionId === 'open'" in script
+    assert "label: 'Open'" in script
+    assert "UI_MARKETPLACE_STORE_URL_STORAGE_KEY" in script
+    assert "DEFAULT_MARKETPLACE_STORE_URL" in script
+    assert "Marketplace Source" not in script
     assert "thomas_deep_link" in script
     assert "Synced from" in script
     assert "__THOMAS_WEB_BUILD__" in _read_text("thomas/server/web/index.html")
+
+
+def test_workspace_nav_clicks_are_wired_to_open_dynamic_workspaces() -> None:
+    script = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+
+    assert "if (workspaceNavItems)" in script
+    assert "workspaceNavItems.addEventListener('click'" in script
+    assert "setSidebarNavMode(mode);" in script
 
 
 def test_workspaces_render_in_sidebar_markup() -> None:

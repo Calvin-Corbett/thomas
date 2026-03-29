@@ -311,6 +311,89 @@ jobs:
           python scripts/security_incident_drill.py --repo-root . --json
           python scripts/security_audit.py --repo-root . --json --strict
 
+      - name: Core Python coverage signal
+        run: |
+          mkdir -p output/ci
+          python -m pytest \
+            tests/test_dispatch_router.py \
+            tests/test_agent_presence.py \
+            tests/test_agent_presence_additional.py \
+            tests/test_agent_presence_more.py \
+            tests/test_server_tools_api.py \
+            tests/test_server_chat_v2_max_mode.py \
+            tests/test_server_chat_v2_helpers.py \
+            tests/test_server_health_routes.py \
+            tests/test_chat_delegation.py \
+            tests/test_codex_provider_tools_policy.py \
+            tests/test_codex_provider_additional.py \
+            tests/test_orchestrator_brain_streaming.py \
+            tests/test_orchestrator_brain_status.py \
+            tests/test_orchestrator_brain_coverage.py \
+            tests/test_server_app_routes_init.py \
+            tests/test_server_app_core.py \
+            tests/test_config_env_override.py \
+            tests/test_config_runtime.py \
+            --cov=thomas.agent.dispatch \
+            --cov=thomas.core.agent_presence \
+            --cov=thomas.core.config \
+            --cov=thomas.server.app_core \
+            --cov=thomas.server.routes.chat_v2 \
+            --cov=thomas.server.app_routes_init \
+            --cov=thomas.server.chat_delegation \
+            --cov=thomas.marketplace.codex.provider \
+            --cov=thomas.marketplace.orchestrator.brain \
+            --cov-fail-under=88 \
+            --cov-report=term-missing:skip-covered \
+            --cov-report=xml:output/ci/core-python-coverage.xml \
+            -q
+
+      - name: Python dependency vulnerability scan
+        run: |
+          mkdir -p output/ci
+          python scripts/python_dependency_vulnerability_scan.py \
+            --target pyproject.toml \
+            --allow-unfixed \
+            --strict \
+            --json > output/ci/python-dependency-vulnerabilities.json
+          cat output/ci/python-dependency-vulnerabilities.json
+
+      - name: Core Python Bandit scan
+        run: |
+          mkdir -p output/ci
+          bandit -r \
+            thomas/agent/dispatch.py \
+            thomas/core/agent_presence.py \
+            thomas/core/config.py \
+            thomas/server/app_core.py \
+            thomas/server/routes/chat_v2.py \
+            thomas/server/app_routes_init.py \
+            thomas/server/chat_delegation.py \
+            thomas/marketplace/codex/provider.py \
+            thomas/marketplace/orchestrator/brain.py \
+            scripts/active_folders.py \
+            scripts/agent_bootstrap_claim.py \
+            scripts/agent_startup_router.py \
+            scripts/workboard_claim.py \
+            scripts/workboard_claim_ops.py \
+            scripts/workboard_claim_utils.py \
+            -lll -ii -f json -o output/ci/python-bandit-core.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          payload = json.loads(Path("output/ci/python-bandit-core.json").read_text(encoding="utf-8"))
+          print(json.dumps({"results": len(payload.get("results", [])), "metrics": payload.get("metrics", {})}, indent=2))
+          PY
+
+      - name: Upload core Python quality artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: core-python-quality-signals
+          path: |
+            output/ci/core-python-coverage.xml
+            output/ci/python-dependency-vulnerabilities.json
+            output/ci/python-bandit-core.json
+          if-no-files-found: error
+
 
   codebase-auto-checks:
     runs-on: ubuntu-latest
@@ -422,4 +505,3 @@ jobs:
       - name: Required checks passed
         run: |
           echo "All robustness gates passed."
-

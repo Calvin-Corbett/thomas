@@ -52,6 +52,22 @@ def test_changed_files_gate_passes_when_file_is_claimed(tmp_path: Path, capsys) 
     assert "Workboard changed-files gate: PASS" in out
 
 
+def test_changed_files_gate_passes_for_literal_bracket_path(tmp_path: Path, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=apps/site/src/app/[locale]/page.tsx; task=locale page",
+        active_tasks_block=(
+            "- task_id=locale-page; agent=Codex 3; scope=apps/site/src/app/[locale]/page.tsx; "
+            "summary=locale page; status=active"
+        ),
+    )
+
+    rc = mod.run(["--workboard", str(workboard), "--file", "apps/site/src/app/[locale]/page.tsx"])
+    out = capsys.readouterr().out
+    assert rc == 0
+    assert "Workboard changed-files gate: PASS" in out
+
+
 def test_changed_files_gate_fails_for_unclaimed_file(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,

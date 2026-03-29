@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
@@ -11,25 +11,88 @@ from aiohttp import web
 from .mission_support import (
     _BENCHMARK_ARTIFACTS,
     _RUN_ID_RE,
+    _coerce_iso,
+    _iso_to_epoch,
     _json_or_empty,
     _room_for_tool_name,
     _trim_summary,
     _utc_iso_now,
 )
 
+_STALE_RUN_IDLE_SECONDS = 10 * 60
+_DEAD_RUN_ERROR_PREFIX = "dead_run:"
+
+
+def _event_activity_iso(run_meta: dict[str, Any], last_evt: dict[str, Any] | None) -> str:
+    event = last_evt or {}
+    ts_ms_raw = event.get("ts_ms")
+    try:
+        ts_ms = float(ts_ms_raw)
+    except Exception:
+        ts_ms = 0.0
+    if ts_ms > 0:
+        return datetime.fromtimestamp(ts_ms / 1000.0, tz=timezone.utc).isoformat(timespec="seconds")
+
+    started_epoch = _iso_to_epoch(run_meta.get("started_at"))
+    t_ms_raw = event.get("t_ms")
+    try:
+        t_ms = float(t_ms_raw)
+    except Exception:
+        t_ms = -1.0
+    if started_epoch > 0 and t_ms >= 0:
+        dt = datetime.fromtimestamp(started_epoch, tz=timezone.utc) + timedelta(milliseconds=t_ms)
+        return dt.isoformat(timespec="seconds")
+
+    return _coerce_iso(run_meta.get("started_at"))
+
+
+def _run_updated_at(run_meta: dict[str, Any], last_evt: dict[str, Any] | None) -> str:
+    ended_at = str(run_meta.get("ended_at") or "").strip()
+    if ended_at:
+        return _coerce_iso(ended_at)
+    return _event_activity_iso(run_meta, last_evt)
+
+
+def _run_is_stale(
+    run_meta: dict[str, Any],
+    last_evt: dict[str, Any] | None,
+    *,
+    now_iso: str | None = None,
+    idle_seconds: int = _STALE_RUN_IDLE_SECONDS,
+) -> bool:
+    if str(run_meta.get("ended_at") or "").strip():
+        return False
+    now_epoch = _iso_to_epoch(now_iso or _utc_iso_now())
+    updated_epoch = _iso_to_epoch(_run_updated_at(run_meta, last_evt))
+    if now_epoch <= 0 or updated_epoch <= 0:
+        return False
+    return (now_epoch - updated_epoch) >= max(1, int(idle_seconds))
+
 
 def _run_state_room_and_summary(
     run_meta: dict[str, Any],
     last_evt: dict[str, Any] | None,
+    *,
+    now_iso: str | None = None,
+    idle_seconds: int = _STALE_RUN_IDLE_SECONDS,
 ) -> tuple[str, str, str]:
     event_type = str((last_evt or {}).get("type") or "").strip().lower()
+    stale_run = _run_is_stale(run_meta, last_evt, now_iso=now_iso, idle_seconds=idle_seconds)
+    error_txt = str(run_meta.get("error") or "").strip().lower()
     if run_meta.get("ended_at"):
-        status = (
-            "succeeded" if run_meta.get("ok") is True else ("failed" if run_meta.get("ok") is False else "completed")
-        )
+        if error_txt.startswith(_DEAD_RUN_ERROR_PREFIX):
+            status = "dead"
+        else:
+            status = (
+                "succeeded"
+                if run_meta.get("ok") is True
+                else ("failed" if run_meta.get("ok") is False else "completed")
+            )
+    elif stale_run:
+        status = "dead"
     else:
         status = "running"
-    room = "planning" if status == "running" else "done"
+    room = "planning" if status == "running" else ("review" if status == "dead" else "done")
     summary = _trim_summary(
         str(run_meta.get("mode") or "run")
         + " / "
@@ -94,6 +157,14 @@ def _run_state_room_and_summary(
         status = "succeeded"
         room = "done"
         summary = "Run complete."
+
+    if status == "dead":
+        room = "review"
+
+    if stale_run and not run_meta.get("ended_at") and status in {"running", "dead"}:
+        status = "dead"
+        room = "review"
+        summary = _trim_summary(f"Run went idle after {summary}", 140)
 
     return status, room, summary
 

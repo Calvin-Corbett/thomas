@@ -28,6 +28,7 @@ def test_ui_editor_now_has_inspector_and_stable_targets() -> None:
     assert "Selected Element" in editor_core
     assert "Visible Layers" in editor_core
     assert "Export Snapshot" in editor_core
+    assert '[data-ui-editor-target-key="' in editor_core
     assert "Live Thomas UI" in editor_shell
     assert "thomas_shell" not in editor_shell
     assert "selected_key" in editor_shell
@@ -36,6 +37,12 @@ def test_ui_editor_now_has_inspector_and_stable_targets() -> None:
     assert "applySelectionFields" in editor_shell
     assert "resetSelectionOverride" in editor_shell
     assert "persistProjects()" in editor_shell
+    assert "Selected layer could not be rebound to the live DOM." in editor_shell
+    assert "frameSandboxValue" in editor_shell
+    assert "applyFrameSandbox" in editor_shell
+    assert "if (trustedProject) {" in editor_shell
+    assert "frame.removeAttribute('sandbox');" in editor_shell
+    assert "loadProject(true);" in editor_shell
 
 
 def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
@@ -59,7 +66,11 @@ def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
     assert "Live Thomas UI" in primary_runtime
     assert "Visible Layers" in primary_runtime
     assert "Export Snapshot" in primary_runtime
-    assert "/static/static/plugin_marketplace.html" in primary_runtime
+    assert '[data-ui-editor-target-key="' in primary_runtime
+    assert "allow-scripts allow-forms allow-popups allow-modals" in primary_runtime
+    assert "/static/static/plugin_marketplace.html" not in primary_runtime
+    assert "DEFAULT_MARKETPLACE_STORE_URL" in primary_runtime
+    assert "/api/marketplace/sync?limit=600" in primary_runtime
     assert "Store Health" not in primary_runtime
     assert "Store Activity" not in primary_runtime
     assert "Feature Inventory" not in primary_runtime
@@ -67,7 +78,9 @@ def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
     assert "thomas_shell" not in primary_runtime
     assert "moduleUiEditorBuildThomasShellDocument" not in primary_runtime
     assert "moduleUiEditorBuildThomasShellDocument" not in runtime_module_core
+    assert "allow-scripts allow-same-origin allow-forms allow-popups allow-modals" not in runtime_module_core
     assert "thomas_shell" not in runtime_module_core
+    assert "allow-scripts allow-same-origin allow-forms allow-popups allow-modals" not in runtime_module_shell
     assert "thomas_shell" not in runtime_module_shell
     assert "Thomas Companion" not in marketplace_html
     assert "/api/marketplace/plugins" in marketplace_script
@@ -96,9 +109,13 @@ def test_shell_layout_guards_prevent_duplicate_suggestions_and_forced_chat_setti
 
     assert "frame.style.height = '980px';" not in primary_runtime
     assert "setSidebarNavMode('chat', { persist: false });" not in open_settings_block
-    assert "min-height: calc(100dvh - 60px - max(220px, var(--composer-offset, 220px)));" in layout_css
-    assert "animation: assistantSuggestionMarquee 24s linear infinite;" in suggestion_css
-    assert "mask-image: linear-gradient(90deg, transparent 0, black 6%, black 91%, transparent 100%);" in suggestion_css
+    assert (
+        "padding-bottom: calc(max(176px, var(--composer-offset, 176px)) + env(safe-area-inset-bottom) + 10px);"
+        in layout_css
+    )
+    assert "min-height: 100%;" in layout_css
+    assert "animation: assistantSuggestionMarquee var(--assistant-scroll-duration) linear infinite;" in suggestion_css
+    assert "mask-image: linear-gradient(90deg, transparent 0, #000 8%, #000 92%, transparent 100%);" in suggestion_css
     assert "function renderAssistantAvatarVisual" in primary_runtime
     assert "resolveActiveChatProfileMeta" in primary_runtime
     assert "body::before" in marketplace_css

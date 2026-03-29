@@ -39,13 +39,15 @@ class _FakeSpecialist:
 
 
 class _FakeRegistry:
-    specialist_ids = ["reasoning"]
+    specialist_ids = ["reasoning", "tools"]
 
     def __init__(self) -> None:
         self.executed: list[str] = []
 
     def get(self, specialist_id: str):
         if specialist_id == "reasoning":
+            return _FakeSpecialist()
+        if specialist_id == "tools":
             return _FakeSpecialist()
         return None
 
@@ -73,12 +75,25 @@ class TestOrchestratorBrainStreaming(unittest.IsolatedAsyncioTestCase):
             )(),
             mode="auto",
             autonomy_level=3,
+            token_economy="optimal",
             stream_text_events=True,
         )
 
         self.assertEqual(dispatcher.text_parts, ["Hello", " there"])
         self.assertEqual(result.content, "Hello there")
         self.assertTrue(registry.executed)
+
+    async def test_classify_and_route_prefers_tools_for_explicit_file_requests(self):
+        registry = _FakeRegistry()
+        brain = OrchestratorBrain(config=None, llm=None, memory_engine=None, registry=registry)
+
+        route = await brain._classify_and_route(
+            "Use your file tools and name three top-level files in the current repo.",
+            ConversationManager(),
+            _FakeMemoryContext(),
+        )
+
+        self.assertEqual(route.specialists, ["tools"])
 
 
 if __name__ == "__main__":

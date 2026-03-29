@@ -27,6 +27,11 @@ def test_mission_runtime_panel_and_stream_contract() -> None:
     assert ".mission-runtime-panel {" in mission_css
     assert ".mission-runtime-progress-rail {" in mission_css
     assert ".mission-runtime-task {" in mission_css
+    assert "function missionCreateUnavailableReason(" in js
+    assert "function missionSyncCreateAvailability(" in js
+    assert "Jobs unavailable ·" in js
+    assert "Mission runtime unavailable:" in js
+    assert "creation unavailable:" in js
 
 
 def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
@@ -47,6 +52,9 @@ def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
     assert "function chatRobotWorldRunDebugScenario(" in js
     assert "function chatRobotWorldSpawnDebugHelper(" in js
     assert "function chatRobotWorldSyncDebugState(" in js
+    assert "function chatRobotWorldDetailLine(" in js
+    assert "function delegationRowIsRenderableLive(" in js
+    assert "function officePixelAgentMarkup(" in js
     assert "function chatWorldCurrentMode(" in js
     assert "function chatPhysicsWorldPrime(" in js
     assert "function chatPhysicsWorldAdvanceActor(" in js
@@ -60,9 +68,13 @@ def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
     assert "bodyVelocityX" in js
     assert "function setChatAgentPresence(activity)" in js
     assert "Open Office" in js
+    assert "assistant-inline-thinking-status" in js
+    assert "physicsNeedsSnap" in js
+    assert "${officePixelAgentMarkup()}" in js
     assert ".task-continuity-panel {" in task_css
     assert ".chat-robot-world {" in task_css
     assert ".chat-robot-world-physics {" in task_css
+    assert ".assistant-inline-thinking-status {" in task_css
     assert ".chat-robot-world-route.route-door {" in task_css
     assert ".chat-robot-world-route.route-ladder {" in task_css
     assert ".chat-robot-world-route.route-lift" in task_css
@@ -80,6 +92,8 @@ def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
     assert "runScenario" in js
     assert "labelCenterOffsetPx" in js
     assert "visualCenterOffsetPx" in js
+    assert ".office-pixel-agent, .chat-robot-agent" in js
+    assert "if (state.exiting) return;" in js
     assert "propKind" in js
     assert "chatAgentPresenceUpsert(specId, {" in js
     assert "window.setTimeout(() => {" in js

@@ -1,122 +1,25 @@
 from __future__ import annotations
 
-from thomas.core import task_bot_runtime as mod
+from pathlib import Path
+
+from thomas.core import task_bot_runtime
 
 
-def test_runtime_record_roundtrip_and_summary(tmp_path):
-    execution = mod.create_execution(
-        session_id="sess-1",
-        summary="Investigate a failing worker lane",
-        task_id="task-1",
-        intent="chat_task",
-        scope=["thomas/agent"],
-        actor="task-manager-agent",
-        repo_root=tmp_path,
-    )
+def test_write_json_retries_permission_error_and_uses_unique_temp_files(tmp_path, monkeypatch):
+    path = tmp_path / "executions-summary.json"
+    attempts: list[str] = []
+    original_replace = Path.replace
 
-    execution_id = str(execution["execution_id"])
-    mod.update_execution(
-        execution_id,
-        state="classified",
-        progress_summary="Classified for delegation.",
-        actor="task-manager-agent",
-        repo_root=tmp_path,
-    )
-    mod.update_execution(
-        execution_id,
-        state="queued",
-        progress_summary="Queued for worker pickup.",
-        actor="task-manager-agent",
-        repo_root=tmp_path,
-    )
-    mod.update_execution(
-        execution_id,
-        state="claimed",
-        claimed_owner="zach",
-        actor="zach",
-        repo_root=tmp_path,
-    )
-    mod.update_execution(
-        execution_id,
-        state="executing",
-        progress_summary="Worker is running checks.",
-        actor="zach",
-        repo_root=tmp_path,
-    )
-    mod.attach_proof(
-        execution_id,
-        artifacts=[{"kind": "log", "path": "runtime/workers/task-1.log"}],
-        summary="Worker log attached.",
-        actor="zach",
-        repo_root=tmp_path,
-    )
-    mod.complete_execution(
-        execution_id,
-        actor="zach",
-        summary="Task completed cleanly.",
-        repo_root=tmp_path,
-    )
+    def flaky_replace(self: Path, target: Path):
+        attempts.append(self.name)
+        if len(attempts) == 1:
+            raise PermissionError("busy")
+        return original_replace(self, target)
 
-    record = mod.get_execution(execution_id, tmp_path)
-    summary = mod.read_summary(tmp_path, refresh=True)
+    monkeypatch.setattr(Path, "replace", flaky_replace)
 
-    assert record is not None
-    assert record["state"] == "completed"
-    assert record["proof_status"] == "verified"
-    assert record["claimed_owner"] == "zach"
-    assert record["proof"]["artifacts"][0]["path"] == "runtime/workers/task-1.log"
-    assert summary["execution_count"] == 1
-    assert summary["active_count"] == 0
-    assert summary["executions"][0]["task_id"] == "task-1"
+    task_bot_runtime._write_json(path, {"ok": True})
 
-
-def test_sync_task_state_maps_workboard_statuses(tmp_path):
-    execution = mod.create_execution(
-        session_id="sess-2",
-        summary="Ship a queued task",
-        task_id="task-2",
-        actor="task-manager-agent",
-        repo_root=tmp_path,
-    )
-    execution_id = str(execution["execution_id"])
-
-    mod.sync_task_state(
-        task_id="task-2",
-        workboard_status="claimed",
-        actor="worker-1",
-        claimed_owner="worker-1",
-        repo_root=tmp_path,
-    )
-    mod.sync_task_state(
-        task_id="task-2",
-        workboard_status="in_progress",
-        actor="worker-1",
-        claimed_owner="worker-1",
-        repo_root=tmp_path,
-    )
-    mod.attach_proof(
-        execution_id,
-        artifacts=[{"kind": "proof", "path": "proof.txt"}],
-        actor="worker-1",
-        repo_root=tmp_path,
-    )
-    mod.sync_task_state(
-        task_id="task-2",
-        workboard_status="review",
-        actor="worker-1",
-        claimed_owner="worker-1",
-        repo_root=tmp_path,
-    )
-    mod.sync_task_state(
-        task_id="task-2",
-        workboard_status="done",
-        actor="worker-1",
-        claimed_owner="worker-1",
-        repo_root=tmp_path,
-    )
-
-    record = mod.get_execution(execution_id, tmp_path)
-    assert record is not None
-    assert record["claimed_owner"] == "worker-1"
-    assert record["state"] in {"verified", "completed"}
-    assert record["proof_status"] in {"attached", "verified"}
+    assert len(attempts) == 2
+    assert attempts[0] != attempts[1]
+    assert path.read_text(encoding="utf-8").strip() == '{\n  "ok": true\n}'

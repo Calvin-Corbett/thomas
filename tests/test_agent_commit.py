@@ -138,6 +138,31 @@ def test_agent_commit_fallback_succeeds_without_active_claim(tmp_path: Path) -> 
     assert "Thomas-Fallback-Reason: user approved scoped fallback" in body
 
 
+def test_agent_commit_fallback_accepts_literal_bracket_paths(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=docs; task=Other work",),
+    )
+    bracket_path = repo / "apps" / "site" / "src" / "app" / "[locale]" / "page.tsx"
+    _write(bracket_path, "export default function Page() { return null; }\n")
+
+    result = mod.commit_scoped_changes(
+        message="feat: bracket fallback commit",
+        agent="codex",
+        include_paths=["apps/site/src/app/[locale]/page.tsx"],
+        allow_scope_fallback=True,
+        fallback_reason="user approved scoped fallback",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.scope_source == mod.FALLBACK_SOURCE
+    body = _git(repo, "log", "-1", "--pretty=%B")
+    assert "feat: bracket fallback commit" in body
+
+
 def test_agent_commit_fallback_requires_include_and_reason(tmp_path: Path) -> None:
     repo, workboard = _init_repo(
         tmp_path,

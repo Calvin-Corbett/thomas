@@ -32,4 +32,7 @@ ENV THOMAS_CONFIG=${ENVIRONMENT:+/app/thomas.prod.toml}
 
 EXPOSE 8899
 
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8899/api/health')" || exit 1
+
 CMD ["python", "-m", "thomas.server", "--host", "0.0.0.0", "--port", "8899"]

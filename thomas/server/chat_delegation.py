@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,22 @@ log = logging.getLogger(__name__)
 ROOT = Path(__file__).resolve().parents[2]
 TASK_MANAGER_BACKEND = "task_manager"
 PROVIDER_NATIVE_BACKEND = "provider_native"
+_COUNT_WORDS = {
+    "one": 1,
+    "two": 2,
+    "three": 3,
+    "four": 4,
+    "five": 5,
+    "couple": 2,
+    "few": 3,
+}
+_MULTI_AGENT_COUNT_RE = re.compile(
+    r"(?:spawn|start|launch|run|create|use)\s+"
+    r"(?:exactly\s+)?(?:a\s+)?(?P<count>\d+|one|two|three|four|five|couple|few)\s+"
+    r"(?:real\s+|live\s+|tiny\s+|distinct\s+|lightweight\s+|small\s+|task\s+)*"
+    r"(?:sub[- ]?agents?|agents?|helpers?|workers?)",
+    re.I,
+)
 
 
 class _DelegationEmitter:
@@ -102,6 +119,50 @@ def _coerce_bridge(app: Any) -> Any | None:
     return bridge_ref
 
 
+async def _ensure_bridge(app: Any) -> Any | None:
+    bridge = _coerce_bridge(app)
+    if bridge is not None and bool(getattr(bridge, "is_running", False)):
+        return bridge
+
+    try:
+        bridge_ref = app.get(APP_CODEX_BRIDGE)
+    except Exception:
+        bridge_ref = None
+
+    if not isinstance(bridge_ref, dict):
+        return None
+
+    lock = bridge_ref.get("_start_lock")
+    if not isinstance(lock, asyncio.Lock):
+        lock = asyncio.Lock()
+        bridge_ref["_start_lock"] = lock
+
+    async with lock:
+        bridge = bridge_ref.get("bridge")
+        if bridge is None:
+            try:
+                from thomas.codex.bridge import CodexBridge
+
+                bridge = CodexBridge()
+                bridge_ref["bridge"] = bridge
+            except Exception as exc:
+                log.debug("Codex bridge bootstrap unavailable: %s", exc)
+                return None
+
+        try:
+            if not bool(getattr(bridge, "is_running", False)):
+                await bridge.start()
+            account = await bridge.check_auth()
+        except Exception as exc:
+            log.debug("Codex bridge startup skipped: %s", exc)
+            return None
+
+        if not bool(getattr(account, "logged_in", False)):
+            return None
+
+        return bridge
+
+
 def _summarize_prompt(prompt: str) -> str:
     text = " ".join(str(prompt or "").strip().split())
     if len(text) > 160:
@@ -115,9 +176,36 @@ def _infer_specialist(prompt: str) -> str:
         return "coding"
     if any(token in text for token in ("research", "find", "look up", "compare", "investigate")):
         return "research"
-    if any(token in text for token in ("tool", "command", "run ", "install", "configure", "setup")):
+    if any(token in text for token in ("tool", "command", "run ", "install", "configure", "setup", "set up")):
         return "tools"
     return "reasoning"
+
+
+def _requested_delegate_count(prompt: str) -> int:
+    text = str(prompt or "").strip().lower()
+    if not text:
+        return 1
+    match = _MULTI_AGENT_COUNT_RE.search(text)
+    if not match:
+        return 1
+    raw = str(match.group("count") or "").strip().lower()
+    if raw.isdigit():
+        value = int(raw)
+    else:
+        value = _COUNT_WORDS.get(raw, 1)
+    return max(1, min(5, int(value or 1)))
+
+
+def _helper_prompt(prompt: str, *, helper_index: int, helper_count: int, bot_name: str) -> str:
+    if helper_count <= 1:
+        return prompt
+    return (
+        f"{prompt.rstrip()}\n\n"
+        f"[Helper assignment]\n"
+        f"You are helper {helper_index} of {helper_count} ({bot_name}). "
+        f"Take a distinct slice of the work from the other helpers, avoid duplicating them, "
+        f"and report concise progress."
+    ).strip()
 
 
 def _normalize_record(payload: dict[str, Any] | None) -> dict[str, Any]:
@@ -190,7 +278,8 @@ async def start_background_delegation(
     force: bool = False,
 ) -> dict[str, Any] | None:
     normalized_mode = str(mode or "").strip().lower()
-    if normalized_mode != "max" and not bool(force):
+    forced = bool(force)
+    if normalized_mode != "max" and not forced:
         return None
 
     current = session_active_delegations(session_id, repo_root=repo_root)
@@ -200,15 +289,41 @@ async def start_background_delegation(
         active_tasks=current,
         mode=normalized_mode,
     )
-    if decision.action != "dispatch":
+    if decision.action != "dispatch" and not forced:
         return None
 
     specialist_id = _infer_specialist(prompt)
-    bot = pick_bot_for_specialist(specialist_id)
     emitter = _DelegationEmitter(emit_event)
-    bridge = _coerce_bridge(app)
+    bridge = await _ensure_bridge(app)
+    delegate_count = _requested_delegate_count(prompt) if forced else 1
 
-    if bridge is not None and bool(getattr(bridge, "is_running", False)):
+    if delegate_count > 1:
+        exclude: set[str] = set()
+        records: list[dict[str, Any]] = []
+        for index in range(delegate_count):
+            bot = pick_bot_for_specialist(specialist_id, exclude=set(exclude))
+            exclude.add(bot.id)
+            helper_prompt = _helper_prompt(
+                prompt,
+                helper_index=index + 1,
+                helper_count=delegate_count,
+                bot_name=bot.name,
+            )
+            record = await _start_task_manager_delegation(
+                session_id=session_id,
+                prompt=helper_prompt,
+                specialist_id=specialist_id,
+                bot=bot,
+                emitter=emitter,
+                repo_root=repo_root,
+            )
+            if record:
+                records.append(record)
+        return records or None
+
+    bot = pick_bot_for_specialist(specialist_id)
+
+    if bridge is not None:
         try:
             return await _start_provider_native_delegation(
                 bridge,

@@ -8,6 +8,7 @@ export const siteConfig = {
   nav: [
     { href: "/", label: "Home" },
     { href: "/download", label: "Download" },
+    { href: "/docs", label: "Documentation" },
     { href: "/marketplace", label: "Marketplace" },
     { href: "/roadmap", label: "Roadmap" },
     { href: "/updates", label: "Updates" },
@@ -19,6 +20,8 @@ export const siteConfig = {
     github: "https://github.com",
   },
 } as const;
+
+const DEFAULT_CANONICAL_SITE_URL = "https://thomas-site.thomasdevhub.workers.dev";
 
 export function getRepoSlug(): string {
   return process.env.THOMAS_GITHUB_REPO ?? "";
@@ -53,5 +56,5 @@ export function getDefaultChannel(): ReleaseChannel {
 }
 
 export function getCanonicalSiteUrl(): string {
-  return process.env.SITE_URL ?? "https://thomas.dev";
+  return process.env.SITE_URL ?? DEFAULT_CANONICAL_SITE_URL;
 }

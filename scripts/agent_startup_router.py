@@ -221,6 +221,15 @@ def _subsystems(paths: list[str]) -> set[str]:
     return out
 
 
+def _bootstrap_command(summary: str, paths: list[str]) -> str:
+    scope = ",".join(_unique([_relpath(path) for path in paths if _relpath(path)])) or "<scope>"
+    task = re.sub(r"[\r\n;]+", " ", str(summary or "").strip()) or "describe the task"
+    return (
+        'python scripts/agent_bootstrap_claim.py --agent "<agent-id>" '
+        f'--scope "{scope}" --task "{task}" --no-auto-dispatch'
+    )
+
+
 def classify_task(
     *,
     summary: str,
@@ -259,11 +268,13 @@ def classify_task(
     else:
         lane = "simple-edit"
 
-    workboard_required = lane in WORKBOARD_REQUIRED_LANES or tracked_work or long_running or conflict or multi_agent
+    workboard_required = bool(edit_intent) or lane in WORKBOARD_REQUIRED_LANES or tracked_work or long_running or conflict or multi_agent
     reads: list[str] = [ROUTER_DOC, LANE_CARD_PATHS[lane]]
     if lane != "chat":
         reads.extend(["docs/AGENT_FILE_EDITING_RULES.md", "GUARDRAILS.md"])
         reads.extend(_find_guardrails(paths))
+    if workboard_required:
+        reads.append("plans/thomas/WORKBOARD.md")
     if lane in {"risky-edit", "multi-file", "multi-agent"} and workflow_mode == "guided":
         reads.append("AGENTS.md")
     if lane == "multi-file" and workflow_mode == "guided":
@@ -281,16 +292,19 @@ def classify_task(
             "Capture proof artifacts and benchmark audit output before handoff.",
         ],
         "simple-edit": [
+            "Bootstrap a workboard claim before implementation.",
             "Run a file-level syntax or compile check for edited code.",
             "Run focused regression tests for changed behavior.",
         ],
         "risky-edit": [
+            "Bootstrap or confirm the workboard claim before implementation.",
             "Run focused regression tests for changed behavior.",
             "Run python scripts/test_stepup_protocol.py when the change needs repo-wide regression confidence.",
             "Run release hygiene checks when product behavior changes.",
             "Validate workboard claim requirements if tracked work is required.",
         ],
         "multi-file": [
+            "Bootstrap or confirm the workboard claim before implementation.",
             "Run focused regression tests across changed subsystems.",
             "Run python scripts/test_stepup_protocol.py and carry it through the large shard stage before handoff.",
             "Run release hygiene checks.",
@@ -348,6 +362,7 @@ def classify_task(
             "stale": bool(workboard.get("stale", False)),
             "updated_at": str(workboard.get("updated_at") or ""),
         },
+        "bootstrap_command": _bootstrap_command(summary, paths) if workboard_required else "",
         "flags": {
             "ui_proof": bool(ui_proof),
             "benchmark_mode": bool(benchmark_mode),
@@ -451,6 +466,8 @@ def _text_output(payload: dict[str, Any]) -> str:
             ),
         ]
     )
+    if payload.get("bootstrap_command"):
+        lines.append(f"bootstrap_command: {payload['bootstrap_command']}")
     if payload["paths"]:
         lines.append("paths:")
         lines.extend([f"  - {path}" for path in payload["paths"]])

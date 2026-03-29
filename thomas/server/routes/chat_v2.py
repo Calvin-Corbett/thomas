@@ -18,6 +18,7 @@ from typing import Any
 
 from aiohttp import web
 
+from thomas.agent.dispatch import should_dispatch
 from thomas.chat.conversation import ConversationManager
 from thomas.chat.event_stream import EventDispatcher
 from thomas.chat.session_store import SessionMeta, SessionStore
@@ -69,6 +70,19 @@ _BACKGROUND_DELEGATION_RE = (
     r"(?:background|delegate|delegation|parallel|while you work|in the background)"
     r"|(?:rest|deeper work|longer work)\s+(?:in|into)?\s*background"
 )
+_EXPLICIT_DELEGATION_RE = (
+    r"(?:spawn|start|launch|run|use|create)\s+(?:exactly\s+|real\s+|live\s+|multiple\s+|few\s+|three\s+|four\s+|five\s+)*"
+    r"(?:sub[- ]?agents?|agents?|helpers?|workers?)"
+    r"|(?:delegate|delegation|parallel|multi-agent|multi agent|swarm)\b"
+)
+_INLINE_TOOL_REQUEST_RE = re.compile(
+    r"(?:\buse\s+(?:your\s+)?(?:file|files|tool|tools)\b|"
+    r"\b(?:file|files|tool|tools)\b.*\b(?:repo|repository|workspace|folder|directory|path)\b|"
+    r"\btop[- ]level\s+files?\b|"
+    r"\bcurrent\s+(?:repo|repository|workspace)\b|"
+    r"\b(?:shell|command|directory listing|list files)\b)",
+    re.I,
+)
 
 
 def _requests_reply_first_background(prompt: str) -> bool:
@@ -76,6 +90,45 @@ def _requests_reply_first_background(prompt: str) -> bool:
     if not text:
         return False
     return bool(re.search(_BACKGROUND_REPLY_NOW_RE, text) and re.search(_BACKGROUND_DELEGATION_RE, text))
+
+
+def _requests_explicit_delegation(prompt: str) -> bool:
+    text = str(prompt or "").strip().lower()
+    if not text:
+        return False
+    return bool(re.search(_EXPLICIT_DELEGATION_RE, text))
+
+
+def _requires_inline_tool_execution(prompt: str) -> bool:
+    text = str(prompt or "").strip()
+    if not text:
+        return False
+    return bool(_INLINE_TOOL_REQUEST_RE.search(text))
+
+
+def _should_auto_background_actionable(
+    prompt: str,
+    *,
+    mode: str,
+    autonomy_level: int,
+    recent_messages: list[dict[str, Any]] | None = None,
+    active_tasks: list[dict[str, Any]] | None = None,
+    requires_inline_tools: bool = False,
+) -> bool:
+    normalized_mode = str(mode or "").strip().lower()
+    if normalized_mode != "auto":
+        return False
+    if int(autonomy_level or 0) < 3:
+        return False
+    if requires_inline_tools:
+        return False
+    decision = should_dispatch(
+        prompt,
+        recent_messages=recent_messages,
+        active_tasks=active_tasks,
+        mode=normalized_mode,
+    )
+    return str(decision.action or "").strip().lower() == "dispatch"
 
 
 _BACKGROUND_SPLIT_PATTERNS = (
@@ -357,6 +410,7 @@ def register_chat_v2_routes(
     app.on_cleanup.append(_cleanup_warm_codex_pool)
 
     if config is not None and getattr(config, "models", None):
+
         async def _startup_prewarm(app_ref: web.Application) -> None:
             for profile_name, model_cfg in list(getattr(config, "models", {}).items()):
                 try:
@@ -504,10 +558,27 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
     dispatcher = EventDispatcher(response.write)
     is_first_message = conversation.length == 0
     recent_messages = conversation.get_context_window(max_tokens=8_000)
+    current_active_tasks = session_active_delegations(sid)
     launcher_task: asyncio.Task[Any] | None = None
-    launch_background = bool(mode == "max" or (mode == "auto" and _requests_reply_first_background(prompt)))
-    force_background = bool(mode == "auto" and launch_background)
-    visible_prompt = _foreground_reply_prompt(prompt) if launch_background else prompt
+    dispatch_inline_actionable = _requires_inline_tool_execution(prompt)
+    reply_first_background = bool(mode == "auto" and _requests_reply_first_background(prompt))
+    explicit_delegation = bool(autonomy_level >= 4 and _requests_explicit_delegation(prompt))
+    auto_actionable_background = _should_auto_background_actionable(
+        prompt,
+        mode=mode,
+        autonomy_level=autonomy_level,
+        recent_messages=recent_messages,
+        active_tasks=current_active_tasks,
+        requires_inline_tools=dispatch_inline_actionable,
+    )
+    launch_background = bool(mode == "max" or reply_first_background or explicit_delegation or auto_actionable_background)
+    force_background = bool(reply_first_background or explicit_delegation or auto_actionable_background)
+    background_ack_only = bool(auto_actionable_background and not reply_first_background and not explicit_delegation)
+    visible_prompt = (
+        _foreground_reply_prompt(prompt)
+        if reply_first_background or auto_actionable_background
+        else prompt
+    )
 
     try:
         if launch_background:
@@ -540,7 +611,8 @@ async def handle_chat_v2(request: web.Request) -> web.StreamResponse:
                 is_first_message=is_first_message,
                 active_task_digest=active_task_digest,
                 active_tasks=active_tasks,
-                dispatch_actionable=False,
+                dispatch_actionable=dispatch_inline_actionable,
+                background_ack_only=background_ack_only,
             )
 
         if llm_lock is not None:

@@ -11,3 +11,17 @@ services:
       - ./runtime:/app/runtime
       - ./thomas.toml:/app/thomas.toml:ro
     restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "2.0"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8899/api/health')"]
+      interval: 30s
+      timeout: 5s
+      start_period: 15s
+      retries: 3

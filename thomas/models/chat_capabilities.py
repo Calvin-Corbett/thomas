@@ -54,8 +54,8 @@ def profile_chat_control_map(cfg: ModelConfig) -> dict[str, Any]:
                 "options": [
                     _option("1", "L1 Chat"),
                     _option("2", "L2 Assist"),
-                    _option("3", "L3 Auto"),
-                    _option("4", "L4 Agent"),
+                    _option("3", "L3 Agent"),
+                    _option("4", "L4 Full Autonomy"),
                 ],
             },
             "token_economy": {

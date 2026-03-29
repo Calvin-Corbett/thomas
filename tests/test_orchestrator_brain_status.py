@@ -69,6 +69,37 @@ class TestOrchestratorBrainStatus(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(dispatcher.done_payloads)
         self.assertEqual(dispatcher.done_payloads[-1].get("thinking_summary"), "background_status")
 
+    async def test_background_ack_reply_skips_llm_and_emits_short_started_message(self):
+        brain = OrchestratorBrain(
+            config=None,
+            llm=None,
+            memory_engine=None,
+            registry=object(),
+        )
+        dispatcher = _FakeDispatcher()
+        conversation = ConversationManager()
+
+        with (
+            patch("thomas.marketplace.orchestrator.brain.MemoryCoordinator", _FakeMemoryCoordinator),
+            patch.object(OrchestratorBrain, "_dispatch_single", new=AsyncMock()) as dispatch_single,
+        ):
+            updated = await brain.process_message(
+                session_id="sess-ack",
+                conversation=conversation,
+                prompt="Please set up Discord for Thomas.",
+                dispatcher=dispatcher,
+                mode="auto",
+                active_tasks=[],
+                dispatch_actionable=False,
+                background_ack_only=True,
+            )
+
+        dispatch_single.assert_not_awaited()
+        self.assertEqual("".join(dispatcher.text_parts), "Working on that now.")
+        self.assertEqual(updated.last_assistant_message(), "Working on that now.")
+        self.assertTrue(dispatcher.done_payloads)
+        self.assertEqual(dispatcher.done_payloads[-1].get("thinking_summary"), "background_ack")
+
 
 if __name__ == "__main__":
     unittest.main()

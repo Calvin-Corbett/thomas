@@ -48,6 +48,8 @@ def _scope_matches_path(scope: str, rel_path: str) -> bool:
         return False
     if scope_norm in {".", "*", "**"}:
         return True
+    if path_norm == scope_norm or path_norm.startswith(scope_norm + "/"):
+        return True
     if any(ch in scope_norm for ch in "*?["):
         if fnmatch.fnmatchcase(path_norm, scope_norm):
             return True
@@ -55,7 +57,7 @@ def _scope_matches_path(scope: str, rel_path: str) -> bool:
             base = scope_norm[:-3].rstrip("/")
             return bool(base) and (path_norm == base or path_norm.startswith(base + "/"))
         return False
-    return path_norm == scope_norm or path_norm.startswith(scope_norm + "/")
+    return False
 
 
 def _run_git(args: Sequence[str]) -> list[str] | None:

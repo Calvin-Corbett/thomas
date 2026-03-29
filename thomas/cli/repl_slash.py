@@ -142,15 +142,13 @@ def _build_autonomy_options(context: Any) -> list[SlashArgOption]:
     except (TypeError, ValueError):
         current_level = 3
     current = f"L{current_level}".upper()
-    if current_level == 3:
-        current = "Auto"
     return [
         SlashArgOption("Auto", "Auto", "use default policy", is_current=current == "Auto"),
         SlashArgOption("L0", "L0", "lowest autonomy", is_current=current == "L0"),
         SlashArgOption("L1", "L1", "chat", is_current=current == "L1"),
         SlashArgOption("L2", "L2", "assist", is_current=current == "L2"),
-        SlashArgOption("L3", "L3", "auto", is_current=current == "L3"),
-        SlashArgOption("L4", "L4", "agent", is_current=current == "L4"),
+        SlashArgOption("L3", "L3", "agent", is_current=current == "L3"),
+        SlashArgOption("L4", "L4", "full autonomy", is_current=current == "L4"),
     ]
 
 

@@ -55,6 +55,25 @@ def test_gate_passes_with_matching_agent_claim(tmp_path: Path, monkeypatch, caps
     assert "matching claims: 1" in out
 
 
+def test_gate_passes_with_matching_literal_bracket_claim(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 2; scope=apps/site/src/app/[locale]/page.tsx; task=locale page",
+        active_tasks_block=(
+            "- task_id=locale-page; agent=Codex 2; scope=apps/site/src/app/[locale]/page.tsx; "
+            "summary=locale page; status=active"
+        ),
+    )
+    monkeypatch.setenv("AGENT_ID", "codex 2")
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["apps/site/src/app/[locale]/page.tsx"])
+
+    rc = mod.run(["--workboard", str(workboard), "--enforce-staged-scope"])
+    out = capsys.readouterr().out
+
+    assert rc == 0
+    assert "Workboard agent claim gate: PASS" in out
+
+
 def test_gate_fails_when_agent_id_missing(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(tmp_path, "- none")
     monkeypatch.delenv("AGENT_ID", raising=False)
