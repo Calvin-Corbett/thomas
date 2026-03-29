@@ -12,6 +12,7 @@ Versioning: Semantic Versioning.
 ### Changed
 - runtime: Token-economy now scales prompt/context overhead as well as pass counts, so `cheap` strips most optional scaffolding, `balanced`/`optimal` keeps only the highest-impact extras, and `max` retains the fuller autonomy/skills/test-visibility stack.
 - workflow: Added shared gate-response policy metadata and startup-router output so agents can distinguish remediation-and-retry gates from hard-stop integrity/ownership/security gates before they start work.
+- governance: Breakglass now requires local human authorization on Windows via a credential prompt, the helper runners no longer auto-generate breakglass metadata, and the live pre-commit chain now includes the protected-files gate.
 
 ## [0.14.54] - 2026-03-29
 

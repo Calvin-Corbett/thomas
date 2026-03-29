@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from types import SimpleNamespace
+
 import scripts.auto_checks as mod
 
 
@@ -8,6 +10,17 @@ def _enable_breakglass(monkeypatch) -> None:
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-12345")
     monkeypatch.setenv("THOMAS_SKIP_REASON", "emergency bypass for focused test harness")
     monkeypatch.setenv("AGENT_ID", "Codex Test")
+    monkeypatch.setattr(
+        mod,
+        "authorize_breakglass",
+        lambda **_: SimpleNamespace(
+            ok=True,
+            message="approved",
+            actor="WORKSTATION\\corbe",
+            method="windows-credential-dialog",
+            cancelled=False,
+        ),
+    )
 
 
 def test_gate_steps_include_surface_parity() -> None:
@@ -199,7 +212,7 @@ def test_run_rejects_skip_overrides_without_breakglass(monkeypatch, capsys) -> N
     assert called["count"] == 0
 
 
-def test_run_autofills_breakglass_metadata_for_skip_flags(monkeypatch) -> None:
+def test_run_requires_explicit_breakglass_metadata_for_skip_flags(monkeypatch, capsys) -> None:
     seen: list[str] = []
 
     def _fake_run_step(label: str, _cmd: tuple[str, ...]) -> int:
@@ -214,8 +227,8 @@ def test_run_autofills_breakglass_metadata_for_skip_flags(monkeypatch) -> None:
     monkeypatch.delenv("AGENT_ID", raising=False)
 
     rc = mod.run(["--skip-tests"])
-    assert rc == 0
-    assert "Python compile check" in seen
-    assert len(str(mod.os.getenv("THOMAS_SKIP_TICKET", ""))) >= 6
-    assert len(str(mod.os.getenv("THOMAS_SKIP_REASON", ""))) >= 12
-    assert str(mod.os.getenv("AGENT_ID", "")).strip()
+    out = capsys.readouterr().out
+
+    assert rc == 1
+    assert "breakglass requires THOMAS_SKIP_TICKET" in out
+    assert seen == []

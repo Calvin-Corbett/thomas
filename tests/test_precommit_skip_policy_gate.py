@@ -3,8 +3,23 @@ from __future__ import annotations
 import json
 from datetime import datetime, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 import scripts.check_precommit_skip_policy as mod
+
+
+def _approve_breakglass(monkeypatch, *, actor: str = "WORKSTATION\\corbe") -> None:
+    monkeypatch.setattr(
+        mod,
+        "authorize_breakglass",
+        lambda **_: SimpleNamespace(
+            ok=True,
+            message="approved",
+            actor=actor,
+            method="windows-credential-dialog",
+            cancelled=False,
+        ),
+    )
 
 
 def test_passes_when_skip_not_set(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -21,26 +36,20 @@ def test_passes_when_skip_not_set(tmp_path: Path, capsys, monkeypatch) -> None:
     assert not audit_log.exists()
 
 
-def test_autofills_reason_when_breakglass_reason_missing(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_fails_when_breakglass_reason_missing(tmp_path: Path, capsys, monkeypatch) -> None:
     audit_log = tmp_path / "skip_audit.jsonl"
     monkeypatch.setenv("SKIP", "thomas-release-update-gate")
     monkeypatch.setenv("AGENT_ID", "Codex 3")
     monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2001")
     monkeypatch.delenv("THOMAS_SKIP_REASON", raising=False)
-    monkeypatch.setattr(mod, "_staged_files", lambda: ["AGENTS.md"])
-    monkeypatch.setattr(mod, "_run_git", lambda _args: "mock")
 
-    rc = mod.run(["--audit-log", str(audit_log), "--json"])
-    payload = json.loads(capsys.readouterr().out)
-    rows = [line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()]
-    logged = json.loads(rows[0])
+    rc = mod.run(["--audit-log", str(audit_log)])
+    out = capsys.readouterr().out
 
-    assert rc == 0
-    assert payload["ok"] is True
-    assert payload["breakglass_reason_auto"] is True
-    assert logged["breakglass_reason_auto"] is True
-    assert len(str(logged["reason"])) >= 12
+    assert rc == 1
+    assert "breakglass requires THOMAS_SKIP_REASON" in out
+    assert not audit_log.exists()
 
 
 def test_fails_when_skip_set_without_agent(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -87,6 +96,7 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-1234")
     monkeypatch.setattr(mod, "_staged_files", lambda: ["AGENTS.md", "scripts/workboard_issue.py"])
     monkeypatch.setattr(mod, "_run_git", lambda _args: "mock")
+    _approve_breakglass(monkeypatch)
 
     rc = mod.run(["--audit-log", str(audit_log), "--json"])
     payload = json.loads(capsys.readouterr().out)
@@ -94,6 +104,9 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     assert rc == 0
     assert payload["ok"] is True
     assert payload["skip_hook_count"] == 2
+    assert payload["breakglass_human_verified"] is True
+    assert payload["breakglass_auth_method"] == "windows-credential-dialog"
+    assert payload["breakglass_authorized_by"] == "WORKSTATION\\corbe"
     assert audit_log.exists()
     rows = [line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 1
@@ -105,6 +118,9 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     ]
     assert logged["reason"] == "Scoped commit; unrelated repo-wide gate conflict."
     assert logged["staged_files"] == ["AGENTS.md", "scripts/workboard_issue.py"]
+    assert logged["breakglass_human_verified"] is True
+    assert logged["breakglass_auth_method"] == "windows-credential-dialog"
+    assert logged["breakglass_authorized_by"] == "WORKSTATION\\corbe"
 
 
 def test_fails_when_protected_hook_skipped_without_breakglass(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -132,6 +148,7 @@ def test_allows_protected_hook_with_breakglass_and_ticket(tmp_path: Path, capsys
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-1234")
     monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/check_precommit_skip_policy.py"])
     monkeypatch.setattr(mod, "_run_git", lambda _args: "mock")
+    _approve_breakglass(monkeypatch)
 
     rc = mod.run(["--audit-log", str(audit_log), "--json"])
     payload = json.loads(capsys.readouterr().out)
@@ -177,26 +194,20 @@ def test_fails_when_skip_used_without_breakglass(tmp_path: Path, capsys, monkeyp
     assert not audit_log.exists()
 
 
-def test_autofills_ticket_when_breakglass_ticket_missing(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_fails_when_breakglass_ticket_missing(tmp_path: Path, capsys, monkeypatch) -> None:
     audit_log = tmp_path / "skip_audit.jsonl"
     monkeypatch.setenv("SKIP", "thomas-release-update-gate")
     monkeypatch.setenv("AGENT_ID", "Codex 3")
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Need temporary bypass while investigating.")
     monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
     monkeypatch.delenv("THOMAS_SKIP_TICKET", raising=False)
-    monkeypatch.setattr(mod, "_staged_files", lambda: ["AGENTS.md"])
-    monkeypatch.setattr(mod, "_run_git", lambda _args: "mock")
 
-    rc = mod.run(["--audit-log", str(audit_log), "--json"])
-    payload = json.loads(capsys.readouterr().out)
-    rows = [line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()]
-    logged = json.loads(rows[0])
+    rc = mod.run(["--audit-log", str(audit_log)])
+    out = capsys.readouterr().out
 
-    assert rc == 0
-    assert payload["ok"] is True
-    assert payload["breakglass_ticket_auto"] is True
-    assert logged["breakglass_ticket_auto"] is True
-    assert len(str(logged["skip_ticket"])) >= 6
+    assert rc == 1
+    assert "breakglass requires THOMAS_SKIP_TICKET" in out
+    assert not audit_log.exists()
 
 
 def test_fails_when_breakglass_staged_files_exceed_hard_limit(tmp_path: Path, capsys, monkeypatch) -> None:
@@ -279,3 +290,32 @@ def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatc
 
     assert rc == 1
     assert "breakglass quota exceeded for `Codex 3`" in out
+
+
+def test_fails_when_human_authorization_is_cancelled(tmp_path: Path, capsys, monkeypatch) -> None:
+    audit_log = tmp_path / "skip_audit.jsonl"
+    monkeypatch.setenv("SKIP", "thomas-architecture")
+    monkeypatch.setenv("AGENT_ID", "Codex 3")
+    monkeypatch.setenv("THOMAS_SKIP_REASON", "Need temporary bypass while investigating baseline.")
+    monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
+    monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2007")
+    monkeypatch.setattr(
+        mod,
+        "authorize_breakglass",
+        lambda **_: SimpleNamespace(
+            ok=False,
+            message="breakglass authorization cancelled by user",
+            actor=None,
+            method="windows-credential-dialog",
+            cancelled=True,
+        ),
+    )
+
+    rc = mod.run(["--audit-log", str(audit_log), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["breakglass_human_verified"] is False
+    assert payload["breakglass_cancelled"] is True
+    assert not audit_log.exists()
