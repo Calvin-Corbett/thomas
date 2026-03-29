@@ -206,6 +206,7 @@ def test_changed_files_gate_accepts_explicit_fallback_scope(tmp_path: Path, caps
     )
     monkeypatch.setenv("AGENT_ID", "Codex 2")
     monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON", "user approved scoped fallback")
 
     rc = mod.run(["--workboard", str(workboard), "--file", "thomas/cli/main.py", "--json"])
     payload = json.loads(capsys.readouterr().out)
@@ -223,6 +224,7 @@ def test_changed_files_gate_rejects_fallback_conflict_with_claimed_file(tmp_path
     )
     monkeypatch.setenv("AGENT_ID", "Codex 2")
     monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON", "user approved scoped fallback")
 
     rc = mod.run(["--workboard", str(workboard), "--file", "thomas/cli/main.py", "--json"])
     payload = json.loads(capsys.readouterr().out)
@@ -230,3 +232,21 @@ def test_changed_files_gate_rejects_fallback_conflict_with_claimed_file(tmp_path
     assert payload["ok"] is False
     assert payload["fallback_conflict_count"] == 1
     assert payload["fallback_conflicts"][0]["owners"] == ["Codex 3"]
+
+
+def test_changed_files_gate_rejects_explicit_fallback_without_reason(tmp_path: Path, capsys, monkeypatch) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=solo; parent=none; scope=docs/note.md; task=docs lane",
+        active_tasks_block="- task_id=docs-lane; agent=Codex 3; scope=docs/note.md; summary=docs lane; status=active",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 2")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+
+    rc = mod.run(["--workboard", str(workboard), "--file", "thomas/cli/main.py", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["scope_source"] == "explicit_fallback"
+    assert "requires THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON" in payload["error"]

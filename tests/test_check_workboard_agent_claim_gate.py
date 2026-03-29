@@ -467,3 +467,22 @@ def test_gate_rejects_explicit_fallback_overlap(tmp_path: Path, monkeypatch, cap
     assert payload["ok"] is False
     assert payload["scope_source"] == "explicit_fallback"
     assert "overlaps active claim" in payload["error"]
+
+
+def test_gate_rejects_explicit_fallback_without_reason(tmp_path: Path, monkeypatch, capsys) -> None:
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 1; scope=docs/note.md; task=docs lane",
+        active_tasks_block="- task_id=docs-lane; agent=Codex 1; scope=docs/note.md; summary=docs lane; status=active",
+    )
+    monkeypatch.setenv("AGENT_ID", "Codex 2")
+    monkeypatch.setenv("THOMAS_WORKBOARD_SCOPE_FALLBACK", "thomas/cli/main.py")
+
+    rc = mod.run(["--workboard", str(workboard), "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["ok"] is False
+    assert payload["scope_source"] == "explicit_fallback"
+    assert payload["fallback_reason"] == ""
+    assert "requires THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON" in payload["error"]

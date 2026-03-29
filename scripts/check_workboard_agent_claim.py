@@ -405,6 +405,29 @@ def run(argv: Sequence[str] | None = None) -> int:
                 print("Workboard agent claim gate: FAIL")
                 print(f"- {message}")
             return 1
+        if not fallback_reason:
+            message = (
+                f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} "
+                "so fallback scope use is explicitly audited"
+            )
+            if args.json:
+                payload = {
+                    "gate": "workboard_agent_claim",
+                    "ok": False,
+                    "agent": agent,
+                    "active_claim_count": len(claims),
+                    "matching_claim_count": 0,
+                    "workboard": str(workboard_path),
+                    "error": message,
+                    "scope_source": SCOPE_SOURCE_FALLBACK,
+                    "fallback_reason": fallback_reason,
+                    "scopes": fallback_scopes,
+                }
+                print(json.dumps(payload, sort_keys=True))
+            else:
+                print("Workboard agent claim gate: FAIL")
+                print(f"- {message}")
+            return 1
 
         conflicts = _fallback_conflicts(agent, claims, fallback_scopes)
         if conflicts:
