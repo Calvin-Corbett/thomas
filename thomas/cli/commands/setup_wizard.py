@@ -268,6 +268,59 @@ def run_wizard() -> str | None:
     config_path.write_text(config_content, encoding="utf-8")
     click.echo(click.style(f"  OK: Config saved to {config_path.resolve()}", fg="green"))
 
+    # ── Step 7: Desktop Shortcut ─────────────────────────────────
+    _step(7, "Desktop Shortcut")
+    click.echo("  Create a shortcut to launch Thomas from your desktop?")
+
+    if click.confirm("  Create desktop shortcut?", default=True):
+        try:
+            from scripts.create_shortcut import (
+                create_desktop_shortcut,
+                create_start_menu_shortcut,
+            )
+        except ImportError:
+            # Fallback: add scripts dir to path
+            import sys as _sys
+            _scripts = Path(__file__).resolve().parents[3] / "scripts"
+            _sys.path.insert(0, str(_scripts))
+            try:
+                from create_shortcut import (
+                    create_desktop_shortcut,
+                    create_start_menu_shortcut,
+                )
+            except ImportError:
+                click.echo(click.style(
+                    "  Warning: shortcut module not found. Skipping.",
+                    fg="yellow",
+                ))
+                create_desktop_shortcut = None  # type: ignore[assignment]
+
+        if create_desktop_shortcut is not None:
+            try:
+                shortcut_path = create_desktop_shortcut()
+                click.echo(click.style(
+                    f"  OK: Shortcut created at {shortcut_path}",
+                    fg="green",
+                ))
+
+                # Also offer Start Menu / app launcher on Windows and Linux
+                import platform as _plat
+                if _plat.system() in ("Windows", "Linux") and click.confirm("  Also add to Start Menu / app launcher?", default=True):
+                    sm_path = create_start_menu_shortcut()
+                    if sm_path:
+                        click.echo(click.style(
+                            f"  OK: Added to app launcher: {sm_path}",
+                            fg="green",
+                        ))
+            except Exception as exc:
+                click.echo(click.style(
+                    f"  Warning: Could not create shortcut: {exc}",
+                    fg="yellow",
+                ))
+    else:
+        click.echo("  Skipped. You can create one later with:")
+        click.echo(click.style("    python scripts/create_shortcut.py", fg="yellow"))
+
     print_section_heading("Setup Complete")
     click.echo("  Quick start commands:")
     click.echo(click.style('    thomas chat "hello"', fg="yellow") + "    - single query")

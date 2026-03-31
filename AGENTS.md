@@ -29,6 +29,24 @@ Thomas is an AI-first workspace platform with a **marketplace of domain modules*
 
 **Everything else under `thomas/`** — Marketplace domain modules. Leave them alone unless the user explicitly asks you to work on them.
 
+## Branch awareness (required — prevents duplicate work)
+
+Before creating ANY new file or feature, check for existing work on other branches:
+
+```bash
+git branch -a --list '*<keyword>*'          # branches named after the feature
+git log --all --oneline --grep='<keyword>'  # commits mentioning it anywhere
+```
+
+Replace `<keyword>` with the core noun of your task (e.g., `channel`, `discord`, `voice`, `marketplace`).
+
+**If you find matching branches or commits:**
+1. Read the diff: `git log --oneline master..<branch>` to see what was done.
+2. Ask the user before building anything new — the work may just need a merge.
+3. If the branch has real, working code, merge or cherry-pick it instead of rewriting.
+
+**Why this exists:** Multiple agents (Codex, Claude, Gemini) work on this repo in separate sessions. Agent A may build a feature on a branch and not merge it. Agent B starts a new session on `master`, sees no files, and rebuilds from scratch — wasting hours and losing Agent A's work. This rule prevents that.
+
 ## Worktree discipline (required)
 
 - Read `WORKTREE_RULES.md` before making edits.

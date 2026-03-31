@@ -210,6 +210,11 @@ const newChatSidebar = document.getElementById('newChatSidebar');
 const navChatBtn = document.getElementById('navChatBtn');
 const navOfficeBtn = document.getElementById('navOfficeBtn');
 const navMissionBtn = document.getElementById('navMissionBtn');
+const navUiEditorBtn = document.getElementById('navUiEditorBtn');
+const navMyStuffBtn = document.getElementById('navMyStuffBtn');
+const navChannelsBtn = document.getElementById('navChannelsBtn');
+const navMarketplaceBtn = document.getElementById('navMarketplaceBtn');
+const navTokenEconomyBtn = document.getElementById('navTokenEconomyBtn');
 const navContentBtn = document.getElementById('navContentBtn');
 const navInfiniteBtn = document.getElementById('navInfiniteBtn');
 const topNav = document.querySelector('.top-nav');
@@ -350,6 +355,7 @@ const moduleTriageTitle = document.getElementById('moduleTriageTitle');
 const moduleTriageMeta = document.getElementById('moduleTriageMeta');
 const moduleTriageFilters = document.getElementById('moduleTriageFilters');
 const moduleTriageMessages = document.getElementById('moduleTriageMessages');
+const workspaceNavItems = document.getElementById('workspaceNavItems');
 const pluginNavItems = document.getElementById('pluginNavItems');
 const sidebarModeButtons = Array.from(document.querySelectorAll('.sidebar-nav [data-nav-mode]'));
 
@@ -800,6 +806,9 @@ const OFFICE_RUNTIME_STORAGE_KEY = 'thomas.ui.office.runtime.v1';
 const OFFICE_RUNTIME_SCHEMA_VERSION = 1;
 const DEFAULT_AGENT_NAME = 'Thomas';
 const MODULE_REFRESH_INTERVAL_MS = 15_000;
+const MODULE_CHANNELS_REFRESH_TTL_MS = 12_000;
+const UI_CHANNELS_CATALOG_ORDER_STORAGE_KEY = 'thomas.channels.catalog.order.v1';
+let moduleChannelsDraggedCardId = '';
 const MODULE_MARKETPLACE_REFRESH_TTL_MS = 75_000;
 const OFFICE_MAX_TASKS = 24;
 const OFFICE_MAX_CHAT_LINES = 48;
@@ -27416,7 +27425,9 @@ const MODULE_NAV_MODES = Object.freeze([
     'finance',
     'integrations',
     'my_stuff',
+    'channels',
     'marketplace',
+    'token_economy',
     'vault',
     'timeline',
     'infinite',
@@ -27681,6 +27692,23 @@ const MODULE_MODE_SEEDS = Object.freeze({
             { id: 'request_approval', label: 'Request Approval', meta: 'Route high-risk spend.' },
         ],
     },
+    token_economy: {
+        title: 'Token Economy',
+        subtitle: 'AI spend tracking, budgets, and economy modes.',
+        pill: 'Spend',
+        kpis: [
+            { label: 'Today Spend', key: 'spend_today_usd', meta: 'rolling 24h' },
+            { label: 'Session Spend', key: 'spend_session_usd', meta: 'this session' },
+            { label: 'Tokens Today', key: 'spend_tokens_today', meta: 'prompt + completion' },
+            { label: 'Economy Mode', key: 'spend_economy_mode', meta: 'cheap / optimal / max' },
+        ],
+        actions: [
+            { id: 'switch_cheap', label: 'Switch to Cheap', meta: '0.3× passes — single-shot.' },
+            { id: 'switch_optimal', label: 'Switch to Optimal', meta: '1.0× passes — balanced.' },
+            { id: 'switch_max', label: 'Switch to Max', meta: '2.5× passes — thorough.' },
+            { id: 'export_spend', label: 'Export CSV', meta: 'Download spend history.' },
+        ],
+    },
     integrations: {
         title: 'Integrations',
         subtitle: 'Connector scopes, tokens, webhooks, and plugin health.',
@@ -27702,6 +27730,13 @@ const MODULE_MODE_SEEDS = Object.freeze({
         title: 'My Stuff',
         subtitle: 'Project board with launch controls, troubleshooting, and project-scoped Thomas chats.',
         pill: 'Launchpad',
+        kpis: [],
+        actions: [],
+    },
+    channels: {
+        title: 'Channels',
+        subtitle: 'Own bridge lifecycle, permissions, and searchable Discord conversation context.',
+        pill: 'Discord',
         kpis: [],
         actions: [],
     },
@@ -27781,8 +27816,10 @@ const MODULE_MODE_SURFACES = Object.freeze({
     research_lab: { layout: 'research', sections: ['Collections', 'Sources', 'Notes', 'Citations'] },
     people: { layout: 'tri_pane', sections: ['Segments', 'Timeline', 'Commitments', 'Follow-ups'] },
     finance: { layout: 'tri_pane', sections: ['Accounts', 'Transactions', 'Approvals', 'Forecast'] },
+    token_economy: { layout: 'custom', sections: ['Overview', 'Models', 'History', 'Economy Mode'] },
     integrations: { layout: 'tri_pane', sections: ['Installed', 'Available', 'Permissions', 'Logs'] },
     my_stuff: { layout: 'catalog', sections: [] },
+    channels: { layout: 'catalog', sections: [] },
     marketplace: { layout: 'catalog', sections: [] },
     vault: { layout: 'admin', sections: ['Secrets', 'Permissions', 'Memory', 'Retention'] },
     timeline: { layout: 'audit', sections: ['Events', 'Approvals', 'Retries', 'Rollbacks'] },
@@ -29397,6 +29434,10 @@ function moduleBuildDefinition(mode, snapshot, signals) {
         queueRows = basePlatforms;
         activityRows = [...injectedActivity, ...moduleBuildEventRows(snapshot.events, { limit: 10, includeTags: ['integrations', 'errors'] })].slice(0, 10);
         } else if (mode === 'my_stuff') {
+        queueRows = [];
+        healthRows = [];
+        activityRows = [];
+    } else if (mode === 'channels') {
         queueRows = [];
         healthRows = [];
         activityRows = [];
@@ -39126,6 +39167,8 @@ const MODULE_STATIC_WORKSPACE_ITEMS = Object.freeze([
     { workspace_id: 'mission', mode_id: 'mission', label: 'Mission Control', icon: 'ph-crosshair-simple', default_nav_section: 'command_centers', default_nav_order: 120 },
     { workspace_id: 'app_builder', mode_id: 'app_builder', label: 'UI Editor', icon: 'ph-app-window', default_nav_section: 'command_centers', default_nav_order: 160 },
     { workspace_id: 'my_stuff', mode_id: 'my_stuff', label: 'My Stuff', icon: 'ph-grid-four', default_nav_section: 'command_centers', default_nav_order: 220 },
+    { workspace_id: 'channels', mode_id: 'channels', label: 'Channels', icon: 'ph-broadcast', default_nav_section: 'command_centers', default_nav_order: 280 },
+    { workspace_id: 'token_economy', mode_id: 'token_economy', label: 'Token Economy', icon: 'ph-coins', default_nav_section: 'command_centers', default_nav_order: 300 },
     { workspace_id: 'marketplace', mode_id: 'marketplace', label: 'Marketplace', icon: 'ph-storefront', default_nav_section: 'command_centers', default_nav_order: 320 },
 ]);
 
@@ -39188,6 +39231,8 @@ function moduleWorkspaceNavEntries() {
         ['mission', navMissionBtn],
         ['app_builder', navUiEditorBtn],
         ['my_stuff', navMyStuffBtn],
+        ['channels', navChannelsBtn],
+        ['token_economy', navTokenEconomyBtn],
         ['marketplace', navMarketplaceBtn],
     ]);
     const entries = [];
@@ -39830,6 +39875,1169 @@ function moduleRenderMyStuffSurface(container) {
     });
 }
 
+const MODULE_CHANNEL_CATALOG = Object.freeze([
+    {
+        id: 'discord',
+        title: 'Discord',
+        icon: 'ph-discord-logo',
+        eyebrow: 'Live bridge',
+        summary: 'Text chat, wake-word voice, media controls, and delegated access already flow through Thomas.',
+        capabilityLabel: 'Text, voice, media',
+        accent: 'live',
+    },
+    {
+        id: 'slack',
+        title: 'Slack',
+        icon: 'ph-slack-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for a first-class Thomas Slack bridge.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'telegram',
+        title: 'Telegram',
+        icon: 'ph-telegram-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for a first-class Thomas Telegram bridge.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'email',
+        title: 'Email',
+        icon: 'ph-envelope-simple',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for an indexed Thomas inbox bridge.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'sms',
+        title: 'SMS / MMS',
+        icon: 'ph-chat-circle-text',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for phone messaging and carrier-backed outreach.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'whatsapp',
+        title: 'WhatsApp',
+        icon: 'ph-whatsapp-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for a WhatsApp bridge with owner-scoped automation.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'signal',
+        title: 'Signal',
+        icon: 'ph-chat-teardrop-text',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for a privacy-first Signal bridge.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'imessage',
+        title: 'iMessage',
+        icon: 'ph-chat-centered-dots',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Apple messaging surfaces and local-device workflows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'teams',
+        title: 'Microsoft Teams',
+        icon: 'ph-users-three',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Teams chat, meetings, and workspace controls.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'google_chat',
+        title: 'Google Chat',
+        icon: 'ph-google-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Google Chat rooms, threads, and workspace context.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'matrix',
+        title: 'Matrix',
+        icon: 'ph-squares-four',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Matrix rooms and federated community access.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'mattermost',
+        title: 'Mattermost',
+        icon: 'ph-chats-circle',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for self-hosted team chat and ops workflows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'twitch_chat',
+        title: 'Twitch Chat',
+        icon: 'ph-twitch-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for stream chat moderation, clips, and live viewer context.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'youtube_live',
+        title: 'YouTube Live',
+        icon: 'ph-youtube-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for YouTube live chat and creator workflow actions.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'kick_chat',
+        title: 'Kick Chat',
+        icon: 'ph-broadcast',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Kick live chat and creator-side control flows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'twitter_dm',
+        title: 'X / Twitter DM',
+        icon: 'ph-x-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for DMs, mentions, and timeline-triggered workflows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'instagram_dm',
+        title: 'Instagram DM',
+        icon: 'ph-instagram-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for creator messaging and social inbox routing.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'facebook_messenger',
+        title: 'Messenger',
+        icon: 'ph-messenger-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Facebook Messenger and page-side outreach.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'reddit',
+        title: 'Reddit',
+        icon: 'ph-reddit-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for modmail, replies, and community intelligence.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'github',
+        title: 'GitHub',
+        icon: 'ph-github-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for issues, PR threads, and repository-side conversation loops.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'xbox',
+        title: 'Xbox Live',
+        icon: 'ph-game-controller',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Xbox chat and gaming-party workflows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'playstation',
+        title: 'PlayStation',
+        icon: 'ph-game-controller',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for PlayStation messaging and party presence.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'steam',
+        title: 'Steam Chat',
+        icon: 'ph-steam-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Steam chat, lobbies, and PC gaming surfaces.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'web_widget',
+        title: 'Web Widget',
+        icon: 'ph-browser',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for an embeddable Thomas website chat surface.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'forum',
+        title: 'Forums',
+        icon: 'ph-rows',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for threaded forum communities and long-form discussions.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'bluesky',
+        title: 'Bluesky',
+        icon: 'ph-cloud',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Bluesky posts, replies, and direct-message workflows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'threads',
+        title: 'Threads',
+        icon: 'ph-at',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Threads conversation loops and creator replies.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'linkedin',
+        title: 'LinkedIn',
+        icon: 'ph-linkedin-logo',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for professional inbox, post replies, and outreach flows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'line',
+        title: 'LINE',
+        icon: 'ph-chat-circle-dots',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for LINE messaging and Asia-focused channel automation.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'wechat',
+        title: 'WeChat',
+        icon: 'ph-chats-circle',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for WeChat messaging, communities, and service workflows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'viber',
+        title: 'Viber',
+        icon: 'ph-phone-call',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Viber messaging and voice-adjacent customer touchpoints.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'zoom_chat',
+        title: 'Zoom Team Chat',
+        icon: 'ph-video-camera',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Zoom team chat, meeting context, and live follow-up.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'meet_chat',
+        title: 'Google Meet Chat',
+        icon: 'ph-video-camera',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for Meet chat, call notes, and voice-session follow-through.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'zendesk',
+        title: 'Zendesk',
+        icon: 'ph-headset',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for support-ticket conversations and inbox escalation loops.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'intercom',
+        title: 'Intercom',
+        icon: 'ph-chat-centered-text',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for product chat, support triage, and customer messaging.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+    {
+        id: 'irc',
+        title: 'IRC',
+        icon: 'ph-hash',
+        eyebrow: 'Reserved',
+        summary: 'Channel slot reserved for classic IRC channels and community relay workflows.',
+        capabilityLabel: 'Catalog slot',
+        accent: 'catalog',
+    },
+]);
+
+function moduleChannelsState() {
+    const state = moduleEnsureRuntime();
+    if (!state) return null;
+    if (!state.channels || typeof state.channels !== 'object') {
+        state.channels = {
+            loading: false,
+            error: '',
+            status: null,
+            sessions: [],
+            hits: [],
+            selectedSessionId: '',
+            selectedChannelId: '',
+            detailOpen: false,
+            sessionDetail: null,
+            search: '',
+            voiceProbeRunning: false,
+            voiceProbeResult: null,
+            lastLoadedAt: 0,
+            requestPromise: null,
+        };
+    }
+    return state.channels;
+}
+
+function loadStoredChannelsCatalogOrder() {
+    try {
+        if (!window?.localStorage || isUiEditorPreviewShell()) return [];
+        const raw = window.localStorage.getItem(UI_CHANNELS_CATALOG_ORDER_STORAGE_KEY);
+        const parsed = raw ? JSON.parse(raw) : [];
+        return Array.isArray(parsed) ? parsed.map((value) => safeString(value).toLowerCase()).filter(Boolean) : [];
+    } catch {
+        return [];
+    }
+}
+
+function saveStoredChannelsCatalogOrder(orderRaw) {
+    const order = Array.isArray(orderRaw) ? orderRaw.map((value) => safeString(value).toLowerCase()).filter(Boolean) : [];
+    try {
+        if (!window?.localStorage || isUiEditorPreviewShell()) return;
+        window.localStorage.setItem(UI_CHANNELS_CATALOG_ORDER_STORAGE_KEY, JSON.stringify(order));
+    } catch {
+        // Ignore storage failures.
+    }
+}
+
+function moduleChannelsCatalogOrder(entriesRaw) {
+    const entries = Array.isArray(entriesRaw) ? entriesRaw : [];
+    const validIds = new Set(entries.map((entry) => safeString(entry?.id).toLowerCase()).filter(Boolean));
+    const stored = loadStoredChannelsCatalogOrder().filter((id) => validIds.has(id));
+    const appended = entries
+        .map((entry) => safeString(entry?.id).toLowerCase())
+        .filter((id) => id && !stored.includes(id));
+    return stored.concat(appended);
+}
+
+function modulePersistChannelsCatalogOrderFromDom() {
+    if (!(moduleQueueList instanceof HTMLElement)) return;
+    const grid = moduleQueueList.querySelector('[data-channel-grid]');
+    if (!(grid instanceof HTMLElement)) return;
+    const order = Array.from(grid.querySelectorAll('[data-channel-card-id]'))
+        .map((node) => safeString(node.getAttribute('data-channel-card-id')).toLowerCase())
+        .filter(Boolean);
+    saveStoredChannelsCatalogOrder(order);
+}
+
+async function moduleLoadChannelsSession(sessionIdRaw, { silent = false } = {}) {
+    const state = moduleChannelsState();
+    const sessionId = safeString(sessionIdRaw);
+    if (!state || !sessionId) return null;
+    try {
+        const payload = await moduleFetchJsonSafe(`/api/channels/discord/history/${encodeURIComponent(sessionId)}?limit=12`);
+        state.sessionDetail = payload && typeof payload === 'object' ? payload : null;
+        state.selectedSessionId = sessionId;
+        if (safeString(sidebarNavMode) === 'channels') {
+            moduleRender('channels', { touch: false });
+        }
+        return state.sessionDetail;
+    } catch (error) {
+        if (!silent) {
+            state.error = safeString(error?.message) || 'Could not load Discord session context.';
+            if (safeString(sidebarNavMode) === 'channels') {
+                moduleRender('channels', { touch: false });
+            }
+        }
+        return null;
+    }
+}
+
+function moduleChannelsHistoryUrl(state) {
+    const query = safeString(state?.search).trim();
+    if (!query) return '/api/channels/discord/history?limit=12';
+    return `/api/channels/discord/history?q=${encodeURIComponent(query)}&limit=12`;
+}
+
+async function moduleRefreshChannels({ force = false } = {}) {
+    const state = moduleChannelsState();
+    if (!state) return null;
+    const ageMs = Date.now() - Number(state.lastLoadedAt || 0);
+    if (!force && state.requestPromise) return state.requestPromise;
+    if (!force && state.status && ageMs < MODULE_CHANNELS_REFRESH_TTL_MS) return state.status;
+    state.loading = true;
+    state.error = '';
+    const nextRequest = Promise.all([
+        moduleFetchJsonSafe('/api/channels/discord'),
+        moduleFetchJsonSafe(moduleChannelsHistoryUrl(state)),
+    ]).then(async ([statusPayload, historyPayload]) => {
+        state.status = statusPayload?.discord || null;
+        state.sessions = Array.isArray(historyPayload?.sessions) ? historyPayload.sessions : [];
+        state.hits = Array.isArray(historyPayload?.hits) ? historyPayload.hits : [];
+        state.lastLoadedAt = Date.now();
+        const preferredSessionId = safeString(state.selectedSessionId)
+            || safeString(state.sessions?.[0]?.session_id)
+            || safeString(state.hits?.[0]?.session_id);
+        if (preferredSessionId) {
+            if (!state.sessionDetail || safeString(state.sessionDetail?.session?.session_id) !== preferredSessionId) {
+                await moduleLoadChannelsSession(preferredSessionId, { silent: true });
+            }
+        } else {
+            state.sessionDetail = null;
+        }
+        return state.status;
+    }).catch((error) => {
+        state.error = safeString(error?.message) || 'Failed to load Discord channel state.';
+        return null;
+    }).finally(() => {
+        state.loading = false;
+        state.requestPromise = null;
+        if (safeString(sidebarNavMode) === 'channels') {
+            moduleRender('channels', { touch: false });
+        }
+    });
+    state.requestPromise = nextRequest;
+    return nextRequest;
+}
+
+function moduleRenderChannelsSurface(container) {
+    if (!container) return null;
+    const state = moduleChannelsState();
+    if (!state) return null;
+    const ageMs = Date.now() - Number(state.lastLoadedAt || 0);
+    if ((!state.status || ageMs >= MODULE_CHANNELS_REFRESH_TTL_MS) && !state.loading) {
+        void moduleRefreshChannels();
+    }
+    return moduleRenderChannelsSurfaceNext(container, state);
+
+    const statusPayload = state.status && typeof state.status === 'object' ? state.status : {};
+    const bridge = statusPayload.bridge && typeof statusPayload.bridge === 'object' ? statusPayload.bridge : {};
+    const config = statusPayload.config && typeof statusPayload.config === 'object' ? statusPayload.config : {};
+    const runtime = statusPayload.runtime && typeof statusPayload.runtime === 'object' ? statusPayload.runtime : {};
+    const conversations = statusPayload.conversations && typeof statusPayload.conversations === 'object' ? statusPayload.conversations : {};
+    const sessions = Array.isArray(state.sessions) ? state.sessions : [];
+    const hits = Array.isArray(state.hits) ? state.hits : [];
+    const selectedSession = state.sessionDetail && typeof state.sessionDetail === 'object' ? state.sessionDetail : null;
+    const selectedTurns = Array.isArray(selectedSession?.turns) ? selectedSession.turns : [];
+    const selectedMeta = selectedSession?.session && typeof selectedSession.session === 'object' ? selectedSession.session : {};
+    const searchText = safeString(state.search);
+    const running = Boolean(bridge.running);
+    const configured = Boolean(bridge.configured);
+    const enabled = Boolean(bridge.enabled);
+    const statusLabel = safeString(bridge.status) || (running ? 'running' : configured ? 'stopped' : 'unconfigured');
+    const statusTone = running ? 'ready' : configured ? 'catalog' : 'warn';
+    const lastUpdatedLabel = Number(state.lastLoadedAt || 0) > 0
+        ? missionRelativeTime(new Date(Number(state.lastLoadedAt)).toISOString())
+        : 'never';
+    const sessionMarkup = sessions.length ? sessions.map((row) => {
+        const sessionId = safeString(row?.session_id);
+        const isSelected = sessionId && sessionId === safeString(selectedMeta?.session_id || state.selectedSessionId);
+        const preview = safeString(row?.preview) || 'No preview yet.';
+        const scopeKey = safeString(row?.scope_key) || 'unknown scope';
+        const updatedAt = safeString(row?.updated_at);
+        return `
+            <button
+                type="button"
+                class="module-item-btn${isSelected ? ' active' : ''}"
+                data-channels-session-id="${escapeHtml(sessionId)}"
+                style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;text-align:left;">
+                <strong>${escapeHtml(sessionId || 'session')}</strong>
+                <span>${escapeHtml(`${scopeKey} | ${updatedAt ? missionRelativeTime(updatedAt) : 'unknown time'}`)}</span>
+                <span>${escapeHtml(preview.slice(0, 140))}</span>
+            </button>
+        `;
+    }).join('') : '<div class="module-empty">No indexed Discord sessions yet.</div>';
+    const hitMarkup = searchText && hits.length ? `
+        <div style="display:grid;gap:10px;margin-top:14px;">
+            ${hits.slice(0, 6).map((hit) => `
+                <button
+                    type="button"
+                    class="module-item-btn"
+                    data-channels-session-id="${escapeHtml(safeString(hit?.session_id))}"
+                    style="display:flex;flex-direction:column;align-items:flex-start;gap:4px;width:100%;text-align:left;">
+                    <strong>${escapeHtml(safeString(hit?.created_at) || safeString(hit?.session_id) || 'match')}</strong>
+                    <span>${escapeHtml(safeString(hit?.excerpt) || 'No excerpt available.')}</span>
+                </button>
+            `).join('')}
+        </div>
+    ` : '';
+    const turnMarkup = selectedTurns.length ? selectedTurns.map((turn) => `
+        <article class="module-item-card" style="gap:10px;">
+            <div class="module-item-top">
+                <h4 class="module-item-title">${escapeHtml(safeString(turn?.display_name) || 'Discord user')}</h4>
+                <span class="module-item-badge">${escapeHtml(safeString(turn?.created_at) || '')}</span>
+            </div>
+            <p class="module-item-meta">${escapeHtml(safeString(turn?.user_text) || '(no user text)')}</p>
+            <p class="module-item-meta">${escapeHtml(safeString(turn?.assistant_text) || '(no Thomas reply)')}</p>
+        </article>
+    `).join('') : '<div class="module-empty">Select a Discord session to inspect recent context.</div>';
+
+    container.innerHTML = `
+        <section class="module-channels-shell" style="display:grid;gap:18px;">
+            <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;">
+                <article class="module-item-card" style="gap:14px;">
+                    <div class="module-item-top">
+                        <h4 class="module-item-title">Discord Bridge</h4>
+                        <span class="marketplace-card-status" data-marketplace-status="${escapeHtml(statusTone)}">${escapeHtml(statusLabel)}</span>
+                    </div>
+                    <p class="module-item-meta">Lifecycle is Thomas-owned here. Enable the channel separately from starting the bridge process.</p>
+                    <p class="module-item-meta">Enabled: ${enabled ? 'On' : 'Off'} | Configured: ${configured ? 'Yes' : 'No'} | Refreshed ${escapeHtml(lastUpdatedLabel)}</p>
+                    <div class="module-item-actions">
+                        <button type="button" class="module-item-btn" data-channels-action="toggle_enabled">${enabled ? 'Turn Off Channel' : 'Turn On Channel'}</button>
+                        <button type="button" class="module-item-btn" data-channels-action="start">Start</button>
+                        <button type="button" class="module-item-btn" data-channels-action="stop">Stop</button>
+                        <button type="button" class="module-item-btn" data-channels-action="restart">Restart</button>
+                        <button type="button" class="module-item-btn" data-channels-action="refresh">Refresh</button>
+                    </div>
+                    ${safeString(bridge?.last_error) ? `<p class="module-item-meta">${escapeHtml(safeString(bridge.last_error).slice(0, 320))}</p>` : ''}
+                </article>
+                <article class="module-item-card" style="gap:14px;">
+                    <div class="module-item-top">
+                        <h4 class="module-item-title">Connect + Configure</h4>
+                        <span class="module-item-badge">Bridge .env</span>
+                    </div>
+                    <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;">
+                        <label style="display:grid;gap:6px;">
+                            <span>Discord Bot Token</span>
+                            <input type="password" class="form-control" data-channels-config-field="bot_token" placeholder="${escapeHtml(safeString(config?.bot_token_masked) || 'Enter new bot token')}" autocomplete="new-password" />
+                        </label>
+                        <label style="display:grid;gap:6px;">
+                            <span>Owner User IDs</span>
+                            <input type="text" class="form-control" data-channels-config-field="owner_user_ids" value="${escapeHtml((Array.isArray(config?.owner_user_ids) ? config.owner_user_ids.join(', ') : ''))}" />
+                        </label>
+                        <label style="display:grid;gap:6px;">
+                            <span>Allowed Guild IDs</span>
+                            <input type="text" class="form-control" data-channels-config-field="allowed_guild_ids" value="${escapeHtml((Array.isArray(config?.allowed_guild_ids) ? config.allowed_guild_ids.join(', ') : ''))}" />
+                        </label>
+                        <label style="display:grid;gap:6px;">
+                            <span>Auto Channel IDs</span>
+                            <input type="text" class="form-control" data-channels-config-field="auto_channel_ids" value="${escapeHtml((Array.isArray(config?.auto_channel_ids) ? config.auto_channel_ids.join(', ') : ''))}" />
+                        </label>
+                        <label style="display:grid;gap:6px;">
+                            <span>Thomas Base URL</span>
+                            <input type="text" class="form-control" data-channels-config-field="thomas_base_url" value="${escapeHtml(safeString(config?.thomas_base_url) || 'http://127.0.0.1:8899')}" />
+                        </label>
+                        <label style="display:grid;gap:6px;">
+                            <span>Session Prefix</span>
+                            <input type="text" class="form-control" data-channels-config-field="session_prefix" value="${escapeHtml(safeString(config?.session_prefix) || 'thomas-discord')}" />
+                        </label>
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:14px;">
+                        <label style="display:inline-flex;align-items:center;gap:8px;">
+                            <input type="checkbox" data-channels-config-field="owner_only_mode" ${config?.owner_only_mode ? 'checked' : ''} />
+                            <span>Owner-only mode</span>
+                        </label>
+                        <label style="display:inline-flex;align-items:center;gap:8px;">
+                            <input type="checkbox" data-channels-config-field="require_mention" ${config?.require_mention !== false ? 'checked' : ''} />
+                            <span>Require mention</span>
+                        </label>
+                    </div>
+                    <div class="module-item-actions">
+                        <button type="button" class="module-item-btn" data-channels-action="save_config">Save Config</button>
+                    </div>
+                </article>
+                <article class="module-item-card" style="gap:14px;">
+                    <div class="module-item-top">
+                        <h4 class="module-item-title">Conversation Context</h4>
+                        <span class="module-item-badge">${escapeHtml(String(conversations?.indexed_turns || 0))} turns</span>
+                    </div>
+                    <p class="module-item-meta">Bridge sessions tracked: ${escapeHtml(String(conversations?.tracked_bridge_sessions || 0))}</p>
+                    <p class="module-item-meta">Indexed sessions: ${escapeHtml(String(conversations?.indexed_sessions || 0))}</p>
+                    <p class="module-item-meta">Wake word: ${runtime?.voice_require_wake_word ? 'required' : 'not required'} | Mention mode: ${runtime?.require_mention ? 'mentions only' : 'reply to everyone'}</p>
+                    <p class="module-item-meta">Voice profile: ${escapeHtml(safeString(runtime?.voice_profile) || 'unknown')} | Media volume: ${escapeHtml(String(runtime?.voice_media_volume || 0))}% | Delegated grants: ${escapeHtml(String(runtime?.access_grants_count || 0))}</p>
+                </article>
+            </div>
+            <div style="display:grid;grid-template-columns:minmax(280px,360px) minmax(0,1fr);gap:16px;align-items:start;">
+                <article class="module-item-card" style="gap:14px;">
+                    <div class="module-item-top">
+                        <h4 class="module-item-title">Searchable History</h4>
+                        <span class="module-item-badge">${state.loading ? 'Refreshing' : 'Ready'}</span>
+                    </div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+                        <input type="search" class="form-control" data-channels-search value="${escapeHtml(searchText)}" placeholder="Search Discord history" style="flex:1 1 220px;" />
+                        <button type="button" class="module-item-btn" data-channels-action="search">Search</button>
+                        <button type="button" class="module-item-btn" data-channels-action="clear_search">Clear</button>
+                    </div>
+                    <div style="display:grid;gap:10px;">
+                        ${sessionMarkup}
+                    </div>
+                    ${hitMarkup}
+                </article>
+                <article class="module-item-card" style="gap:14px;">
+                    <div class="module-item-top">
+                        <h4 class="module-item-title">Session Context</h4>
+                        <span class="module-item-badge">${escapeHtml(safeString(selectedMeta?.session_id) || 'none')}</span>
+                    </div>
+                    <p class="module-item-meta">${escapeHtml(safeString(selectedMeta?.scope_key) || 'Select a session to inspect metadata and recent turns.')}</p>
+                    <div style="display:grid;gap:12px;">
+                        ${turnMarkup}
+                    </div>
+                </article>
+            </div>
+            ${safeString(state.error) ? `<div class="module-empty">${escapeHtml(state.error)}</div>` : ''}
+        </section>
+    `;
+    return container.firstElementChild;
+}
+
+function moduleBuildChannelsSurfaceModel(state) {
+    const statusPayload = state?.status && typeof state.status === 'object' ? state.status : {};
+    const bridge = statusPayload.bridge && typeof statusPayload.bridge === 'object' ? statusPayload.bridge : {};
+    const config = statusPayload.config && typeof statusPayload.config === 'object' ? statusPayload.config : {};
+    const runtime = statusPayload.runtime && typeof statusPayload.runtime === 'object' ? statusPayload.runtime : {};
+    const conversations = statusPayload.conversations && typeof statusPayload.conversations === 'object' ? statusPayload.conversations : {};
+    const sessions = Array.isArray(state?.sessions) ? state.sessions : [];
+    const hits = Array.isArray(state?.hits) ? state.hits : [];
+    const selectedSession = state?.sessionDetail && typeof state.sessionDetail === 'object' ? state.sessionDetail : null;
+    const selectedTurns = Array.isArray(selectedSession?.turns) ? selectedSession.turns : [];
+    const selectedMeta = selectedSession?.session && typeof selectedSession.session === 'object' ? selectedSession.session : {};
+    const running = Boolean(bridge.running);
+    const configured = Boolean(bridge.configured);
+    const enabled = Boolean(bridge.enabled);
+    const statusLabel = running ? 'Live' : configured ? 'Configured' : 'Not configured';
+    const statusTone = running ? 'ready' : configured ? 'ok' : 'catalog';
+    const lastUpdatedLabel = Number(state?.lastLoadedAt || 0) > 0
+        ? missionRelativeTime(new Date(Number(state.lastLoadedAt)).toISOString())
+        : 'never';
+    const orderedIds = moduleChannelsCatalogOrder(MODULE_CHANNEL_CATALOG);
+    const catalogById = new Map(MODULE_CHANNEL_CATALOG.map((entry) => [entry.id, entry]));
+    const catalog = orderedIds.map((id) => catalogById.get(id)).filter(Boolean);
+    const selectedChannelId = catalog.some((entry) => entry.id === safeString(state?.selectedChannelId).toLowerCase())
+        ? safeString(state?.selectedChannelId).toLowerCase()
+        : (catalog[0]?.id || 'discord');
+    const selectedChannel = catalog.find((entry) => entry.id === selectedChannelId) || catalog[0] || MODULE_CHANNEL_CATALOG[0];
+    const requestKindsText = Array.isArray(selectedMeta?.request_kinds) && selectedMeta.request_kinds.length
+        ? selectedMeta.request_kinds.join(', ')
+        : 'message';
+    const secretStorage = config?.secret_storage && typeof config.secret_storage === 'object' ? config.secret_storage : {};
+    const secretStorageLabel = safeString(secretStorage?.encryption) === 'dpapi'
+        ? 'Windows current-user encryption'
+        : (safeString(secretStorage?.encryption) || 'local secure storage');
+    return {
+        bridge,
+        config,
+        runtime,
+        conversations,
+        sessions,
+        hits,
+        selectedMeta,
+        selectedTurns,
+        searchText: safeString(state?.search),
+        running,
+        configured,
+        enabled,
+        statusLabel,
+        statusTone,
+        lastUpdatedLabel,
+        catalog,
+        selectedChannel,
+        selectedChannelId,
+        requestKindsText,
+        secretStorageLabel,
+        configuredCount: configured ? 1 : 0,
+        liveCount: running ? 1 : 0,
+        indexedTurnCount: Number(conversations?.indexed_turns || 0),
+    };
+}
+
+function moduleChannelsSessionMarkup(model, state) {
+    if (!model.sessions.length) return '<div class="module-empty">No indexed Discord sessions yet.</div>';
+    return model.sessions.map((row) => {
+        const sessionId = safeString(row?.session_id);
+        const isSelected = sessionId && sessionId === safeString(model.selectedMeta?.session_id || state?.selectedSessionId);
+        const preview = safeString(row?.preview) || 'No preview yet.';
+        const scopeKey = safeString(row?.scope_key) || 'unknown scope';
+        const updatedAt = safeString(row?.updated_at);
+        const displayName = safeString(row?.display_name) || 'Discord scope';
+        const turnCount = Number(row?.turn_count || 0);
+        return `
+            <button
+                type="button"
+                class="module-channels-session-btn${isSelected ? ' is-selected' : ''}"
+                data-channels-session-id="${escapeHtml(sessionId)}">
+                <div class="module-channels-session-top">
+                    <strong>${escapeHtml(displayName)}</strong>
+                    <span>${escapeHtml(updatedAt ? missionRelativeTime(updatedAt) : 'unknown time')}</span>
+                </div>
+                <div class="module-channels-session-tags">
+                    <span>${escapeHtml(scopeKey)}</span>
+                    <span>${escapeHtml(`${turnCount} turn${turnCount === 1 ? '' : 's'}`)}</span>
+                </div>
+                <p>${escapeHtml(preview.slice(0, 160))}</p>
+            </button>
+        `;
+    }).join('');
+}
+
+function moduleChannelsHitMarkup(model) {
+    if (!model.searchText) return '';
+    return `
+        <div class="module-channels-search-results">
+            <div class="module-channels-section-header compact">
+                <div>
+                    <span class="module-channels-section-kicker">Search results</span>
+                    <h4>Matched turns</h4>
+                </div>
+                <span>${escapeHtml(String(model.hits.length))} hits</span>
+            </div>
+            <div class="module-channels-hit-list">
+            ${model.hits.length ? model.hits.slice(0, 8).map((hit) => `
+                <button
+                    type="button"
+                    class="module-channels-hit-card"
+                    data-channels-session-id="${escapeHtml(safeString(hit?.session_id))}">
+                    <div class="module-channels-session-top">
+                        <strong>${escapeHtml(safeString(hit?.display_name) || safeString(hit?.session_id) || 'Match')}</strong>
+                        <span>${escapeHtml(safeString(hit?.created_at) ? missionRelativeTime(safeString(hit.created_at)) : 'recent')}</span>
+                    </div>
+                    <div class="module-channels-session-tags">
+                        <span>${escapeHtml(safeString(hit?.scope_key) || safeString(hit?.session_id) || 'Discord')}</span>
+                        <span>${escapeHtml(safeString(hit?.request_kind) || 'message')}</span>
+                    </div>
+                    <p>${escapeHtml(safeString(hit?.excerpt) || 'No excerpt available.')}</p>
+                </button>
+            `).join('') : '<div class="module-empty">No Discord history matches this query yet.</div>'}
+            </div>
+        </div>
+    `;
+}
+
+function moduleChannelsSessionSummaryMarkup(model) {
+    if (!safeString(model.selectedMeta?.session_id) && !model.selectedTurns.length) {
+        return `
+            <div class="module-empty">
+                Choose a session on the left to inspect the indexed Discord transcript, metadata, and retrieval anchor Thomas will use for future context.
+            </div>
+        `;
+    }
+    const turnCount = Number(model.selectedMeta?.turn_count || model.selectedTurns.length || 0);
+    return `
+        <div class="module-channels-context-grid">
+            <article class="module-channels-context-card">
+                <span>Scope key</span>
+                <strong>${escapeHtml(safeString(model.selectedMeta?.scope_key) || 'not selected')}</strong>
+                <em>Thomas retrieval anchor</em>
+            </article>
+            <article class="module-channels-context-card">
+                <span>Guild / channel</span>
+                <strong>${escapeHtml(safeString(model.selectedMeta?.guild_id) || 'dm')}</strong>
+                <em>${escapeHtml(safeString(model.selectedMeta?.channel_id) || 'unknown channel')}</em>
+            </article>
+            <article class="module-channels-context-card">
+                <span>Request kinds</span>
+                <strong>${escapeHtml(model.requestKindsText)}</strong>
+                <em>${escapeHtml(`${turnCount} indexed turn${turnCount === 1 ? '' : 's'}`)}</em>
+            </article>
+            <article class="module-channels-context-card">
+                <span>Updated</span>
+                <strong>${escapeHtml(safeString(model.selectedMeta?.updated_at) ? missionRelativeTime(safeString(model.selectedMeta.updated_at)) : 'unknown')}</strong>
+                <em>${escapeHtml(safeString(model.selectedMeta?.session_id) || 'no session selected')}</em>
+            </article>
+        </div>
+    `;
+}
+
+function moduleChannelsTurnMarkup(model) {
+    if (!model.selectedTurns.length) return '<div class="module-empty">Select a Discord session to inspect recent context.</div>';
+    return model.selectedTurns.map((turn) => `
+        <article class="module-channels-transcript-turn">
+            <div class="module-channels-transcript-head">
+                <strong>${escapeHtml(safeString(turn?.display_name) || 'Discord user')}</strong>
+                <span>${escapeHtml(safeString(turn?.created_at) ? missionRelativeTime(safeString(turn.created_at)) : '')}</span>
+            </div>
+            <div class="module-channels-transcript-block" data-turn-role="user">
+                <span>User said</span>
+                <p>${escapeHtml(safeString(turn?.user_text) || '(no user text)')}</p>
+            </div>
+            <div class="module-channels-transcript-block" data-turn-role="assistant">
+                <span>Thomas replied</span>
+                <p>${escapeHtml(safeString(turn?.assistant_text) || '(no Thomas reply)')}</p>
+            </div>
+        </article>
+    `).join('');
+}
+
+function moduleChannelsHelpButton(label, description) {
+    const helpText = safeString(description);
+    if (!helpText) return '';
+    const aria = safeString(label) ? `${label}: ${helpText}` : helpText;
+    return `
+        <button
+            type="button"
+            class="module-channels-help"
+            title="${escapeHtml(helpText)}"
+            aria-label="${escapeHtml(aria)}">
+            <span aria-hidden="true">i</span>
+        </button>
+    `;
+}
+
+function moduleBuildChannelsConfigurePrompt(channel) {
+    const title = safeString(channel?.title) || 'channel';
+    return [
+        `Help me plan a first-class ${title} channel for Thomas.`,
+        'Focus on owner-scoped safety, searchable history, lifecycle controls, guided setup, and the minimum human steps required to finish the connection.',
+        'List the exact credentials, permissions, APIs, and UI controls Thomas should own on the Thomas side.',
+    ].join(' ');
+}
+
+function moduleChannelsProbeResultMarkup(state) {
+    const result = state?.voiceProbeResult && typeof state.voiceProbeResult === 'object' ? state.voiceProbeResult : null;
+    if (!result) {
+        return `
+            <article class="module-channels-section-card">
+                <div class="module-channels-section-header">
+                    <div>
+                        <span class="module-channels-section-kicker">Voice self-test</span>
+                        <h4>Last probe</h4>
+                    </div>
+                    <span>not run yet</span>
+                </div>
+                <p class="module-channels-section-copy">Run a Thomas-managed wake-word probe to join Discord voice, simulate a real "Hey Thomas" request, and verify the spoken reply with local transcription.</p>
+            </article>
+        `;
+    }
+    const matched = Boolean(result.reply_matches_transcript);
+    const wakeMode = safeString(result.mode) === 'wake';
+    const requestedText = wakeMode ? safeString(result.raw_transcript) : safeString(result.prompt);
+    const requestedLabel = wakeMode ? 'Wake phrase' : 'Requested line';
+    const replyLabel = wakeMode ? 'Thomas replied' : 'Spoken reply';
+    const durationMs = Number(result.duration_ms || 0);
+    return `
+        <article class="module-channels-section-card">
+            <div class="module-channels-section-header">
+                <div>
+                    <span class="module-channels-section-kicker">Voice self-test</span>
+                    <h4>Last probe</h4>
+                </div>
+                <span>${matched ? 'match confirmed' : 'review needed'}</span>
+            </div>
+            <div class="module-channels-meta-grid">
+                <div><span>Backend</span><strong>${escapeHtml(safeString(result.probe_backend) || 'unknown')}</strong></div>
+                <div><span>Synth</span><strong>${escapeHtml(safeString(result.synth_backend) || 'unknown')}</strong></div>
+                <div><span>STT</span><strong>${escapeHtml(safeString(result.stt_backend) || 'unknown')}</strong></div>
+                <div><span>Channel</span><strong>${escapeHtml(safeString(result.voice_channel_name) || 'unknown')}</strong></div>
+                <div><span>Probe time</span><strong>${escapeHtml(durationMs > 0 ? `${(durationMs / 1000).toFixed(1)}s` : 'n/a')}</strong></div>
+            </div>
+            <div class="module-channels-turn-list">
+                <article class="module-channels-turn-card">
+                    <div class="module-channels-turn-head"><strong>${escapeHtml(requestedLabel)}</strong><span>${escapeHtml(safeString(result.mode) || 'probe')}</span></div>
+                    <p>${escapeHtml(requestedText || '(no prompt recorded)')}</p>
+                </article>
+                <article class="module-channels-turn-card">
+                    <div class="module-channels-turn-head"><strong>${escapeHtml(replyLabel)}</strong><span>${matched ? 'matches' : 'differs'}</span></div>
+                    <p>${escapeHtml(safeString(result.reply_text) || '(no reply text)')}</p>
+                </article>
+                <article class="module-channels-turn-card">
+                    <div class="module-channels-turn-head"><strong>Heard back</strong><span>${matched ? 'matches' : 'differs'}</span></div>
+                    <p>${escapeHtml(safeString(result.transcribed_reply) || '(no transcription)')}</p>
+                </article>
+            </div>
+        </article>
+    `;
+}
+
+function moduleChannelsCatalogMarkup(model) {
+    return model.catalog.map((entry) => {
+        const isDiscord = entry.id === 'discord';
+        const isSelected = entry.id === model.selectedChannelId;
+        const tileStatus = isDiscord ? model.statusLabel : 'Coming soon';
+        const tileTone = isDiscord ? model.statusTone : 'catalog';
+        const tileMeta = isDiscord
+            ? `${model.enabled ? 'Channel on' : 'Channel off'} | ${model.configured ? 'Securely configured' : 'Setup required'}`
+            : 'Reorder this slot now. Bridge lifecycle lands here later.';
+        return `
+            <button
+                type="button"
+                class="module-channel-card${isSelected ? ' is-selected' : ''}"
+                data-channel-card-select="${escapeHtml(entry.id)}"
+                data-channel-card-id="${escapeHtml(entry.id)}"
+                draggable="true">
+                <div class="module-channel-card-head">
+                    <div class="module-channel-card-brand">
+                        <i class="ph ${escapeHtml(entry.icon)}"></i>
+                        <div>
+                            <span>${escapeHtml(entry.eyebrow || 'Channel')}</span>
+                            <strong>${escapeHtml(entry.title)}</strong>
+                        </div>
+                    </div>
+                    <span class="module-channel-card-status" data-channel-status="${escapeHtml(tileTone)}">${escapeHtml(tileStatus)}</span>
+                </div>
+                <p class="module-channel-card-summary">${escapeHtml(entry.summary)}</p>
+                <div class="module-channel-card-foot">
+                    <span>${escapeHtml(entry.capabilityLabel || '')}</span>
+                    <span>${escapeHtml(tileMeta)}</span>
+                </div>
+            </button>
+        `;
+    }).join('');
+}
+
+function moduleRenderPlaceholderChannelDetail(model) {
+    return `
+        <section class="module-channels-detail-shell">
+            <div class="module-channels-detail-toolbar">
+                <button type="button" class="module-channels-btn" data-channels-action="back_to_catalog">Back To All Channels</button>
+                <span class="module-channel-card-status" data-channel-status="catalog">Coming soon</span>
+            </div>
+            <div class="module-channels-detail-head">
+                <div>
+                    <span class="module-channels-section-kicker">Channel detail</span>
+                    <h3>${escapeHtml(model.selectedChannel.title)}</h3>
+                    <p>${escapeHtml(model.selectedChannel.summary)}</p>
+                </div>
+            </div>
+            <div class="module-channels-detail-grid">
+                <article class="module-channels-section-card">
+                    <div class="module-channels-section-header">
+                        <div>
+                            <span class="module-channels-section-kicker">Planned surface</span>
+                            <h4>Why this slot exists</h4>
+                        </div>
+                        ${moduleChannelsHelpButton('Planned surface', 'This channel is a placeholder slot. Thomas is not connected here yet, but the UI and ordering are ready so the channel can become first-class without redesigning the workspace.')}
+                    </div>
+                    <p class="module-channels-section-copy">This tile keeps ${escapeHtml(model.selectedChannel.title)} visible in the catalog now, so the future bridge can inherit the same Thomas-owned lifecycle, history, settings, and safety model as Discord.</p>
+                    <div class="module-channels-meta-grid">
+                        <div><span>Status</span><strong>Placeholder</strong></div>
+                        <div><span>Configure path</span><strong>Guided Thomas prompt</strong></div>
+                        <div><span>History model</span><strong>Searchable channel memory</strong></div>
+                        <div><span>Permissions</span><strong>Owner scoped by default</strong></div>
+                    </div>
+                </article>
+                <article class="module-channels-section-card">
+                    <div class="module-channels-section-header">
+                        <div>
+                            <span class="module-channels-section-kicker">Guided setup</span>
+                            <h4>Generate a Thomas setup prompt</h4>
+                        </div>
+                        ${moduleChannelsHelpButton('Guided setup', 'This sends a structured setup prompt into Thomas chat so Thomas can walk through the API, permissions, and product-side requirements for this channel.')}
+                    </div>
+                    <p class="module-channels-section-copy">Use the guided configure action to send a prebuilt planning prompt into Thomas chat for ${escapeHtml(model.selectedChannel.title)}.</p>
+                    <div class="module-channels-actions">
+                        <button type="button" class="module-channels-btn primary" data-channels-action="configure_channel" data-channels-channel-id="${escapeHtml(model.selectedChannel.id)}">Configure ${escapeHtml(model.selectedChannel.title)}</button>
+                    </div>
+                </article>
+            </div>
+        </section>
+    `;
+}
+
+function moduleRenderDiscordChannelDetail(model, state) {
+    const ttsBackend = safeString(model.config?.voice_tts_backend).toLowerCase() || 'piper';
+    const sttBackend = safeString(model.config?.voice_stt_backend).toLowerCase() || 'faster-whisper';
+    const sttDevice = safeString(model.config?.voice_stt_device).toLowerCase() || 'cpu';
+    const sttComputeType = safeString(model.config?.voice_stt_compute_type).toLowerCase() || 'int8';
+    const sttVadFilterEnabled = safeString(model.config?.voice_stt_vad_filter ?? true).toLowerCase() !== 'false';
+    const primaryControlLabel = model.running ? 'Stop Bridge' : 'Start Bridge';
+    const primaryControlAction = model.running ? 'stop' : 'start';
+    return `
+        <section class="module-channels-detail-shell">
+            <div class="module-channels-detail-toolbar">
+                <button type="button" class="module-channels-btn" data-channels-action="back_to_catalog">Back To All Channels</button>
+                <span class="module-channel-card-status" data-channel-status="${escapeHtml(model.statusTone)}">${escapeHtml(model.statusLabel)}</span>
+            </div>
+            <div class="module-channels-detail-head">
+                <div>
+                    <span class="module-channels-section-kicker">Channel detail</span>
+                    <h3>Discord bridge</h3>
+                    <p>Lifecycle, voice behavior, secure configuration, owner-scoped access rules, and indexed conversation lookup all live here on the Thomas side.</p>
+                </div>
+            </div>
+            <div class="module-channels-stat-grid">
+                <article class="module-channels-stat-card"><span>Bridge state</span><strong>${escapeHtml(model.statusLabel)}</strong><em>${escapeHtml(model.bridge?.pid ? `PID ${model.bridge.pid}` : 'not running')}</em></article>
+                <article class="module-channels-stat-card"><span>Channel</span><strong>${model.enabled ? 'On' : 'Off'}</strong><em>${model.configured ? 'owner-scoped controls active' : 'secure config still required'}</em></article>
+                <article class="module-channels-stat-card"><span>Conversation index</span><strong>${escapeHtml(String(model.indexedTurnCount))}</strong><em>${escapeHtml(String(model.conversations?.indexed_sessions || 0))} indexed sessions</em></article>
+                <article class="module-channels-stat-card"><span>Runtime access</span><strong>${escapeHtml(String(model.runtime?.access_grants_count || 0))}</strong><em>${model.runtime?.voice_require_wake_word ? 'wake word required' : 'wake word optional'}</em></article>
+            </div>
+            <div class="module-channels-detail-grid">
+                <article class="module-channels-section-card">
+                    <div class="module-channels-section-header"><div><span class="module-channels-section-kicker">Bridge controls</span><h4>Lifecycle + status</h4></div><span>${escapeHtml(model.bridge?.pid ? `PID ${model.bridge.pid}` : 'offline')}</span>${moduleChannelsHelpButton('Lifecycle + status', 'Start, stop, restart, or wake-probe the managed Discord bridge from Thomas without touching the bot repo manually.')}</div>
+                    <p class="module-channels-section-copy">Use the primary control to start or stop the bridge. Restart reapplies runtime settings, and the wake probe exercises the live Discord voice path.</p>
+                    <div class="module-channels-actions">
+                        <button type="button" class="module-channels-btn primary" data-channels-action="${primaryControlAction}">${primaryControlLabel}</button>
+                        <button type="button" class="module-channels-btn" data-channels-action="restart">Restart Bridge</button>
+                        <button type="button" class="module-channels-btn" data-channels-action="toggle_enabled">${model.enabled ? 'Turn Channel Off' : 'Turn Channel On'}</button>
+                        <button type="button" class="module-channels-btn" data-channels-action="voice_probe">${state?.voiceProbeRunning ? 'Running Wake Probe' : 'Run Wake Probe'}</button>
+                        <button type="button" class="module-channels-btn" data-channels-action="refresh">Refresh Status</button>
+                    </div>
+                    <div class="module-channels-meta-grid">
+                        <div><span>Last started</span><strong>${escapeHtml(safeString(model.bridge?.last_started_at) ? missionRelativeTime(safeString(model.bridge.last_started_at)) : 'never')}</strong></div>
+                        <div><span>Last stopped</span><strong>${escapeHtml(safeString(model.bridge?.last_stopped_at) ? missionRelativeTime(safeString(model.bridge.last_stopped_at)) : 'unknown')}</strong></div>
+                        <div><span>Secure config</span><strong>${model.configured ? 'ready' : 'missing values'}</strong></div>
+                        <div><span>Wake probe</span><strong>${state?.voiceProbeRunning ? 'running' : 'ready'}</strong></div>
+                    </div>
+                    ${safeString(model.bridge?.last_error) ? `<div class="module-empty">${escapeHtml(safeString(model.bridge.last_error).slice(0, 320))}</div>` : ''}
+                </article>
+                <form class="module-channels-section-card" data-channels-config-form>
+                    <div class="module-channels-section-header"><div><span class="module-channels-section-kicker">Connect + configure</span><h4>Secure local store</h4></div><span>${escapeHtml(model.secretStorageLabel)}</span>${moduleChannelsHelpButton('Secure local store', 'Discord secrets stay in Thomas local secure storage and are only injected into the managed bridge process when the bridge starts.')}</div>
+                    <p class="module-channels-section-copy">Discord secrets are stored in Thomas secure local storage and only injected into the managed bridge process when it launches.</p>
+                    <div class="module-channels-form-grid">
+                        <label class="module-channels-field"><span>Discord bot token</span><input type="password" class="form-control" data-channels-config-field="bot_token" placeholder="${escapeHtml(safeString(model.config?.bot_token_masked) || 'Enter new bot token')}" autocomplete="new-password" /></label>
+                        <label class="module-channels-field"><span>Thomas API token</span><input type="password" class="form-control" data-channels-config-field="thomas_api_token" placeholder="${escapeHtml(safeString(model.config?.thomas_api_token_masked) || 'Optional server token')}" autocomplete="new-password" /></label>
+                        <label class="module-channels-field"><span>Thomas base URL</span><input type="text" class="form-control" data-channels-config-field="thomas_base_url" value="${escapeHtml(safeString(model.config?.thomas_base_url) || 'http://127.0.0.1:8899')}" /></label>
+                        <label class="module-channels-field"><span>Session prefix</span><input type="text" class="form-control" data-channels-config-field="session_prefix" value="${escapeHtml(safeString(model.config?.session_prefix) || 'thomas-discord')}" /></label>
+                        <label class="module-channels-field"><span>Primary guild ID</span><input type="text" class="form-control" data-channels-config-field="guild_id" value="${escapeHtml(safeString(model.config?.guild_id) || '')}" /></label>
+                    </div>
+                    <div class="module-channels-actions compact"><button type="button" class="module-channels-btn primary" data-channels-action="save_config">Save Configuration</button></div>
+                </form>
+                <article class="module-channels-section-card">
+                    <div class="module-channels-section-header"><div><span class="module-channels-section-kicker">Access + safety</span><h4>Owner-scoped permissions</h4></div><span>${model.config?.owner_only_mode ? 'owner only' : 'delegated access enabled'}</span>${moduleChannelsHelpButton('Owner-scoped permissions', 'Random Discord users cannot change Thomas settings. Settings actions remain owner-only unless the owner explicitly grants narrower delegated capabilities.')}</div>
+                    <p class="module-channels-section-copy">Keep settings and machine-side actions owner scoped. Delegated access should stay narrow and channel-appropriate.</p>
+                    <div class="module-channels-form-grid">
+                        <label class="module-channels-field"><span>Owner user IDs</span><input type="text" class="form-control" data-channels-config-field="owner_user_ids" value="${escapeHtml((Array.isArray(model.config?.owner_user_ids) ? model.config.owner_user_ids.join(', ') : ''))}" /></label>
+                        <label class="module-channels-field"><span>Allowed guild IDs</span><input type="text" class="form-control" data-channels-config-field="allowed_guild_ids" value="${escapeHtml((Array.isArray(model.config?.allowed_guild_ids) ? model.config.allowed_guild_ids.join(', ') : ''))}" /></label>
+                        <label class="module-channels-field"><span>Auto channel IDs</span><input type="text" class="form-control" data-channels-config-field="auto_channel_ids" value="${escapeHtml((Array.isArray(model.config?.auto_channel_ids) ? model.config.auto_channel_ids.join(', ') : ''))}" /></label>
+                    </div>
+                    <div class="module-channels-checks">
+                        <label class="module-channels-check"><input type="checkbox" data-channels-config-field="owner_only_mode" ${model.config?.owner_only_mode ? 'checked' : ''} /><span>Owner-only mode</span></label>
+                        <label class="module-channels-check"><input type="checkbox" data-channels-config-field="require_mention" ${model.config?.require_mention !== false ? 'checked' : ''} /><span>Require mention</span></label>
+                    </div>
+                    <div class="module-channels-meta-grid">
+                        <div><span>Wake word</span><strong>${model.runtime?.voice_require_wake_word ? 'Required' : 'Optional'}</strong></div>
+                        <div><span>Voice profile</span><strong>${escapeHtml(safeString(model.runtime?.voice_profile) || 'unknown')}</strong></div>
+                        <div><span>Media volume</span><strong>${escapeHtml(String(model.runtime?.voice_media_volume || 0))}%</strong></div>
+                        <div><span>Delegated grants</span><strong>${escapeHtml(String(model.runtime?.access_grants_count || 0))}</strong></div>
+                    </div>
+                    <div class="module-channels-actions compact"><button type="button" class="module-channels-btn" data-channels-action="save_config">Save Access Rules</button></div>
+                </article>
+                <article class="module-channels-section-card">
+                    <div class="module-channels-section-header"><div><span class="module-channels-section-kicker">Voice + speech</span><h4>Discord-specific runtime</h4></div><span>${escapeHtml(safeString(model.runtime?.voice_profile) || safeString(model.config?.voice_tts_backend) || 'voice unset')}</span>${moduleChannelsHelpButton('Voice + speech', 'Voice profile, wake-word behavior, TTS backend, media volume, and speech-to-text options are Discord-specific. Saving here reapplies the bridge runtime so Discord uses the new settings.')}</div>
+                    <p class="module-channels-section-copy">Change the Discord voice profile, wake-word behavior, TTS backend, media volume, and speech-to-text settings here. Thomas will reapply the bridge if it is already running.</p>
+                    <div class="module-channels-form-grid">
+                        <label class="module-channels-field"><span>TTS backend</span><select class="form-control" data-channels-voice-config-field="voice_tts_backend"><option value="piper"${ttsBackend === 'piper' ? ' selected' : ''}>piper</option><option value="openai"${ttsBackend === 'openai' ? ' selected' : ''}>openai</option><option value="windows"${ttsBackend === 'windows' ? ' selected' : ''}>windows</option></select></label>
+                        <label class="module-channels-field"><span>TTS model</span><input type="text" class="form-control" data-channels-voice-config-field="voice_tts_model" value="${escapeHtml(safeString(model.config?.voice_tts_model) || '')}" placeholder="${escapeHtml(ttsBackend === 'openai' ? 'gpt-4o-mini-tts' : 'en_US-ryan-high')}" /></label>
+                        <label class="module-channels-field"><span>Cloud voice</span><input type="text" class="form-control" data-channels-voice-config-field="voice_cloud_voice" value="${escapeHtml(safeString(model.config?.voice_cloud_voice) || '')}" placeholder="alloy" /></label>
+                        <label class="module-channels-field"><span>Voice profile</span><input type="text" class="form-control" data-channels-runtime-field="voice_profile" value="${escapeHtml(safeString(model.runtime?.voice_profile) || '')}" placeholder="en_US-ryan-high" /></label>
+                        <label class="module-channels-field"><span>Preferred voice channel</span><input type="text" class="form-control" data-channels-voice-config-field="default_voice_channel_name" value="${escapeHtml(safeString(model.config?.default_voice_channel_name) || '')}" placeholder="Music" /></label>
+                        <label class="module-channels-field"><span>End-of-speech ms</span><input type="number" min="200" max="5000" class="form-control" data-channels-voice-config-field="voice_silence_ms" value="${escapeHtml(String(model.config?.voice_silence_ms ?? 700))}" /></label>
+                        <label class="module-channels-field"><span>Wake capture max ms</span><input type="number" min="500" max="30000" class="form-control" data-channels-voice-config-field="voice_wake_capture_ms" value="${escapeHtml(String(model.config?.voice_wake_capture_ms ?? 6500))}" /></label>
+                        <label class="module-channels-field"><span>Wake words</span><input type="text" class="form-control" data-channels-runtime-field="voice_wake_words" value="${escapeHtml((Array.isArray(model.runtime?.voice_wake_words) ? model.runtime.voice_wake_words.join(', ') : ''))}" placeholder="thomas, hey thomas" /></label>
+                        <label class="module-channels-field"><span>Media volume</span><input type="number" min="0" max="200" class="form-control" data-channels-runtime-field="voice_media_volume" value="${escapeHtml(String(model.runtime?.voice_media_volume ?? 100))}" /></label>
+                        <label class="module-channels-field"><span>STT backend</span><select class="form-control" data-channels-voice-config-field="voice_stt_backend"><option value="faster-whisper"${sttBackend === 'faster-whisper' ? ' selected' : ''}>faster-whisper</option><option value="openai"${sttBackend === 'openai' ? ' selected' : ''}>openai</option><option value="windows"${sttBackend === 'windows' ? ' selected' : ''}>windows</option></select></label>
+                        <label class="module-channels-field"><span>STT model</span><input type="text" class="form-control" data-channels-voice-config-field="voice_stt_model" value="${escapeHtml(safeString(model.config?.voice_stt_model) || '')}" placeholder="${escapeHtml(sttBackend === 'openai' ? 'gpt-4o-transcribe' : 'distil-large-v3')}" /></label>
+                        <label class="module-channels-field"><span>STT device</span><select class="form-control" data-channels-voice-config-field="voice_stt_device"><option value="cpu"${sttDevice === 'cpu' ? ' selected' : ''}>cpu</option><option value="cuda"${sttDevice === 'cuda' ? ' selected' : ''}>cuda</option></select></label>
+                        <label class="module-channels-field"><span>Compute type</span><select class="form-control" data-channels-voice-config-field="voice_stt_compute_type"><option value="int8"${sttComputeType === 'int8' ? ' selected' : ''}>int8</option><option value="float16"${sttComputeType === 'float16' ? ' selected' : ''}>float16</option><option value="float32"${sttComputeType === 'float32' ? ' selected' : ''}>float32</option></select></label>
+                        <label class="module-channels-field"><span>Beam size</span><input type="number" min="1" max="10" class="form-control" data-channels-voice-config-field="voice_stt_beam_size" value="${escapeHtml(String(model.config?.voice_stt_beam_size ?? 5))}" /></label>
+                        <label class="module-channels-field"><span>STT VAD filter</span><select class="form-control" data-channels-voice-config-field="voice_stt_vad_filter"><option value="true"${sttVadFilterEnabled ? ' selected' : ''}>on</option><option value="false"${!sttVadFilterEnabled ? ' selected' : ''}>off</option></select></label>
+                        <label class="module-channels-field"><span>VAD min silence ms</span><input type="number" min="100" max="5000" class="form-control" data-channels-voice-config-field="voice_stt_vad_min_silence_ms" value="${escapeHtml(String(model.config?.voice_stt_vad_min_silence_ms ?? 500))}" /></label>
+                        <label class="module-channels-field"><span>STT language</span><input type="text" class="form-control" data-channels-voice-config-field="voice_stt_language" value="${escapeHtml(safeString(model.config?.voice_stt_language) || '')}" placeholder="en" /></label>
+                        <label class="module-channels-field"><span>STT hint phrases</span><input type="text" class="form-control" data-channels-voice-config-field="voice_stt_hint_phrases" value="${escapeHtml((Array.isArray(model.config?.voice_stt_hint_phrases) ? model.config.voice_stt_hint_phrases.join(', ') : ''))}" placeholder="music, soundboard, hey thomas" /></label>
+                        <label class="module-channels-field module-channels-field-wide"><span>STT prompt</span><textarea class="form-control" rows="3" data-channels-voice-config-field="voice_stt_prompt" placeholder="Tell STT what names or Discord commands matter most.">${escapeHtml(safeString(model.config?.voice_stt_prompt) || '')}</textarea></label>
+                    </div>
+                    <div class="module-channels-checks">
+                        <label class="module-channels-check"><input type="checkbox" data-channels-runtime-field="voice_require_wake_word" ${model.runtime?.voice_require_wake_word ? 'checked' : ''} /><span>Require wake phrase before voice actions</span></label>
+                    </div>
+                    <div class="module-channels-actions compact"><button type="button" class="module-channels-btn primary" data-channels-action="save_voice_settings">Save Voice + Speech</button></div>
+                </article>
+            </div>
+            <article class="module-channels-section-card">
+                <div class="module-channels-section-header"><div><span class="module-channels-section-kicker">Conversation access</span><h4>Indexed Discord memory</h4></div><span>${state?.loading ? 'refreshing' : `updated ${escapeHtml(model.lastUpdatedLabel)}`}</span>${moduleChannelsHelpButton('Indexed Discord memory', 'Thomas indexes Discord turns here so it can search past conversations, select a session, and reuse the correct context later.')}</div>
+                <div class="module-channels-searchbar">
+                    <input type="search" class="form-control" data-channels-search value="${escapeHtml(model.searchText)}" placeholder="Search Discord history" />
+                    <button type="button" class="module-channels-btn" data-channels-action="search">Search</button>
+                    <button type="button" class="module-channels-btn" data-channels-action="clear_search">Clear</button>
+                </div>
+                ${moduleChannelsHitMarkup(model)}
+                <div class="module-channels-history-frame">
+                    <aside class="module-channels-session-rail">
+                        <div class="module-channels-session-rail-head">
+                            <strong>Sessions</strong>
+                            <span>${escapeHtml(String(model.sessions.length))}</span>
+                        </div>
+                        <div class="module-channels-session-list">${moduleChannelsSessionMarkup(model, state)}</div>
+                    </aside>
+                    <section class="module-channels-transcript-shell">
+                        <div class="module-channels-section-header compact">
+                            <div>
+                                <span class="module-channels-section-kicker">Selected session</span>
+                                <h4>${escapeHtml(safeString(model.selectedMeta?.display_name) || safeString(model.selectedMeta?.session_id) || 'No session selected')}</h4>
+                            </div>
+                            <span>${escapeHtml(safeString(model.selectedMeta?.session_id) || 'none')}</span>
+                        </div>
+                        ${moduleChannelsSessionSummaryMarkup(model)}
+                        <div class="module-channels-transcript-list">${moduleChannelsTurnMarkup(model)}</div>
+                    </section>
+                </div>
+            </article>
+            ${moduleChannelsProbeResultMarkup(state)}
+        </section>
+    `;
+}
+
+function moduleRenderChannelsSurfaceNext(container, state) {
+    const model = moduleBuildChannelsSurfaceModel(state);
+    state.selectedChannelId = model.selectedChannelId;
+    const detailOpen = Boolean(state?.detailOpen);
+    const detailMarkup = model.selectedChannel?.id === 'discord'
+        ? moduleRenderDiscordChannelDetail(model, state)
+        : moduleRenderPlaceholderChannelDetail(model);
+    container.innerHTML = detailOpen ? `
+        <section class="module-channels-shell">
+            ${detailMarkup}
+            ${safeString(state?.error) ? `<div class="module-empty">${escapeHtml(state.error)}</div>` : ''}
+        </section>
+    ` : `
+        <section class="module-channels-shell">
+            <section class="module-channels-catalog">
+                <div>
+                    <span class="module-channels-section-kicker">Channels workspace</span>
+                    <h3>All channels</h3>
+                    <p>Drag channels into the order you want, then open one to manage it.</p>
+                </div>
+                <div class="module-channels-section-header">
+                    <div>
+                        <span class="module-channels-section-kicker">Channel catalog</span>
+                        <h4>${escapeHtml(String(model.catalog.length))} channel slots ready</h4>
+                    </div>
+                    <span>${state?.loading ? 'refreshing' : `updated ${escapeHtml(model.lastUpdatedLabel)}`}</span>
+                </div>
+                <div class="module-channels-grid" data-channel-grid>
+                    ${moduleChannelsCatalogMarkup(model)}
+                </div>
+            </section>
+            ${safeString(state?.error) ? `<div class="module-empty">${escapeHtml(state.error)}</div>` : ''}
+        </section>
+    `;
+    return container.firstElementChild;
+}
+
 function moduleRenderSpecialSurface(mode, container) {
     const config = moduleGetSpecialSurfaceConfig(mode);
     if (!config) return null;
@@ -39969,7 +41177,7 @@ function moduleRender(modeRaw, { touch = true } = {}) {
     const layout = safeString(definition?.layout) || 'hub';
     const specialSurfaceOnly = moduleModeUsesSpecialSurface(mode);
     const specialSurfaceMode = specialSurfaceOnly ? moduleGetSpecialSurfaceMode(mode) : '';
-    const queueSurfaceOnly = specialSurfaceOnly || mode === 'marketplace';
+    const queueSurfaceOnly = specialSurfaceOnly || mode === 'marketplace' || mode === 'channels';
 
     if (moduleWorkspaceTitle) moduleWorkspaceTitle.textContent = definition.title;
     if (moduleWorkspaceSubtitle) moduleWorkspaceSubtitle.textContent = definition.subtitle;
@@ -40005,6 +41213,8 @@ function moduleRender(modeRaw, { touch = true } = {}) {
     if (moduleWorkspaceMeta) {
         if (mode === 'marketplace') {
             moduleWorkspaceMeta.textContent = 'Marketplace catalog';
+        } else if (mode === 'channels') {
+            moduleWorkspaceMeta.textContent = 'Discord bridge lifecycle, safety, and searchable conversation context';
         } else if (mode === 'my_stuff') {
             moduleWorkspaceMeta.textContent = 'Local launch shortcuts';
         } else {
@@ -40075,6 +41285,8 @@ function moduleRender(modeRaw, { touch = true } = {}) {
         if (queueSurfaceOnly) {
         if (mode === 'marketplace') {
             moduleRenderMarketplaceSurface(moduleQueueList);
+        } else if (mode === 'channels') {
+            moduleRenderChannelsSurface(moduleQueueList);
         } else {
             moduleRenderSpecialSurface(mode, moduleQueueList);
         }
@@ -40110,15 +41322,94 @@ function moduleRender(modeRaw, { touch = true } = {}) {
     state.lastRenderedMode = mode;
 }
 
+// ── Module Background System ─────────────────────────────────────
+// Marketplace modules can register a page-level background that
+// gets injected when they're active and removed when they leave.
+//
+// Usage from any module JS:
+//   window.__moduleBackgrounds = window.__moduleBackgrounds || {};
+//   window.__moduleBackgrounds['my_module'] = {
+//       mount: () => { /* inject bg onto document.body */ },
+//       unmount: () => { /* remove it */ },
+//   };
+//
+// The system calls mount() on enter and unmount() on leave
+// automatically. Only one module bg is active at a time.
+if (!window.__moduleBackgrounds) window.__moduleBackgrounds = {};
+let _activeModuleBg = null;
+
+function _mountModuleBg(mode) {
+    // Tear down any previous module background first
+    _unmountModuleBg();
+    const reg = window.__moduleBackgrounds[mode];
+    if (reg && typeof reg.mount === 'function') {
+        try { reg.mount(); _activeModuleBg = mode; } catch (e) { console.warn('[module-bg] mount error:', e); }
+    }
+}
+
+function _unmountModuleBg() {
+    if (_activeModuleBg) {
+        const reg = window.__moduleBackgrounds[_activeModuleBg];
+        if (reg && typeof reg.unmount === 'function') {
+            try { reg.unmount(); } catch (e) { console.warn('[module-bg] unmount error:', e); }
+        }
+        _activeModuleBg = null;
+    }
+}
+
 function moduleEnterMode(modeRaw) {
     const mode = MODULE_NAV_MODE_SET.has(modeRaw) ? modeRaw : 'dashboard';
     const state = moduleEnsureRuntime();
     if (!state) return;
     state.activeMode = mode;
+
+    // Activate module background if registered (any marketplace module can use this)
+    _mountModuleBg(mode);
+
+    // Token Economy uses a custom renderer via token_economy.js
+    if (mode === 'token_economy' && window.__tokenEconomy && moduleWorkspace) {
+        // hide all existing workspace children so they don't show beneath
+        for (const ch of moduleWorkspace.children) {
+            if (!ch.hasAttribute('data-te-container')) ch.style.display = 'none';
+        }
+        let teContainer = moduleWorkspace.querySelector('[data-te-container]');
+        if (!teContainer) {
+            teContainer = document.createElement('div');
+            teContainer.setAttribute('data-te-container', '');
+            teContainer.style.cssText = 'flex:1;min-height:0;overflow:hidden;display:flex;flex-direction:column;';
+            moduleWorkspace.appendChild(teContainer);
+        }
+        teContainer.style.display = '';
+        window.__tokenEconomy.mount(teContainer);
+        state.lastRenderedMode = mode;
+        return;
+    }
+
+    // hide token economy container and restore siblings if switching away
+    const teEl = moduleWorkspace?.querySelector('[data-te-container]');
+    if (teEl) {
+        teEl.style.display = 'none';
+        if (window.__tokenEconomy) window.__tokenEconomy.unmount();
+        // restore all workspace children that were hidden
+        for (const ch of moduleWorkspace.children) {
+            if (!ch.hasAttribute('data-te-container')) ch.style.display = '';
+        }
+    }
+
     moduleRender(mode);
 }
 
-function moduleLeaveMode() {}
+function moduleLeaveMode() {
+    // Tear down any active module background
+    _unmountModuleBg();
+
+    // clean up token economy if active
+    const teEl = document.querySelector('[data-te-container]');
+    if (teEl) {
+        teEl.classList.add('hidden');
+        if (window.__tokenEconomy) window.__tokenEconomy.unmount();
+    }
+}
 
 function moduleSyncSurfaceScrollState() {
     if (!moduleWorkspace) return;
@@ -40386,6 +41677,255 @@ function initModuleWorkspace() {
                 moduleRender('marketplace', { touch: false });
             }
             notifyUser('Plugin imported.', { tone: 'success', durationMs: 1500, debugKind: 'marketplace-import' });
+        });
+        moduleQueueList.addEventListener('input', (event) => {
+            const target = event.target instanceof Element ? event.target.closest('input[data-channels-search]') : null;
+            if (!(target instanceof HTMLInputElement)) return;
+            const channelsState = moduleChannelsState();
+            if (!channelsState) return;
+            channelsState.search = safeString(target.value);
+        });
+        moduleQueueList.addEventListener('click', (event) => {
+            const tile = event.target instanceof Element ? event.target.closest('[data-channel-card-select]') : null;
+            if (!tile) return;
+            const channelsState = moduleChannelsState();
+            if (!channelsState) return;
+            const nextId = safeString(tile.getAttribute('data-channel-card-select')).toLowerCase();
+            if (!nextId) return;
+            channelsState.selectedChannelId = nextId;
+            channelsState.detailOpen = true;
+            moduleRender('channels', { touch: false });
+        });
+        moduleQueueList.addEventListener('dragstart', (event) => {
+            const tile = event.target instanceof Element ? event.target.closest('[data-channel-card-id]') : null;
+            if (!(tile instanceof HTMLElement)) return;
+            moduleChannelsDraggedCardId = safeString(tile.getAttribute('data-channel-card-id')).toLowerCase();
+            tile.classList.add('is-dragging');
+            if (event.dataTransfer) {
+                event.dataTransfer.effectAllowed = 'move';
+                event.dataTransfer.setData('text/plain', moduleChannelsDraggedCardId);
+            }
+        });
+        moduleQueueList.addEventListener('dragend', () => {
+            moduleChannelsDraggedCardId = '';
+            moduleQueueList.querySelectorAll('.module-channel-card.is-dragging').forEach((node) => node.classList.remove('is-dragging'));
+            modulePersistChannelsCatalogOrderFromDom();
+        });
+        moduleQueueList.addEventListener('dragover', (event) => {
+            const draggedId = moduleChannelsDraggedCardId || (event.dataTransfer ? safeString(event.dataTransfer.getData('text/plain')).toLowerCase() : '');
+            if (!draggedId) return;
+            const grid = event.target instanceof Element ? event.target.closest('[data-channel-grid]') : null;
+            const target = event.target instanceof Element ? event.target.closest('[data-channel-card-id]') : null;
+            if (!(grid instanceof HTMLElement) || !(target instanceof HTMLElement)) return;
+            const dragged = Array.from(grid.querySelectorAll('[data-channel-card-id]')).find((node) => safeString(node.getAttribute('data-channel-card-id')).toLowerCase() === draggedId);
+            if (!(dragged instanceof HTMLElement) || dragged === target) return;
+            event.preventDefault();
+            const rect = target.getBoundingClientRect();
+            const after = event.clientX > rect.left + (rect.width / 2);
+            grid.insertBefore(dragged, after ? target.nextSibling : target);
+        });
+        moduleQueueList.addEventListener('drop', (event) => {
+            const grid = event.target instanceof Element ? event.target.closest('[data-channel-grid]') : null;
+            if (!(grid instanceof HTMLElement)) return;
+            event.preventDefault();
+            modulePersistChannelsCatalogOrderFromDom();
+            moduleChannelsDraggedCardId = '';
+            moduleRender('channels', { touch: false });
+        });
+        moduleQueueList.addEventListener('click', async (event) => {
+            const actionButton = event.target instanceof Element ? event.target.closest('[data-channels-action]') : null;
+            if (!actionButton) return;
+            const actionId = safeString(actionButton.dataset.channelsAction).toLowerCase();
+            const channelsState = moduleChannelsState();
+            if (!channelsState) return;
+            if (actionButton instanceof HTMLButtonElement) actionButton.disabled = true;
+            try {
+                if (actionId === 'refresh') {
+                    await moduleRefreshChannels({ force: true });
+                    notifyUser('Discord channel state refreshed.', { tone: 'success', durationMs: 1400, debugKind: 'channels-refresh' });
+                    return;
+                }
+                if (actionId === 'back_to_catalog') {
+                    channelsState.detailOpen = false;
+                    moduleRender('channels', { touch: false });
+                    return;
+                }
+                if (actionId === 'clear_search') {
+                    channelsState.search = '';
+                    const searchInput = moduleQueueList.querySelector('input[data-channels-search]');
+                    if (searchInput instanceof HTMLInputElement) searchInput.value = '';
+                    await moduleRefreshChannels({ force: true });
+                    return;
+                }
+                if (actionId === 'search') {
+                    await moduleRefreshChannels({ force: true });
+                    return;
+                }
+                if (actionId === 'configure_channel') {
+                    const channelId = safeString(actionButton.dataset.channelsChannelId).toLowerCase();
+                    const entry = MODULE_CHANNEL_CATALOG.find((item) => item.id === channelId) || MODULE_CHANNEL_CATALOG[0];
+                    const prompt = moduleBuildChannelsConfigurePrompt(entry);
+                    if (composerTextarea instanceof HTMLTextAreaElement && typeof handleSend === 'function') {
+                        setSidebarNavMode('chat');
+                        composerTextarea.value = prompt;
+                        composerTextarea.dispatchEvent(new Event('input'));
+                        composerTextarea.focus();
+                        await handleSend();
+                        notifyUser(`${safeString(entry?.title) || 'Channel'} setup prompt sent to Thomas.`, {
+                            tone: 'success',
+                            durationMs: 1800,
+                            debugKind: 'channels-configure',
+                        });
+                        return;
+                    }
+                    throw new Error('Chat composer is not available right now.');
+                }
+                if (actionId === 'toggle_enabled') {
+                    const nextEnabled = !(channelsState?.status?.bridge?.enabled);
+                    await moduleFetchJsonSafe('/api/channels/discord/enabled', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ enabled: nextEnabled }),
+                    });
+                    await moduleRefreshChannels({ force: true });
+                    notifyUser(`Discord channel turned ${nextEnabled ? 'on' : 'off'}.`, {
+                        tone: nextEnabled ? 'success' : 'warning',
+                        durationMs: 1500,
+                        debugKind: 'channels-enabled',
+                    });
+                    return;
+                }
+                if (actionId === 'start' || actionId === 'stop' || actionId === 'restart') {
+                    await moduleFetchJsonSafe(`/api/channels/discord/${actionId}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({}),
+                    });
+                    await moduleRefreshChannels({ force: true });
+                    notifyUser(`Discord bridge ${actionId} completed.`, {
+                        tone: actionId === 'stop' ? 'warning' : 'success',
+                        durationMs: 1500,
+                        debugKind: `channels-${actionId}`,
+                    });
+                    return;
+                }
+                if (actionId === 'voice_probe') {
+                    channelsState.voiceProbeRunning = true;
+                    moduleRender('channels', { touch: false });
+                    const payload = await moduleFetchJsonSafe('/api/channels/discord/voice-probe', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            wake: 'Hey Thomas, how are you?',
+                            speaker_name: 'Thomas Channels UI Probe',
+                            speaker_id: safeString(channelsState?.status?.config?.owner_user_ids?.[0]) || 'owner-probe',
+                        }),
+                    });
+                    channelsState.voiceProbeResult = payload?.probe ? { ...payload.probe, duration_ms: payload?.duration_ms } : null;
+                    channelsState.status = payload?.discord || channelsState.status;
+                    channelsState.detailOpen = true;
+                    notifyUser(
+                        payload?.probe?.reply_matches_transcript
+                            ? 'Discord wake probe matched the spoken transcript.'
+                            : 'Discord wake probe completed, but the transcript needs review.',
+                        {
+                            tone: payload?.probe?.reply_matches_transcript ? 'success' : 'warning',
+                            durationMs: 2200,
+                            debugKind: 'channels-voice-probe',
+                        },
+                    );
+                    return;
+                }
+                if (actionId === 'save_voice_settings') {
+                    const bridgeRunning = Boolean(channelsState?.status?.bridge?.running);
+                    const runtimePayload = {};
+                    moduleQueueList.querySelectorAll('[data-channels-runtime-field]').forEach((field) => {
+                        const key = safeString(field.getAttribute('data-channels-runtime-field'));
+                        if (!key) return;
+                        if (field instanceof HTMLInputElement && field.type === 'checkbox') {
+                            runtimePayload[key] = Boolean(field.checked);
+                            return;
+                        }
+                        const value = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement
+                            ? safeString(field.value)
+                            : '';
+                        runtimePayload[key] = value;
+                    });
+                    const voiceConfigPayload = {};
+                    moduleQueueList.querySelectorAll('[data-channels-voice-config-field]').forEach((field) => {
+                        const key = safeString(field.getAttribute('data-channels-voice-config-field'));
+                        if (!key) return;
+                        const value = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement
+                            ? safeString(field.value)
+                            : '';
+                        voiceConfigPayload[key] = value;
+                    });
+                    if (Object.keys(voiceConfigPayload).length) {
+                        await moduleFetchJsonSafe('/api/channels/discord/config', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify(voiceConfigPayload),
+                        });
+                    }
+                    await moduleFetchJsonSafe('/api/channels/discord/runtime', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(runtimePayload),
+                    });
+                    await moduleRefreshChannels({ force: true });
+                    notifyUser(
+                        bridgeRunning
+                            ? 'Discord voice and speech settings saved and reapplied.'
+                            : 'Discord voice and speech settings saved for the next bridge launch.',
+                        {
+                        tone: 'success',
+                        durationMs: 1700,
+                        debugKind: 'channels-voice-settings',
+                        },
+                    );
+                    return;
+                }
+                if (actionId === 'save_config') {
+                    const payload = {};
+                    moduleQueueList.querySelectorAll('[data-channels-config-field]').forEach((field) => {
+                        const key = safeString(field.getAttribute('data-channels-config-field'));
+                        if (!key) return;
+                        if (field instanceof HTMLInputElement && field.type === 'checkbox') {
+                            payload[key] = Boolean(field.checked);
+                            return;
+                        }
+                        const value = field instanceof HTMLInputElement || field instanceof HTMLTextAreaElement || field instanceof HTMLSelectElement
+                            ? safeString(field.value)
+                            : '';
+                        if (!value && (key === 'bot_token' || key === 'thomas_api_token')) return;
+                        payload[key] = value;
+                    });
+                    await moduleFetchJsonSafe('/api/channels/discord/config', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload),
+                    });
+                    await moduleRefreshChannels({ force: true });
+                    notifyUser('Discord bridge config saved.', { tone: 'success', durationMs: 1500, debugKind: 'channels-config' });
+                    return;
+                }
+            } catch (error) {
+                notifyUser(safeString(error?.message) || 'Discord channels action failed.', {
+                    tone: 'error',
+                    durationMs: 2200,
+                    debugKind: 'channels-action',
+                });
+            } finally {
+                channelsState.voiceProbeRunning = false;
+                if (actionButton instanceof HTMLButtonElement) actionButton.disabled = false;
+            }
+        });
+        moduleQueueList.addEventListener('click', async (event) => {
+            const sessionButton = event.target instanceof Element ? event.target.closest('[data-channels-session-id]') : null;
+            if (!sessionButton) return;
+            const sessionId = safeString(sessionButton.getAttribute('data-channels-session-id'));
+            if (!sessionId) return;
+            await moduleLoadChannelsSession(sessionId);
         });
     }
     if (moduleHealthList) moduleHealthList.addEventListener('click', itemActionHandler);
@@ -41135,6 +42675,7 @@ function initContentWorkspace() {
 
 function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const requestedMode = normalizeNavMode(mode);
+    const previousMode = sidebarNavMode;
     sidebarNavMode = isUiEditorPreviewShell() && requestedMode === 'app_builder' ? 'chat' : requestedMode;
     const isSearch = sidebarNavMode === 'search';
     const isChat = sidebarNavMode === 'chat' || isSearch;
@@ -41212,6 +42753,10 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     }
 
     if (isModule) {
+        if (sidebarNavMode === 'channels' && previousMode !== 'channels') {
+            const channelsState = moduleChannelsState();
+            if (channelsState) channelsState.detailOpen = false;
+        }
         moduleEnterMode(sidebarNavMode);
         if (sidebarNavMode === 'finance') void spendRefresh();
         if (sidebarNavMode === 'operations' || sidebarNavMode === 'dashboard') void goalsRefresh();
@@ -47846,7 +49391,7 @@ function applyProductShellCopy() {
     if (sidebarDivider) sidebarDivider.textContent = 'Build And Extend';
     const welcomeSubtitle = document.querySelector('#welcomeScreen .welcome-subtitle');
     if (welcomeSubtitle) welcomeSubtitle.textContent = 'Ready when you are. Start a chat, explore past conversations, or customize your workspace.';
-    const navLabels = { 'chat': 'Chat', 'search': 'Find', 'app_builder': 'Build', 'marketplace': 'Extend', 'office': 'Office', 'tasks': 'Tasks', 'repair': 'Repair' };
+    const navLabels = { 'chat': 'Chat', 'search': 'Find', 'app_builder': 'Build', 'channels': 'Channels', 'marketplace': 'Extend', 'office': 'Office', 'tasks': 'Tasks', 'repair': 'Repair' };
     document.querySelectorAll('.sidebar-nav [role="button"], .sidebar-nav button').forEach((item) => {
         const mode = safeString(item?.getAttribute('data-nav-mode')).toLowerCase();
         if (navLabels[mode]) {

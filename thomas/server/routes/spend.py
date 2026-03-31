@@ -11,6 +11,7 @@ from typing import Any, Callable, Dict
 from aiohttp import web
 
 from thomas.core.cost_tracker import get_cost_tracker
+from thomas.core.runtime_profile import all_profiles, resolve_runtime_profile
 
 RequireAccessFn = Callable[[web.Request], None]
 
@@ -143,6 +144,33 @@ def register_spend_routes(
 
         return resp
 
+    # ── GET /api/runtime/profile ──
+
+    async def api_runtime_profile(request: web.Request) -> web.Response:
+        """Return the current resolved runtime profile (autonomy × economy)."""
+        require_api_access(request)
+        # Read current settings from preferences
+        from thomas.core.persistence import get_preferences_store
+
+        prefs = get_preferences_store().snapshot()
+        adv = prefs.get("advanced", {}) if isinstance(prefs, dict) else {}
+        rt = adv.get("runtime", {}) if isinstance(adv, dict) else {}
+        economy = rt.get("default_token_economy", "optimal") if isinstance(rt, dict) else "optimal"
+        autonomy = rt.get("autonomy_level", 3) if isinstance(rt, dict) else 3
+
+        profile = resolve_runtime_profile(
+            autonomy_level=autonomy,
+            economy_level=economy,
+        )
+        return web.json_response(profile.to_dict())
+
+    # ── GET /api/runtime/matrix ──
+
+    async def api_runtime_matrix(request: web.Request) -> web.Response:
+        """Return the full 4×3 autonomy × economy matrix for the UI."""
+        require_api_access(request)
+        return web.json_response({"profiles": all_profiles()})
+
     # ── register ──
 
     app.router.add_get("/api/spend/today", api_spend_today)
@@ -152,3 +180,5 @@ def register_spend_routes(
     app.router.add_get("/api/spend/pricing", api_spend_pricing)
     app.router.add_get("/api/spend/export.csv", api_spend_export_csv)
     app.router.add_get("/api/spend/stream", api_spend_stream)
+    app.router.add_get("/api/runtime/profile", api_runtime_profile)
+    app.router.add_get("/api/runtime/matrix", api_runtime_matrix)

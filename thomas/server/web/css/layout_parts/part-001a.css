@@ -34,11 +34,12 @@ body {
     min-width: var(--sidebar-min-width);
     max-width: min(var(--sidebar-max-width), calc(100vw - var(--sidebar-safe-gutter)));
     position: relative;
-    background: linear-gradient(180deg, rgba(17, 20, 26, 0.92), rgba(22, 27, 36, 0.9));
-    backdrop-filter: blur(8px);
+    background: rgba(8, 9, 12, 0.82);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
     display: flex;
     flex-direction: column;
-    border-right: 1px solid var(--border-light);
+    border-right: 1px solid rgba(255, 255, 255, 0.06);
     overflow: hidden;
     transition: width 0.2s cubic-bezier(0.2, 0.9, 0.2, 1), border-color 0.2s ease;
     will-change: width;
@@ -55,12 +56,13 @@ body {
 }
 
 .sidebar-header {
-    padding: 14px 14px 10px;
+    padding: 12px 14px 8px;
     display: flex;
     justify-content: space-between;
     align-items: center;
     gap: 10px;
     min-width: 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
 }
 
 .sidebar-header-actions {
@@ -86,21 +88,22 @@ body {
 }
 
 .sidebar-search-input-wrap {
-    border: 1px solid var(--border-light);
-    border-radius: 16px;
-    background: linear-gradient(180deg, rgba(17, 22, 30, 0.94), rgba(13, 17, 24, 0.9));
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 0;
+    background: rgba(0, 0, 0, 0.25);
     display: flex;
     align-items: center;
     gap: 6px;
     padding: 0 11px;
-    min-height: 38px;
+    min-height: 34px;
     width: 100%;
     box-sizing: border-box;
+    transition: border-color 0.15s;
 }
 
 .sidebar-search-input-wrap:focus-within {
-    border-color: rgba(88, 166, 255, 0.65);
-    background: linear-gradient(180deg, rgba(19, 25, 34, 0.98), rgba(14, 18, 25, 0.94));
+    border-color: rgba(88, 166, 255, 0.4);
+    background: rgba(0, 0, 0, 0.35);
 }
 
 .sidebar-search-input-wrap .search-icon {
@@ -124,9 +127,10 @@ body {
     appearance: none;
     -webkit-appearance: none;
     color: var(--text-primary);
-    font-size: 13px;
+    font-size: 12px;
     line-height: 1.35;
-    font-family: inherit;
+    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
+    letter-spacing: 0.02em;
 }
 
 .sidebar-search-input-wrap input::placeholder {
@@ -139,19 +143,35 @@ body {
     text-transform: none;
     letter-spacing: 0.02em;
     padding-left: 12px;
+    opacity: 0;
+    height: 0;
+    overflow: hidden;
+    margin: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    transition: opacity 0.2s;
+}
+
+/* Only show mode label when it has real content (not matching placeholder) */
+.sidebar-search-mode.has-filter {
     opacity: 0.74;
+    height: auto;
 }
 
 .brand-text {
     font-size: 16px;
-    font-weight: 600;
-    color: var(--text-primary);
+    font-weight: 800;
+    color: #9ad8ff;
     margin: 0;
     flex: 1 1 auto;
     min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
+    text-shadow: 0 0 12px rgba(154, 216, 255, 0.4), 0 0 4px rgba(88, 166, 255, 0.2);
 }
 
 .sidebar-nav {
@@ -169,11 +189,14 @@ body {
 .sidebar-nav-divider {
     margin: 6px 2px 2px;
     padding-top: 8px;
-    border-top: 1px solid rgba(162, 191, 233, 0.24);
-    font-size: 10px;
-    letter-spacing: 0.08em;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
     text-transform: uppercase;
     color: var(--text-muted);
+    opacity: 0.5;
+    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
 }
 
 .sidebar-chat-shell {
@@ -207,28 +230,28 @@ body {
 }
 
 .sidebar-chat-row {
-    border: 1px solid var(--border-light);
-    border-radius: var(--radius-sm);
-    background: rgba(255, 255, 255, 0.02);
-    color: var(--text-secondary);
+    border: 1px solid rgba(255, 255, 255, 0.04);
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-muted);
     cursor: pointer;
     text-align: left;
-    padding: 8px 10px;
+    padding: 7px 10px;
     display: flex;
     flex-direction: column;
     gap: 2px;
-    transition: border-color 0.15s ease, background 0.15s ease, color 0.15s ease;
+    transition: border-color 0.15s ease, color 0.15s ease;
+    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
 }
 
 .sidebar-chat-row:hover {
-    border-color: rgba(88, 166, 255, 0.42);
-    background: rgba(88, 166, 255, 0.12);
-    color: var(--text-primary);
+    border-color: rgba(88, 166, 255, 0.2);
+    color: var(--text-secondary);
 }
 
 .sidebar-chat-row.active {
-    border-color: rgba(88, 166, 255, 0.7);
-    background: rgba(88, 166, 255, 0.18);
+    border-color: rgba(88, 166, 255, 0.35);
+    background: rgba(88, 166, 255, 0.06);
     color: var(--text-primary);
 }
 
@@ -264,14 +287,16 @@ body {
     position: relative;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 12px;
-    border-radius: var(--radius-sm);
+    gap: 10px;
+    padding: 9px 12px;
+    border-radius: 0;
     color: var(--text-secondary);
     text-decoration: none;
-    font-size: 14px;
-    font-weight: 500;
-    transition: background 0.14s ease, border-color 0.14s ease, color 0.14s ease;
+    font-size: 13px;
+    font-weight: 600;
+    font-family: var(--font-mono, 'SF Mono', 'Consolas', 'Fira Code', monospace);
+    letter-spacing: 0.02em;
+    transition: color 0.14s ease, border-color 0.14s ease;
     cursor: pointer;
     border: 1px solid transparent;
     background: transparent;
@@ -287,15 +312,15 @@ body {
 }
 
 .nav-item:hover {
-    background: rgba(255, 255, 255, 0.04);
-    border-color: rgba(255, 255, 255, 0.08);
-    color: var(--text-primary);
+    background: transparent;
+    border-color: rgba(88, 166, 255, 0.15);
+    color: var(--text-secondary);
 }
 
 .nav-item.active {
     background: transparent;
-    border-color: transparent;
-    color: var(--text-primary);
+    border-color: rgba(88, 166, 255, 0.25);
+    color: #9ad8ff;
 }
 
 .nav-item.active::before {
@@ -318,9 +343,9 @@ body {
 
 .sidebar-footer {
     padding: 10px 12px 12px;
-    border-top: 1px solid var(--border-light);
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
     margin-top: auto;
-    background: linear-gradient(180deg, rgba(17, 20, 26, 0.64), rgba(17, 20, 26, 0.9));
+    background: rgba(0, 0, 0, 0.15);
     position: relative;
     z-index: 2;
 }
@@ -482,36 +507,39 @@ body {
 }
 
 .debug-toggle-btn {
-    border: 1px solid var(--border-light);
-    background: rgba(25, 30, 39, 0.74);
-    color: var(--text-secondary);
-    border-radius: var(--radius-md);
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    min-height: 24px;
+    border: 1px solid transparent;
+    background: transparent;
+    color: var(--text-muted);
+    border-radius: 0;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
     padding: 0;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: border-color 0.2s, background 0.2s, color 0.2s;
+    transition: color 0.16s ease, border-color 0.16s ease;
+    opacity: 0.45;
 }
 
 .debug-toggle-btn:hover {
-    border-color: rgba(88, 166, 255, 0.5);
-    background: rgba(88, 166, 255, 0.12);
-    color: var(--text-primary);
+    border-color: rgba(88, 166, 255, 0.25);
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: 1;
 }
 
 .debug-toggle-btn.active {
-    border-color: rgba(88, 166, 255, 0.72);
-    background: rgba(88, 166, 255, 0.16);
-    color: var(--text-primary);
+    border-color: rgba(88, 166, 255, 0.35);
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: 0.85;
 }
 
 .debug-toggle-btn i {
-    font-size: 15px;
+    font-size: 12px;
     line-height: 1;
 }
 
@@ -557,15 +585,20 @@ body {
 }
 
 .sidebar:not(.collapsed) ~ .main-content .sidebar-toggle {
-    opacity: 1;
+    opacity: 0.35;
     visibility: visible;
     pointer-events: auto;
 }
 
 .sidebar.collapsed ~ .main-content .sidebar-toggle {
-    opacity: 1;
+    opacity: 0.45;
     visibility: visible;
     pointer-events: auto;
+}
+
+.sidebar:not(.collapsed) ~ .main-content .sidebar-toggle:hover,
+.sidebar.collapsed ~ .main-content .sidebar-toggle:hover {
+    opacity: 0.9;
 }
 
 .model-dropdown {
