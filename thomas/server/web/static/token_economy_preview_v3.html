@@ -333,19 +333,6 @@ body.te-screensaver-exit .te-v3 {
 }
 
 /* HUD scan lines — very subtle overlay */
-.te-scanlines {
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: repeating-linear-gradient(
-        0deg,
-        transparent 0px,
-        transparent 3px,
-        rgba(255,255,255,0.008) 3px,
-        rgba(255,255,255,0.008) 4px
-    );
-}
-
 /* ── Panel transparency: space shows through ───────────────── */
 .te-topbar {
     background: rgba(8, 9, 12, 0.65);
@@ -1358,6 +1345,369 @@ window.EventSource = function(){this.close=function(){};this.addEventListener=fu
     let _galaxies = [];
 
     // ── Procedural nebula canvas — organic noise-based gas clouds ──
+    function initStarfield(canvas) {
+        _starfieldCanvas = canvas;
+        const w = canvas.width;
+        const h = canvas.height;
+
+        // 3 parallax layers spread evenly across the viewport
+        // Far: 400 tiny stars, very dim, very slow drift
+        // Mid: 150 medium stars, moderate, slow drift
+        // Near: 50 bright stars, bright, slow drift
+        const layerConfigs = [
+            { count: 400, drift: 0.003, baseSize: 0.5, baseAlpha: 0.25, twinkleMin: 0.05, twinkleMax: 0.2 },
+            { count: 150, drift: 0.008, baseSize: 1.0, baseAlpha: 0.45, twinkleMin: 0.08, twinkleMax: 0.25 },
+            { count: 50,  drift: 0.015, baseSize: 2.0, baseAlpha: 0.7,  twinkleMin: 0.1,  twinkleMax: 0.3 },
+        ];
+
+        _stars = [];
+        layerConfigs.forEach((cfg, layerIdx) => {
+            for (let i = 0; i < cfg.count; i++) {
+                // Spread stars evenly across entire viewport, not clustered at center
+                const x = Math.random() * w;
+                const y = Math.random() * h;
+                _stars.push({
+                    x,
+                    y,
+                    size: cfg.baseSize * (0.7 + Math.random() * 0.6),
+                    baseAlpha: cfg.baseAlpha * (0.6 + Math.random() * 0.4),
+                    twinkleSpeed: cfg.twinkleMin + Math.random() * (cfg.twinkleMax - cfg.twinkleMin),
+                    twinklePhase: Math.random() * Math.PI * 2,
+                    drift: cfg.drift,
+                    layer: layerIdx,
+                });
+            }
+        });
+
+        animateStarfield();
+    }
+
+    function animateStarfield() {
+        if (!_starfieldCanvas) return;
+        const ctx = _starfieldCanvas.getContext('2d');
+        const w = _starfieldCanvas.width;
+        const h = _starfieldCanvas.height;
+        let time = 0;
+
+        function frame() {
+            time += 0.016; // ~60fps
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.clearRect(0, 0, w, h);
+
+            _stars.forEach((star) => {
+                // Gentle lateral drift: all stars drift slowly left and slightly up (like moving forward + right)
+                star.x -= star.drift;
+                star.y -= star.drift * 0.4;
+
+                // Recycle: when a star drifts off left edge, respawn on right edge at random Y
+                if (star.x < -10) {
+                    star.x = w + 10;
+                    star.y = Math.random() * h;
+                }
+                // When drifts off top, respawn at bottom
+                if (star.y < -10) {
+                    star.y = h + 10;
+                    star.x = Math.random() * w;
+                }
+
+                // Twinkle: MUCH slower and gentler. Only varies 30% in brightness
+                const twinkle = 0.7 + 0.3 * Math.sin(time * star.twinkleSpeed + star.twinklePhase);
+                const alpha = star.baseAlpha * twinkle;
+
+                // Draw star
+                ctx.globalAlpha = alpha;
+                ctx.fillStyle = '#ffffff';
+                ctx.beginPath();
+                ctx.arc(star.x, star.y, star.size * 0.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                // Glow for bigger stars
+                if (star.size > 1.5) {
+                    ctx.globalAlpha = alpha * 0.3;
+                    ctx.beginPath();
+                    ctx.arc(star.x, star.y, star.size * 1.2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+
+                // 4-point diffraction spike for big stars
+                if (star.size > 2) {
+                    ctx.globalAlpha = alpha * 0.15;
+                    ctx.strokeStyle = '#ffffff';
+                    ctx.lineWidth = 0.5;
+                    const spikeLong = star.size * 1.5;
+                    const spikeShort = star.size * 0.5;
+                    ctx.beginPath();
+                    ctx.moveTo(star.x - spikeLong, star.y); ctx.lineTo(star.x + spikeLong, star.y);
+                    ctx.moveTo(star.x, star.y - spikeShort); ctx.lineTo(star.x, star.y + spikeShort);
+                    ctx.stroke();
+                }
+            });
+
+            ctx.globalAlpha = 1;
+            _starfieldRAF = requestAnimationFrame(frame);
+        }
+
+        frame();
+    }
+
+    // ── Galaxy renderer ────────────────────────────────────────
+    let _galaxyRAF = null;
+    let _galaxyCanvas = null;
+    let _galaxies = [];
+
+    function renderGalaxies(canvas) {
+        _galaxyCanvas = canvas;
+        const w = canvas.width;
+        const h = canvas.height;
+
+        _galaxies = [];
+        const galaxyCount = 5 + Math.floor(Math.random() * 4);
+        const galaxyTypes = ['spiral', 'elliptical', 'barred'];
+
+        for (let i = 0; i < galaxyCount; i++) {
+            const type = galaxyTypes[Math.floor(Math.random() * galaxyTypes.length)];
+            const size = 40 + Math.random() * 50; // Bigger galaxies (40-90px)
+            const x = Math.random() * w;
+            const y = Math.random() * h;
+            const rotation = Math.random() * Math.PI * 2;
+            const armTightness = 0.5 + Math.random() * 1.5; // Vary spiral tightness
+
+            _galaxies.push({
+                type, size, x, y, rotation, armTightness,
+                pulsePhase: Math.random() * Math.PI * 2,
+                pulseSpeed: 0.1 + Math.random() * 0.3, // Much slower pulse
+            });
+        }
+
+        animateGalaxies();
+    }
+
+    function animateGalaxies() {
+        if (!_galaxyCanvas) return;
+        const ctx = _galaxyCanvas.getContext('2d');
+        const w = _galaxyCanvas.width;
+        const h = _galaxyCanvas.height;
+        let time = 0;
+
+        function frame() {
+            time += 0.016;
+            ctx.fillStyle = 'rgba(0,0,0,0)';
+            ctx.clearRect(0, 0, w, h);
+
+            _galaxies.forEach(gal => {
+                const pulseAlpha = 0.3 + 0.2 * Math.sin(time * gal.pulseSpeed + gal.pulsePhase);
+                ctx.save();
+                ctx.translate(gal.x, gal.y);
+                ctx.rotate(gal.rotation);
+
+                if (gal.type === 'spiral') {
+                    drawSpiralGalaxy(ctx, gal.size, pulseAlpha, gal.armTightness);
+                } else if (gal.type === 'elliptical') {
+                    drawEllipticalGalaxy(ctx, gal.size, pulseAlpha);
+                } else if (gal.type === 'barred') {
+                    drawBarredSpiralGalaxy(ctx, gal.size, pulseAlpha, gal.armTightness);
+                }
+
+                ctx.restore();
+            });
+
+            _galaxyRAF = requestAnimationFrame(frame);
+        }
+
+        frame();
+    }
+
+    function drawSpiralGalaxy(ctx, size, alpha, armTightness) {
+        // Background halo: very faint, large
+        ctx.globalAlpha = alpha * 0.08;
+        ctx.fillStyle = 'rgba(200, 180, 255, 1)';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Core: warm yellowish-white with soft radial gradient
+        const coreGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.15);
+        coreGradient.addColorStop(0, 'rgba(255, 235, 180, ' + (alpha * 0.9) + ')');
+        coreGradient.addColorStop(0.5, 'rgba(240, 210, 150, ' + (alpha * 0.5) + ')');
+        coreGradient.addColorStop(1, 'rgba(200, 180, 255, ' + (alpha * 0.1) + ')');
+        ctx.fillStyle = coreGradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.15, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Spiral arms: 2 arms with 200+ points each, high scatter, small stars
+        const armCount = 2;
+        const pointsPerArm = 250;
+        for (let arm = 0; arm < armCount; arm++) {
+            for (let p = 0; p < pointsPerArm; p++) {
+                const t = p / pointsPerArm; // 0 to 1 along the arm
+                const baseAngle = (arm * Math.PI) + (t * Math.PI * 2.5 * armTightness); // Logarithmic spiral
+                const baseR = t * size * 0.4;
+
+                // Gaussian scatter perpendicular to arm
+                const scatterStdDev = size * 0.04;
+                const perpAngle = baseAngle + Math.PI / 2;
+                const scatterDist = (Math.random() + Math.random() - 1) * scatterStdDev; // Box-Muller simplified
+                const scatterX = Math.cos(perpAngle) * scatterDist;
+                const scatterY = Math.sin(perpAngle) * scatterDist;
+
+                const x = Math.cos(baseAngle) * baseR + scatterX;
+                const y = Math.sin(baseAngle) * baseR + scatterY;
+
+                // Color gradient: warm white near core, cool blue at edges
+                const colorT = t;
+                const r = 255 - (colorT * 50);
+                const g = 235 - (colorT * 60);
+                const b = 180 + (colorT * 40);
+
+                // Alpha decreases with distance from core
+                const pointAlpha = alpha * (1 - t * 0.7) * 0.6;
+                ctx.globalAlpha = pointAlpha;
+                ctx.fillStyle = 'rgba(' + Math.floor(r) + ',' + Math.floor(g) + ',' + Math.floor(b) + ', 1)';
+                ctx.beginPath();
+                ctx.arc(x, y, 0.3 + Math.random() * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // HII regions: bright spots along arms
+        for (let arm = 0; arm < armCount; arm++) {
+            const hiiCount = 2 + Math.floor(Math.random() * 2);
+            for (let i = 0; i < hiiCount; i++) {
+                const t = 0.3 + Math.random() * 0.6;
+                const baseAngle = (arm * Math.PI) + (t * Math.PI * 2.5 * armTightness);
+                const baseR = t * size * 0.4;
+                const x = Math.cos(baseAngle) * baseR;
+                const y = Math.sin(baseAngle) * baseR;
+
+                ctx.globalAlpha = alpha * (0.4 + Math.random() * 0.3);
+                ctx.fillStyle = 'rgba(255, 150, 100, 1)';
+                ctx.beginPath();
+                ctx.arc(x, y, 1 + Math.random() * 1.5, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        // Dust lanes: dark semi-transparent dots between arms
+        const dustCount = 80;
+        for (let i = 0; i < dustCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = Math.random() * size * 0.35;
+            const x = Math.cos(angle) * r;
+            const y = Math.sin(angle) * r;
+
+            ctx.globalAlpha = alpha * 0.15;
+            ctx.fillStyle = 'rgba(0, 0, 0, 1)';
+            ctx.beginPath();
+            ctx.arc(x, y, 0.5 + Math.random() * 1.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+    }
+
+    function drawEllipticalGalaxy(ctx, size, alpha) {
+        // Dense gaussian blob of 200+ points
+        // Color gradient: golden-yellow core to pale white edges
+        const pointCount = 200;
+        const aspectRatio = 0.6 + Math.random() * 0.3; // 0.6 to 0.9
+
+        for (let i = 0; i < pointCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const r = Math.sqrt(Math.random()) * size * 0.3;
+            const x = Math.cos(angle) * r;
+            const y = Math.sin(angle) * r * aspectRatio;
+
+            // Smooth radial falloff
+            const dist = Math.sqrt(x * x + y * y) / (size * 0.3);
+            const pointAlpha = alpha * Math.max(0, 1 - dist * dist);
+
+            // Color: golden-yellow to pale white
+            const colorT = dist;
+            const r_val = 255 - (colorT * 30);
+            const g_val = 220 - (colorT * 50);
+            const b_val = 180 + (colorT * 20);
+
+            ctx.globalAlpha = pointAlpha * 0.7;
+            ctx.fillStyle = 'rgba(' + Math.floor(r_val) + ',' + Math.floor(g_val) + ',' + Math.floor(b_val) + ', 1)';
+            ctx.beginPath();
+            ctx.arc(x, y, 0.4 + Math.random() * 0.5, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Core: bright yellowish region
+        const coreGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.12);
+        coreGradient.addColorStop(0, 'rgba(255, 230, 150, ' + (alpha * 0.8) + ')');
+        coreGradient.addColorStop(1, 'rgba(230, 190, 100, ' + (alpha * 0.2) + ')');
+        ctx.fillStyle = coreGradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.12, 0, Math.PI * 2);
+        ctx.fill();
+    }
+
+    function drawBarredSpiralGalaxy(ctx, size, alpha, armTightness) {
+        // Background halo
+        ctx.globalAlpha = alpha * 0.08;
+        ctx.fillStyle = 'rgba(200, 180, 255, 1)';
+        ctx.beginPath();
+        ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Central bright bar: elongated cluster of warm-white points
+        const barLength = size * 0.35;
+        const barWidth = size * 0.08;
+        const barPointCount = 120;
+
+        for (let i = 0; i < barPointCount; i++) {
+            const t = (i / barPointCount) * 2 - 1; // -1 to 1
+            const x = t * barLength * 0.5;
+            const perturbY = (Math.random() - 0.5) * barWidth;
+            const y = perturbY;
+
+            const barAlpha = alpha * (0.7 - Math.abs(t) * 0.2) * 0.8;
+            ctx.globalAlpha = barAlpha;
+            ctx.fillStyle = 'rgba(255, 240, 180, 1)';
+            ctx.beginPath();
+            ctx.arc(x, y, 0.4 + Math.random() * 0.6, 0, Math.PI * 2);
+            ctx.fill();
+        }
+
+        // Spiral arms from bar ends
+        const armCount = 2;
+        const pointsPerArm = 200;
+
+        for (let arm = 0; arm < armCount; arm++) {
+            const startAngle = (arm * Math.PI); // Arms start from bar ends
+            for (let p = 0; p < pointsPerArm; p++) {
+                const t = p / pointsPerArm;
+                const baseAngle = startAngle + (t * Math.PI * 2 * armTightness);
+                const baseR = (barLength * 0.5) + (t * size * 0.3);
+
+                // Scatter perpendicular to arm
+                const scatterStdDev = size * 0.04;
+                const perpAngle = baseAngle + Math.PI / 2;
+                const scatterDist = (Math.random() + Math.random() - 1) * scatterStdDev;
+                const scatterX = Math.cos(perpAngle) * scatterDist;
+                const scatterY = Math.sin(perpAngle) * scatterDist;
+
+                const x = Math.cos(baseAngle) * baseR + scatterX;
+                const y = Math.sin(baseAngle) * baseR + scatterY;
+
+                // Color gradient
+                const colorT = t;
+                const r = 255 - (colorT * 40);
+                const g = 240 - (colorT * 50);
+                const b = 180 + (colorT * 30);
+
+                const pointAlpha = alpha * (1 - t * 0.6) * 0.6;
+                ctx.globalAlpha = pointAlpha;
+                ctx.fillStyle = 'rgba(' + Math.floor(r) + ',' + Math.floor(g) + ',' + Math.floor(b) + ', 1)';
+                ctx.beginPath();
+                ctx.arc(x, y, 0.3 + Math.random() * 0.4, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+    }
+
+    // ── Procedural nebula canvas — organic noise-based gas clouds ──
     function paintNebulaCanvas(canvas) {
         const ctx = canvas.getContext('2d');
         const w = canvas.width;
@@ -1404,15 +1754,16 @@ window.EventSource = function(){this.close=function(){};this.addEventListener=fu
         const d = imgData.data;
         const scaleX = 5 / w, scaleY = 5 / h;
 
+        // Single pass: render with HIGHER octaves (6 instead of 5) for smoother noise
         for (let py = 0; py < h; py++) {
             for (let px = 0; px < w; px++) {
                 const idx = (py * w + px) * 4;
                 const nx = px * scaleX, ny = py * scaleY;
 
-                // Multiple noise layers for different color channels
-                const n1 = fbm(nx, ny, 0, 5);
-                const n2 = fbm(nx + 10, ny + 10, 50, 5);
-                const n3 = fbm(nx + 20, ny - 5, 100, 4);
+                // Multiple noise layers for different color channels (higher octaves = smoother)
+                const n1 = fbm(nx, ny, 0, 6);
+                const n2 = fbm(nx + 10, ny + 10, 50, 6);
+                const n3 = fbm(nx + 20, ny - 5, 100, 5);
 
                 // Pick colors based on noise values
                 const ci1 = Math.floor(n1 * (palette.length - 1));
@@ -1421,15 +1772,16 @@ window.EventSource = function(){this.close=function(){};this.addEventListener=fu
                 const c1 = palette[ci1], c2 = palette[ci2];
 
                 // Density — where the gas is thick vs thin
-                const density = Math.max(0, n2 * 1.4 - 0.3);
-                const brightness = density * density; // quadratic falloff for contrast
+                // Softer falloff: use linear instead of quadratic to reduce hard transitions
+                const density = Math.max(0, n2 * 1.2 - 0.2);
+                const brightness = density * 0.6; // Cap max brightness lower for softer appearance
 
                 const r = (c1[0] + (c2[0] - c1[0]) * t) * brightness;
                 const g = (c1[1] + (c2[1] - c1[1]) * t) * brightness;
                 const b = (c1[2] + (c2[2] - c1[2]) * t) * brightness;
 
                 // Alpha based on combined noise — creates wispy edges
-                const alpha = Math.min(255, brightness * n3 * 500);
+                const alpha = Math.min(255, brightness * n3 * 400);
 
                 d[idx] = Math.min(255, r * 1.2);
                 d[idx + 1] = Math.min(255, g * 1.1);
@@ -1438,293 +1790,217 @@ window.EventSource = function(){this.close=function(){};this.addEventListener=fu
             }
         }
         ctx.putImageData(imgData, 0, 0);
-
-        // Second pass: brighter wisps for volumetric effect
-        const wispsData = ctx.createImageData(w, h);
-        const wd = wispsData.data;
-        for (let py = 0; py < h; py++) {
-            for (let px = 0; px < w; px++) {
-                const idx = (py * w + px) * 4;
-                const nx = px * scaleX, ny = py * scaleY;
-
-                // Sparse bright wisps
-                const wispNoise = fbm(nx * 0.5, ny * 0.5, 42, 4);
-                if (wispNoise > 0.6) {
-                    const n1 = fbm(nx, ny, 0, 5);
-                    const n2 = fbm(nx + 10, ny + 10, 50, 5);
-                    const ci1 = Math.floor(n1 * (palette.length - 1));
-                    const ci2 = Math.min(ci1 + 1, palette.length - 1);
-                    const t = (n1 * (palette.length - 1)) - ci1;
-                    const c1 = palette[ci1], c2 = palette[ci2];
-                    const density = Math.max(0, n2 * 1.4 - 0.3);
-                    const brightness = density * density * 1.3;
-
-                    wd[idx] = Math.min(255, (c1[0] + (c2[0] - c1[0]) * t) * brightness * 1.4);
-                    wd[idx + 1] = Math.min(255, (c1[1] + (c2[1] - c1[1]) * t) * brightness * 1.3);
-                    wd[idx + 2] = Math.min(255, (c1[2] + (c2[2] - c1[2]) * t) * brightness * 1.5);
-                    wd[idx + 3] = Math.min(255, brightness * 250);
-                }
-            }
-        }
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.putImageData(wispsData, 0, 0);
-        ctx.globalCompositeOperation = 'source-over';
     }
 
-    // ── Canvas-based starfield ─────────────────────────────────────
-    function initStarfield(canvas) {
-        _starfieldCanvas = canvas;
-        const w = canvas.width;
-        const h = canvas.height;
-        const cx = w / 2;
-        const cy = h / 2;
+    // ── Planet renderer ────────────────────────────────────────
+    let _planetCanvas = null;
+    let _planets = [];
 
-        // 3 parallax layers: far (200 stars, 0.02px/frame), mid (100 stars, 0.05px/frame), near (40 stars, 0.1px/frame)
-        const layerConfigs = [
-            { count: 200, drift: 0.02, baseSize: 0.3, baseAlpha: 0.3 },
-            { count: 100, drift: 0.05, baseSize: 1.0, baseAlpha: 0.5 },
-            { count: 40,  drift: 0.1,  baseSize: 2.2, baseAlpha: 0.7 },
-        ];
-
-        _stars = [];
-        layerConfigs.forEach((cfg, layerIdx) => {
-            for (let i = 0; i < cfg.count; i++) {
-                const angle = Math.random() * Math.PI * 2;
-                const dist = Math.random() * 200 + 50;
-                const x = cx + Math.cos(angle) * dist;
-                const y = cy + Math.sin(angle) * dist;
-                _stars.push({
-                    x,
-                    y,
-                    size: cfg.baseSize * (0.8 + Math.random() * 0.5),
-                    baseAlpha: cfg.baseAlpha * (0.5 + Math.random() * 0.5),
-                    twinkleSpeed: 0.5 + Math.random() * 2.5,
-                    twinklePhase: Math.random() * Math.PI * 2,
-                    drift: cfg.drift,
-                    layer: layerIdx,
-                });
-            }
-        });
-
-        animateStarfield();
-    }
-
-    function animateStarfield() {
-        if (!_starfieldCanvas) return;
-        const ctx = _starfieldCanvas.getContext('2d');
-        const w = _starfieldCanvas.width;
-        const h = _starfieldCanvas.height;
-        const cx = w / 2;
-        const cy = h / 2;
-        let time = 0;
-
-        function frame() {
-            time += 0.016; // ~60fps
-            ctx.fillStyle = 'rgba(0,0,0,0)';
-            ctx.clearRect(0, 0, w, h);
-
-            _stars.forEach((star, idx) => {
-                // Forward-flight drift: stars move from center outward
-                const dirX = (star.x - cx);
-                const dirY = (star.y - cy);
-                const len = Math.sqrt(dirX * dirX + dirY * dirY) || 1;
-                const normX = dirX / len;
-                const normY = dirY / len;
-
-                star.x += normX * star.drift;
-                star.y += normY * star.drift;
-
-                // Recycle: if drifted off screen, respawn near center
-                const distFromCenter = Math.sqrt(Math.pow(star.x - cx, 2) + Math.pow(star.y - cy, 2));
-                if (distFromCenter > Math.max(w, h) * 0.7) {
-                    const newAngle = Math.random() * Math.PI * 2;
-                    const newDist = Math.random() * 100 + 20;
-                    star.x = cx + Math.cos(newAngle) * newDist;
-                    star.y = cy + Math.sin(newAngle) * newDist;
-                }
-
-                // Twinkle: alpha oscillates
-                const twinkle = 0.5 + 0.5 * Math.sin(time * star.twinkleSpeed + star.twinklePhase);
-                const alpha = star.baseAlpha * twinkle;
-
-                // Draw star
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(star.x, star.y, star.size * 0.5, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Glow for bigger stars
-                if (star.size > 1.5) {
-                    ctx.globalAlpha = alpha * 0.3;
-                    ctx.beginPath();
-                    ctx.arc(star.x, star.y, star.size * 1.2, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-            });
-
-            ctx.globalAlpha = 1;
-            _starfieldRAF = requestAnimationFrame(frame);
-        }
-
-        frame();
-    }
-
-    // ── Galaxy renderer ────────────────────────────────────────
-    function renderGalaxies(canvas) {
-        _galaxyCanvas = canvas;
+    function renderPlanets(canvas) {
+        _planetCanvas = canvas;
         const w = canvas.width;
         const h = canvas.height;
 
-        _galaxies = [];
-        const galaxyCount = 6 + Math.floor(Math.random() * 5);
-        const galaxyTypes = ['spiral', 'elliptical', 'barred'];
+        _planets = [];
+        const planetCount = 2 + Math.floor(Math.random() * 3);
+        const planetTypes = ['gasGiant', 'iceGiant', 'rocky'];
 
-        for (let i = 0; i < galaxyCount; i++) {
-            const type = galaxyTypes[Math.floor(Math.random() * galaxyTypes.length)];
-            const size = 20 + Math.random() * 40;
-            const x = Math.random() * w;
-            const y = Math.random() * h;
+        for (let i = 0; i < planetCount; i++) {
+            const type = planetTypes[Math.floor(Math.random() * planetTypes.length)];
+            const radius = 8 + Math.random() * 22;
+            let x, y;
+            // Position planets away from each other
+            let validPosition = false;
+            while (!validPosition) {
+                x = Math.random() * w;
+                y = Math.random() * h;
+                validPosition = true;
+                // Check distance from other planets
+                for (const p of _planets) {
+                    const dist = Math.sqrt((p.x - x) ** 2 + (p.y - y) ** 2);
+                    if (dist < (p.radius + radius) * 3) {
+                        validPosition = false;
+                        break;
+                    }
+                }
+            }
+
+            const hasRings = type === 'gasGiant' && Math.random() < 0.4;
             const rotation = Math.random() * Math.PI * 2;
 
-            _galaxies.push({
-                type, size, x, y, rotation,
-                pulsePhase: Math.random() * Math.PI * 2,
-                pulseSpeed: 0.3 + Math.random() * 0.7,
+            _planets.push({
+                type, radius, x, y, hasRings, rotation,
+                rotationSpeed: 0.001 + Math.random() * 0.003,
             });
         }
 
-        animateGalaxies();
+        drawPlanetsFrame(canvas.getContext('2d'));
     }
 
-    function animateGalaxies() {
-        if (!_galaxyCanvas) return;
-        const ctx = _galaxyCanvas.getContext('2d');
-        const w = _galaxyCanvas.width;
-        const h = _galaxyCanvas.height;
-        let time = 0;
+    function drawPlanetsFrame(ctx) {
+        const canvas = ctx.canvas;
+        const w = canvas.width;
+        const h = canvas.height;
 
-        function frame() {
-            time += 0.016;
-            ctx.fillStyle = 'rgba(0,0,0,0)';
-            ctx.clearRect(0, 0, w, h);
+        ctx.fillStyle = 'rgba(0,0,0,0)';
+        ctx.clearRect(0, 0, w, h);
 
-            _galaxies.forEach(gal => {
-                const pulseAlpha = 0.4 + 0.3 * Math.sin(time * gal.pulseSpeed + gal.pulsePhase);
-                ctx.save();
-                ctx.translate(gal.x, gal.y);
-                ctx.rotate(gal.rotation);
+        _planets.forEach(planet => {
+            ctx.save();
+            ctx.translate(planet.x, planet.y);
+            ctx.rotate(planet.rotation);
 
-                if (gal.type === 'spiral') {
-                    drawSpiralGalaxy(ctx, gal.size, pulseAlpha);
-                } else if (gal.type === 'elliptical') {
-                    drawEllipticalGalaxy(ctx, gal.size, pulseAlpha);
-                } else if (gal.type === 'barred') {
-                    drawBarredSpiralGalaxy(ctx, gal.size, pulseAlpha);
-                }
-
-                ctx.restore();
-            });
-
-            _galaxyRAF = requestAnimationFrame(frame);
-        }
-
-        frame();
-    }
-
-    function drawSpiralGalaxy(ctx, size, alpha) {
-        // Bright core
-        ctx.globalAlpha = alpha * 0.8;
-        ctx.fillStyle = 'rgba(200,210,255,1)';
-        ctx.beginPath();
-        ctx.arc(0, 0, size * 0.08, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Spiral arms with points
-        const armCount = 2.5;
-        const pointsPerArm = 60;
-        for (let arm = 0; arm < armCount; arm++) {
-            for (let p = 0; p < pointsPerArm; p++) {
-                const angle = (arm + (p / pointsPerArm) * 2) * Math.PI;
-                const r = (p / pointsPerArm) * size * 0.35;
-                const x = Math.cos(angle) * r;
-                const y = Math.sin(angle) * r;
-
-                const pointAlpha = alpha * (1 - p / pointsPerArm) * 0.6;
-                ctx.globalAlpha = pointAlpha;
-                ctx.fillStyle = 'rgba(160,190,255,1)';
-                ctx.beginPath();
-                ctx.arc(x, y, 0.4 + (p / pointsPerArm) * 0.2, 0, Math.PI * 2);
-                ctx.fill();
+            if (planet.type === 'gasGiant') {
+                drawGasGiant(ctx, planet.radius);
+            } else if (planet.type === 'iceGiant') {
+                drawIceGiant(ctx, planet.radius);
+            } else if (planet.type === 'rocky') {
+                drawRockyPlanet(ctx, planet.radius);
             }
-        }
 
-        // Core glow
-        ctx.globalAlpha = alpha * 0.15;
-        ctx.fillStyle = 'rgba(200,210,255,1)';
-        ctx.beginPath();
-        ctx.arc(0, 0, size * 0.2, 0, Math.PI * 2);
-        ctx.fill();
+            if (planet.hasRings) {
+                drawRings(ctx, planet.radius);
+            }
+
+            ctx.restore();
+
+            // Update rotation
+            planet.rotation += planet.rotationSpeed;
+        });
     }
 
-    function drawEllipticalGalaxy(ctx, size, alpha) {
-        // Warm-tinted cluster
-        ctx.globalAlpha = alpha * 0.7;
-        ctx.fillStyle = 'rgba(255,220,180,1)';
+    function drawGasGiant(ctx, radius) {
+        // Gradient from warm colors to darker tones
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        gradient.addColorStop(0, 'rgba(220, 160, 80, 1)');
+        gradient.addColorStop(0.4, 'rgba(200, 140, 60, 1)');
+        gradient.addColorStop(0.7, 'rgba(100, 80, 40, 1)');
+        gradient.addColorStop(1, 'rgba(40, 30, 20, 1)');
 
-        // Gaussian-like distribution of points
-        for (let i = 0; i < 100; i++) {
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Horizontal bands
+        const bandCount = 4 + Math.floor(Math.random() * 3);
+        for (let i = 0; i < bandCount; i++) {
+            const y = (i / bandCount - 0.5) * radius * 1.8;
+            const bandHeight = radius * 0.25;
+            const bandIntensity = Math.random() * 0.3;
+
+            ctx.globalAlpha = 0.4 * bandIntensity;
+            ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 200, 100, 1)' : 'rgba(150, 100, 50, 1)';
+            ctx.fillRect(-radius, y - bandHeight, radius * 2, bandHeight * 2);
+        }
+
+        // Crescent shadow on one side
+        ctx.globalAlpha = 0.3;
+        const shadowGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
+        shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
+        shadowGradient.addColorStop(0.3, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = shadowGradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 1;
+    }
+
+    function drawIceGiant(ctx, radius) {
+        // Blue-green gradient
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        gradient.addColorStop(0, 'rgba(150, 200, 220, 1)');
+        gradient.addColorStop(0.5, 'rgba(80, 140, 180, 1)');
+        gradient.addColorStop(1, 'rgba(30, 80, 120, 1)');
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Subtle banding
+        for (let i = 0; i < 3; i++) {
+            const y = (i / 3 - 0.5) * radius * 1.5;
+            ctx.globalAlpha = 0.2;
+            ctx.fillStyle = i % 2 === 0 ? 'rgba(200, 230, 255, 1)' : 'rgba(100, 150, 180, 1)';
+            ctx.fillRect(-radius, y, radius * 2, radius * 0.3);
+        }
+
+        // Crescent shadow
+        ctx.globalAlpha = 0.25;
+        const shadowGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
+        shadowGradient.addColorStop(0, 'rgba(0, 30, 80, 0.5)');
+        shadowGradient.addColorStop(0.3, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = shadowGradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        ctx.globalAlpha = 1;
+    }
+
+    function drawRockyPlanet(ctx, radius) {
+        // Gray-brown gradient
+        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
+        gradient.addColorStop(0, 'rgba(180, 160, 140, 1)');
+        gradient.addColorStop(0.5, 'rgba(120, 100, 80, 1)');
+        gradient.addColorStop(1, 'rgba(60, 50, 40, 1)');
+
+        ctx.fillStyle = gradient;
+        ctx.beginPath();
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Crater-like darker spots
+        const craterCount = 3 + Math.floor(Math.random() * 4);
+        for (let i = 0; i < craterCount; i++) {
             const angle = Math.random() * Math.PI * 2;
-            const r = Math.sqrt(Math.random()) * size * 0.25;
-            const x = Math.cos(angle) * r;
-            const y = Math.sin(angle) * r * 0.6;
+            const dist = Math.random() * radius * 0.7;
+            const cx = Math.cos(angle) * dist;
+            const cy = Math.sin(angle) * dist;
+            const craterRadius = 1 + Math.random() * 3;
 
-            ctx.globalAlpha = alpha * (0.6 - (Math.sqrt(x*x + y*y) / (size * 0.15)) * 0.4);
-            ctx.fillStyle = 'rgba(255,200,140,1)';
+            ctx.globalAlpha = 0.4 + Math.random() * 0.3;
+            ctx.fillStyle = 'rgba(30, 20, 10, 1)';
             ctx.beginPath();
-            ctx.arc(x, y, 0.3 + Math.random() * 0.4, 0, Math.PI * 2);
+            ctx.arc(cx, cy, craterRadius, 0, Math.PI * 2);
             ctx.fill();
         }
 
-        // Core highlight
-        ctx.globalAlpha = alpha * 0.2;
-        ctx.fillStyle = 'rgba(255,220,200,1)';
+        // Crescent shadow
+        ctx.globalAlpha = 0.3;
+        const shadowGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
+        shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
+        shadowGradient.addColorStop(0.2, 'rgba(0, 0, 0, 0)');
+        ctx.fillStyle = shadowGradient;
         ctx.beginPath();
-        ctx.arc(0, 0, size * 0.15, 0, Math.PI * 2);
+        ctx.arc(0, 0, radius, 0, Math.PI * 2);
         ctx.fill();
+
+        ctx.globalAlpha = 1;
     }
 
-    function drawBarredSpiralGalaxy(ctx, size, alpha) {
-        // Central bar
-        ctx.globalAlpha = alpha * 0.7;
-        ctx.fillStyle = 'rgba(180,190,255,1)';
-        ctx.fillRect(-size * 0.15, -size * 0.06, size * 0.3, size * 0.12);
+    function drawRings(ctx, planetRadius) {
+        const ringOuterRadius = planetRadius * 1.8;
+        const ringInnerRadius = planetRadius * 1.2;
 
-        // Spiral arms from bar ends
-        const armStart = size * 0.15;
-        for (let arm = 0; arm < 2; arm++) {
-            const startAngle = (arm * Math.PI) + (Math.PI / 4);
-            for (let p = 0; p < 50; p++) {
-                const angle = startAngle + (p / 50) * Math.PI;
-                const r = armStart + (p / 50) * size * 0.25;
-                const x = Math.cos(angle) * r;
-                const y = Math.sin(angle) * r;
-
-                const pointAlpha = alpha * (1 - p / 50) * 0.5;
-                ctx.globalAlpha = pointAlpha;
-                ctx.fillStyle = 'rgba(150,170,255,1)';
-                ctx.beginPath();
-                ctx.arc(x, y, 0.35, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-
-        // Core glow
-        ctx.globalAlpha = alpha * 0.12;
-        ctx.fillStyle = 'rgba(180,200,255,1)';
+        ctx.globalAlpha = 0.4;
+        ctx.strokeStyle = 'rgba(180, 160, 140, 1)';
+        ctx.lineWidth = planetRadius * 0.3;
         ctx.beginPath();
-        ctx.arc(0, 0, size * 0.18, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.ellipse(0, 0, ringOuterRadius, ringInnerRadius * 0.4, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        // Ring shadow
+        ctx.globalAlpha = 0.15;
+        ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
+        ctx.lineWidth = planetRadius * 0.2;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, ringOuterRadius * 0.95, ringInnerRadius * 0.35, 0, 0, Math.PI * 2);
+        ctx.stroke();
+
+        ctx.globalAlpha = 1;
     }
 
     function injectSpaceBg() {
@@ -1733,35 +2009,31 @@ window.EventSource = function(){this.close=function(){};this.addEventListener=fu
         const root = document.createElement('div');
         root.id = 'te-space-root';
 
-        // CSS gradient nebula layer (animated)
+        // Layer order: nebula gradient → nebula canvas → planet canvas → galaxies → starfield (on top) → CSS blobs
+        // No scanlines
+
+        // 1. CSS gradient nebula layer (animated background)
         const nebula = document.createElement('div');
         nebula.className = 'te-nebula-layer';
         root.appendChild(nebula);
 
-        // Procedural canvas nebula — organic texture underneath
+        // 2. Procedural canvas nebula — render at very low res and blur heavily for soft edges
         const nebulaCanvas = document.createElement('canvas');
-        nebulaCanvas.width = Math.floor(window.innerWidth * 0.33);
-        nebulaCanvas.height = Math.floor(window.innerHeight * 0.33);
-        nebulaCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0.6;filter:blur(2px);pointer-events:none;';
+        nebulaCanvas.width = Math.floor(window.innerWidth * 0.15);
+        nebulaCanvas.height = Math.floor(window.innerHeight * 0.15);
+        nebulaCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0.6;filter:blur(6px);pointer-events:none;';
         paintNebulaCanvas(nebulaCanvas);
         root.appendChild(nebulaCanvas);
 
-        // Canvas-based animated starfield
-        const starfieldCanvas = document.createElement('canvas');
-        starfieldCanvas.width = window.innerWidth;
-        starfieldCanvas.height = window.innerHeight;
-        starfieldCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
-        initStarfield(starfieldCanvas);
-        root.appendChild(starfieldCanvas);
+        // 3. Canvas-based planet renderer (behind stars)
+        const planetCanvas = document.createElement('canvas');
+        planetCanvas.width = window.innerWidth;
+        planetCanvas.height = window.innerHeight;
+        planetCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+        renderPlanets(planetCanvas);
+        root.appendChild(planetCanvas);
 
-        // 3 nebula gas clouds (CSS blurred blobs)
-        for (let i = 0; i < 3; i++) {
-            const blob = document.createElement('div');
-            blob.className = 'te-nebula-blob';
-            root.appendChild(blob);
-        }
-
-        // Canvas-based galaxy renderer
+        // 4. Canvas-based galaxy renderer
         const galaxyCanvas = document.createElement('canvas');
         galaxyCanvas.width = window.innerWidth;
         galaxyCanvas.height = window.innerHeight;
@@ -1769,10 +2041,20 @@ window.EventSource = function(){this.close=function(){};this.addEventListener=fu
         renderGalaxies(galaxyCanvas);
         root.appendChild(galaxyCanvas);
 
-        // Scan lines
-        const scan = document.createElement('div');
-        scan.className = 'te-scanlines';
-        root.appendChild(scan);
+        // 5. Canvas-based animated starfield (on top, most visible)
+        const starfieldCanvas = document.createElement('canvas');
+        starfieldCanvas.width = window.innerWidth;
+        starfieldCanvas.height = window.innerHeight;
+        starfieldCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
+        initStarfield(starfieldCanvas);
+        root.appendChild(starfieldCanvas);
+
+        // 6. 3 nebula gas clouds (CSS blurred blobs)
+        for (let i = 0; i < 3; i++) {
+            const blob = document.createElement('div');
+            blob.className = 'te-nebula-blob';
+            root.appendChild(blob);
+        }
 
         document.body.appendChild(root);
         document.body.classList.add('te-space-active');
@@ -1785,10 +2067,12 @@ window.EventSource = function(){this.close=function(){};this.addEventListener=fu
         if (_galaxyRAF) { cancelAnimationFrame(_galaxyRAF); _galaxyRAF = null; }
         _starfieldCanvas = null;
         _galaxyCanvas = null;
+        _planetCanvas = null;
         const existing = document.getElementById('te-space-root');
         if (existing) existing.remove();
         document.body.classList.remove('te-space-active');
     }
+
 
     // ── Floating robots — random office bots drift across space ──
     let _floaterTimer = null;
