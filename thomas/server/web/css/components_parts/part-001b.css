@@ -965,20 +965,32 @@ code {
     display: none;
 }
 
-.sidebar-toggle {
-    border: 1px solid var(--border-light);
-    background: rgba(25, 30, 39, 0.74);
-    border-radius: var(--radius-md);
-    transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+button.sidebar-toggle.sidebar-toggle {
+    border: 1px solid transparent;
+    background: transparent;
+    border-radius: 0;
+    transition: color 0.16s ease, border-color 0.16s ease;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text-muted);
+    opacity: 0.45;
 }
 
-.sidebar-toggle:hover {
-    border-color: rgba(88, 166, 255, 0.5);
-    background: rgba(88, 166, 255, 0.12);
+button.sidebar-toggle.sidebar-toggle:hover {
+    border-color: rgba(88, 166, 255, 0.25);
+    color: var(--text-secondary);
+    background: transparent;
+    opacity: 1;
 }
 
-.sidebar-toggle i {
-    font-size: 18px;
+button.sidebar-toggle.sidebar-toggle i {
+    font-size: 12px;
 }
 
 .model-setup-content {

@@ -27,6 +27,24 @@ Thomas is an AI-first workspace platform with a marketplace of domain modules. T
 - `thomas/memory/` — Conversation and context stores.
 - Everything else under `thomas/` — Marketplace domain modules. Leave them alone unless told otherwise.
 
+## Branch awareness (required — prevents duplicate work)
+
+Before creating ANY new file or feature, check for existing work on other branches:
+
+```bash
+git branch -a --list '*<keyword>*'          # branches named after the feature
+git log --all --oneline --grep='<keyword>'  # commits mentioning it anywhere
+```
+
+Replace `<keyword>` with the core noun of your task (e.g., `channel`, `discord`, `voice`, `marketplace`).
+
+If you find matching branches or commits:
+1. Read the diff: `git log --oneline master..<branch>` to see what was done.
+2. Ask the user before building anything new — the work may just need a merge.
+3. If the branch has real, working code, merge or cherry-pick it instead of rewriting.
+
+The startup router (`agent_startup_router.py`) now scans branches automatically and will warn you. **Do not ignore branch scan warnings.**
+
 ## Before you write code
 
 1. Read `AGENTS.md` (full rules and router startup)

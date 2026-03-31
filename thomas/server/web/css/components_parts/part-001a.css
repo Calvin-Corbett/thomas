@@ -215,27 +215,47 @@
 }
 
 .icon-btn-shared {
-    width: 24px;
-    height: 24px;
-    min-width: 24px;
-    min-height: 24px;
-    border: 1px solid var(--border-light);
-    border-radius: 8px;
-    background: rgba(25, 30, 39, 0.74);
-    color: var(--text-secondary);
-    font-size: 15px;
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    border: 1px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: var(--text-muted);
+    font-size: 12px;
     line-height: 1;
+    opacity: 0.45;
+    transition: color 0.16s ease, border-color 0.16s ease, opacity 0.16s ease;
 }
 
 .icon-btn-shared i {
-    font-size: 1em;
+    font-size: 12px;
     line-height: 1;
 }
 
 .icon-btn-shared:hover {
-    border-color: rgba(88, 166, 255, 0.5);
-    background: rgba(88, 166, 255, 0.12);
-    color: var(--text-primary);
+    border-color: rgba(88, 166, 255, 0.25);
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: 1;
+}
+
+.btn-icon.icon-btn-shared {
+    width: 22px;
+    height: 22px;
+    min-width: 22px;
+    min-height: 22px;
+    border-radius: 0;
+    background: transparent;
+    opacity: 0.45;
+}
+
+.btn-icon.icon-btn-shared:hover {
+    border-color: rgba(88, 166, 255, 0.25);
+    background: transparent;
+    color: var(--text-secondary);
+    opacity: 1;
 }
 
 #sidebarCollapseBtn i,

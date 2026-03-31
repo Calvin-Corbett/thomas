@@ -8,6 +8,7 @@ import importlib.util
 import json
 import re
 import sqlite3
+import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -239,6 +240,111 @@ def _bootstrap_command(summary: str, paths: list[str]) -> str:
     )
 
 
+_BRANCH_SCAN_STOP_WORDS = frozenset({
+    "a", "an", "the", "is", "are", "was", "were", "be", "been", "being",
+    "have", "has", "had", "do", "does", "did", "will", "would", "shall",
+    "should", "may", "might", "must", "can", "could", "to", "of", "in",
+    "for", "on", "with", "at", "by", "from", "as", "into", "through",
+    "during", "before", "after", "above", "below", "between", "out",
+    "up", "down", "and", "but", "or", "nor", "not", "so", "yet",
+    "both", "either", "neither", "each", "every", "all", "any",
+    "this", "that", "these", "those", "it", "its", "my", "our",
+    "add", "fix", "update", "create", "make", "build", "implement",
+    "change", "modify", "edit", "remove", "delete", "refactor",
+    "work", "get", "set", "new", "use", "run", "test", "check",
+    "file", "files", "code", "module", "function", "class", "method",
+    "thomas", "agent", "feature", "bug", "issue", "task", "page",
+})
+
+
+def _extract_keywords(summary: str, paths: list[str]) -> list[str]:
+    """Extract meaningful keywords from a task summary and file paths."""
+    words: list[str] = []
+    # From summary: split on non-alphanumeric, keep words >= 3 chars
+    for token in re.split(r"[^a-zA-Z0-9_-]+", summary.lower()):
+        token = token.strip("-_")
+        if len(token) >= 3 and token not in _BRANCH_SCAN_STOP_WORDS:
+            words.append(token)
+    # From paths: extract meaningful directory/file name components
+    for raw in paths:
+        rel = _relpath(raw)
+        for part in rel.replace("\\", "/").split("/"):
+            name = part.split(".")[0].strip("-_").lower()
+            if len(name) >= 3 and name not in _BRANCH_SCAN_STOP_WORDS:
+                words.append(name)
+    return _unique(words)[:8]  # Cap at 8 keywords to keep searches fast
+
+
+def _scan_related_branches(summary: str, paths: list[str]) -> dict[str, Any]:
+    """Scan local and remote branches/commits for existing work related to the task.
+
+    Returns a dict with:
+      - keywords: list of keywords searched
+      - branches: list of matching branch names
+      - commits: list of matching commit one-liners (capped at 15)
+      - warning: human-readable warning string (empty if nothing found)
+    """
+    keywords = _extract_keywords(summary, paths)
+    if not keywords:
+        return {"keywords": [], "branches": [], "commits": [], "warning": ""}
+
+    matched_branches: list[str] = []
+    matched_commits: list[str] = []
+
+    for kw in keywords:
+        # Search branch names
+        try:
+            result = subprocess.run(
+                ["git", "branch", "-a", "--list", f"*{kw}*"],
+                capture_output=True, text=True, timeout=10, cwd=str(ROOT),
+            )
+            for line in result.stdout.strip().splitlines():
+                branch = line.strip().lstrip("* ").strip()
+                if branch and branch not in matched_branches:
+                    matched_branches.append(branch)
+        except (subprocess.SubprocessError, OSError):
+            pass
+
+        # Search commit messages
+        try:
+            result = subprocess.run(
+                ["git", "log", "--all", "--oneline", "--grep", kw, "-n", "10"],
+                capture_output=True, text=True, timeout=10, cwd=str(ROOT),
+            )
+            for line in result.stdout.strip().splitlines():
+                line = line.strip()
+                if line and line not in matched_commits:
+                    matched_commits.append(line)
+        except (subprocess.SubprocessError, OSError):
+            pass
+
+    # Deduplicate and cap
+    matched_branches = _unique(matched_branches)[:10]
+    matched_commits = _unique(matched_commits)[:15]
+
+    warning = ""
+    if matched_branches or matched_commits:
+        parts = []
+        if matched_branches:
+            branch_list = ", ".join(matched_branches[:5])
+            more = f" (+{len(matched_branches) - 5} more)" if len(matched_branches) > 5 else ""
+            parts.append(f"Found {len(matched_branches)} related branch(es): {branch_list}{more}")
+        if matched_commits:
+            parts.append(f"Found {len(matched_commits)} related commit(s) across all branches.")
+        parts.append(
+            "STOP and check these before creating new files. "
+            "Existing work may just need a merge. Ask the user before rebuilding."
+        )
+        warning = " ".join(parts)
+
+    return {
+        "keywords": keywords,
+        "branches": matched_branches,
+        "commits": matched_commits,
+        "warning": warning,
+    }
+
+
 def classify_task(
     *,
     summary: str,
@@ -415,6 +521,7 @@ def build_startup_payload(
         workboard_path=workboard_path,
     )
     payload["preflight"] = agent_preflight.evaluate_preflight(root=ROOT, cwd=cwd)
+    payload["branch_scan"] = _scan_related_branches(summary, paths)
     return payload
 
 
@@ -503,6 +610,24 @@ def _text_output(payload: dict[str, Any]) -> str:
         lines.append("  - none")
     lines.append("escalate_when:")
     lines.extend([f"  - {item}" for item in payload["escalation_triggers"]])
+    branch_scan = dict(payload.get("branch_scan") or {})
+    warning = str(branch_scan.get("warning") or "").strip()
+    if warning:
+        lines.append("")
+        lines.append("*** BRANCH SCAN WARNING ***")
+        lines.append(warning)
+        branches = list(branch_scan.get("branches") or [])
+        if branches:
+            lines.append("matching_branches:")
+            lines.extend([f"  - {b}" for b in branches])
+        commits = list(branch_scan.get("commits") or [])
+        if commits:
+            lines.append("matching_commits:")
+            lines.extend([f"  - {c}" for c in commits[:10]])
+        lines.append(
+            "ACTION REQUIRED: Review these branches/commits before creating new files. "
+            "Run 'git log --oneline master..<branch>' to inspect. Ask the user before rebuilding."
+        )
     return "\n".join(lines)
 
 

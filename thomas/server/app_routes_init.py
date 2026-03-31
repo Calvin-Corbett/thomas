@@ -551,6 +551,25 @@ def _setup_routes_and_handlers(
 
     _register_search_routes(app)
 
+    def _register_discord_channels_routes(app_ref: web.Application, cfg_ref: AppConfig) -> None:
+        """Register Thomas-owned Discord bridge lifecycle and history APIs."""
+        if not callable(_require_api_access) or not callable(_read_json):
+            log.warning("Discord channels route registration skipped: missing runtime dependencies")
+            return
+        try:
+            from thomas.server.routes.discord_channels_aiohttp import register_discord_channels_routes
+
+            register_discord_channels_routes(
+                app_ref,
+                config=cfg_ref,
+                require_api_access=_require_api_access,
+                read_json=_read_json,
+            )
+        except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
+            log.warning("Discord channels routes unavailable: %s", e)
+
+    _register_discord_channels_routes(app, config)
+
     def _register_secrets_routes(app_ref: web.Application) -> None:
         """Register API-key and secret rotation APIs."""
         if not callable(_require_api_access) or not callable(_read_json):
