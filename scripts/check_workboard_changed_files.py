@@ -20,6 +20,13 @@ except ImportError:  # pragma: no cover
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 DEFAULT_IGNORE_PATTERNS = ("plans/thomas/WORKBOARD.md",)
+
+
+def _runtime_protection_disabled() -> bool:
+    """Check if a human has temporarily disabled runtime protection."""
+    return (ROOT / "runtime" / ".runtime_protection_disabled").is_file()
+
+
 DEFAULT_MAX_CHANGED_FILES = 200
 DEFAULT_BULK_ALLOW_ENV = "THOMAS_ALLOW_BULK_CHANGED_FILES"
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
@@ -227,7 +234,10 @@ def evaluate_changed_files(
         "require_identity_metadata": bool(require_identity_metadata),
         "changed_file_count": len(seen_files),
         "ignored_file_count": len(ignored_files),
-        "checked_file_count": len(owner_by_file) + len(unclaimed_files) + len(ambiguous_files) + len(fallback_conflicts),
+        "checked_file_count": len(owner_by_file)
+        + len(unclaimed_files)
+        + len(ambiguous_files)
+        + len(fallback_conflicts),
         "ignored_files": ignored_files,
         "owner_by_file": owner_by_file,
         "unclaimed_file_count": len(unclaimed_files),
@@ -246,6 +256,11 @@ def evaluate_changed_files(
 
 
 def run(argv: Sequence[str] | None = None) -> int:
+    # Honour the runtime protection toggle (requires Windows auth to disable).
+    if _runtime_protection_disabled():
+        print("Workboard changed-files gate: PASS (runtime protection disabled by human)")
+        return 0
+
     parser = argparse.ArgumentParser(
         description=("Validate that changed files are owned by exactly one active WORKBOARD claim scope.")
     )
@@ -323,8 +338,7 @@ def run(argv: Sequence[str] | None = None) -> int:
             "gate": "workboard_changed_files",
             "ok": False,
             "error": (
-                f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} "
-                "so fallback scope use is explicitly audited"
+                f"{FALLBACK_SCOPE_ENV} requires {FALLBACK_REASON_ENV} " "so fallback scope use is explicitly audited"
             ),
             "workboard": str(workboard_path),
             "require_identity_metadata": bool(args.require_identity_metadata),

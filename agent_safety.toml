@@ -259,3 +259,44 @@ directories = [
     "thomas/server/web/js/app_parts/",
 ]
 redirect_to = "thomas/server/web/js/app_runtime_primary.mjs"
+
+# ── Runtime Protection ─────────────────────────────────────────────────────
+# Directories and files that agent-spawned tools (fs.write_file, diff.create,
+# diff.apply_patch) CANNOT modify.  The enforcement is hardcoded in
+# thomas/tools/filesystem.py::_is_protected_runtime_path() so that even if
+# this config file is corrupted, the protection remains active.
+#
+# This section exists for documentation and auditability.  Changing it does
+# NOT weaken the hardcoded guard — which is the point.
+
+[runtime_protection]
+# Thomas's own runtime — the code that runs agents and enforces rules.
+# Agent-spawned tools get read-only access.  Humans commit changes directly.
+protected_dirs = [
+    "thomas/tools/",
+    "thomas/agent/",
+    "thomas/core/",
+    "thomas/server/",
+    "scripts/",
+]
+
+# Top-level policy files that define agent behavior.
+protected_files = [
+    "agent_safety.toml",
+    "AGENTS.md",
+    "GUARDRAILS.md",
+    ".pre-commit-config.yaml",
+    "pyproject.toml",
+    "thomas.toml",
+    "thomas.prod.toml",
+]
+
+# Why this works (self-referential protection):
+# - _is_protected_runtime_path() lives in thomas/tools/filesystem.py
+# - thomas/tools/ is a protected directory
+# - Therefore the function that blocks writes to protected paths
+#   is itself protected by that block
+# - The agent cannot modify the code that restricts it
+# - shell.exec is disabled by default (tools.allow_shell = false)
+# - Even if enabled, shell.exec does not bypass this — all writes
+#   through Thomas's tool layer hit the same check
