@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """Reject legacy monolith split filename patterns.
 
-Catches both `.partNN.ext` (dot-separated) and `_partNN.ext` (underscore-separated).
+Catches ALL split patterns across ALL languages:
+  - `.partNN.ext`  (dot-separated, e.g. app.part3.js)
+  - `_partNN.ext`  (underscore-separated, e.g. app_part3.py)
+  - `part-NNN.ext` (dash-separated, e.g. part-001.js)
+  - Files inside directories named `*_parts/` or `*-parts/`
+
 This check is intentionally strict and filename-only: if any staged or tracked
 repository file matches the pattern, the gate fails unless that file is outside
 scanned directories.
@@ -20,9 +25,16 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 
 FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (
+    # .partNN.ext — e.g. app.part3.js
     re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),
+    # _partNN.ext — e.g. app_part3.py
     re.compile(r"_part\d+\.\w+$", re.IGNORECASE),
+    # part-NNN.ext — e.g. part-001.js, part-032b.js
+    re.compile(r"^part-\d+[a-z]?\.\w+$", re.IGNORECASE),
 )
+
+# Directories that are themselves a split pattern (e.g. app_parts/, css_parts/)
+FORBIDDEN_SPLIT_DIR_PATTERNS: tuple[re.Pattern[str], ...] = (re.compile(r"[_-]parts?$", re.IGNORECASE),)
 
 SKIP_DIR_NAMES = {
     ".git",
@@ -68,7 +80,15 @@ def _git_changed_files(repo_root: Path) -> list[str]:
 
 
 def _is_forbidden_part_file(path: Path) -> bool:
-    return any(pattern.search(path.name) for pattern in FORBIDDEN_PART_FILE_PATTERNS)
+    # Check the filename itself
+    if any(pattern.search(path.name) for pattern in FORBIDDEN_PART_FILE_PATTERNS):
+        return True
+    # Check if the file lives in a forbidden split directory
+    for parent in path.parents:
+        if any(pattern.search(parent.name) for pattern in FORBIDDEN_SPLIT_DIR_PATTERNS):
+            # Allow GUARDRAILS.md files inside these dirs (they document debt)
+            return path.name.upper() not in ("GUARDRAILS.MD", "README.MD")
+    return False
 
 
 def _run_all_file_scan(repo_root: Path) -> list[dict[str, str]]:
@@ -126,7 +146,9 @@ def _scan(repo_root: Path, *, staged_only: bool) -> list[dict[str, str]]:
 
 
 def run(argv: Iterable[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Fail when `.partNN.ext` filenames are present in repository sources.")
+    parser = argparse.ArgumentParser(
+        description=("Fail when `.partNN.ext` filenames are present " "in repository sources.")
+    )
     parser.add_argument(
         "--repo-root",
         default=None,
@@ -160,13 +182,12 @@ def run(argv: Iterable[str] | None = None) -> int:
                 sort_keys=True,
             )
         )
+    elif ok:
+        print("Monolith filename guard: PASS " "(no legacy `.partNN.ext` filenames)")
     else:
-        if ok:
-            print("Monolith filename guard: PASS (no legacy `.partNN.ext` filenames)")
-        else:
-            print(f"Monolith filename guard: FAIL ({len(violations)} violation(s))")
-            for row in violations:
-                print(f"- {row['path']}: {row['reason']}")
+        print(f"Monolith filename guard: FAIL " f"({len(violations)} violation(s))")
+        for row in violations:
+            print(f"- {row['path']}: {row['reason']}")
 
     return 0 if ok else 1
 
