@@ -71,8 +71,28 @@ def _authenticate_windows() -> bool:
             _run_windows_credential_prompt,
         )
     except ImportError:
-        print("ERROR: Could not import breakglass_auth. Run from the Thomas repo root.")
-        return False
+        try:
+            from breakglass_auth import (  # type: ignore[no-redef]
+                BreakglassAuthorization,
+                _current_windows_sam_name,
+                _run_windows_credential_prompt,
+            )
+        except ImportError:
+            # Last resort: add the scripts directory to sys.path
+            import sys
+
+            _scripts_dir = str(Path(__file__).resolve().parent)
+            if _scripts_dir not in sys.path:
+                sys.path.insert(0, _scripts_dir)
+            try:
+                from breakglass_auth import (  # type: ignore[no-redef]
+                    BreakglassAuthorization,
+                    _current_windows_sam_name,
+                    _run_windows_credential_prompt,
+                )
+            except ImportError:
+                print("ERROR: Could not import breakglass_auth. Run from the Thomas repo root.")
+                return False
 
     current_user = _current_windows_sam_name()
     if not current_user:
