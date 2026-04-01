@@ -19,9 +19,32 @@ This file contains rules that ALL AI agents (Claude, Codex, GPT, Gemini, etc.) M
 - **No file may exceed 1200 lines under ANY circumstance** — not even with a debt annotation.
 
 ### Frontend Files
-- **JavaScript (.js):** Max 800 lines (soft limit), 2000 lines (hard ceiling)
-- **CSS (.css):** Max 600 lines (soft limit), 1200 lines (hard ceiling)
-- **HTML (.html):** Max 2000 lines (soft limit), 3000 lines (hard ceiling)
+- **JavaScript (.js, .mjs, .cjs, .jsx, .ts, .tsx):** Max 800 lines (soft), 1200 lines (hard)
+- **CSS (.css):** Max 600 lines (soft), 1600 lines (hard)
+- **HTML (.html):** Max 1000 lines (hard)
+
+### Per-Commit Growth Cap
+- **No single file may grow by more than 300 lines in one commit.**
+- This applies to ALL monitored file types (Python, JS, CSS, HTML).
+- If you need to add more than 300 lines, split the work across multiple files or multiple commits with meaningful intermediate states.
+- New files over 300 lines are also blocked — design smaller modules from the start.
+- Enforced by: `scripts/check_commit_growth_guard.py`
+
+### Bulk Commit Ban
+- **No commit may stage more than 50 files.**
+- "Snapshot", "checkpoint", or "dump" commits that touch hundreds of files are the #1 vector for smuggling monolith files past guards.
+- If you genuinely need to commit 50+ files (e.g. a real migration), you must get explicit human approval and document the reason.
+- Enforced by: `scripts/check_bulk_commit_guard.py`
+
+### No Split/Part Files — ANY Language
+- **Do not create files matching any of these patterns, in ANY language:**
+  - `*_partNN.*` (e.g. `app_part3.py`, `styles_part1.css`)
+  - `*.partNN.*` (e.g. `app.part2.js`)
+  - `part-NNN.*` (e.g. `part-001.js`, `part-032b.js`)
+  - Files inside directories named `*_parts/` or `*-parts/`
+- This ban covers Python, JavaScript, CSS, HTML, TypeScript, and every other language.
+- Chopping a large file into numbered chunks is not decomposition. Real decomposition means splitting by responsibility into modules with descriptive names and proper imports/exports.
+- Enforced by: `scripts/check_monolith_filename_guard.py`
 
 ### General Rules
 - If your implementation would exceed soft limits, you MUST split it into multiple files BEFORE writing it.
@@ -30,8 +53,9 @@ This file contains rules that ALL AI agents (Claude, Codex, GPT, Gemini, etc.) M
   - Modify `test_architecture.py` to increase the limit
   - Modify `MONOLITH_CEILING` or `max_file_lines_hard`
   - Create a "temporary exception" or "TODO to split later"
+  - Use `--no-verify` to skip pre-commit hooks
+  - Create a "snapshot" or "checkpoint" commit to dump bulk changes
 - If you find yourself wanting to do any of the above, your design is wrong. Split the file.
-- **Legacy exemption:** JS files in `thomas/server/web/js/app_parts/part-*.js` are documented debt being migrated to modules
 
 ## Rule 2: No Modifying Guards
 

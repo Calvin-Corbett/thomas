@@ -121,6 +121,8 @@ enforcement_scripts = [
     "scripts/workboard_problem_record.py",
     # ── Repo & build integrity (Audit Finding 1) ──
     "scripts/check_monolith_filename_guard.py",
+    "scripts/check_commit_growth_guard.py",
+    "scripts/check_bulk_commit_guard.py",
     "scripts/check_feature_registry.py",
     "scripts/check_repo_identity.py",
     "scripts/check_merge_readiness.py",

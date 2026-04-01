@@ -33,7 +33,9 @@ DEFAULT_BASELINE = "docs/monolith_guard_baseline.json"
 _FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),
     re.compile(r"_part\d+\.\w+$", re.IGNORECASE),
+    re.compile(r"^part-\d+[a-z]?\.\w+$", re.IGNORECASE),
 )
+_FORBIDDEN_SPLIT_DIR_PATTERNS: tuple[re.Pattern[str], ...] = (re.compile(r"[_-]parts?$", re.IGNORECASE),)
 _ALLOWED_PART_FILE_PATTERNS: tuple[str, ...] = ()
 _FORBIDDEN_LOADER_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?m)^\s*def\s+_load_monolith_parts\s*\("),
@@ -83,7 +85,14 @@ def _line_count(path: Path) -> int:
 
 
 def _looks_like_legacy_monolith_file(path: Path) -> bool:
-    return any(pattern.search(path.name) for pattern in _FORBIDDEN_PART_FILE_PATTERNS)
+    if any(pattern.search(path.name) for pattern in _FORBIDDEN_PART_FILE_PATTERNS):
+        return True
+    # Check parent directories for split-dir patterns (e.g. app_parts/)
+    for parent in path.parents:
+        if any(pattern.search(parent.name) for pattern in _FORBIDDEN_SPLIT_DIR_PATTERNS):
+            # Allow GUARDRAILS.md / README.md inside split dirs (they document debt)
+            return path.name.upper() not in ("GUARDRAILS.MD", "README.MD")
+    return False
 
 
 def _is_allowed_split_file(path: Path, rel: str) -> bool:
@@ -292,11 +301,10 @@ def run_guard(
     prior_line_cache: dict[str, int | None] = {}
     growth_lookup_error = ""
     tracked_files = _git_tracked_files(repo_root)
-    if staged_only and not normalized_base_ref:
-        if _git_ref_exists(repo_root, "HEAD"):
-            normalized_base_ref = "HEAD"
-            growth_context["base_ref"] = normalized_base_ref
-            growth_context["enabled"] = True
+    if staged_only and not normalized_base_ref and _git_ref_exists(repo_root, "HEAD"):
+        normalized_base_ref = "HEAD"
+        growth_context["base_ref"] = normalized_base_ref
+        growth_context["enabled"] = True
     if staged_only:
         try:
             scoped_files = _git_staged_files(repo_root)

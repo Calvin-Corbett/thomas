@@ -6,12 +6,14 @@
 2. Read [GUARDRAILS.md](GUARDRAILS.md) and the module-level `GUARDRAILS.md` for whatever directory you are modifying
 3. Read [docs/AGENT_FILE_EDITING_RULES.md](docs/AGENT_FILE_EDITING_RULES.md) — this project has a monolith source loader; editing the wrong file means your changes DO NOTHING
 4. Check `agent_safety.toml` for protected files, forbidden patterns, and circular import rules
-5. NEVER create files matching `*_part*.py` or `*.part*.py` — this is a banned monolith split pattern
+5. NEVER create split/part files in ANY language — `*_partNN.*`, `*.partNN.*`, `part-NNN.*`, or files inside `*_parts/` directories. This applies to Python, JS, CSS, HTML, and all other languages.
 6. NEVER use `exec()` to load code from other files — use normal Python imports
 7. NEVER commit with `--no-verify` — pre-commit hooks exist for a reason
 8. NEVER modify protected files listed in `agent_safety.toml` without explicit user approval
-9. Tag every commit with your model name (e.g., `Thomas-Agent: codex` or `Thomas-Agent: claude`)
-10. Run `ruff check` on any Python file you modify before committing
+9. NEVER grow a single file by more than 300 lines in one commit — split across files or commits
+10. NEVER stage more than 50 files in one commit — no "snapshot", "checkpoint", or "dump" commits
+11. Tag every commit with your model name (e.g., `Thomas-Agent: codex` or `Thomas-Agent: claude`)
+12. Run `ruff check` on any Python file you modify before committing
 
 ## What Thomas Is — Do Not Misjudge This Repo
 
