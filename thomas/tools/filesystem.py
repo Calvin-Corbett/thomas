@@ -3,11 +3,100 @@
 from __future__ import annotations
 
 import fnmatch
+import logging
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
+
+log = logging.getLogger(__name__)
+
+# ---------------------------------------------------------------------------
+# Hardcoded protected directories — the last line of defence.
+# Even if agent_safety.toml is corrupted or unreadable, these stay active.
+# Every directory listed here (relative to sandbox root) is read-only for
+# agent-spawned tools.  The list is deliberately minimal: only Thomas's own
+# runtime, enforcement scripts, and top-level policy files.
+# ---------------------------------------------------------------------------
+_HARDCODED_PROTECTED_DIRS: tuple[str, ...] = (
+    "thomas/tools",
+    "thomas/agent",
+    "thomas/core",
+    "thomas/server",
+    "scripts",
+)
+
+_HARDCODED_PROTECTED_FILES: tuple[str, ...] = (
+    "agent_safety.toml",
+    "AGENTS.md",
+    "GUARDRAILS.md",
+    ".pre-commit-config.yaml",
+    "pyproject.toml",
+    "thomas.toml",
+    "thomas.prod.toml",
+)
+
+
+def _is_runtime_protection_disabled(sandbox_root: Path) -> bool:
+    """Return True if a human has temporarily disabled runtime protection.
+
+    The flag file is created by ``scripts/runtime_protection_toggle.py``
+    which requires Windows credential authentication before writing it.
+    """
+    flag = sandbox_root.resolve() / "runtime" / ".runtime_protection_disabled"
+    return flag.is_file()
+
+
+def _is_protected_runtime_path(sandbox_root: Path, target: Path) -> str | None:
+    """Check if *target* falls inside a protected runtime directory or matches
+    a protected file.
+
+    Returns a human-readable reason string if the path is protected, or
+    ``None`` if the write is allowed.
+
+    The check is intentionally independent of any config file so that an agent
+    cannot neutralise it by editing ``agent_safety.toml`` — that file is
+    itself inside the protected set.
+
+    A human can temporarily disable this by running::
+
+        python scripts/runtime_protection_toggle.py off
+
+    which requires Windows credential authentication and creates a flag file.
+    """
+    # Allow bypass when a human has explicitly disabled protection.
+    if _is_runtime_protection_disabled(sandbox_root):
+        return None
+
+    try:
+        rel = target.resolve().relative_to(sandbox_root.resolve())
+    except ValueError:
+        # Outside sandbox entirely — _safe_path already handles this.
+        return None
+
+    # Normalise to forward-slash for consistent matching on all platforms.
+    rel_posix = PurePosixPath(rel)
+
+    # Check protected directories (any file *inside* these).
+    for pdir in _HARDCODED_PROTECTED_DIRS:
+        protected = PurePosixPath(pdir)
+        try:
+            rel_posix.relative_to(protected)
+            return (
+                f"BLOCKED: '{rel_posix}' is inside protected runtime "
+                f"directory '{pdir}/'. Agent-spawned tools cannot modify "
+                f"Thomas's own runtime code."
+            )
+        except ValueError:
+            continue
+
+    # Check individual protected files at the repo root.
+    for pfile in _HARDCODED_PROTECTED_FILES:
+        if rel_posix == PurePosixPath(pfile):
+            return f"BLOCKED: '{rel_posix}' is a protected policy file. " f"Agent-spawned tools cannot modify it."
+
+    return None
 
 
 def _safe_path(root: Path, rel: str) -> Path:
@@ -29,7 +118,7 @@ def _safe_path(root: Path, rel: str) -> Path:
             if common != resolved_root:
                 raise ValueError(f"Path escapes sandbox: {rel}")
     except ValueError:
-        raise ValueError(f"Path escapes sandbox: {rel}")
+        raise ValueError(f"Path escapes sandbox: {rel}") from None
     return p
 
 
@@ -135,6 +224,12 @@ class WriteFileTool(Tool):
             path = _safe_path(self._root, rel)
         except ValueError as e:
             return ToolResult(ok=False, error=str(e))
+
+        # ── Runtime protection: block writes to Thomas's own code ──
+        blocked = _is_protected_runtime_path(self._root, path)
+        if blocked:
+            log.warning("Runtime protection triggered: %s", blocked)
+            return ToolResult(ok=False, error=blocked)
 
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(args["content"], encoding="utf-8")

@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import difflib
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any
 
 from thomas.tools.base import Tool, ToolResult
-from thomas.tools.filesystem import _safe_path
-
+from thomas.tools.filesystem import _is_protected_runtime_path, _safe_path
 
 # ---------------------------------------------------------------------------
 # Tools
@@ -49,7 +48,7 @@ class CreateDiffTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         rel = args["file"]
         old_str = args["old_str"]
         new_str = args["new_str"]
@@ -64,6 +63,11 @@ class CreateDiffTool(Tool):
         if not path.is_file():
             return ToolResult(ok=False, error=f"Not a file: {rel}")
 
+        # ── Runtime protection: block edits to Thomas's own code ──
+        blocked = _is_protected_runtime_path(self._root, path)
+        if blocked:
+            return ToolResult(ok=False, error=blocked)
+
         try:
             content = path.read_text(encoding="utf-8", errors="replace")
         except OSError as e:
@@ -72,20 +76,14 @@ class CreateDiffTool(Tool):
         if old_str not in content:
             return ToolResult(
                 ok=False,
-                error=(
-                    f"old_str not found in {rel}. "
-                    f"Make sure the text matches exactly including whitespace."
-                ),
+                error=(f"old_str not found in {rel}. " f"Make sure the text matches exactly including whitespace."),
             )
 
         count = content.count(old_str)
         if count > 1:
             return ToolResult(
                 ok=False,
-                error=(
-                    f"old_str appears {count} times in {rel}. "
-                    f"Add more surrounding context to make it unique."
-                ),
+                error=(f"old_str appears {count} times in {rel}. " f"Add more surrounding context to make it unique."),
             )
 
         new_content = content.replace(old_str, new_str, 1)
@@ -119,7 +117,7 @@ class ApplyPatchTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         patch_text = args["patch"]
 
         try:
@@ -130,7 +128,7 @@ class ApplyPatchTool(Tool):
         if not results:
             return ToolResult(ok=False, error="No valid hunks found in patch")
 
-        summary_lines: List[str] = []
+        summary_lines: list[str] = []
         for filepath, applied, error in results:
             if applied:
                 summary_lines.append(f"  patched: {filepath}")
@@ -174,7 +172,7 @@ class PreviewDiffTool(Tool):
     def __init__(self, sandbox_root: Path):
         self._root = sandbox_root.resolve()
 
-    async def execute(self, args: Dict[str, Any]) -> ToolResult:
+    async def execute(self, args: dict[str, Any]) -> ToolResult:
         rel = args["file"]
         old_str = args["old_str"]
         new_str = args["new_str"]
@@ -216,16 +214,14 @@ class PreviewDiffTool(Tool):
 # ---------------------------------------------------------------------------
 
 
-def _apply_unified_diff(
-    patch_text: str, root: Path
-) -> List[tuple[str, bool, str]]:
+def _apply_unified_diff(patch_text: str, root: Path) -> list[tuple[str, bool, str]]:
     """Parse and apply a unified diff patch.
 
     Returns list of (filepath, success, error_message).
     This is a simplified implementation — for complex patches with
     fuzzy matching, use `git apply` via shell.exec instead.
     """
-    results: List[tuple[str, bool, str]] = []
+    results: list[tuple[str, bool, str]] = []
     chunks = _split_file_diffs(patch_text)
 
     for filename, hunks_text in chunks:
@@ -233,6 +229,12 @@ def _apply_unified_diff(
             fpath = _safe_path(root, filename)
         except ValueError as e:
             results.append((filename, False, str(e)))
+            continue
+
+        # ── Runtime protection: block patches to Thomas's own code ──
+        blocked = _is_protected_runtime_path(root, fpath)
+        if blocked:
+            results.append((filename, False, blocked))
             continue
 
         try:
@@ -255,9 +257,9 @@ def _apply_unified_diff(
     return results
 
 
-def _split_file_diffs(patch_text: str) -> List[tuple[str, str]]:
+def _split_file_diffs(patch_text: str) -> list[tuple[str, str]]:
     """Split a multi-file patch into (filename, hunks_text) pairs."""
-    chunks: List[tuple[str, str]] = []
+    chunks: list[tuple[str, str]] = []
     lines = patch_text.splitlines(keepends=True)
     i = 0
 
@@ -272,9 +274,7 @@ def _split_file_diffs(patch_text: str) -> List[tuple[str, str]]:
 
             # Collect all hunk lines until next file or end
             hunk_start = i
-            while i < len(lines) and not (
-                lines[i].startswith("--- ") or lines[i].startswith("diff --git")
-            ):
+            while i < len(lines) and not (lines[i].startswith("--- ") or lines[i].startswith("diff --git")):
                 i += 1
             hunks_text = "".join(lines[hunk_start:i])
             chunks.append((fname, hunks_text))
@@ -300,7 +300,7 @@ def _apply_hunks(content: str, hunks_text: str) -> str:
         pos = old_start + offset
 
         # Process hunk lines
-        new_lines: List[str] = []
+        new_lines: list[str] = []
         remove_count = 0
         for line in hunk_lines:
             if not line:
@@ -319,22 +319,22 @@ def _apply_hunks(content: str, hunks_text: str) -> str:
                 new_lines.append(text)
 
         # Replace old lines with new lines
-        result_lines[pos:pos + remove_count] = new_lines
+        result_lines[pos : pos + remove_count] = new_lines
         offset += len(new_lines) - remove_count
 
     return "".join(result_lines)
 
 
-def _parse_hunks(hunks_text: str) -> List[tuple[str, List[str]]]:
+def _parse_hunks(hunks_text: str) -> list[tuple[str, list[str]]]:
     """Parse hunk headers and their lines from a chunk of diff text."""
-    hunks: List[tuple[str, List[str]]] = []
+    hunks: list[tuple[str, list[str]]] = []
     lines = hunks_text.splitlines()
     i = 0
 
     while i < len(lines):
         if lines[i].startswith("@@"):
             header = lines[i]
-            hunk_lines: List[str] = []
+            hunk_lines: list[str] = []
             i += 1
             while i < len(lines) and not lines[i].startswith("@@"):
                 hunk_lines.append(lines[i])

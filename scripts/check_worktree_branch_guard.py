@@ -36,6 +36,10 @@ def _branch_name() -> str:
 
 
 def run(_argv: Sequence[str] | None = None) -> int:
+    # Honour the runtime protection toggle (requires Windows auth to disable).
+    if (ROOT / "runtime" / ".runtime_protection_disabled").is_file():
+        print("Worktree branch guard: PASS (runtime protection disabled by human)")
+        return 0
     if _truthy(os.environ.get(DISABLE_ENV)):
         print(f"Worktree branch guard: SKIP ({DISABLE_ENV}=1)")
         return 0

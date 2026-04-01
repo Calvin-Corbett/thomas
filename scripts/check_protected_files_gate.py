@@ -21,8 +21,7 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
-from pathlib import PurePosixPath
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 
 ROOT = Path(__file__).resolve().parent.parent
 PRECOMMIT_BREADCRUMB = ROOT / ".git" / "thomas_precommit_ran"
@@ -122,12 +121,26 @@ def _drop_precommit_breadcrumb() -> None:
         pass
 
 
+def _runtime_protection_disabled() -> bool:
+    """Check if a human has temporarily disabled runtime protection."""
+    flag = ROOT / "runtime" / ".runtime_protection_disabled"
+    return flag.is_file()
+
+
 def run(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--json", action="store_true", help="Emit JSON output.")
     args = parser.parse_args(argv)
 
     _drop_precommit_breadcrumb()
+
+    # Honour the runtime protection toggle (requires Windows auth to disable).
+    if _runtime_protection_disabled():
+        if args.json:
+            print(json.dumps({"gate": "protected_files_gate", "ok": True, "bypass": "runtime_protection_disabled"}))
+        else:
+            print("Protected files gate: PASS (runtime protection disabled by human)")
+        return 0
 
     staged = _staged_files()
     all_protected = set(PROTECTED_FILES) | set(PROTECTED_ENFORCEMENT_SCRIPTS)
