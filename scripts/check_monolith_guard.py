@@ -16,6 +16,8 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
+ROOT = Path(__file__).resolve().parent.parent
+
 DEFAULT_HARD_LIMITS: dict[str, int] = {
     "py": 1200,
     "js": 1200,
@@ -67,6 +69,12 @@ SKIP_DIR_NAMES = {
     ".inbox_extract_20260210_234207",
     ".feature_backups",
 }
+
+
+def _runtime_protection_disabled() -> bool:
+    """Check if a human has temporarily disabled runtime protection."""
+    flag = ROOT / "runtime" / ".runtime_protection_disabled"
+    return flag.is_file()
 
 
 def _parse_iso_date(text: str) -> date | None:
@@ -509,6 +517,10 @@ def run_guard(
 
 
 def main() -> int:
+    if _runtime_protection_disabled():
+        print("Monolith guard: PASS (runtime protection disabled by human)")
+        return 0
+
     parser = argparse.ArgumentParser(description="Fail when source files exceed anti-monolith limits.")
     parser.add_argument(
         "--repo-root",

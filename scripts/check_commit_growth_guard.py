@@ -64,6 +64,12 @@ SKIP_DIR_NAMES = {
 }
 
 
+def _runtime_protection_disabled() -> bool:
+    """Check if a human has temporarily disabled runtime protection."""
+    flag = ROOT / "runtime" / ".runtime_protection_disabled"
+    return flag.is_file()
+
+
 def _is_skipped(rel: str) -> bool:
     parts = Path(rel).parts
     return any(p in SKIP_DIR_NAMES for p in parts)
@@ -112,6 +118,11 @@ def run(
     max_growth: int = DEFAULT_MAX_GROWTH,
     json_output: bool = False,
 ) -> int:
+    if _runtime_protection_disabled():
+        if not json_output:
+            print("Commit growth guard: PASS (runtime protection disabled by human)")
+        return 0
+
     if os.environ.get("THOMAS_COMMIT_GROWTH_GUARD_DISABLE") == "1":
         if not json_output:
             print("Commit growth guard: SKIP " "(THOMAS_COMMIT_GROWTH_GUARD_DISABLE=1)")

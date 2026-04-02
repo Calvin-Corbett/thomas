@@ -1,4 +1,5 @@
 /* layout.css */
-/* Split into ordered parts to keep this file below monolith limits. */
-@import url("./layout_parts/part-001.css?v=20260317-ui-refresh-1");
-@import url("./layout_parts/part-002.css?v=20260317-ui-refresh-1");
+/* Split into functional areas to keep each file below monolith limits. */
+@import url("./layout_parts/layout-app-shell.css?v=20260401-rename");
+@import url("./layout_parts/layout-debug-panel.css?v=20260401-rename");
+@import url("./layout_parts/layout-workspace.css?v=20260401-rename");
