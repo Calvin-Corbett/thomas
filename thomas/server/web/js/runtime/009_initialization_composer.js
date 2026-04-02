@@ -1,0 +1,1181 @@
+function composerShowGamesColumn(show) {
+    if (!composerGamesColumn) return;
+    composerGamesColumn.classList.toggle('hidden', !show);
+    if (!composerActionList) return;
+    const gamesBtn = composerActionList.querySelector('[data-action="games"]');
+    if (gamesBtn instanceof HTMLButtonElement) {
+        gamesBtn.classList.toggle('active', show);
+        gamesBtn.setAttribute('aria-expanded', show ? 'true' : 'false');
+    }
+}
+
+function composerResolveModePreset(modeIdRaw) {
+    const modeId = String(modeIdRaw || '').trim().toLowerCase();
+    if (!modeId) return null;
+    return COMPOSER_MODE_PRESETS[modeId] || null;
+}
+
+function composerRenderModeChip() {
+    if (!composerModeChip || !composerModeChipLabel) return;
+    if (!composerModeSelection) {
+        composerModeChip.classList.add('hidden');
+        composerModeChipLabel.textContent = '';
+        return;
+    }
+    composerModeChipLabel.textContent = composerModeSelection.label || 'Mode';
+    composerModeChip.classList.remove('hidden');
+}
+
+function composerSetMode(modeIdRaw, { label = '', kind = '', promptPrefix = '' } = {}) {
+    const preset = composerResolveModePreset(modeIdRaw);
+    const modeId = preset?.id || String(modeIdRaw || '').trim().toLowerCase();
+    if (!modeId) return null;
+    composerModeSelection = {
+        id: modeId,
+        label: safeString(label) || safeString(preset?.label) || modeId,
+        kind: safeString(kind) || safeString(preset?.kind),
+        promptPrefix: safeString(promptPrefix) || safeString(preset?.promptPrefix),
+    };
+    composerRenderModeChip();
+    return composerModeSelection;
+}
+
+function composerClearMode({ closeGame = true } = {}) {
+    const activeModeKind = safeString(composerModeSelection?.kind);
+    composerModeSelection = null;
+    composerRenderModeChip();
+    if (closeGame && activeModeKind === 'game') {
+        chatGameClose({ clearMode: false });
+    }
+}
+
+function composerBuildMessageForModel(textRaw, modeSelectionRaw = null) {
+    const text = String(textRaw || '').trim();
+    const modeSelection = modeSelectionRaw || composerModeSelection;
+    const modePrompt = safeString(modeSelection?.promptPrefix);
+    if (!modePrompt) return text;
+    if (!text) return modePrompt;
+    return `${modePrompt}
+
+User request:
+${text}`;
+}
+
+function composerCloseActionsMenu() {
+    composerActionsOpen = false;
+    if (composerActionPopover) {
+        composerActionPopover.classList.add('hidden');
+    }
+    composerShowGamesColumn(false);
+    if (attachBtn) {
+        attachBtn.classList.remove('active');
+        attachBtn.setAttribute('aria-expanded', 'false');
+    }
+}
+
+function composerOpenActionsMenu() {
+    composerActionsOpen = true;
+    if (composerActionPopover) {
+        composerActionPopover.classList.remove('hidden');
+    }
+    composerShowGamesColumn(false);
+    if (attachBtn) {
+        attachBtn.classList.add('active');
+        attachBtn.setAttribute('aria-expanded', 'true');
+    }
+}
+
+function composerToggleActionsMenu() {
+    if (composerActionsOpen) {
+        composerCloseActionsMenu();
+        return;
+    }
+    composerOpenActionsMenu();
+}
+
+function composerHandleQuickAction(actionRaw) {
+    const action = String(actionRaw || '').trim().toLowerCase();
+    if (!action) return;
+
+    if (action === 'games') {
+        composerSetMode('games');
+        const showing = composerGamesColumn ? !composerGamesColumn.classList.contains('hidden') : false;
+        composerShowGamesColumn(!showing);
+        return;
+    }
+
+    const mode = composerSetMode(action);
+    if (!mode) return;
+    composerCloseActionsMenu();
+
+    if (mode.kind !== 'game') {
+        chatGameClose({ clearMode: false });
+    }
+
+    if (action === 'add_files') {
+        if (docFileInput) docFileInput.click();
+        return;
+    }
+
+    if (composerTextarea) {
+        composerTextarea.focus();
+    }
+}
+
+function composerHandleGameChoice(gameRaw) {
+    const game = String(gameRaw || '').trim().toLowerCase();
+    if (!game) return;
+    composerCloseActionsMenu();
+    if (game === 'cloud_jump' || game === JETPACK_GAME_ID || game === DINO_GAME_ID) {
+        composerSetMode(game);
+        chatGameOpen(game);
+        return;
+    }
+    composerSetMode('games');
+    chatGameClose({ clearMode: false });
+}
+
+function chatGameGetHighScore(gameIdRaw = chatGameRuntime.activeGameId || 'cloud_jump') {
+    const gameId = safeString(gameIdRaw).toLowerCase();
+    const storageKey = CHAT_GAME_HIGHSCORE_STORAGE_KEYS[gameId] || CHAT_GAME_HIGHSCORE_STORAGE_KEYS.cloud_jump;
+    try {
+        const raw = window.localStorage.getItem(storageKey);
+        const parsed = Number(raw);
+        if (!Number.isFinite(parsed)) return 0;
+        return Math.max(0, Math.floor(parsed));
+    } catch {
+        return 0;
+    }
+}
+
+function chatGameSetHighScore(scoreRaw, gameIdRaw = chatGameRuntime.activeGameId || 'cloud_jump') {
+    const gameId = safeString(gameIdRaw).toLowerCase();
+    const storageKey = CHAT_GAME_HIGHSCORE_STORAGE_KEYS[gameId] || CHAT_GAME_HIGHSCORE_STORAGE_KEYS.cloud_jump;
+    const score = Math.max(0, Math.floor(Number(scoreRaw) || 0));
+    try {
+        window.localStorage.setItem(storageKey, String(score));
+    } catch {
+        // no-op in storage restricted contexts
+    }
+}
+
+function chatGameSetStatusText(text) {
+    const next = safeString(text);
+    if (chatGameStatusText) {
+        chatGameStatusText.textContent = next;
+    }
+    if (composerDinoStatusText) {
+        composerDinoStatusText.textContent = next;
+    }
+}
+
+function chatGameSetPanelOpen(open) {
+    const shouldOpen = Boolean(open);
+    if (chatGamePanel) {
+        chatGamePanel.classList.toggle('hidden', !shouldOpen);
+    }
+    if (appRoot) {
+        appRoot.classList.remove('chat-game-open');
+    }
+}
+
+function chatGameSetDinoSurfaceOpen(open) {
+    const shouldOpen = Boolean(open);
+    if (composerDinoShell) {
+        composerDinoShell.classList.toggle('hidden', !shouldOpen);
+        composerDinoShell.classList.toggle('is-open', shouldOpen);
+    }
+    if (composerBox) {
+        composerBox.classList.toggle('dino-active', shouldOpen);
+    }
+    if (composerContainer) {
+        composerContainer.classList.toggle('dino-active', shouldOpen);
+    }
+    if (composerDisclaimer) {
+        composerDisclaimer.classList.toggle('hidden', shouldOpen);
+    }
+    if (chatGamePortal) {
+        chatGamePortal.classList.add('hidden');
+    }
+    if (appRoot) {
+        appRoot.classList.toggle('chat-game-dino-open', shouldOpen);
+    }
+}
+
+// 
+//   CHAT GAMES                                                             
+//   Cloud Jump, Jetpack Joyride, Dino Run  physics, rendering, game loop  
+// 
+
+function chatGameSetCenterMuted(enable) {
+    if (!appRoot) return;
+    appRoot.classList.toggle('game-center-muted', Boolean(enable));
+}
+
+function chatGameSetPhaseClass(modeRaw = '') {
+    if (chatGamePanel) {
+        chatGamePanel.classList.remove('phase-intro', 'phase-ready', 'phase-launch', 'phase-playing', 'phase-game_over');
+    }
+    if (composerDinoShell) {
+        composerDinoShell.classList.remove('phase-intro', 'phase-ready', 'phase-launch', 'phase-playing', 'phase-game_over');
+    }
+    const mode = safeString(modeRaw).toLowerCase();
+    if (mode === 'intro' || mode === 'ready' || mode === 'launch' || mode === 'playing' || mode === 'game_over') {
+        if (chatGamePanel) {
+            chatGamePanel.classList.add(`phase-${mode}`);
+        }
+        if (composerDinoShell) {
+            composerDinoShell.classList.add(`phase-${mode}`);
+        }
+    }
+}
+
+function chatGameToggleHiddenCanvasPriority(enable) {
+    const demote = Boolean(enable);
+    document.querySelectorAll('canvas').forEach((canvas) => {
+        if (!(canvas instanceof HTMLCanvasElement)) return;
+        if (canvas === chatGameCanvas) return;
+        if (demote) {
+            const rect = canvas.getBoundingClientRect();
+            const hidden = rect.width < 2 || rect.height < 2 || Boolean(canvas.closest('.hidden'));
+            if (!hidden) return;
+            if (canvas.dataset.thomasCanvasDemoted === '1') return;
+            canvas.dataset.thomasCanvasDemoted = '1';
+            canvas.dataset.thomasCanvasWidth = String(canvas.width || 0);
+            canvas.dataset.thomasCanvasHeight = String(canvas.height || 0);
+            canvas.width = 1;
+            canvas.height = 1;
+            return;
+        }
+        if (canvas.dataset.thomasCanvasDemoted !== '1') return;
+        const savedWidth = Number(canvas.dataset.thomasCanvasWidth);
+        const savedHeight = Number(canvas.dataset.thomasCanvasHeight);
+        if (Number.isFinite(savedWidth) && Number.isFinite(savedHeight) && savedWidth > 0 && savedHeight > 0) {
+            canvas.width = savedWidth;
+            canvas.height = savedHeight;
+        }
+        delete canvas.dataset.thomasCanvasDemoted;
+        delete canvas.dataset.thomasCanvasWidth;
+        delete canvas.dataset.thomasCanvasHeight;
+    });
+}
+
+function chatGameClamp(value, min, max) {
+    const numeric = Number(value);
+    if (!Number.isFinite(numeric)) return Number(min) || 0;
+    return Math.min(Number(max) || 0, Math.max(Number(min) || 0, numeric));
+}
+
+function chatGameRandom(min, max) {
+    const lo = Number(min) || 0;
+    const hi = Number(max) || 0;
+    return lo + (Math.random() * (hi - lo));
+}
+
+function chatGameEaseOutCubic(value) {
+    const t = chatGameClamp(value, 0, 1);
+    return 1 - ((1 - t) ** 3);
+}
+
+function chatGameEaseInOutCubic(value) {
+    const t = chatGameClamp(value, 0, 1);
+    if (t < 0.5) {
+        return 4 * t * t * t;
+    }
+    return 1 - (((-2 * t) + 2) ** 3) / 2;
+}
+
+function chatGameLerp(start, end, t) {
+    return Number(start) + ((Number(end) - Number(start)) * chatGameClamp(t, 0, 1));
+}
+
+function chatGameNormalizeOfficeAgent(agentRaw, fallbackId = 'agent-game') {
+    const fallbackColor = '#9ad8ff';
+    const candidate = agentRaw && typeof agentRaw === 'object' ? agentRaw : {};
+    const id = safeString(candidate.id) || safeString(fallbackId) || 'agent-game';
+    const resolvedName = normalizeAgentName(safeString(candidate.name) || 'Office Bot');
+    const colorRaw = safeString(candidate.color);
+    const color = /^#[0-9a-f]{6}$/i.test(colorRaw) ? colorRaw : fallbackColor;
+    const costumeRaw = safeString(candidate.costume || 'none').toLowerCase();
+    const costume = OFFICE_AGENT_COSTUME_POOL.includes(costumeRaw) ? costumeRaw : 'none';
+    const tintRaw = safeString(candidate.tint).toLowerCase();
+    return {
+        id,
+        name: resolvedName || 'Office Bot',
+        color,
+        costume,
+        tint: tintRaw || officeAgentTintFromColor(color),
+    };
+}
+
+function chatGameCollectOfficeAgentRoster() {
+    const liveAgents = Array.isArray(officeState?.agents) ? officeState.agents : [];
+    if (liveAgents.length) {
+        return liveAgents.map((agent, index) => chatGameNormalizeOfficeAgent(agent, `agent-live-${index + 1}`));
+    }
+
+    const seedAgents = OFFICE_AGENT_SEEDS.map((seed, index) => ({
+        id: `agent-${index + 1}`,
+        name: seed.name,
+        color: seed.color,
+        costume: seed.costume,
+        tint: seed.tint,
+    }));
+    const storedPrefs = loadStoredOfficeAgentPrefs();
+    officeApplyStoredAgentPrefs(seedAgents, storedPrefs);
+    return seedAgents.map((agent, index) => chatGameNormalizeOfficeAgent(agent, `agent-seed-${index + 1}`));
+}
+
+function chatGamePickOfficeAgentForRun() {
+    const roster = chatGameCollectOfficeAgentRoster();
+    if (!roster.length) {
+        return chatGameNormalizeOfficeAgent({ name: 'Office Bot', costume: 'headset', color: '#9ad8ff' });
+    }
+    const pickIndex = Math.floor(Math.random() * roster.length);
+    return chatGameNormalizeOfficeAgent(roster[pickIndex], `agent-pick-${pickIndex + 1}`);
+}
+
+function chatGameApplyBotAgentStyle(agentRaw) {
+    const agent = chatGameNormalizeOfficeAgent(agentRaw);
+    const palette = officeAgentPalette(agent);
+
+    if (chatGameBot) {
+        chatGameBot.classList.remove('costume-cap', 'costume-visor', 'costume-headset', 'costume-bowtie');
+        if (agent.costume && agent.costume !== 'none') {
+            chatGameBot.classList.add(`costume-${agent.costume}`);
+        }
+        chatGameBot.style.setProperty('--agent-primary', palette.primary);
+        chatGameBot.style.setProperty('--agent-secondary', palette.secondary);
+        chatGameBot.style.setProperty('--agent-glow', palette.glow);
+        chatGameBot.style.setProperty('--agent-trim', '#0d1117');
+    }
+    if (chatGameBotWrap) {
+        chatGameBotWrap.dataset.agentId = agent.id;
+        chatGameBotWrap.dataset.agentName = agent.name;
+    }
+    if (chatGameBotName) {
+        chatGameBotName.textContent = agent.name;
+        chatGameBotName.title = agent.name;
+    }
+    return agent;
+}
+
+function chatGameDistanceToSegmentSquared(px, py, x1, y1, x2, y2) {
+    const segmentDx = x2 - x1;
+    const segmentDy = y2 - y1;
+    const segmentLengthSq = (segmentDx * segmentDx) + (segmentDy * segmentDy);
+    if (segmentLengthSq <= 0.0001) {
+        const dx = px - x1;
+        const dy = py - y1;
+        return (dx * dx) + (dy * dy);
+    }
+    const projection = chatGameClamp(
+        (((px - x1) * segmentDx) + ((py - y1) * segmentDy)) / segmentLengthSq,
+        0,
+        1,
+    );
+    const nearestX = x1 + (segmentDx * projection);
+    const nearestY = y1 + (segmentDy * projection);
+    const dx = px - nearestX;
+    const dy = py - nearestY;
+    return (dx * dx) + (dy * dy);
+}
+
+function chatGameCircleRectOverlap(cx, cy, radius, rx, ry, rw, rh) {
+    const nearestX = chatGameClamp(cx, rx, rx + rw);
+    const nearestY = chatGameClamp(cy, ry, ry + rh);
+    const dx = cx - nearestX;
+    const dy = cy - nearestY;
+    return ((dx * dx) + (dy * dy)) <= (radius * radius);
+}
+
+function chatGameCreatePlatform(state, y, options = {}) {
+    const width = Math.round(chatGameRandom(CHAT_GAME_PLATFORM_MIN_WIDTH, CHAT_GAME_PLATFORM_MAX_WIDTH));
+    const safeMinX = Math.max(0, CHAT_GAME_PLATFORM_SAFE_MARGIN);
+    const safeMaxX = Math.max(safeMinX, state.width - width - CHAT_GAME_PLATFORM_SAFE_MARGIN);
+    const minCenter = safeMinX + (width * 0.5);
+    const maxCenter = safeMaxX + (width * 0.5);
+    const pathCenter = Number(state.platformGuideX);
+    const targetCenterRaw = Number(state.pathTargetX);
+    const optionCenter = Number(options?.centerX);
+    const optionX = Number(options?.x);
+    const optionDrift = Number(options?.drift);
+    const optionDriftMax = Number(options?.driftMax);
+    const targetCenter = chatGameClamp(
+        Number.isFinite(targetCenterRaw) ? targetCenterRaw : (state.width * CHAT_GAME_PLATFORM_CENTER_RATIO),
+        minCenter,
+        maxCenter,
+    );
+    const guideCenter = Number.isFinite(pathCenter) ? pathCenter : targetCenter;
+
+    let centerX = Number.isFinite(optionCenter)
+        ? optionCenter
+        : (
+            Number.isFinite(optionX)
+                ? (optionX + (width * 0.5))
+                : (
+                    guideCenter
+                    + chatGameRandom(-CHAT_GAME_PLATFORM_PATH_STEP, CHAT_GAME_PLATFORM_PATH_STEP)
+                    + ((targetCenter - guideCenter) * CHAT_GAME_PLATFORM_CENTER_CORRECTION)
+                )
+        );
+    centerX = chatGameClamp(centerX, minCenter, maxCenter);
+
+    const x = Number.isFinite(optionX)
+        ? chatGameClamp(optionX, safeMinX, safeMaxX)
+        : chatGameClamp(centerX - (width * 0.5), safeMinX, safeMaxX);
+
+    const driftMax = Number.isFinite(optionDriftMax)
+        ? Math.max(0, optionDriftMax)
+        : CHAT_GAME_PLATFORM_DRIFT_MAX;
+    const drift = Number.isFinite(optionDrift)
+        ? optionDrift
+        : (Math.random() < CHAT_GAME_PLATFORM_DRIFT_CHANCE ? chatGameRandom(-driftMax, driftMax) : 0);
+
+    state.platformGuideX = x + (width * 0.5);
+    return {
+        id: state.platformSeq++,
+        x,
+        y,
+        w: width,
+        h: 10,
+        drift,
+    };
+}
+
+function chatGameSpawnPlatforms(state) {
+    if (!state) return;
+    const playerCenter = (Number(state.player?.x) || 0) + ((Number(state.player?.w) || 0) * 0.5);
+    const desiredTarget = chatGameClamp(
+        Number.isFinite(playerCenter) ? playerCenter : (state.width * CHAT_GAME_PLATFORM_CENTER_RATIO),
+        state.width * 0.24,
+        state.width * 0.76,
+    );
+    if (Number.isFinite(Number(state.pathTargetX))) {
+        state.pathTargetX += (desiredTarget - Number(state.pathTargetX)) * CHAT_GAME_PLATFORM_CENTER_FOLLOW;
+    } else {
+        state.pathTargetX = desiredTarget;
+    }
+    let highestY = state.platforms.reduce((min, platform) => Math.min(min, platform.y), state.height);
+    while (highestY > -156) {
+        highestY -= chatGameRandom(CHAT_GAME_PLATFORM_GAP_MIN, CHAT_GAME_PLATFORM_GAP_MAX);
+        state.platforms.push(chatGameCreatePlatform(state, highestY));
+    }
+}
+
+function chatGameCollectPlatformSweeps(state, deltaFrames, fallSpeed) {
+    const sweeps = [];
+    const minX = Math.max(0, CHAT_GAME_PLATFORM_SAFE_MARGIN);
+    state.platforms.forEach((platform) => {
+        const previousY = platform.y;
+        platform.y += fallSpeed * deltaFrames;
+        platform.x += platform.drift * deltaFrames;
+        const maxX = Math.max(minX, state.width - platform.w - CHAT_GAME_PLATFORM_SAFE_MARGIN);
+        if (platform.x <= minX || platform.x >= maxX) {
+            platform.drift *= -1;
+            platform.x = chatGameClamp(platform.x, minX, maxX);
+        }
+        sweeps.push({ platform, previousY });
+    });
+    return sweeps;
+}
+
+function chatGameFindLandingPlatform(platformSweeps, player, previousBottom, currentBottom, options = {}) {
+    if (!Array.isArray(platformSweeps) || !player) return null;
+    const tolerance = chatGameClamp(Number(options?.tolerance) || 8, 2, 18);
+    const footInset = chatGameClamp(Number(options?.footInset) || 2, 0, Math.max(0, player.w * 0.45));
+    const footLeft = player.x + footInset;
+    const footRight = player.x + player.w - footInset;
+    let picked = null;
+    let pickedTop = Number.POSITIVE_INFINITY;
+    for (const sweep of platformSweeps) {
+        const platform = sweep?.platform;
+        if (!platform) continue;
+        const sweepTop = Math.min(sweep.previousY, platform.y) - tolerance;
+        const sweepBottom = Math.max(sweep.previousY, platform.y) + tolerance;
+        const crossedVertical = previousBottom <= sweepBottom && currentBottom >= sweepTop;
+        if (!crossedVertical) continue;
+        const overlapX = footRight >= platform.x && footLeft <= (platform.x + platform.w);
+        if (!overlapX) continue;
+        const platformTop = platform.y;
+        if (platformTop < pickedTop) {
+            picked = platform;
+            pickedTop = platformTop;
+        }
+    }
+    return picked;
+}
+
+function chatGameResizeCanvas() {
+    if (!(chatGameCanvas instanceof HTMLCanvasElement)) {
+        return { width: 320, height: 560 };
+    }
+    const laneRect = chatGameLane instanceof HTMLElement ? chatGameLane.getBoundingClientRect() : null;
+    const gameId = safeString(chatGameRuntime.activeGameId).toLowerCase();
+    const isJetpackWide = gameId === JETPACK_GAME_ID;
+    const width = Math.round(chatGameClamp(
+        (laneRect?.width || 320) - 4,
+        isJetpackWide ? 640 : 224,
+        isJetpackWide ? 1800 : 360,
+    ));
+    const height = Math.round(chatGameClamp((laneRect?.height || 560) - 4, isJetpackWide ? 360 : 300, 960));
+    if (chatGameCanvas.width !== width) {
+        chatGameCanvas.width = width;
+    }
+    if (chatGameCanvas.height !== height) {
+        chatGameCanvas.height = height;
+    }
+    return { width, height };
+}
+
+function chatGameResizeDinoCanvas() {
+    if (!(composerDinoCanvas instanceof HTMLCanvasElement)) {
+        return { width: 760, height: 214 };
+    }
+    const shellRect = composerDinoShell instanceof HTMLElement ? composerDinoShell.getBoundingClientRect() : null;
+    const width = Math.round(chatGameClamp((shellRect?.width || 760) - 2, 360, 980));
+    const height = Math.round(chatGameClamp((shellRect?.height || 214) - 2, 168, 340));
+    if (composerDinoCanvas.width !== width) {
+        composerDinoCanvas.width = width;
+    }
+    if (composerDinoCanvas.height !== height) {
+        composerDinoCanvas.height = height;
+    }
+    return { width, height };
+}
+
+function chatGameGetPortalAnchorInDino(state) {
+    const surfaceWidth = Math.max(360, Number(state?.width) || 0);
+    const surfaceHeight = Math.max(168, Number(state?.height) || 0);
+    const fallbackY = Math.max(34, surfaceHeight - DINO_GROUND_PADDING - 48);
+    const fallback = { x: 6, y: fallbackY };
+    if (!(attachBtn instanceof HTMLElement) || !(composerDinoShell instanceof HTMLElement)) {
+        return fallback;
+    }
+    const shellRect = composerDinoShell.getBoundingClientRect();
+    const plusRect = attachBtn.getBoundingClientRect();
+    if (shellRect.width < 2 || plusRect.width < 2 || plusRect.height < 2) {
+        return fallback;
+    }
+    const anchor = {
+        x: chatGameClamp(
+            (plusRect.left - shellRect.left) + (plusRect.width * 0.5) - (CHAT_GAME_BOT_WRAP_SIZE * 0.5),
+            -24,
+            surfaceWidth + 24,
+        ),
+        y: chatGameClamp(
+            (plusRect.top - shellRect.top) + (plusRect.height * 0.5) - (CHAT_GAME_BOT_WRAP_SIZE * 0.5),
+            -24,
+            surfaceHeight + 24,
+        ),
+    };
+    const shellLikelyUnstable = shellRect.width < (surfaceWidth * 0.5) || shellRect.height < (surfaceHeight * 0.5);
+    if (!Number.isFinite(anchor.x) || !Number.isFinite(anchor.y)) {
+        return fallback;
+    }
+    if (shellLikelyUnstable && anchor.y < (surfaceHeight * 0.42)) {
+        return fallback;
+    }
+    if (anchor.y < 16 && surfaceHeight > 150) {
+        return fallback;
+    }
+    return anchor;
+}
+
+function chatGameGetDoorAnchor(state) {
+    const fallbackWidth = state?.width || 320;
+    const fallbackHeight = state?.height || 560;
+    const fallbackDoorWidth = 74;
+    const fallbackDoorHeight = 110;
+    const fallbackDoorLeft = fallbackWidth - fallbackDoorWidth - 8;
+    const fallbackDoorTop = fallbackHeight - fallbackDoorHeight - 34;
+    const fallbackX = fallbackDoorLeft + CHAT_GAME_DOOR_BOT_MOUNT_LEFT + CHAT_GAME_DOOR_BOT_ENTER_OFFSET_END;
+    const fallbackY = fallbackDoorTop + fallbackDoorHeight - CHAT_GAME_DOOR_BOT_MOUNT_BOTTOM - CHAT_GAME_BOT_WRAP_SIZE;
+    if (!(chatGameDoor instanceof HTMLElement) || !(chatGameLane instanceof HTMLElement)) {
+        return {
+            x: fallbackX,
+            y: fallbackY,
+            doorLeft: fallbackDoorLeft,
+            doorTop: fallbackDoorTop,
+            doorWidth: fallbackDoorWidth,
+            doorHeight: fallbackDoorHeight,
+        };
+    }
+    const laneRect = chatGameLane.getBoundingClientRect();
+    const doorRect = chatGameDoor.getBoundingClientRect();
+    const laneWidth = Math.max(1, Number(laneRect.width) || fallbackWidth);
+    const laneHeight = Math.max(1, Number(laneRect.height) || fallbackHeight);
+    if (laneRect.width < 2 || doorRect.width < 2) {
+        return {
+            x: fallbackX,
+            y: fallbackY,
+            doorLeft: fallbackDoorLeft,
+            doorTop: fallbackDoorTop,
+            doorWidth: fallbackDoorWidth,
+            doorHeight: fallbackDoorHeight,
+        };
+    }
+    const doorLeft = doorRect.left - laneRect.left;
+    const doorTop = doorRect.top - laneRect.top;
+    const anchorX = doorLeft + CHAT_GAME_DOOR_BOT_MOUNT_LEFT + CHAT_GAME_DOOR_BOT_ENTER_OFFSET_END;
+    const anchorY = doorTop + doorRect.height - CHAT_GAME_DOOR_BOT_MOUNT_BOTTOM - CHAT_GAME_BOT_WRAP_SIZE;
+    return {
+        x: chatGameClamp(anchorX, -24, laneWidth + 24),
+        y: chatGameClamp(anchorY, -24, laneHeight + 24),
+        doorLeft: chatGameClamp(doorLeft, -120, laneWidth + 120),
+        doorTop: chatGameClamp(doorTop, -120, laneHeight + 120),
+        doorWidth: chatGameClamp(doorRect.width, 48, 180),
+        doorHeight: chatGameClamp(doorRect.height, 72, 220),
+    };
+}
+
+function chatGameCreateTopStartPlatforms(state) {
+    if (!state) return;
+    state.platforms = [];
+    const safeMinX = Math.max(0, CHAT_GAME_PLATFORM_SAFE_MARGIN);
+    const anchorWidth = 164;
+    const anchorY = -18;
+    const playerCenter = state.player.x + (state.player.w * 0.5);
+    state.pathTargetX = chatGameClamp(
+        playerCenter,
+        state.width * 0.24,
+        state.width * 0.76,
+    );
+    const anchorX = chatGameClamp(
+        playerCenter - (anchorWidth / 2),
+        safeMinX,
+        Math.max(safeMinX, state.width - anchorWidth - CHAT_GAME_PLATFORM_SAFE_MARGIN),
+    );
+    state.platforms.push({
+        id: state.platformSeq++,
+        x: anchorX,
+        y: anchorY,
+        w: anchorWidth,
+        h: 10,
+        drift: 0,
+    });
+    state.platformGuideX = anchorX + (anchorWidth * 0.5);
+    let seedY = anchorY - chatGameRandom(34, 46);
+    for (let index = 0; index < CHAT_GAME_PLATFORM_RUNWAY_COUNT; index += 1) {
+        const runwayBias = Math.sin(index * 0.78) * 18;
+        const correction = (Number(state.pathTargetX) - Number(state.platformGuideX)) * 0.34;
+        const guideX = Number(state.platformGuideX) + runwayBias + correction + chatGameRandom(-12, 12);
+        state.platforms.push(chatGameCreatePlatform(state, seedY, {
+            centerX: guideX,
+            driftMax: index < 4 ? 0 : 0.08,
+        }));
+        seedY -= chatGameRandom(40, 56);
+    }
+    chatGameSpawnPlatforms(state);
+}
+
+function chatGameUpdateHud(state) {
+    if (!state) return;
+    const scoreText = String(Math.max(0, Math.floor(state.score)));
+    const highText = String(Math.max(0, Math.floor(state.best)));
+    if (state.id === DINO_GAME_ID) {
+        if (composerDinoScore) {
+            composerDinoScore.textContent = scoreText;
+        }
+        if (composerDinoHighScore) {
+            composerDinoHighScore.textContent = highText;
+        }
+        return;
+    }
+    if (chatGameScore) {
+        chatGameScore.textContent = scoreText;
+    }
+    if (chatGameHighScore) {
+        chatGameHighScore.textContent = highText;
+    }
+}
+
+function chatGameSyncScene(state) {
+    if (!state) return;
+    const activeGame = safeString(chatGameRuntime.activeGameId).toLowerCase();
+    const isDino = activeGame === DINO_GAME_ID;
+    const scene = state.scene || {};
+    const selectedAgent = chatGameApplyBotAgentStyle(state.selectedAgent || chatGamePickOfficeAgentForRun());
+    if (!state.selectedAgent || state.selectedAgent.id !== selectedAgent.id) {
+        state.selectedAgent = selectedAgent;
+    }
+    const botScale = chatGameClamp(Number(scene.botScale) || 1, 0.24, 1.8);
+    const botRotate = chatGameClamp(Number(scene.botRotate) || 0, -1200, 1200);
+    chatGameSetPhaseClass(state.mode);
+    if (chatGamePanel) {
+        chatGamePanel.classList.toggle('door-visible', Boolean(scene.doorVisible));
+    }
+    if (chatGameDoor) {
+        chatGameDoor.style.setProperty('--door-open', chatGameClamp(scene.doorOpen, 0, 1).toFixed(3));
+        chatGameDoor.style.setProperty('--door-light', chatGameClamp(scene.light, 0, 1).toFixed(3));
+    }
+    if (chatGamePortal) {
+        const portal = state.portal || {};
+        const portalVisible = isDino && Boolean(portal.visible);
+        chatGamePortal.classList.toggle('hidden', !portalVisible);
+        if (portalVisible) {
+            chatGamePortal.style.left = `${(Number(portal.x) || 0).toFixed(2)}px`;
+            chatGamePortal.style.top = `${(Number(portal.y) || 0).toFixed(2)}px`;
+            chatGamePortal.style.setProperty('--portal-spin', `${chatGameClamp(Number(portal.spin) || 0, -10000, 10000).toFixed(2)}deg`);
+            chatGamePortal.style.setProperty('--portal-scale', chatGameClamp(Number(portal.scale) || 1, 0.2, 2.8).toFixed(3));
+            chatGamePortal.style.setProperty('--portal-glow', chatGameClamp(Number(portal.glow) || 0.7, 0, 1).toFixed(3));
+        }
+    }
+    if (chatGameBotWrap) {
+        const botX = Number(scene.botX) || 0;
+        const botY = Number(scene.botY) || 0;
+        const insideDoor = Boolean(scene.botInside);
+        chatGameBotWrap.style.setProperty('--bot-rotate', botRotate.toFixed(2));
+        const botPlayfieldHost = isDino && composerDinoShell instanceof HTMLElement ? composerDinoShell : chatGameLane;
+        if (insideDoor && !isDino && chatGameDoor instanceof HTMLElement) {
+            if (chatGameBotWrap.parentElement !== chatGameDoor) {
+                chatGameDoor.appendChild(chatGameBotWrap);
+            }
+            const doorOffsetX = Number(scene.botDoorOffsetX) || 0;
+            chatGameBotWrap.style.left = `${CHAT_GAME_DOOR_BOT_MOUNT_LEFT}px`;
+            chatGameBotWrap.style.top = 'auto';
+            chatGameBotWrap.style.bottom = `${CHAT_GAME_DOOR_BOT_MOUNT_BOTTOM}px`;
+            chatGameBotWrap.style.transform = `translate3d(${doorOffsetX.toFixed(2)}px, 0px, 0px) rotate(${botRotate.toFixed(2)}deg) scale(${botScale.toFixed(3)})`;
+        } else {
+            if (botPlayfieldHost instanceof HTMLElement && chatGameBotWrap.parentElement !== botPlayfieldHost) {
+                botPlayfieldHost.appendChild(chatGameBotWrap);
+            }
+            chatGameBotWrap.style.left = '0px';
+            chatGameBotWrap.style.top = '0px';
+            chatGameBotWrap.style.bottom = 'auto';
+            chatGameBotWrap.style.transform = `translate3d(${botX.toFixed(2)}px, ${botY.toFixed(2)}px, 0px) rotate(${botRotate.toFixed(2)}deg) scale(${botScale.toFixed(3)})`;
+        }
+        chatGameBotWrap.classList.toggle('visible', Boolean(scene.botVisible));
+        chatGameBotWrap.classList.toggle('inside-door', Boolean(scene.botInside));
+        chatGameBotWrap.classList.toggle('jetpack-on', activeGame === JETPACK_GAME_ID && Boolean(scene.botJetpack));
+        chatGameBotWrap.classList.toggle('dino-ride', isDino);
+        if (isDino) {
+            chatGameBotWrap.classList.remove('jetpack-on');
+        }
+        const moving = Boolean(scene.botRunning) || (state.mode === 'playing' && Math.abs(state.player?.vx || 0) > 0.35);
+        chatGameBotWrap.classList.toggle('is-running', moving);
+        chatGameBotWrap.classList.toggle('dir-left', Number(state.player?.facing || -1) < 0);
+    }
+    if (chatGameBot) {
+        chatGameBot.classList.toggle('looking-user', state.mode === 'ready');
+    }
+}
+
+function chatGameResetCloudJump() {
+    if (!(chatGameCanvas instanceof HTMLCanvasElement)) return;
+    const surface = chatGameResizeCanvas();
+    const width = surface.width;
+    const height = surface.height;
+    const best = chatGameGetHighScore();
+    const selectedAgent = chatGamePickOfficeAgentForRun();
+    const state = {
+        mode: 'intro',
+        selectedAgent,
+        width,
+        height,
+        tick: 0,
+        introSeconds: 0,
+        readySeconds: 0,
+        score: 0,
+        best,
+        distance: 0,
+        playFrames: 0,
+        gravity: 0.41,
+        horizontalSpeed: 4.6,
+        jumpVelocity: -10.6,
+        baseFallSpeed: 1.16,
+        launchSeconds: 0,
+        scrollLine: height * 0.34,
+        startY: height - 140,
+        platformGuideX: (width * CHAT_GAME_START_X_RATIO),
+        pathTargetX: (width * CHAT_GAME_PLATFORM_CENTER_RATIO),
+        platformSeq: 1,
+        platforms: [],
+        player: {
+            x: (width * CHAT_GAME_START_X_RATIO) - 15,
+            y: height - 150,
+            w: 30,
+            h: 34,
+            vx: 0,
+            vy: 0,
+            facing: -1,
+        },
+        scene: {
+            doorVisible: false,
+            doorOpen: 0,
+            light: 0,
+            botVisible: false,
+            botRunning: false,
+            botInside: true,
+            botDoorOffsetX: CHAT_GAME_DOOR_BOT_ENTER_OFFSET_START,
+            botX: width - 50,
+            botY: height - 150,
+            botScale: 1,
+            botJetpack: false,
+        },
+    };
+
+    const doorAnchor = chatGameGetDoorAnchor(state);
+    const startY = Number(doorAnchor.y) || (height - 140);
+    state.player.x = chatGameClamp(state.player.x, 18, Math.max(18, width - state.player.w - 18));
+    state.startY = startY;
+    state.player.y = startY;
+    state.platformGuideX = state.player.x + (state.player.w * 0.5);
+    state.pathTargetX = state.platformGuideX;
+    state.scene.botX = Number(doorAnchor.doorLeft || 0) + CHAT_GAME_DOOR_BOT_MOUNT_LEFT + CHAT_GAME_DOOR_BOT_ENTER_OFFSET_START;
+    state.scene.botY = startY;
+    chatGameRuntime.cloudJump = state;
+    chatGameRuntime.lastFrameMs = 0;
+    chatGameUpdateHud(state);
+    chatGameSetStatusText('Door opening...');
+    chatGameSyncScene(state);
+}
+
+function chatGameStartRun(state = chatGameRuntime.cloudJump) {
+    if (!state || state.mode !== 'ready') return false;
+    state.mode = 'launch';
+    state.launchSeconds = 0;
+    state.playFrames = 0;
+    state.score = 0;
+    state.distance = 0;
+    chatGameCreateTopStartPlatforms(state);
+    state.player.y = Number(state.startY) || state.player.y;
+    state.player.vy = 0;
+    state.player.vx = 0;
+    chatGameSetStatusText('Platforms incoming. First landing starts the run.');
+    chatGameSyncScene(state);
+    return true;
+}
+
+function chatGameStepIntro(state, deltaFrames) {
+    const stepSeconds = deltaFrames / 60;
+    state.tick += deltaFrames;
+    state.introSeconds += stepSeconds;
+
+    const elapsed = state.introSeconds;
+    const scene = state.scene;
+    scene.botScale = 1;
+    scene.botJetpack = false;
+    scene.doorVisible = elapsed >= 0.08;
+    scene.doorOpen = chatGameClamp((elapsed - 0.32) / 0.46, 0, 1);
+    scene.light = chatGameClamp((elapsed - 0.42) / 0.4, 0, 1);
+
+    const doorMetrics = chatGameGetDoorAnchor(state);
+    const insideBaseY = doorMetrics.y;
+    const insideOffsetStart = CHAT_GAME_DOOR_BOT_ENTER_OFFSET_START;
+    const insideOffsetEnd = CHAT_GAME_DOOR_BOT_ENTER_OFFSET_END;
+    const worldXFromDoorOffset = (offsetX) => (
+        Number(doorMetrics.doorLeft || 0) + CHAT_GAME_DOOR_BOT_MOUNT_LEFT + offsetX
+    );
+    const holdInsideStart = 0.22;
+    const holdInsideEnd = 1.12;
+    const emergeEnd = 1.58;
+    const runEnd = 2.72;
+    const doorCloseStart = runEnd - 0.34;
+
+    if (elapsed < holdInsideStart) {
+        scene.botVisible = false;
+        scene.botRunning = false;
+        scene.botInside = true;
+        scene.botDoorOffsetX = insideOffsetStart;
+        scene.botX = worldXFromDoorOffset(scene.botDoorOffsetX);
+        scene.botY = insideBaseY;
+        state.player.y = insideBaseY;
+        state.player.facing = -1;
+    } else if (elapsed < holdInsideEnd) {
+        scene.botVisible = true;
+        scene.botRunning = false;
+        scene.botInside = true;
+        scene.botDoorOffsetX = insideOffsetStart;
+        scene.botX = worldXFromDoorOffset(scene.botDoorOffsetX);
+        scene.botY = insideBaseY;
+        state.player.y = insideBaseY;
+        state.player.facing = -1;
+    } else if (elapsed < emergeEnd) {
+        const emergeProgress = chatGameClamp((elapsed - holdInsideEnd) / Math.max(0.001, emergeEnd - holdInsideEnd), 0, 1);
+        const eased = chatGameEaseOutCubic(emergeProgress);
+        scene.botVisible = true;
+        scene.botRunning = emergeProgress > 0.08;
+        scene.botInside = true;
+        scene.botDoorOffsetX = insideOffsetStart + ((insideOffsetEnd - insideOffsetStart) * eased);
+        scene.botX = worldXFromDoorOffset(scene.botDoorOffsetX);
+        scene.botY = insideBaseY;
+        state.player.y = insideBaseY;
+        state.player.facing = -1;
+    } else {
+        const runProgress = chatGameClamp((elapsed - emergeEnd) / Math.max(0.001, runEnd - emergeEnd), 0, 1);
+        const eased = chatGameEaseOutCubic(runProgress);
+        const startX = worldXFromDoorOffset(insideOffsetEnd);
+        const endX = state.player.x;
+        const closeProgress = chatGameClamp((elapsed - doorCloseStart) / Math.max(0.001, runEnd - doorCloseStart), 0, 1);
+        scene.botVisible = true;
+        scene.botRunning = runProgress < 0.98;
+        scene.botInside = false;
+        scene.botDoorOffsetX = 0;
+        scene.botX = startX + ((endX - startX) * eased);
+        scene.botY = insideBaseY + (Math.sin(runProgress * Math.PI) * 1.4);
+        scene.doorOpen = 1 - closeProgress;
+        scene.light *= (1 - closeProgress);
+        scene.doorVisible = closeProgress < 0.98;
+        state.player.y = insideBaseY;
+        state.startY = insideBaseY;
+        state.player.facing = -1;
+    }
+
+    if (elapsed >= (runEnd + 0.16)) {
+        state.mode = 'ready';
+        state.readySeconds = 0;
+        scene.botVisible = true;
+        scene.botRunning = false;
+        scene.botInside = false;
+        scene.botDoorOffsetX = 0;
+        scene.doorVisible = false;
+        scene.doorOpen = 0;
+        scene.light = 0;
+        scene.botX = state.player.x;
+        scene.botY = state.startY;
+        state.player.y = state.startY;
+        chatGameSetStatusText('Press Space to start | Esc to exit');
+    }
+}
+
+function chatGameStepReady(state, deltaFrames) {
+    state.tick += deltaFrames;
+    state.readySeconds += (deltaFrames / 60);
+    const scene = state.scene;
+    scene.botScale = 1;
+    scene.botJetpack = false;
+    scene.doorVisible = false;
+    scene.doorOpen = 0;
+    scene.light = 0;
+    scene.botVisible = true;
+    scene.botRunning = false;
+    scene.botInside = false;
+    scene.botDoorOffsetX = 0;
+    state.player.vx = 0;
+    state.player.vy = 0;
+    state.player.y = state.startY;
+    scene.botX = state.player.x;
+    scene.botY = state.player.y + (Math.sin(state.tick * 0.11) * 0.8);
+}
+
+function chatGameStepLaunch(state, deltaFrames) {
+    state.tick += deltaFrames;
+    state.launchSeconds += (deltaFrames / 60);
+
+    const player = state.player;
+    const horizontal = (chatGameRuntime.input.right ? 1 : 0) - (chatGameRuntime.input.left ? 1 : 0);
+    player.vx = horizontal * (state.horizontalSpeed * 0.92);
+    player.x += player.vx * deltaFrames;
+    if (player.vx > 0.12) {
+        player.facing = 1;
+    } else if (player.vx < -0.12) {
+        player.facing = -1;
+    }
+    if (player.x > state.width) {
+        player.x = -player.w;
+    } else if ((player.x + player.w) < 0) {
+        player.x = state.width;
+    }
+
+    const groundY = Number(state.startY) || player.y;
+    player.y = groundY;
+    player.vy = 0;
+
+    const playerBottom = player.y + player.h;
+    const launchSweeps = chatGameCollectPlatformSweeps(state, deltaFrames, CHAT_GAME_LAUNCH_PLATFORM_FALL_SPEED);
+    const landedPlatform = chatGameFindLandingPlatform(
+        launchSweeps,
+        player,
+        playerBottom - 4,
+        playerBottom + 4,
+        { tolerance: 10, footInset: 3 },
+    );
+
+    state.platforms = state.platforms.filter((platform) => platform.y < (state.height + 44));
+    chatGameSpawnPlatforms(state);
+
+    const scene = state.scene;
+    scene.botScale = 1;
+    scene.botJetpack = false;
+    scene.doorVisible = false;
+    scene.doorOpen = 0;
+    scene.light = 0;
+    scene.botVisible = true;
+    scene.botX = player.x;
+    scene.botY = player.y;
+    scene.botRunning = Math.abs(player.vx) > 0.3;
+    scene.botInside = false;
+    scene.botDoorOffsetX = 0;
+
+    if (landedPlatform) {
+        player.y = landedPlatform.y - player.h;
+        player.vy = state.jumpVelocity;
+        state.mode = 'playing';
+        state.playFrames = 0;
+        state.launchSeconds = 0;
+        chatGameSetStatusText('Run active. Keep landing to stay up.');
+        return;
+    }
+
+    if (state.launchSeconds > CHAT_GAME_PLATFORM_LAUNCH_RESPAWN_SECONDS) {
+        state.launchSeconds = 0;
+        chatGameCreateTopStartPlatforms(state);
+        chatGameSetStatusText('Platforms realigned. First landing starts the run.');
+    }
+}
+
+function chatGameStepPlaying(state, deltaFrames) {
+    state.tick += deltaFrames;
+    state.playFrames += deltaFrames;
+
+    const player = state.player;
+    const horizontal = (chatGameRuntime.input.right ? 1 : 0) - (chatGameRuntime.input.left ? 1 : 0);
+    player.vx = horizontal * state.horizontalSpeed;
+    player.x += player.vx * deltaFrames;
+    if (player.vx > 0.12) {
+        player.facing = 1;
+    } else if (player.vx < -0.12) {
+        player.facing = -1;
+    }
+    if (player.x > state.width) {
+        player.x = -player.w;
+    } else if ((player.x + player.w) < 0) {
+        player.x = state.width;
+    }
+
+    const previousBottom = player.y + player.h;
+    player.vy += state.gravity * deltaFrames;
+    player.vy = Math.min(player.vy, 14.8);
+    player.y += player.vy * deltaFrames;
+
+    const platformFallSpeed = state.baseFallSpeed + Math.min(2.2, state.score * 0.009);
+    const platformSweeps = chatGameCollectPlatformSweeps(state, deltaFrames, platformFallSpeed);
+
+    if (player.vy > 0) {
+        const currentBottom = player.y + player.h;
+        const landedPlatform = chatGameFindLandingPlatform(
+            platformSweeps,
+            player,
+            previousBottom,
+            currentBottom,
+            { tolerance: 8, footInset: 3 },
+        );
+        if (landedPlatform) {
+            player.y = landedPlatform.y - player.h;
+            player.vy = state.jumpVelocity;
+        }
+    }
+
+    if (player.y < state.scrollLine) {
+        const travel = state.scrollLine - player.y;
+        player.y = state.scrollLine;
+        state.platforms.forEach((platform) => {
+            platform.y += travel;
+        });
+        state.distance += travel;
+    }
+
+    const climbScore = Math.max(0, Math.floor(state.distance / 5));
+    const timeScore = Math.max(0, Math.floor(state.playFrames * 0.08));
+    state.score = Math.max(state.score, climbScore + timeScore);
+
+    state.platforms = state.platforms.filter((platform) => platform.y < (state.height + 44));
+    chatGameSpawnPlatforms(state);
+
+    const scene = state.scene;
+    scene.botScale = 1;
+    scene.botJetpack = false;
+    scene.doorVisible = false;
+    scene.doorOpen = 0;
+    scene.light = 0;
+    scene.botVisible = true;
+    scene.botX = player.x;
+    scene.botY = player.y;
+    scene.botRunning = Math.abs(player.vx) > 0.4;
+    scene.botInside = false;
+    scene.botDoorOffsetX = 0;
+
+    if (player.y > (state.height + 42)) {
+        state.mode = 'game_over';
+        state.best = Math.max(state.best, state.score);
+        chatGameSetHighScore(state.best);
+        player.vx = 0;
+        player.vy = 0;
+        scene.botRunning = false;
+        chatGameSetStatusText('Game over. Space to run again | Esc to exit');
+    }
+}
+
+function chatGameStepGameOver(state, deltaFrames) {
+    state.tick += deltaFrames;
+    const scene = state.scene;
+    scene.botScale = 1;
+    scene.botJetpack = false;
+    scene.doorVisible = false;
+    scene.doorOpen = 0;
+    scene.light = 0;
+    scene.botVisible = true;
+    scene.botRunning = false;
+    scene.botInside = false;
+    scene.botDoorOffsetX = 0;
+    scene.botX = state.player.x;
+    scene.botY = Math.min(state.height - state.player.h - 12, state.player.y + (Math.sin(state.tick * 0.08) * 0.6));
+}
+
+function chatGameStepCloudJump(deltaFrames) {
+    const state = chatGameRuntime.cloudJump;
+    if (!state) return;
+    const frames = Number.isFinite(deltaFrames) ? Math.max(0, deltaFrames) : 1;
+
+    if (state.mode === 'intro') {
+        chatGameStepIntro(state, frames);
+    } else if (state.mode === 'ready') {
+        chatGameStepReady(state, frames);
+    } else if (state.mode === 'launch') {
+        chatGameStepLaunch(state, frames);
+    } else if (state.mode === 'playing') {
+        chatGameStepPlaying(state, frames);
+    } else if (state.mode === 'game_over') {
+        chatGameStepGameOver(state, frames);
+    }
+    chatGameUpdateHud(state);
+    chatGameSyncScene(state);
+}
+
+function chatGameRenderCloudJump() {
+    if (!(chatGameCanvas instanceof HTMLCanvasElement)) return;
+    const ctx = chatGameCanvas.getContext('2d');
+    const state = chatGameRuntime.cloudJump;
+    if (!ctx || !state) return;
+
+    const width = state.width;
+    const height = state.height;
+    ctx.clearRect(0, 0, width, height);
+
+    state.platforms.forEach((platform) => {
+        const shimmer = 0.64 + (Math.sin((state.tick * 0.05) + (platform.id * 0.18)) * 0.13);
+        ctx.fillStyle = `rgba(70, 175, 248, ${chatGameClamp(shimmer, 0.32, 0.86).toFixed(3)})`;
+        ctx.fillRect(platform.x, platform.y, platform.w, platform.h);
+        ctx.fillStyle = 'rgba(230, 246, 255, 0.92)';
+        ctx.fillRect(platform.x + 2, platform.y + 2, platform.w - 4, 3);
+    });
+
+    if (state.mode === 'game_over') {
+        ctx.fillStyle = 'rgba(236, 246, 255, 0.88)';
+        ctx.font = '700 14px "Segoe UI", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText('Run Ended', width * 0.5, Math.max(36, height * 0.18));
+    }
+    chatGameSyncScene(state);
+}
+
+function chatGameGetJetpackFlightBounds(state, entityHeight = 0) {
+    const minY = JETPACK_PLAYER_TOP_PADDING;
+    const maxY = Math.max(
+        minY,
+        state.height - Number(entityHeight || 0) - JETPACK_PLAYER_BOTTOM_PADDING,
+    );
+    return { minY, maxY };
+}
+

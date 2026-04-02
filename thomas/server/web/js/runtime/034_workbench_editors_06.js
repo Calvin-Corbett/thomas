@@ -1,0 +1,1374 @@
+function moduleRenderWorkbenchGameStudioOss(container, wb) {
+    return moduleRenderWorkbenchGameStudioDirector(container, wb);
+    if (!container || !wb) return false;
+    if (wb.ossError) return false;
+    if (!wb.ossReady || !window.Phaser) {
+        moduleWorkbenchRenderEngineLoading(
+            container,
+            'Game Studio Runtime Engine',
+            'Phaser playtest viewport plus Godot and Unreal handoff tools.',
+            'Loading Phaser...',
+            'Fallback grid editor opens if Phaser fails.',
+        );
+        if (!wb.ossLoading) {
+            wb.ossLoading = true;
+            void moduleWorkbenchLoadPhaser().then(() => {
+                wb.ossReady = true;
+                wb.ossLoading = false;
+                wb.ossError = '';
+                moduleWorkbenchRefreshMode('game_studio');
+            }).catch((error) => {
+                wb.ossLoading = false;
+                wb.ossReady = false;
+                wb.ossError = safeString(error?.message) || 'Failed to load Phaser.';
+                notifyUser('Phaser failed to load, using fallback level grid.', { tone: 'warn', durationMs: 2300, debugKind: 'game-studio' });
+                moduleWorkbenchRefreshMode('game_studio');
+            });
+        }
+        return true;
+    }
+
+    moduleGameStudioEnsureGrid(wb);
+    wb.godotProjectPath = safeString(wb.godotProjectPath) || 'C:/games/MyGodotProject';
+    wb.unrealProjectPath = safeString(wb.unrealProjectPath) || 'C:/games/MyUnrealProject/MyGame.uproject';
+    wb.selectedProjectId = safeString(wb.selectedProjectId);
+    wb.viewMode = moduleGameStudioViewMode(wb.viewMode);
+    wb.unrealViewportUrl = safeString(wb.unrealViewportUrl) || 'http://127.0.0.1:8888';
+    wb.viewportConnected = Boolean(wb.viewportConnected) && Boolean(safeString(wb.unrealViewportUrl));
+    wb.unrealRcUrl = safeString(wb.unrealRcUrl) || 'http://127.0.0.1:30010';
+    wb.unrealRcEndpoint = safeString(wb.unrealRcEndpoint) || '/remote/object/call';
+    wb.unrealRcPayload = safeString(wb.unrealRcPayload)
+        || '{\n  "objectPath": "/Game/Blueprints/BP_GameMode.BP_GameMode_C",\n  "functionName": "RunEditorTick",\n  "parameters": {}\n}';
+    wb.unrealRcResponse = safeString(wb.unrealRcResponse);
+    wb.aiPrompt = safeString(wb.aiPrompt) || 'Build a modular mission loop with replay value.';
+    wb.playTarget = moduleGameStudioPlayTarget(wb.playTarget);
+    wb.viewportLoadState = safeString(wb.viewportLoadState) || 'idle';
+    wb.viewportBlockedHint = Boolean(wb.viewportBlockedHint);
+    wb.viewportProbeTimer = Number(wb.viewportProbeTimer) || 0;
+    wb.bridgePollTimer = Number(wb.bridgePollTimer) || 0;
+    if (!Array.isArray(wb.sceneActors)) wb.sceneActors = [];
+    wb.selectedActorId = safeString(wb.selectedActorId);
+    wb.nextActorId = Math.max(1, Number(wb.nextActorId) || 1);
+    moduleGameStudioSyncSceneActorsFromTiles(wb);
+    moduleGameStudioEnsureAssets(wb);
+    moduleGameStudioBridgeState(wb);
+
+    moduleWorkbenchHeader(container, 'Game Studio Runtime Engine', 'Thomas runs game build/content pipelines and engine handoffs while you monitor playtest readiness.');
+    const shell = document.createElement('section');
+    shell.className = 'module-wb-shell module-wb-shell-game-oss';
+    shell.innerHTML = `
+        <section class="module-wb-stage-card module-wb-gs-terminal-shell">
+            <div class="module-wb-gs-topbar">
+                <div class="module-wb-gs-title">THOMAS GAME STUDIO // EDITOR</div>
+                <div class="module-wb-gs-status" data-game-status></div>
+            </div>
+            <div class="module-wb-gs-workspace">
+                <aside class="module-wb-gs-left">
+                    <div class="module-wb-gs-block">
+                        <h4>Content Browser</h4>
+                        ${moduleWorkbenchRenderProjectControls('game_studio', 'Game Projects')}
+                        <div class="module-wb-field-grid">
+                            <label class="module-wb-field module-wb-field-wide">Search<input type="text" data-game-asset-search placeholder="Filter assets..." value="${escapeHtml(safeString(wb.assetSearch))}" /></label>
+                            <label class="module-wb-field module-wb-field-wide">Type
+                                <select data-game-asset-type>
+                                    ${MODULE_GAME_ASSET_TYPES.map((row) => `<option value="${escapeHtml(safeString(row.id))}"${safeString(row.id) === safeString(wb.assetFilterType) ? ' selected' : ''}>${escapeHtml(safeString(row.label))}</option>`).join('')}
+                                </select>
+                            </label>
+                        </div>
+                        <div class="module-wb-inspector-actions">
+                            <button type="button" class="module-item-btn" data-game-action="asset_add">Add Asset</button>
+                            <button type="button" class="module-item-btn" data-game-action="asset_place">Place Asset</button>
+                            <button type="button" class="module-item-btn" data-game-action="asset_remove">Remove Asset</button>
+                        </div>
+                        <div class="module-wb-asset-list" data-game-assets></div>
+                    </div>
+                    <div class="module-wb-gs-block">
+                        <h4>Viewport Mode</h4>
+                        <div class="module-wb-tool-group" data-game-view-modes></div>
+                    </div>
+                    <div class="module-wb-gs-block">
+                        <h4>Level Tools</h4>
+                        <div class="module-wb-tool-group" data-game-brushes></div>
+                        <div class="module-wb-toolbar-actions">
+                            <label class="module-wb-inline-field">W <input type="number" min="8" max="64" data-game-size="width" value="${wb.gridWidth}" /></label>
+                            <label class="module-wb-inline-field">H <input type="number" min="6" max="40" data-game-size="height" value="${wb.gridHeight}" /></label>
+                            <button type="button" class="module-item-btn" data-game-action="resize">Resize Grid</button>
+                        </div>
+                        <div class="module-wb-inspector-actions">
+                            <button type="button" class="module-item-btn" data-game-action="check">Path Check</button>
+                            <button type="button" class="module-item-btn" data-game-action="clear">Clear</button>
+                            <button type="button" class="module-item-btn" data-game-action="export">Export</button>
+                        </div>
+                    </div>
+                    <div class="module-wb-gs-block">
+                        <h4>World Outliner</h4>
+                        <div class="module-wb-app-list" data-game-outliner></div>
+                    </div>
+                    <div class="module-wb-gs-block">
+                        <h4>AI Director</h4>
+                        <label class="module-wb-field module-wb-field-wide">Prompt<input type="text" data-game-ai-prompt value="${escapeHtml(safeString(wb.aiPrompt) || 'Build a modular mission loop with replay value.')}"/></label>
+                        <div class="module-wb-inspector-actions">
+                            <button type="button" class="module-item-btn" data-game-action="ai_blueprint">Blueprint Spec</button>
+                            <button type="button" class="module-item-btn" data-game-action="ai_quest">Quest Pack</button>
+                            <button type="button" class="module-item-btn" data-game-action="ai_npc">NPC Behaviors</button>
+                            <button type="button" class="module-item-btn" data-game-action="ai_test_plan">Test Plan</button>
+                        </div>
+                    </div>
+                </aside>
+                <section class="module-wb-gs-center">
+                    <div class="module-wb-gs-toolbar">
+                        <button type="button" class="module-item-btn" data-game-action="playtest">Play</button>
+                        <button type="button" class="module-item-btn" data-game-action="stop">Stop</button>
+                        <button type="button" class="module-item-btn" data-game-action="play_target">Target: Auto</button>
+                        <button type="button" class="module-item-btn" data-game-action="add_actor">Add Actor</button>
+                        <button type="button" class="module-item-btn" data-game-action="connect_unreal">Connect Unreal</button>
+                        <button type="button" class="module-item-btn" data-game-action="reload_unreal">Reload Stream</button>
+                        <button type="button" class="module-item-btn" data-game-action="open_unreal">Open Stream</button>
+                    </div>
+                    <div class="module-wb-game-stage-layout" data-game-layout data-game-view="${escapeHtml(wb.viewMode)}">
+                        <div class="module-wb-game-grid-wrap">
+                            <div class="module-wb-stage-head"><span class="module-wb-stage-title">Level Canvas</span><span class="module-wb-stage-meta">paintable gameplay space</span></div>
+                            <div class="module-wb-game-grid" data-game-grid></div>
+                        </div>
+                        <div class="module-wb-game-preview-wrap">
+                            <div class="module-wb-stage-head"><span class="module-wb-stage-title">PIE View</span><span class="module-wb-stage-meta">Phaser play-in-editor runtime</span></div>
+                            <div class="module-wb-game-preview" data-game-preview></div>
+                        </div>
+                        <div class="module-wb-game-unreal-wrap">
+                            <div class="module-wb-stage-head"><span class="module-wb-stage-title">Unreal Viewport</span><span class="module-wb-stage-meta" data-game-viewport-status></span></div>
+                            <div class="module-wb-unreal-viewport">
+                                <iframe
+                                    title="Unreal viewport stream"
+                                    data-game-unreal-frame
+                                    loading="lazy"
+                                    referrerpolicy="no-referrer"
+                                    allow="autoplay; fullscreen; clipboard-read; clipboard-write"
+                                ></iframe>
+                                <div class="module-wb-unreal-overlay hidden" data-game-unreal-blocked>
+                                    <strong>Stream embed blocked.</strong>
+                                    <p>Target denies iframe embedding. Use Open Stream, or enable framing on the Unreal stream host.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="module-wb-gs-terminal">
+                        <div class="module-wb-gs-terminal-head">Output Log</div>
+                        <div class="module-wb-log-list" data-game-logs></div>
+                    </div>
+                </section>
+            </div>
+        </section>
+        <aside class="module-wb-inspector-card module-wb-gs-right">
+            <h4>Session Stats</h4>
+            <div class="module-wb-metrics" data-game-metrics></div>
+            <h4>Selection Details</h4>
+            <div class="module-wb-field-grid">
+                <label class="module-wb-field module-wb-field-wide">Name<input type="text" data-game-actor-name placeholder="Select actor from outliner" /></label>
+                <label class="module-wb-field">Class
+                    <select data-game-actor-class>
+                        <option value="platform">Platform</option>
+                        <option value="hazard">Hazard</option>
+                        <option value="spawn">Spawn</option>
+                        <option value="goal">Goal</option>
+                        <option value="npc">NPC</option>
+                        <option value="pickup">Pickup</option>
+                        <option value="trigger">Trigger</option>
+                        <option value="light">Light</option>
+                        <option value="camera">Camera</option>
+                        <option value="marker">Marker</option>
+                    </select>
+                </label>
+                <label class="module-wb-field">X<input type="number" step="0.1" data-game-actor-x value="0" /></label>
+                <label class="module-wb-field">Y<input type="number" step="0.1" data-game-actor-y value="0" /></label>
+                <label class="module-wb-field">Z<input type="number" step="0.1" data-game-actor-z value="0" /></label>
+                <label class="module-wb-field">Rot X<input type="number" step="1" data-game-actor-rx value="0" /></label>
+                <label class="module-wb-field">Rot Y<input type="number" step="1" data-game-actor-ry value="0" /></label>
+                <label class="module-wb-field">Rot Z<input type="number" step="1" data-game-actor-rz value="0" /></label>
+                <label class="module-wb-field">Scale X<input type="number" step="0.1" data-game-actor-sx value="1" /></label>
+                <label class="module-wb-field">Scale Y<input type="number" step="0.1" data-game-actor-sy value="1" /></label>
+                <label class="module-wb-field">Scale Z<input type="number" step="0.1" data-game-actor-sz value="1" /></label>
+            </div>
+            <div class="module-wb-inspector-actions">
+                <button type="button" class="module-item-btn" data-game-action="apply_actor">Apply Actor</button>
+                <button type="button" class="module-item-btn" data-game-action="delete_actor">Delete Actor</button>
+            </div>
+            <p class="module-wb-hint" data-game-actor-meta>Select an actor to edit transform and class.</p>
+            <h4>Unreal Bridge Session</h4>
+            <div class="module-wb-metrics" data-game-bridge-metrics></div>
+            <div class="module-wb-inspector-actions">
+                <button type="button" class="module-item-btn" data-game-action="bridge_ping">Ping</button>
+                <button type="button" class="module-item-btn" data-game-action="bridge_pull">Pull State</button>
+                <button type="button" class="module-item-btn" data-game-action="bridge_push_actor">Push Selected</button>
+                <button type="button" class="module-item-btn" data-game-action="bridge_push_scene">Push Scene</button>
+            </div>
+            <p class="module-wb-hint" data-game-bridge-status>Bridge idle.</p>
+            <h4>Details + Engine Bridge</h4>
+            <div class="module-wb-field-grid">
+                <label class="module-wb-field module-wb-field-wide">Godot project path<input type="text" data-game-path="godot" value="${escapeHtml(wb.godotProjectPath)}" /></label>
+                <label class="module-wb-field module-wb-field-wide">Unreal .uproject path<input type="text" data-game-path="unreal" value="${escapeHtml(wb.unrealProjectPath)}" /></label>
+            </div>
+            <div class="module-wb-inspector-actions">
+                <button type="button" class="module-item-btn" data-game-action="godot_export">Godot Export</button>
+                <button type="button" class="module-item-btn" data-game-action="unreal_export">Unreal Export</button>
+                <button type="button" class="module-item-btn" data-game-action="godot_tscn">Godot TSCN</button>
+                <button type="button" class="module-item-btn" data-game-action="unreal_csv">Unreal CSV</button>
+                <button type="button" class="module-item-btn" data-game-action="godot_open">Copy Godot Open</button>
+                <button type="button" class="module-item-btn" data-game-action="godot_build">Copy Godot Build</button>
+                <button type="button" class="module-item-btn" data-game-action="unreal_open">Copy Unreal Open</button>
+                <button type="button" class="module-item-btn" data-game-action="unreal_build">Copy Unreal Build</button>
+            </div>
+            <h4>Unreal Viewport Link</h4>
+            <div class="module-wb-field-grid">
+                <label class="module-wb-field module-wb-field-wide">Pixel Streaming URL<input type="text" data-game-unreal-url value="${escapeHtml(wb.unrealViewportUrl)}" placeholder="http://127.0.0.1:8888" /></label>
+            </div>
+            <div class="module-wb-inspector-actions">
+                <button type="button" class="module-item-btn" data-game-action="connect_unreal">Connect</button>
+                <button type="button" class="module-item-btn" data-game-action="reload_unreal">Reload</button>
+                <button type="button" class="module-item-btn" data-game-action="open_unreal">Open Popout</button>
+            </div>
+            <p class="module-wb-hint">If iframe embed is blocked by host policy, use Open Popout and keep Remote Control connected.</p>
+            <details class="module-wb-collapsible">
+                <summary>Unreal Remote Control (Advanced)</summary>
+                <div class="module-wb-field-grid">
+                    <label class="module-wb-field">Base URL<input type="text" data-game-rc-url value="${escapeHtml(wb.unrealRcUrl)}" placeholder="http://127.0.0.1:30010" /></label>
+                    <label class="module-wb-field">Endpoint<input type="text" data-game-rc-endpoint value="${escapeHtml(wb.unrealRcEndpoint)}" placeholder="/remote/object/call" /></label>
+                    <label class="module-wb-field module-wb-field-wide">Payload JSON<textarea rows="6" data-game-rc-payload>${escapeHtml(wb.unrealRcPayload)}</textarea></label>
+                    <label class="module-wb-field module-wb-field-wide">Response<textarea rows="7" data-game-rc-response readonly>${escapeHtml(wb.unrealRcResponse)}</textarea></label>
+                </div>
+                <div class="module-wb-inspector-actions">
+                    <button type="button" class="module-item-btn" data-game-action="rc_send">Send to Unreal</button>
+                </div>
+            </details>
+        </aside>
+        ${moduleWorkbenchRenderOssStack('game_studio')}
+    `;
+    container.appendChild(shell);
+
+    const brushes = [
+        { id: 0, label: 'Erase' },
+        { id: 1, label: 'Platform' },
+        { id: 2, label: 'Hazard' },
+        { id: 3, label: 'Spawn' },
+        { id: 4, label: 'Goal' },
+    ];
+    const viewModes = [
+        { id: 'edit', label: 'Edit Grid' },
+        { id: 'playtest', label: 'Playtest' },
+        { id: 'unreal', label: 'Unreal View' },
+        { id: 'split', label: 'Split' },
+    ];
+    const viewModeLabel = () => viewModes.find((entry) => entry.id === wb.viewMode)?.label || 'Split';
+    const brushBar = shell.querySelector('[data-game-brushes]');
+    const viewModeBar = shell.querySelector('[data-game-view-modes]');
+    const layout = shell.querySelector('[data-game-layout]');
+    const grid = shell.querySelector('[data-game-grid]');
+    const preview = shell.querySelector('[data-game-preview]');
+    const viewportStatus = shell.querySelector('[data-game-viewport-status]');
+    const viewportFrame = shell.querySelector('iframe[data-game-unreal-frame]');
+    const blockedHint = shell.querySelector('[data-game-unreal-blocked]');
+    const status = shell.querySelector('[data-game-status]');
+    const metrics = shell.querySelector('[data-game-metrics]');
+    const logs = shell.querySelector('[data-game-logs]');
+    const outliner = shell.querySelector('[data-game-outliner]');
+    const assetsList = shell.querySelector('[data-game-assets]');
+    const assetSearchInput = shell.querySelector('input[data-game-asset-search]');
+    const assetTypeSelect = shell.querySelector('select[data-game-asset-type]');
+    const sizeWidthInput = shell.querySelector('input[data-game-size="width"]');
+    const sizeHeightInput = shell.querySelector('input[data-game-size="height"]');
+    const unrealUrlInput = shell.querySelector('input[data-game-unreal-url]');
+    const rcUrlInput = shell.querySelector('input[data-game-rc-url]');
+    const rcEndpointInput = shell.querySelector('input[data-game-rc-endpoint]');
+    const rcPayloadInput = shell.querySelector('textarea[data-game-rc-payload]');
+    const rcResponseInput = shell.querySelector('textarea[data-game-rc-response]');
+    const aiPromptInput = shell.querySelector('input[data-game-ai-prompt]');
+    const actorNameInput = shell.querySelector('input[data-game-actor-name]');
+    const actorClassInput = shell.querySelector('select[data-game-actor-class]');
+    const actorXInput = shell.querySelector('input[data-game-actor-x]');
+    const actorYInput = shell.querySelector('input[data-game-actor-y]');
+    const actorZInput = shell.querySelector('input[data-game-actor-z]');
+    const actorRxInput = shell.querySelector('input[data-game-actor-rx]');
+    const actorRyInput = shell.querySelector('input[data-game-actor-ry]');
+    const actorRzInput = shell.querySelector('input[data-game-actor-rz]');
+    const actorSxInput = shell.querySelector('input[data-game-actor-sx]');
+    const actorSyInput = shell.querySelector('input[data-game-actor-sy]');
+    const actorSzInput = shell.querySelector('input[data-game-actor-sz]');
+    const actorMeta = shell.querySelector('[data-game-actor-meta]');
+    const bridgeMetrics = shell.querySelector('[data-game-bridge-metrics]');
+    const bridgeStatus = shell.querySelector('[data-game-bridge-status]');
+    if (!(brushBar instanceof HTMLElement)
+        || !(viewModeBar instanceof HTMLElement)
+        || !(layout instanceof HTMLElement)
+        || !(grid instanceof HTMLElement)
+        || !(preview instanceof HTMLElement)
+        || !(viewportStatus instanceof HTMLElement)
+        || !(viewportFrame instanceof HTMLIFrameElement)
+        || !(blockedHint instanceof HTMLElement)
+        || !(status instanceof HTMLElement)
+        || !(metrics instanceof HTMLElement)
+        || !(logs instanceof HTMLElement)
+        || !(outliner instanceof HTMLElement)
+        || !(assetsList instanceof HTMLElement)
+        || !(assetSearchInput instanceof HTMLInputElement)
+        || !(assetTypeSelect instanceof HTMLSelectElement)
+        || !(unrealUrlInput instanceof HTMLInputElement)
+        || !(rcUrlInput instanceof HTMLInputElement)
+        || !(rcEndpointInput instanceof HTMLInputElement)
+        || !(rcPayloadInput instanceof HTMLTextAreaElement)
+        || !(rcResponseInput instanceof HTMLTextAreaElement)
+        || !(aiPromptInput instanceof HTMLInputElement)
+        || !(actorNameInput instanceof HTMLInputElement)
+        || !(actorClassInput instanceof HTMLSelectElement)
+        || !(actorXInput instanceof HTMLInputElement)
+        || !(actorYInput instanceof HTMLInputElement)
+        || !(actorZInput instanceof HTMLInputElement)
+        || !(actorRxInput instanceof HTMLInputElement)
+        || !(actorRyInput instanceof HTMLInputElement)
+        || !(actorRzInput instanceof HTMLInputElement)
+        || !(actorSxInput instanceof HTMLInputElement)
+        || !(actorSyInput instanceof HTMLInputElement)
+        || !(actorSzInput instanceof HTMLInputElement)
+        || !(actorMeta instanceof HTMLElement)
+        || !(bridgeMetrics instanceof HTMLElement)
+        || !(bridgeStatus instanceof HTMLElement)) {
+        return false;
+    }
+
+    let paintDirty = false;
+    const paint = (x, y) => {
+        const value = moduleWorkbenchClamp(Number(wb.brush) || 0, 0, 4);
+        if (value === 3 || value === 4) {
+            wb.tiles.forEach((row, rowIndex) => row.forEach((tile, colIndex) => {
+                if (Number(tile) === value) wb.tiles[rowIndex][colIndex] = 0;
+            }));
+        }
+        wb.tiles[y][x] = value;
+        paintDirty = true;
+    };
+    const renderProjectSelect = () => {
+        const select = shell.querySelector('select[data-wb-project-select="game_studio"]');
+        if (!(select instanceof HTMLSelectElement)) return;
+        const rows = moduleWorkbenchProjectList('game_studio');
+        const current = safeString(wb.selectedProjectId);
+        select.innerHTML = `<option value="">Select project</option>${rows.map((row) => `<option value="${escapeHtml(safeString(row.id))}">${escapeHtml(`${safeString(row.name)} (${new Date(Number(row.updatedAt) || Date.now()).toLocaleString()})`)}</option>`).join('')}`;
+        select.value = rows.some((row) => safeString(row.id) === current) ? current : '';
+    };
+    const projectPayload = () => ({
+        gridWidth: wb.gridWidth,
+        gridHeight: wb.gridHeight,
+        brush: wb.brush,
+        tiles: wb.tiles,
+        sceneActors: wb.sceneActors,
+        selectedActorId: wb.selectedActorId,
+        nextActorId: wb.nextActorId,
+        assets: wb.assets,
+        selectedAssetId: wb.selectedAssetId,
+        assetFilterType: wb.assetFilterType,
+        assetSearch: wb.assetSearch,
+        godotProjectPath: wb.godotProjectPath,
+        unrealProjectPath: wb.unrealProjectPath,
+        viewMode: wb.viewMode,
+        playTarget: wb.playTarget,
+        aiPrompt: wb.aiPrompt,
+        unrealViewportUrl: wb.unrealViewportUrl,
+        unrealRcUrl: wb.unrealRcUrl,
+        unrealRcEndpoint: wb.unrealRcEndpoint,
+        unrealRcPayload: wb.unrealRcPayload,
+        bridgeActorSyncPath: safeString(moduleGameStudioBridgeState(wb).actorSyncPath),
+    });
+    const applyProjectPayload = (payloadRaw) => {
+        const payload = payloadRaw && typeof payloadRaw === 'object' ? payloadRaw : {};
+        moduleGameStudioResizeGrid(wb, Number(payload.gridWidth) || wb.gridWidth, Number(payload.gridHeight) || wb.gridHeight);
+        const rawTiles = Array.isArray(payload.tiles) ? payload.tiles : [];
+        wb.tiles = Array.from({ length: wb.gridHeight }, (_row, y) => (
+            Array.from({ length: wb.gridWidth }, (_col, x) => moduleWorkbenchClamp(Number(rawTiles?.[y]?.[x]) || 0, 0, 4))
+        ));
+        wb.brush = moduleWorkbenchClamp(Number(payload.brush) || wb.brush || 1, 0, 4);
+        wb.godotProjectPath = safeString(payload.godotProjectPath) || wb.godotProjectPath;
+        wb.unrealProjectPath = safeString(payload.unrealProjectPath) || wb.unrealProjectPath;
+        wb.viewMode = moduleGameStudioViewMode(payload.viewMode || wb.viewMode);
+        wb.playTarget = moduleGameStudioPlayTarget(payload.playTarget || wb.playTarget);
+        wb.unrealViewportUrl = safeString(payload.unrealViewportUrl) || wb.unrealViewportUrl;
+        wb.unrealRcUrl = safeString(payload.unrealRcUrl) || wb.unrealRcUrl;
+        wb.unrealRcEndpoint = safeString(payload.unrealRcEndpoint) || wb.unrealRcEndpoint;
+        wb.unrealRcPayload = safeString(payload.unrealRcPayload) || wb.unrealRcPayload;
+        wb.aiPrompt = safeString(payload.aiPrompt) || wb.aiPrompt;
+        const rawSceneActors = Array.isArray(payload.sceneActors) ? payload.sceneActors : [];
+        wb.sceneActors = rawSceneActors.map((actor, index) => moduleGameStudioNormalizeActor(actor, `actor-load-${index + 1}`));
+        wb.selectedActorId = safeString(payload.selectedActorId) || wb.selectedActorId;
+        wb.nextActorId = Math.max(
+            Number(payload.nextActorId) || 1,
+            wb.sceneActors.length + 1,
+            Number(wb.nextActorId) || 1,
+        );
+        moduleGameStudioSyncSceneActorsFromTiles(wb);
+        const rawAssets = Array.isArray(payload.assets) ? payload.assets : [];
+        wb.assets = rawAssets.map((asset, index) => moduleGameStudioNormalizeAsset(asset, `asset-load-${index + 1}`));
+        wb.selectedAssetId = safeString(payload.selectedAssetId) || wb.selectedAssetId;
+        wb.assetFilterType = safeString(payload.assetFilterType).toLowerCase() || wb.assetFilterType;
+        wb.assetSearch = safeString(payload.assetSearch) || wb.assetSearch;
+        moduleGameStudioEnsureAssets(wb);
+        const bridge = moduleGameStudioBridgeState(wb);
+        bridge.actorSyncPath = safeString(payload.bridgeActorSyncPath) || bridge.actorSyncPath;
+        wb.viewportConnected = false;
+        wb.viewportLoadState = 'idle';
+        wb.viewportBlockedHint = false;
+    };
+    const setViewMode = (modeRaw, { silent = false } = {}) => {
+        const nextMode = moduleGameStudioViewMode(modeRaw);
+        const changed = wb.viewMode !== nextMode;
+        wb.viewMode = nextMode;
+        layout.dataset.gameView = wb.viewMode;
+        if (changed && !silent) {
+            moduleWorkbenchPushLog(wb.logs, `Viewport mode set to ${viewModeLabel().toLowerCase()}.`, 'ok', 80, 'game-log');
+        }
+    };
+    const renderViewportStatus = () => {
+        if (!safeString(wb.unrealViewportUrl)) {
+            wb.viewportConnected = false;
+            wb.viewportLoadState = 'idle';
+            wb.viewportBlockedHint = false;
+            viewportStatus.textContent = 'No URL';
+            blockedHint.classList.add('hidden');
+            return;
+        }
+        if (wb.viewportLoadState === 'pending') {
+            viewportStatus.textContent = 'Connecting';
+        } else if (wb.viewportLoadState === 'blocked') {
+            viewportStatus.textContent = 'Blocked';
+        } else {
+            viewportStatus.textContent = wb.viewportConnected ? 'Live' : 'Disconnected';
+        }
+        blockedHint.classList.toggle('hidden', !wb.viewportBlockedHint);
+    };
+    const mountUnrealViewport = (forceReload = false, { silent = false } = {}) => {
+        const url = safeString(wb.unrealViewportUrl).trim();
+        if (!url) {
+            wb.viewportConnected = false;
+            wb.viewportLoadState = 'idle';
+            wb.viewportBlockedHint = false;
+            viewportFrame.removeAttribute('src');
+            viewportFrame.dataset.viewportUrl = '';
+            if (Number(wb.viewportProbeTimer) > 0) {
+                window.clearTimeout(Number(wb.viewportProbeTimer));
+                wb.viewportProbeTimer = 0;
+            }
+            if (!silent) {
+                moduleWorkbenchPushLog(wb.logs, 'Set Unreal viewport URL before connecting.', 'warn', 80, 'game-log');
+            }
+            renderViewportStatus();
+            return false;
+        }
+        const cached = safeString(viewportFrame.dataset.viewportUrl);
+        if (!forceReload && cached === url && safeString(viewportFrame.getAttribute('src')) && wb.viewportLoadState !== 'blocked') {
+            renderViewportStatus();
+            return true;
+        }
+        if (Number(wb.viewportProbeTimer) > 0) {
+            window.clearTimeout(Number(wb.viewportProbeTimer));
+            wb.viewportProbeTimer = 0;
+        }
+        wb.viewportConnected = false;
+        wb.viewportLoadState = 'pending';
+        wb.viewportBlockedHint = false;
+        const finalUrl = forceReload
+            ? `${url}${url.includes('?') ? '&' : '?'}thomasReload=${Date.now()}`
+            : url;
+        viewportFrame.src = finalUrl;
+        viewportFrame.dataset.viewportUrl = url;
+        wb.viewportProbeTimer = window.setTimeout(() => {
+            wb.viewportProbeTimer = 0;
+            if (wb.viewportLoadState !== 'pending') return;
+            wb.viewportLoadState = 'blocked';
+            wb.viewportBlockedHint = true;
+            wb.viewportConnected = false;
+            moduleWorkbenchPushLog(
+                wb.logs,
+                'Unreal stream did not load in-frame. Host may block embedding (CSP/X-Frame-Options).',
+                'warn',
+                80,
+                'game-log',
+            );
+            render();
+        }, 2800);
+        if (!silent) {
+            moduleWorkbenchPushLog(wb.logs, `${forceReload ? 'Reloading' : 'Connecting'} Unreal viewport...`, 'ok', 80, 'game-log');
+        }
+        renderViewportStatus();
+        return true;
+    };
+    const playTargetLabel = () => {
+        if (wb.playTarget === 'unreal') return 'Unreal';
+        if (wb.playTarget === 'phaser') return 'Phaser';
+        return 'Auto';
+    };
+    const selectedActor = () => moduleGameStudioActorById(wb, wb.selectedActorId);
+    const selectedAsset = () => moduleGameStudioAssetById(wb, wb.selectedAssetId);
+    const updateBridgeFromResult = (resultRaw) => {
+        const result = resultRaw && typeof resultRaw === 'object' ? resultRaw : {};
+        const bridge = moduleGameStudioBridgeState(wb);
+        bridge.lastSeenAt = Date.now();
+        bridge.lastPingMs = Number(result.elapsedMs) || 0;
+        if (result.ok) {
+            bridge.status = 'online';
+            bridge.lastError = '';
+            return;
+        }
+        const statusCode = Number(result.status) || 0;
+        bridge.status = statusCode > 0 ? 'degraded' : 'offline';
+        bridge.lastError = safeString(result.statusText) || (statusCode > 0 ? `HTTP ${statusCode}` : 'Request failed.');
+    };
+    const runBridgeAction = (requestFactory, { successMessage = 'Bridge request completed.', failureMessage = 'Bridge request failed.' } = {}) => {
+        void requestFactory().then((result) => {
+            updateBridgeFromResult(result);
+            wb.unrealRcResponse = JSON.stringify(result, null, 2);
+            moduleWorkbenchPushLog(
+                wb.logs,
+                result?.ok ? successMessage : `${failureMessage} (${Number(result?.status) || 0}).`,
+                result?.ok ? 'ok' : 'warn',
+                80,
+                'game-log',
+            );
+            render();
+        }).catch((error) => {
+            const bridge = moduleGameStudioBridgeState(wb);
+            bridge.status = 'offline';
+            bridge.lastSeenAt = Date.now();
+            bridge.lastPingMs = 0;
+            bridge.lastError = safeString(error?.message) || failureMessage;
+            wb.unrealRcResponse = JSON.stringify({
+                ok: false,
+                error: bridge.lastError,
+            }, null, 2);
+            moduleWorkbenchPushLog(wb.logs, bridge.lastError, 'error', 80, 'game-log');
+            render();
+        });
+    };
+    const updateSelectedActorFields = () => {
+        const actor = selectedActor();
+        if (!actor) {
+            actorNameInput.value = '';
+            actorClassInput.value = 'marker';
+            actorXInput.value = '0';
+            actorYInput.value = '0';
+            actorZInput.value = '0';
+            actorRxInput.value = '0';
+            actorRyInput.value = '0';
+            actorRzInput.value = '0';
+            actorSxInput.value = '1';
+            actorSyInput.value = '1';
+            actorSzInput.value = '1';
+            actorMeta.textContent = 'No actor selected.';
+            return;
+        }
+        const asset = moduleGameStudioAssetById(wb, actor.assetId);
+        if (asset) wb.selectedAssetId = safeString(asset.id);
+        actorNameInput.value = safeString(actor.name);
+        actorClassInput.value = safeString(actor.className) || 'marker';
+        actorXInput.value = String(Number(actor.x) || 0);
+        actorYInput.value = String(Number(actor.y) || 0);
+        actorZInput.value = String(Number(actor.z) || 0);
+        actorRxInput.value = String(Number(actor.rx) || 0);
+        actorRyInput.value = String(Number(actor.ry) || 0);
+        actorRzInput.value = String(Number(actor.rz) || 0);
+        actorSxInput.value = String(Number(actor.sx) || 1);
+        actorSyInput.value = String(Number(actor.sy) || 1);
+        actorSzInput.value = String(Number(actor.sz) || 1);
+        const assetLabel = asset ? ` | ${safeString(asset.name)}` : '';
+        actorMeta.textContent = `${safeString(actor.className).toUpperCase()} // (${Number(actor.x) || 0}, ${Number(actor.y) || 0}, ${Number(actor.z) || 0})${assetLabel}`;
+    };
+    const applySelectedActorEdits = () => {
+        const actor = selectedActor();
+        if (!actor) {
+            moduleWorkbenchPushLog(wb.logs, 'Select an actor first.', 'warn', 80, 'game-log');
+            return false;
+        }
+        const nextClass = safeString(actorClassInput.value).toLowerCase() || safeString(actor.className);
+        const nextActor = moduleGameStudioNormalizeActor({
+            ...actor,
+            name: safeString(actorNameInput.value) || actor.name,
+            className: nextClass,
+            assetId: safeString(actor.assetId) || safeString(wb.selectedAssetId),
+            x: Number(actorXInput.value),
+            y: Number(actorYInput.value),
+            z: Number(actorZInput.value),
+            rx: Number(actorRxInput.value),
+            ry: Number(actorRyInput.value),
+            rz: Number(actorRzInput.value),
+            sx: Number(actorSxInput.value),
+            sy: Number(actorSyInput.value),
+            sz: Number(actorSzInput.value),
+        }, actor.id);
+        const rows = Array.isArray(wb.sceneActors) ? wb.sceneActors.map((row) => moduleGameStudioNormalizeActor(row)) : [];
+        const index = rows.findIndex((row) => safeString(row.id) === safeString(actor.id));
+        if (index < 0) return false;
+        rows[index] = nextActor;
+        wb.sceneActors = rows;
+        moduleGameStudioRebuildTilesFromActors(wb);
+        moduleGameStudioSyncSceneActorsFromTiles(wb);
+        wb.selectedActorId = safeString(nextActor.id);
+        moduleWorkbenchPushLog(wb.logs, `Updated actor ${safeString(nextActor.name)}.`, 'ok', 80, 'game-log');
+        return true;
+    };
+    const addActor = () => {
+        const index = (Array.isArray(wb.sceneActors) ? wb.sceneActors.length : 0) + 1;
+        const actor = moduleGameStudioNormalizeActor({
+            id: moduleGameStudioActorId(wb),
+            name: moduleGameStudioActorName('npc', index),
+            className: 'npc',
+            assetId: safeString(wb.selectedAssetId),
+            x: 1,
+            y: 1,
+            z: 0,
+            rx: 0,
+            ry: 0,
+            rz: 0,
+            sx: 1,
+            sy: 1,
+            sz: 1,
+        });
+        actor.tileBacked = false;
+        wb.sceneActors = [...(Array.isArray(wb.sceneActors) ? wb.sceneActors : []), actor];
+        wb.selectedActorId = safeString(actor.id);
+        moduleWorkbenchPushLog(wb.logs, `Added actor ${safeString(actor.name)}.`, 'ok', 80, 'game-log');
+        return actor;
+    };
+    const addAsset = () => {
+        const filterType = safeString(wb.assetFilterType).toLowerCase();
+        const type = filterType && filterType !== 'all' ? filterType : 'mesh';
+        const rawName = safeString(wb.assetSearch).replace(/[^\w\s.-]/g, '').trim();
+        const stamp = `${Date.now().toString(36)}${Math.floor(Math.random() * 46656).toString(36)}`;
+        const asset = moduleGameStudioNormalizeAsset({
+            id: `asset-${stamp}`,
+            name: rawName || `New ${type.toUpperCase()}`,
+            type,
+            source: '/Game/Generated',
+            tags: rawName ? ['custom', type] : [type],
+        });
+        wb.assets = [asset, ...(Array.isArray(wb.assets) ? wb.assets : [])].slice(0, 180);
+        wb.selectedAssetId = safeString(asset.id);
+        moduleGameStudioEnsureAssets(wb);
+        moduleWorkbenchPushLog(wb.logs, `Added asset ${safeString(asset.name)}.`, 'ok', 80, 'game-log');
+        return asset;
+    };
+    const placeSelectedAsset = () => {
+        const asset = selectedAsset();
+        if (!asset) {
+            moduleWorkbenchPushLog(wb.logs, 'Select an asset first.', 'warn', 80, 'game-log');
+            return false;
+        }
+        let actor = selectedActor();
+        let createdActor = false;
+        if (!actor) {
+            actor = addActor();
+            createdActor = true;
+        }
+        if (!actor) return false;
+        const rows = Array.isArray(wb.sceneActors) ? wb.sceneActors.map((row) => moduleGameStudioNormalizeActor(row)) : [];
+        const index = rows.findIndex((row) => safeString(row.id) === safeString(actor.id));
+        if (index < 0) return false;
+        const fallbackClass = asset.type === 'mesh' ? 'platform' : asset.type === 'blueprint' ? 'npc' : 'marker';
+        const rowActor = rows[index];
+        const className = createdActor ? fallbackClass : safeString(rowActor.className) || fallbackClass;
+        rows[index] = moduleGameStudioNormalizeActor({
+            ...rowActor,
+            className,
+            assetId: safeString(asset.id),
+            name: createdActor ? `${safeString(asset.name)} Actor` : rowActor.name,
+        }, rowActor.id);
+        wb.sceneActors = rows;
+        moduleGameStudioRebuildTilesFromActors(wb);
+        moduleGameStudioSyncSceneActorsFromTiles(wb);
+        wb.selectedActorId = safeString(rows[index].id);
+        moduleWorkbenchPushLog(
+            wb.logs,
+            `Placed ${safeString(asset.name)} on ${safeString(rows[index].name)}.`,
+            'ok',
+            80,
+            'game-log',
+        );
+        return true;
+    };
+    const removeSelectedAsset = () => {
+        const asset = selectedAsset();
+        if (!asset) {
+            moduleWorkbenchPushLog(wb.logs, 'No selected asset to remove.', 'warn', 80, 'game-log');
+            return false;
+        }
+        const previousId = safeString(asset.id);
+        let detachedCount = 0;
+        wb.sceneActors = (Array.isArray(wb.sceneActors) ? wb.sceneActors : []).map((row) => {
+            const actor = moduleGameStudioNormalizeActor(row);
+            if (safeString(actor.assetId) !== previousId) return actor;
+            detachedCount += 1;
+            return moduleGameStudioNormalizeActor({
+                ...actor,
+                assetId: '',
+            }, actor.id);
+        });
+        wb.assets = (Array.isArray(wb.assets) ? wb.assets : []).filter((row) => safeString(row?.id) !== previousId);
+        if (!wb.assets.length) {
+            wb.assets = [moduleGameStudioNormalizeAsset({
+                id: 'asset-prototype-cube',
+                name: 'SM_PrototypeCube',
+                type: 'mesh',
+                source: '/Game/Generated',
+                tags: ['fallback'],
+            })];
+        }
+        moduleGameStudioEnsureAssets(wb);
+        moduleGameStudioSyncSceneActorsFromTiles(wb);
+        moduleWorkbenchPushLog(
+            wb.logs,
+            `Removed asset ${safeString(asset.name)}${detachedCount > 0 ? ` and detached ${detachedCount} actor(s)` : ''}.`,
+            'warn',
+            80,
+            'game-log',
+        );
+        return true;
+    };
+    const deleteSelectedActor = () => {
+        const actor = selectedActor();
+        if (!actor) {
+            moduleWorkbenchPushLog(wb.logs, 'No actor selected to delete.', 'warn', 80, 'game-log');
+            return false;
+        }
+        const tileType = moduleGameStudioTileFromActorType(actor.className);
+        if (tileType > 0) {
+            const x = moduleWorkbenchClamp(Math.round(Number(actor.x) || 0), 0, wb.gridWidth - 1);
+            const y = moduleWorkbenchClamp(Math.round(Number(actor.y) || 0), 0, wb.gridHeight - 1);
+            if ((Number(wb.tiles?.[y]?.[x]) || 0) === tileType) {
+                wb.tiles[y][x] = 0;
+            }
+        }
+        wb.sceneActors = (Array.isArray(wb.sceneActors) ? wb.sceneActors : [])
+            .filter((row) => safeString(row?.id) !== safeString(actor.id));
+        moduleGameStudioRebuildTilesFromActors(wb);
+        moduleGameStudioSyncSceneActorsFromTiles(wb);
+        moduleWorkbenchPushLog(wb.logs, `Deleted actor ${safeString(actor.name)}.`, 'warn', 80, 'game-log');
+        return true;
+    };
+    const render = () => {
+        moduleGameStudioSyncSceneActorsFromTiles(wb);
+        layout.dataset.gameView = wb.viewMode;
+        viewModeBar.innerHTML = viewModes
+            .map((entry) => `<button type="button" class="module-wb-tool-btn${entry.id === wb.viewMode ? ' active' : ''}" data-game-view-mode="${entry.id}"><span>${entry.label}</span></button>`)
+            .join('');
+        brushBar.innerHTML = brushes.map((brush) => `<button type="button" class="module-wb-tool-btn${Number(wb.brush) === brush.id ? ' active' : ''}" data-game-brush="${brush.id}"><span>${brush.label}</span></button>`).join('');
+        const playTargetBtn = shell.querySelector('[data-game-action="play_target"]');
+        if (playTargetBtn instanceof HTMLElement) {
+            playTargetBtn.textContent = `Target: ${playTargetLabel()}`;
+        }
+        grid.style.gridTemplateColumns = `repeat(${wb.gridWidth}, minmax(0, 1fr))`;
+        const cells = [];
+        for (let y = 0; y < wb.gridHeight; y += 1) {
+            for (let x = 0; x < wb.gridWidth; x += 1) {
+                cells.push(`<button type="button" class="module-wb-game-cell tile-${moduleWorkbenchClamp(Number(wb.tiles[y][x]) || 0, 0, 4)}" data-game-x="${x}" data-game-y="${y}"></button>`);
+            }
+        }
+        grid.innerHTML = cells.join('');
+        const counts = moduleGameStudioCounts(wb);
+        const actorRows = Array.isArray(wb.sceneActors) ? wb.sceneActors.slice(0, 140) : [];
+        outliner.innerHTML = actorRows.length
+            ? actorRows.map((actor) => {
+                const selected = safeString(actor.id) === safeString(wb.selectedActorId);
+                const className = safeString(actor.className).toLowerCase();
+                const asset = moduleGameStudioAssetById(wb, actor.assetId);
+                const assetLabel = asset ? ` | ${safeString(asset.name)}` : '';
+                return `
+                    <button type="button" class="module-wb-outliner-row${selected ? ' active' : ''}" data-game-outline-action="select_actor" data-game-actor-id="${escapeHtml(safeString(actor.id))}">
+                        <strong>${escapeHtml(safeString(actor.name) || 'Actor')}</strong>
+                        <span>${escapeHtml(`${className || 'actor'} | (${Number(actor.x) || 0}, ${Number(actor.y) || 0}, ${Number(actor.z) || 0})${assetLabel}`)}</span>
+                    </button>
+                `;
+            }).join('')
+            : '<div class="module-wb-ghost">No actors in level.</div>';
+        const filteredAssets = moduleGameStudioFilteredAssets(wb).slice(0, 120);
+        assetsList.innerHTML = filteredAssets.length
+            ? filteredAssets.map((asset) => {
+                const selected = safeString(asset.id) === safeString(wb.selectedAssetId) ? ' selected' : '';
+                const usedBy = actorRows.filter((row) => safeString(row.assetId) === safeString(asset.id)).length;
+                return `
+                    <article class="module-wb-asset-row${selected}" data-game-asset-id="${escapeHtml(safeString(asset.id))}">
+                        <div>
+                            <strong>${escapeHtml(safeString(asset.name) || 'Asset')}</strong>
+                            <span>${escapeHtml(`${safeString(asset.type).toUpperCase()} | ${safeString(asset.source)}`)}</span>
+                        </div>
+                        <span>${usedBy}x</span>
+                    </article>
+                `;
+            }).join('')
+            : '<div class="module-wb-ghost">No assets match filter.</div>';
+        const viewportLabel = wb.viewportLoadState === 'pending'
+            ? 'Connecting'
+            : wb.viewportLoadState === 'blocked'
+                ? 'Blocked'
+                : wb.viewportConnected
+                    ? 'Live'
+                    : 'Idle';
+        metrics.innerHTML = `
+            <div><span>Platforms</span><strong>${counts[1]}</strong></div>
+            <div><span>Hazards</span><strong>${counts[2]}</strong></div>
+            <div><span>Spawn</span><strong>${counts[3]}</strong></div>
+            <div><span>Goal</span><strong>${counts[4]}</strong></div>
+            <div><span>Actors</span><strong>${actorRows.length}</strong></div>
+            <div><span>Mode</span><strong>${escapeHtml(viewModeLabel())}</strong></div>
+            <div><span>Unreal</span><strong>${viewportLabel}</strong></div>
+        `;
+        status.textContent = `${wb.gridWidth}x${wb.gridHeight} | ${moduleGameStudioPlayable(wb) ? 'Playable path found' : 'No valid path'} | ${viewModeLabel()} | High ${Number(wb.highScore) || 0}`;
+        if (sizeWidthInput instanceof HTMLInputElement) sizeWidthInput.value = String(wb.gridWidth);
+        if (sizeHeightInput instanceof HTMLInputElement) sizeHeightInput.value = String(wb.gridHeight);
+        unrealUrlInput.value = safeString(wb.unrealViewportUrl);
+        rcUrlInput.value = safeString(wb.unrealRcUrl);
+        rcEndpointInput.value = safeString(wb.unrealRcEndpoint);
+        rcPayloadInput.value = safeString(wb.unrealRcPayload);
+        rcResponseInput.value = safeString(wb.unrealRcResponse);
+        aiPromptInput.value = safeString(wb.aiPrompt);
+        assetSearchInput.value = safeString(wb.assetSearch);
+        assetTypeSelect.value = safeString(wb.assetFilterType) || 'all';
+        const bridge = moduleGameStudioBridgeState(wb);
+        const lastSeen = Number(bridge.lastSeenAt) > 0
+            ? new Date(Number(bridge.lastSeenAt)).toLocaleTimeString()
+            : '--';
+        const bridgeStatusLabel = bridge.status === 'online'
+            ? 'Online'
+            : bridge.status === 'degraded'
+                ? 'Degraded'
+                : bridge.status === 'offline'
+                    ? 'Offline'
+                    : 'Idle';
+        bridgeMetrics.innerHTML = `
+            <div><span>Status</span><strong>${escapeHtml(bridgeStatusLabel)}</strong></div>
+            <div><span>Ping</span><strong>${Number(bridge.lastPingMs) > 0 ? `${Number(bridge.lastPingMs)} ms` : '--'}</strong></div>
+            <div><span>Routes</span><strong>${Array.isArray(bridge.routes) ? bridge.routes.length : 0}</strong></div>
+            <div><span>Pulls</span><strong>${Number(bridge.pullCount) || 0}</strong></div>
+            <div><span>Pushes</span><strong>${Number(bridge.pushCount) || 0}</strong></div>
+            <div><span>Last Seen</span><strong>${escapeHtml(lastSeen)}</strong></div>
+        `;
+        bridgeStatus.textContent = bridge.lastError
+            ? `Last error: ${safeString(bridge.lastError)}`
+            : `${bridgeStatusLabel}${Number(bridge.lastPingMs) > 0 ? ` (${Number(bridge.lastPingMs)} ms)` : ''}`;
+        updateSelectedActorFields();
+        renderProjectSelect();
+        renderViewportStatus();
+        logs.innerHTML = wb.logs.length
+            ? wb.logs.slice(0, 14).map((entry) => `<article class="module-wb-log-item ${moduleToneClass(entry.tone) || 'ok'}"><span>${escapeHtml(safeString(entry.time))}</span><p>${escapeHtml(safeString(entry.message))}</p></article>`).join('')
+            : '<div class="module-wb-ghost">No playtest logs yet.</div>';
+    };
+    const startPreview = ({ silent = false } = {}) => {
+        if (wb.phaserGame?.destroy && preview.querySelector('canvas')) return;
+        moduleGameStudioStartPhaserPreview(wb, preview, {
+            onGoal: () => {
+                moduleWorkbenchPushLog(wb.logs, 'Reached goal tile in playtest.', 'ok', 80, 'game-log');
+                render();
+            },
+            onHazard: () => {
+                moduleWorkbenchPushLog(wb.logs, 'Hit hazard tile in playtest.', 'warn', 80, 'game-log');
+                render();
+            },
+        });
+        if (!silent) moduleWorkbenchPushLog(wb.logs, 'Playtest started in Phaser runtime.', 'ok', 80, 'game-log');
+        render();
+    };
+    const stopPreview = ({ silent = false } = {}) => {
+        if (wb.phaserGame?.destroy) {
+            try {
+                wb.phaserGame.destroy(true);
+            } catch (_error) {}
+            wb.phaserGame = null;
+        }
+        preview.innerHTML = '';
+        if (!silent) moduleWorkbenchPushLog(wb.logs, 'Playtest stopped.', 'warn', 80, 'game-log');
+        render();
+    };
+    const exportLevel = () => ({
+        width: wb.gridWidth,
+        height: wb.gridHeight,
+        tiles: wb.tiles,
+        spawn: moduleGameStudioFindFirstTile(wb, 3),
+        goal: moduleGameStudioFindFirstTile(wb, 4),
+    });
+
+    if (wb.viewMode !== 'playtest' && wb.viewMode !== 'split' && wb.phaserGame?.destroy) {
+        try {
+            wb.phaserGame.destroy(true);
+        } catch (_error) {}
+        wb.phaserGame = null;
+    }
+    if (Number(wb.bridgePollTimer) > 0) {
+        window.clearInterval(Number(wb.bridgePollTimer));
+        wb.bridgePollTimer = 0;
+    }
+    wb.bridgePollTimer = window.setInterval(() => {
+        if (!document.body.contains(shell)) return;
+        void moduleGameStudioBridgePing(wb, { silent: true }).then(() => {
+            if (!document.body.contains(shell)) return;
+            render();
+        });
+    }, 12000);
+    void moduleGameStudioBridgePing(wb, { silent: true }).then(() => {
+        if (!document.body.contains(shell)) return;
+        render();
+    });
+    if (wb.viewMode === 'playtest' || wb.viewMode === 'split') startPreview({ silent: true });
+    if (wb.viewMode === 'unreal' || wb.viewMode === 'split') mountUnrealViewport(false, { silent: true });
+    render();
+
+    shell.addEventListener('click', (event) => {
+        if (moduleWorkbenchHandleOssStackClick(event.target)) return;
+        const projectActionEl = event.target instanceof Element
+            ? event.target.closest('[data-wb-project-action][data-wb-project-mode="game_studio"]')
+            : null;
+        if (projectActionEl) {
+            const action = safeString(projectActionEl.dataset.wbProjectAction).toLowerCase();
+            const select = shell.querySelector('select[data-wb-project-select="game_studio"]');
+            const input = shell.querySelector('input[data-wb-project-name="game_studio"]');
+            const selectedId = safeString(select instanceof HTMLSelectElement ? select.value : wb.selectedProjectId);
+            if (action === 'save') {
+                const savedId = moduleWorkbenchProjectSave('game_studio', projectPayload(), safeString(input instanceof HTMLInputElement ? input.value : ''));
+                wb.selectedProjectId = savedId;
+                if (input instanceof HTMLInputElement) input.value = '';
+                renderProjectSelect();
+                notifyUser('Game project saved.', { tone: 'success', durationMs: 1600, debugKind: 'game-studio' });
+                return;
+            }
+            if (action === 'load') {
+                if (!selectedId) return;
+                const project = moduleWorkbenchProjectGet('game_studio', selectedId);
+                if (!project?.payload) return;
+                stopPreview({ silent: true });
+                applyProjectPayload(project.payload);
+                wb.selectedProjectId = selectedId;
+                if (wb.viewMode === 'playtest' || wb.viewMode === 'split') startPreview({ silent: true });
+                if (wb.viewMode === 'unreal' || wb.viewMode === 'split') mountUnrealViewport(false, { silent: true });
+                render();
+                notifyUser(`Loaded game project: ${safeString(project.name)}.`, { tone: 'success', durationMs: 1800, debugKind: 'game-studio' });
+                return;
+            }
+            if (action === 'delete') {
+                if (!selectedId) return;
+                if (moduleWorkbenchProjectDelete('game_studio', selectedId)) {
+                    wb.selectedProjectId = '';
+                    renderProjectSelect();
+                    notifyUser('Deleted game project.', { tone: 'warn', durationMs: 1700, debugKind: 'game-studio' });
+                }
+                return;
+            }
+        }
+        const target = event.target instanceof Element ? event.target.closest('[data-game-brush], [data-game-view-mode], [data-game-action], [data-game-outline-action], [data-game-asset-id], [data-game-x][data-game-y]') : null;
+        if (!target) return;
+        const brush = safeString(target.dataset.gameBrush);
+        const viewMode = safeString(target.dataset.gameViewMode);
+        const action = safeString(target.dataset.gameAction).toLowerCase();
+        const outlineAction = safeString(target.dataset.gameOutlineAction).toLowerCase();
+        const assetId = safeString(target.dataset.gameAssetId);
+        if (assetId && !action) {
+            wb.selectedAssetId = assetId;
+            render();
+            return;
+        }
+        if (outlineAction === 'select_actor') {
+            wb.selectedActorId = safeString(target.dataset.gameActorId);
+            render();
+            return;
+        }
+        if (outlineAction === 'path_check') {
+            const pass = moduleGameStudioPlayable(wb);
+            moduleWorkbenchPushLog(wb.logs, pass ? 'Path check passed.' : 'Path check failed.', pass ? 'ok' : 'warn', 80, 'game-log');
+            render();
+            return;
+        }
+        if (viewMode) {
+            const previousMode = wb.viewMode;
+            setViewMode(viewMode);
+            if (wb.viewMode === 'playtest' || wb.viewMode === 'split') {
+                startPreview({ silent: true });
+            } else if (previousMode === 'playtest' || previousMode === 'split') {
+                stopPreview({ silent: true });
+            }
+            if (wb.viewMode === 'unreal' || wb.viewMode === 'split') mountUnrealViewport(false, { silent: true });
+            render();
+            return;
+        }
+        if (brush) {
+            wb.brush = moduleWorkbenchClamp(Number(brush) || 0, 0, 4);
+            render();
+            return;
+        }
+        const x = Number(target.dataset.gameX);
+        const y = Number(target.dataset.gameY);
+        if (Number.isFinite(x) && Number.isFinite(y)) {
+            paint(x, y);
+            render();
+            return;
+        }
+        if (action === 'playtest') {
+            const wantsUnreal = wb.playTarget === 'unreal'
+                || (wb.playTarget === 'auto' && (wb.viewMode === 'unreal' || wb.viewMode === 'split'));
+            if (wantsUnreal) {
+                const mounted = mountUnrealViewport(false, { silent: true });
+                if (mounted) {
+                    void moduleGameStudioRemoteSend(wb).then((result) => {
+                        updateBridgeFromResult(result);
+                        wb.unrealRcResponse = JSON.stringify(result, null, 2);
+                        moduleWorkbenchPushLog(
+                            wb.logs,
+                            `Engine play ${result.ok ? 'started' : 'request failed'} (${result.status}).`,
+                            result.ok ? 'ok' : 'warn',
+                            80,
+                            'game-log',
+                        );
+                        render();
+                    }).catch((error) => {
+                        moduleWorkbenchPushLog(
+                            wb.logs,
+                            safeString(error?.message) || 'Engine play request failed, using local simulation.',
+                            'warn',
+                            80,
+                            'game-log',
+                        );
+                        const bridge = moduleGameStudioBridgeState(wb);
+                        bridge.status = 'offline';
+                        bridge.lastSeenAt = Date.now();
+                        bridge.lastPingMs = 0;
+                        bridge.lastError = safeString(error?.message) || 'Engine play failed.';
+                        if (wb.playTarget === 'auto') {
+                            setViewMode('playtest', { silent: true });
+                            startPreview({ silent: true });
+                        }
+                        render();
+                    });
+                } else if (wb.playTarget === 'auto') {
+                    setViewMode('playtest', { silent: true });
+                    startPreview({ silent: true });
+                }
+                render();
+                return;
+            }
+            setViewMode('playtest', { silent: true });
+            startPreview();
+            return;
+        }
+        if (action === 'stop') {
+            stopPreview();
+            return;
+        }
+        if (action === 'play_target') {
+            const sequence = ['auto', 'phaser', 'unreal'];
+            const current = sequence.indexOf(wb.playTarget);
+            wb.playTarget = sequence[(current + 1) % sequence.length];
+            moduleWorkbenchPushLog(wb.logs, `Play target switched to ${playTargetLabel().toLowerCase()}.`, 'ok', 80, 'game-log');
+            render();
+            return;
+        }
+        if (action === 'add_actor') {
+            addActor();
+            render();
+            return;
+        }
+        if (action === 'asset_add') {
+            addAsset();
+            render();
+            return;
+        }
+        if (action === 'asset_place') {
+            placeSelectedAsset();
+            render();
+            return;
+        }
+        if (action === 'asset_remove') {
+            removeSelectedAsset();
+            render();
+            return;
+        }
+        if (action === 'apply_actor') {
+            applySelectedActorEdits();
+            render();
+            return;
+        }
+        if (action === 'delete_actor') {
+            deleteSelectedActor();
+            render();
+            return;
+        }
+        if (action === 'check') {
+            const pass = moduleGameStudioPlayable(wb);
+            moduleWorkbenchPushLog(wb.logs, pass ? 'Path check passed.' : 'Path check failed.', pass ? 'ok' : 'warn', 80, 'game-log');
+            render();
+            return;
+        }
+        if (action === 'clear') {
+            wb.tiles = Array.from({ length: wb.gridHeight }, () => Array.from({ length: wb.gridWidth }, () => 0));
+            moduleWorkbenchPushLog(wb.logs, 'Cleared level grid.', 'warn', 80, 'game-log');
+            render();
+            return;
+        }
+        if (action === 'resize') {
+            moduleGameStudioResizeGrid(
+                wb,
+                Number(sizeWidthInput instanceof HTMLInputElement ? sizeWidthInput.value : wb.gridWidth),
+                Number(sizeHeightInput instanceof HTMLInputElement ? sizeHeightInput.value : wb.gridHeight),
+            );
+            moduleWorkbenchPushLog(wb.logs, `Resized grid to ${wb.gridWidth}x${wb.gridHeight}.`, 'ok', 80, 'game-log');
+            render();
+            return;
+        }
+        if (action === 'export') {
+            moduleWorkbenchCopyJson(exportLevel(), 'Game Studio Level JSON');
+            return;
+        }
+        if (action === 'connect_unreal') {
+            mountUnrealViewport(false);
+            render();
+            return;
+        }
+        if (action === 'reload_unreal') {
+            mountUnrealViewport(true);
+            render();
+            return;
+        }
+        if (action === 'open_unreal') {
+            const url = safeString(wb.unrealViewportUrl).trim();
+            if (!url) return;
+            window.open(url, '_blank', 'noopener');
+            return;
+        }
+        if (action === 'bridge_ping') {
+            runBridgeAction(
+                () => moduleGameStudioBridgePing(wb, { silent: true }),
+                {
+                    successMessage: 'Bridge ping ok.',
+                    failureMessage: 'Bridge ping degraded',
+                },
+            );
+            return;
+        }
+        if (action === 'bridge_pull') {
+            runBridgeAction(
+                () => moduleGameStudioBridgePullState(wb),
+                {
+                    successMessage: 'Pulled scene snapshot from bridge.',
+                    failureMessage: 'Scene pull failed',
+                },
+            );
+            return;
+        }
+        if (action === 'bridge_push_actor') {
+            runBridgeAction(
+                () => moduleGameStudioBridgePushSelectedActor(wb),
+                {
+                    successMessage: 'Pushed selected actor to bridge.',
+                    failureMessage: 'Actor push failed',
+                },
+            );
+            return;
+        }
+        if (action === 'bridge_push_scene') {
+            runBridgeAction(
+                () => moduleGameStudioBridgePushScene(wb),
+                {
+                    successMessage: 'Pushed scene snapshot to bridge.',
+                    failureMessage: 'Scene push failed',
+                },
+            );
+            return;
+        }
+        if (action === 'rc_send') {
+            runBridgeAction(
+                () => moduleGameStudioRemoteSend(wb),
+                {
+                    successMessage: 'Unreal RC succeeded.',
+                    failureMessage: 'Unreal RC failed',
+                },
+            );
+            return;
+        }
+        if (action === 'ai_blueprint') {
+            const prompt = safeString(wb.aiPrompt) || 'Gameplay feature';
+            moduleWorkbenchCopyText(
+                `// Thomas AI Blueprint Spec\nFeature: ${prompt}\n\nSystems:\n- Core loop nodes\n- Input handling\n- Reward state\n- Failure state\n\nUnreal Blueprint Tasks:\n1. Create BP_GameMode_Thomas.\n2. Create BP_PlayerController_Thomas.\n3. Add event dispatchers for mission_start / mission_complete.\n4. Bind HUD widget update events.\n`,
+                'AI Blueprint Spec',
+            );
+            moduleWorkbenchPushLog(wb.logs, 'Generated AI blueprint spec.', 'ok', 80, 'game-log');
+            render();
+            return;
+        }
+        if (action === 'ai_quest') {
+            const prompt = safeString(wb.aiPrompt) || 'mission loop';
+            moduleWorkbenchCopyJson({
+                quest_pack: 'thomas-ai-pack',
+                theme: prompt,
+                quests: [
+                    { id: 'q_intro', name: 'Boot Sequence', objective: 'Activate first terminal and sync diagnostics.' },
+                    { id: 'q_ops', name: 'Ops Drift', objective: 'Resolve three incident anomalies before timer expires.' },
+                    { id: 'q_boss', name: 'Command Breaker', objective: 'Stabilize central node under threat pressure.' },
+                ],
+                rewards: ['upgrade_token', 'gear_module', 'lore_fragment'],
+            }, 'AI Quest Pack JSON');
+            moduleWorkbenchPushLog(wb.logs, 'Generated AI quest pack.', 'ok', 80, 'game-log');
+            render();
+            return;
+        }
+        if (action === 'ai_npc') {
+            const prompt = safeString(wb.aiPrompt) || 'npc behaviors';
+            moduleWorkbenchCopyJson({
+                prompt,
+                behavior_tree: {
+                    root: 'selector',
+                    nodes: [
+                        { id: 'sense_player', type: 'service', tick_ms: 200 },
+                        { id: 'engage', type: 'sequence', condition: 'player_visible' },
+                        { id: 'flank', type: 'task', score: 0.72 },
+                        { id: 'fallback', type: 'task', condition: 'low_health' },
+                        { id: 'patrol', type: 'task', default: true },
+                    ],
+                },
+            }, 'AI NPC Behavior JSON');
+            moduleWorkbenchPushLog(wb.logs, 'Generated NPC behavior template.', 'ok', 80, 'game-log');
+            render();
+            return;
+        }
+        if (action === 'ai_test_plan') {
+            const prompt = safeString(wb.aiPrompt) || 'game feature';
+            moduleWorkbenchCopyText(
+                `# AI Playtest Plan\nFeature Focus: ${prompt}\n\n1. Core loop test: verify start -> objective -> reward completes without deadlock.\n2. Failure test: force hazard/death and verify clean restart + preserved high score.\n3. Balance test: run 10 sessions and record completion time distribution.\n4. UX test: confirm control discoverability within first 30 seconds.\n5. Perf test: monitor FPS in split viewport while Unreal stream is active.\n`,
+                'AI Playtest Plan',
+            );
+            moduleWorkbenchPushLog(wb.logs, 'Generated AI playtest plan.', 'ok', 80, 'game-log');
+            render();
+            return;
+        }
+        const commands = moduleGameStudioCommands(wb);
+        if (action === 'godot_export') {
+            moduleWorkbenchCopyJson({
+                format: 'godot.tilemap.v1',
+                tile_size: 32,
+                ...exportLevel(),
+            }, 'Godot TileMap JSON');
+            return;
+        }
+        if (action === 'unreal_export') {
+            moduleWorkbenchCopyJson({
+                format: 'unreal.world.v1',
+                tile_size: 100,
+                ...exportLevel(),
+            }, 'Unreal World JSON');
+            return;
+        }
+        if (action === 'godot_tscn') {
+            moduleWorkbenchCopyText(moduleGameStudioGodotTscn(wb), 'Godot TSCN');
+            return;
+        }
+        if (action === 'unreal_csv') {
+            moduleWorkbenchCopyText(moduleGameStudioUnrealCsv(wb), 'Unreal CSV');
+            return;
+        }
+        if (action === 'godot_open') moduleWorkbenchCopyText(commands.godotOpen, 'Godot Open Command');
+        if (action === 'godot_build') moduleWorkbenchCopyText(commands.godotBuild, 'Godot Build Command');
+        if (action === 'unreal_open') moduleWorkbenchCopyText(commands.unrealOpen, 'Unreal Open Command');
+        if (action === 'unreal_build') moduleWorkbenchCopyText(commands.unrealBuild, 'Unreal Build Command');
+    });
+
+    shell.querySelectorAll('input[data-game-path]').forEach((input) => {
+        input.addEventListener('input', () => {
+            const key = safeString(input.dataset.gamePath);
+            if (key === 'godot') wb.godotProjectPath = safeString(input.value);
+            if (key === 'unreal') wb.unrealProjectPath = safeString(input.value);
+        });
+    });
+    assetSearchInput.addEventListener('input', () => {
+        wb.assetSearch = safeString(assetSearchInput.value).slice(0, 120);
+        render();
+    });
+    assetTypeSelect.addEventListener('change', () => {
+        wb.assetFilterType = safeString(assetTypeSelect.value).toLowerCase() || 'all';
+        render();
+    });
+    unrealUrlInput.addEventListener('input', () => {
+        wb.unrealViewportUrl = safeString(unrealUrlInput.value);
+        wb.viewportConnected = false;
+        wb.viewportLoadState = 'idle';
+        wb.viewportBlockedHint = false;
+        if (Number(wb.viewportProbeTimer) > 0) {
+            window.clearTimeout(Number(wb.viewportProbeTimer));
+            wb.viewportProbeTimer = 0;
+        }
+        renderViewportStatus();
+    });
+    rcUrlInput.addEventListener('input', () => {
+        wb.unrealRcUrl = safeString(rcUrlInput.value);
+        const bridge = moduleGameStudioBridgeState(wb);
+        bridge.status = 'idle';
+        bridge.lastError = '';
+        bridge.lastPingMs = 0;
+    });
+    rcEndpointInput.addEventListener('input', () => {
+        wb.unrealRcEndpoint = safeString(rcEndpointInput.value);
+    });
+    rcPayloadInput.addEventListener('input', () => {
+        wb.unrealRcPayload = safeString(rcPayloadInput.value);
+    });
+    aiPromptInput.addEventListener('input', () => {
+        wb.aiPrompt = safeString(aiPromptInput.value);
+    });
+    viewportFrame.addEventListener('load', () => {
+        if (Number(wb.viewportProbeTimer) > 0) {
+            window.clearTimeout(Number(wb.viewportProbeTimer));
+            wb.viewportProbeTimer = 0;
+        }
+        wb.viewportConnected = true;
+        wb.viewportLoadState = 'live';
+        wb.viewportBlockedHint = false;
+        moduleWorkbenchPushLog(wb.logs, 'Unreal stream connected in viewport.', 'ok', 80, 'game-log');
+        renderViewportStatus();
+    });
+    viewportFrame.addEventListener('error', () => {
+        if (Number(wb.viewportProbeTimer) > 0) {
+            window.clearTimeout(Number(wb.viewportProbeTimer));
+            wb.viewportProbeTimer = 0;
+        }
+        wb.viewportConnected = false;
+        wb.viewportLoadState = 'blocked';
+        wb.viewportBlockedHint = true;
+        moduleWorkbenchPushLog(wb.logs, 'Unreal viewport failed to load.', 'warn', 80, 'game-log');
+        render();
+    });
+
+    const paintFromTarget = (eventTarget) => {
+        const cell = eventTarget instanceof Element ? eventTarget.closest('[data-game-x][data-game-y]') : null;
+        if (!cell) return false;
+        const x = Number(cell.dataset.gameX);
+        const y = Number(cell.dataset.gameY);
+        if (!Number.isFinite(x) || !Number.isFinite(y)) return false;
+        paint(x, y);
+        return true;
+    };
+    grid.addEventListener('pointerdown', (event) => {
+        if (paintFromTarget(event.target)) {
+            wb.dragging = true;
+            render();
+        }
+    });
+    grid.addEventListener('pointermove', (event) => {
+        if (!wb.dragging) return;
+        if (paintFromTarget(event.target)) {
+            render();
+        }
+    });
+    const endPaint = () => {
+        wb.dragging = false;
+        if (paintDirty) {
+            paintDirty = false;
+            render();
+        }
+    };
+    grid.addEventListener('pointerup', endPaint);
+    grid.addEventListener('pointerleave', endPaint);
+    const projectSelect = shell.querySelector('select[data-wb-project-select="game_studio"]');
+    if (projectSelect instanceof HTMLSelectElement) {
+        projectSelect.addEventListener('change', () => {
+            wb.selectedProjectId = safeString(projectSelect.value);
+        });
+    }
+
+    return true;
+}
