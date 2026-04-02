@@ -160,7 +160,6 @@ placeholder_files = [
 ]
 
 build_output_files = [
-    "thomas/server/web/js/app.js",
     "thomas/server/web/css/app.css",
 ]
 

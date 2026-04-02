@@ -1,25 +1,23 @@
 /**
- * App bootstrap uses a single live runtime.
+ * App bootstrap — loads the split runtime via the ordered script loader.
  *
- * Thomas no longer falls through old generated or split-part runtimes.
- * If the active runtime fails, we enter rescue mode instead of reviving
- * stale UI variants.
+ * Thomas loads runtime modules as ordered <script> tags so they share
+ * global scope.  The loader (app_runtime_loader.js) is included before
+ * this module in index.html and sets window.__thomasRuntimeReady to a
+ * Promise that resolves once every script has executed.
+ *
+ * If the runtime fails, we fall back to rescue mode.
  */
-
-async function loadPrimaryAppRuntime() {
-    const baseUrl = new URL(import.meta.url);
-    const runtimeUrl = new URL('./app_runtime_primary.mjs', baseUrl);
-    runtimeUrl.search = baseUrl.search;
-    console.log('[Thomas] Loading primary app runtime...');
-    await import(runtimeUrl.href);
-}
 
 (async () => {
     try {
-        await loadPrimaryAppRuntime();
-        console.log('[Thomas] SUCCESS: Using primary app runtime');
+        if (typeof window.__thomasRuntimeReady === 'undefined') {
+            throw new Error('Runtime loader not found — is app_runtime_loader.js included before app.js?');
+        }
+        await window.__thomasRuntimeReady;
+        console.log('[Thomas] SUCCESS: Using split runtime');
     } catch (error) {
-        console.error('[Thomas] FATAL: Primary app runtime failed to load', error);
+        console.error('[Thomas] FATAL: Runtime failed to load', error);
         try {
             console.warn('[Thomas] Loading UI editor rescue mode...');
             const rescue = await import(new URL('./ui_editor_rescue.js', import.meta.url).href);
