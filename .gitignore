@@ -111,6 +111,7 @@ Thumbs.db
 *.db
 *.cache
 runtime/
+!thomas/server/web/js/runtime/
 .runtime/
 .state/
 secrets.env
