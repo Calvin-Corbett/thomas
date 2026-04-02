@@ -7,7 +7,17 @@
  *
  * Hooks into the module system via window.__tokenEconomy.
  * Consumes /api/spend/* endpoints + SSE for live updates.
+ *
+ * Space rendering engine lives in token_economy_space.js (loaded on demand).
  */
+
+// Ensure space engine is loaded (script tag may not exist yet)
+if (!window.__teSpace) {
+    const _teS = document.createElement('script');
+    _teS.src = '/static/js/token_economy_space.js';
+    _teS.async = false;
+    document.head.appendChild(_teS);
+}
 
 (function tokenEconomyModule() {
     'use strict';
@@ -185,737 +195,116 @@
     }
     function sseOff() { if (_s.sse) { _s.sse.close(); _s.sse = null; } }
 
-    // ── Animated starfield canvas ──────────────────────────────
-    let _starfieldRAF = null;
-    let _starfieldCanvas = null;
-    let _stars = [];
 
-    function initStarfield(canvas) {
-        _starfieldCanvas = canvas;
-        const w = canvas.width;
-        const h = canvas.height;
+    // ── Space rendering engine (extracted to token_economy_space.js) ──
+    function injectSpaceBg() { if (window.__teSpace) window.__teSpace.inject(); }
+    function removeSpaceBg() { if (window.__teSpace) window.__teSpace.remove(); }
 
-        // 3 parallax layers spread evenly across the viewport
-        // Far: 400 tiny stars, very dim, very slow drift
-        // Mid: 150 medium stars, moderate, slow drift
-        // Near: 50 bright stars, bright, slow drift
-        const layerConfigs = [
-            { count: 400, drift: 0.003, baseSize: 0.5, baseAlpha: 0.25, twinkleMin: 0.05, twinkleMax: 0.2 },
-            { count: 150, drift: 0.008, baseSize: 1.0, baseAlpha: 0.45, twinkleMin: 0.08, twinkleMax: 0.25 },
-            { count: 50,  drift: 0.015, baseSize: 2.0, baseAlpha: 0.7,  twinkleMin: 0.1,  twinkleMax: 0.3 },
-        ];
-
-        _stars = [];
-        layerConfigs.forEach((cfg, layerIdx) => {
-            for (let i = 0; i < cfg.count; i++) {
-                // Spread stars evenly across entire viewport, not clustered at center
-                const x = Math.random() * w;
-                const y = Math.random() * h;
-                _stars.push({
-                    x,
-                    y,
-                    size: cfg.baseSize * (0.7 + Math.random() * 0.6),
-                    baseAlpha: cfg.baseAlpha * (0.6 + Math.random() * 0.4),
-                    twinkleSpeed: cfg.twinkleMin + Math.random() * (cfg.twinkleMax - cfg.twinkleMin),
-                    twinklePhase: Math.random() * Math.PI * 2,
-                    drift: cfg.drift,
-                    layer: layerIdx,
-                });
-            }
-        });
-
-        animateStarfield();
-    }
-
-    function animateStarfield() {
-        if (!_starfieldCanvas) return;
-        const ctx = _starfieldCanvas.getContext('2d');
-        const w = _starfieldCanvas.width;
-        const h = _starfieldCanvas.height;
-        let time = 0;
-
-        function frame() {
-            time += 0.016; // ~60fps
-            ctx.fillStyle = 'rgba(0,0,0,0)';
-            ctx.clearRect(0, 0, w, h);
-
-            _stars.forEach((star) => {
-                // Gentle lateral drift: all stars drift slowly left and slightly up (like moving forward + right)
-                star.x -= star.drift;
-                star.y -= star.drift * 0.4;
-
-                // Recycle: when a star drifts off left edge, respawn on right edge at random Y
-                if (star.x < -10) {
-                    star.x = w + 10;
-                    star.y = Math.random() * h;
-                }
-                // When drifts off top, respawn at bottom
-                if (star.y < -10) {
-                    star.y = h + 10;
-                    star.x = Math.random() * w;
-                }
-
-                // Twinkle: MUCH slower and gentler. Only varies 30% in brightness
-                const twinkle = 0.7 + 0.3 * Math.sin(time * star.twinkleSpeed + star.twinklePhase);
-                const alpha = star.baseAlpha * twinkle;
-
-                // Draw star
-                ctx.globalAlpha = alpha;
-                ctx.fillStyle = '#ffffff';
-                ctx.beginPath();
-                ctx.arc(star.x, star.y, star.size * 0.5, 0, Math.PI * 2);
-                ctx.fill();
-
-                // Glow for bigger stars
-                if (star.size > 1.5) {
-                    ctx.globalAlpha = alpha * 0.3;
-                    ctx.beginPath();
-                    ctx.arc(star.x, star.y, star.size * 1.2, 0, Math.PI * 2);
-                    ctx.fill();
-                }
-
-                // 4-point diffraction spike for big stars
-                if (star.size > 2) {
-                    ctx.globalAlpha = alpha * 0.15;
-                    ctx.strokeStyle = '#ffffff';
-                    ctx.lineWidth = 0.5;
-                    const spikeLong = star.size * 1.5;
-                    const spikeShort = star.size * 0.5;
-                    ctx.beginPath();
-                    ctx.moveTo(star.x - spikeLong, star.y); ctx.lineTo(star.x + spikeLong, star.y);
-                    ctx.moveTo(star.x, star.y - spikeShort); ctx.lineTo(star.x, star.y + spikeShort);
-                    ctx.stroke();
-                }
-            });
-
-            ctx.globalAlpha = 1;
-            _starfieldRAF = requestAnimationFrame(frame);
+    // ── Plugin iframe theme injection ──────────────────────────
+    // Plugins run in iframes with their own stylesheets.
+    // We inject a <style> override to make them transparent against space.
+    const _IFRAME_SPACE_CSS = `
+        html, body {
+            background: transparent !important;
+            color: #ececf1 !important;
         }
-
-        frame();
-    }
-
-    // ── Galaxy renderer ────────────────────────────────────────
-    let _galaxyRAF = null;
-    let _galaxyCanvas = null;
-    let _galaxies = [];
-
-    function renderGalaxies(canvas) {
-        _galaxyCanvas = canvas;
-        const w = canvas.width;
-        const h = canvas.height;
-
-        _galaxies = [];
-        const galaxyCount = 5 + Math.floor(Math.random() * 4);
-        const galaxyTypes = ['spiral', 'elliptical', 'barred'];
-
-        for (let i = 0; i < galaxyCount; i++) {
-            const type = galaxyTypes[Math.floor(Math.random() * galaxyTypes.length)];
-            const size = 40 + Math.random() * 50; // Bigger galaxies (40-90px)
-            const x = Math.random() * w;
-            const y = Math.random() * h;
-            const rotation = Math.random() * Math.PI * 2;
-            const armTightness = 0.5 + Math.random() * 1.5; // Vary spiral tightness
-
-            _galaxies.push({
-                type, size, x, y, rotation, armTightness,
-                pulsePhase: Math.random() * Math.PI * 2,
-                pulseSpeed: 0.1 + Math.random() * 0.3, // Much slower pulse
-            });
+        .panel, .card, section, .app-shell > section {
+            background: rgba(8, 12, 20, 0.55) !important;
+            border-color: rgba(88, 166, 255, 0.14) !important;
+            color: #ececf1 !important;
+            backdrop-filter: blur(6px);
+            -webkit-backdrop-filter: blur(6px);
         }
-
-        animateGalaxies();
-    }
-
-    function animateGalaxies() {
-        if (!_galaxyCanvas) return;
-        const ctx = _galaxyCanvas.getContext('2d');
-        const w = _galaxyCanvas.width;
-        const h = _galaxyCanvas.height;
-        let time = 0;
-
-        function frame() {
-            time += 0.016;
-            ctx.fillStyle = 'rgba(0,0,0,0)';
-            ctx.clearRect(0, 0, w, h);
-
-            _galaxies.forEach(gal => {
-                const pulseAlpha = 0.3 + 0.2 * Math.sin(time * gal.pulseSpeed + gal.pulsePhase);
-                ctx.save();
-                ctx.translate(gal.x, gal.y);
-                ctx.rotate(gal.rotation);
-
-                if (gal.type === 'spiral') {
-                    drawSpiralGalaxy(ctx, gal.size, pulseAlpha, gal.armTightness);
-                } else if (gal.type === 'elliptical') {
-                    drawEllipticalGalaxy(ctx, gal.size, pulseAlpha);
-                } else if (gal.type === 'barred') {
-                    drawBarredSpiralGalaxy(ctx, gal.size, pulseAlpha, gal.armTightness);
-                }
-
-                ctx.restore();
-            });
-
-            _galaxyRAF = requestAnimationFrame(frame);
+        .panel:hover, .card:hover {
+            border-color: rgba(88, 166, 255, 0.30) !important;
         }
-
-        frame();
-    }
-
-    function drawSpiralGalaxy(ctx, size, alpha, armTightness) {
-        // Background halo: very faint, large
-        ctx.globalAlpha = alpha * 0.08;
-        ctx.fillStyle = 'rgba(200, 180, 255, 1)';
-        ctx.beginPath();
-        ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Core: warm yellowish-white with soft radial gradient
-        const coreGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.15);
-        coreGradient.addColorStop(0, 'rgba(255, 235, 180, ' + (alpha * 0.9) + ')');
-        coreGradient.addColorStop(0.5, 'rgba(240, 210, 150, ' + (alpha * 0.5) + ')');
-        coreGradient.addColorStop(1, 'rgba(200, 180, 255, ' + (alpha * 0.1) + ')');
-        ctx.fillStyle = coreGradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, size * 0.15, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Spiral arms: 2 arms with 200+ points each, high scatter, small stars
-        const armCount = 2;
-        const pointsPerArm = 250;
-        for (let arm = 0; arm < armCount; arm++) {
-            for (let p = 0; p < pointsPerArm; p++) {
-                const t = p / pointsPerArm; // 0 to 1 along the arm
-                const baseAngle = (arm * Math.PI) + (t * Math.PI * 2.5 * armTightness); // Logarithmic spiral
-                const baseR = t * size * 0.4;
-
-                // Gaussian scatter perpendicular to arm
-                const scatterStdDev = size * 0.04;
-                const perpAngle = baseAngle + Math.PI / 2;
-                const scatterDist = (Math.random() + Math.random() - 1) * scatterStdDev; // Box-Muller simplified
-                const scatterX = Math.cos(perpAngle) * scatterDist;
-                const scatterY = Math.sin(perpAngle) * scatterDist;
-
-                const x = Math.cos(baseAngle) * baseR + scatterX;
-                const y = Math.sin(baseAngle) * baseR + scatterY;
-
-                // Color gradient: warm white near core, cool blue at edges
-                const colorT = t;
-                const r = 255 - (colorT * 50);
-                const g = 235 - (colorT * 60);
-                const b = 180 + (colorT * 40);
-
-                // Alpha decreases with distance from core
-                const pointAlpha = alpha * (1 - t * 0.7) * 0.6;
-                ctx.globalAlpha = pointAlpha;
-                ctx.fillStyle = 'rgba(' + Math.floor(r) + ',' + Math.floor(g) + ',' + Math.floor(b) + ', 1)';
-                ctx.beginPath();
-                ctx.arc(x, y, 0.3 + Math.random() * 0.4, 0, Math.PI * 2);
-                ctx.fill();
-            }
+        .hero {
+            background: linear-gradient(135deg, rgba(10, 16, 28, 0.90), rgba(8, 24, 52, 0.85)) !important;
         }
-
-        // HII regions: bright spots along arms
-        for (let arm = 0; arm < armCount; arm++) {
-            const hiiCount = 2 + Math.floor(Math.random() * 2);
-            for (let i = 0; i < hiiCount; i++) {
-                const t = 0.3 + Math.random() * 0.6;
-                const baseAngle = (arm * Math.PI) + (t * Math.PI * 2.5 * armTightness);
-                const baseR = t * size * 0.4;
-                const x = Math.cos(baseAngle) * baseR;
-                const y = Math.sin(baseAngle) * baseR;
-
-                ctx.globalAlpha = alpha * (0.4 + Math.random() * 0.3);
-                ctx.fillStyle = 'rgba(255, 150, 100, 1)';
-                ctx.beginPath();
-                ctx.arc(x, y, 1 + Math.random() * 1.5, 0, Math.PI * 2);
-                ctx.fill();
-            }
+        input, select, textarea {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border-color: rgba(88, 166, 255, 0.18) !important;
+            color: #ececf1 !important;
         }
-
-        // Dust lanes: dark semi-transparent dots between arms
-        const dustCount = 80;
-        for (let i = 0; i < dustCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const r = Math.random() * size * 0.35;
-            const x = Math.cos(angle) * r;
-            const y = Math.sin(angle) * r;
-
-            ctx.globalAlpha = alpha * 0.15;
-            ctx.fillStyle = 'rgba(0, 0, 0, 1)';
-            ctx.beginPath();
-            ctx.arc(x, y, 0.5 + Math.random() * 1.5, 0, Math.PI * 2);
-            ctx.fill();
+        input::placeholder { color: rgba(236, 236, 241, 0.35) !important; }
+        h1, h2, h3, strong { color: #f0f4ff !important; }
+        p, span, label, .panel-kicker, .eyebrow { color: rgba(236, 236, 241, 0.75) !important; }
+        .panel-meta, .item-meta { color: rgba(236, 236, 241, 0.50) !important; }
+        button[type="submit"], .btn-primary {
+            background: rgba(88, 166, 255, 0.20) !important;
+            border-color: rgba(88, 166, 255, 0.35) !important;
+            color: #8cc8ff !important;
         }
-    }
-
-    function drawEllipticalGalaxy(ctx, size, alpha) {
-        // Dense gaussian blob of 200+ points
-        // Color gradient: golden-yellow core to pale white edges
-        const pointCount = 200;
-        const aspectRatio = 0.6 + Math.random() * 0.3; // 0.6 to 0.9
-
-        for (let i = 0; i < pointCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const r = Math.sqrt(Math.random()) * size * 0.3;
-            const x = Math.cos(angle) * r;
-            const y = Math.sin(angle) * r * aspectRatio;
-
-            // Smooth radial falloff
-            const dist = Math.sqrt(x * x + y * y) / (size * 0.3);
-            const pointAlpha = alpha * Math.max(0, 1 - dist * dist);
-
-            // Color: golden-yellow to pale white
-            const colorT = dist;
-            const r_val = 255 - (colorT * 30);
-            const g_val = 220 - (colorT * 50);
-            const b_val = 180 + (colorT * 20);
-
-            ctx.globalAlpha = pointAlpha * 0.7;
-            ctx.fillStyle = 'rgba(' + Math.floor(r_val) + ',' + Math.floor(g_val) + ',' + Math.floor(b_val) + ', 1)';
-            ctx.beginPath();
-            ctx.arc(x, y, 0.4 + Math.random() * 0.5, 0, Math.PI * 2);
-            ctx.fill();
+        .hero-stat {
+            background: rgba(255, 255, 255, 0.06) !important;
+            border-color: rgba(255, 255, 255, 0.08) !important;
         }
+        .item-row, .item-card { border-color: rgba(88, 166, 255, 0.10) !important; }
+    `;
 
-        // Core: bright yellowish region
-        const coreGradient = ctx.createRadialGradient(0, 0, 0, 0, 0, size * 0.12);
-        coreGradient.addColorStop(0, 'rgba(255, 230, 150, ' + (alpha * 0.8) + ')');
-        coreGradient.addColorStop(1, 'rgba(230, 190, 100, ' + (alpha * 0.2) + ')');
-        ctx.fillStyle = coreGradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, size * 0.12, 0, Math.PI * 2);
-        ctx.fill();
-    }
-
-    function drawBarredSpiralGalaxy(ctx, size, alpha, armTightness) {
-        // Background halo
-        ctx.globalAlpha = alpha * 0.08;
-        ctx.fillStyle = 'rgba(200, 180, 255, 1)';
-        ctx.beginPath();
-        ctx.arc(0, 0, size * 0.5, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Central bright bar: elongated cluster of warm-white points
-        const barLength = size * 0.35;
-        const barWidth = size * 0.08;
-        const barPointCount = 120;
-
-        for (let i = 0; i < barPointCount; i++) {
-            const t = (i / barPointCount) * 2 - 1; // -1 to 1
-            const x = t * barLength * 0.5;
-            const perturbY = (Math.random() - 0.5) * barWidth;
-            const y = perturbY;
-
-            const barAlpha = alpha * (0.7 - Math.abs(t) * 0.2) * 0.8;
-            ctx.globalAlpha = barAlpha;
-            ctx.fillStyle = 'rgba(255, 240, 180, 1)';
-            ctx.beginPath();
-            ctx.arc(x, y, 0.4 + Math.random() * 0.6, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Spiral arms from bar ends
-        const armCount = 2;
-        const pointsPerArm = 200;
-
-        for (let arm = 0; arm < armCount; arm++) {
-            const startAngle = (arm * Math.PI); // Arms start from bar ends
-            for (let p = 0; p < pointsPerArm; p++) {
-                const t = p / pointsPerArm;
-                const baseAngle = startAngle + (t * Math.PI * 2 * armTightness);
-                const baseR = (barLength * 0.5) + (t * size * 0.3);
-
-                // Scatter perpendicular to arm
-                const scatterStdDev = size * 0.04;
-                const perpAngle = baseAngle + Math.PI / 2;
-                const scatterDist = (Math.random() + Math.random() - 1) * scatterStdDev;
-                const scatterX = Math.cos(perpAngle) * scatterDist;
-                const scatterY = Math.sin(perpAngle) * scatterDist;
-
-                const x = Math.cos(baseAngle) * baseR + scatterX;
-                const y = Math.sin(baseAngle) * baseR + scatterY;
-
-                // Color gradient
-                const colorT = t;
-                const r = 255 - (colorT * 40);
-                const g = 240 - (colorT * 50);
-                const b = 180 + (colorT * 30);
-
-                const pointAlpha = alpha * (1 - t * 0.6) * 0.6;
-                ctx.globalAlpha = pointAlpha;
-                ctx.fillStyle = 'rgba(' + Math.floor(r) + ',' + Math.floor(g) + ',' + Math.floor(b) + ', 1)';
-                ctx.beginPath();
-                ctx.arc(x, y, 0.3 + Math.random() * 0.4, 0, Math.PI * 2);
-                ctx.fill();
-            }
-        }
-    }
-
-    // ── Procedural nebula canvas — organic noise-based gas clouds ──
-    function paintNebulaCanvas(canvas) {
-        const ctx = canvas.getContext('2d');
-        const w = canvas.width;
-        const h = canvas.height;
-
-        // Simple value noise for organic shapes
-        function noise(x, y, seed) {
-            const n = Math.sin(x * 12.9898 + y * 78.233 + seed) * 43758.5453;
-            return n - Math.floor(n);
-        }
-
-        function smoothNoise(x, y, seed) {
-            const ix = Math.floor(x), iy = Math.floor(y);
-            const fx = x - ix, fy = y - iy;
-            const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
-            const a = noise(ix, iy, seed), b = noise(ix + 1, iy, seed);
-            const c = noise(ix, iy + 1, seed), d = noise(ix + 1, iy + 1, seed);
-            return a + (b - a) * sx + (c - a) * sy + (a - b - c + d) * sx * sy;
-        }
-
-        function fbm(x, y, seed, octaves) {
-            let v = 0, amp = 0.5, freq = 1;
-            for (let i = 0; i < octaves; i++) {
-                v += amp * smoothNoise(x * freq, y * freq, seed + i * 100);
-                amp *= 0.5;
-                freq *= 2.1;
-            }
-            return v;
-        }
-
-        // Nebula color palette — blues, purples, teals, pinks, golds, cyans
-        const palette = [
-            [20, 40, 120],   // deep blue
-            [80, 25, 130],   // purple
-            [15, 70, 100],   // teal
-            [130, 40, 90],   // rose
-            [40, 100, 160],  // bright blue
-            [60, 20, 100],   // dark purple
-            [180, 120, 40],  // amber/gold
-            [40, 180, 200],  // cyan
-        ];
-
-        const imgData = ctx.createImageData(w, h);
-        const d = imgData.data;
-        const scaleX = 5 / w, scaleY = 5 / h;
-
-        // Single pass: render with HIGHER octaves (6 instead of 5) for smoother noise
-        for (let py = 0; py < h; py++) {
-            for (let px = 0; px < w; px++) {
-                const idx = (py * w + px) * 4;
-                const nx = px * scaleX, ny = py * scaleY;
-
-                // Multiple noise layers for different color channels (higher octaves = smoother)
-                const n1 = fbm(nx, ny, 0, 6);
-                const n2 = fbm(nx + 10, ny + 10, 50, 6);
-                const n3 = fbm(nx + 20, ny - 5, 100, 5);
-
-                // Pick colors based on noise values
-                const ci1 = Math.floor(n1 * (palette.length - 1));
-                const ci2 = Math.min(ci1 + 1, palette.length - 1);
-                const t = (n1 * (palette.length - 1)) - ci1;
-                const c1 = palette[ci1], c2 = palette[ci2];
-
-                // Density — where the gas is thick vs thin
-                // Softer falloff: use linear instead of quadratic to reduce hard transitions
-                const density = Math.max(0, n2 * 1.2 - 0.2);
-                const brightness = density * 0.6; // Cap max brightness lower for softer appearance
-
-                const r = (c1[0] + (c2[0] - c1[0]) * t) * brightness;
-                const g = (c1[1] + (c2[1] - c1[1]) * t) * brightness;
-                const b = (c1[2] + (c2[2] - c1[2]) * t) * brightness;
-
-                // Alpha based on combined noise — creates wispy edges
-                const alpha = Math.min(255, brightness * n3 * 400);
-
-                d[idx] = Math.min(255, r * 1.2);
-                d[idx + 1] = Math.min(255, g * 1.1);
-                d[idx + 2] = Math.min(255, b * 1.3);
-                d[idx + 3] = alpha;
-            }
-        }
-        ctx.putImageData(imgData, 0, 0);
-    }
-
-    // ── Planet renderer ────────────────────────────────────────
-    let _planetCanvas = null;
-    let _planets = [];
-
-    function renderPlanets(canvas) {
-        _planetCanvas = canvas;
-        const w = canvas.width;
-        const h = canvas.height;
-
-        _planets = [];
-        const planetCount = 2 + Math.floor(Math.random() * 3);
-        const planetTypes = ['gasGiant', 'iceGiant', 'rocky'];
-
-        for (let i = 0; i < planetCount; i++) {
-            const type = planetTypes[Math.floor(Math.random() * planetTypes.length)];
-            const radius = 8 + Math.random() * 22;
-            let x, y;
-            // Position planets away from each other
-            let validPosition = false;
-            while (!validPosition) {
-                x = Math.random() * w;
-                y = Math.random() * h;
-                validPosition = true;
-                // Check distance from other planets
-                for (const p of _planets) {
-                    const dist = Math.sqrt((p.x - x) ** 2 + (p.y - y) ** 2);
-                    if (dist < (p.radius + radius) * 3) {
-                        validPosition = false;
-                        break;
+    function _injectIframeThemes() {
+        const iframes = document.querySelectorAll('#moduleWorkspace iframe');
+        iframes.forEach(iframe => {
+            // Inject now if loaded
+            _injectIntoIframe(iframe);
+            // Also inject on load (iframe may still be loading)
+            if (!iframe._teSpaceLoadHandler) {
+                iframe._teSpaceLoadHandler = () => {
+                    if (document.body.classList.contains('te-space-active')) {
+                        _injectIntoIframe(iframe);
                     }
-                }
+                };
+                iframe.addEventListener('load', iframe._teSpaceLoadHandler);
             }
-
-            const hasRings = type === 'gasGiant' && Math.random() < 0.4;
-            const rotation = Math.random() * Math.PI * 2;
-
-            _planets.push({
-                type, radius, x, y, hasRings, rotation,
-                rotationSpeed: 0.001 + Math.random() * 0.003,
-            });
-        }
-
-        drawPlanetsFrame(canvas.getContext('2d'));
+        });
+    }
+    function _injectIntoIframe(iframe) {
+        try {
+            const doc = iframe.contentDocument;
+            if (!doc || !doc.head) return;
+            if (doc.getElementById('te-space-iframe-theme')) return;
+            const style = doc.createElement('style');
+            style.id = 'te-space-iframe-theme';
+            style.textContent = _IFRAME_SPACE_CSS;
+            doc.head.appendChild(style);
+        } catch (e) { /* cross-origin */ }
     }
 
-    function drawPlanetsFrame(ctx) {
-        const canvas = ctx.canvas;
-        const w = canvas.width;
-        const h = canvas.height;
-
-        ctx.fillStyle = 'rgba(0,0,0,0)';
-        ctx.clearRect(0, 0, w, h);
-
-        _planets.forEach(planet => {
-            ctx.save();
-            ctx.translate(planet.x, planet.y);
-            ctx.rotate(planet.rotation);
-
-            if (planet.type === 'gasGiant') {
-                drawGasGiant(ctx, planet.radius);
-            } else if (planet.type === 'iceGiant') {
-                drawIceGiant(ctx, planet.radius);
-            } else if (planet.type === 'rocky') {
-                drawRockyPlanet(ctx, planet.radius);
-            }
-
-            if (planet.hasRings) {
-                drawRings(ctx, planet.radius);
-            }
-
-            ctx.restore();
-
-            // Update rotation
-            planet.rotation += planet.rotationSpeed;
+    function _removeIframeThemes() {
+        const iframes = document.querySelectorAll('#moduleWorkspace iframe');
+        iframes.forEach(iframe => {
+            try {
+                const doc = iframe.contentDocument;
+                if (!doc) return;
+                const style = doc.getElementById('te-space-iframe-theme');
+                if (style) style.remove();
+            } catch (e) { /* cross-origin */ }
         });
     }
 
-    function drawGasGiant(ctx, radius) {
-        // Gradient from warm colors to darker tones
-        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-        gradient.addColorStop(0, 'rgba(220, 160, 80, 1)');
-        gradient.addColorStop(0.4, 'rgba(200, 140, 60, 1)');
-        gradient.addColorStop(0.7, 'rgba(100, 80, 40, 1)');
-        gradient.addColorStop(1, 'rgba(40, 30, 20, 1)');
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Horizontal bands
-        const bandCount = 4 + Math.floor(Math.random() * 3);
-        for (let i = 0; i < bandCount; i++) {
-            const y = (i / bandCount - 0.5) * radius * 1.8;
-            const bandHeight = radius * 0.25;
-            const bandIntensity = Math.random() * 0.3;
-
-            ctx.globalAlpha = 0.4 * bandIntensity;
-            ctx.fillStyle = i % 2 === 0 ? 'rgba(255, 200, 100, 1)' : 'rgba(150, 100, 50, 1)';
-            ctx.fillRect(-radius, y - bandHeight, radius * 2, bandHeight * 2);
-        }
-
-        // Crescent shadow on one side
-        ctx.globalAlpha = 0.3;
-        const shadowGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
-        shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.6)');
-        shadowGradient.addColorStop(0.3, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = shadowGradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalAlpha = 1;
+    // MutationObserver to catch iframes that load after the space bg is mounted
+    let _iframeObserver = null;
+    function _watchForIframes() {
+        if (_iframeObserver) return;
+        const ws = document.getElementById('moduleWorkspace');
+        if (!ws) return;
+        _iframeObserver = new MutationObserver(() => {
+            if (document.body.classList.contains('te-space-active')) {
+                _injectIframeThemes();
+            }
+        });
+        _iframeObserver.observe(ws, { childList: true, subtree: true });
+    }
+    function _unwatchIframes() {
+        if (_iframeObserver) { _iframeObserver.disconnect(); _iframeObserver = null; }
     }
 
-    function drawIceGiant(ctx, radius) {
-        // Blue-green gradient
-        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-        gradient.addColorStop(0, 'rgba(150, 200, 220, 1)');
-        gradient.addColorStop(0.5, 'rgba(80, 140, 180, 1)');
-        gradient.addColorStop(1, 'rgba(30, 80, 120, 1)');
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Subtle banding
-        for (let i = 0; i < 3; i++) {
-            const y = (i / 3 - 0.5) * radius * 1.5;
-            ctx.globalAlpha = 0.2;
-            ctx.fillStyle = i % 2 === 0 ? 'rgba(200, 230, 255, 1)' : 'rgba(100, 150, 180, 1)';
-            ctx.fillRect(-radius, y, radius * 2, radius * 0.3);
-        }
-
-        // Crescent shadow
-        ctx.globalAlpha = 0.25;
-        const shadowGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
-        shadowGradient.addColorStop(0, 'rgba(0, 30, 80, 0.5)');
-        shadowGradient.addColorStop(0.3, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = shadowGradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalAlpha = 1;
-    }
-
-    function drawRockyPlanet(ctx, radius) {
-        // Gray-brown gradient
-        const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, radius);
-        gradient.addColorStop(0, 'rgba(180, 160, 140, 1)');
-        gradient.addColorStop(0.5, 'rgba(120, 100, 80, 1)');
-        gradient.addColorStop(1, 'rgba(60, 50, 40, 1)');
-
-        ctx.fillStyle = gradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Crater-like darker spots
-        const craterCount = 3 + Math.floor(Math.random() * 4);
-        for (let i = 0; i < craterCount; i++) {
-            const angle = Math.random() * Math.PI * 2;
-            const dist = Math.random() * radius * 0.7;
-            const cx = Math.cos(angle) * dist;
-            const cy = Math.sin(angle) * dist;
-            const craterRadius = 1 + Math.random() * 3;
-
-            ctx.globalAlpha = 0.4 + Math.random() * 0.3;
-            ctx.fillStyle = 'rgba(30, 20, 10, 1)';
-            ctx.beginPath();
-            ctx.arc(cx, cy, craterRadius, 0, Math.PI * 2);
-            ctx.fill();
-        }
-
-        // Crescent shadow
-        ctx.globalAlpha = 0.3;
-        const shadowGradient = ctx.createLinearGradient(-radius, 0, radius, 0);
-        shadowGradient.addColorStop(0, 'rgba(0, 0, 0, 0.5)');
-        shadowGradient.addColorStop(0.2, 'rgba(0, 0, 0, 0)');
-        ctx.fillStyle = shadowGradient;
-        ctx.beginPath();
-        ctx.arc(0, 0, radius, 0, Math.PI * 2);
-        ctx.fill();
-
-        ctx.globalAlpha = 1;
-    }
-
-    function drawRings(ctx, planetRadius) {
-        const ringOuterRadius = planetRadius * 1.8;
-        const ringInnerRadius = planetRadius * 1.2;
-
-        ctx.globalAlpha = 0.4;
-        ctx.strokeStyle = 'rgba(180, 160, 140, 1)';
-        ctx.lineWidth = planetRadius * 0.3;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, ringOuterRadius, ringInnerRadius * 0.4, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        // Ring shadow
-        ctx.globalAlpha = 0.15;
-        ctx.strokeStyle = 'rgba(0, 0, 0, 1)';
-        ctx.lineWidth = planetRadius * 0.2;
-        ctx.beginPath();
-        ctx.ellipse(0, 0, ringOuterRadius * 0.95, ringInnerRadius * 0.35, 0, 0, Math.PI * 2);
-        ctx.stroke();
-
-        ctx.globalAlpha = 1;
-    }
-
-    function injectSpaceBg() {
-        removeSpaceBg();
-
-        const root = document.createElement('div');
-        root.id = 'te-space-root';
-
-        // Layer order: nebula gradient → nebula canvas → planet canvas → galaxies → starfield (on top) → CSS blobs
-        // No scanlines
-
-        // 1. CSS gradient nebula layer (animated background)
-        const nebula = document.createElement('div');
-        nebula.className = 'te-nebula-layer';
-        root.appendChild(nebula);
-
-        // 2. Procedural canvas nebula — render at very low res and blur heavily for soft edges
-        const nebulaCanvas = document.createElement('canvas');
-        nebulaCanvas.width = Math.floor(window.innerWidth * 0.15);
-        nebulaCanvas.height = Math.floor(window.innerHeight * 0.15);
-        nebulaCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;opacity:0.6;filter:blur(6px);pointer-events:none;';
-        paintNebulaCanvas(nebulaCanvas);
-        root.appendChild(nebulaCanvas);
-
-        // 3. Canvas-based planet renderer (behind stars)
-        const planetCanvas = document.createElement('canvas');
-        planetCanvas.width = window.innerWidth;
-        planetCanvas.height = window.innerHeight;
-        planetCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
-        renderPlanets(planetCanvas);
-        root.appendChild(planetCanvas);
-
-        // 4. Canvas-based galaxy renderer
-        const galaxyCanvas = document.createElement('canvas');
-        galaxyCanvas.width = window.innerWidth;
-        galaxyCanvas.height = window.innerHeight;
-        galaxyCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
-        renderGalaxies(galaxyCanvas);
-        root.appendChild(galaxyCanvas);
-
-        // 5. Canvas-based animated starfield (on top, most visible)
-        const starfieldCanvas = document.createElement('canvas');
-        starfieldCanvas.width = window.innerWidth;
-        starfieldCanvas.height = window.innerHeight;
-        starfieldCanvas.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;pointer-events:none;';
-        initStarfield(starfieldCanvas);
-        root.appendChild(starfieldCanvas);
-
-        // 6. 3 nebula gas clouds (CSS blurred blobs)
-        for (let i = 0; i < 3; i++) {
-            const blob = document.createElement('div');
-            blob.className = 'te-nebula-blob';
-            root.appendChild(blob);
-        }
-
-        document.body.appendChild(root);
-        document.body.classList.add('te-space-active');
-        floaterStart();
-    }
-
-    function removeSpaceBg() {
-        floaterStop();
-        if (_starfieldRAF) { cancelAnimationFrame(_starfieldRAF); _starfieldRAF = null; }
-        if (_galaxyRAF) { cancelAnimationFrame(_galaxyRAF); _galaxyRAF = null; }
-        _starfieldCanvas = null;
-        _galaxyCanvas = null;
-        _planetCanvas = null;
-        const existing = document.getElementById('te-space-root');
-        if (existing) existing.remove();
-        document.body.classList.remove('te-space-active');
+    // ── Wire up space engine callbacks ─────────────────────────
+    if (window.__teSpace) {
+        window.__teSpace.init({
+            onEnter: function() { _injectIframeThemes(); _watchForIframes(); floaterStart(); },
+            onLeave: function() { floaterStop(); _removeIframeThemes(); _unwatchIframes(); },
+        });
     }
 
     // ── Floating robots — random office bots drift across space ──
@@ -924,110 +313,107 @@
     let _screensaverActive = false;
     const SCREENSAVER_IDLE_MS = 90000; // 90 seconds of inactivity
 
-    // Robot roster — pulled from OFFICE_AGENT_SEEDS colors
-    const FLOATER_BOTS = [
-        { name: 'Thomas',  primary: '#9ad8ff', secondary: '#5aaeff', glow: 'rgba(154, 216, 255, 0.5)' },
-        { name: 'Brandon', primary: '#9ad8ff', secondary: '#5aaeff', glow: 'rgba(154, 216, 255, 0.45)' },
-        { name: 'Trey',    primary: '#9becc9', secondary: '#5ec9a0', glow: 'rgba(155, 236, 201, 0.45)' },
-        { name: 'Zach',    primary: '#ffd49f', secondary: '#e0a050', glow: 'rgba(255, 212, 159, 0.4)' },
-        { name: 'Matt',    primary: '#ffc7eb', secondary: '#e080c0', glow: 'rgba(255, 199, 235, 0.4)' },
-        { name: 'Taylor',  primary: '#d7c8ff', secondary: '#a080e0', glow: 'rgba(215, 200, 255, 0.4)' },
-        { name: 'Nova',    primary: '#9ad8ff', secondary: '#60b8f0', glow: 'rgba(154, 216, 255, 0.4)' },
-        { name: 'Pixel',   primary: '#9becc9', secondary: '#50d0a0', glow: 'rgba(155, 236, 201, 0.4)' },
-        { name: 'Byte',    primary: '#f4c4ff', secondary: '#c070e8', glow: 'rgba(244, 196, 255, 0.4)' },
-        { name: 'Orbit',   primary: '#9fd9ff', secondary: '#60b0e0', glow: 'rgba(159, 217, 255, 0.4)' },
-        { name: 'Echo',    primary: '#b2ffc8', secondary: '#60d090', glow: 'rgba(178, 255, 200, 0.4)' },
-        { name: 'Glitch',  primary: '#ffd0a8', secondary: '#d09060', glow: 'rgba(255, 208, 168, 0.4)' },
-        { name: 'Cipher',  primary: '#a7ffe3', secondary: '#50c8a0', glow: 'rgba(167, 255, 227, 0.4)' },
+    // ── IDLE THOMAS — sits by the composer, breathes, blinks, talks randomly ──
+    let _idleThomasEl = null;
+    let _idleSpeechTimer = null;
+
+    const THOMAS_IDLE_LINES = [
+        'Systems nominal.',
+        'Standing by...',
+        'Ready for input.',
+        'All quiet out here.',
+        'Space is beautiful.',
+        'Monitoring channels.',
+        'Core temp stable.',
+        'Signal strong.',
+        'Orbit steady.',
+        'Awaiting orders.',
+        'Processing...',
+        'Tokens flowing.',
+        'Scanning horizon.',
+        'Hull integrity 100%.',
+        'Fuel cells charged.',
+        'Navigation locked.',
+        'Comms online.',
+        'Enjoying the view.',
+        'Nebula looks nice today.',
+        'Sensors green.',
     ];
 
+    function _positionIdleThomas() {
+        if (!_idleThomasEl) return;
+        var sidebar = document.querySelector('.sidebar');
+        var leftOffset = 28;
+        if (sidebar && !sidebar.classList.contains('collapsed')) {
+            leftOffset = sidebar.offsetWidth + 28;
+        }
+        _idleThomasEl.style.left = leftOffset + 'px';
+    }
+
+    let _sidebarObserver = null;
+
+    function _createIdleThomas() {
+        if (_idleThomasEl) return;
+        const el = document.createElement('div');
+        el.id = 'te-idle-thomas';
+        el.innerHTML =
+            '<div class="te-floater-bot" style="--bot-primary:#9ad8ff;--bot-secondary:#5aaeff">' +
+                '<div class="te-floater-visual">' +
+                    '<div class="te-floater-head"><div class="te-floater-eye left"></div><div class="te-floater-eye right"></div></div>' +
+                    '<div class="te-floater-body"></div>' +
+                    '<div class="te-floater-leg left"></div><div class="te-floater-leg right"></div>' +
+                '</div>' +
+                '<span class="te-floater-name">Thomas</span>' +
+            '</div>' +
+            '<div class="te-idle-speech"></div>';
+        document.body.appendChild(el);
+        _idleThomasEl = el;
+        _positionIdleThomas();
+        // Watch sidebar for collapse/expand to reposition
+        var sidebar = document.querySelector('.sidebar');
+        if (sidebar) {
+            _sidebarObserver = new MutationObserver(_positionIdleThomas);
+            _sidebarObserver.observe(sidebar, { attributes: true, attributeFilter: ['class'] });
+        }
+        _startIdleSpeech();
+    }
+
+    function _removeIdleThomas() {
+        if (_idleSpeechTimer) { clearTimeout(_idleSpeechTimer); _idleSpeechTimer = null; }
+        if (_sidebarObserver) { _sidebarObserver.disconnect(); _sidebarObserver = null; }
+        if (_idleThomasEl) { _idleThomasEl.remove(); _idleThomasEl = null; }
+    }
+
+    function _startIdleSpeech() {
+        // Say something random every 15-40 seconds
+        function speak() {
+            if (!_idleThomasEl) return;
+            const bubble = _idleThomasEl.querySelector('.te-idle-speech');
+            if (!bubble) return;
+            const line = THOMAS_IDLE_LINES[Math.floor(Math.random() * THOMAS_IDLE_LINES.length)];
+            bubble.textContent = line;
+            bubble.classList.add('visible');
+            // Hide after 4-6 seconds
+            setTimeout(() => {
+                if (bubble) bubble.classList.remove('visible');
+            }, 4000 + Math.random() * 2000);
+            _idleSpeechTimer = setTimeout(speak, (15 + Math.random() * 25) * 1000);
+        }
+        // First line after 5-10 seconds
+        _idleSpeechTimer = setTimeout(speak, (5 + Math.random() * 5) * 1000);
+    }
+
     function floaterStart() {
-        // First flyby after 20-40 seconds, then every 55-120 seconds
-        _floaterTimer = setTimeout(function loop() {
-            launchFloater();
-            _floaterTimer = setTimeout(loop, (55 + Math.random() * 65) * 1000);
-        }, (20 + Math.random() * 20) * 1000);
+        _createIdleThomas();
         _startScreensaverWatch();
     }
 
     function floaterStop() {
         if (_floaterTimer) { clearTimeout(_floaterTimer); _floaterTimer = null; }
         _stopScreensaverWatch();
+        _removeIdleThomas();
         const existing = document.querySelectorAll('.te-floater');
         existing.forEach(el => el.remove());
-    }
-
-    function launchFloater() {
-        const root = document.getElementById('te-space-root');
-        if (!root) return;
-
-        const vw = window.innerWidth;
-        const vh = window.innerHeight;
-
-        // Pick a random robot from the roster
-        const bot = FLOATER_BOTS[Math.floor(Math.random() * FLOATER_BOTS.length)];
-
-        // Random edge to start from (0=left, 1=right, 2=top, 3=bottom)
-        const edge = Math.floor(Math.random() * 4);
-        // Wider scale range: tiny distant bots (0.35) to big close ones (1.5)
-        const scale = 0.35 + Math.random() * 1.15;
-        // Flight duration 14-24 seconds
-        const duration = 14 + Math.random() * 10;
-
-        let startX, startY, endX, endY;
-        // Larger margin ensures bot is fully off-screen before appearing/fading
-        const botSize = 58 * scale;
-        const margin = botSize + 40;
-
-        if (edge === 0) {
-            startX = -margin; startY = vh * (0.1 + Math.random() * 0.8);
-            endX = vw + margin; endY = vh * (0.1 + Math.random() * 0.8);
-        } else if (edge === 1) {
-            startX = vw + margin; startY = vh * (0.1 + Math.random() * 0.8);
-            endX = -margin; endY = vh * (0.1 + Math.random() * 0.8);
-        } else if (edge === 2) {
-            startX = vw * (0.1 + Math.random() * 0.8); startY = -margin;
-            endX = vw * (0.1 + Math.random() * 0.8); endY = vh + margin;
-        } else {
-            startX = vw * (0.1 + Math.random() * 0.8); startY = vh + margin;
-            endX = vw * (0.1 + Math.random() * 0.8); endY = -margin;
-        }
-
-        const flipX = endX < startX ? 'scaleX(-1)' : '';
-
-        const floater = document.createElement('div');
-        floater.className = 'te-floater';
-        // z-index 0 = behind content. Screensaver CSS overrides to 2.
-        floater.style.cssText = `position:fixed;left:${startX}px;top:${startY}px;transform:scale(${scale}) ${flipX};z-index:0;`;
-        floater.style.filter = `drop-shadow(0 0 18px ${bot.glow}) drop-shadow(0 0 6px ${bot.glow})`;
-
-        floater.innerHTML =
-            '<div class="te-floater-bot" style="animation:te-floater-bob 3s ease-in-out infinite;' +
-            '--bot-primary:' + bot.primary + ';--bot-secondary:' + bot.secondary + '">' +
-            '<div class="te-floater-head"><div class="te-floater-eye left"></div><div class="te-floater-eye right"></div></div>' +
-            '<div class="te-floater-body"></div>' +
-            '<div class="te-floater-leg left"></div><div class="te-floater-leg right"></div>' +
-            '<span class="te-floater-name">' + bot.name + '</span>' +
-            '</div>';
-
-        document.body.appendChild(floater);
-
-        // Keyframes: stay fully visible across the entire viewport,
-        // only fade at the very edges (3% in, 97% out) so bot is off-screen when invisible
-        const keyframes = [
-            { left: startX + 'px', top: startY + 'px', opacity: 0 },
-            { left: startX + (endX - startX) * 0.03 + 'px', top: startY + (endY - startY) * 0.03 + 'px', opacity: 0.85, offset: 0.03 },
-            { left: startX + (endX - startX) * 0.97 + 'px', top: startY + (endY - startY) * 0.97 + 'px', opacity: 0.85, offset: 0.97 },
-            { left: endX + 'px', top: endY + 'px', opacity: 0 },
-        ];
-
-        const anim = floater.animate(keyframes, {
-            duration: duration * 1000,
-            easing: 'linear',
-            fill: 'forwards',
-        });
-
-        anim.onfinish = () => floater.remove();
     }
 
     // ── Screensaver / idle mode ──────────────────────────────────
@@ -1165,7 +551,7 @@
             </div>
             <div class="te-panel">
                 <div class="te-panel-head">
-                    <span><span class="te-dot"></span>TERMINAL</span>
+                    <span><span class="te-dot"></span> TERMINAL</span>
                     <span class="te-panel-sub" data-te-fcount>awaiting</span>
                 </div>
                 <div class="te-terminal" data-te-terminal>
@@ -1415,7 +801,16 @@
         const rows = _s.history || [];
 
         if (!rows.length) {
-            el.innerHTML = '<div class="te-empty-state">no spend history</div>';
+            el.innerHTML = '<div class="te-empty-state">' +
+                '<div class="te-empty-chart">' +
+                '<svg viewBox="0 0 300 100" preserveAspectRatio="none" class="te-empty-svg">' +
+                '<polyline points="0,90 30,82 60,75 90,68 120,72 150,55 180,58 210,42 240,35 270,28 300,18" fill="none" stroke="rgba(88,166,255,0.15)" stroke-width="1.5"/>' +
+                '<polyline points="0,90 30,82 60,75 90,68 120,72 150,55 180,58 210,42 240,35 270,28 300,18 300,100 0,100" fill="url(#te-ghost-fill)" stroke="none"/>' +
+                '<defs><linearGradient id="te-ghost-fill" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="rgba(88,166,255,0.08)"/><stop offset="100%" stop-color="rgba(88,166,255,0)"/></linearGradient></defs>' +
+                '</svg>' +
+                '</div>' +
+                '<span class="te-empty-label">awaiting first API call</span>' +
+                '</div>';
             return;
         }
 
@@ -1495,44 +890,3 @@
             });
         }
         const rb = $('[data-te-refresh]', root);
-        if (rb) rb.addEventListener('click', () => refresh({ force: true }));
-
-        const eb = $('[data-te-export]', root);
-        if (eb) eb.addEventListener('click', () => window.open('/api/spend/export.csv?days=' + _s.period, '_blank'));
-
-        root.addEventListener('click', (e) => {
-            const btn = e.target.closest('.te-switch-opt');
-            if (!btn) return;
-            const mode = btn.dataset.mode;
-            if (!mode || mode === _s.economy) return;
-            _s.economy = mode;
-            paintModes();
-            paintBudget();
-            paintHero();
-            paintTopMode();
-            setEconomy(mode);
-        });
-    }
-
-    async function setEconomy(mode) {
-        try {
-            await fetch('/api/preferences', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ advanced: { runtime: { default_token_economy: mode } } }),
-            });
-        } catch { /* best effort */ }
-    }
-
-    // Register page background through the module background system.
-    // This means moduleEnterMode('token_economy') will call injectSpaceBg()
-    // and moduleLeaveMode() / switching away will call removeSpaceBg().
-    // The space background covers the ENTIRE page, not just the widget.
-    window.__moduleBackgrounds = window.__moduleBackgrounds || {};
-    window.__moduleBackgrounds['token_economy'] = {
-        mount: injectSpaceBg,
-        unmount: removeSpaceBg,
-    };
-
-    window.__tokenEconomy = { mount, unmount, refresh, getState: () => ({ ..._s }) };
-})();

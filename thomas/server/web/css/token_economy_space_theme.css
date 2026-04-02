@@ -1,0 +1,684 @@
+/* ══════════════════════════════════════════════════════════════════
+   SPACE THEME: GLOBAL UI OVERRIDES
+   Token Economy cockpit aesthetic applied to EVERY view.
+   Bloomberg Terminal × spacecraft instruments.
+   Monospace-first · Blue accent glow · Dark translucent panels.
+   ══════════════════════════════════════════════════════════════════ */
+
+/* ── GLOBAL FONT: Token Economy monospace everywhere ──────────── */
+body.te-space-active {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace) !important;
+    font-variant-numeric: tabular-nums;
+    background: transparent !important;
+    color: #ececf1 !important;
+}
+/* Apply monospace to major text containers — NOT * (would break icon fonts) */
+body.te-space-active .main-content,
+body.te-space-active .sidebar,
+body.te-space-active .top-nav,
+body.te-space-active .composer-container,
+body.te-space-active .chat-scroll-area,
+body.te-space-active .welcome-screen,
+body.te-space-active .message-content,
+body.te-space-active .message-meta,
+body.te-space-active .message-author,
+body.te-space-active .sidebar-chat-row,
+body.te-space-active .sidebar-nav,
+body.te-space-active .debug-dock,
+body.te-space-active #settingsModal,
+body.te-space-active .task-continuity-panel,
+body.te-space-active .module-panel,
+body.te-space-active .module-header {
+    font-family: var(--font-mono, ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace) !important;
+}
+
+/* Grid pattern on main-content is replaced by scanline overlay below */
+
+/* ── Root / body / layout transparency ────────────────────────── */
+body.te-space-active .app-layout {
+    background: transparent !important;
+}
+body.te-space-active .main-content {
+    background: transparent !important;
+}
+
+/* ── Chat scroll area — fully transparent, scrollable ─────────── */
+body.te-space-active .chat-scroll-area {
+    background: transparent !important;
+    overflow-y: auto !important;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ── Welcome screen — cockpit boot screen ─────────────────────── */
+body.te-space-active .welcome-screen {
+    background: transparent !important;
+}
+body.te-space-active .welcome-title {
+    color: #ececf1 !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.03em !important;
+    text-shadow: 0 0 40px rgba(88, 166, 255, 0.20);
+}
+body.te-space-active .welcome-subtitle {
+    color: rgba(236, 236, 241, 0.50) !important;
+    font-size: 13px !important;
+    letter-spacing: 0.04em !important;
+    text-transform: uppercase !important;
+}
+body.te-space-active .welcome-card {
+    background: rgba(8, 12, 20, 0.65) !important;
+    border: 1px solid rgba(88, 166, 255, 0.18) !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: rgba(236, 236, 241, 0.75) !important;
+    border-radius: 4px !important;
+}
+body.te-space-active .welcome-card:hover {
+    border-color: rgba(88, 166, 255, 0.40) !important;
+    box-shadow: 0 0 18px rgba(88, 166, 255, 0.12), inset 0 0 12px rgba(88, 166, 255, 0.04) !important;
+    background: rgba(10, 18, 32, 0.75) !important;
+}
+body.te-space-active .welcome-card-title {
+    color: #58a6ff !important;
+    font-weight: 700 !important;
+    font-size: 12px !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+}
+body.te-space-active .welcome-card-desc {
+    color: rgba(236, 236, 241, 0.50) !important;
+    font-size: 12px !important;
+}
+body.te-space-active .welcome-card i {
+    color: #58a6ff !important;
+}
+
+/* ── Composer container — cockpit command line ─────────────────── */
+body.te-space-active .composer-container {
+    background: linear-gradient(180deg,
+        rgba(5, 6, 8, 0) 0%,
+        rgba(5, 6, 8, 0.55) 40%,
+        rgba(5, 6, 8, 0.88) 100%) !important;
+}
+
+/* ── Composer box — primary command input ──────────────────────── */
+body.te-space-active .composer-box {
+    background: rgba(8, 12, 20, 0.88) !important;
+    border: 1px solid rgba(88, 166, 255, 0.25) !important;
+    border-radius: 6px !important;
+    box-shadow:
+        0 0 1px rgba(88, 166, 255, 0.30),
+        0 0 12px rgba(88, 166, 255, 0.06),
+        0 8px 28px rgba(0, 0, 0, 0.55) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+body.te-space-active .composer-box:focus-within {
+    border-color: rgba(88, 166, 255, 0.45) !important;
+    box-shadow:
+        0 0 1px rgba(88, 166, 255, 0.50),
+        0 0 24px rgba(88, 166, 255, 0.10),
+        0 8px 28px rgba(0, 0, 0, 0.55) !important;
+}
+
+/* Composer textarea / input — clearly visible monospace */
+body.te-space-active .composer-box textarea,
+body.te-space-active .composer-box input[type="text"],
+body.te-space-active .composer-box .ql-editor,
+body.te-space-active #chatInput {
+    color: #ececf1 !important;
+    caret-color: #58a6ff !important;
+    font-size: 14px !important;
+}
+body.te-space-active .composer-box textarea::placeholder,
+body.te-space-active #chatInput::placeholder {
+    color: rgba(236, 236, 241, 0.28) !important;
+    font-style: normal !important;
+    letter-spacing: 0.02em !important;
+}
+
+/* Composer action buttons */
+body.te-space-active .composer-box button,
+body.te-space-active .composer-box .composer-action-btn {
+    color: rgba(236, 236, 241, 0.55) !important;
+    border-radius: 4px !important;
+}
+body.te-space-active .composer-box button:hover,
+body.te-space-active .composer-box .composer-action-btn:hover {
+    color: #58a6ff !important;
+    background: rgba(88, 166, 255, 0.10) !important;
+}
+
+/* Send button — bright accent */
+body.te-space-active .composer-box .send-btn,
+body.te-space-active .composer-box button[aria-label="Send"],
+body.te-space-active .composer-box button.primary {
+    background: rgba(88, 166, 255, 0.15) !important;
+    border: 1px solid rgba(88, 166, 255, 0.35) !important;
+    color: #58a6ff !important;
+}
+body.te-space-active .composer-box .send-btn:hover,
+body.te-space-active .composer-box button[aria-label="Send"]:hover,
+body.te-space-active .composer-box button.primary:hover {
+    background: rgba(88, 166, 255, 0.25) !important;
+    border-color: rgba(88, 166, 255, 0.55) !important;
+    box-shadow: 0 0 12px rgba(88, 166, 255, 0.15) !important;
+}
+
+/* Composer status bar */
+body.te-space-active .composer-status-bar {
+    color: rgba(88, 166, 255, 0.45) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.08em !important;
+    text-transform: uppercase !important;
+}
+
+/* Disclaimer text */
+body.te-space-active .disclaimer {
+    color: rgba(236, 236, 241, 0.20) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.04em !important;
+}
+
+/* ── Chat message bubbles — instrument readout panels ─────────── */
+
+/* Assistant messages */
+body.te-space-active .message-row.is-assistant .message-content {
+    background: rgba(8, 12, 20, 0.60) !important;
+    border: 1px solid rgba(88, 166, 255, 0.14) !important;
+    border-left: 2px solid rgba(88, 166, 255, 0.35) !important;
+    border-radius: 2px 6px 6px 2px !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #ececf1 !important;
+}
+
+/* User messages */
+body.te-space-active .message-row.is-user .message-content {
+    background: rgba(12, 20, 38, 0.65) !important;
+    border: 1px solid rgba(88, 166, 255, 0.22) !important;
+    border-right: 2px solid rgba(88, 166, 255, 0.35) !important;
+    border-radius: 6px 2px 2px 6px !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    color: #ececf1 !important;
+}
+
+/* Message text styling */
+body.te-space-active .message-content p,
+body.te-space-active .message-content li,
+body.te-space-active .message-content span {
+    color: rgba(236, 236, 241, 0.92) !important;
+    line-height: 1.65 !important;
+}
+
+/* Message metadata — TE label style */
+body.te-space-active .message-author {
+    color: #58a6ff !important;
+    font-size: 10px !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.10em !important;
+    text-transform: uppercase !important;
+}
+body.te-space-active .message-timestamp {
+    color: rgba(236, 236, 241, 0.25) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.06em !important;
+}
+body.te-space-active .message-footer {
+    color: rgba(236, 236, 241, 0.40) !important;
+}
+body.te-space-active .message-provider {
+    color: rgba(88, 166, 255, 0.55) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.06em !important;
+}
+
+/* Message action buttons */
+body.te-space-active .message-actions button {
+    color: rgba(236, 236, 241, 0.35) !important;
+    border-radius: 3px !important;
+}
+body.te-space-active .message-actions button:hover {
+    color: #58a6ff !important;
+    background: rgba(88, 166, 255, 0.10) !important;
+}
+
+/* Code blocks — terminal readout */
+body.te-space-active .message-content pre {
+    background: rgba(3, 5, 10, 0.80) !important;
+    border: 1px solid rgba(88, 166, 255, 0.12) !important;
+    border-radius: 3px !important;
+    color: rgba(236, 236, 241, 0.90) !important;
+}
+body.te-space-active .message-content code {
+    background: rgba(5, 8, 14, 0.70) !important;
+    border: 1px solid rgba(88, 166, 255, 0.08) !important;
+    border-radius: 2px !important;
+    color: #9ad8ff !important;
+    font-size: 13px !important;
+}
+
+/* Links inside messages */
+body.te-space-active .message-content a {
+    color: #58a6ff !important;
+    text-decoration: none !important;
+    border-bottom: 1px solid rgba(88, 166, 255, 0.25) !important;
+}
+body.te-space-active .message-content a:hover {
+    color: #79b8ff !important;
+    border-bottom-color: rgba(88, 166, 255, 0.50) !important;
+    text-shadow: 0 0 8px rgba(88, 166, 255, 0.20);
+}
+
+/* Strong/bold — accent color */
+body.te-space-active .message-content strong,
+body.te-space-active .message-content b {
+    color: #ececf1 !important;
+    font-weight: 700 !important;
+}
+
+/* Headings in messages */
+body.te-space-active .message-content h1,
+body.te-space-active .message-content h2,
+body.te-space-active .message-content h3,
+body.te-space-active .message-content h4 {
+    color: #58a6ff !important;
+    font-weight: 800 !important;
+    letter-spacing: -0.02em !important;
+    border-bottom: 1px solid rgba(88, 166, 255, 0.12);
+    padding-bottom: 4px;
+}
+
+/* ── Sidebar — cockpit navigation panel ───────────────────────── */
+body.te-space-active .sidebar {
+    background: rgba(4, 5, 8, 0.92) !important;
+    border-right: 1px solid rgba(88, 166, 255, 0.10) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+body.te-space-active .sidebar-header {
+    background: transparent !important;
+    border-bottom-color: rgba(88, 166, 255, 0.08) !important;
+}
+body.te-space-active .sidebar-nav {
+    background: transparent !important;
+}
+body.te-space-active .sidebar-chat-row {
+    color: rgba(236, 236, 241, 0.65) !important;
+    border-radius: 3px !important;
+    font-size: 13px !important;
+}
+body.te-space-active .sidebar-chat-row:hover {
+    background: rgba(88, 166, 255, 0.06) !important;
+    color: #ececf1 !important;
+}
+body.te-space-active .sidebar-chat-row.active {
+    background: rgba(88, 166, 255, 0.10) !important;
+    border-left: 2px solid #58a6ff !important;
+    color: #ececf1 !important;
+}
+body.te-space-active .sidebar-chat-row-title {
+    color: rgba(236, 236, 241, 0.85) !important;
+    font-weight: 600 !important;
+}
+body.te-space-active .sidebar-chat-row-meta {
+    color: rgba(88, 166, 255, 0.35) !important;
+    font-size: 10px !important;
+    letter-spacing: 0.04em !important;
+}
+body.te-space-active .sidebar-footer {
+    background: transparent !important;
+    border-top: 1px solid rgba(88, 166, 255, 0.08) !important;
+}
+
+/* Sidebar search */
+body.te-space-active .sidebar-search-input-wrap {
+    background: rgba(255, 255, 255, 0.03) !important;
+    border: 1px solid rgba(88, 166, 255, 0.14) !important;
+    border-radius: 4px !important;
+}
+body.te-space-active .sidebar-search-input-wrap:focus-within {
+    border-color: rgba(88, 166, 255, 0.35) !important;
+    box-shadow: 0 0 12px rgba(88, 166, 255, 0.08) !important;
+}
+body.te-space-active .sidebar-search-input-wrap input {
+    color: #ececf1 !important;
+}
+body.te-space-active .sidebar-search-input-wrap input::placeholder {
+    color: rgba(88, 166, 255, 0.30) !important;
+}
+
+/* Sidebar nav items — TE style labels */
+body.te-space-active .sidebar-nav .nav-item,
+body.te-space-active .sidebar-nav .sidebar-nav-item {
+    color: rgba(236, 236, 241, 0.55) !important;
+    font-size: 12px !important;
+    letter-spacing: 0.03em !important;
+    border-radius: 3px !important;
+}
+body.te-space-active .sidebar-nav .nav-item:hover,
+body.te-space-active .sidebar-nav .sidebar-nav-item:hover {
+    background: rgba(88, 166, 255, 0.06) !important;
+    color: #ececf1 !important;
+}
+body.te-space-active .sidebar-nav .nav-item.active,
+body.te-space-active .sidebar-nav .sidebar-nav-item.active {
+    background: rgba(88, 166, 255, 0.10) !important;
+    color: #58a6ff !important;
+    font-weight: 700 !important;
+}
+
+/* Sidebar dividers */
+body.te-space-active .sidebar-nav-divider {
+    border-color: rgba(88, 166, 255, 0.06) !important;
+}
+
+/* ── Top nav — transparent HUD ────────────────────────────────── */
+body.te-space-active .top-nav {
+    background: transparent !important;
+}
+body.te-space-active .model-select-wrapper::before {
+    background: radial-gradient(ellipse at center,
+        rgba(5, 6, 8, 0.55) 0%,
+        rgba(5, 6, 8, 0.30) 48%,
+        rgba(5, 6, 8, 0.06) 72%,
+        transparent 100%) !important;
+}
+
+/* Model dropdown */
+body.te-space-active .model-dropdown,
+body.te-space-active .model-select {
+    color: rgba(236, 236, 241, 0.80) !important;
+    font-size: 12px !important;
+    letter-spacing: 0.04em !important;
+}
+
+/* Nav buttons */
+body.te-space-active .nav-left button,
+body.te-space-active .nav-right button {
+    color: rgba(236, 236, 241, 0.50) !important;
+}
+body.te-space-active .nav-left button:hover,
+body.te-space-active .nav-right button:hover {
+    color: #58a6ff !important;
+    background: rgba(88, 166, 255, 0.08) !important;
+}
+
+/* ── Suggestion chips — TE style ──────────────────────────────── */
+body.te-space-active .suggestion-chip {
+    background: rgba(8, 12, 20, 0.65) !important;
+    border: 1px solid rgba(88, 166, 255, 0.18) !important;
+    color: rgba(236, 236, 241, 0.65) !important;
+    border-radius: 3px !important;
+    font-size: 12px !important;
+    letter-spacing: 0.02em !important;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+}
+body.te-space-active .suggestion-chip:hover {
+    background: rgba(10, 18, 32, 0.75) !important;
+    border-color: rgba(88, 166, 255, 0.35) !important;
+    color: #58a6ff !important;
+    box-shadow: 0 0 10px rgba(88, 166, 255, 0.08) !important;
+}
+
+/* ── Task continuity panel ────────────────────────────────────── */
+body.te-space-active .task-continuity-panel {
+    background: rgba(8, 12, 20, 0.70) !important;
+    border: 1px solid rgba(88, 166, 255, 0.14) !important;
+    border-radius: 4px !important;
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+}
+
+/* ── Scrollbar theming — subtle blue ──────────────────────────── */
+body.te-space-active ::-webkit-scrollbar {
+    width: 6px;
+}
+body.te-space-active ::-webkit-scrollbar-track {
+    background: transparent;
+}
+body.te-space-active ::-webkit-scrollbar-thumb {
+    background: rgba(88, 166, 255, 0.15);
+    border-radius: 3px;
+}
+body.te-space-active ::-webkit-scrollbar-thumb:hover {
+    background: rgba(88, 166, 255, 0.30);
+}
+
+/* ── Debug dock — cockpit instrument panel ────────────────────── */
+body.te-space-active .debug-dock {
+    background: rgba(4, 6, 12, 0.90) !important;
+    border-left: 1px solid rgba(88, 166, 255, 0.10) !important;
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+}
+
+/* ── Settings modal ───────────────────────────────────────────── */
+body.te-space-active #settingsModal {
+    background: rgba(6, 10, 18, 0.95) !important;
+    border: 1px solid rgba(88, 166, 255, 0.14) !important;
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+}
+body.te-space-active #settingsModal h1,
+body.te-space-active #settingsModal h2,
+body.te-space-active #settingsModal h3 {
+    color: #58a6ff !important;
+    font-weight: 700 !important;
+    letter-spacing: 0.04em !important;
+}
+body.te-space-active #settingsModal label {
+    color: rgba(236, 236, 241, 0.70) !important;
+    font-size: 11px !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+}
+body.te-space-active #settingsModal input,
+body.te-space-active #settingsModal select,
+body.te-space-active #settingsModal textarea {
+    background: rgba(255, 255, 255, 0.04) !important;
+    border: 1px solid rgba(88, 166, 255, 0.15) !important;
+    color: #ececf1 !important;
+    border-radius: 3px !important;
+}
+
+/* ── Attachment chips ─────────────────────────────────────────── */
+body.te-space-active .attachment-chip {
+    background: rgba(8, 12, 20, 0.70) !important;
+    border: 1px solid rgba(88, 166, 255, 0.18) !important;
+    color: rgba(236, 236, 241, 0.75) !important;
+    border-radius: 3px !important;
+}
+
+/* ── Game panel / secondary overlays ──────────────────────────── */
+body.te-space-active .chat-game-panel {
+    background: rgba(6, 10, 18, 0.80) !important;
+    border: 1px solid rgba(88, 166, 255, 0.12) !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+}
+
+/* ── Generic form elements in space mode ──────────────────────── */
+body.te-space-active input,
+body.te-space-active select,
+body.te-space-active textarea {
+    caret-color: #58a6ff !important;
+}
+body.te-space-active button {
+    font-family: inherit !important;
+}
+
+/* ── Tooltip / popover overrides ──────────────────────────────── */
+body.te-space-active .popover,
+body.te-space-active .tooltip,
+body.te-space-active .dropdown-menu,
+body.te-space-active .context-menu {
+    background: rgba(6, 10, 18, 0.92) !important;
+    border: 1px solid rgba(88, 166, 255, 0.14) !important;
+    color: #ececf1 !important;
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border-radius: 4px !important;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.55) !important;
+}
+body.te-space-active .dropdown-menu .dropdown-item,
+body.te-space-active .context-menu-item {
+    color: rgba(236, 236, 241, 0.70) !important;
+    font-size: 12px !important;
+}
+body.te-space-active .dropdown-menu .dropdown-item:hover,
+body.te-space-active .context-menu-item:hover {
+    background: rgba(88, 166, 255, 0.10) !important;
+    color: #58a6ff !important;
+}
+
+/* ── ALL ICON BUTTONS — consistent TE treatment ───────────────── */
+body.te-space-active #sidebarCollapseBtn,
+body.te-space-active #sidebarToggleBtn,
+body.te-space-active #debugDockToggleBtn,
+body.te-space-active #attachBtn,
+body.te-space-active #micBtn,
+body.te-space-active #thinkingEffortBtn,
+body.te-space-active .btn-icon {
+    color: rgba(236, 236, 241, 0.45) !important;
+    border-color: transparent !important;
+    background: transparent !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+}
+body.te-space-active #sidebarCollapseBtn:hover,
+body.te-space-active #sidebarToggleBtn:hover,
+body.te-space-active #debugDockToggleBtn:hover,
+body.te-space-active #attachBtn:hover,
+body.te-space-active #micBtn:hover,
+body.te-space-active #thinkingEffortBtn:hover,
+body.te-space-active .btn-icon:hover {
+    color: #58a6ff !important;
+    background: rgba(88, 166, 255, 0.08) !important;
+    border-color: rgba(88, 166, 255, 0.15) !important;
+}
+
+/* ── Send button — primary action glow ────────────────────────── */
+body.te-space-active #sendBtn {
+    color: #58a6ff !important;
+    background: rgba(88, 166, 255, 0.10) !important;
+    border: 1px solid rgba(88, 166, 255, 0.30) !important;
+    border-radius: 4px !important;
+    transition: all 0.2s ease !important;
+}
+body.te-space-active #sendBtn:hover {
+    color: #9ad8ff !important;
+    background: rgba(88, 166, 255, 0.20) !important;
+    border-color: rgba(88, 166, 255, 0.50) !important;
+    box-shadow: 0 0 14px rgba(88, 166, 255, 0.18) !important;
+}
+
+/* ── New Chat button — special cockpit button ─────────────────── */
+body.te-space-active #newChatSidebar {
+    background: rgba(88, 166, 255, 0.06) !important;
+    border: 1px solid rgba(88, 166, 255, 0.20) !important;
+    border-radius: 4px !important;
+    color: #58a6ff !important;
+    position: relative !important;
+    overflow: hidden !important;
+    transition: all 0.3s ease !important;
+}
+body.te-space-active #newChatSidebar::after {
+    content: '';
+    position: absolute;
+    top: 0; left: -100%;
+    width: 100%; height: 100%;
+    background: linear-gradient(90deg, transparent, rgba(88, 166, 255, 0.08), transparent);
+    transition: left 0.5s ease;
+}
+body.te-space-active #newChatSidebar:hover {
+    background: rgba(88, 166, 255, 0.12) !important;
+    border-color: rgba(88, 166, 255, 0.40) !important;
+    box-shadow: 0 0 16px rgba(88, 166, 255, 0.10), inset 0 0 20px rgba(88, 166, 255, 0.04) !important;
+}
+body.te-space-active #newChatSidebar:hover::after {
+    left: 100%;
+}
+
+/* ── Composer action popover — cockpit menu ───────────────────── */
+body.te-space-active .composer-action-popover {
+    background: rgba(6, 10, 18, 0.95) !important;
+    border: 1px solid rgba(88, 166, 255, 0.18) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 12px 36px rgba(0, 0, 0, 0.60), 0 0 1px rgba(88, 166, 255, 0.20) !important;
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+}
+body.te-space-active .composer-action-btn,
+body.te-space-active .composer-game-btn {
+    color: rgba(236, 236, 241, 0.65) !important;
+    border-radius: 4px !important;
+    font-size: 12px !important;
+    letter-spacing: 0.02em !important;
+}
+body.te-space-active .composer-action-btn:hover,
+body.te-space-active .composer-game-btn:hover {
+    background: rgba(88, 166, 255, 0.12) !important;
+    border-color: rgba(88, 166, 255, 0.30) !important;
+    color: #58a6ff !important;
+}
+body.te-space-active .composer-games-title {
+    color: rgba(88, 166, 255, 0.50) !important;
+    font-size: 9px !important;
+    letter-spacing: 0.12em !important;
+    text-transform: uppercase !important;
+}
+body.te-space-active .composer-games-column {
+    border-left-color: rgba(88, 166, 255, 0.10) !important;
+}
+
+/* ── Nav button labels — TE style ─────────────────────────────── */
+body.te-space-active #navChatBtn,
+body.te-space-active #navUiEditorBtn,
+body.te-space-active #navMyStuffBtn,
+body.te-space-active #navMarketplaceBtn {
+    color: rgba(236, 236, 241, 0.55) !important;
+    font-size: 12px !important;
+    letter-spacing: 0.03em !important;
+    border-radius: 4px !important;
+}
+body.te-space-active #navChatBtn:hover,
+body.te-space-active #navUiEditorBtn:hover,
+body.te-space-active #navMyStuffBtn:hover,
+body.te-space-active #navMarketplaceBtn:hover {
+    color: #58a6ff !important;
+    background: rgba(88, 166, 255, 0.06) !important;
+}
+body.te-space-active #navChatBtn.active,
+body.te-space-active #navUiEditorBtn.active,
+body.te-space-active #navMyStuffBtn.active,
+body.te-space-active #navMarketplaceBtn.active {
+    color: #58a6ff !important;
+    background: rgba(88, 166, 255, 0.10) !important;
+}
+
+/* ── Kill grid on main-content — MUST use display:none, no overlay ─ */
+body.te-space-active .main-content::before {
+    display: none !important;
+}
+/* No ::after overlays on main-content — they break chat scroll */
+
+/* ── Hide the alert robot stage when not active (prevent ghost bot) ── */
+body.te-space-active .robot-alert-stage:not(.active) {
+    display: none !important;
+}
+/* Remove any old flying floater robots — only idle Thomas now */
+body.te-space-active .te-floater:not(#te-idle-thomas) {
+    display: none !important;
+}
+
+/* ── THOMAS IDLE BOT — parked left of the composer ────────────── */
+#te-idle-thomas {
+    position: fixed;
+    bottom: 90px;
+    z-index: 50;
+    pointer-events: none;
+    image-rendering: pixelated;
+    filter: drop-shadow(0 0 14px rgba(154, 216, 255, 0.4)) drop-shadow(0 0 5px
