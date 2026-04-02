@@ -77,7 +77,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     };
 }
 
-const moduleWorkbenchTeardownOriginalForUiEditor = moduleWorkbenchTeardown;
+// [duplicate removed] const moduleWorkbenchTeardownOriginalForUiEditor = moduleWorkbenchTeardown;
 moduleWorkbenchTeardown = function moduleWorkbenchTeardownWithUiEditor(mode) {
     if (safeString(mode) === 'app_builder') {
         const state = moduleEnsureRuntime();
