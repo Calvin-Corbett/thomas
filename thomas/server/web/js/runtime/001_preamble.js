@@ -3,10 +3,31 @@
  * Minimal, clean, vanilla JS to power the thoughtful interface.
  */
 
-// 
-//   GLOBAL STATE & CONSTANTS                                               
-//   Chat state, game constants, composer presets, DOM element refs          
-// 
+//
+//   SHARED UTILITY FUNCTIONS (hoisted here for cross-file availability)
+//
+
+function safeString(value) {
+    return String(value || '').trim();
+}
+
+function escapeHtml(unsafe) {
+    return String(unsafe || '')
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
+function streamChunkString(value) {
+    return value === undefined || value === null ? '' : String(value);
+}
+
+//
+//   GLOBAL STATE & CONSTANTS
+//   Chat state, game constants, composer presets, DOM element refs
+//
 
 // Basic State
 let chatHistory = [];

@@ -525,7 +525,7 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
 // (block scope removed for split compliance — originally from part-033.js)
 
 
-const MODULE_STUDIO_COMFY_STYLE_ID = 'moduleStudioComfyStyles';
+// [duplicate removed] const MODULE_STUDIO_COMFY_STYLE_ID = 'moduleStudioComfyStyles';
 const MODULE_UI_EDITOR_PLUGIN_BOOTSTRAP_ALLOWLIST = [
     'raw.githubusercontent.com',
 ];
@@ -1032,7 +1032,7 @@ function moduleStudioBindComfyPanel(container, wb) {
     }
 }
 
-const moduleRenderWorkbenchStudioOssOriginal = moduleRenderWorkbenchStudioOss;
+// [duplicate removed] const moduleRenderWorkbenchStudioOssOriginal = moduleRenderWorkbenchStudioOss;
 moduleRenderWorkbenchStudioOss = function moduleRenderWorkbenchStudioOssWithComfy(container, wb) {
     const rendered = moduleRenderWorkbenchStudioOssOriginal(container, wb);
     if (rendered) {
@@ -1045,16 +1045,16 @@ moduleRenderWorkbenchStudioOss = function moduleRenderWorkbenchStudioOssWithComf
     return rendered;
 };
 
-const MODULE_UI_EDITOR_STYLE_ID = 'moduleUiEditorStyles';
-const MODULE_UI_EDITOR_INLINE_STYLE_ID = 'moduleUiEditorInlineStyles';
-const MODULE_UI_EDITOR_STORE_KEY = 'thomas.uiEditor.urlProjects.v1';
+// [duplicate removed] const MODULE_UI_EDITOR_STYLE_ID = 'moduleUiEditorStyles';
+// [duplicate removed] const MODULE_UI_EDITOR_INLINE_STYLE_ID = 'moduleUiEditorInlineStyles';
+// [duplicate removed] const MODULE_UI_EDITOR_STORE_KEY = 'thomas.uiEditor.urlProjects.v1';
 const MODULE_UI_EDITOR_PLUGIN_STORE_KEY = 'thomas.uiEditor.shellModules.v1';
 const MODULE_UI_EDITOR_PLUGIN_MARKETPLACE_URL_KEY = 'thomas.uiEditor.shellModules.marketplaceUrl.v1';
 const MODULE_UI_EDITOR_PLUGIN_MARKETPLACE_LASTSYNC_KEY = 'thomas.uiEditor.shellModules.marketplaceLastSync.v1';
-const MODULE_UI_EDITOR_VIEWPORT_MIN_WIDTH = 420;
-const MODULE_UI_EDITOR_VIEWPORT_MIN_HEIGHT = 280;
-const MODULE_UI_EDITOR_VIEWPORT_MAX_WIDTH = 2400;
-const MODULE_UI_EDITOR_VIEWPORT_MAX_HEIGHT = 1600;
+// [duplicate removed] const MODULE_UI_EDITOR_VIEWPORT_MIN_WIDTH = 420;
+// [duplicate removed] const MODULE_UI_EDITOR_VIEWPORT_MIN_HEIGHT = 280;
+// [duplicate removed] const MODULE_UI_EDITOR_VIEWPORT_MAX_WIDTH = 2400;
+// [duplicate removed] const MODULE_UI_EDITOR_VIEWPORT_MAX_HEIGHT = 1600;
 
 function moduleUiEditorEscapeHtml(valueRaw) {
     const value = safeString(valueRaw);
