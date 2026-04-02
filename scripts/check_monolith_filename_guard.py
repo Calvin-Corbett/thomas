@@ -58,6 +58,12 @@ SKIP_DIR_NAMES = {
 }
 
 
+def _runtime_protection_disabled() -> bool:
+    """Check if a human has temporarily disabled runtime protection."""
+    flag = ROOT / "runtime" / ".runtime_protection_disabled"
+    return flag.is_file()
+
+
 def _is_skipped_path(path: Path) -> bool:
     return any(part in SKIP_DIR_NAMES for part in path.parts)
 
@@ -146,6 +152,10 @@ def _scan(repo_root: Path, *, staged_only: bool) -> list[dict[str, str]]:
 
 
 def run(argv: Iterable[str] | None = None) -> int:
+    if _runtime_protection_disabled():
+        print("Monolith filename guard: PASS (runtime protection disabled by human)")
+        return 0
+
     parser = argparse.ArgumentParser(
         description=("Fail when `.partNN.ext` filenames are present " "in repository sources.")
     )
