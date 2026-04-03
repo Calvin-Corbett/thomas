@@ -253,6 +253,47 @@ enabled_files = [
 # ── Dead Code ───────────────────────────────────────────────────────────────
 # Directories containing legacy code that should not be edited.
 
+[skip_policy]
+protected_hooks = [
+    "ruff",
+    "ruff-format",
+    "thomas-agent-safety-validation",
+    "thomas-active-folder-guard",
+    "thomas-precommit-skip-policy-gate",
+    "thomas-protected-files-gate",
+    "thomas-plan-structure-gate",
+    "thomas-core-overhead-guard",
+    "thomas-worktree-rules-gate",
+    "thomas-worktree-branch-guard",
+    "thomas-workboard-claims-gate",
+    "thomas-workboard-task-problems-gate",
+    "thomas-workboard-changed-files-gate",
+    "thomas-workboard-agent-claim-gate",
+    "thomas-workboard-issue-tool-smoke",
+    "thomas-workboard-problem-record-smoke",
+    "thomas-bulk-commit-guard",
+    "thomas-commit-growth-guard",
+    "thomas-monolith-guard",
+    "thomas-protected-deletion-guard",
+    "thomas-feature-registry-gate",
+    "thomas-repo-identity-gate",
+    "thomas-site-visual-proof-gate",
+    "thomas-merge-readiness",
+    "thomas-repo-hygiene-gate",
+    "thomas-repo-clean-worktree-gate",
+    "thomas-release-hygiene-gate",
+    "thomas-release-update-gate",
+    "thomas-architecture",
+    "thomas-auto-checks-quick",
+    "thomas-workboard-audit-backstop-gate",
+    "thomas-monolith-filename-pattern-gate",
+]
+max_skip_hooks = 4
+max_staged_files_with_skip = 200
+max_staged_files_with_breakglass = 60
+breakglass_max_per_agent_24h = 3
+breakglass_cooldown_minutes = 15
+
 [dead_code]
 directories = [
     "thomas/server/web/js/app_parts/",

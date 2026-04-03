@@ -31,7 +31,7 @@
     min-height: 0;
     overflow: hidden;
     gap: 14px;
-    align-items: start;
+    align-items: stretch;
 }
 
 .settings-nav-panel {
@@ -43,12 +43,9 @@
     flex-direction: column;
     gap: 10px;
     padding: 10px;
-    position: sticky;
-    top: 0;
-    align-self: start;
-    height: 100%;
-    max-height: 100%;
-    overflow: hidden;
+    position: relative;
+    overflow-y: auto;
+    overscroll-behavior: contain;
 }
 
 .settings-nav-search {

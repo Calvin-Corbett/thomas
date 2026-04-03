@@ -1061,6 +1061,7 @@
     transform-origin: center center;
     pointer-events: none;
     z-index: 4;
+    display: none;
 }
 
 .chat-game-bot-wrap.inside-door {

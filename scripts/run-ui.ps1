@@ -492,7 +492,7 @@ function Start-BootDoctorBackgroundRepair {
     [Parameter(Mandatory = $true)][int]$DiagPort
   )
 
-  $bootDoctorScript = Join-Path $Root 'scriptsootdoctor.ps1'
+  $bootDoctorScript = Join-Path $Root 'scripts\bootdoctor.ps1'
   if (-not (Test-Path $bootDoctorScript)) {
     return $null
   }

@@ -19,9 +19,13 @@ Versioning: Semantic Versioning.
 - settings: Extended the default preference schema and patch models to cover workspace visibility, token-economy, channel, marketplace, and data controls, and aligned the live web runtime/settings modules with those expanded settings surfaces.
 - server: Web build fingerprinting and frontend references now track the split runtime loader instead of the old monolith entrypoint.
 - architecture: Raised the hard monolith ceiling to 1500 lines and aligned the TOML compatibility parser with inline-comment handling for bare values, quoted strings, and arrays.
+- web: Theme boot now uses a persisted prepaint preference instead of a blocking `/api/preferences` XHR, and the global space background stays synchronized with light/dark versus auto theme state.
+- safety: Release-scope skip-policy coverage now protects the bulk-commit and commit-growth hooks, while split-runtime surface parity checks point at the live rescue/runtime files instead of removed legacy paths.
 
 ### Fixed
 - workboard: Repaired a truncated `openclaw-parity-stabilization` task-plan entry that was leaving `plans/thomas/WORKBOARD.md` in an invalid state.
+- startup: Boot Doctor recovery scripts now point at the real `runtime/boot_doctor` and `scripts/bootdoctor.ps1` paths instead of corrupted control-character paths that could not launch.
+- web: The rescue loader now targets the real `063_module_studio_comfy_style_id_*` split files, and mobile robot alerts clamp inside narrow viewports instead of overflowing off-screen.
 
 ## [0.14.55] - 2026-03-29
 

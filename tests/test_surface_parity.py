@@ -108,6 +108,22 @@ def test_read_cli_sources_raises_when_none_exist(monkeypatch: pytest.MonkeyPatch
         _ = mod._read_cli_sources()
 
 
+def test_read_web_sources_prefers_runtime_modules(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    runtime_b = runtime_dir / "010.js"
+    runtime_a = runtime_dir / "002.js"
+    runtime_b.write_text("runtime-b", encoding="utf-8")
+    runtime_a.write_text("runtime-a", encoding="utf-8")
+
+    monkeypatch.setattr(mod, "WEB_RUNTIME_DIR", runtime_dir)
+    monkeypatch.setattr(mod, "WEB_CHAT", tmp_path / "missing_chat.js")
+    monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
+    monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
+
+    assert mod._read_web_sources() == "runtime-a\nruntime-b"
+
+
 def test_read_web_sources_uses_chat_app_and_sorted_parts(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     web_dir = tmp_path / "web"
     parts_dir = web_dir / "app_parts"
@@ -121,6 +137,7 @@ def test_read_web_sources_uses_chat_app_and_sorted_parts(monkeypatch: pytest.Mon
     part_b.write_text("part-b", encoding="utf-8")
     part_a.write_text("part-a", encoding="utf-8")
 
+    monkeypatch.setattr(mod, "WEB_RUNTIME_DIR", tmp_path / "missing_runtime")
     monkeypatch.setattr(mod, "WEB_CHAT", chat)
     monkeypatch.setattr(mod, "WEB_APP", app)
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", parts_dir)
@@ -131,6 +148,7 @@ def test_read_web_sources_uses_chat_app_and_sorted_parts(monkeypatch: pytest.Mon
 def test_read_web_sources_raises_when_none_exist(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     missing_file = tmp_path / "missing.js"
     missing_dir = tmp_path / "missing_parts"
+    monkeypatch.setattr(mod, "WEB_RUNTIME_DIR", tmp_path / "missing_runtime")
     monkeypatch.setattr(mod, "WEB_CHAT", missing_file)
     monkeypatch.setattr(mod, "WEB_APP", missing_file)
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", missing_dir)
@@ -184,7 +202,9 @@ def helper():
 
 def test_run_passes_with_minimal_valid_sources(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     server = tmp_path / "server.py"
-    web = tmp_path / "web.js"
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    web = runtime_dir / "web.js"
     cli = tmp_path / "cli.py"
 
     server.write_text(
@@ -203,7 +223,8 @@ def test_run_passes_with_minimal_valid_sources(monkeypatch: pytest.MonkeyPatch, 
     )
 
     monkeypatch.setattr(mod, "SERVER_EVENT_SOURCES", (server,))
-    monkeypatch.setattr(mod, "WEB_CHAT", web)
+    monkeypatch.setattr(mod, "WEB_RUNTIME_DIR", runtime_dir)
+    monkeypatch.setattr(mod, "WEB_CHAT", tmp_path / "missing_chat.js")
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
@@ -214,7 +235,9 @@ def test_run_passes_with_minimal_valid_sources(monkeypatch: pytest.MonkeyPatch, 
 
 def test_run_fails_when_web_missing_required_event(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     server = tmp_path / "server.py"
-    web = tmp_path / "web.js"
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    web = runtime_dir / "web.js"
     cli = tmp_path / "cli.py"
 
     server.write_text(
@@ -234,7 +257,8 @@ def test_run_fails_when_web_missing_required_event(monkeypatch: pytest.MonkeyPat
     )
 
     monkeypatch.setattr(mod, "SERVER_EVENT_SOURCES", (server,))
-    monkeypatch.setattr(mod, "WEB_CHAT", web)
+    monkeypatch.setattr(mod, "WEB_RUNTIME_DIR", runtime_dir)
+    monkeypatch.setattr(mod, "WEB_CHAT", tmp_path / "missing_chat.js")
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
@@ -247,7 +271,9 @@ def test_run_json_pass_payload(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     server = tmp_path / "server.py"
-    web = tmp_path / "web.js"
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    web = runtime_dir / "web.js"
     cli = tmp_path / "cli.py"
 
     server.write_text(
@@ -266,7 +292,8 @@ def test_run_json_pass_payload(
     )
 
     monkeypatch.setattr(mod, "SERVER_EVENT_SOURCES", (server,))
-    monkeypatch.setattr(mod, "WEB_CHAT", web)
+    monkeypatch.setattr(mod, "WEB_RUNTIME_DIR", runtime_dir)
+    monkeypatch.setattr(mod, "WEB_CHAT", tmp_path / "missing_chat.js")
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
@@ -287,7 +314,9 @@ def test_run_json_fail_payload(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
     server = tmp_path / "server.py"
-    web = tmp_path / "web.js"
+    runtime_dir = tmp_path / "runtime"
+    runtime_dir.mkdir(parents=True, exist_ok=True)
+    web = runtime_dir / "web.js"
     cli = tmp_path / "cli.py"
 
     server.write_text(
@@ -306,7 +335,8 @@ def test_run_json_fail_payload(
     )
 
     monkeypatch.setattr(mod, "SERVER_EVENT_SOURCES", (server,))
-    monkeypatch.setattr(mod, "WEB_CHAT", web)
+    monkeypatch.setattr(mod, "WEB_RUNTIME_DIR", runtime_dir)
+    monkeypatch.setattr(mod, "WEB_CHAT", tmp_path / "missing_chat.js")
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
@@ -325,7 +355,7 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
     site_markup = (root / "apps/site/src/components/pixel-agents.tsx").read_text(encoding="utf-8")
     site_css = (root / "apps/site/src/app/globals.css").read_text(encoding="utf-8")
     web_index = (root / "thomas/server/web/index.html").read_text(encoding="utf-8")
-    web_css = (root / "thomas/server/web/css/components_parts/part-001a.css").read_text(encoding="utf-8")
+    web_css = (root / "thomas/server/web/css/components_parts/composer-attachments.css").read_text(encoding="utf-8")
 
     # Read all split runtime files
     runtime_dir = root / "thomas/server/web/js/runtime"
@@ -335,12 +365,10 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
             runtime_content += part.read_text(encoding="utf-8") + "\n"
 
     runtime_sources = {
-        "runtime": runtime_content,
         "module": (root / "thomas/server/web/js/modules/060_togglesidebarcollapsed.js").read_text(encoding="utf-8"),
         "src_module": (root / "thomas/server/web/js/src/runtime_modules/060_togglesidebarcollapsed.js").read_text(
             encoding="utf-8"
         ),
-        "app_part": (root / "thomas/server/web/js/app_parts/part-031.js").read_text(encoding="utf-8"),
     }
 
     for token in (
@@ -365,12 +393,11 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
         assert selector in site_css
         assert selector in web_css
 
-    assert "nav-chat-robot-wrap" in web_index
-    assert "pixel-agent pixel-agent-blue nav-chat-robot" in web_index
+    assert "nav-chat-robot-wrap" not in web_index
+    assert "pixel-agent pixel-agent-blue nav-chat-robot" not in web_index
     assert '<i class="ph ph-chat-teardrop"></i>' not in web_index
 
     for name, text in runtime_sources.items():
-        assert "CANONICAL_NAV_CHAT_ROBOT_MARKUP" in text, name
-        assert "ensureNavChatUsesCanonicalRobot" in text, name
+        assert "stripNavChatRobot" in text, name
         assert "MutationObserver" in text, name
-        assert "pixel-agent pixel-agent-blue nav-chat-robot" in text, name
+        assert "label.querySelectorAll('.nav-chat-robot-wrap, .nav-chat-robot, .pixel-agent').forEach((node) => node.remove());" in text, name

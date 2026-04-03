@@ -401,89 +401,174 @@
     color: var(--text-muted);
 }
 
+/* ── Robot alert: space fly-in notification ── */
 .robot-alert-stage {
-    position: absolute;
+    position: fixed;
     left: 0;
-    width: min(360px, calc(100vw - 24px));
-    bottom: calc(var(--composer-offset, 200px) - 84px);
-    height: 190px;
+    top: 0;
+    width: 100vw;
+    height: 100vh;
+    --robot-alert-land-x: clamp(18px, calc(50vw - 102px), 290px);
+    --robot-alert-land-y: calc(100dvh - 160px);
+    --robot-alert-bubble-left: clamp(88px, calc(var(--robot-alert-land-x) + 68px), calc(100vw - 236px));
+    --robot-alert-bubble-bottom: clamp(126px, calc(100dvh - 152px), 152px);
     pointer-events: none;
     z-index: 38;
-    opacity: 0;
-    transform: translateX(-16px);
-    transition: opacity 0.24s ease, transform 0.24s ease;
-}
-
-.robot-alert-stage.active {
-    opacity: 1;
-    transform: translateX(0);
-}
-
-.robot-alert-door {
-    position: absolute;
-    left: 8px;
-    bottom: 0;
-    width: 70px;
-    height: 98px;
-    border-radius: 12px 12px 8px 8px;
-    border: 1px solid var(--border-light);
-    background: linear-gradient(180deg, rgba(22, 27, 36, 0.96), rgba(13, 17, 24, 0.96));
-    box-shadow: inset 0 0 18px rgba(0, 0, 0, 0.4);
     overflow: hidden;
-}
-
-.robot-alert-door-leaf {
-    position: absolute;
-    top: 0;
-    bottom: 0;
-    width: 50%;
-    background: linear-gradient(180deg, rgba(40, 49, 64, 0.95), rgba(25, 31, 42, 0.95));
-    border-right: 1px solid rgba(255, 255, 255, 0.08);
-    transition: transform 0.34s cubic-bezier(0.2, 0.9, 0.2, 1);
-}
-
-.robot-alert-door-leaf.left {
-    left: 0;
-}
-
-.robot-alert-door-leaf.right {
-    right: 0;
-    border-right: none;
-    border-left: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.robot-alert-stage.active .robot-alert-door-leaf.left {
-    transform: translateX(-15px);
-}
-
-.robot-alert-stage.active .robot-alert-door-leaf.right {
-    transform: translateX(15px);
 }
 
 .robot-alert-bot {
     --bot-primary: #9ad8ff;
     --bot-secondary: #5aaeff;
     --bot-trim: #0d1117;
+    --spawn-x: 80vw;
+    --spawn-y: 10vh;
+    --land-x: var(--robot-alert-land-x);
+    --land-y: var(--robot-alert-land-y);
     position: absolute;
-    left: 15px;
-    bottom: 9px;
+    left: 0;
+    top: 0;
     width: 58px;
     height: 54px;
     image-rendering: pixelated;
-    filter: drop-shadow(0 8px 16px rgba(0, 0, 0, 0.45));
-    transform: translateX(-86px);
+    filter: drop-shadow(0 4px 12px rgba(90, 174, 255, 0.5));
+    transform: translate(var(--spawn-x), var(--spawn-y)) scale(0.08);
     opacity: 0;
-    transition: transform 0.5s cubic-bezier(0.18, 0.94, 0.22, 1), opacity 0.2s ease;
+    will-change: transform, opacity;
 }
 
-.robot-alert-stage.active .robot-alert-bot {
-    transform: translateX(66px);
+/* Phase 1: fly in from space to landing spot */
+.robot-alert-bot.flying-in {
+    animation: robotFlyIn 1.1s cubic-bezier(0.22, 0.9, 0.32, 1) forwards;
+}
+
+/* Phase 2: hovering in place, jetpack idling */
+.robot-alert-bot.landed {
+    transform: translate(var(--land-x), var(--land-y)) scale(1);
+    opacity: 1;
+    animation: robotHover 1.8s ease-in-out infinite;
+}
+
+/* Phase 3: fly off to the left */
+.robot-alert-bot.flying-out {
+    animation: robotFlyOut 0.8s cubic-bezier(0.6, 0, 0.9, 0.4) forwards;
+}
+
+@keyframes robotFlyIn {
+    0% {
+        transform: translate(var(--spawn-x), var(--spawn-y)) scale(0.08);
+        opacity: 0;
+        filter: drop-shadow(0 0 2px rgba(90, 174, 255, 0.8));
+    }
+    8% {
+        opacity: 1;
+    }
+    45% {
+        transform: translate(calc(var(--land-x) + 60px), calc(var(--land-y) - 80px)) scale(0.6);
+        filter: drop-shadow(0 0 18px rgba(90, 174, 255, 0.6));
+    }
+    78% {
+        transform: translate(var(--land-x), calc(var(--land-y) - 12px)) scale(1.06);
+    }
+    100% {
+        transform: translate(var(--land-x), var(--land-y)) scale(1);
+        opacity: 1;
+        filter: drop-shadow(0 4px 12px rgba(90, 174, 255, 0.4));
+    }
+}
+
+@keyframes robotHover {
+    0%, 100% { transform: translate(var(--land-x), var(--land-y)) scale(1); }
+    50%      { transform: translate(var(--land-x), calc(var(--land-y) - 4px)) scale(1); }
+}
+
+@keyframes robotFlyOut {
+    0% {
+        transform: translate(var(--land-x), var(--land-y)) scale(1);
+        opacity: 1;
+    }
+    30% {
+        transform: translate(calc(var(--land-x) - 20px), calc(var(--land-y) - 40px)) scale(0.9);
+        opacity: 1;
+    }
+    100% {
+        transform: translate(-120px, calc(var(--land-y) - 200px)) scale(0.12);
+        opacity: 0;
+    }
+}
+
+/* ── Jetpack hardware ── */
+.robot-alert-jetpack-shell {
+    position: absolute;
+    top: 22px;
+    left: 2px;
+    width: 8px;
+    height: 16px;
+    background: linear-gradient(180deg, #5a6e8a, #3b4d66);
+    border: 1px solid var(--bot-trim);
+    border-radius: 2px;
+    opacity: 0;
+}
+
+.robot-alert-jetpack-flame {
+    position: absolute;
+    top: 38px;
+    left: -2px;
+    width: 16px;
+    height: 20px;
+    background: radial-gradient(ellipse at 50% 0%, #ffd54f 0%, #ff9800 35%, #ff5722 65%, transparent 100%);
+    border-radius: 0 0 50% 50%;
+    opacity: 0;
+    filter: blur(1px);
+}
+
+.robot-alert-bot.flying-in .robot-alert-jetpack-shell,
+.robot-alert-bot.flying-out .robot-alert-jetpack-shell {
     opacity: 1;
 }
 
-.robot-alert-stage.exit .robot-alert-bot {
-    transform: translateX(-86px);
-    opacity: 0;
+.robot-alert-bot.flying-in .robot-alert-jetpack-flame,
+.robot-alert-bot.flying-out .robot-alert-jetpack-flame {
+    opacity: 1;
+    animation: robotJetFlame 0.14s linear infinite;
+}
+
+/* Gentle idle flame when hovering/landed */
+.robot-alert-bot.landed .robot-alert-jetpack-shell {
+    opacity: 0.8;
+}
+.robot-alert-bot.landed .robot-alert-jetpack-flame {
+    opacity: 0.45;
+    height: 10px;
+    animation: robotJetFlame 0.22s linear infinite;
+}
+
+@keyframes robotJetFlame {
+    0%   { transform: scaleY(1) scaleX(1);   }
+    33%  { transform: scaleY(1.25) scaleX(0.85); }
+    66%  { transform: scaleY(0.8) scaleX(1.1);  }
+    100% { transform: scaleY(1) scaleX(1);   }
+}
+
+/* ── Starfield trail behind the robot during flight ── */
+.robot-alert-bot.flying-in::before {
+    content: "";
+    position: absolute;
+    top: 30px;
+    left: 4px;
+    width: 3px;
+    height: 60px;
+    background: linear-gradient(180deg, transparent, rgba(90, 174, 255, 0.5), transparent);
+    transform: rotate(var(--trail-angle, 20deg));
+    transform-origin: top center;
+    opacity: 0.6;
+    animation: robotTrailFade 1.1s ease-out forwards;
+}
+
+@keyframes robotTrailFade {
+    0%   { opacity: 0.7; height: 60px; }
+    60%  { opacity: 0.4; height: 40px; }
+    100% { opacity: 0;   height: 0; }
 }
 
 .robot-alert-bot.variant-blue {
@@ -559,19 +644,22 @@
     left: 32px;
 }
 
-.robot-alert-bot.walking .robot-alert-leg.left {
-    animation: robotAlertStepLeft 0.34s steps(2) infinite;
+/* Legs dangle while flying */
+.robot-alert-bot.flying-in .robot-alert-leg,
+.robot-alert-bot.flying-out .robot-alert-leg {
+    animation: robotAlertLegDangle 0.4s ease-in-out infinite alternate;
 }
 
-.robot-alert-bot.walking .robot-alert-leg.right {
-    animation: robotAlertStepRight 0.34s steps(2) infinite;
+@keyframes robotAlertLegDangle {
+    0%   { transform: rotate(-6deg); }
+    100% { transform: rotate(6deg); }
 }
 
 .robot-alert-bubble {
-    position: absolute;
-    left: clamp(88px, calc(100% - 238px), 122px);
-    bottom: 72px;
-    max-width: clamp(150px, calc(100% - 142px), 218px);
+    position: fixed;
+    left: var(--robot-alert-bubble-left);
+    bottom: var(--robot-alert-bubble-bottom);
+    max-width: min(220px, calc(100vw - 104px));
     border-radius: 10px;
     border: 1px solid rgba(255, 255, 255, 0.2);
     background: rgba(17, 23, 33, 0.94);
@@ -583,7 +671,8 @@
     opacity: 0;
     transform: translateY(8px) scale(0.97);
     transition: opacity 0.22s ease, transform 0.22s ease;
-    display: none !important;
+    pointer-events: none;
+    z-index: 39;
 }
 
 .robot-alert-bubble::after {
@@ -597,32 +686,14 @@
     transform: rotate(45deg);
     border-left: 1px solid rgba(255, 255, 255, 0.2);
     border-bottom: 1px solid rgba(255, 255, 255, 0.2);
-    display: none !important;
 }
 
-.robot-alert-stage.talking .robot-alert-bubble {
+.robot-alert-bubble.visible {
     opacity: 1;
     transform: translateY(0) scale(1);
-    display: none !important;
 }
 
-@keyframes robotAlertStepLeft {
-    0%, 100% {
-        transform: translateY(0);
-    }
-    50% {
-        transform: translateY(1px);
-    }
-}
-
-@keyframes robotAlertStepRight {
-    0%, 100% {
-        transform: translateY(1px);
-    }
-    50% {
-        transform: translateY(0);
-    }
-}
+/* (Old walking keyframes removed — replaced by jetpack flight) */
 
 .content-workspace {
     position: absolute;
@@ -873,3 +944,66 @@
         grid-template-columns: 1fr;
     }
 }
+
+@media (max-width: 640px) {
+    .robot-alert-stage {
+        --robot-alert-land-x: 14px;
+        --robot-alert-land-y: calc(100dvh - 148px);
+        --robot-alert-bubble-left: 82px;
+        --robot-alert-bubble-bottom: 136px;
+    }
+
+    .robot-alert-bubble {
+        max-width: calc(100vw - 94px);
+        font-size: 11px;
+        padding: 8px 10px;
+    }
+}
+
+/* ── Toast notification bar (non-chat pages) ── */
+.thomas-toast-bar {
+    position: fixed;
+    top: 12px;
+    right: 16px;
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    pointer-events: none;
+    max-width: 340px;
+}
+
+.thomas-toast {
+    padding: 10px 14px;
+    border-radius: 10px;
+    font-size: 13px;
+    line-height: 1.35;
+    color: #e8edf4;
+    background: rgba(17, 23, 33, 0.94);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
+    backdrop-filter: blur(12px);
+    opacity: 0;
+    transform: translateX(40px) scale(0.96);
+    transition: opacity 0.28s ease, transform 0.28s cubic-bezier(0.22, 0.9, 0.36, 1);
+    pointer-events: auto;
+}
+
+.thomas-toast.visible {
+    opacity: 1;
+    transform: translateX(0) scale(1);
+}
+
+.thomas-toast.exiting {
+    opacity: 0;
+    transform: translateX(40px) scale(0.96);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.thomas-toast--info    { border-left: 3px solid #5aaeff; }
+.thomas-toast--success { border-left: 3px solid #58cfa8; }
+.thomas-toast--error   { border-left: 3px solid #f38fd0; }
+.thomas-toast--warning { border-left: 3px solid #ffad60; }
+.thomas-toast--ok      { border-left: 3px solid #58cfa8; }
+.thomas-toast--danger  { border-left: 3px solid #f38fd0; }
+.thomas-toast--warn    { border-left: 3px solid #ffad60; }

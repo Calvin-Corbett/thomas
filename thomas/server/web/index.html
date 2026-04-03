@@ -19,6 +19,24 @@
 <link rel="stylesheet" href="/static/css/token_economy.css?v=__THOMAS_VERSION__">
 </head>
 <body>
+<script>
+/* Early theme flash prevention — apply saved theme class before first paint */
+(function() {
+    var theme = 'auto';
+    try {
+        theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
+    } catch (_) {}
+    if (theme === 'light') {
+        document.body.classList.add('te-theme-light');
+        document.body.setAttribute('data-theme', 'light');
+    } else if (theme === 'dark') {
+        document.body.classList.add('te-theme-dark');
+        document.body.setAttribute('data-theme', 'dark');
+    } else {
+        document.body.classList.add('te-space-active');
+    }
+})();
+</script>
 <form id="settingsCredentialForm" class="hidden" aria-hidden="true">
 </form>
 <div id="app" class="app-layout">
@@ -87,7 +105,7 @@
 </nav>
 <div class="sidebar-footer">
 <button class="nav-item user-btn" id="settingsBtn">
-<div class="user-avatar" id="sidebarUserAvatar">U</div>
+<i class="ph ph-gear" id="sidebarSettingsIcon" style="font-size:1.35rem;"></i>
 <span>Settings</span>
 </button>
 </div>
@@ -406,28 +424,18 @@
 </div>
 </section>
 <div class="robot-alert-stage" id="robotAlertStage" aria-live="polite" aria-atomic="true">
-<div class="robot-alert-door" id="robotAlertDoor" aria-hidden="true">
-<span class="robot-alert-door-leaf left">
-</span>
-<span class="robot-alert-door-leaf right">
-</span>
-</div>
 <div class="robot-alert-bot variant-blue" id="robotAlertBot" aria-hidden="true">
+<span class="robot-alert-jetpack-shell"></span>
+<span class="robot-alert-jetpack-flame"></span>
 <span class="robot-alert-head">
-<span class="robot-alert-eye left">
+<span class="robot-alert-eye left"></span>
+<span class="robot-alert-eye right"></span>
 </span>
-<span class="robot-alert-eye right">
-</span>
-</span>
-<span class="robot-alert-body">
-</span>
-<span class="robot-alert-leg left">
-</span>
-<span class="robot-alert-leg right">
-</span>
+<span class="robot-alert-body"></span>
+<span class="robot-alert-leg left"></span>
+<span class="robot-alert-leg right"></span>
 </div>
-<div class="robot-alert-bubble" id="robotAlertBubble">
-</div>
+<div class="robot-alert-bubble" id="robotAlertBubble"></div>
 </div>
 <div class="welcome-screen" id="welcomeScreen">
 <h1 class="welcome-title">Thomas</h1>
@@ -766,6 +774,35 @@
 <input type="file" id="imageFileInput" accept="image/*" style="display:none" multiple />
 <div id="toastContainer" class="toast-container">
 </div>
+<script src="/static/js/theme_rules.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/token_economy_space.js?v=__THOMAS_WEB_BUILD__"></script>
+<script>
+/* Global space background — restore only for Nebula/auto theme */
+(function () {
+    'use strict';
+    function _shouldInjectGlobalSpace() {
+        try {
+            var theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
+            return !theme || theme === 'auto' || theme === 'system';
+        } catch (_) {
+            return !document.body.classList.contains('te-theme-light') && !document.body.classList.contains('te-theme-dark');
+        }
+    }
+    function _injectGlobalSpace() {
+        if (!_shouldInjectGlobalSpace()) return;
+        if (window.__teSpace && typeof window.__teSpace.inject === 'function') {
+            window.__teSpace.inject();
+        } else {
+            setTimeout(_injectGlobalSpace, 80);
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _injectGlobalSpace);
+    } else {
+        _injectGlobalSpace();
+    }
+})();
+</script>
 <script src="/static/js/token_economy.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_settings.js?v=__THOMAS_WEB_BUILD__"></script>
 <script src="/static/js/templates/tpl_debug_dock.js?v=__THOMAS_WEB_BUILD__"></script>
@@ -776,7 +813,6 @@
 </script>
 </body>
 </html>
-
 
 
 

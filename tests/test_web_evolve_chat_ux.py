@@ -11,6 +11,10 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_many(paths: list[Path]) -> str:
+    return "\n".join(_read(path) for path in paths)
+
+
 def _read_all_runtime_js() -> str:
     """Read and concatenate all split runtime JS files in order."""
     if not RUNTIME_DIR.exists():
@@ -58,7 +62,7 @@ def test_chat_runtime_prefers_visible_model_selector_over_setup_profile() -> Non
 
 
 def test_chat_runtime_scopes_model_state_to_active_profile_and_skips_inactive_saved_profiles() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "function resolveStoredModelSelection(profileName = '', { allowLocalBackup = false } = {}) {" in text
     assert "const targetProfile = (savedProfileMeta && savedProfileMeta.active)" in text
     assert "applyProfileSelection(targetProfile, { allowLocalBackup: !hasPersistedProfile });" in text
@@ -68,7 +72,7 @@ def test_chat_runtime_scopes_model_state_to_active_profile_and_skips_inactive_sa
 
 
 def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profiles_to_setup() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "function renderSetupProviderPickerMenu(profileName = '', { preserveExpanded = true } = {}) {" in text
     assert "setupProviderMenuShowMore = true;" in text
     assert "Show ${inactive.length} more provider${inactive.length === 1 ? '' : 's'}" in text
@@ -94,7 +98,7 @@ def test_chat_runtime_provider_picker_expands_inline_and_routes_inactive_profile
 
 
 def test_chat_runtime_uses_profile_aware_composer_subbar_and_payload_helper() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "initChatComposerSubbar();" in text
     assert "function ensureChatComposerSubbar() {" in text
     assert (
@@ -107,7 +111,7 @@ def test_chat_runtime_uses_profile_aware_composer_subbar_and_payload_helper() ->
 
 
 def test_task_continuity_prefers_chat_scoped_delegations() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "function buildDelegationRuntimeState(delegations, { sessionId = '' } = {}) {" in text
     assert (
         "const delegationResp = await fetchJsonSafe(`/api/v2/chat/session/${encodeURIComponent(sid)}/delegations`);"
@@ -117,7 +121,7 @@ def test_task_continuity_prefers_chat_scoped_delegations() -> None:
 
 
 def test_chat_runtime_preserves_stream_chunk_spacing_and_server_mic_capture() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "function streamChunkString(value) {" in text
     assert "const textChunk = streamChunkString(chunk);" in text
     assert "const evtText = streamChunkString(evt.text || evt.delta || evt.content);" in text
@@ -129,7 +133,7 @@ def test_chat_runtime_preserves_stream_chunk_spacing_and_server_mic_capture() ->
 
 
 def test_chat_runtime_renders_hover_timestamps_and_inline_edit_panel() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "function chatMessageTimestampText(valueRaw) {" in text
     assert "row.dataset.messageTimestamp = String(createdAt);" in text
     assert "row.title = chatMessageTimestampText(createdAt);" in text
@@ -145,7 +149,7 @@ def test_chat_runtime_renders_hover_timestamps_and_inline_edit_panel() -> None:
 
 
 def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "const CHAT_THINKING_UI_ENABLED = false;" in text
     assert "function robotAmbientStatusText(channel = 'thinking') {" in text
     assert "const OFFICE_CHAT_PREVIEW_GRACE_MS = 9000;" in text
@@ -159,7 +163,7 @@ def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -
     assert "chat-robot-thinking-details" not in create_robot_block
     assert "function _syncDelegationWorkerVisual(evt, status, taskText) {" in text
     assert "officeQueueTask(taskText, {" in text
-    assert "const previewSessionId = _delegationSessionId || safeString(activeChatId) || 'chat';" in text
+    assert "const previewSessionId = safeString(evt?.session_id) || _delegationSessionId || safeString(activeChatId) || 'chat';" in text
     assert "source: `chat-delegation:${previewSessionId}:${activityId}`," in text
     assert "const previewScoped = Boolean(officeWorkspace?.classList.contains('chat-preview-active'));" in text
     assert "officeState.tasks.filter((task) => officeTaskMatchesChatPreview(task))" in text
@@ -167,10 +171,15 @@ def test_chat_runtime_uses_ambient_robot_status_and_office_delegation_bridge() -
 
 
 def test_chat_css_supports_footer_actions_settings_scroll_and_new_robot_idles() -> None:
-    bubble_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-001b.css")
-    settings_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-002a.css")
-    robot_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-005b.css")
-    office_layout_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-002b.css")
+    bubble_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-game-animations.css")
+    settings_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "settings-panel.css")
+    robot_css = _read(ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-robot-animations.css")
+    office_layout_css = _read_many(
+        [
+            ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-workspace.css",
+            ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-responsive.css",
+        ]
+    )
     assert ".message-footer {" in bubble_css
     assert ".message-timestamp {" in bubble_css
     assert ".message-edit-panel {" in bubble_css

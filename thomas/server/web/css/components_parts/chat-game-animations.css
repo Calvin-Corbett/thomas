@@ -1363,6 +1363,7 @@ button.sidebar-toggle.sidebar-toggle i {
     height: 100%;
     min-height: 0;
     position: relative;
+    z-index: 75;
     background:
         radial-gradient(circle at 14% 12%, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0) 34%),
         radial-gradient(circle at 88% 8%, rgba(71, 215, 172, 0.12), rgba(71, 215, 172, 0) 30%),

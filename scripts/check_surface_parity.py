@@ -14,21 +14,17 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 SERVER_EVENT_SOURCES: Sequence[Path] = (
-    ROOT / "thomas" / "server" / "routes" / "chat_aiohttp.py",
-    ROOT / "thomas" / "server" / "routes" / "chat_aiohttp_part01.py",
-    ROOT / "thomas" / "server" / "routes" / "chat_aiohttp_part02.py",
     ROOT / "thomas" / "server" / "routes" / "chat_stream_events.py",
-    ROOT / "thomas" / "server" / "routes" / "chat_modes.py",
+    ROOT / "thomas" / "server" / "routes" / "chat_request_execution.py",
+    ROOT / "thomas" / "server" / "chat_control_mode.py",
 )
+WEB_RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 WEB_CHAT = ROOT / "thomas" / "server" / "web" / "js" / "chat.js"
 WEB_APP = ROOT / "thomas" / "server" / "web" / "js" / "app.js"
 WEB_APP_PARTS_DIR = ROOT / "thomas" / "server" / "web" / "js" / "app_parts"
-CLI_MAIN = ROOT / "thomas" / "cli" / "main.py"
 CLI_EVENT_SOURCES: Sequence[Path] = (
-    CLI_MAIN,
-    ROOT / "thomas" / "cli" / "main_part01.py",
-    ROOT / "thomas" / "cli" / "main_part02.py",
-    ROOT / "thomas" / "cli" / "main_part03.py",
+    ROOT / "thomas" / "cli" / "_commands_base.py",
+    ROOT / "thomas" / "cli" / "repl_agent_runtime.py",
 )
 
 REQUIRED_WIRE_EVENTS: set[str] = {
@@ -85,18 +81,22 @@ def _read_cli_sources() -> str:
 
 
 def _read_web_sources() -> str:
-    """Read web chat sources from either legacy chat.js or split app_parts."""
+    """Read web chat sources from the live split runtime, with legacy fallback for tests."""
     sources: list[Path] = []
-    if WEB_CHAT.exists():
-        sources.append(WEB_CHAT)
-    if WEB_APP.exists():
-        sources.append(WEB_APP)
-    if WEB_APP_PARTS_DIR.exists():
-        sources.extend(sorted(WEB_APP_PARTS_DIR.glob("*.js")))
+    if WEB_RUNTIME_DIR.exists():
+        sources.extend(sorted(WEB_RUNTIME_DIR.glob("*.js")))
+    else:
+        if WEB_CHAT.exists():
+            sources.append(WEB_CHAT)
+        if WEB_APP.exists():
+            sources.append(WEB_APP)
+        if WEB_APP_PARTS_DIR.exists():
+            sources.extend(sorted(WEB_APP_PARTS_DIR.glob("*.js")))
 
     if not sources:
         raise FileNotFoundError(
-            "No web chat source found. Expected one of: " f"{WEB_CHAT}, {WEB_APP}, {WEB_APP_PARTS_DIR}/*.js"
+            "No web chat source found. Expected one of: "
+            f"{WEB_RUNTIME_DIR}/*.js, {WEB_CHAT}, {WEB_APP}, {WEB_APP_PARTS_DIR}/*.js"
         )
 
     return "\n".join(_read(path) for path in sources)

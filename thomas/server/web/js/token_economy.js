@@ -11,7 +11,8 @@
  * Space rendering engine lives in token_economy_space.js (loaded on demand).
  */
 
-// Ensure space engine is loaded (script tag may not exist yet)
+// Space engine is now loaded globally via index.html <script> tag.
+// This guard is kept only for edge cases (e.g. standalone preview pages).
 if (!window.__teSpace) {
     const _teS = document.createElement('script');
     _teS.src = '/static/js/token_economy_space.js';
@@ -197,8 +198,12 @@ if (!window.__teSpace) {
 
 
     // ── Space rendering engine (extracted to token_economy_space.js) ──
+    // Space is now globally injected at page load (index.html).
+    // injectSpaceBg is kept for API compat but is effectively a no-op
+    // since the global init already called inject(). removeSpaceBg is a
+    // no-op so the module system doesn't tear down the global background.
     function injectSpaceBg() { if (window.__teSpace) window.__teSpace.inject(); }
-    function removeSpaceBg() { if (window.__teSpace) window.__teSpace.remove(); }
+    function removeSpaceBg() { /* no-op — space bg is global now */ }
 
     // ── Plugin iframe theme injection ──────────────────────────
     // Plugins run in iframes with their own stylesheets.
@@ -342,12 +347,19 @@ if (!window.__teSpace) {
 
     function _positionIdleThomas() {
         if (!_idleThomasEl) return;
-        var sidebar = document.querySelector('.sidebar');
-        var leftOffset = 28;
-        if (sidebar && !sidebar.classList.contains('collapsed')) {
-            leftOffset = sidebar.offsetWidth + 28;
+        /* Park Thomas just left of the composer textarea */
+        var textarea = document.getElementById('composerTextarea');
+        if (textarea) {
+            var rect = textarea.getBoundingClientRect();
+            _idleThomasEl.style.left = Math.max(8, Math.round(rect.left - 88)) + 'px';
+        } else {
+            var sidebar = document.querySelector('.sidebar');
+            var leftOffset = 28;
+            if (sidebar && !sidebar.classList.contains('collapsed')) {
+                leftOffset = sidebar.offsetWidth + 28;
+            }
+            _idleThomasEl.style.left = leftOffset + 'px';
         }
-        _idleThomasEl.style.left = leftOffset + 'px';
     }
 
     let _sidebarObserver = null;
@@ -403,15 +415,115 @@ if (!window.__teSpace) {
         _idleSpeechTimer = setTimeout(speak, (5 + Math.random() * 5) * 1000);
     }
 
+    // ── Ambient floating bots — small robots that drift across the space ──
+    const AMBIENT_BOT_NAMES = [
+        'Scout', 'Pixel', 'Drift', 'Echo', 'Spark', 'Nova', 'Byte', 'Glow',
+        'Orbit', 'Pulse', 'Comet', 'Flick', 'Haze', 'Ripple', 'Blink',
+    ];
+    const AMBIENT_BOT_COLORS = [
+        { primary: '#a0d4a0', secondary: '#6bae6b' },   // green
+        { primary: '#e8b8e8', secondary: '#c080c0' },   // pink
+        { primary: '#f0d080', secondary: '#d0a848' },   // gold
+        { primary: '#b0c8e8', secondary: '#7898c0' },   // steel blue
+        { primary: '#e0a890', secondary: '#c07860' },   // copper
+        { primary: '#c8e0b8', secondary: '#90b870' },   // lime
+        { primary: '#d0b8e8', secondary: '#a080c8' },   // lavender
+    ];
+    let _ambientBots = [];
+    let _ambientSpawnTimer = null;
+    const MAX_AMBIENT_BOTS = 3;
+
+    function _spawnAmbientBot() {
+        if (_ambientBots.length >= MAX_AMBIENT_BOTS) return;
+        const palette = AMBIENT_BOT_COLORS[Math.floor(Math.random() * AMBIENT_BOT_COLORS.length)];
+        const name = AMBIENT_BOT_NAMES[Math.floor(Math.random() * AMBIENT_BOT_NAMES.length)];
+
+        const el = document.createElement('div');
+        el.className = 'te-ambient-bot';
+        el.innerHTML =
+            '<div class="te-floater-bot" style="--bot-primary:' + palette.primary + ';--bot-secondary:' + palette.secondary + '">' +
+                '<div class="te-floater-visual">' +
+                    '<div class="te-floater-head"><div class="te-floater-eye left"></div><div class="te-floater-eye right"></div></div>' +
+                    '<div class="te-floater-body"></div>' +
+                    '<div class="te-floater-leg left"></div><div class="te-floater-leg right"></div>' +
+                '</div>' +
+                '<span class="te-floater-name">' + name + '</span>' +
+            '</div>';
+
+        // Random flight path: pick a start edge and end edge
+        var vh = window.innerHeight;
+        var vw = window.innerWidth;
+        var goRight = Math.random() > 0.5;
+        var startX = goRight ? -80 : vw + 80;
+        var endX   = goRight ? vw + 80 : -80;
+        var startY = 60 + Math.random() * (vh * 0.5);
+        var endY   = 60 + Math.random() * (vh * 0.5);
+        var duration = 25 + Math.random() * 35; // 25-60 seconds to cross
+
+        el.style.left = startX + 'px';
+        el.style.top = startY + 'px';
+        el.style.transition = 'left ' + duration + 's linear, top ' + duration + 's ease-in-out, opacity 1s ease';
+
+        // Flip direction if going left
+        var visual = el.querySelector('.te-floater-visual');
+        if (!goRight && visual) visual.style.transform = 'scaleX(-1)';
+
+        document.body.appendChild(el);
+        _ambientBots.push(el);
+
+        // Force reflow so browser commits the start position before we animate
+        void el.offsetWidth;
+        el.classList.add('visible');
+        // Use another reflow + rAF to ensure the transition starts from the committed position
+        void el.offsetWidth;
+        requestAnimationFrame(function() {
+            el.style.left = endX + 'px';
+            el.style.top = endY + 'px';
+        });
+
+        // Remove after flight completes
+        setTimeout(function() {
+            el.classList.remove('visible');
+            setTimeout(function() {
+                el.remove();
+                var idx = _ambientBots.indexOf(el);
+                if (idx !== -1) _ambientBots.splice(idx, 1);
+            }, 1200);
+        }, duration * 1000);
+    }
+
+    function _startAmbientBots() {
+        // Spawn first after a delay, then periodically
+        function scheduleNext() {
+            _ambientSpawnTimer = setTimeout(function() {
+                _spawnAmbientBot();
+                scheduleNext();
+            }, (12 + Math.random() * 25) * 1000); // every 12-37 seconds
+        }
+        // First bot after 8-15 seconds
+        _ambientSpawnTimer = setTimeout(function() {
+            _spawnAmbientBot();
+            scheduleNext();
+        }, (8 + Math.random() * 7) * 1000);
+    }
+
+    function _stopAmbientBots() {
+        if (_ambientSpawnTimer) { clearTimeout(_ambientSpawnTimer); _ambientSpawnTimer = null; }
+        _ambientBots.forEach(function(el) { el.remove(); });
+        _ambientBots = [];
+    }
+
     function floaterStart() {
         _createIdleThomas();
         _startScreensaverWatch();
+        _startAmbientBots();
     }
 
     function floaterStop() {
         if (_floaterTimer) { clearTimeout(_floaterTimer); _floaterTimer = null; }
         _stopScreensaverWatch();
         _removeIdleThomas();
+        _stopAmbientBots();
         const existing = document.querySelectorAll('.te-floater');
         existing.forEach(el => el.remove());
     }
@@ -890,3 +1002,43 @@ if (!window.__teSpace) {
             });
         }
         const rb = $('[data-te-refresh]', root);
+        if (rb) rb.addEventListener('click', () => refresh({ force: true }));
+
+        const eb = $('[data-te-export]', root);
+        if (eb) eb.addEventListener('click', () => window.open('/api/spend/export.csv?days=' + _s.period, '_blank'));
+
+        root.addEventListener('click', (e) => {
+            const btn = e.target.closest('.te-switch-opt');
+            if (!btn) return;
+            const mode = btn.dataset.mode;
+            if (!mode || mode === _s.economy) return;
+            _s.economy = mode;
+            paintModes();
+            paintBudget();
+            paintHero();
+            paintTopMode();
+            setEconomy(mode);
+        });
+    }
+
+    async function setEconomy(mode) {
+        try {
+            await fetch('/api/preferences', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ advanced: { runtime: { default_token_economy: mode } } }),
+            });
+        } catch { /* best effort */ }
+    }
+
+    // Register page background through the module background system.
+    // Space bg is now global (injected at page load), so mount is kept
+    // for compat but removeSpaceBg is a no-op to prevent teardown.
+    window.__moduleBackgrounds = window.__moduleBackgrounds || {};
+    window.__moduleBackgrounds['token_economy'] = {
+        mount: injectSpaceBg,
+        unmount: removeSpaceBg,
+    };
+
+    window.__tokenEconomy = { mount, unmount, refresh, getState: () => ({ ..._s }) };
+})();

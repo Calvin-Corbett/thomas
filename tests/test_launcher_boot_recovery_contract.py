@@ -30,7 +30,7 @@ def test_run_ui_wires_visible_bootdoctor_rescue_and_watchdog() -> None:
         'Open-BootDoctorRescue -Reason ("Tray agent exited with code {0}" -f $exitCode) -DiagPort $Port -LaunchMode "tray" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths'
         in text
     )
-    assert "Detached server failed to become healthy on port {0} (pid {1})." in text
+    assert "Detached server failed to become ready on port {0} (pid {1})." in text
     assert (
         'Open-BootDoctorRescue -Reason $reason -DiagPort $Port -LaunchMode "direct" -StdErrTail $bootContext.StdErrTail -StartupLogPaths $bootContext.LogPaths'
         in text
@@ -68,7 +68,7 @@ def test_bootdoctor_core_persists_status_and_recovery_notice() -> None:
 
 
 def test_server_and_web_surface_bootdoctor_recovery_notice() -> None:
-    server_text = _read("thomas/server/app_part02.py")
+    server_text = _read("thomas/server/app_core.py")
     web_text = _read_all_runtime_js()
     assert "/api/bootdoctor/recovery_notice" in server_text
     assert "fetchBootDoctorRecoveryNotice" in web_text

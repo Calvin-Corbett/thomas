@@ -1,7 +1,7 @@
 const UI_EDITOR_PART_FILES = [
-    './modules/063_module_studio_comfy_style_id_part01.js',
-    './modules/063_module_studio_comfy_style_id_part02.js',
-    './modules/063_module_studio_comfy_style_id_part03.js',
+    './modules/063_module_studio_comfy_style_id_bootstrap.js',
+    './modules/063_module_studio_comfy_style_id_helpers.js',
+    './modules/063_module_studio_comfy_style_id_workspace.js',
 ];
 
 function rescueSafeString(valueRaw) {
