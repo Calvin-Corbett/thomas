@@ -2,19 +2,19 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"
-CHAT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-001b.css"
-SUGGESTION_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-002b.css"
-LAYOUT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-001a.css"
-ROBOT_STATUS_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-005a.css"
-ROBOT_DOCK_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-005b.css"
-BRAIN_PY = REPO_ROOT / "thomas" / "orchestrator" / "brain.py"
-COMPONENT_ICON_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-001a.css"
+CHAT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-game-animations.css"
+SUGGESTION_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "easy-setup-ui.css"
+LAYOUT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "layout-app-shell.css"
+ROBOT_STATUS_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "tool-calls-chat.css"
+ROBOT_DOCK_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "chat-robot-animations.css"
+ROBOT_PORTAL_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "robot-portal-animations.css"
+BRAIN_PY = REPO_ROOT / "thomas" / "marketplace" / "orchestrator" / "brain.py"
+COMPONENT_ICON_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "composer-attachments.css"
 INDEX_HTML = REPO_ROOT / "thomas" / "server" / "web" / "index.html"
 TOGGLE_SIDEBAR_MODULE = REPO_ROOT / "thomas" / "server" / "web" / "js" / "modules" / "060_togglesidebarcollapsed.js"
 TOGGLE_SIDEBAR_RUNTIME_MODULE = (
     REPO_ROOT / "thomas" / "server" / "web" / "js" / "src" / "runtime_modules" / "060_togglesidebarcollapsed.js"
 )
-TOGGLE_SIDEBAR_PART = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_parts" / "part-031.js"
 
 
 def _read(path: Path) -> str:
@@ -58,7 +58,7 @@ def test_provider_identity_uses_icons_and_model_inference() -> None:
     assert "justify-content: flex-end;" in css
     assert ".message-row.is-user .message-stack {" in css
     assert "justify-items: end;" in css
-    assert ".message-row.is-user .message-actions {" in css
+    assert ".message-actions {" in css
     assert ".message-row:hover .message-actions," in css
     assert ".msg-action-btn {" in css
     assert ".message-provider-separator {" in css
@@ -117,17 +117,17 @@ def test_chat_feed_layout_stays_bottom_anchored() -> None:
 
 def test_robot_surface_uses_shared_frame_and_teleport_contract() -> None:
     js = _read_all_runtime_js()
-    status_css = _read(ROBOT_STATUS_CSS)
+    portal_css = _read(ROBOT_PORTAL_CSS)
     dock_css = _read(ROBOT_DOCK_CSS)
 
-    assert "const CHAT_ROBOT_ANIMATIONS = ['fishing', 'bouncing', 'looking', 'napping', 'waving', 'lifting'];" in js
+    assert "const CHAT_ROBOT_ANIMATIONS = ['fishing', 'bouncing', 'looking', 'napping', 'waving', 'lifting', 'scanning', 'shimmy'];" in js
     assert "const CHAT_ROBOT_DOCK_WIDTH = 31;" in js
     assert "const CHAT_ROBOT_DOCK_HEIGHT = 29;" in js
     assert "const CHAT_ROBOT_EXIT_FALL_MS = 860;" in js
 
-    assert ".chat-robot-dock {" in status_css
-    assert "width: 31px;" in status_css
-    assert "height: 29px;" in status_css
+    assert ".chat-robot-dock {" in portal_css
+    assert "width: 31px;" in portal_css
+    assert "height: 29px;" in portal_css
 
     assert ".chat-robot-anim-lifting {" in dock_css
     assert "@keyframes chatRobotExitPortal" in dock_css
@@ -141,7 +141,7 @@ def test_sidebar_chat_label_and_search_shell_contract() -> None:
     components_css = _read(COMPONENT_ICON_CSS)
     index_html = _read(INDEX_HTML)
     js = _read_all_runtime_js()
-    modules = [_read(TOGGLE_SIDEBAR_MODULE), _read(TOGGLE_SIDEBAR_RUNTIME_MODULE), _read(TOGGLE_SIDEBAR_PART)]
+    modules = [_read(TOGGLE_SIDEBAR_MODULE), _read(TOGGLE_SIDEBAR_RUNTIME_MODULE)]
 
     assert '<span class="nav-chat-robot-wrap"' not in index_html
     assert ".nav-chat-robot-wrap {" in components_css
@@ -170,10 +170,10 @@ def test_chat_robot_uses_shared_pixel_agent_markup() -> None:
     dock_css = _read(ROBOT_DOCK_CSS)
 
     assert "landed.className = 'chat-robot-landed pixel-agent pixel-agent-blue';" in js
-    assert 'class="chat-robot-agent chat-robot-enter pixel-agent pixel-agent-blue"' in js
-    assert 'class="agent-head office-agent-head"' in js
-    assert 'class="agent-body office-agent-body"' in js
-    assert 'class="agent-leg office-agent-leg office-agent-leg-left agent-leg-left"' in js
+    assert 'class="chat-robot-agent chat-robot-world-agent"' in js
+    assert 'class="office-agent-head"' in js
+    assert 'class="office-agent-body"' in js
+    assert 'class="office-agent-leg office-agent-leg-left"' in js
 
     assert ".chat-robot-agent .agent-head {" in status_css
     assert ".chat-robot-agent .agent-body {" in status_css

@@ -394,7 +394,12 @@ body {
     pointer-events: none !important;
 }
 
-.app-layout.settings-active #settingsModal,
+.app-layout.settings-active #settingsModal {
+    display: flex !important;
+    z-index: 80;
+    pointer-events: auto;
+}
+
 .app-layout.settings-active #settingsModal * {
     pointer-events: auto;
 }

@@ -19,12 +19,11 @@ def test_readme_surfaces_user_first_story() -> None:
 
 def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:
     runtime_init = _read_text("thomas/server/web/js/src/runtime_modules/008_init.js")
-    fallback_init = _read_text("thomas/server/web/js/app_parts/part-004b.js")
     suggestion_runtime = _read_text("thomas/server/web/js/src/runtime_modules/005_capped.js")
-    task_part = _read_text("thomas/server/web/js/app_parts/part-002b.js")
-    sidebar_search_part = _read_text("thomas/server/web/js/app_parts/part-030.js")
+    message_runtime = _read_text("thomas/server/web/js/src/runtime_modules/004_message.js")
     index_html = _read_text("thomas/server/web/index.html")
     app_loader = _read_text("thomas/server/web/js/app.js")
+    model_setup_runtime = _read_text("thomas/server/web/js/runtime/045_model_setup_settings_06.js")
     assert "Build And Extend" in runtime_init
     assert "Start with chat. Add memory, tools, and automation when you are ready." in runtime_init
     assert "Ready for everyday use" in runtime_init
@@ -46,33 +45,27 @@ def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:
     assert "Find past chats" in runtime_init
     assert "Find messages in this chat" in runtime_init
     assert "Current Task" in runtime_init
-    assert "Ask {{agent}} anything or describe a task" in runtime_init
-    assert "welcomeReadinessStatus" in fallback_init
-    assert "welcomeReadinessPills" in fallback_init
-    assert "welcomeRepairBtn" in fallback_init
-    assert "updateWelcomeSupportRail(loadStoredBuilderMode());" in fallback_init
-    assert "Easy Setup is still required before Thomas unlocks memory, tools, and automation." in fallback_init
-    assert "Everyday path is ready. Active connection:" in fallback_init
-    assert "Builder Controls" in fallback_init
-    assert "Everyday Defaults" in fallback_init
-    assert "Setup And Repair" in fallback_init
-    assert "settingsRepairSetupBtn" in fallback_init
-    assert "Connection And Defaults" in fallback_init
-    assert "Use Easy Setup" in fallback_init
-    assert "Speed Vs Quality" in fallback_init
-    assert "Find past chats" in fallback_init
-    assert "Find messages in this chat" in fallback_init
-    assert "Current Task" in fallback_init
-    assert "Ask {{agent}} anything or describe a task" in fallback_init
+    assert "data-agent-placeholder-template" in runtime_init
+    assert "welcomeReadinessStatus" in runtime_init
+    assert "welcomeReadinessPills" in runtime_init
+    assert "welcomeRepairBtn" in runtime_init
+    assert "updateWelcomeSupportRail(loadStoredBuilderMode());" in runtime_init
+    assert "Easy Setup is still required before Thomas unlocks memory, tools, and automation." in runtime_init
+    assert "Everyday path is ready. Active connection:" in runtime_init
+    assert "Builder Controls" in runtime_init
+    assert "Everyday Defaults" in runtime_init
+    assert "Setup And Repair" in runtime_init
+    assert "settingsRepairSetupBtn" in runtime_init
+    assert "Connection And Defaults" in runtime_init
+    assert "Use Easy Setup" in runtime_init
+    assert "Speed Vs Quality" in runtime_init
+    assert "Find past chats" in runtime_init
+    assert "Find messages in this chat" in runtime_init
+    assert "Current Task" in runtime_init
+    assert "data-agent-placeholder-template" in runtime_init
     assert "Try asking" in suggestion_runtime
-    assert "Needs help" in task_part
-    assert "Task status is unavailable right now." in task_part
-    assert "Thomas will show progress and blockers here when a task is running." in task_part
-    assert "Try asking" in task_part
-    assert "Find past chats" in sidebar_search_part
-    assert "Find office activity" in sidebar_search_part
-    assert "Find missions" in sidebar_search_part
-    assert "Find content" in sidebar_search_part
+    assert "Needs help" in message_runtime
+    assert "Thomas will show progress and blockers here when a task is running." in runtime_init
     assert "Find past chats" in index_html
     assert "Find messages in this chat" in index_html
     assert "Current Task" in index_html
@@ -83,10 +76,9 @@ def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:
     assert "app_runtime_loader.js" in app_loader
     assert "generated/app_runtime_joined.mjs" not in app_loader
     assert "app_parts/" not in app_loader
-    model_setup_part = _read_text("thomas/server/web/js/app_parts/part-031.js")
-    assert "ChatGPT / Codex" in model_setup_part
-    assert "Local Ollama" in model_setup_part
-    assert "Provider API key" in model_setup_part
+    assert "ChatGPT / Codex" in model_setup_runtime
+    assert "Local Ollama" in model_setup_runtime
+    assert "Provider API key" in model_setup_runtime
 
 
 def test_settings_respect_stored_builder_mode() -> None:

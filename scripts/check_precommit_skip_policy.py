@@ -54,6 +54,8 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-workboard-agent-claim-gate",
     "thomas-workboard-issue-tool-smoke",
     "thomas-workboard-problem-record-smoke",
+    "thomas-bulk-commit-guard",
+    "thomas-commit-growth-guard",
     "thomas-monolith-guard",
     "thomas-protected-deletion-guard",
     "thomas-feature-registry-gate",

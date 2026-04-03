@@ -109,7 +109,7 @@ function Get-FileTailText {
 }
 
 function Get-BootDoctorRuntimeDir {
-  return (Join-Path $Root "runtimeoot_doctor")
+  return (Join-Path $Root "runtime\boot_doctor")
 }
 
 function Write-BootDoctorDegradedStatus {
@@ -174,7 +174,7 @@ function Start-BootDoctorBackgroundRepair {
     [Parameter(Mandatory = $true)][int]$DiagPort
   )
 
-  $bootDoctorScript = Join-Path $Root "scriptsootdoctor.ps1"
+  $bootDoctorScript = Join-Path $Root "scripts\bootdoctor.ps1"
   if (-not (Test-Path $bootDoctorScript)) {
     return $null
   }
@@ -197,7 +197,7 @@ function Start-BootDoctorRescue {
     [Parameter(Mandatory = $true)][string]$ContextPath
   )
 
-  $bootDoctorScript = Join-Path $Root "scriptsootdoctor.ps1"
+  $bootDoctorScript = Join-Path $Root "scripts\bootdoctor.ps1"
   if (-not (Test-Path $bootDoctorScript)) {
     return $null
   }

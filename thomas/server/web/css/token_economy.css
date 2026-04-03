@@ -1,3 +1,3 @@
 /* token_economy.css — import wrapper (split for monolith compliance) */
-@import url("./token_economy_widget.css?v=20260401-split");
-@import url("./token_economy_space_theme.css?v=20260401-split");
+@import url("./token_economy_widget.css?v=20260402-fix11");
+@import url("./token_economy_space_theme.css?v=20260402-fix11");

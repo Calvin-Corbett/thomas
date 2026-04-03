@@ -19,6 +19,40 @@ const _allIconClasses = [
     'ph-plus','ph-paperclip',
     'ph-microphone','ph-waveform','ph-speaker-high'
 ];
+const THOMAS_THEME_STORAGE_KEY = 'thomas_theme';
+
+function normalizeThemePreference(theme) {
+    const normalized = safeString(theme).toLowerCase();
+    if (normalized === 'system') return 'auto';
+    if (normalized === 'light' || normalized === 'dark' || normalized === 'auto') return normalized;
+    return 'auto';
+}
+
+function storeThemePreference(theme) {
+    try {
+        window.localStorage?.setItem(THOMAS_THEME_STORAGE_KEY, normalizeThemePreference(theme));
+    } catch (_) {}
+}
+
+function syncSpaceThemeState(theme) {
+    const normalized = normalizeThemePreference(theme);
+    const spaceApi = window.__teSpace;
+    if (normalized === 'light' || normalized === 'dark') {
+        if (typeof spaceApi?.remove === 'function') {
+            spaceApi.remove();
+        } else {
+            document.body.classList.remove('te-space-active');
+        }
+        if (window.spaceCanvas) window.spaceCanvas.style.display = 'none';
+        return;
+    }
+    if (typeof spaceApi?.inject === 'function') {
+        spaceApi.inject();
+    } else {
+        document.body.classList.add('te-space-active');
+    }
+    if (window.spaceCanvas) window.spaceCanvas.style.display = '';
+}
 
 function _swapComposerIcons(iconMap) {
     Object.entries(iconMap).forEach(([btnId, cls]) => {
@@ -33,28 +67,26 @@ function _swapComposerIcons(iconMap) {
 }
 
 function applyTheme(theme) {
+    const normalizedTheme = normalizeThemePreference(theme);
     const body = document.body;
     body.classList.remove('te-theme-light', 'te-theme-dark');
     body.removeAttribute('data-theme');
-    if (theme === 'light') {
+    storeThemePreference(normalizedTheme);
+    if (normalizedTheme === 'light') {
         body.classList.add('te-theme-light');
         body.setAttribute('data-theme', 'light');
-        // Hide space canvas for non-space themes
-        body.classList.remove('te-space-active');
-        if (window.spaceCanvas) window.spaceCanvas.style.display = 'none';
+        syncSpaceThemeState(normalizedTheme);
         _swapComposerIcons(_lightIcons);
         _injectLightThemeIntoIframes();
-    } else if (theme === 'dark') {
+    } else if (normalizedTheme === 'dark') {
         body.classList.add('te-theme-dark');
         body.setAttribute('data-theme', 'dark');
-        body.classList.remove('te-space-active');
-        if (window.spaceCanvas) window.spaceCanvas.style.display = 'none';
+        syncSpaceThemeState(normalizedTheme);
         _swapComposerIcons(_defaultIcons);
         _removeLightThemeFromIframes();
     } else {
         // 'auto' = Nebula Core — restore space
-        body.classList.add('te-space-active');
-        if (window.spaceCanvas) window.spaceCanvas.style.display = '';
+        syncSpaceThemeState(normalizedTheme);
         _swapComposerIcons(_defaultIcons);
         _removeLightThemeFromIframes();
     }
