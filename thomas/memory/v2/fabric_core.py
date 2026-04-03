@@ -172,6 +172,7 @@ class MemoryFabricV2(MemoryFabricV2Retrieval):
         base_salience: float = 1.0,
         decay_half_life_hours: float = 48.0,
         source: str = "chat",
+        also_extract_profile: bool = False,
     ) -> dict[str, Any]:
         event_ts = int(ts_ms if ts_ms is not None else _now_ms())
         created_at_ms = _now_ms()

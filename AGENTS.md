@@ -15,6 +15,29 @@
 11. Tag every commit with your model name (e.g., `Thomas-Agent: codex` or `Thomas-Agent: claude`)
 12. Run `ruff check` on any Python file you modify before committing
 
+## Rule: UI Code — Delete Old Before Adding New (CRITICAL)
+
+**When you create new UI rendering code, you MUST remove or disable the old version it replaces.**
+
+This is the #1 recurring agent mistake. Agents create new UI code on top of old code, both versions stay live, and the user sees wrong or broken displays. This has happened with:
+- Token Economy widget (truncated old version vs. new version)
+- Settings panel (old HTML alongside new HTML)
+- Module rendering paths (conflicting mount/unmount exports)
+
+**Before writing any new UI code:**
+1. `grep -rn "<feature_name>" thomas/server/web/js/` to find all existing versions
+2. If an old version exists: FIX IT IN-PLACE or REPLACE IT. Do not create a parallel copy.
+3. If you create a new file: DELETE or DISABLE the old rendering path in the SAME commit.
+4. After your change: `grep` again to confirm no duplicate exports, mount functions, or template fragments remain.
+
+**You may NOT:**
+- Create `feature_v2.js` alongside `feature.js`
+- Leave old `window.__moduleName` exports live after moving logic to a new file
+- Add new HTML template blocks without removing the old ones they replace
+- Assume the old code is dead — verify it's not loaded before ignoring it
+
+**If you're unsure which version is live:** check `index.html` for direct `<script>` tags, and `app_runtime_loader.js` for the split runtime manifest. Those are the ONLY two JS entry points.
+
 ## What Thomas Is — Do Not Misjudge This Repo
 
 Thomas is an AI-first workspace platform with a **marketplace of domain modules**. The repo is intentionally broad in scope — that is a feature, not a problem. Everything under `thomas/` that is NOT listed in the Architecture section below is marketplace inventory. Do not refactor, delete, rename, or judge the project based on these modules. They are plugin content for the Thomas marketplace. See `thomas/marketplace/MANIFEST.json` for the full registry.

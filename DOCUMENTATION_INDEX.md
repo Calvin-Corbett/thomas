@@ -65,8 +65,9 @@ Large files split into parts for manageability:
 - Clear `.pyc` caches after editing
 - Restart server
 
-**JavaScript**: All frontend runs through `thomas/server/web/js/app_runtime_primary.mjs` (41K lines)
-- Edit `app_runtime_primary.mjs` only
+**JavaScript**: All frontend runs through `thomas/server/web/js/runtime/` (45 numbered files, combined 41K lines)
+- Edit files in `runtime/` directory (001–045) only
+- `app_runtime_primary.mjs` is a dead code legacy monolith—ignore it
 - `app_parts/` directory is dead code—ignore it
 - Clear browser cache after editing
 
@@ -145,7 +146,7 @@ See: `thomas/chat/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
 
 ### To update the UI
 → Read: `thomas/server/web/README.md`
-→ Edit: `thomas/server/web/js/app_runtime_primary.mjs` (41K lines)
+→ Edit: `thomas/server/web/js/runtime/` (numbered 001–045) or standalone scripts
 → Clear browser cache (Ctrl+Shift+Delete)
 → Hard-reload (Ctrl+Shift+R)
 
@@ -163,13 +164,14 @@ See: `thomas/chat/README.md`, `docs/CHAT_EXECUTION_MODEL.md`
 
 ### Do NOT Do This
 
-1. **Edit `app_parts/*.js`** — They're dead code. Edit `app_runtime_primary.mjs`.
-2. **Ignore `.pyc` caches** — Clear them: `find . -name "*.pyc" -delete`
-3. **Forget to restart server** — Server caches Python modules.
-4. **Assume all code is active** — Check for `_archived/`, placeholders, and dead code markers.
-5. **Call LLM directly** — Always use `thomas.core.llm_client.LLMClient`.
-6. **Bypass memory system** — Use specialist interface, not raw tools.
-7. **Edit monolith stubs** — Find and edit the actual `_partXX.py` file.
+1. **Edit `app_parts/*.js`** — They're dead code. Edit files in `js/runtime/` instead.
+2. **Edit `app_runtime_primary.mjs`** — It's a dead code legacy monolith. Edit files in `js/runtime/` instead.
+3. **Ignore `.pyc` caches** — Clear them: `find . -name "*.pyc" -delete`
+4. **Forget to restart server** — Server caches Python modules.
+5. **Assume all code is active** — Check for `_archived/`, placeholders, and dead code markers.
+6. **Call LLM directly** — Always use `thomas.core.llm_client.LLMClient`.
+7. **Bypass memory system** — Use specialist interface, not raw tools.
+8. **Edit monolith stubs** — Find and edit the actual `_partXX.py` file.
 
 ### Placeholder/Incomplete Code
 
@@ -183,6 +185,7 @@ Use active modules: `retrieval.py`, `embedder.py`, `store.py`
 - `thomas/agent/loop.py` — Not primary chat path, kept for fallback
 - `thomas/agent/routing.py` — Deprecated, use `dispatch.py`
 - `thomas/server/web/js/app_parts/` — Never loaded
+- `thomas/server/web/js/app_runtime_primary.mjs` — Legacy pre-split monolith, never loaded
 
 **Domain Skeletons** (all placeholder):
 - All `thomas/{domain}/` folders (agriculture, autonomous_vehicles, blockchain, etc.)

@@ -30,6 +30,15 @@ def _exists(relative_path: str) -> bool:
     return (ROOT / relative_path).exists()
 
 
+def _read_all_runtime_js() -> str:
+    """Read and concatenate all split runtime JS files in order."""
+    runtime_dir = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
+    if not runtime_dir.exists():
+        return ""
+    parts = sorted(runtime_dir.glob("*.js"))
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
+
+
 @contextmanager
 def _hosted_plugin_store(bundle_paths: dict[str, Path]):
     bundles: dict[str, tuple[bytes, str]] = {}
@@ -611,7 +620,7 @@ def test_marketplace_surface_uses_plugin_catalog_only() -> None:
 
 
 def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> None:
-    script = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+    script = _read_all_runtime_js()
 
     assert "/api/marketplace/sync" in script
     assert "/api/marketplace/import" in script
@@ -633,7 +642,7 @@ def test_marketplace_runtime_supports_reorderable_workspace_nav_and_import() -> 
 
 
 def test_workspace_nav_clicks_are_wired_to_open_dynamic_workspaces() -> None:
-    script = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+    script = _read_all_runtime_js()
 
     assert "if (workspaceNavItems)" in script
     assert "workspaceNavItems.addEventListener('click'" in script
@@ -649,7 +658,7 @@ def test_workspaces_render_in_sidebar_markup() -> None:
 
 
 def test_marketplace_runtime_uses_store_specific_empty_state_copy() -> None:
-    script = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+    script = _read_all_runtime_js()
     static_html = _read_text("thomas/server/web/static/plugin_marketplace.html")
     static_script = _read_text("thomas/server/web/static/plugin_marketplace.script01.js")
 

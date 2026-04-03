@@ -4,11 +4,19 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 WEB_INDEX_PATH = ROOT / "thomas" / "server" / "web" / "index.html"
-WEB_RUNTIME_PATH = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 
 
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
+
+
+def _read_all_runtime_js() -> str:
+    """Read and concatenate all split runtime JS files in order."""
+    if not RUNTIME_DIR.exists():
+        return ""
+    parts = sorted(RUNTIME_DIR.glob("*.js"))
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
 
 
 def test_chat_shell_contains_mission_control_sidebar_entry() -> None:
@@ -18,7 +26,7 @@ def test_chat_shell_contains_mission_control_sidebar_entry() -> None:
 
 
 def test_evolve_runtime_stays_in_chat_and_posts_followups() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     start = text.index("async function runEvolveMissionJob")
     end = text.index("async function runChatSendJob")
     evolve_block = text[start:end]
@@ -33,7 +41,7 @@ def test_evolve_runtime_stays_in_chat_and_posts_followups() -> None:
 
 
 def test_chat_runtime_defaults_to_v2_and_renders_delegation_activity() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "const chatEndpoint = window.__THOMAS_CHAT_V2__ === false ? '/api/chat' : '/api/v2/chat';" in text
     assert "function createDelegationBadge(specialistId, task) {" in text
     assert "function createAgentActivityRow(agentId, status, currentTask, elapsedMs) {" in text
@@ -44,7 +52,7 @@ def test_chat_runtime_defaults_to_v2_and_renders_delegation_activity() -> None:
 
 
 def test_chat_runtime_prefers_visible_model_selector_over_setup_profile() -> None:
-    text = _read(WEB_RUNTIME_PATH)
+    text = _read_all_runtime_js()
     assert "const selectedProfile = modelSelector.value || setupProviderSelector.value;" in text
     assert "const selectedProfile = setupProviderSelector.value || modelSelector.value;" not in text
 

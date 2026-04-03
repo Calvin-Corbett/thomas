@@ -78,8 +78,9 @@ def test_runtime_copy_keeps_simple_then_expandable_shell() -> None:
     assert "Current Task" in index_html
     assert "Try asking" in index_html
     assert "Ask {{agent}} anything or describe a task" in index_html
-    assert "Loading primary app runtime" in app_loader
-    assert "./app_runtime_primary.mjs" in app_loader
+    assert "window.__thomasRuntimeReady" in app_loader
+    assert "await window.__thomasRuntimeReady" in app_loader
+    assert "app_runtime_loader.js" in app_loader
     assert "generated/app_runtime_joined.mjs" not in app_loader
     assert "app_parts/" not in app_loader
     model_setup_part = _read_text("thomas/server/web/js/app_parts/part-031.js")

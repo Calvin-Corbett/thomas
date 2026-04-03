@@ -184,6 +184,37 @@ class PreferencesStore:
             "onboarding": OnboardingPrefs().model_dump(),
             "profile": ProfilePrefs().model_dump(),
             "thomads": {},
+            "workspaces": {
+                "mission": True,
+                "app_builder": True,
+                "my_stuff": True,
+                "channels": True,
+                "token_economy": True,
+                "marketplace": True,
+                "office": False,
+            },
+            "token_economy": {
+                "monthly_budget": 5_000_000,
+                "budget_alert_pct": "75",
+                "show_sidebar_spend": True,
+                "auto_summarize": False,
+            },
+            "channels": {
+                "default_channel": "none",
+                "max_message_length": 4000,
+                "auto_route": True,
+                "notifications": True,
+                "allow_uploads": True,
+            },
+            "marketplace": {
+                "auto_update": True,
+                "show_domain_modules": False,
+                "plugin_network_access": True,
+            },
+            "data": {
+                "persist_history": True,
+                "auto_archive": False,
+            },
         }
 
     @staticmethod
@@ -581,6 +612,20 @@ class PreferencesStore:
                     if v is not None:
                         current[k] = str(v).strip()
                 base["profile"] = ProfilePrefs(**current).model_dump()
+
+            # ── New patch fields: workspaces, token_economy, channels, marketplace, data ──
+            for key in ("workspaces", "token_economy", "channels", "marketplace", "data"):
+                patch_field = getattr(patch, key, None)
+                if patch_field is not None:
+                    current = dict(base.get(key) or {})
+                    incoming = (
+                        patch_field.model_dump(exclude_unset=True)
+                        if hasattr(patch_field, "model_dump")
+                        else dict(patch_field)
+                    )
+                    for k, v in incoming.items():
+                        current[k] = v
+                    base[key] = current
 
             self._enforce_non_coder_runtime_locks(base)
             self._save_base_prefs(conn, user_id, base)

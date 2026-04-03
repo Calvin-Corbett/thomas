@@ -78,6 +78,9 @@ function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const isContent = sidebarNavMode === 'content';
     const isModule = MODULE_NAV_MODE_SET.has(sidebarNavMode);
 
+    /* Body class so CSS can scope things to the chat page */
+    document.body.classList.toggle('te-nav-chat', isChat);
+
     if (navChatBtn) navChatBtn.classList.toggle('active', isChat);
     const navOfficeBtnLive = document.getElementById('navOfficeBtn');
     if (navOfficeBtnLive) navOfficeBtnLive.classList.toggle('active', isOffice);
@@ -277,6 +280,13 @@ function updateSettingsSectionNavActive() {
     const visibleEntries = getVisibleSettingsSectionEntries();
     if (visibleEntries.length === 0) {
         setActiveSettingsSectionNav('');
+        return;
+    }
+
+    /* If scrolled to (or very near) the bottom, highlight the last section */
+    const atBottom = settingsSections.scrollTop + settingsSections.clientHeight >= settingsSections.scrollHeight - 40;
+    if (atBottom) {
+        setActiveSettingsSectionNav(visibleEntries[visibleEntries.length - 1].section.id);
         return;
     }
 

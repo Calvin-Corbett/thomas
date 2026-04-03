@@ -9,6 +9,20 @@ Versioning: Semantic Versioning.
 
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
+### Added
+- evolve: Added a green-side health ledger, mandatory refactor pass, and interactive evolve wizard scaffolding so evolve sessions can prioritize stale or oversized files before creative passes.
+- workboard: Synced the missing `space-bg-always-on` task artifacts so the workboard/task-problem gates can validate the current board state again.
+
+### Changed
+- safety: Updated the repo guidance, safety gates, and split-runtime tests to treat `thomas/server/web/js/runtime/` as the active frontend runtime and demote `app_runtime_primary.mjs` to legacy dead code guidance.
+- runtime: `thomas evolve run` now prefers a dedicated green virtualenv, falls back through `PYTHONPATH` when needed, and records refactor-pass results in each evolve session.
+- settings: Extended the default preference schema and patch models to cover workspace visibility, token-economy, channel, marketplace, and data controls, and aligned the live web runtime/settings modules with those expanded settings surfaces.
+- server: Web build fingerprinting and frontend references now track the split runtime loader instead of the old monolith entrypoint.
+- architecture: Raised the hard monolith ceiling to 1500 lines and aligned the TOML compatibility parser with inline-comment handling for bare values, quoted strings, and arrays.
+
+### Fixed
+- workboard: Repaired a truncated `openclaw-parity-stabilization` task-plan entry that was leaving `plans/thomas/WORKBOARD.md` in an invalid state.
+
 ## [0.14.55] - 2026-03-29
 
 ### Added
@@ -2707,4 +2721,3 @@ Versioning: Semantic Versioning.
 ### Added
 
 - Initial Thomas CLI, REPL, tool calling, and memory engine bundle.
-

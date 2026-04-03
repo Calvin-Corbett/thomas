@@ -1,7 +1,7 @@
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_JS = ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+RUNTIME_DIR = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 TASK_CSS = ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-005a.css"
 MISSION_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-002.css"
 SIDEBAR_CSS = ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-001a.css"
@@ -12,8 +12,16 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_all_runtime_js() -> str:
+    """Read and concatenate all split runtime JS files in order."""
+    if not RUNTIME_DIR.exists():
+        return ""
+    parts = sorted(RUNTIME_DIR.glob("*.js"))
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
+
+
 def test_mission_runtime_panel_and_stream_contract() -> None:
-    js = _read(RUNTIME_JS)
+    js = _read_all_runtime_js()
     mission_css = _read(MISSION_CSS)
 
     assert "function renderMissionRuntimeHero(" in js
@@ -35,7 +43,7 @@ def test_mission_runtime_panel_and_stream_contract() -> None:
 
 
 def test_chat_presence_runtime_uses_platform_graph_and_motion_debug() -> None:
-    js = _read(RUNTIME_JS)
+    js = _read_all_runtime_js()
     task_css = _read(TASK_CSS)
     mission_css = _read(MISSION_CSS)
     sidebar_css = _read(SIDEBAR_CSS)

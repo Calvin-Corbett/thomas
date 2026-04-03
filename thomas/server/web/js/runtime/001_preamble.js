@@ -501,6 +501,32 @@ const settingAdvAnimationFidelity = document.getElementById('settingAdvAnimation
 const settingAdvAnimationsEnabled = document.getElementById('settingAdvAnimationsEnabled');
 const settingAdvDebugPanelEnabled = document.getElementById('settingAdvDebugPanelEnabled');
 const settingAdvLabsFlags = document.getElementById('settingAdvLabsFlags');
+// ── New Settings: Workspaces ──
+const settingWsMission = document.getElementById('settingWsMission');
+const settingWsAppBuilder = document.getElementById('settingWsAppBuilder');
+const settingWsMyStuff = document.getElementById('settingWsMyStuff');
+const settingWsChannels = document.getElementById('settingWsChannels');
+const settingWsTokenEconomy = document.getElementById('settingWsTokenEconomy');
+const settingWsMarketplace = document.getElementById('settingWsMarketplace');
+const settingWsOffice = document.getElementById('settingWsOffice');
+// ── New Settings: Token Economy ──
+const settingTeMonthlyBudget = document.getElementById('settingTeMonthlyBudget');
+const settingTeBudgetAlertPct = document.getElementById('settingTeBudgetAlertPct');
+const settingTeShowSidebarSpend = document.getElementById('settingTeShowSidebarSpend');
+const settingTeAutoSummarize = document.getElementById('settingTeAutoSummarize');
+// ── New Settings: Channels ──
+const settingChDefaultChannel = document.getElementById('settingChDefaultChannel');
+const settingChMaxMessageLength = document.getElementById('settingChMaxMessageLength');
+const settingChAutoRoute = document.getElementById('settingChAutoRoute');
+const settingChNotifications = document.getElementById('settingChNotifications');
+const settingChAllowUploads = document.getElementById('settingChAllowUploads');
+// ── New Settings: Marketplace & Plugins ──
+const settingMpAutoUpdate = document.getElementById('settingMpAutoUpdate');
+const settingMpShowDomainModules = document.getElementById('settingMpShowDomainModules');
+const settingMpPluginNetworkAccess = document.getElementById('settingMpPluginNetworkAccess');
+// ── New Settings: Data & Storage ──
+const settingDataPersistHistory = document.getElementById('settingDataPersistHistory');
+const settingDataAutoArchive = document.getElementById('settingDataAutoArchive');
 const sidebarUserAvatar = document.getElementById('sidebarUserAvatar');
 const sidebarChatPanel = document.getElementById('sidebarChatPanel');
 const searchOverlayBar = document.getElementById('searchOverlayBar');

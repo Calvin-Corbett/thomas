@@ -18,6 +18,15 @@ def _read_text(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def _read_all_runtime_js() -> str:
+    """Read and concatenate all split runtime JS files in order."""
+    runtime_dir = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
+    if not runtime_dir.exists():
+        return ""
+    parts = sorted(runtime_dir.glob("*.js"))
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
+
+
 class TestServerLocalProjectsRoutes(AioHTTPTestCase):
     def setUp(self) -> None:
         super().setUp()
@@ -186,7 +195,7 @@ class TestServerLocalProjectsRoutes(AioHTTPTestCase):
 
 def test_my_stuff_surface_is_wired_into_runtime_shell() -> None:
     index_html = _read_text("thomas/server/web/index.html")
-    primary_runtime = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+    primary_runtime = _read_all_runtime_js()
     my_stuff_html = _read_text("thomas/server/web/static/my_stuff.html")
     my_stuff_script = _read_text("thomas/server/web/static/my_stuff.script01.js")
 
@@ -204,7 +213,7 @@ def test_my_stuff_surface_is_wired_into_runtime_shell() -> None:
 
 
 def test_marketplace_uses_native_runtime_shell() -> None:
-    primary_runtime = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+    primary_runtime = _read_all_runtime_js()
     architecture = _read_text("ARCHITECTURE.md")
 
     assert "/static/static/plugin_marketplace.html" not in primary_runtime

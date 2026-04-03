@@ -119,13 +119,15 @@ The frontend is delivered from here:
 | `mission.html` | Mission/task UI |
 | `virtual_office.html` | Virtual office interface |
 | `companion.html` | Mobile companion app |
-| `js/app_runtime_primary.mjs` | **THE ENTIRE RUNTIME** (41,470 lines) |
-| `js/app.js` | Entrypoint (loads app_runtime_primary.mjs) |
+| `js/runtime/*.js` (001–045) | **THE ENTIRE RUNTIME** (45 numbered files, combined 41,470 lines) |
+| `js/app_runtime_loader.js` | Loads runtime files 001–045 sequentially into global scope |
+| `js/app.js` | Entrypoint (loads app_runtime_loader.js) |
+| `js/app_runtime_primary.mjs` | **DEAD CODE (LEGACY)** — Pre-split monolith, not loaded by index.html |
 | `js/app_parts/` | **DEAD CODE**—ignore these |
 | `css/` | Stylesheets |
 | `static/` | Assets (images, icons, etc.) |
 
-**CRITICAL:** The only active frontend code is in `js/app_runtime_primary.mjs`. Do not edit `js/app_parts/` — they're never loaded.
+**CRITICAL:** The only active frontend code is in `js/runtime/` (the 45 numbered files). Do not edit `js/app_parts/` or `js/app_runtime_primary.mjs` — they're never loaded.
 
 ## Middleware
 
@@ -163,16 +165,17 @@ Located in `middleware/`:
 
 ### ✗ Don't do this:
 
-1. **Edit `js/app_parts/`** — They're not loaded. Edit `app_runtime_primary.mjs`.
-2. **Ignore monolith parts** — When you edit a route, find the correct `_partXX.py`.
-3. **Assume all routes are in `app_part01.py`** — Check all parts.
-4. **Make HTTP calls directly to LLM** — Use `thomas.core.llm_client.LLMClient`.
-5. **Bypass middleware** — Middleware enforces auth and rate limiting.
+1. **Edit `js/app_parts/`** — They're not loaded. Edit files in `js/runtime/` instead.
+2. **Edit `app_runtime_primary.mjs`** — It's dead code. Edit `js/runtime/` files instead.
+3. **Ignore monolith parts** — When you edit a route, find the correct `_partXX.py`.
+4. **Assume all routes are in `app_part01.py`** — Check all parts.
+5. **Make HTTP calls directly to LLM** — Use `thomas.core.llm_client.LLMClient`.
+6. **Bypass middleware** — Middleware enforces auth and rate limiting.
 
 ### ✓ Do this:
 
 1. For backend changes: Find the right `routes/` file
-2. For frontend changes: Edit `web/js/app_runtime_primary.mjs`
+2. For frontend changes: Edit the appropriate file in `web/js/runtime/` or standalone scripts
 3. For routes in monolith: Edit `app_partXX.py`
 4. After editing: Clear `.pyc` files and restart server
 5. For frontend: Clear browser cache after editing
@@ -214,7 +217,7 @@ To add a plugin:
 3. Restart server
 
 ### To update the UI:
-1. Edit `web/js/app_runtime_primary.mjs`
+1. Edit the appropriate file in `web/js/runtime/` (numbered 001–045) or standalone scripts
 2. Clear browser cache
 3. Reload the page
 

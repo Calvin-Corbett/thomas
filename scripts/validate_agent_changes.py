@@ -21,7 +21,7 @@ def _default_dead_code_dirs() -> list[str]:
 
 
 def _default_dead_code_redirect() -> str:
-    return "thomas/server/web/js/app_runtime_primary.mjs"
+    return "thomas/server/web/js/runtime/"
 
 
 def _default_build_output_files() -> list[str]:
@@ -74,38 +74,42 @@ def check_dead_code_not_edited(staged_files: list[str]) -> tuple[bool, list[str]
 
 def check_javascript_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:
     """Validate the live frontend runtime when it is part of the change set."""
-    js_file = "thomas/server/web/js/app_runtime_primary.mjs"
-    if js_file not in staged_files:
+    runtime_files = [f for f in staged_files if f.startswith("thomas/server/web/js/runtime/")]
+    loader_file = "thomas/server/web/js/app_runtime_loader.js"
+
+    if not runtime_files and loader_file not in staged_files:
         return True, []
 
     try:
-        result = subprocess.run(["node", "--check", js_file], capture_output=True, text=True, timeout=5)
+        # Check runtime files and loader
+        files_to_check = runtime_files + ([loader_file] if loader_file in staged_files else [])
+        for js_file in files_to_check:
+            result = subprocess.run(["node", "--check", js_file], capture_output=True, text=True, timeout=5)
+            if result.returncode != 0:
+                errors = [
+                    "",
+                    "SAFETY GATE FAILED: JavaScript Syntax Error",
+                    "=" * 70,
+                    f"File: {js_file}",
+                    "",
+                    "WHAT YOU DID WRONG:",
+                    "Your changes introduced JavaScript syntax errors.",
+                    "",
+                    "Error output:",
+                    result.stderr.rstrip(),
+                    "",
+                    "HOW TO FIX IT:",
+                    f"1. Run: node --check {js_file}",
+                    "2. Fix all reported syntax errors.",
+                    "=" * 70,
+                ]
+                return False, errors
     except FileNotFoundError:
         return True, []
     except subprocess.TimeoutExpired:
         return True, []
 
-    if result.returncode == 0:
-        return True, []
-
-    errors = [
-        "",
-        "SAFETY GATE FAILED: JavaScript Syntax Error",
-        "=" * 70,
-        f"File: {js_file}",
-        "",
-        "WHAT YOU DID WRONG:",
-        "Your changes introduced JavaScript syntax errors.",
-        "",
-        "Error output:",
-        result.stderr.rstrip(),
-        "",
-        "HOW TO FIX IT:",
-        f"1. Run: node --check {js_file}",
-        "2. Fix all reported syntax errors.",
-        "=" * 70,
-    ]
-    return False, errors
+    return True, []
 
 
 def check_python_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:

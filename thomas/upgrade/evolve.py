@@ -19,6 +19,7 @@ from .doppelganger import (
     _IGNORE_NAMES,
     _INCLUDE_DIRS,
     _INCLUDE_FILES,
+    ensure_green_venv,
     find_project_root,
     get_paths,
     promote_green_to_blue,
@@ -431,6 +432,7 @@ def run_evolve_session(
     passes: int | None = None,
     promote_on_pass: bool = False,
     timeout_seconds: int = 1800,
+    refactor_first: bool = True,
 ) -> dict[str, Any]:
     repo_root = resolve_repo_root(project_root)
     evolve_root, _, _ = ensure_evolve_charter(repo_root)
@@ -443,14 +445,50 @@ def run_evolve_session(
 
     paths = get_paths(repo_root)
     sync_blue_to_green(paths)
+
+    # Ensure the green environment can run Thomas.
+    # Prefer the dedicated green venv; fall back to the system Python with
+    # PYTHONPATH pointed at the green mirror (works in sandboxed envs where
+    # venv creation or network access may be blocked).
+    try:
+        green_python = str(ensure_green_venv(paths))
+    except (OSError, RuntimeError, subprocess.SubprocessError):
+        green_python = sys.executable
+
     green_env = dict(os.environ)
     green_env["THOMAS_MEMORY_ROOT"] = str(paths.green_runtime)
+    # Always set PYTHONPATH so that `python -m thomas` resolves from the
+    # green mirror, even when using the system interpreter as fallback.
+    green_env["PYTHONPATH"] = str(paths.green_root)
 
+    # Phase 0: Mandatory refactor pass (runs before creative passes)
+    refactor_results: dict[str, Any] = {}
+    if refactor_first:
+        try:
+            from .refactor_pass import run_refactor_pass
+
+            refactor_results = run_refactor_pass(
+                repo_root,
+                paths,
+                green_env=green_env,
+                green_python=green_python,
+                timeout_seconds=timeout_seconds,
+                profile=str(profile or "").strip(),
+            )
+        except (ImportError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
+            import logging
+
+            logging.getLogger(__name__).warning(
+                "Refactor pass failed (non-fatal, continuing): %s", exc,
+            )
+            refactor_results = {"phase": "refactor", "error": str(exc)}
+
+    # Phase 1: Creative / goal-directed passes
     pass_results: list[dict[str, Any]] = []
     goal_used = str(goal or charter.default_goal).strip() or DEFAULT_EVOLVE_GOAL
     for idx in range(requested_passes):
         prompt = _build_agent_prompt(charter, goal_used, pass_index=idx + 1, pass_count=requested_passes)
-        command = [sys.executable, "-m", "thomas", "chat", "--autonomy-level", "4"]
+        command = [green_python, "-m", "thomas", "chat", "--autonomy-level", "4"]
         if str(profile or "").strip():
             command.extend(["-m", str(profile).strip()])
         command.append(prompt)
@@ -486,6 +524,7 @@ def run_evolve_session(
         "goal": goal_used,
         "profile": str(profile or "").strip(),
         "passes_requested": requested_passes,
+        "refactor_results": refactor_results,
         "pass_results": pass_results,
         "verification": verification,
         "delta": delta,

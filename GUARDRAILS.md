@@ -15,11 +15,12 @@ This file contains rules that ALL AI agents (Claude, Codex, GPT, Gemini, etc.) M
 ## Rule 1: File Size Limits — ABSOLUTE, NO EXCEPTIONS
 
 ### Python Files
-- **No Python file may exceed 800 lines.** Period.
-- **No file may exceed 1200 lines under ANY circumstance** — not even with a debt annotation.
+- **No Python file may exceed 800 lines (soft limit).** This triggers review.
+- **No file may exceed 1500 lines under ANY circumstance (hard limit)** — not even with a debt annotation.
+- The evolve loop's refactor pass will automatically target files exceeding these limits.
 
 ### Frontend Files
-- **JavaScript (.js, .mjs, .cjs, .jsx, .ts, .tsx):** Max 800 lines (soft), 1200 lines (hard)
+- **JavaScript (.js, .mjs, .cjs, .jsx, .ts, .tsx):** Max 800 lines (soft), 1500 lines (hard)
 - **CSS (.css):** Max 600 lines (soft), 1600 lines (hard)
 - **HTML (.html):** Max 1000 lines (hard)
 

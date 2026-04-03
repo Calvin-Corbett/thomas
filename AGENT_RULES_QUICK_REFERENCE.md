@@ -5,25 +5,30 @@
 ### ❌ DO NOT Edit These Files
 
 1. **thomas/server/web/js/app_parts/** — DEAD CODE
-   - Edit `thomas/server/web/js/app_runtime_primary.mjs` instead
+   - Edit files in `thomas/server/web/js/runtime/` instead
    - Your changes WILL BE REJECTED by pre-commit
 
-2. **thomas/memory/episodic.py** — PLACEHOLDER STUB
+2. **thomas/server/web/js/app_runtime_primary.mjs** — DEAD CODE (LEGACY)
+   - Pre-split monolith, not loaded by index.html
+   - Edit files in `thomas/server/web/js/runtime/` instead
+   - Your changes WILL BE REJECTED by pre-commit
+
+3. **thomas/memory/episodic.py** — PLACEHOLDER STUB
    - Create a NEW file if you need real implementation
    - See: `thomas/memory/GUARDRAILS.md` Rule 9
 
-3. **thomas/memory/episodic_store.py** — PLACEHOLDER STUB
+4. **thomas/memory/episodic_store.py** — PLACEHOLDER STUB
    - Don't try to "complete" it
    - Create a new real implementation file instead
 
-4. **thomas/memory/summarization.py** — PLACEHOLDER STUB
+5. **thomas/memory/summarization.py** — PLACEHOLDER STUB
    - Same as above
 
-5. **tests/test_architecture.py** — PROTECTED
+6. **tests/test_architecture.py** — PROTECTED
    - Don't modify this to make tests pass
    - FIX YOUR CODE instead
 
-6. **.pyc files** — NEVER
+7. **.pyc files** — NEVER
    - These are auto-compiled files
    - They will be rejected by pre-commit
 

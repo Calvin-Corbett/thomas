@@ -327,8 +327,15 @@ def test_web_nav_chat_robot_uses_website_pixel_agent_contract() -> None:
     web_index = (root / "thomas/server/web/index.html").read_text(encoding="utf-8")
     web_css = (root / "thomas/server/web/css/components_parts/part-001a.css").read_text(encoding="utf-8")
 
+    # Read all split runtime files
+    runtime_dir = root / "thomas/server/web/js/runtime"
+    runtime_content = ""
+    if runtime_dir.exists():
+        for part in sorted(runtime_dir.glob("*.js")):
+            runtime_content += part.read_text(encoding="utf-8") + "\n"
+
     runtime_sources = {
-        "runtime": (root / "thomas/server/web/js/app_runtime_primary.mjs").read_text(encoding="utf-8"),
+        "runtime": runtime_content,
         "module": (root / "thomas/server/web/js/modules/060_togglesidebarcollapsed.js").read_text(encoding="utf-8"),
         "src_module": (root / "thomas/server/web/js/src/runtime_modules/060_togglesidebarcollapsed.js").read_text(
             encoding="utf-8"
