@@ -9,6 +9,15 @@ def _read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def _read_all_runtime_js() -> str:
+    """Read and concatenate all split runtime JS files in order."""
+    runtime_dir = ROOT / "thomas" / "server" / "web" / "js" / "runtime"
+    if not runtime_dir.exists():
+        return ""
+    parts = sorted(runtime_dir.glob("*.js"))
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
+
+
 def test_run_ui_wires_visible_bootdoctor_rescue_and_watchdog() -> None:
     text = _read("scripts/run-ui.ps1")
     assert "function Get-StartupFailureContext" in text
@@ -60,7 +69,7 @@ def test_bootdoctor_core_persists_status_and_recovery_notice() -> None:
 
 def test_server_and_web_surface_bootdoctor_recovery_notice() -> None:
     server_text = _read("thomas/server/app_part02.py")
-    web_text = _read("thomas/server/web/js/app_runtime_primary.mjs")
+    web_text = _read_all_runtime_js()
     assert "/api/bootdoctor/recovery_notice" in server_text
     assert "fetchBootDoctorRecoveryNotice" in web_text
     assert "appendAssistantChatHistoryMessage(message, noticeId)" in web_text

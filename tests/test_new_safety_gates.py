@@ -170,7 +170,7 @@ class TestDuplicateFilenameGate:
             "swarm_execution.py",
             "tone_definitions.py",
             "event_bus.py",
-            "app_runtime_primary.mjs",
+            "app_runtime_loader.js",
         ],
     )
     def test_allows_clean_names(self, name):

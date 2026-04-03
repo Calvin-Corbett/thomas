@@ -41,7 +41,8 @@ dispatch.py (is it casual or actionable?)
 | `core/*.py` | Foundation: LLM client, config, RAG, event schemas |
 | `tools/*.py` | Built-in tools: file readers, database, sandbox, code search, etc. |
 | `server/` | HTTP server (aiohttp) + middleware + plugins |
-| `server/web/js/app_runtime_primary.mjs` | **THE FRONTEND RUNTIME** (41K lines—all JS runs through this) |
+| `server/web/js/runtime/*.js` | **THE ACTIVE FRONTEND RUNTIME** (45 numbered files, combined 41K lines—all JS runs through these) |
+| `server/web/js/app_runtime_primary.mjs` | **DEAD CODE (LEGACY)** — Pre-split monolith, not loaded by index.html |
 | `server/routes/*.py` | HTTP API endpoints (chat, memory, tasks, etc.) |
 
 ## What Each Major Subdirectory Does
@@ -69,13 +70,15 @@ Some large Python files are split into parts:
 2. **Always clear `.pyc` files**: `find . -name "*.pyc" -delete`
 3. Restart the server for changes to take effect
 
-### JavaScript Monolith
-The entire frontend runtime is in one file:
-- **`thomas/server/web/js/app_runtime_primary.mjs`** (41,470 lines) — **THE ONLY ACTIVE RUNTIME**
+### JavaScript Split Runtime
+The frontend runtime is split into 45 numbered files:
+- **`thomas/server/web/js/runtime/001.js` through `045.js`** — **THE ACTIVE RUNTIME** (combined 41,470 lines)
+- **`thomas/server/web/js/app_runtime_loader.js`** — Loads the 45 runtime files sequentially into global scope
+- `thomas/server/web/js/app_runtime_primary.mjs` — **DEAD CODE (LEGACY)**. Pre-split monolith, not loaded.
 - `thomas/server/web/js/app_parts/` — **DEAD CODE**. These files are NOT loaded at runtime. Ignore them.
 
 **When you edit the frontend:**
-1. Edit `app_runtime_primary.mjs` directly
+1. Edit the appropriate file in `js/runtime/` or standalone scripts (token_economy.js, theme_rules.js, templates/tpl_settings.js)
 2. Clear browser cache (Ctrl+Shift+Del)
 3. Reload the page
 
@@ -83,17 +86,18 @@ The entire frontend runtime is in one file:
 
 ### ✗ Don't do this:
 
-1. **Editing `app_parts/` files** — They're never loaded. Edit `app_runtime_primary.mjs` instead.
-2. **Ignoring `.pyc` caches** — After editing Python, delete `__pycache__` and `.pyc` files.
-3. **Calling the old agent loop directly** — It's not the primary chat path anymore. Use orchestrator/brain.py.
-4. **Assuming all files are active code** — Many directories are placeholders (see next section).
-5. **Editing `thomas/agent/routing.py`** — It's deprecated. The real routing is in dispatch.py.
+1. **Editing `app_parts/` files** — They're never loaded. Edit files in `js/runtime/` instead.
+2. **Editing `app_runtime_primary.mjs`** — It's dead code. Edit `js/runtime/` files instead.
+3. **Ignoring `.pyc` caches** — After editing Python, delete `__pycache__` and `.pyc` files.
+4. **Calling the old agent loop directly** — It's not the primary chat path anymore. Use orchestrator/brain.py.
+5. **Assuming all files are active code** — Many directories are placeholders (see next section).
+6. **Editing `thomas/agent/routing.py`** — It's deprecated. The real routing is in dispatch.py.
 
 ### ✓ Do this instead:
 
 1. Edit the correct runtime file:
    - Python: Find `_partXX.py` monolith parts, or single files
-   - JS: Always edit `app_runtime_primary.mjs`
+   - JS: Edit the numbered files in `js/runtime/` or standalone scripts (token_economy.js, theme_rules.js, templates/tpl_settings.js)
 2. Clear caches after edits:
    - Python: `find /sessions/lucid-confident-cannon/mnt/Thomas -name "*.pyc" -delete && find . -name "__pycache__" -type d -exec rm -rf {} +`
    - JS: Browser cache
@@ -140,9 +144,10 @@ These were created to support a "pluggable domain" architecture that's not fully
 4. Restart server
 
 ### To change the UI:
-1. Edit `thomas/server/web/js/app_runtime_primary.mjs` (yes, the whole 41K lines)
-2. Clear browser cache
-3. Reload the page
+1. Edit the appropriate file in `thomas/server/web/js/runtime/` (numbered 001–045)
+2. Or edit standalone scripts: token_economy.js, theme_rules.js, templates/tpl_settings.js
+3. Clear browser cache
+4. Reload the page
 
 ## See Also
 

@@ -47,7 +47,7 @@ class Bot:
 
 
 # ── The Official Roster ───────────────────────────────────────────────
-# These match OFFICE_AGENT_SEEDS in app_runtime_primary.mjs.
+# These match OFFICE_AGENT_SEEDS in the split runtime files (runtime/*.js).
 # If you add a bot here, add it there too.
 
 ROSTER: list[Bot] = [

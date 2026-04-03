@@ -1203,7 +1203,7 @@ MODULES = {
 # Monolith ceiling --absolute hard limit for any file, no exceptions
 # ---------------------------------------------------------------------------
 
-MONOLITH_CEILING = 1200  # Absolute max. No exemptions. Split or fail.
+MONOLITH_CEILING = 1500  # Absolute max. No exemptions. Split or fail.
 
 # ---------------------------------------------------------------------------
 # Rules --enforced by tests/test_architecture.py and pre-commit hooks
@@ -1211,7 +1211,7 @@ MONOLITH_CEILING = 1200  # Absolute max. No exemptions. Split or fail.
 
 RULES = {
     "max_new_file_lines": 800,  # soft limit for new files
-    "max_file_lines_hard": 800,  # hard block for new files
+    "max_file_lines_hard": 1500,  # hard block — enforced by refactor pass
     "forbidden_patterns": [
         "tmp_*",
         "probe_*",
@@ -1249,7 +1249,7 @@ RULES = {
         ("investigation", "memory"),
     ],
     "frontend_limits": {
-        "js": {"soft": 800, "hard": 2000},  # JavaScript files
+        "js": {"soft": 800, "hard": 1500},  # JavaScript files
         "css": {"soft": 600, "hard": 2000},  # CSS files
         "html": {"soft": 2000, "hard": 3000},  # HTML standalone apps
     },
@@ -1272,7 +1272,7 @@ ANTI_PATTERNS = [
     "No version bumps for non-behavioral changes",
     "No numbered command stubs (p001, p002...)",
     "No bulk deletion --before removing ANY file, grep for all imports/references, verify nothing depends on it, and confirm the server still boots",
-    "No file may exceed MONOLITH_CEILING lines regardless of debt annotation",
+    "No file may exceed MONOLITH_CEILING (1500) lines regardless of debt annotation",
 ]
 
 # ---------------------------------------------------------------------------

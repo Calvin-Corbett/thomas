@@ -55,6 +55,11 @@ function stopGeneration() {
     setGeneratingState(false);
 }
 
+function _getSendIconClass() {
+    /* Return theme-appropriate send icon */
+    return document.body.classList.contains('te-theme-light') ? 'ph-pen-nib' : 'ph-arrow-up';
+}
+
 function setGeneratingState(generating) {
     isGenerating = generating;
     if (generating) {
@@ -64,7 +69,7 @@ function setGeneratingState(generating) {
         _stopSuggestionAutoScroll();
     } else {
         sendBtn.classList.remove('stop-state');
-        sendBtn.innerHTML = '<i class="ph ph-arrow-up"></i>';
+        sendBtn.innerHTML = '<i class="ph ' + _getSendIconClass() + '"></i>';
         sendBtn.disabled = (composerTextarea.value.trim().length === 0 && pendingDocs.length === 0 && pendingImages.length === 0);
     }
     syncSendButtonA11y();
@@ -637,12 +642,29 @@ function queueRobotAlert(message, { tone = 'info', durationMs = 0, dedupeMs = 35
     return true;
 }
 
+function _randomSpawnPoint() {
+    /* Pick a random origin point in the viewport — biased toward edges
+       and upper areas so the robot feels like it's flying in from deep space. */
+    const zones = [
+        /* top-right quadrant */  { xMin: 60, xMax: 95, yMin: 2, yMax: 20 },
+        /* top-center */          { xMin: 30, xMax: 70, yMin: 1, yMax: 10 },
+        /* right edge mid */      { xMin: 85, xMax: 98, yMin: 20, yMax: 50 },
+        /* bottom-right corner */ { xMin: 70, xMax: 95, yMin: 60, yMax: 85 },
+        /* top-left far */        { xMin: 5, xMax: 30, yMin: 1, yMax: 15 },
+    ];
+    const z = zones[Math.floor(Math.random() * zones.length)];
+    const x = z.xMin + Math.random() * (z.xMax - z.xMin);
+    const y = z.yMin + Math.random() * (z.yMax - z.yMin);
+    return { x: x + 'vw', y: y + 'vh' };
+}
+
 async function processRobotAlertQueue() {
     if (robotAlertShowing) return;
     if (!robotAlertStage || !robotAlertBot || !robotAlertBubble) return;
     robotAlertShowing = true;
 
     const variantClasses = ['variant-blue', 'variant-mint', 'variant-pink', 'variant-orange'];
+    const phaseClasses = ['flying-in', 'landed', 'flying-out'];
 
     try {
         while (robotAlertQueue.length) {
@@ -651,42 +673,93 @@ async function processRobotAlertQueue() {
 
             const tone = safeString(next.tone).toLowerCase() || 'info';
             const variant = robotAlertVariantFromTone(tone);
-            robotAlertBot.classList.remove(...variantClasses);
+            robotAlertBot.classList.remove(...variantClasses, ...phaseClasses);
             robotAlertBot.classList.add(variant);
-
+            robotAlertBubble.classList.remove('visible');
             robotAlertBubble.textContent = next.message;
 
-            robotAlertStage.classList.remove('exit', 'talking');
-            robotAlertStage.classList.add('active');
-            robotAlertBot.classList.add('walking');
+            /* Randomise where the robot spawns from */
+            const spawn = _randomSpawnPoint();
+            robotAlertBot.style.setProperty('--spawn-x', spawn.x);
+            robotAlertBot.style.setProperty('--spawn-y', spawn.y);
+            /* Vary the trail angle based on spawn position */
+            const trailDeg = (parseFloat(spawn.x) > 50 ? -25 : 20) + (Math.random() * 10 - 5);
+            robotAlertBot.style.setProperty('--trail-angle', trailDeg + 'deg');
 
-            await sleepMs(500);
-            robotAlertBot.classList.remove('walking');
-            robotAlertStage.classList.add('talking');
+            /* Show the stage (space theme hides it when not .active) */
+            robotAlertStage.classList.add('active');
+
+            /* Phase 1 — fly in from space */
+            robotAlertBot.classList.add('flying-in');
+            await sleepMs(1100);
+
+            /* Phase 2 — land, show bubble */
+            robotAlertBot.classList.remove('flying-in');
+            robotAlertBot.classList.add('landed');
+            await sleepMs(200);
+            robotAlertBubble.classList.add('visible');
 
             const readingMs = Math.max(1900, Math.min(5600, 900 + (next.message.length * 28)));
             const holdMs = next.durationMs > 0 ? Math.max(900, next.durationMs) : readingMs;
             await sleepMs(holdMs);
 
-            robotAlertStage.classList.remove('talking');
-            robotAlertStage.classList.add('exit');
-            robotAlertBot.classList.add('walking');
+            /* Phase 3 — dismiss bubble, fly out */
+            robotAlertBubble.classList.remove('visible');
+            await sleepMs(220);
+            robotAlertBot.classList.remove('landed');
+            robotAlertBot.classList.add('flying-out');
+            await sleepMs(800);
 
-            await sleepMs(520);
-            robotAlertBot.classList.remove('walking');
-            robotAlertStage.classList.remove('active', 'exit', 'talking');
-
-            await sleepMs(120);
+            /* Clean up */
+            robotAlertBot.classList.remove(...phaseClasses);
+            robotAlertStage.classList.remove('active');
+            await sleepMs(100);
         }
     } finally {
         robotAlertShowing = false;
     }
 }
 
+/* ── Toast notification for non-chat pages ── */
+function _ensureToastContainer() {
+    let el = document.getElementById('thomasToastBar');
+    if (el) return el;
+    el = document.createElement('div');
+    el.id = 'thomasToastBar';
+    el.className = 'thomas-toast-bar';
+    el.setAttribute('aria-live', 'polite');
+    document.body.appendChild(el);
+    return el;
+}
+
+function _showToast(message, tone) {
+    const bar = _ensureToastContainer();
+    const toast = document.createElement('div');
+    toast.className = 'thomas-toast thomas-toast--' + (tone || 'info');
+    toast.textContent = message;
+    bar.appendChild(toast);
+    /* trigger entry */
+    requestAnimationFrame(() => { toast.classList.add('visible'); });
+    const readMs = Math.max(2200, Math.min(5000, 900 + (message.length * 26)));
+    setTimeout(() => {
+        toast.classList.remove('visible');
+        toast.classList.add('exiting');
+        setTimeout(() => { toast.remove(); }, 340);
+    }, readMs);
+}
+
+function _isOnMainChatPage() {
+    return typeof sidebarNavMode === 'string' && (sidebarNavMode === 'chat' || sidebarNavMode === 'search');
+}
+
 function notifyUser(message, { tone = 'info', durationMs = 0, dedupeMs = 3500, debugKind = '' } = {}) {
     const normalized = normalizeNotificationMessage(message);
     if (!normalized) return;
-    queueRobotAlert(normalized, { tone, durationMs, dedupeMs });
+    if (_isOnMainChatPage()) {
+        queueRobotAlert(normalized, { tone, durationMs, dedupeMs });
+    } else {
+        _showToast(normalized, tone);
+    }
     if (safeString(debugKind)) {
         pushDebugEvent(debugKind, normalized);
     }

@@ -688,8 +688,8 @@ def setup_middleware_and_handlers(
             )
             web_build = _web_build_fingerprint(
                 "js/app.js",
-                "js/app_runtime_primary.mjs",
-                "js/ui_editor_rescue.js",
+                "js/app_runtime_loader.js",
+                "js/runtime/001_preamble.js",
                 "index.html",
             )
             html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
@@ -707,8 +707,8 @@ def setup_middleware_and_handlers(
             html = (web_dir / "settings.html").read_text(encoding="utf-8", errors="replace")
             web_build = _web_build_fingerprint(
                 "js/app.js",
-                "js/app_runtime_primary.mjs",
-                "js/ui_editor_rescue.js",
+                "js/app_runtime_loader.js",
+                "js/runtime/001_preamble.js",
                 "index.html",
             )
             html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)
@@ -726,8 +726,8 @@ def setup_middleware_and_handlers(
             html = (web_dir / "companion.html").read_text(encoding="utf-8", errors="replace")
             web_build = _web_build_fingerprint(
                 "js/app.js",
-                "js/app_runtime_primary.mjs",
-                "js/ui_editor_rescue.js",
+                "js/app_runtime_loader.js",
+                "js/runtime/001_preamble.js",
                 "index.html",
             )
             html = html.replace("__THOMAS_VERSION__", THOMAS_VERSION)

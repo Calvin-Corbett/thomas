@@ -21,14 +21,15 @@ To prevent these issues, we've implemented **safety gates** that automatically r
 
 This script runs automatically before each commit and checks:
 
-1. **Dead Code Check** — No changes to `thomas/server/web/js/app_parts/`
+1. **Dead Code Check** — No changes to `thomas/server/web/js/app_parts/` or `thomas/server/web/js/app_runtime_primary.mjs`
    - These files are legacy code being migrated
-   - Agents must edit `app_runtime_primary.mjs` instead
+   - Agents must edit files in `js/runtime/` instead
    - If violated: Commit is REJECTED
 
-2. **JavaScript Syntax Check** — `app_runtime_primary.mjs` has valid JS
+2. **JavaScript Syntax Check** — All edited JS files have valid syntax
    - Uses `node --check` to validate syntax
    - Catches typos and bracket mismatches
+   - Applies to all files in `js/runtime/`
    - If violated: Commit is REJECTED
 
 3. **Python Syntax Check** — All modified Python files parse correctly
@@ -132,7 +133,7 @@ HOW TO FIX IT:
    git checkout -- thomas/server/web/js/app_parts/
 
 2. If you need to update app functionality, edit:
-   thomas/server/web/js/app_runtime_primary.mjs
+   Files in thomas/server/web/js/runtime/ (001–045)
 
 3. If adding new features, follow the module migration plan in GUARDRAILS.md
 ========================================================

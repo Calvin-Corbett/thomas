@@ -3,7 +3,7 @@ Agent Safety Tests — Prevent AI agents from breaking things.
 
 These tests enforce architectural safety guardrails that prevent agents from:
 - Modifying dead code files (app_parts/)
-- Breaking JavaScript syntax in app_runtime_primary.mjs
+- Breaking JavaScript syntax in split runtime files (runtime/*.js)
 - Creating unparseable Python files
 - Accidentally "finishing" placeholder implementations
 - Other harmful architectural patterns
@@ -19,49 +19,51 @@ class TestAgentSafety:
 
     def test_app_parts_not_modified(self):
         """
-        Test that app_parts/ files are not newer than app_runtime_primary.mjs.
+        Test that app_parts/ files are not newer than app_runtime_loader.js.
 
         If app_parts/ files are newer, it means an agent edited them (bad).
-        If app_runtime_primary.mjs is newer, the build system regenerated them (good).
+        If app_runtime_loader.js is newer, the build system regenerated them (good).
         """
         app_parts_dir = Path("thomas/server/web/js/app_parts")
-        app_runtime = Path("thomas/server/web/js/app_runtime_primary.mjs")
+        runtime_loader = Path("thomas/server/web/js/app_runtime_loader.js")
 
         if not app_parts_dir.exists():
             return  # Directory doesn't exist, skip test
 
-        app_runtime_mtime = app_runtime.stat().st_mtime if app_runtime.exists() else 0
+        loader_mtime = runtime_loader.stat().st_mtime if runtime_loader.exists() else 0
 
         # Check all part files
         part_files = sorted(app_parts_dir.glob("part-*.js"))
         for part_file in part_files:
             part_mtime = part_file.stat().st_mtime
-            assert part_mtime <= app_runtime_mtime, (
-                f"Dead code file {part_file.name} is newer than app_runtime_primary.mjs!\n"
+            assert part_mtime <= loader_mtime, (
+                f"Dead code file {part_file.name} is newer than app_runtime_loader.js!\n"
                 f"This indicates manual editing of dead code.\n"
-                f"Edit thomas/server/web/js/app_runtime_primary.mjs instead.\n\n"
+                f"Edit the split runtime files in thomas/server/web/js/runtime/ instead.\n\n"
                 f"To fix: git checkout -- {part_file}"
             )
 
     def test_app_runtime_primary_has_valid_javascript(self):
         """
-        Test that app_runtime_primary.mjs has valid JavaScript syntax.
+        Test that all split runtime JS files have valid JavaScript syntax.
 
         Uses node.js to check syntax if available.
         """
-        js_file = Path("thomas/server/web/js/app_runtime_primary.mjs")
+        runtime_dir = Path("thomas/server/web/js/runtime")
 
-        if not js_file.exists():
-            return  # File doesn't exist, skip test
+        if not runtime_dir.exists():
+            return  # Directory doesn't exist, skip test
 
-        # Try to validate with node.js if available
+        # Check each runtime file for valid syntax
+        runtime_files = sorted(runtime_dir.glob("*.js"))
         try:
-            result = subprocess.run(["node", "--check", str(js_file)], capture_output=True, text=True, timeout=5)
-            assert result.returncode == 0, (
-                f"JavaScript syntax error in {js_file}:\n"
-                f"{result.stderr}\n\n"
-                f"Fix the syntax errors and try again."
-            )
+            for js_file in runtime_files:
+                result = subprocess.run(["node", "--check", str(js_file)], capture_output=True, text=True, timeout=5)
+                assert result.returncode == 0, (
+                    f"JavaScript syntax error in {js_file}:\n"
+                    f"{result.stderr}\n\n"
+                    f"Fix the syntax errors and try again."
+                )
         except FileNotFoundError:
             # node.js not available, skip this check
             pass

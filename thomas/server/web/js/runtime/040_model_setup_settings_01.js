@@ -1,3 +1,241 @@
+/* ── Theme + font-size application ───────────────────────────── */
+
+/* Default (Nebula) icon classes for composer buttons */
+const _defaultIcons = {
+    sendBtn:   { from: 'ph-arrow-up',    to: 'ph-arrow-up' },
+    attachBtn: { from: 'ph-plus',         to: 'ph-plus' },
+    micBtn:    { from: 'ph-microphone',   to: 'ph-microphone' }
+};
+/* Light-theme overrides — journal / stationery feel */
+const _lightIcons = {
+    sendBtn:   { to: 'ph-pen-nib' },
+    attachBtn: { to: 'ph-paperclip' },
+    micBtn:    { to: 'ph-waveform' }
+};
+
+/* All possible icon classes that could be on these buttons */
+const _allIconClasses = [
+    'ph-arrow-up','ph-pen-nib','ph-feather',
+    'ph-plus','ph-paperclip',
+    'ph-microphone','ph-waveform','ph-speaker-high'
+];
+
+function _swapComposerIcons(iconMap) {
+    Object.entries(iconMap).forEach(([btnId, cls]) => {
+        const btn = document.getElementById(btnId);
+        if (!btn) return;
+        const i = btn.querySelector('i.ph');
+        if (!i) return;
+        /* Remove any previous swap classes, then add the target */
+        _allIconClasses.forEach(c => i.classList.remove(c));
+        i.classList.add(cls.to);
+    });
+}
+
+function applyTheme(theme) {
+    const body = document.body;
+    body.classList.remove('te-theme-light', 'te-theme-dark');
+    body.removeAttribute('data-theme');
+    if (theme === 'light') {
+        body.classList.add('te-theme-light');
+        body.setAttribute('data-theme', 'light');
+        // Hide space canvas for non-space themes
+        body.classList.remove('te-space-active');
+        if (window.spaceCanvas) window.spaceCanvas.style.display = 'none';
+        _swapComposerIcons(_lightIcons);
+        _injectLightThemeIntoIframes();
+    } else if (theme === 'dark') {
+        body.classList.add('te-theme-dark');
+        body.setAttribute('data-theme', 'dark');
+        body.classList.remove('te-space-active');
+        if (window.spaceCanvas) window.spaceCanvas.style.display = 'none';
+        _swapComposerIcons(_defaultIcons);
+        _removeLightThemeFromIframes();
+    } else {
+        // 'auto' = Nebula Core — restore space
+        body.classList.add('te-space-active');
+        if (window.spaceCanvas) window.spaceCanvas.style.display = '';
+        _swapComposerIcons(_defaultIcons);
+        _removeLightThemeFromIframes();
+    }
+}
+
+/* ── Iframe theme injection ─────────────────────────────────────
+   Plugin workspaces (Life Manager, My Stuff, etc.) render inside
+   same-origin iframes. Our main-document CSS can't reach them,
+   so we inject a <style> block that adopts the journal palette. */
+const _LIGHT_IFRAME_CSS = `
+/* Injected by Thomas — light journal theme for plugin iframes */
+:root, body, html {
+    background: #ebe5d9 !important;
+    color: #2c2420 !important;
+    font-family: 'Georgia','Palatino Linotype','Palatino','Book Antiqua',serif !important;
+}
+*:not(.ph):not([class*="ph-"]) {
+    font-family: 'Georgia','Palatino Linotype','Palatino','Book Antiqua',serif !important;
+}
+/* Kill ALL dark rgba backgrounds */
+[style*="gradient"], [style*="rgba(8"], [style*="rgba(1"], [style*="rgba(3"],
+[style*="rgba(6"], [style*="rgba(5"], [style*="rgb(5,"], [style*="rgb(8,"],
+[style*="rgb(10,"], [style*="rgb(1"], [style*="rgb(2"], [style*="rgb(3"] {
+    background: #ebe5d9 !important;
+    background-image: none !important;
+}
+/* Broad overrides for common dark patterns */
+section, div, main, article, header, footer, aside, nav {
+    background-color: transparent !important;
+    background-image: none !important;
+}
+/* Cards, tiles, panels */
+[class*="-card"], [class*="-tile"], [class*="-panel"],
+[class*="-section"], [class*="-block"], [class*="-widget"],
+[class*="-hero"], [class*="-header"], [class*="-toolbar"],
+[class*="-board"], [class*="-frame"], [class*="-view"],
+[class*="stuff-"], [class*="lm-"], [class*="plugin-"] {
+    background: #f4efe6 !important;
+    background-image: none !important;
+    color: #2c2420 !important;
+    border-color: #c8bfab !important;
+}
+/* Body and wrapper backgrounds */
+body, .app, .wrapper, .container, .content, .main,
+[class*="-wrap"], [class*="-container"], [class*="-content"],
+[class*="-page"], [class*="-screen"], [class*="-workspace"],
+[class*="-dashboard"], [class*="-statusbar"] {
+    background: #ebe5d9 !important;
+    background-image: none !important;
+    color: #2c2420 !important;
+}
+/* Text: always dark */
+h1, h2, h3, h4, h5, h6, p, span, a, label, strong, em, li, td, th, dt, dd {
+    color: #2c2420 !important;
+    text-shadow: none !important;
+}
+/* Muted text */
+small, .muted, .meta, .subtitle, [class*="-meta"], [class*="-sub"],
+[class*="-muted"], [class*="-hint"], [class*="-note"] {
+    color: #8a7a65 !important;
+}
+/* Buttons */
+button, .btn, [class*="-btn"] {
+    background: #e0d8ca !important;
+    background-image: none !important;
+    color: #3d3028 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 2px !important;
+    text-shadow: none !important;
+}
+button:hover, .btn:hover { background: #d6cebf !important; }
+/* Primary button — accent */
+[class*="primary"], [class*="accent"] {
+    background: #8a7250 !important;
+    background-image: none !important;
+    color: #f5f0e8 !important;
+    border-color: #7a6240 !important;
+}
+/* Inputs */
+input, select, textarea {
+    background: #f0ebe2 !important;
+    color: #2c2420 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 1px !important;
+}
+input::placeholder, textarea::placeholder { color: #a0907a !important; font-style: italic !important; }
+/* Tables */
+table, th, td { background: #f4efe6 !important; color: #2c2420 !important; border-color: #c8bfab !important; }
+th { background: #e6dfd2 !important; font-weight: 700 !important; }
+/* Badges */
+[class*="-badge"], [class*="-pill"], [class*="-tag"], [class*="-status"] {
+    background: #e0d8ca !important;
+    color: #3d3028 !important;
+    border: 1px solid #c8bca8 !important;
+    text-shadow: none !important;
+}
+/* Scrollbar */
+::-webkit-scrollbar-thumb { background: #c0ad90 !important; }
+::-webkit-scrollbar-track { background: #e2dbd0 !important; }
+/* Empty states */
+[class*="-empty"], [class*="empty-"] {
+    background: #f4efe6 !important;
+    color: #8a7a65 !important;
+}
+`.trim();
+
+function _injectLightThemeIntoIframes() {
+    try {
+        document.querySelectorAll('iframe').forEach(frame => {
+            try {
+                const doc = frame.contentDocument || frame.contentWindow?.document;
+                if (!doc) return;
+                /* Remove old injection if any */
+                const old = doc.getElementById('thomas-light-theme-inject');
+                if (old) old.remove();
+                const style = doc.createElement('style');
+                style.id = 'thomas-light-theme-inject';
+                style.textContent = _LIGHT_IFRAME_CSS;
+                (doc.head || doc.documentElement).appendChild(style);
+            } catch(_) { /* cross-origin — skip */ }
+        });
+    } catch(_) {}
+    /* Also re-run after a short delay for lazy-loaded iframes */
+    clearTimeout(window._lightIframeTimer);
+    window._lightIframeTimer = setTimeout(() => _injectLightThemeIntoIframes_once(), 1500);
+}
+
+function _injectLightThemeIntoIframes_once() {
+    if (!document.body.classList.contains('te-theme-light')) return;
+    try {
+        document.querySelectorAll('iframe').forEach(frame => {
+            try {
+                const doc = frame.contentDocument || frame.contentWindow?.document;
+                if (!doc || doc.getElementById('thomas-light-theme-inject')) return;
+                const style = doc.createElement('style');
+                style.id = 'thomas-light-theme-inject';
+                style.textContent = _LIGHT_IFRAME_CSS;
+                (doc.head || doc.documentElement).appendChild(style);
+            } catch(_) {}
+        });
+    } catch(_) {}
+}
+
+/* Watch for new iframes being added to the DOM and inject light theme */
+(function _watchForNewIframes() {
+    const obs = new MutationObserver(muts => {
+        if (!document.body.classList.contains('te-theme-light')) return;
+        for (const m of muts) {
+            for (const n of m.addedNodes) {
+                if (n.tagName === 'IFRAME') {
+                    n.addEventListener('load', () => _injectLightThemeIntoIframes_once());
+                } else if (n.querySelectorAll) {
+                    n.querySelectorAll('iframe').forEach(f => {
+                        f.addEventListener('load', () => _injectLightThemeIntoIframes_once());
+                    });
+                }
+            }
+        }
+    });
+    obs.observe(document.body, { childList: true, subtree: true });
+})();
+
+function _removeLightThemeFromIframes() {
+    clearTimeout(window._lightIframeTimer);
+    try {
+        document.querySelectorAll('iframe').forEach(frame => {
+            try {
+                const doc = frame.contentDocument || frame.contentWindow?.document;
+                if (!doc) return;
+                const el = doc.getElementById('thomas-light-theme-inject');
+                if (el) el.remove();
+            } catch(_) {}
+        });
+    } catch(_) {}
+}
+
+function applyFontSize(px) {
+    document.documentElement.style.setProperty('--user-font-size', px + 'px');
+    document.body.style.fontSize = px + 'px';
+}
+
 function initModelSetup() {
     const closeModelSetupModal = () => {
         closeSetupProviderMenu();
@@ -379,6 +617,21 @@ async function persistMemorySetting(isEnabled) {
     }
 }
 
+function applyWorkspaceVisibility(ws) {
+    const map = {
+        mission: 'navMissionBtn',
+        app_builder: 'navUiEditorBtn',
+        my_stuff: 'navMyStuffBtn',
+        channels: 'navChannelsBtn',
+        token_economy: 'navTokenEconomyBtn',
+        marketplace: 'navMarketplaceBtn',
+    };
+    Object.entries(map).forEach(([key, btnId]) => {
+        const btn = document.getElementById(btnId);
+        if (btn) btn.style.display = (ws && ws[key] === false) ? 'none' : '';
+    });
+}
+
 function openSettingsModal() {
     if (!settingsModal) return;
     setDebugDockOpen(false, { recordEvent: false });
@@ -603,6 +856,8 @@ async function refreshIdentityState() {
         if (prefsRes.ok) {
             currentPreferences = await prefsRes.json();
             if (!currentPreferences || typeof currentPreferences !== 'object') currentPreferences = {};
+        applyTheme(safeString(currentPreferences?.appearance?.theme) || 'auto');
+        applyFontSize(toInt(currentPreferences?.appearance?.font_size, 16, 12, 28));
         const prefAutonomyRaw = safeString(currentPreferences?.autonomy?.default_level).replace(/^l/i, '');
         const prefAutonomy = Number.parseInt(prefAutonomyRaw, 10);
         if (Number.isFinite(prefAutonomy)) {
@@ -686,6 +941,8 @@ async function loadSettings() {
 
         currentPreferences = prefsRes.data || {};
         currentCodexStatus = codexRes.ok ? (codexRes.data || null) : null;
+        applyTheme(safeString(currentPreferences?.appearance?.theme) || 'auto');
+        applyFontSize(toInt(currentPreferences?.appearance?.font_size, 16, 12, 28));
         applyInterfaceMotionPreference();
 
         const appearance = currentPreferences.appearance || {};
@@ -716,6 +973,7 @@ async function loadSettings() {
         updateSettingsSectionNavVisibility();
 
         if (settingTheme) settingTheme.value = safeString(appearance.theme) || 'auto';
+        applyTheme(safeString(appearance.theme) || 'auto');
         const autonomyDefaultLevel = safeString(autonomy.default_level) || 'L1';
         if (settingAutonomy) settingAutonomy.value = autonomyDefaultLevel;
         const autonomyNumeric = Number.parseInt(autonomyDefaultLevel.replace(/^l/i, ''), 10);
@@ -728,6 +986,7 @@ async function loadSettings() {
             const fontSize = toInt(appearance.font_size, 16, 12, 28);
             settingFontSize.value = String(fontSize);
             if (settingFontSizeValue) settingFontSizeValue.textContent = `${fontSize}px`;
+            applyFontSize(fontSize);
         }
 
         if (settingBubbleStyle) settingBubbleStyle.value = safeString(appearance.bubble_style) || 'rounded';
@@ -866,6 +1125,50 @@ async function loadSettings() {
         if (settingAdvLabsFlags) settingAdvLabsFlags.value = safeString(advInterface.labs_flags);
         syncAdvancedChatPhysicsSettingUi();
 
+        // ── New Settings: Workspaces ──
+        const workspaces = currentPreferences.workspaces || {};
+        if (settingWsMission) settingWsMission.checked = workspaces.mission !== false;
+        if (settingWsAppBuilder) settingWsAppBuilder.checked = workspaces.app_builder !== false;
+        if (settingWsMyStuff) settingWsMyStuff.checked = workspaces.my_stuff !== false;
+        if (settingWsChannels) settingWsChannels.checked = workspaces.channels !== false;
+        if (settingWsTokenEconomy) settingWsTokenEconomy.checked = workspaces.token_economy !== false;
+        if (settingWsMarketplace) settingWsMarketplace.checked = workspaces.marketplace !== false;
+        if (settingWsOffice) settingWsOffice.checked = Boolean(workspaces.office);
+
+        // ── New Settings: Token Economy ──
+        const teSettings = currentPreferences.token_economy || {};
+        if (settingTeMonthlyBudget) settingTeMonthlyBudget.value = String(toInt(teSettings.monthly_budget, 5000000, 0, 100000000));
+        if (settingTeBudgetAlertPct) settingTeBudgetAlertPct.value = safeString(teSettings.budget_alert_pct) || '75';
+        if (settingTeShowSidebarSpend) settingTeShowSidebarSpend.checked = teSettings.show_sidebar_spend !== false;
+        if (settingTeAutoSummarize) settingTeAutoSummarize.checked = Boolean(teSettings.auto_summarize);
+
+        // ── New Settings: Channels ──
+        const chSettings = currentPreferences.channels || {};
+        if (settingChDefaultChannel) settingChDefaultChannel.value = safeString(chSettings.default_channel) || 'none';
+        if (settingChMaxMessageLength) settingChMaxMessageLength.value = String(toInt(chSettings.max_message_length, 4000, 100, 10000));
+        if (settingChAutoRoute) settingChAutoRoute.checked = chSettings.auto_route !== false;
+        if (settingChNotifications) settingChNotifications.checked = chSettings.notifications !== false;
+        if (settingChAllowUploads) settingChAllowUploads.checked = chSettings.allow_uploads !== false;
+
+        // ── New Settings: Marketplace & Plugins ──
+        const mpSettings = currentPreferences.marketplace || {};
+        if (settingMpAutoUpdate) settingMpAutoUpdate.checked = mpSettings.auto_update !== false;
+        if (settingMpShowDomainModules) settingMpShowDomainModules.checked = Boolean(mpSettings.show_domain_modules);
+        if (settingMpPluginNetworkAccess) settingMpPluginNetworkAccess.checked = mpSettings.plugin_network_access !== false;
+
+        // ── New Settings: Data & Storage ──
+        const dataSettings = currentPreferences.data || {};
+        if (settingDataPersistHistory) settingDataPersistHistory.checked = dataSettings.persist_history !== false;
+        if (settingDataAutoArchive) settingDataAutoArchive.checked = Boolean(dataSettings.auto_archive);
+
+        // Populate About section
+        const aboutVersion = document.getElementById('settingAboutVersion');
+        const aboutRuntime = document.getElementById('settingAboutRuntime');
+        const aboutModel = document.getElementById('settingAboutModel');
+        if (aboutVersion) aboutVersion.textContent = safeString(currentPreferences._version) || 'dev';
+        if (aboutRuntime) aboutRuntime.textContent = safeString(currentPreferences._runtime) || 'aiohttp';
+        if (aboutModel) aboutModel.textContent = safeString(currentPreferences._active_model) || '—';
+
         applyApiKeyPlaceholders(currentPreferences.api_keys || {});
 
         const displayName = resolveAgentName(currentPreferences);
@@ -894,6 +1197,8 @@ async function loadSettings() {
                 settingThomadsConfig.value = '{}';
             }
         }
+        // Apply workspace visibility based on loaded settings
+        applyWorkspaceVisibility(currentPreferences.workspaces);
     } catch (e) {
         console.error("Failed to load settings", e);
         notifyUser('Could not load settings right now. Check backend and retry.', {
@@ -1134,6 +1439,42 @@ async function saveSettings() {
             patch.thomads = thomadsPatch;
         }
 
+        // ── New Settings patches ──
+        patch.workspaces = {
+            mission: Boolean(settingWsMission?.checked),
+            app_builder: Boolean(settingWsAppBuilder?.checked),
+            my_stuff: Boolean(settingWsMyStuff?.checked),
+            channels: Boolean(settingWsChannels?.checked),
+            token_economy: Boolean(settingWsTokenEconomy?.checked),
+            marketplace: Boolean(settingWsMarketplace?.checked),
+            office: Boolean(settingWsOffice?.checked),
+        };
+        patch.token_economy = {
+            monthly_budget: toInt(settingTeMonthlyBudget?.value, 5000000, 0, 100000000),
+            budget_alert_pct: safeString(settingTeBudgetAlertPct?.value) || '75',
+            show_sidebar_spend: Boolean(settingTeShowSidebarSpend?.checked),
+            auto_summarize: Boolean(settingTeAutoSummarize?.checked),
+        };
+        patch.channels = {
+            default_channel: safeString(settingChDefaultChannel?.value) || 'none',
+            max_message_length: toInt(settingChMaxMessageLength?.value, 4000, 100, 10000),
+            auto_route: Boolean(settingChAutoRoute?.checked),
+            notifications: Boolean(settingChNotifications?.checked),
+            allow_uploads: Boolean(settingChAllowUploads?.checked),
+        };
+        patch.marketplace = {
+            auto_update: Boolean(settingMpAutoUpdate?.checked),
+            show_domain_modules: Boolean(settingMpShowDomainModules?.checked),
+            plugin_network_access: Boolean(settingMpPluginNetworkAccess?.checked),
+        };
+        patch.data = {
+            persist_history: Boolean(settingDataPersistHistory?.checked),
+            auto_archive: Boolean(settingDataAutoArchive?.checked),
+        };
+
+        // Apply workspace visibility immediately
+        applyWorkspaceVisibility(patch.workspaces);
+
         const res = await fetch('/api/preferences', {
             method: 'PATCH',
             headers: { 'Content-Type': 'application/json' },
@@ -1145,13 +1486,17 @@ async function saveSettings() {
         }
 
         currentPreferences = await res.json();
+        applyTheme(safeString(currentPreferences?.appearance?.theme) || 'auto');
+        applyFontSize(toInt(currentPreferences?.appearance?.font_size, 16, 12, 28));
         applyInterfaceMotionPreference();
         updateSidebarIdentity();
         applyApiKeyPlaceholders(currentPreferences.api_keys || {});
         if (setupMemoryToggle) {
             setupMemoryToggle.checked = Boolean(currentPreferences?.memory?.enabled_global);
         }
-        setDebugDockOpen(Boolean(currentPreferences?.advanced?.interface?.debug_panel_enabled), { recordEvent: false });
+        /* Preserve current debug-dock open/closed state on save —
+           don't force-open it just because the pref is enabled.
+           Only sync the toggle if it was *just* enabled or disabled. */
         updateDebugDockSnapshot();
 
         saveSettingsBtn.textContent = 'Saved!';
@@ -1163,7 +1508,6 @@ async function saveSettings() {
         });
         setTimeout(() => {
             saveSettingsBtn.textContent = 'Save Settings';
-            closeSettingsModal();
         }, 1000);
     } catch (e) {
         console.error("Failed to save settings", e);

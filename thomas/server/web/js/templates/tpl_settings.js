@@ -19,7 +19,7 @@
 </div>
 <div class="settings-suite-actions">
 <div class="advanced-toggle-wrap">
-<span>Advanced</span>
+<span>Show More</span>
 <label class="toggle-switch">
 <input type="checkbox" id="settingsAdvancedToggle">
 <span class="slider round">
@@ -68,14 +68,6 @@
 </div>
 <div class="settings-grid two-col">
 <div class="form-group">
-<label for="settingTheme">Theme</label>
-<select id="settingTheme" class="setup-fluid-select">
-<option value="auto">Nebula Core (Standard)</option>
-<option value="light">Light</option>
-<option value="dark">Dark</option>
-</select>
-</div>
-<div class="form-group">
 <label for="settingAutonomy">Default Autonomy Level</label>
 <select id="settingAutonomy" class="setup-fluid-select">
 <option value="L1">L1 - Chat</option>
@@ -83,11 +75,6 @@
 <option value="L3">L3 - Auto</option>
 <option value="L4">L4 - Agent</option>
 </select>
-</div>
-<div class="form-group">
-<label for="settingFontSize">Font Size <span id="settingFontSizeValue">16px</span>
-</label>
-<input id="settingFontSize" class="settings-range" type="range" min="12" max="28" step="1" value="16">
 </div>
 </div>
 <div class="switch-row">
@@ -115,12 +102,320 @@
 </section>
 <section class="settings-section">
 <div class="settings-section-head">
+<h3>Graphics</h3>
+<p>Appearance, theme, and visual settings for Thomas.</p>
+</div>
+<div class="settings-grid two-col">
+<div class="form-group">
+<label for="settingTheme">Theme</label>
+<select id="settingTheme" class="setup-fluid-select">
+<option value="auto">Nebula Core (Standard)</option>
+<option value="light">Light</option>
+<option value="dark">Dark</option>
+</select>
+</div>
+<div class="form-group">
+<label for="settingFontSize">Font Size <span id="settingFontSizeValue">16px</span>
+</label>
+<input id="settingFontSize" class="settings-range" type="range" min="12" max="28" step="1" value="16">
+</div>
+</div>
+<div class="switch-row">
+<div>
+<strong>Space Theme Background</strong>
+<p>Show the animated nebula background on the chat page.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingSpaceTheme" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Thomas Mascot</strong>
+<p>Show the idle Thomas robot on the chat page.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingShowMascot" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Robot Notifications</strong>
+<p>Animate the fly-in robot for chat notifications.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingRobotNotifications" checked>
+<span class="slider round"></span>
+</label>
+</div>
+</section>
+<section class="settings-section">
+<div class="settings-section-head">
 <h3>Onboarding</h3>
 <p>Re-run Easy Setup any time to reconnect providers or retune defaults.</p>
 </div>
 <div class="settings-inline-actions">
 <button type="button" class="settings-mini-btn" id="rerunEasySetupBtn">Run Easy Setup</button>
 <span class="settings-inline-note">Tip: type <code>/onboarding</code> in chat to launch this wizard.</span>
+</div>
+</section>
+<section class="settings-section">
+<div class="settings-section-head">
+<h3>Workspaces</h3>
+<p>Choose which workspace tabs are visible in the sidebar.</p>
+</div>
+<div class="switch-row">
+<div>
+<strong>Mission Control</strong>
+<p>Task board, goals, and operational overview.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingWsMission" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>UI Editor</strong>
+<p>Visual app builder for custom interfaces.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingWsAppBuilder" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>My Stuff</strong>
+<p>Personal vault, saved items, and bookmarks.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingWsMyStuff" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Channels</strong>
+<p>Messaging channels — Telegram, Discord, Slack, webhooks.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingWsChannels" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Token Economy</strong>
+<p>Spending dashboard, budget tracking, and cost analytics.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingWsTokenEconomy" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Marketplace</strong>
+<p>Browse and install domain modules, plugins, and integrations.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingWsMarketplace" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Virtual Office</strong>
+<p>2D workspace with autonomous agents and live presence.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingWsOffice">
+<span class="slider round"></span>
+</label>
+</div>
+</section>
+<section class="settings-section">
+<div class="settings-section-head">
+<h3>Token Economy</h3>
+<p>Control spending, budgets, and economy behavior.</p>
+</div>
+<div class="settings-grid two-col">
+<div class="form-group">
+<label for="settingTeMonthlyBudget">Monthly Budget (tokens)</label>
+<input id="settingTeMonthlyBudget" class="form-control" type="number" min="0" max="100000000" value="5000000" placeholder="0 = unlimited">
+</div>
+<div class="form-group">
+<label for="settingTeBudgetAlertPct">Budget Alert Threshold</label>
+<select id="settingTeBudgetAlertPct" class="setup-fluid-select">
+<option value="50">50%</option>
+<option value="75" selected>75%</option>
+<option value="90">90%</option>
+<option value="100">100% (hard cap)</option>
+</select>
+</div>
+</div>
+<div class="switch-row">
+<div>
+<strong>Show Spend in Sidebar</strong>
+<p>Display running token count below the Token Economy nav button.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingTeShowSidebarSpend" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Auto-Summarize Spend</strong>
+<p>Generate a daily summary of token usage and costs.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingTeAutoSummarize">
+<span class="slider round"></span>
+</label>
+</div>
+</section>
+<section class="settings-section">
+<div class="settings-section-head">
+<h3>Channels</h3>
+<p>Configure messaging integrations and channel defaults.</p>
+</div>
+<div class="settings-grid two-col">
+<div class="form-group">
+<label for="settingChDefaultChannel">Default Channel</label>
+<select id="settingChDefaultChannel" class="setup-fluid-select">
+<option value="none">None</option>
+<option value="telegram">Telegram</option>
+<option value="discord">Discord</option>
+<option value="slack">Slack</option>
+<option value="webhook">Webhook</option>
+</select>
+</div>
+<div class="form-group">
+<label for="settingChMaxMessageLength">Max Message Length</label>
+<input id="settingChMaxMessageLength" class="form-control" type="number" min="100" max="10000" value="4000">
+</div>
+</div>
+<div class="switch-row">
+<div>
+<strong>Auto-Route Replies</strong>
+<p>Send agent replies back to the originating channel automatically.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingChAutoRoute" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Channel Notifications</strong>
+<p>Receive in-app notifications for incoming channel messages.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingChNotifications" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Allow Channel File Uploads</strong>
+<p>Let channels send images and documents into Thomas.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingChAllowUploads" checked>
+<span class="slider round"></span>
+</label>
+</div>
+</section>
+<section class="settings-section">
+<div class="settings-section-head">
+<h3>Marketplace &amp; Plugins</h3>
+<p>Manage installed modules and plugin behavior.</p>
+</div>
+<div class="switch-row">
+<div>
+<strong>Auto-Update Plugins</strong>
+<p>Keep marketplace plugins up to date automatically.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingMpAutoUpdate" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Show Domain Modules in Sidebar</strong>
+<p>Add installed domain modules (Agriculture, Blockchain, etc.) to the sidebar nav.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingMpShowDomainModules">
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Allow Plugin Network Access</strong>
+<p>Permit marketplace plugins to make outbound network requests.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingMpPluginNetworkAccess" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="form-group settings-top-gap">
+<label for="settingMpInstalledPlugins">Installed Plugins</label>
+<div id="settingMpInstalledPluginsList" class="settings-inline-note">No plugins installed. Visit the Marketplace to browse.</div>
+</div>
+</section>
+<section class="settings-section">
+<div class="settings-section-head">
+<h3>Data &amp; Storage</h3>
+<p>Chat history, exports, and local data management.</p>
+</div>
+<div class="switch-row">
+<div>
+<strong>Persist Chat History</strong>
+<p>Keep chat sessions between app restarts.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingDataPersistHistory" checked>
+<span class="slider round"></span>
+</label>
+</div>
+<div class="switch-row">
+<div>
+<strong>Auto-Archive Old Chats</strong>
+<p>Move chats older than 30 days to archive automatically.</p>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="settingDataAutoArchive">
+<span class="slider round"></span>
+</label>
+</div>
+<div class="settings-inline-actions">
+<button type="button" class="settings-mini-btn" id="exportAllSettingsBtn">Export All Settings</button>
+<button type="button" class="settings-mini-btn" id="importSettingsBtn">Import Settings</button>
+<button type="button" class="settings-mini-btn danger" id="clearAllDataBtn">Clear All Data</button>
+</div>
+<div id="settingDataStorageUsage" class="settings-inline-note">Calculating storage usage...</div>
+</section>
+<section class="settings-section">
+<div class="settings-section-head">
+<h3>About Thomas</h3>
+<p>Platform information and links.</p>
+</div>
+<div class="settings-about-grid">
+<div class="settings-inline-note"><strong>Version:</strong> <span id="settingAboutVersion">—</span></div>
+<div class="settings-inline-note"><strong>Runtime:</strong> <span id="settingAboutRuntime">—</span></div>
+<div class="settings-inline-note"><strong>Active Model:</strong> <span id="settingAboutModel">—</span></div>
+<div class="settings-inline-note"><strong>Memory Entries:</strong> <span id="settingAboutMemoryCount">—</span></div>
+</div>
+<div class="settings-inline-actions" style="margin-top:12px">
+<button type="button" class="settings-mini-btn" id="aboutCheckUpdatesBtn">Check for Updates</button>
+<button type="button" class="settings-mini-btn" id="aboutViewLogsBtn">View Logs</button>
 </div>
 </section>
 <section class="settings-section settings-advanced-only">
@@ -880,7 +1175,7 @@
 </section>
 <section class="settings-section">
 <div class="settings-section-head">
-<h3>Thomads</h3>
+<h3>Thomas Overrides</h3>
 <p>Advanced Thomas metadata and runtime overrides used by backend preferences.</p>
 </div>
 <div class="form-group">

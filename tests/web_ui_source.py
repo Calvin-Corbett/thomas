@@ -6,7 +6,7 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 APP_JS_PATH = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app.js"
-APP_RUNTIME_PATH = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 APP_PARTS_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_parts"
 LAYOUT_CSS_PATH = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout.css"
 LAYOUT_PARTS_DIR = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts"
@@ -17,6 +17,14 @@ def _extract_part_names(loader_source: str) -> list[str]:
     if not block_match:
         return []
     return re.findall(r'"([^"]+\.js)"', block_match.group(1))
+
+
+def _read_all_runtime_js() -> str:
+    """Read and concatenate all split runtime JS files in order."""
+    if not RUNTIME_DIR.exists():
+        return ""
+    parts = sorted(RUNTIME_DIR.glob("*.js"))
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
 
 
 def _decode_part_source(part_source: str) -> str:
@@ -42,9 +50,14 @@ def _decode_part_source(part_source: str) -> str:
 
 
 def read_app_js_source() -> str:
+    """Read the application JavaScript source, resolving split runtime files if present."""
     source = APP_JS_PATH.read_text(encoding="utf-8")
-    if "app_runtime_primary.mjs" in source and APP_RUNTIME_PATH.exists():
-        return APP_RUNTIME_PATH.read_text(encoding="utf-8")
+
+    # If the runtime directory exists, concatenate all split runtime files
+    if RUNTIME_DIR.exists():
+        return _read_all_runtime_js()
+
+    # Fall back to app_parts-based loading if split runtime doesn't exist
     if "APP_PART_FILES" not in source or not APP_PARTS_DIR.exists():
         return source
 

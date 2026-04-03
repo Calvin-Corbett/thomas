@@ -1,7 +1,7 @@
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-RUNTIME_JS = REPO_ROOT / "thomas" / "server" / "web" / "js" / "app_runtime_primary.mjs"
+RUNTIME_DIR = REPO_ROOT / "thomas" / "server" / "web" / "js" / "runtime"
 CHAT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-001b.css"
 SUGGESTION_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "components_parts" / "part-002b.css"
 LAYOUT_CSS = REPO_ROOT / "thomas" / "server" / "web" / "css" / "layout_parts" / "part-001a.css"
@@ -21,8 +21,16 @@ def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _read_all_runtime_js() -> str:
+    """Read and concatenate all split runtime JS files in order."""
+    if not RUNTIME_DIR.exists():
+        return ""
+    parts = sorted(RUNTIME_DIR.glob("*.js"))
+    return "\n".join(p.read_text(encoding="utf-8", errors="replace") for p in parts)
+
+
 def test_provider_identity_uses_icons_and_model_inference() -> None:
-    js = _read(RUNTIME_JS)
+    js = _read_all_runtime_js()
     css = _read(CHAT_CSS)
     brain = _read(BRAIN_PY)
 
@@ -79,7 +87,7 @@ def test_provider_identity_uses_icons_and_model_inference() -> None:
 
 
 def test_suggestion_rail_contract_uses_looping_marquee() -> None:
-    js = _read(RUNTIME_JS)
+    js = _read_all_runtime_js()
     css = _read(SUGGESTION_CSS)
 
     assert "assistantSuggestionBubbles.dataset.mode = 'marquee';" in js
@@ -108,7 +116,7 @@ def test_chat_feed_layout_stays_bottom_anchored() -> None:
 
 
 def test_robot_surface_uses_shared_frame_and_teleport_contract() -> None:
-    js = _read(RUNTIME_JS)
+    js = _read_all_runtime_js()
     status_css = _read(ROBOT_STATUS_CSS)
     dock_css = _read(ROBOT_DOCK_CSS)
 
@@ -132,7 +140,7 @@ def test_sidebar_chat_label_and_search_shell_contract() -> None:
     layout_css = _read(LAYOUT_CSS)
     components_css = _read(COMPONENT_ICON_CSS)
     index_html = _read(INDEX_HTML)
-    js = _read(RUNTIME_JS)
+    js = _read_all_runtime_js()
     modules = [_read(TOGGLE_SIDEBAR_MODULE), _read(TOGGLE_SIDEBAR_RUNTIME_MODULE), _read(TOGGLE_SIDEBAR_PART)]
 
     assert '<span class="nav-chat-robot-wrap"' not in index_html
@@ -157,7 +165,7 @@ def test_sidebar_chat_label_and_search_shell_contract() -> None:
 
 
 def test_chat_robot_uses_shared_pixel_agent_markup() -> None:
-    js = _read(RUNTIME_JS)
+    js = _read_all_runtime_js()
     status_css = _read(ROBOT_STATUS_CSS)
     dock_css = _read(ROBOT_DOCK_CSS)
 

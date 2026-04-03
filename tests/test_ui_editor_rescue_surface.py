@@ -48,7 +48,7 @@ def test_ui_editor_now_has_inspector_and_stable_targets() -> None:
 def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
     app_loader = _read_text("thomas/server/web/js/app.js")
     rescue_loader = _read_text("thomas/server/web/js/ui_editor_rescue.js")
-    primary_runtime = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+    runtime_loader = _read_text("thomas/server/web/js/app_runtime_loader.js")
     runtime_module_core = _read_text(
         "thomas/server/web/js/src/runtime_modules/063_module_studio_comfy_style_id_part02.js"
     )
@@ -57,26 +57,28 @@ def test_ui_editor_rescue_loader_is_wired_into_app_boot() -> None:
     )
     marketplace_html = _read_text("thomas/server/web/static/plugin_marketplace.html")
     marketplace_script = _read_text("thomas/server/web/static/plugin_marketplace.script01.js")
-    assert "Loading primary app runtime" in app_loader
-    assert "./app_runtime_primary.mjs" in app_loader
+    assert "window.__thomasRuntimeReady" in app_loader
+    assert "await window.__thomasRuntimeReady" in app_loader
+    assert "startUiEditorRescueMode" in app_loader
+    assert "ui_editor_rescue.js" in app_loader
     assert "generated/app_runtime_joined.mjs" not in app_loader
     assert "app_parts/" not in app_loader
     assert "Loading UI editor rescue mode" in app_loader
-    assert "function moduleRenderWorkbenchAppBuilder" in primary_runtime
-    assert "Live Thomas UI" in primary_runtime
-    assert "Visible Layers" in primary_runtime
-    assert "Export Snapshot" in primary_runtime
-    assert '[data-ui-editor-target-key="' in primary_runtime
-    assert "allow-scripts allow-forms allow-popups allow-modals" in primary_runtime
-    assert "/static/static/plugin_marketplace.html" not in primary_runtime
-    assert "DEFAULT_MARKETPLACE_STORE_URL" in primary_runtime
-    assert "/api/marketplace/sync?limit=600" in primary_runtime
-    assert "Store Health" not in primary_runtime
-    assert "Store Activity" not in primary_runtime
-    assert "Feature Inventory" not in primary_runtime
-    assert "Recent Store Activity" not in primary_runtime
-    assert "thomas_shell" not in primary_runtime
-    assert "moduleUiEditorBuildThomasShellDocument" not in primary_runtime
+    assert "function moduleRenderWorkbenchAppBuilder" in runtime_loader
+    assert "Live Thomas UI" in runtime_loader
+    assert "Visible Layers" in runtime_loader
+    assert "Export Snapshot" in runtime_loader
+    assert '[data-ui-editor-target-key="' in runtime_loader
+    assert "allow-scripts allow-forms allow-popups allow-modals" in runtime_loader
+    assert "/static/static/plugin_marketplace.html" not in runtime_loader
+    assert "DEFAULT_MARKETPLACE_STORE_URL" in runtime_loader
+    assert "/api/marketplace/sync?limit=600" in runtime_loader
+    assert "Store Health" not in runtime_loader
+    assert "Store Activity" not in runtime_loader
+    assert "Feature Inventory" not in runtime_loader
+    assert "Recent Store Activity" not in runtime_loader
+    assert "thomas_shell" not in runtime_loader
+    assert "moduleUiEditorBuildThomasShellDocument" not in runtime_loader
     assert "moduleUiEditorBuildThomasShellDocument" not in runtime_module_core
     assert "allow-scripts allow-same-origin allow-forms allow-popups allow-modals" not in runtime_module_core
     assert "thomas_shell" not in runtime_module_core
@@ -98,16 +100,16 @@ def test_legacy_joined_runtime_files_are_removed() -> None:
 
 
 def test_shell_layout_guards_prevent_duplicate_suggestions_and_forced_chat_settings() -> None:
-    primary_runtime = _read_text("thomas/server/web/js/app_runtime_primary.mjs")
+    runtime_loader = _read_text("thomas/server/web/js/app_runtime_loader.js")
     layout_css = _read_text("thomas/server/web/css/layout_parts/part-001a.css")
     suggestion_css = _read_text("thomas/server/web/css/components_parts/part-002b.css")
     marketplace_css = _read_text("thomas/server/web/static/plugin_marketplace.style01_part01.css")
 
-    open_settings_block = primary_runtime.split("function openSettingsModal()", 1)[1].split(
+    open_settings_block = runtime_loader.split("function openSettingsModal()", 1)[1].split(
         "function isSettingsScreenOpen()", 1
     )[0]
 
-    assert "frame.style.height = '980px';" not in primary_runtime
+    assert "frame.style.height = '980px';" not in runtime_loader
     assert "setSidebarNavMode('chat', { persist: false });" not in open_settings_block
     assert (
         "padding-bottom: calc(max(176px, var(--composer-offset, 176px)) + env(safe-area-inset-bottom) + 10px);"

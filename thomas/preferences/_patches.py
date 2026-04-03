@@ -441,6 +441,42 @@ class AdvancedPatch(BaseModel):
     interface: AdvancedInterfacePatch | None = None
 
 
+class WorkspacesPatch(BaseModel):
+    mission: bool | None = None
+    app_builder: bool | None = None
+    my_stuff: bool | None = None
+    channels: bool | None = None
+    token_economy: bool | None = None
+    marketplace: bool | None = None
+    office: bool | None = None
+
+
+class TokenEconomySettingsPatch(BaseModel):
+    monthly_budget: int | None = Field(default=None, ge=0, le=100_000_000)
+    budget_alert_pct: str | None = None
+    show_sidebar_spend: bool | None = None
+    auto_summarize: bool | None = None
+
+
+class ChannelsPatch(BaseModel):
+    default_channel: str | None = None
+    max_message_length: int | None = Field(default=None, ge=100, le=10_000)
+    auto_route: bool | None = None
+    notifications: bool | None = None
+    allow_uploads: bool | None = None
+
+
+class MarketplacePatch(BaseModel):
+    auto_update: bool | None = None
+    show_domain_modules: bool | None = None
+    plugin_network_access: bool | None = None
+
+
+class DataPatch(BaseModel):
+    persist_history: bool | None = None
+    auto_archive: bool | None = None
+
+
 class PreferencesPatch(BaseModel):
     appearance: AppearancePatch | None = None
     voice: VoicePatch | None = None
@@ -452,3 +488,8 @@ class PreferencesPatch(BaseModel):
     api_keys: APIKeysPatch | None = None
     profile: ProfilePatch | None = None
     thomads: dict[str, Any] | None = None
+    workspaces: WorkspacesPatch | None = None
+    token_economy: TokenEconomySettingsPatch | None = None
+    channels: ChannelsPatch | None = None
+    marketplace: MarketplacePatch | None = None
+    data: DataPatch | None = None

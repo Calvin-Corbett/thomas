@@ -257,7 +257,7 @@ enabled_files = [
 directories = [
     "thomas/server/web/js/app_parts/",
 ]
-redirect_to = "thomas/server/web/js/app_runtime_primary.mjs"
+redirect_to = "thomas/server/web/js/runtime/"
 
 # ── Runtime Protection ─────────────────────────────────────────────────────
 # Directories and files that agent-spawned tools (fs.write_file, diff.create,

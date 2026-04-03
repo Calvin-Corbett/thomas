@@ -31,6 +31,43 @@ else:
                 """Bare-minimum TOML parser for thomas.toml configs."""
 
                 @staticmethod
+                def _strip_inline_comment(val: str) -> str:
+                    """Strip inline TOML comments from a value string.
+
+                    Handles: bare values, quoted strings, and arrays.
+                    Examples:
+                        'true  # comment'        -> 'true'
+                        '"auto"  # comment'      -> '"auto"'
+                        '[]  # comment'          -> '[]'
+                        '["a","b"]  # comment'   -> '["a","b"]'
+                    """
+                    if not val or "#" not in val:
+                        return val
+                    # Quoted string: find closing quote, strip comment after it
+                    if val.startswith('"') or val.startswith("'"):
+                        quote = val[0]
+                        end = val.find(quote, 1)
+                        if end >= 0:
+                            return val[: end + 1]
+                        return val
+                    # Array: find closing bracket, strip comment after it
+                    if val.startswith("["):
+                        depth = 0
+                        for i, ch in enumerate(val):
+                            if ch == "[":
+                                depth += 1
+                            elif ch == "]":
+                                depth -= 1
+                                if depth == 0:
+                                    return val[: i + 1]
+                        return val
+                    # Bare value: strip at first #
+                    idx = val.find("#")
+                    if idx >= 0:
+                        return val[:idx].strip()
+                    return val
+
+                @staticmethod
                 def loads(s: str) -> dict:
                     result: dict = {}
                     current: dict = result
@@ -52,10 +89,7 @@ else:
                             key = key.strip()
                             val = val.strip()
                             # Strip inline comments (# ...) outside quotes
-                            if not val.startswith('"') and not val.startswith("'") and not val.startswith("["):
-                                comment_idx = val.find("#")
-                                if comment_idx >= 0:
-                                    val = val[:comment_idx].strip()
+                            val = _MinimalTOML._strip_inline_comment(val)
                             # Booleans
                             if val == "true":
                                 current[key] = True

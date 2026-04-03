@@ -111,7 +111,6 @@
         });
         setTimeout(() => {
             saveSettingsBtn.textContent = 'Save Settings';
-            closeSettingsModal();
         }, 1000);
     } catch (e) {
         console.error("Failed to save settings", e);

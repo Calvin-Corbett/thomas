@@ -10,10 +10,11 @@ The web frontend is the **user-facing interface** to Thomas. When a user opens T
 
 | Item | Status | Size | Purpose |
 |---|---|---|---|
-| `js/app_runtime_primary.mjs` | **ACTIVE** | 41,470 lines | **THE ONLY ACTIVE RUNTIME**—entire app logic |
-| `js/app.js` | ACTIVE | ~100 lines | Entrypoint—loads app_runtime_primary.mjs |
-| `js/app_modules.js` | ACTIVE | Module system | Helper for module loading |
+| `js/runtime/*.js` (001–045) | **ACTIVE** | 41,470 lines combined | **THE ONLY ACTIVE RUNTIME**—45 numbered files loaded by app_runtime_loader.js |
+| `js/app_runtime_loader.js` | ACTIVE | ~200 lines | Loads runtime files 001–045 sequentially into global scope |
+| `js/app.js` | ACTIVE | ~100 lines | Entrypoint—loads app_runtime_loader.js |
 | `js/app_parts/` | **DEAD CODE** | Hundreds of files | **DO NOT EDIT**—never loaded at runtime |
+| `js/app_runtime_primary.mjs` | **DEAD CODE** (LEGACY) | 41,470 lines | Pre-split monolith—not loaded by index.html—replaced by js/runtime/ split |
 | `index.html` | ACTIVE | 78K | Main chat interface |
 | `settings.html` | ACTIVE | 45K | Settings UI |
 | `mission.html` | ACTIVE | 10K | Mission/task display |
@@ -22,30 +23,28 @@ The web frontend is the **user-facing interface** to Thomas. When a user opens T
 | `css/` | ACTIVE | Multiple files | Stylesheets |
 | `static/` | ACTIVE | Assets | Icons, images, etc. |
 
-## CRITICAL: The Monolith Runtime
+## CRITICAL: The Split Runtime Architecture
 
-**All JavaScript execution happens through ONE file:**
+**All JavaScript execution happens through 45 numbered files in `js/runtime/`:**
 
 ```
-app_runtime_primary.mjs
-├── DOM manipulation
-├── Event handling
-├── WebSocket/SSE listeners
-├── State management
-├── Chat UI rendering
-├── Settings management
-├── Mission control
-└── Every other feature
+app_runtime_loader.js (loads sequentially)
+├── runtime/001_preamble.js
+├── runtime/002_dom_setup.js
+├── runtime/003_event_handlers.js
+├── runtime/... (004–044)
+├── runtime/045_model_setup_settings_06.js
+└── All run in global scope (combined ~41K lines)
 ```
 
-**`js/app_parts/` directory:**
-- Contains dozens of `.js` files (part-001.js, part-002.js, etc.)
-- **These are NEVER LOADED**
-- They're dead code, probably from an older split architecture
+**`js/app_parts/` directory and `app_runtime_primary.mjs`:**
+- Legacy dead code from pre-split architecture
+- `app_parts/` contains dozens of unused files
+- `app_runtime_primary.mjs` is the old monolith—NOT LOADED
 - **DO NOT EDIT THEM**
 
 **When you edit the frontend:**
-1. Edit `js/app_runtime_primary.mjs` ONLY
+1. Edit the appropriate file in `js/runtime/` (or standalone scripts if needed: token_economy.js, theme_rules.js, templates/tpl_settings.js)
 2. Clear your browser cache (Ctrl+Shift+Delete)
 3. Hard-reload the page (Ctrl+Shift+R or Cmd+Shift+R)
 4. Check the browser console for errors
@@ -59,16 +58,18 @@ Serves index.html
         ↓
 Loads <script src="js/app.js"></script>
         ↓
-app.js imports app_runtime_primary.mjs
+app.js loads js/app_runtime_loader.js
         ↓
-app_runtime_primary.mjs initializes:
+app_runtime_loader.js sequentially loads runtime/001.js through runtime/045.js
+        ↓
+All runtime files initialize in global scope:
     ├── Event listeners
     ├── WebSocket connection
     ├── DOM elements
     ├── Chat interface
     └── Settings UI
         ↓
-User types message → app_runtime_primary.mjs handles it
+User types message → Runtime handlers process it
                   → Sends to /chat endpoint
                   → Receives response stream
                   → Updates DOM
@@ -86,26 +87,12 @@ User types message → app_runtime_primary.mjs handles it
 
 Each HTML file is a **shell**—it contains structure and styling, but all logic runs through `app_runtime_primary.mjs`.
 
-## Inside app_runtime_primary.mjs
+## Inside js/runtime/ (The Split Runtime)
 
-This monolithic file (41K lines) contains everything:
+The 45 numbered files collectively contain all frontend logic:
 
 ```javascript
-// Event listeners
-window.addEventListener('load', init)
-document.addEventListener('submit', handleChat)
-
-// WebSocket
-socket.addEventListener('message', handleMessage)
-
-// UI rendering
-function renderChatMessage(msg) { ... }
-function updateUI(state) { ... }
-
-// Settings
-function saveSetting(key, value) { ... }
-
-// State
+// runtime/001_preamble.js — Global state and utilities
 let globalState = {
     messages: [],
     user: null,
@@ -113,8 +100,22 @@ let globalState = {
     ...
 }
 
-// And 41,000 more lines...
+// runtime/002-010.js — Event listeners, DOM setup
+window.addEventListener('load', init)
+document.addEventListener('submit', handleChat)
+
+// runtime/011-020.js — WebSocket, messaging
+socket.addEventListener('message', handleMessage)
+
+// runtime/021-035.js — UI rendering, settings
+function renderChatMessage(msg) { ... }
+function updateUI(state) { ... }
+function saveSetting(key, value) { ... }
+
+// runtime/036-045.js — Initialization and final setup
 ```
+
+**Note:** `app_runtime_primary.mjs` is the legacy pre-split monolith and is NOT loaded.
 
 ## CSS Styling
 
@@ -143,19 +144,20 @@ Reference them in HTML as `static/image.png`.
 
 ### ✗ Don't do this:
 
-1. **Edit `app_parts/*.js`** — They don't run. Edit `app_runtime_primary.mjs`.
-2. **Forget to clear browser cache** — Old code stays cached.
-3. **Assume CSS loads from one file** — Multiple CSS files are imported.
-4. **Call LLM directly from frontend** — Always use `/chat` endpoint.
-5. **Expect `app_modules.js` to load files automatically** — Import or use fetch.
+1. **Edit `app_parts/*.js`** — They don't run. Edit the numbered files in `js/runtime/`.
+2. **Edit `app_runtime_primary.mjs`** — It's dead code. Use `js/runtime/` instead.
+3. **Forget to clear browser cache** — Old code stays cached.
+4. **Assume CSS loads from one file** — Multiple CSS files are imported.
+5. **Call LLM directly from frontend** — Always use `/chat` endpoint.
 
 ### ✓ Do this:
 
-1. Edit `js/app_runtime_primary.mjs` for logic changes
-2. Edit `css/*.css` for styling changes
-3. Add new assets to `static/`
-4. Hard-reload the browser after changes (Ctrl+Shift+R)
-5. Check browser console (F12) for errors
+1. Edit the appropriate file in `js/runtime/` for logic changes
+2. Edit standalone scripts if needed: `token_economy.js`, `theme_rules.js`, `templates/tpl_settings.js`
+3. Edit `css/*.css` for styling changes
+4. Add new assets to `static/`
+5. Hard-reload the browser after changes (Ctrl+Shift+R)
+6. Check browser console (F12) for errors
 
 ## Debugging the Frontend
 
@@ -176,17 +178,19 @@ Check for:
 **Issue:** Chat messages not appearing
 → Check browser console for JavaScript errors
 → Verify `/chat` endpoint is responding (Network tab)
-→ Check that `app_runtime_primary.mjs` has `renderChatMessage()` function
+→ Check that one of the `js/runtime/*.js` files has `renderChatMessage()` function
 
 **Issue:** UI looks broken after edit
 → Clear browser cache: Ctrl+Shift+Delete
 → Hard-reload: Ctrl+Shift+R
 → Check CSS file imports in HTML
+→ Verify that `app_runtime_loader.js` is loading all 45 runtime files
 
 **Issue:** WebSocket not connecting
 → Check browser console for connection errors
 → Verify server is running (curl localhost:8000/health)
 → Check firewall/CORS settings
+→ Ensure WebSocket handler is in the loaded runtime files
 
 ## Frontend Architecture Patterns
 
@@ -240,20 +244,20 @@ events.addEventListener('message', (e) => {
 4. Hard-reload browser to see changes
 
 ### To change chat rendering:
-1. Find `renderChatMessage()` in `app_runtime_primary.mjs`
+1. Find `renderChatMessage()` in the `js/runtime/` files (likely in a file numbered 020–035)
 2. Modify the DOM construction logic
 3. Hard-reload to test
 
 ### To add a new settings option:
 1. Add HTML input to `settings.html`
 2. Add CSS styling to `css/settings.css`
-3. Add JS handler in `app_runtime_primary.mjs` to save/load the setting
+3. Add JS handler in the appropriate `js/runtime/` file to save/load the setting
 4. Hard-reload to test
 
 ### To fix a broken feature:
 1. Open browser console (F12)
 2. Look for red error messages
-3. Trace the error to the function in `app_runtime_primary.mjs`
+3. Trace the error to the function in one of the `js/runtime/` files
 4. Fix and test
 
 ### To optimize performance:
