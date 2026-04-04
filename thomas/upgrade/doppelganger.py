@@ -37,6 +37,22 @@ _INCLUDE_FILES = (
     ".gitignore",
     "SOUL.md",
 )
+_GREEN_SUPPORT_DIRS = ("extensions",)
+_GREEN_SUPPORT_FILES = (
+    "AGENTS.md",
+    "GUARDRAILS.md",
+    "WORKTREE_RULES.md",
+    "agent_safety.toml",
+    "docs/AGENT_FILE_EDITING_RULES.md",
+    "docs/ai/AGENT_ROUTER.md",
+    "docs/ai/CHECKLISTS/agent-lane-chat.md",
+    "apps/site/src/lib/site-config.ts",
+    "apps/site/src/app/marketplace/page.tsx",
+    "apps/site/src/app/api/marketplace/catalog/route.ts",
+    "apps/site/src/app/api/v1/plugins/catalog/route.ts",
+    "apps/site/src/app/api/v1/plugins/download-token/route.ts",
+    "apps/site/src/app/api/v1/plugins/[pluginId]/route.ts",
+)
 
 _IGNORE_NAMES = {
     "__pycache__",
@@ -177,6 +193,15 @@ def sync_blue_to_green(paths: DoppelgangerPaths) -> None:
         if src.exists():
             (paths.green_root / f).parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(src, paths.green_root / f)
+    for d in _GREEN_SUPPORT_DIRS:
+        src = paths.blue_root / d
+        if src.exists():
+            _sync_tree(src, paths.green_root / d)
+    for f in _GREEN_SUPPORT_FILES:
+        src = paths.blue_root / f
+        if src.exists():
+            (paths.green_root / f).parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(src, paths.green_root / f)
 
 
 def sync_green_to_blue(paths: DoppelgangerPaths) -> None:
@@ -296,7 +321,7 @@ def _stop_thomas_on_port_windows(port: int) -> bool:
         "Bypass",
         "-Command",
         (
-            "$p=%d;"
+            f"$p={int(port)};"
             "$l=Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | Select-Object -First 1;"
             "if(-not $l){ exit 3 };"
             # Avoid PowerShell's built-in $PID (read-only) which is case-insensitive.
@@ -306,8 +331,7 @@ def _stop_thomas_on_port_windows(port: int) -> bool:
             "if($cmd -and ($cmd -match '(?i)(\\\\b-m\\\\s+thomas\\\\s+serve\\\\b|\\\\bthomas(\\\\.exe)?\\\\s+serve\\\\b)')){"
             "  Stop-Process -Id $procId -Force -ErrorAction SilentlyContinue; exit 0"
             "} else { exit 4 }"
-        )
-        % int(port),
+        ),
     ]
 
     r = subprocess.run(ps, capture_output=True, text=True)  # nosec

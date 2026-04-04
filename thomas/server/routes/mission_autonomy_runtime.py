@@ -46,11 +46,11 @@ def build_mission_autonomy_helpers(app: web.Application):
                 return False
 
             try:
-                from thomas.autonomy.adapters import ChatAdapter, ChatAdapterConfig
-                from thomas.autonomy.engine import AutonomyEngine
-                from thomas.autonomy.policy import AutonomyPolicy
-                from thomas.autonomy.scheduler import EngineTiming
-                from thomas.autonomy.store import AutonomyStore
+                from thomas.marketplace.autonomy.adapters import ChatAdapter, ChatAdapterConfig
+                from thomas.marketplace.autonomy.engine import AutonomyEngine
+                from thomas.marketplace.autonomy.policy import AutonomyPolicy
+                from thomas.marketplace.autonomy.scheduler import EngineTiming
+                from thomas.marketplace.autonomy.store import AutonomyStore
 
                 root = Path(getattr(getattr(cfg, "memory", None), "root_path", "") or Path("runtime") / ".thomas")
                 db_path = Path(os.environ.get("THOMAS_AUTONOMY_DB_PATH") or (root / "autonomy" / "autonomy.sqlite3"))
@@ -112,9 +112,7 @@ def build_mission_autonomy_helpers(app: web.Application):
 
                 return True
             except Exception:
-                if app.get("autonomy_store") is not None and app.get("autonomy_engine") is not None:
-                    return True
-                return False
+                return app.get("autonomy_store") is not None and app.get("autonomy_engine") is not None
 
     async def _mission_require_store(*, auto_enable: bool = False) -> Any:
         store = app.get("autonomy_store")

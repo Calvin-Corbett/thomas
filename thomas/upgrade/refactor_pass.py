@@ -1,4 +1,4 @@
-"""Refactor pass — mandatory first phase of every evolution session.
+"""Refactor pass -- mandatory first phase of every evolution session.
 
 This module runs before creative/feature evolve passes.  It:
 1. Runs the sweep scanner to detect oversized files and violations.
@@ -7,7 +7,7 @@ This module runs before creative/feature evolve passes.  It:
 4. Executes refactor agent passes in the green mirror.
 5. Updates the health ledger with results.
 
-The refactor pass is NOT optional — if violations exist, it runs first.
+The refactor pass is NOT optional -- if violations exist, it runs first.
 """
 
 from __future__ import annotations
@@ -32,10 +32,10 @@ logger = logging.getLogger(__name__)
 # Configuration
 # ---------------------------------------------------------------------------
 
-HARD_LIMIT = 1500  # New hard limit — files above this MUST be refactored
-SOFT_LIMIT = 800   # Soft limit — files above this get flagged for review
+HARD_LIMIT = 1500  # New hard limit -- files above this MUST be refactored
+SOFT_LIMIT = 800  # Soft limit -- files above this get flagged for review
 MAX_REFACTOR_TARGETS = 5  # Don't try to refactor more than 5 files per session
-REVIEW_MAX_AGE_HOURS = 168.0  # 1 week — files reviewed within this are skipped
+REVIEW_MAX_AGE_HOURS = 168.0  # 1 week -- files reviewed within this are skipped
 
 
 @dataclass
@@ -62,7 +62,7 @@ class RefactorPlan:
 
 
 # ---------------------------------------------------------------------------
-# Detection — find what needs refactoring
+# Detection -- find what needs refactoring
 # ---------------------------------------------------------------------------
 
 
@@ -93,22 +93,26 @@ def build_refactor_plan(project_root: Path) -> RefactorPlan:
     oversized = detect_oversized_files(project_root)
     plan.total_violations = len(oversized)
     for f in oversized:
-        plan.targets.append(RefactorTarget(
-            path=f["path"],
-            line_count=f["line_count"],
-            reason="oversized",
-            priority=0,
-        ))
+        plan.targets.append(
+            RefactorTarget(
+                path=f["path"],
+                line_count=f["line_count"],
+                reason="oversized",
+                priority=0,
+            )
+        )
 
     # Priority 2: Files marked "needs_work" in the ledger
     for path, rec in ledger.records.items():
         if rec.status == "needs_work" and not any(t.path == path for t in plan.targets):
-            plan.targets.append(RefactorTarget(
-                path=path,
-                line_count=rec.line_count,
-                reason="needs_work",
-                priority=1,
-            ))
+            plan.targets.append(
+                RefactorTarget(
+                    path=path,
+                    line_count=rec.line_count,
+                    reason="needs_work",
+                    priority=1,
+                )
+            )
 
     # Priority 3: Stale soft-limit violations (oldest reviewed first)
     review_queue = build_review_queue(
@@ -119,12 +123,14 @@ def build_refactor_plan(project_root: Path) -> RefactorPlan:
     )
     for item in review_queue:
         if not any(t.path == item["path"] for t in plan.targets):
-            plan.targets.append(RefactorTarget(
-                path=item["path"],
-                line_count=item["line_count"],
-                reason="stale",
-                priority=2,
-            ))
+            plan.targets.append(
+                RefactorTarget(
+                    path=item["path"],
+                    line_count=item["line_count"],
+                    reason="stale",
+                    priority=2,
+                )
+            )
 
     # Sort by priority, then by line count descending (biggest first within tier)
     plan.targets.sort(key=lambda t: (t.priority, -t.line_count))
@@ -155,39 +161,49 @@ def build_refactor_prompt(target: RefactorTarget) -> str:
     ]
 
     if target.reason == "oversized":
-        lines.extend([
-            f"This file EXCEEDS the hard limit of {HARD_LIMIT} lines and MUST be split.",
-            "Refactor it into smaller, cohesive modules with descriptive names.",
-            "Do NOT create *_part*.py or *.part*.py files — those are banned.",
-            "Split by responsibility: group related functions/classes into their own modules.",
-            "Maintain all public API — existing imports from other files must still work.",
-        ])
+        lines.extend(
+            [
+                f"This file EXCEEDS the hard limit of {HARD_LIMIT} lines and MUST be split.",
+                "Refactor it into smaller, cohesive modules with descriptive names.",
+                "Do NOT create *_part*.py or *.part*.py files -- those are banned.",
+                "Split by responsibility: group related functions/classes into their own modules.",
+                "Maintain all public API -- existing imports from other files must still work.",
+            ]
+        )
     elif target.reason == "needs_work":
-        lines.extend([
-            "This file was previously flagged as needing work.",
-            "Review it for: oversized functions, poor error handling, missing type hints,",
-            "silent exception swallowing, and opportunities to extract helper modules.",
-        ])
+        lines.extend(
+            [
+                "This file was previously flagged as needing work.",
+                "Review it for: oversized functions, poor error handling, missing type hints,",
+                "silent exception swallowing, and opportunities to extract helper modules.",
+            ]
+        )
     else:
-        lines.extend([
-            f"This file is {target.line_count} lines (above soft limit of {SOFT_LIMIT}).",
-            "Review it and improve code quality. If it can be split cleanly, do so.",
-            "If the code is cohesive and splitting would hurt readability, document why",
-            "and focus on other improvements: better error handling, type hints, logging.",
-        ])
+        lines.extend(
+            [
+                f"This file is {target.line_count} lines (above soft limit of {SOFT_LIMIT}).",
+                "Review it and improve code quality. If it can be split cleanly, do so.",
+                "If the code is cohesive and splitting would hurt readability, document why",
+                "and focus on other improvements: better error handling, type hints, logging.",
+            ]
+        )
 
-    lines.extend([
-        "",
-        "RULES:",
-        "- Work only in the current cwd (the green mirror).",
-        "- The green mirror has no .git metadata — do not rely on git commands.",
-        "- Do NOT create *_part*.py or *.part*.py files.",
-        "- Do NOT use exec() to load code from other files — use normal imports.",
-        "- Every except Exception: must have logger.exception() and a comment.",
-        "- Run `python -c \"import py_compile; py_compile.compile('{path}', doraise=True)\"` "
-        "on every file you modify.",
-        "- End with a concise summary of what you changed and why.",
-    ])
+    lines.extend(
+        [
+            "",
+            "RULES:",
+            "- Work only in the current cwd (the green mirror).",
+            "- The green mirror has no .git metadata -- do not rely on git commands.",
+            "- Never modify tests, policy files, guardrails, or enforcement scripts.",
+            "- If a check fails because of environment limits, report it instead of editing the guard.",
+            "- Do NOT create *_part*.py or *.part*.py files.",
+            "- Do NOT use exec() to load code from other files -- use normal imports.",
+            "- Every except Exception: must have logger.exception() and a comment.",
+            "- Run `python -c \"import py_compile; py_compile.compile('{path}', doraise=True)\"` "
+            "on every file you modify.",
+            "- End with a concise summary of what you changed and why.",
+        ]
+    )
 
     return "\n".join(lines).strip()
 
@@ -209,11 +225,11 @@ For each file, check:
 6. Missing docstrings on public classes/functions
 
 For each file, output a one-line verdict:
-  PASS: <filename> — code quality acceptable
-  NEEDS_WORK: <filename> — <brief reason>
+  PASS: <filename> -- code quality acceptable
+  NEEDS_WORK: <filename> -- <brief reason>
 
 Then fix what you can in the NEEDS_WORK files. Prioritise silent exception
-handlers and missing logging — those hide production bugs.
+handlers and missing logging -- those hide production bugs.
 
 RULES:
 - Work only in the current cwd (the green mirror).
@@ -310,9 +326,7 @@ def run_refactor_pass(
     for target in plan.targets:
         # Check if the file was successfully handled
         passed = all(
-            int(r.get("returncode") or 0) == 0
-            for r in results["pass_results"]
-            if r.get("target") == target.path
+            int(r.get("returncode") or 0) == 0 for r in results["pass_results"] if r.get("target") == target.path
         )
         ledger.mark_reviewed(
             target.path,
