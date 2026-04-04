@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 import shlex
+import shutil
 import subprocess  # nosec
 import sys
 import uuid
@@ -14,6 +15,11 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+import tomllib
+
+from thomas.core.config import load_config
+from thomas.core.model_resolution import resolve_effective_model
 
 from .doppelganger import (
     _IGNORE_NAMES,
@@ -240,6 +246,60 @@ def _read_text(path: Path) -> str | None:
         return None
 
 
+def _normalize_relpath(value: str | Path) -> str:
+    return str(value or "").replace("\\", "/").lstrip("./")
+
+
+def _load_evolve_protected_paths(repo_root: Path) -> set[str]:
+    config_path = repo_root / "agent_safety.toml"
+    if not config_path.exists():
+        return set()
+    try:
+        payload = tomllib.loads(config_path.read_text(encoding="utf-8"))
+    except (OSError, tomllib.TOMLDecodeError):
+        return set()
+    protected = payload.get("protected")
+    if not isinstance(protected, dict):
+        return set()
+    relpaths: set[str] = set()
+    for key in ("policy_files", "guardrails_files", "enforcement_files", "enforcement_scripts"):
+        rows = protected.get(key) or []
+        if not isinstance(rows, list):
+            continue
+        for item in rows:
+            rel = _normalize_relpath(str(item or "")).strip()
+            if rel:
+                relpaths.add(rel)
+    return relpaths
+
+
+def _restore_green_path_from_blue(paths, rel: str) -> None:
+    rel_path = Path(_normalize_relpath(rel))
+    blue_path = paths.blue_root / rel_path
+    green_path = paths.green_root / rel_path
+    if blue_path.exists():
+        green_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(blue_path, green_path)
+        return
+    if green_path.exists():
+        green_path.unlink()
+
+
+def _revert_protected_changes(
+    paths,
+    delta: dict[str, Any],
+    protected_paths: set[str],
+) -> tuple[dict[str, Any], list[str], list[str]]:
+    violations = sorted(rel for rel in (delta.get("changed_files") or []) if _normalize_relpath(rel) in protected_paths)
+    reverted: list[str] = []
+    for rel in violations:
+        _restore_green_path_from_blue(paths, rel)
+        reverted.append(rel)
+    if violations:
+        delta = _collect_tree_delta(paths)
+    return delta, violations, reverted
+
+
 def _collect_tree_delta(paths) -> dict[str, Any]:
     blue = _iter_scope_files(paths.blue_root)
     green = _iter_scope_files(paths.green_root)
@@ -312,6 +372,21 @@ def _display_command(command: str | list[str]) -> str:
     return " ".join(shlex.quote(str(part)) for part in command)
 
 
+def _resolve_evolve_profile(repo_root: Path, requested_profile: str = "") -> str:
+    config = load_config(repo_root / "thomas.toml")
+    resolved_profile, _ = resolve_effective_model(
+        config,
+        cli_profile=str(requested_profile or "").strip() or None,
+        env_profile=str(os.environ.get("THOMAS_DEFAULT_MODEL", "")).strip() or None,
+    )
+    resolved = str(resolved_profile or "").strip()
+    if not resolved and "codex" in config.models:
+        return "codex"
+    if not str(requested_profile or "").strip() and resolved.lower() == "local" and "codex" in config.models:
+        return "codex"
+    return resolved
+
+
 def _run_exec(
     command: str | list[str],
     *,
@@ -361,6 +436,8 @@ def _build_agent_prompt(charter: EvolveCharter, goal: str, *, pass_index: int, p
         "- Work only inside the current cwd, which is the green mirror of Thomas.",
         "- The green mirror intentionally has no .git metadata. Do not rely on git commands.",
         "- Do not touch runtime/doppelganger, .thomas/evolve, secrets, or external machine state.",
+        "- Never modify policy, guardrail, or verification files such as tests/test_architecture.py, thomas/_architecture.py, agent_safety.toml, GUARDRAILS.md, or scripts/check_*.py.",
+        "- If verification fails because of environment limits or missing metadata, report that honestly instead of editing the guard.",
         "- Prefer concrete code improvements over commentary-only work.",
         "- Run targeted verification yourself before you stop.",
         "- End with a concise summary of files changed and verification run.",
@@ -385,10 +462,17 @@ def _build_verify_commands(charter: EvolveCharter, delta: dict[str, Any]) -> lis
 
 
 def _session_status(
-    pass_results: list[dict[str, Any]], verification: list[dict[str, Any]], changed_count: int, promoted: bool
+    pass_results: list[dict[str, Any]],
+    verification: list[dict[str, Any]],
+    changed_count: int,
+    promoted: bool,
+    *,
+    policy_violation: bool,
 ) -> str:
     if any(int(item.get("returncode") or 0) != 0 for item in pass_results):
         return "agent_failed"
+    if policy_violation:
+        return "policy_violation"
     if any(int(item.get("returncode") or 0) != 0 for item in verification):
         return "verification_failed"
     if changed_count <= 0:
@@ -407,14 +491,24 @@ def _render_session_markdown(session: dict[str, Any]) -> str:
         f"- Changed files: {session['delta']['changed_count']}",
         f"- Promotable: `{str(session['promotable']).lower()}`",
         f"- Promoted: `{str(session['promoted']).lower()}`",
-        "",
-        "## Verification",
     ]
+    if session.get("policy_violations"):
+        lines.append(f"- Policy violations: {len(session['policy_violations'])}")
+    lines.extend(
+        [
+            "",
+            "## Verification",
+        ]
+    )
     if session.get("verification"):
         for item in session["verification"]:
             lines.append(f"- `{item['command']}` -> `{item['returncode']}`")
     else:
         lines.append("- No verification commands recorded.")
+    if session.get("policy_violations"):
+        lines.append("")
+        lines.append("## Policy Violations")
+        lines.extend(f"- `{rel}`" for rel in session["policy_violations"])
     lines.append("")
     lines.append("## Files")
     if session["delta"]["changed_files"]:
@@ -438,6 +532,7 @@ def run_evolve_session(
     evolve_root, _, _ = ensure_evolve_charter(repo_root)
     charter = load_evolve_charter(repo_root)
     requested_passes = max(1, min(int(passes or charter.max_passes or 1), 8))
+    effective_profile = _resolve_evolve_profile(repo_root, profile)
     session_id = f"evolve-{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}-{uuid.uuid4().hex[:6]}"
     session_dir = _sessions_root(repo_root) / session_id
     session_dir.mkdir(parents=True, exist_ok=True)
@@ -457,6 +552,9 @@ def run_evolve_session(
 
     green_env = dict(os.environ)
     green_env["THOMAS_MEMORY_ROOT"] = str(paths.green_runtime)
+    green_env["THOMAS_SPEND_PATH"] = str(
+        Path(os.environ.get("THOMAS_SPEND_PATH") or (repo_root / "thomas_spend.jsonl"))
+    )
     # Always set PYTHONPATH so that `python -m thomas` resolves from the
     # green mirror, even when using the system interpreter as fallback.
     green_env["PYTHONPATH"] = str(paths.green_root)
@@ -473,13 +571,14 @@ def run_evolve_session(
                 green_env=green_env,
                 green_python=green_python,
                 timeout_seconds=timeout_seconds,
-                profile=str(profile or "").strip(),
+                profile=effective_profile,
             )
         except (ImportError, OSError, RuntimeError, subprocess.SubprocessError) as exc:
             import logging
 
             logging.getLogger(__name__).warning(
-                "Refactor pass failed (non-fatal, continuing): %s", exc,
+                "Refactor pass failed (non-fatal, continuing): %s",
+                exc,
             )
             refactor_results = {"phase": "refactor", "error": str(exc)}
 
@@ -489,8 +588,8 @@ def run_evolve_session(
     for idx in range(requested_passes):
         prompt = _build_agent_prompt(charter, goal_used, pass_index=idx + 1, pass_count=requested_passes)
         command = [green_python, "-m", "thomas", "chat", "--autonomy-level", "4"]
-        if str(profile or "").strip():
-            command.extend(["-m", str(profile).strip()])
+        if effective_profile:
+            command.extend(["-m", effective_profile])
         command.append(prompt)
         result = _run_exec(command, cwd=paths.green_root, env=green_env, timeout_seconds=timeout_seconds)
         result["pass_index"] = idx + 1
@@ -499,7 +598,13 @@ def run_evolve_session(
         if int(result.get("returncode") or 0) != 0:
             break
 
-    delta = _collect_tree_delta(paths)
+    pre_policy_delta = _collect_tree_delta(paths)
+    protected_paths = _load_evolve_protected_paths(repo_root)
+    delta, policy_violations, reverted_policy_paths = _revert_protected_changes(
+        paths,
+        pre_policy_delta,
+        protected_paths,
+    )
     verify_commands = _build_verify_commands(charter, delta)
     verification = [
         _run_exec(command, cwd=paths.green_root, env=green_env, timeout_seconds=timeout_seconds)
@@ -509,7 +614,11 @@ def run_evolve_session(
     diff_path = session_dir / "changes.patch"
     _write_text(diff_path, _diff_preview(paths, delta) or "# No tracked changes\n")
 
-    promotable = bool(delta["changed_count"]) and all(int(item.get("returncode") or 0) == 0 for item in verification)
+    promotable = (
+        bool(delta["changed_count"])
+        and not policy_violations
+        and all(int(item.get("returncode") or 0) == 0 for item in verification)
+    )
     promoted = False
     promotion_backup = ""
     if promote_on_pass and promotable:
@@ -522,11 +631,13 @@ def run_evolve_session(
         "evolve_root": str(evolve_root),
         "green_root": str(paths.green_root),
         "goal": goal_used,
-        "profile": str(profile or "").strip(),
+        "profile": effective_profile,
         "passes_requested": requested_passes,
         "refactor_results": refactor_results,
         "pass_results": pass_results,
         "verification": verification,
+        "policy_violations": policy_violations,
+        "reverted_policy_paths": reverted_policy_paths,
         "delta": delta,
         "changed_files": list(delta["changed_files"]),
         "promotable": promotable,
@@ -536,11 +647,17 @@ def run_evolve_session(
         "charter": charter.to_dict(),
         "started_at": started_at,
         "finished_at": utc_now_iso(),
-        "status": _session_status(pass_results, verification, delta["changed_count"], promoted),
+        "status": _session_status(
+            pass_results,
+            verification,
+            delta["changed_count"],
+            promoted,
+            policy_violation=bool(policy_violations),
+        ),
     }
     _write_json(session_dir / "session.json", session)
     _write_text(session_dir / "session.md", _render_session_markdown(session))
-    return {"ok": session["status"] != "agent_failed", "session": session}
+    return {"ok": session["status"] not in {"agent_failed", "policy_violation"}, "session": session}
 
 
 def promote_evolve_session(
