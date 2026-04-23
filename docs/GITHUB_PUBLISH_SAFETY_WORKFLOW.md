@@ -13,15 +13,13 @@ Public GitHub repos do not have private sub-branches. If a branch is pushed to G
 
 - `robustness-gates.yml`: Python collection, regression, packaging, and container smoke checks
 - `github-publish-safety.yml`: publish preflight and release hygiene checks
-- `site-release.yml`: site checks and optional production deployment when site files change
-- `publish.yml`: package publishing when a version tag is pushed
 
 ## Recommended Setup
 
 1. Keep `main` as the default branch.
 2. Protect `main` in GitHub once the workflows are green.
 3. Require the CI checks that matter for your release process before merging.
-4. Only enable site deployment after `THOMAS_SITE_DEPLOY_ENABLED` and the required Cloudflare secrets are configured in GitHub.
+4. Keep website and deployment infrastructure out of the public release snapshot unless you explicitly intend to publish them.
 
 ## Day-to-Day Flow
 
@@ -50,5 +48,4 @@ This checks:
 
 - The public repo only publishes the sanitized release snapshot.
 - GitHub Actions validates the public repo directly on `main`.
-- Site deployment stays opt-in until deployment secrets and repo variables are configured.
-- PyPI publishing remains tag-driven instead of running on ordinary pushes.
+- Cloudflare site assets and site deployment automation stay outside the public release snapshot by default.
