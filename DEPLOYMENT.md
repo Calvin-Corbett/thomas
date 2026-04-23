@@ -60,7 +60,7 @@ docker build -t thomas:latest .
 docker compose up -d
 ```
 
-Uses `requirements-lock.txt` for reproducible installs and `thomas.prod.toml` for configuration.
+Uses `requirements-server.txt` for the container runtime dependency subset and `thomas.prod.toml` for configuration.
 
 ### Development
 

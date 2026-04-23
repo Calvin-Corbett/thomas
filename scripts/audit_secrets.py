@@ -67,7 +67,6 @@ SKIP_DIRS = {
 }
 SKIP_FILES = {
     "audit_secrets.py",  # This script itself
-    "requirements-lock.txt",
     ".env.example",
 }
 SKIP_EXTENSIONS = {
