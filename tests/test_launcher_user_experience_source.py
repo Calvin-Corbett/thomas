@@ -1,6 +1,12 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - Python 3.10 compatibility
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 
@@ -9,9 +15,15 @@ def _read(relative_path: str) -> str:
     return (ROOT / relative_path).read_text(encoding="utf-8")
 
 
+def _read_pyproject() -> dict:
+    return tomllib.loads(_read("pyproject.toml"))
+
+
 def test_run_ui_reuses_healthy_instance_and_disables_implicit_ollama_autostart() -> None:
     text = _read("scripts/run-ui.ps1")
     assert "[switch]$Restart" in text
+    assert "[switch]$NoPrompt" in text
+    assert "Approve this local setup change now? [y/N]" in text
     assert "Reusing healthy Thomas instance on port" in text
     assert "THOMAS_AUTO_START_OLLAMA" in text
     assert "-Easy -NoPrompt -SkipInstall -SkipDoctor" in text
@@ -35,9 +47,10 @@ def test_windows_shortcuts_prefer_launcher_wrapper_over_raw_python_serve() -> No
 
 
 def test_server_extra_includes_ui_runtime_dependencies() -> None:
-    text = _read("pyproject.toml")
-    assert "Pillow>=10.0" in text
-    assert "prompt_toolkit>=3.0" in text
+    optional = _read_pyproject()["project"]["optional-dependencies"]
+    assert "Pillow>=10.0" in optional["server"]
+    assert "cryptography>=42.0" in optional["server"]
+    assert "prompt_toolkit>=3.0" in optional["repl"]
 
 
 def test_manifest_includes_embedded_discord_bridge_assets() -> None:

@@ -1,6 +1,20 @@
 from __future__ import annotations
 
+import sys
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    import tomllib
+else:  # pragma: no cover - Python 3.10 compatibility
+    import tomli as tomllib
+
+
+def _read_requirements(path: Path) -> list[str]:
+    return [
+        line.strip()
+        for line in path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
 
 
 def test_nightly_reliability_workflow_removed_from_public_ci() -> None:
@@ -30,6 +44,22 @@ def test_robustness_gates_targets_main_with_public_ci_suite() -> None:
     assert "tests/test_release_contracts.py" in text
     assert "competitor" not in text.lower()
     assert "workboard" not in text.lower()
+
+
+def test_dockerfile_uses_server_runtime_requirements_subset() -> None:
+    text = Path("Dockerfile").read_text(encoding="utf-8")
+    assert "COPY requirements-server.txt ./" in text
+    assert "pip install --no-cache-dir -r requirements-server.txt" in text
+    assert "requirements-lock.txt" not in text
+    assert '".[server]' not in text
+
+
+def test_container_runtime_requirements_match_pyproject_server_runtime() -> None:
+    pyproject = tomllib.loads(Path("pyproject.toml").read_text(encoding="utf-8"))
+    project = pyproject["project"]
+    expected = [*project["dependencies"], *project["optional-dependencies"]["server"]]
+    actual = _read_requirements(Path("requirements-server.txt"))
+    assert actual == expected
 
 
 def test_github_publish_safety_targets_main_without_release_lanes() -> None:
