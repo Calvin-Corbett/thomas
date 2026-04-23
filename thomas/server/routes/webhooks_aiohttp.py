@@ -1,21 +1,23 @@
 """Aiohttp bridge for webhook routes.
 
-The canonical webhook logic currently lives in `thomas.server.routes.webhooks`
-and is implemented with FastAPI-style handlers. Thomas serves via aiohttp, so
-this bridge exposes equivalent aiohttp routes by adapting requests/responses.
+The canonical webhook handlers live in `thomas.server.routes.webhooks_routes`
+and share runtime state/helpers from `thomas.server.routes.webhooks`. Thomas
+serves via aiohttp, so this bridge adapts aiohttp requests to those handlers.
 """
 
 from __future__ import annotations
 
 import json
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 
 from aiohttp import web
 from fastapi import HTTPException as FastAPIHTTPException
 from pydantic import ValidationError
 
-from thomas.server.routes import webhooks as webhook_mod
+from thomas.server.routes import webhooks as webhook_state
+from thomas.server.routes import webhooks_routes as webhook_mod
 
 
 @dataclass
@@ -35,7 +37,7 @@ class _FastAPIRequestShim:
 
 
 def _to_plain_json(value: Any) -> Any:
-    if hasattr(value, "model_dump") and callable(getattr(value, "model_dump")):
+    if hasattr(value, "model_dump") and callable(value.model_dump):
         return _to_plain_json(value.model_dump())
     if isinstance(value, dict):
         return {str(k): _to_plain_json(v) for k, v in value.items()}
@@ -73,13 +75,13 @@ async def _read_json_object(request: web.Request) -> dict[str, Any]:
     try:
         raw = await request.read()
     except Exception as e:
-        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}")
+        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}") from e
     if not raw:
         return {}
     try:
         payload = json.loads(raw.decode("utf-8-sig"))
     except Exception as e:
-        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}")
+        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}") from e
     if not isinstance(payload, dict):
         raise web.HTTPBadRequest(text="json body must be an object")
     return payload
@@ -108,10 +110,10 @@ def register_webhooks_routes(
     app: web.Application,
     *,
     require_api_access: Callable[[web.Request], None],
-    signature_enforcement_default: Optional[bool] = None,
+    signature_enforcement_default: bool | None = None,
 ) -> None:
     """Attach webhook management + receive routes to aiohttp app."""
-    webhook_mod.configure_webhook_signature_enforcement_default(signature_enforcement_default)
+    webhook_state.configure_webhook_signature_enforcement_default(signature_enforcement_default)
 
     async def api_register(request: web.Request) -> web.Response:
         require_api_access(request)
@@ -119,7 +121,7 @@ def register_webhooks_routes(
         try:
             body = webhook_mod.RegisterWebhookRequest(**payload)
         except (ValidationError, TypeError) as e:
-            raise web.HTTPBadRequest(text=f"Invalid webhook registration payload: {e}")
+            raise web.HTTPBadRequest(text=f"Invalid webhook registration payload: {e}") from e
         return await _dispatch(
             webhook_mod.register_webhook,
             body=body,
@@ -132,7 +134,7 @@ def register_webhooks_routes(
         try:
             body = webhook_mod.PatchWebhookRequest(**payload)
         except (ValidationError, TypeError) as e:
-            raise web.HTTPBadRequest(text=f"Invalid webhook patch payload: {e}")
+            raise web.HTTPBadRequest(text=f"Invalid webhook patch payload: {e}") from e
         return await _dispatch(
             webhook_mod.patch_webhook,
             id=str(request.match_info.get("id") or "").strip(),

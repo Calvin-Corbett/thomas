@@ -163,7 +163,15 @@ def _current_origin(repo_root: Path) -> str:
 
 
 def _init_snapshot_repo(snapshot_root: Path, *, origin_url: str) -> None:
-    subprocess.run(["git", "init", "-q"], cwd=snapshot_root, check=True)
+    init_proc = subprocess.run(
+        ["git", "init", "-q", "--initial-branch=main"],
+        cwd=snapshot_root,
+        capture_output=True,
+        text=True,
+    )
+    if init_proc.returncode != 0:
+        subprocess.run(["git", "init", "-q"], cwd=snapshot_root, check=True)
+        subprocess.run(["git", "branch", "-M", "main"], cwd=snapshot_root, check=True)
     subprocess.run(["git", "config", "user.name", "Thomas Snapshot"], cwd=snapshot_root, check=True)
     subprocess.run(
         ["git", "config", "user.email", "snapshot@local.invalid"],
@@ -175,8 +183,6 @@ def _init_snapshot_repo(snapshot_root: Path, *, origin_url: str) -> None:
         subprocess.run(["git", "remote", "add", "origin", origin_url], cwd=snapshot_root, check=True)
     subprocess.run(["git", "add", "-A"], cwd=snapshot_root, check=True)
     subprocess.run(["git", "commit", "-qm", "publish snapshot"], cwd=snapshot_root, check=True)
-    subprocess.run(["git", "branch", "dev"], cwd=snapshot_root, check=True)
-    subprocess.run(["git", "branch", "prod"], cwd=snapshot_root, check=True)
 
 
 def _run_preflight(snapshot_root: Path, *, deep: bool) -> dict[str, Any]:

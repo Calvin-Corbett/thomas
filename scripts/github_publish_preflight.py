@@ -68,7 +68,7 @@ REQUIRED_GITIGNORE_SNIPPETS = (
     "thomas.db",
     "thomas.marketplace.asset_studio.db",
 )
-DEFAULT_REQUIRED_BRANCHES = ("dev", "prod")
+DEFAULT_REQUIRED_BRANCHES: tuple[str, ...] = ()
 SCAN_SKIP_PREFIXES = (
     "tests/",
     "docs/",
@@ -372,7 +372,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         "--required-branch",
         action="append",
         default=[],
-        help="Required local branch name (repeatable). Defaults to dev + prod.",
+        help="Required local branch name (repeatable). Defaults to none.",
     )
     parser.add_argument("--skip-worktree-clean-check", action="store_true", help="Skip dirty worktree check.")
     parser.add_argument("--deep", action="store_true", help="Run deep checks (repo hygiene + release + security).")

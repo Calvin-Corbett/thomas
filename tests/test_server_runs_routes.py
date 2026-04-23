@@ -136,6 +136,30 @@ class TestRunsRoutesLocal(AioHTTPTestCase):
         resp = await self.client.get("/api/runs/nonexistent")
         self.assertEqual(resp.status, 404)
 
+    async def test_cancel_run_marks_active_run_dead(self):
+        run_store.create_run(
+            {
+                "run_id": "cancel_me",
+                "started_at": "2026-01-15T12:00:00+00:00",
+            }
+        )
+        resp = await self.client.post("/api/runs/cancel_me/cancel")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["status"], "cancelled")
+
+        run = run_store.get_run("cancel_me")
+        self.assertFalse(run["run"]["ok"])
+        self.assertIn("dead_run:", str(run["run"]["error"] or ""))
+
+    async def test_cancel_run_is_idempotent_for_missing_run(self):
+        resp = await self.client.post("/api/runs/ghost/cancel")
+        self.assertEqual(resp.status, 200)
+        body = await resp.json()
+        self.assertTrue(body["ok"])
+        self.assertEqual(body["status"], "not_found")
+
     # ── GET /api/runs/{run_id}/events (paginated) ──
 
     async def test_events_pagination(self):
@@ -335,6 +359,16 @@ class TestRunsRoutesRemoteAuth(AioHTTPTestCase):
     async def test_export_requires_auth(self):
         no_auth = await self.client.get("/api/runs/any_id/export.json")
         self.assertEqual(no_auth.status, 401)
+
+    async def test_cancel_requires_auth(self):
+        no_auth = await self.client.post("/api/runs/any_id/cancel")
+        self.assertEqual(no_auth.status, 401)
+
+        with_auth = await self.client.post(
+            "/api/runs/any_id/cancel",
+            headers={"Authorization": "Bearer test-token"},
+        )
+        self.assertEqual(with_auth.status, 200)
 
 
 if __name__ == "__main__":

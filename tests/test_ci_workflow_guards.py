@@ -3,39 +3,44 @@ from __future__ import annotations
 from pathlib import Path
 
 
-def test_nightly_reliability_uses_strict_competitor_and_security_checks() -> None:
-    text = Path(".github/workflows/nightly-reliability.yml").read_text(encoding="utf-8")
-    assert "python scripts/competitors/check_weekly_delta_alert.py --json --strict" in text
-    assert "python scripts/security_audit.py --repo-root . --json --strict" in text
+def test_nightly_reliability_workflow_removed_from_public_ci() -> None:
+    assert not Path(".github/workflows/nightly-reliability.yml").exists()
 
 
-def test_robustness_gates_auto_checks_declares_breakglass_metadata() -> None:
+def test_robustness_gates_targets_main_with_public_ci_suite() -> None:
     text = Path(".github/workflows/robustness-gates.yml").read_text(encoding="utf-8")
-    assert 'THOMAS_SKIP_BREAKGLASS: "1"' in text
-    assert 'THOMAS_SKIP_TICKET: "CI-ROBUSTNESS-GATES"' in text
-    assert (
-        'THOMAS_SKIP_REASON: "CI-reviewed robustness-gates lane skips nested gate scripts to avoid duplicate execution."'
-        in text
-    )
+    assert "branches: [main]" in text
+    assert "test-collection-gate" in text
+    assert "security-regression" in text
+    assert "full-test-matrix" in text
+    assert "quality-signals" in text
+    assert "docker-smoke" in text
+    assert "python -m pytest --collect-only -q" in text
+    assert "python -m build" in text
+    assert "python scripts/github_publish_preflight.py --json --strict" in text
+    assert "python scripts/check_release_hygiene.py" in text
+    assert "tests/test_ci_workflow_guards.py" in text
+    assert "tests/test_github_publish_snapshot.py" in text
+    assert "tests/test_github_publish_preflight.py" in text
+    assert "tests/test_release_hygiene.py" in text
+    assert "tests/test_release_contracts.py" in text
+    assert "competitor" not in text.lower()
+    assert "workboard" not in text.lower()
 
 
-def test_robustness_gates_publish_core_python_quality_signals() -> None:
-    text = Path(".github/workflows/robustness-gates.yml").read_text(encoding="utf-8")
-    assert "Core Python coverage signal" in text
-    assert "--cov-fail-under=88" in text
-    assert "tests/test_agent_presence_more.py" in text
-    assert "tests/test_chat_delegation.py" in text
-    assert "tests/test_server_app_core.py" in text
-    assert "tests/test_config_runtime.py" in text
-    assert "--cov=thomas.server.chat_delegation" in text
-    assert "--cov=thomas.server.app_core" in text
-    assert "--cov=thomas.core.config" in text
-    assert "--cov-report=xml:output/ci/core-python-coverage.xml" in text
-    assert "python scripts/python_dependency_vulnerability_scan.py" in text
-    assert "--allow-unfixed" in text
-    assert "bandit -r \\" in text
-    assert "thomas/server/chat_delegation.py \\" in text
-    assert "thomas/server/app_core.py \\" in text
-    assert "thomas/core/config.py \\" in text
-    assert "output/ci/python-bandit-core.json" in text
-    assert "actions/upload-artifact@v4" in text
+def test_site_release_targets_main_and_handles_initial_push_history() -> None:
+    text = Path(".github/workflows/site-release.yml").read_text(encoding="utf-8")
+    assert "branches: [main]" in text
+    assert "deploy-preview" not in text
+    assert "git rev-parse --verify HEAD^" in text
+    assert "git hash-object -t tree /dev/null" in text
+    assert "vars.THOMAS_SITE_DEPLOY_ENABLED == 'true'" in text
+
+
+def test_github_publish_safety_targets_main_without_release_lanes() -> None:
+    text = Path(".github/workflows/github-publish-safety.yml").read_text(encoding="utf-8")
+    assert "branches: [main]" in text
+    assert "github_publish_preflight.py --deep --json --strict" in text
+    assert "check_release_hygiene.py" in text
+    assert "check_release_lane_policy.py" not in text
+    assert "prod branch only" not in text
