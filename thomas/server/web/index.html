@@ -1,0 +1,826 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title id="appDocumentTitle" data-agent-template="{{agent}}">Thomas</title>
+<link rel="icon" href="data:,">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<script src="https://unpkg.com/@phosphor-icons/web">
+</script>
+<script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js">
+</script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/styles/atom-one-dark.min.css">
+<script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js">
+</script>
+<link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__">
+<link rel="stylesheet" href="/static/css/layout.css?v=__THOMAS_VERSION__">
+<link rel="stylesheet" href="/static/css/accessibility.css?v=__THOMAS_VERSION__">
+<link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__">
+<link rel="stylesheet" href="/static/css/token_economy.css?v=__THOMAS_VERSION__">
+</head>
+<body>
+<script>
+/* Early theme flash prevention — apply saved theme class before first paint */
+(function() {
+    var theme = 'auto';
+    try {
+        theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
+    } catch (_) {}
+    if (theme === 'light') {
+        document.body.classList.add('te-theme-light');
+        document.body.setAttribute('data-theme', 'light');
+    } else if (theme === 'dark') {
+        document.body.classList.add('te-theme-dark');
+        document.body.setAttribute('data-theme', 'dark');
+    } else {
+        document.body.classList.add('te-space-active');
+    }
+})();
+</script>
+<form id="settingsCredentialForm" class="hidden" aria-hidden="true">
+</form>
+<div id="app" class="app-layout">
+<aside class="sidebar" id="sidebar">
+<div class="sidebar-header">
+<h2 class="brand-text" id="sidebarBrandText" data-agent-template="{{agent}}">Thomas</h2>
+<div class="sidebar-header-actions">
+<button class="btn-icon icon-btn-shared" id="sidebarCollapseBtn" title="Collapse Sidebar" aria-label="Collapse sidebar">
+<i class="ph ph-list">
+</i>
+</button>
+<button class="btn-icon" id="newChatSidebar" title="Rename Agent (Shift+Click for New Chat)" aria-label="Rename agent (Shift+Click for new chat)">
+<i class="ph ph-pencil-simple">
+</i>
+</button>
+</div>
+</div>
+<div class="sidebar-search-shell" id="searchOverlayBar">
+<label class="sidebar-search-input-wrap" for="globalSearchInput">
+<i class="ph ph-magnifying-glass search-icon">
+</i>
+<input type="text" id="globalSearchInput" placeholder="Find past chats" autocomplete="off">
+</label>
+<span class="sidebar-search-mode" id="sidebarSearchModeLabel">Find past chats</span>
+</div>
+<nav class="sidebar-nav">
+<button class="nav-item active" id="navChatBtn">
+<span class="nav-chat-label">
+<span>Chat</span>
+</span>
+<span class="nav-chat-caret" aria-hidden="true">
+<i class="ph ph-caret-down">
+</i>
+</span>
+</button>
+<section class="sidebar-chat-shell" id="sidebarChatPanel">
+<div class="sidebar-chat-list" id="sidebarChatList">
+</div>
+<select id="chatHistorySelector" class="hidden">
+<option value="new">New Chat</option>
+</select>
+</section>
+<div class="sidebar-nav-divider">Workspaces</div>
+<div id="workspaceNavItems">
+<button class="nav-item" id="navMissionBtn" data-nav-mode="mission">
+<i class="ph ph-crosshair-simple">
+</i> Mission Control </button>
+<button class="nav-item" id="navUiEditorBtn" data-nav-mode="app_builder">
+<i class="ph ph-app-window">
+</i> UI Editor </button>
+<button class="nav-item" id="navMyStuffBtn" data-nav-mode="my_stuff">
+<i class="ph ph-grid-four">
+</i> My Stuff </button>
+<button class="nav-item" id="navChannelsBtn" data-nav-mode="channels">
+<i class="ph ph-broadcast">
+</i> Channels </button>
+<button class="nav-item" id="navTokenEconomyBtn" data-nav-mode="token_economy">
+<i class="ph ph-coins">
+</i> Token Economy </button>
+<button class="nav-item" id="navMarketplaceBtn" data-nav-mode="marketplace">
+<i class="ph ph-storefront">
+</i> Marketplace </button>
+<div id="pluginNavItems" class="hidden">
+</div>
+</div>
+</nav>
+<div class="sidebar-footer">
+<button class="nav-item user-btn" id="settingsBtn">
+<i class="ph ph-gear" id="sidebarSettingsIcon" style="font-size:1.35rem;"></i>
+<span>Settings</span>
+</button>
+</div>
+</aside>
+<main class="main-content">
+<nav class="top-nav">
+<div class="nav-left">
+<button class="btn-icon sidebar-toggle icon-btn-shared" id="sidebarToggleBtn">
+<i class="ph ph-list">
+</i>
+</button>
+</div>
+<div class="model-select-wrapper">
+<button id="modelSetupBtn" class="model-setup-btn" title="Configure Model">
+<span id="modelSetupCurrentLabel">loading...</span>
+</button>
+<select id="modelSelector" class="hidden">
+</select>
+</div>
+<div class="nav-right">
+<button class="debug-toggle-btn icon-btn-shared" id="debugDockToggleBtn" type="button" aria-expanded="false" aria-label="Open tools panel" title="Tools">
+<i class="ph ph-list">
+</i>
+</button>
+</div>
+</nav>
+<section class="settings-screen hidden" id="settingsModal"></section>
+<aside class="debug-dock" id="debugDock" aria-label="Thomas tools panel" data-agent-aria-label-template="{{agent}} tools panel"></aside>
+<section class="office-workspace hidden" id="officeWorkspace" aria-label="Virtual office workspace">
+<div class="office-toolbar">
+<div class="office-toolbar-title">
+<span class="office-toolbar-dot">
+</span>
+<span>Robot Editor</span>
+</div>
+<button id="officeEditorToggleBtn" class="settings-mini-btn" type="button">Robot Editor</button>
+</div>
+<div class="office-stage">
+<div class="office-scene-wrap" tabindex="0" aria-label="Virtual office map. Drag to pan, use wheel to zoom, or use arrow keys for keyboard panning.">
+<div class="office-scene-panzoom" id="officeScenePanzoom">
+<div class="office-scene" id="officeScene">
+</div>
+</div>
+<section class="office-minimap" id="officeMinimap" aria-label="Office minimap">
+<div class="office-minimap-head">
+<span>Live Map</span>
+<button id="officeFollowToggleBtn" class="settings-mini-btn" type="button">Follow: Off</button>
+</div>
+<canvas id="officeMinimapCanvas" width="240" height="152" aria-label="Office minimap. Click or drag to pan the camera.">
+</canvas>
+</section>
+<div class="office-map-controls">
+<button id="officeZoomOutBtn" class="btn-icon" type="button" title="Zoom out" aria-label="Zoom out">
+<i class="ph ph-minus">
+</i>
+</button>
+<button id="officeZoomResetBtn" class="settings-mini-btn" type="button" aria-label="Reset zoom to fit">100%</button>
+<button id="officeZoomInBtn" class="btn-icon" type="button" title="Zoom in" aria-label="Zoom in">
+<i class="ph ph-plus">
+</i>
+</button>
+<button id="officeDebugToggleBtn" class="settings-mini-btn" type="button" aria-pressed="false" aria-label="Toggle office debug overlay">Debug</button>
+</div>
+<aside class="office-debug-overlay hidden" id="officeDebugOverlay" aria-live="polite" aria-label="Office debug overlay">
+</aside>
+</div>
+<div class="office-editor-modal hidden" id="officeEditorModal" role="dialog" aria-modal="true" aria-hidden="true" aria-labelledby="officeEditorTitle">
+<div class="office-editor-card">
+<div class="office-editor-head">
+<h3 id="officeEditorTitle">Robot Editor</h3>
+<button id="officeEditorCloseBtn" class="btn-icon" type="button" aria-label="Close robot editor">
+<i class="ph ph-x">
+</i>
+</button>
+</div>
+<div class="office-editor-grid">
+<label class="office-field compact">
+<span>Agent</span>
+<select id="officeAgentSelect">
+</select>
+</label>
+<label class="office-field compact">
+<span>Name</span>
+<input id="officeAgentNameInput" type="text" maxlength="24" placeholder="Agent name">
+</label>
+<label class="office-field compact">
+<span>Color</span>
+<input id="officeAgentColorInput" type="color" value="#58a6ff">
+</label>
+<label class="office-field compact">
+<span>Costume</span>
+<select id="officeAgentCostumeSelect">
+<option value="none">None</option>
+<option value="cap">Cap</option>
+<option value="visor">Visor</option>
+<option value="headset">Headset</option>
+<option value="bowtie">Bow Tie</option>
+</select>
+</label>
+</div>
+<div class="office-editor-actions" aria-label="Robot editor quick actions">
+<button id="officeActionSummonBtn" class="settings-mini-btn" type="button">Summon To Lobby</button>
+<button id="officeActionBreakBtn" class="settings-mini-btn" type="button">Break Wave</button>
+<button id="officeActionResumeBtn" class="settings-mini-btn" type="button">Resume Work</button>
+</div>
+</div>
+</div>
+</div>
+<div class="office-bottom-dock">
+<section class="office-panel office-live-panel">
+<h3>Live Work</h3>
+<div class="office-task-list" id="officeTaskList">
+</div>
+</section>
+<div class="office-chatbar">
+<div class="office-chat-log" id="officeChatLog">
+</div>
+<div class="office-chat-row">
+<input id="officeChatInput" type="text" autocomplete="off" placeholder="Talk with @name ... or drop a task for the office">
+<button id="officeChatSendBtn" class="btn-primary" type="button">Send</button>
+</div>
+</div>
+</div>
+</section>
+<section class="mission-workspace hidden" id="missionWorkspace" aria-label="Mission control center"></section>
+<section class="content-workspace hidden" id="contentWorkspace" aria-label="Content hub workspace">
+<div class="content-shell">
+<header class="content-header">
+<div class="content-header-copy">
+<h2>Content Hub</h2>
+<p id="contentWorkspaceLead" data-agent-template="Manage platform stats, workflows, and publish schedules from one {{agent}} workspace.">Manage platform stats, workflows, and publish schedules from one Thomas workspace.</p>
+</div>
+<div class="content-header-actions">
+<button class="settings-mini-btn" id="contentRefreshBtn" type="button">
+<i class="ph ph-arrows-clockwise">
+</i>
+<span>Refresh</span>
+</button>
+</div>
+</header>
+<section class="content-kpi-grid" aria-label="Content Hub KPI strip">
+<article class="content-kpi-card">
+<span>Connected Platforms</span>
+<strong id="contentConnectedCount">0</strong>
+<em id="contentConnectedMeta">Loading connections</em>
+</article>
+<article class="content-kpi-card">
+<span>Active Jobs</span>
+<strong id="contentAudienceCount">0</strong>
+<em id="contentAudienceMeta">Jobs currently in motion</em>
+</article>
+<article class="content-kpi-card">
+<span>Queued Posts</span>
+<strong id="contentQueuedCount">0</strong>
+<em id="contentQueuedMeta">Ready to publish</em>
+</article>
+<article class="content-kpi-card">
+<span>Active Workflows</span>
+<strong id="contentWorkflowCount">0</strong>
+<em id="contentWorkflowMetaSummary">Live automation groups</em>
+</article>
+</section>
+<section class="content-control-shell" aria-label="Chat-first control surface">
+<div class="content-panel-head">
+<h3>Chat-First Control Surface</h3>
+<span class="content-panel-meta" id="contentControlMeta">Loading run-state telemetry</span>
+</div>
+<div class="content-control-grid" id="contentControlGrid">
+</div>
+</section>
+<section class="content-ia-grid" aria-label="Content hub information architecture">
+<article class="content-panel">
+<div class="content-panel-head">
+<h3>Core Navigation</h3>
+<span class="content-panel-meta" id="contentNavMeta">Minimal pages, each with a purpose</span>
+</div>
+<div class="content-track-list" id="contentNavList">
+</div>
+</article>
+<article class="content-panel">
+<div class="content-panel-head">
+<h3>Creator Organization Axes</h3>
+<span class="content-panel-meta" id="contentAxisMeta">Time, campaign, and asset views</span>
+</div>
+<div class="content-track-list" id="contentAxisList">
+</div>
+</article>
+</section>
+<div class="content-grid">
+<section class="content-panel content-panel-platforms">
+<div class="content-panel-head">
+<h3>Platform Stats</h3>
+<span class="content-panel-meta" id="contentPlatformMeta">Checking account links</span>
+</div>
+<div class="content-platform-grid" id="contentPlatformGrid">
+</div>
+</section>
+<section class="content-panel">
+<div class="content-panel-head">
+<h3>Workflow Builder</h3>
+<span class="content-panel-meta" id="contentWorkflowMeta">Template flows</span>
+</div>
+<div class="content-workflow-grid" id="contentWorkflowGrid">
+</div>
+</section>
+<section class="content-panel">
+<div class="content-panel-head">
+<h3>Scheduler</h3>
+<span class="content-panel-meta" id="contentSchedulerMeta">Planned publish queue</span>
+</div>
+<div class="content-scheduler-shell">
+<table class="content-scheduler-table">
+<thead>
+<tr>
+<th>Day</th>
+<th>Time</th>
+<th>Platform</th>
+<th>Post Type</th>
+<th>Status</th>
+</tr>
+</thead>
+<tbody id="contentSchedulerRows">
+</tbody>
+</table>
+</div>
+</section>
+<section class="content-panel">
+<div class="content-panel-head">
+<h3 id="contentManagerStackTitle" data-agent-template="{{agent}} Content Manager Stack">Thomas Content Manager Stack</h3>
+<span class="content-panel-meta" id="contentToolsMeta">Capabilities</span>
+</div>
+<div class="content-tools-grid" id="contentToolsGrid">
+</div>
+</section>
+</div>
+<section class="content-checklist-shell" aria-label="Content hub build checklist">
+<div class="content-panel-head">
+<h3>Everything Checklist</h3>
+<span class="content-panel-meta" id="contentChecklistMeta">Tracking implementation status for all required features</span>
+</div>
+<div class="content-checklist-grid" id="contentChecklistGrid">
+</div>
+</section>
+</div>
+</section>
+<section class="module-workspace hidden" id="moduleWorkspace" aria-label="Expanded Thomas workspaces" data-agent-aria-label-template="Expanded {{agent}} workspaces">
+<div class="module-shell">
+<header class="module-header">
+<div class="module-header-copy">
+<h2 id="moduleWorkspaceTitle">Dashboard</h2>
+<p id="moduleWorkspaceSubtitle">One screen that answers what matters right now.</p>
+</div>
+<div class="module-header-meta">
+<span class="module-meta-pill" id="moduleWorkspaceModePill">Live</span>
+<span class="module-meta-text" id="moduleWorkspaceMeta">Updated just now</span>
+</div>
+</header>
+<section class="module-kpi-grid" id="moduleKpiGrid" aria-label="Workspace KPI strip">
+</section>
+<section class="module-subnav-row hidden" id="moduleSubnavRow" aria-label="Workspace sections">
+<div class="module-subnav-list" id="moduleSubnavList">
+</div>
+</section>
+<section class="module-flair-row hidden" id="moduleFlairRow" aria-label="Workspace context">
+</section>
+<section class="module-focus-strip hidden" id="moduleFocusStrip" aria-label="Top priorities">
+</section>
+<section class="module-special-grid hidden" id="moduleSpecialGrid" aria-label="Workspace specialized modules">
+</section>
+<section class="module-workbench hidden" id="moduleWorkbench" aria-label="Workspace workbench">
+</section>
+<div class="module-grid">
+<section class="module-panel" id="moduleQueuePanel">
+<div class="module-panel-head">
+<h3 id="moduleQueueTitle">Priority Queue</h3>
+<span class="module-panel-meta" id="moduleQueueMeta">Top work</span>
+</div>
+<div class="module-list" id="moduleQueueList">
+</div>
+</section>
+<section class="module-panel" id="moduleHealthPanel">
+<div class="module-panel-head">
+<h3 id="moduleHealthTitle">Health + Status</h3>
+<span class="module-panel-meta" id="moduleHealthMeta">Connections and checks</span>
+</div>
+<div class="module-list" id="moduleHealthList">
+</div>
+</section>
+<section class="module-panel" id="moduleActionsPanel">
+<div class="module-panel-head">
+<h3 id="moduleActionsTitle">Quick Actions</h3>
+<span class="module-panel-meta" id="moduleActionsMeta">Execute instantly</span>
+</div>
+<div class="module-actions-grid" id="moduleActionsGrid">
+</div>
+</section>
+<section class="module-panel" id="moduleActivityPanel">
+<div class="module-panel-head">
+<h3 id="moduleActivityTitle">Activity</h3>
+<span class="module-panel-meta" id="moduleActivityMeta">Recent interactions</span>
+</div>
+<div class="module-list" id="moduleActivityList">
+</div>
+</section>
+<section class="module-panel module-panel-wide hidden" id="moduleTriagePanel">
+<div class="module-panel-head">
+<h3 id="moduleTriageTitle">Triage</h3>
+<span class="module-panel-meta" id="moduleTriageMeta">Filter and act</span>
+</div>
+<div class="module-filter-row" id="moduleTriageFilters">
+</div>
+<div class="module-list" id="moduleTriageMessages">
+</div>
+</section>
+</div>
+</div>
+</section>
+<div class="robot-alert-stage" id="robotAlertStage" aria-live="polite" aria-atomic="true">
+<div class="robot-alert-bot variant-blue" id="robotAlertBot" aria-hidden="true">
+<span class="robot-alert-jetpack-shell"></span>
+<span class="robot-alert-jetpack-flame"></span>
+<span class="robot-alert-head">
+<span class="robot-alert-eye left"></span>
+<span class="robot-alert-eye right"></span>
+</span>
+<span class="robot-alert-body"></span>
+<span class="robot-alert-leg left"></span>
+<span class="robot-alert-leg right"></span>
+</div>
+<div class="robot-alert-bubble" id="robotAlertBubble"></div>
+</div>
+<div class="welcome-screen" id="welcomeScreen">
+<h1 class="welcome-title">Thomas</h1>
+<p class="welcome-subtitle">Your AI that actually does things</p>
+<div class="welcome-cards">
+<button class="welcome-card" data-prompt="Write a Python function that reads a CSV file and generates a summary report, then run it">
+<i class="ph ph-code">
+</i>
+<span class="welcome-card-title">Write &amp; run code</span>
+<span class="welcome-card-desc">Execute real code, debug errors, build scripts</span>
+</button>
+<button class="welcome-card" data-prompt="Search the web for the latest news on AI and summarize the top 3 stories">
+<i class="ph ph-globe">
+</i>
+<span class="welcome-card-title">Search the web</span>
+<span class="welcome-card-desc">Find info, summarize articles, research topics</span>
+</button>
+<button class="welcome-card" data-prompt="List the files in my current directory, then organize them by type">
+<i class="ph ph-folder-open">
+</i>
+<span class="welcome-card-title">Manage files</span>
+<span class="welcome-card-desc">Read, write, organize, and transform your files</span>
+</button>
+<button class="welcome-card" data-prompt="I have a complex research task: compare the top 3 JavaScript frameworks. Use multiple agents to research each one in parallel, then synthesize the results.">
+<i class="ph ph-users-three">
+</i>
+<span class="welcome-card-title">Multi-agent tasks</span>
+<span class="welcome-card-desc">Coordinate specialists on complex problems</span>
+</button>
+</div>
+</div>
+<div class="chat-search-bar" id="chatSearchBar">
+<input type="text" placeholder="Find messages in this chat" id="chatSearchInput">
+<span class="search-count">
+</span>
+<button class="search-nav-btn" id="chatSearchPrev" title="Previous">
+<i class="ph ph-caret-up">
+</i>
+</button>
+<button class="search-nav-btn" id="chatSearchNext" title="Next">
+<i class="ph ph-caret-down">
+</i>
+</button>
+<button class="search-nav-btn" id="chatSearchClose" title="Close">
+<i class="ph ph-x">
+</i>
+</button>
+</div>
+<section class="task-continuity-panel hidden" id="taskContinuityPanel" aria-live="polite">
+<div class="task-continuity-head">
+<div class="task-continuity-title-wrap">
+<strong class="task-continuity-title">Current Task</strong>
+<span class="task-continuity-status" id="taskContinuityStatusPill">Idle</span>
+</div>
+<button class="btn-icon task-continuity-refresh" id="taskContinuityRefreshBtn" title="Refresh task status">
+<i class="ph ph-arrows-clockwise">
+</i>
+</button>
+</div>
+<p class="task-continuity-goal" id="taskContinuityGoal">No active task yet. Start with a question or describe something you want done.</p>
+<div class="task-continuity-blockers hidden" id="taskContinuityBlockersWrap">
+<span class="task-continuity-blockers-label">Needs:</span>
+<ul id="taskContinuityBlockersList">
+</ul>
+</div>
+<p class="task-continuity-progress" id="taskContinuityProgress">Thomas will show progress and blockers here when a task is running.</p>
+<ul class="task-continuity-events hidden" id="taskContinuityEventsList">
+</ul>
+<div class="task-continuity-meta">
+<span id="taskContinuityUpdatedAt">Not synced</span>
+<span id="taskContinuitySession">Session: --</span>
+</div>
+</section>
+<div class="chat-scroll-area hidden" id="chatScrollArea">
+<div class="chat-container" id="chatMessagesInner">
+</div>
+</div>
+<section class="chat-game-panel hidden" id="chatGamePanel" aria-label="Cloud Jump game lane">
+<div class="chat-game-lane" id="chatGameLane">
+<canvas class="chat-game-canvas" id="chatGameCanvas" width="320" height="560" aria-label="Cloud Jump game canvas">
+</canvas>
+<div class="chat-game-door" id="chatGameDoor" aria-hidden="true">
+<span class="chat-game-door-light">
+</span>
+<span class="chat-game-door-leaf left">
+</span>
+<span class="chat-game-door-leaf right">
+</span>
+</div>
+<div class="chat-game-bot-wrap" id="chatGameBotWrap" aria-hidden="true">
+<span class="chat-game-dino-mount" id="chatGameDinoMount" aria-hidden="true">
+<span class="chat-game-dino-tail">
+</span>
+<span class="chat-game-dino-body">
+</span>
+<span class="chat-game-dino-head">
+</span>
+<span class="chat-game-dino-jaw">
+</span>
+<span class="chat-game-dino-leg chat-game-dino-leg-left">
+</span>
+<span class="chat-game-dino-leg chat-game-dino-leg-right">
+</span>
+</span>
+<span class="office-pixel-agent costume-headset" id="chatGameBot">
+<span class="office-agent-head">
+<span class="office-agent-eye office-agent-eye-left">
+</span>
+<span class="office-agent-eye office-agent-eye-right">
+</span>
+</span>
+<span class="office-agent-jetpack-shell">
+</span>
+<span class="office-agent-jetpack-flame">
+</span>
+<span class="office-agent-body">
+</span>
+<span class="office-agent-leg office-agent-leg-left">
+</span>
+<span class="office-agent-leg office-agent-leg-right">
+</span>
+</span>
+<span class="office-agent-label chat-game-bot-name" id="chatGameBotName">Office Bot</span>
+</div>
+<div class="chat-game-hud">
+<div class="chat-game-score-line chat-game-score-live" id="chatGameScoreWrap">
+<span class="chat-game-score-label">Score</span>
+<strong id="chatGameScore">0</strong>
+</div>
+<div class="chat-game-score-line chat-game-score-high" id="chatGameHighScoreWrap">
+<span class="chat-game-score-label">High</span>
+<strong id="chatGameHighScore">0</strong>
+</div>
+</div>
+<p class="chat-game-status" id="chatGameStatusText">Press Space to start | Esc to exit</p>
+</div>
+</section>
+<div class="composer-container">
+<div class="composer-inner">
+<div class="assistant-suggestion-rail hidden" id="assistantSuggestionRail">
+<div class="assistant-suggestion-head">
+<span class="assistant-suggestion-title" id="assistantSuggestionTitle">Try asking</span>
+<button class="assistant-suggestion-dismiss hidden" id="assistantSuggestionDismissBtn" type="button" aria-label="Dismiss suggestions">
+<i class="ph ph-x">
+</i>
+</button>
+</div>
+<div class="assistant-suggestion-bubbles" id="assistantSuggestionBubbles">
+</div>
+</div>
+<div class="composer-box">
+<div id="attachmentsPreview" class="attachments-preview">
+</div>
+<div class="composer-input-row">
+<button class="btn-icon" id="attachBtn" title="Actions menu" aria-expanded="false" aria-controls="composerActionPopover">
+<i class="ph ph-plus">
+</i>
+</button>
+<div class="composer-mode-chip hidden" id="composerModeChip" role="status" aria-live="polite">
+<span class="composer-mode-chip-label" id="composerModeChipLabel">
+</span>
+<button class="composer-mode-chip-close" id="composerModeChipCloseBtn" type="button" aria-label="Clear selected mode">
+<i class="ph ph-x">
+</i>
+</button>
+</div>
+<textarea class="composer-textarea" id="composerTextarea" rows="1" placeholder="Ask Thomas anything or describe a task" data-agent-placeholder-template="Ask {{agent}} anything or describe a task" autofocus>
+</textarea>
+<button class="btn-icon" id="micBtn" title="Use microphone">
+<i class="ph ph-microphone">
+</i>
+</button>
+<button class="btn-send" id="sendBtn" disabled>
+<i class="ph ph-arrow-up">
+</i>
+</button>
+</div>
+<div class="composer-status-bar" id="composerStatusBar" role="status" aria-live="polite">
+</div>
+<div class="composer-action-popover hidden" id="composerActionPopover" role="menu" aria-label="Quick actions">
+<div class="composer-action-column" id="composerActionList">
+<button class="composer-action-btn" type="button" data-action="research">Research</button>
+<button class="composer-action-btn" type="button" data-action="evolve">Evolve</button>
+<button class="composer-action-btn" type="button" data-action="create_image">Create image</button>
+<button class="composer-action-btn" type="button" data-action="create_video">Create video</button>
+<button class="composer-action-btn" type="button" data-action="create_song">Create song</button>
+<button class="composer-action-btn" type="button" data-action="add_files">Add files</button>
+<button class="composer-action-btn has-submenu" type="button" data-action="games" aria-expanded="false">Games <i class="ph ph-caret-right">
+</i>
+</button>
+</div>
+<div class="composer-games-column hidden" id="composerGamesColumn" aria-label="Game options">
+<div class="composer-games-title">Playable now</div>
+<button class="composer-game-btn" type="button" data-game="cloud_jump">Cloud Jump: Office Bot</button>
+<button class="composer-game-btn" type="button" data-game="jetpack_joyride">Jetpack Joyride: Office Bot</button>
+<button class="composer-game-btn" type="button" data-game="dino_run">Dino Run: Office Bot</button>
+<div class="composer-games-empty">More arcade modes will appear here as they ship.</div>
+</div>
+</div>
+<section class="composer-dino-shell hidden" id="composerDinoShell" aria-label="Dino Run game area">
+<canvas class="composer-dino-canvas" id="composerDinoCanvas" width="760" height="214" aria-label="Dino Run game canvas">
+</canvas>
+<div class="composer-dino-hud" id="composerDinoHud">
+<div class="composer-dino-score-line composer-dino-score-high">
+<span class="composer-dino-score-label">High</span>
+<strong id="composerDinoHighScore">0</strong>
+</div>
+<div class="composer-dino-score-line composer-dino-score-live">
+<span class="composer-dino-score-label">Score</span>
+<strong id="composerDinoScore">0</strong>
+</div>
+</div>
+<p class="composer-dino-status" id="composerDinoStatusText">Press Space to start | Esc to exit</p>
+<div class="chat-game-portal hidden" id="chatGamePortal" aria-hidden="true">
+<span class="chat-game-portal-ring">
+</span>
+<span class="chat-game-portal-ring ring-inner">
+</span>
+<span class="chat-game-portal-core">
+</span>
+</div>
+</section>
+</div>
+<div class="disclaimer" id="composerDisclaimer" data-agent-template="{{agent}} can make mistakes. Consider verifying important information."> Thomas can make mistakes. Consider verifying important information. </div>
+</div>
+</div>
+</main>
+</div>
+<div class="thomas-modal" id="modelSetupModal">
+<div class="modal-backdrop" id="modelSetupBackdrop">
+</div>
+<div class="modal-content model-setup-content">
+<div class="modal-header">
+<h2>Model Setup</h2>
+<button class="btn-icon" id="closeModelSetupBtn">
+<i class="ph ph-x">
+</i>
+</button>
+</div>
+<div class="modal-body">
+<div class="form-group">
+<label for="setupProviderPickerBtn">Provider</label>
+<div class="setup-provider-picker" id="setupProviderPicker">
+<button type="button" class="setup-provider-trigger" id="setupProviderPickerBtn" aria-haspopup="listbox" aria-expanded="false" aria-controls="setupProviderMenu">
+<span class="setup-provider-trigger-copy">
+<span class="setup-provider-trigger-label" id="setupProviderPickerLabel">Select provider</span>
+<span class="setup-provider-trigger-state" id="setupProviderPickerState">Choose where Thomas should run.</span>
+</span>
+<i class="ph ph-caret-down">
+</i>
+</button>
+<div class="setup-provider-menu hidden" id="setupProviderMenu" role="listbox" aria-label="Provider list">
+</div>
+</div>
+<select id="setupProviderSelector" class="hidden">
+</select>
+</div>
+<div class="form-group" id="setupModelOverrideGroup">
+<label>Model</label>
+<select id="setupModelSelector" class="setup-fluid-select">
+</select>
+</div>
+<div class="setup-runtime-row">
+<div class="form-group" id="setupReasoningGroup" style="display:none">
+<label data-runtime-help-title="Reasoning Effort" data-runtime-help-body="Controls how much deliberate reasoning Thomas spends before answering. Higher settings usually improve hard tasks, but they take longer and use more tokens.">Reasoning Effort</label>
+<div class="segmented-control" id="setupReasoningEffortGroup">
+<button class="segment" data-level="low" data-runtime-help-title="Low Reasoning" data-runtime-help-body="Fastest and cheapest. Best for simple tasks, short edits, and low-risk follow-through.">Low</button>
+<button class="segment active" data-level="medium" data-runtime-help-title="Medium Reasoning" data-runtime-help-body="Default balance. Good for most work without pushing token usage too hard.">Medium</button>
+<button class="segment" data-level="high" data-runtime-help-title="High Reasoning" data-runtime-help-body="Deeper thinking for harder code, planning, and debugging. Slower and more token-intensive than medium.">High</button>
+<button class="segment" data-level="xhigh" data-runtime-help-title="xHigh Reasoning" data-runtime-help-body="Maximum reasoning depth. Best for complex or ambiguous work, but it usually costs the most tokens and time.">xHigh</button>
+</div>
+</div>
+<div class="form-group">
+<label data-runtime-help-title="Autonomy" data-runtime-help-body="Controls how independently Thomas can work. Higher autonomy can do more multi-step execution and delegated work, which usually increases token usage and runtime.">Autonomy Engine Level</label>
+<div class="segmented-control" id="setupAutonomyGroup">
+<button class="segment active" data-level="1" data-runtime-help-title="L1 Chat" data-runtime-help-body="Plain chat. Best for questions, drafting, and lightweight back-and-forth with minimal autonomous work.">L1 <span>Chat</span>
+</button>
+<button class="segment" data-level="2" data-runtime-help-title="L2 Assist" data-runtime-help-body="Assisted execution. Thomas can help with bounded actions while staying closer to direct supervision.">L2 <span>Assist</span>
+</button>
+<button class="segment" data-level="3" data-runtime-help-title="L3 Auto" data-runtime-help-body="Agentic multi-step work. Thomas can chain together more execution on its own, which usually uses more time and tokens than L1-L2.">L3 <span>Auto</span>
+</button>
+<button class="segment" data-level="4" data-runtime-help-title="L4 Agent" data-runtime-help-body="Full agent mission mode. Thomas can do longer delegated work and deeper execution loops, which is usually the most powerful and the most expensive autonomy setting.">L4 <span>Agent</span>
+</button>
+</div>
+</div>
+<div class="form-group">
+<label data-runtime-help-title="Token Economy" data-runtime-help-body="Controls how aggressively Thomas spends context, retries, and pass budget. It changes runtime overhead, not your trust boundary.">Token Economy</label>
+<div class="segmented-control" id="setupEconomyGroup">
+<button class="segment" data-level="cheap" data-runtime-help-title="Cheap Token Economy" data-runtime-help-body="Prioritizes lower spend with fewer retries, passes, and overhead. Good for lightweight tasks and quick iteration.">Cheap</button>
+<button class="segment active" data-level="balanced" data-runtime-help-title="Balanced Token Economy" data-runtime-help-body="Default tradeoff between quality and cost. Usually the best general-purpose setting.">Balanced</button>
+<button class="segment" data-level="max" data-runtime-help-title="Maximum Token Economy" data-runtime-help-body="Lets Thomas spend more on retries, passes, and deeper execution. Best quality ceiling, but usually the highest token cost.">Maximum</button>
+</div>
+</div>
+<div class="form-group">
+<label data-runtime-help-title="Guardrails" data-runtime-help-body="Controls trust and safety posture separately from token economy. Stronger guardrails often add overhead from approvals, verification, and extra checks, so they can increase token usage.">Guardrails</label>
+<div class="segmented-control" id="setupGuardrailsGroup">
+<button class="segment" data-level="locked" data-runtime-help-title="Locked Guardrails" data-runtime-help-body="Strongest posture. Forces stricter approvals and safety floors. Safest option, but it can add runtime and token overhead.">Locked</button>
+<button class="segment active" data-level="standard" data-runtime-help-title="Standard Guardrails" data-runtime-help-body="Default posture. Keeps normal safety protections on without the full strictness of Locked.">Standard</button>
+<button class="segment" data-level="builder" data-runtime-help-title="Builder Guardrails" data-runtime-help-body="Loosest normal posture. Reduces posture-imposed restrictions for active building, but it carries more risk and should only be used intentionally.">Builder</button>
+</div>
+</div>
+</div>
+<div class="form-group split-group">
+<div class="form-subgroup">
+<label>Personality Preset</label>
+<select id="setupPersonalitySelector" class="setup-fluid-select">
+<option value="">Default Assistant</option>
+<option value="You are a helpful and friendly companion. Use emojis.">Friendly Companion </option>
+<option value="You are a terse senior software engineer. Answer directly in code with zero fluff."> Senior Coder</option>
+<option value="custom">Custom (Override)</option>
+</select>
+</div>
+</div>
+<div class="form-group hidden" id="customPersonalityGroup">
+<label>Custom System Prompt</label>
+<textarea id="setupCustomPrompt" rows="3" placeholder="You are Thomas..." data-agent-placeholder-template="You are {{agent}}...">
+</textarea>
+</div>
+<div class="form-group switch-group">
+<div class="switch-label">
+<strong>Memory Engine</strong>
+<span>Persist context across sessions natively</span>
+</div>
+<label class="toggle-switch">
+<input type="checkbox" id="setupMemoryToggle" checked>
+<span class="slider round">
+</span>
+</label>
+</div>
+</div>
+<div class="modal-footer" style="justify-content:space-between">
+<button class="btn-secondary" id="restartServerBtn" title="Restart Thomas server" style="font-size:0.85rem">&#8635; Restart Server</button>
+<button class="btn-primary" id="applyModelSetupBtn">Apply Configuration</button>
+</div>
+</div>
+</div>
+<div class="restart-overlay hidden" id="restartOverlay">
+<div class="restart-overlay-inner">
+<div>Restarting server&hellip;</div>
+<div id="restartStatus" style="font-size:0.85rem;opacity:0.7;margin-top:0.5rem">
+</div>
+</div>
+</div>
+<div class="thomas-modal" id="easySetupModal"></div>
+<input type="file" id="docFileInput" style="display:none" multiple />
+<input type="file" id="imageFileInput" accept="image/*" style="display:none" multiple />
+<div id="toastContainer" class="toast-container">
+</div>
+<script src="/static/js/theme_rules.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/token_economy_space.js?v=__THOMAS_WEB_BUILD__"></script>
+<script>
+/* Global space background — restore only for Nebula/auto theme */
+(function () {
+    'use strict';
+    function _shouldInjectGlobalSpace() {
+        try {
+            var theme = String(window.localStorage.getItem('thomas_theme') || 'auto').toLowerCase();
+            return !theme || theme === 'auto' || theme === 'system';
+        } catch (_) {
+            return !document.body.classList.contains('te-theme-light') && !document.body.classList.contains('te-theme-dark');
+        }
+    }
+    function _injectGlobalSpace() {
+        if (!_shouldInjectGlobalSpace()) return;
+        if (window.__teSpace && typeof window.__teSpace.inject === 'function') {
+            window.__teSpace.inject();
+        } else {
+            setTimeout(_injectGlobalSpace, 80);
+        }
+    }
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', _injectGlobalSpace);
+    } else {
+        _injectGlobalSpace();
+    }
+})();
+</script>
+<script src="/static/js/token_economy.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/templates/tpl_settings_sections.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/templates/tpl_settings.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/templates/tpl_debug_dock.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/templates/tpl_mission.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/templates/tpl_easy_setup.js?v=__THOMAS_WEB_BUILD__"></script>
+<script src="/static/js/app_runtime_loader.js?v=__THOMAS_WEB_BUILD__"></script>
+<script type="module" src="/static/js/app.js?v=__THOMAS_WEB_BUILD__">
+</script>
+</body>
+</html>

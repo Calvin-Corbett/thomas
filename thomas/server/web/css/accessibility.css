@@ -1,0 +1,518 @@
+/**
+ * WCAG 2.1 AA Accessibility Enhancements for Thomas
+ * Comprehensive accessibility features including focus management, screen reader support,
+ * high contrast mode, reduced motion preferences, and keyboard navigation support.
+ */
+
+/* ============================================================================
+   1. FOCUS INDICATORS - Visible focus outlines for all interactive elements
+   ============================================================================ */
+
+/* Default focus styles for all interactive elements */
+button,
+a,
+input,
+select,
+textarea,
+[role="button"],
+[role="tab"],
+[role="menuitem"],
+[role="option"],
+[tabindex]:not([tabindex="-1"]) {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  transition: outline 0.15s ease;
+}
+
+/* Visible focus state */
+button:focus,
+a:focus,
+input:focus,
+select:focus,
+textarea:focus,
+[role="button"]:focus,
+[role="tab"]:focus,
+[role="menuitem"]:focus,
+[role="option"]:focus,
+[tabindex]:not([tabindex="-1"]):focus {
+  outline: 2px solid var(--border-focus, #58a6ff);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(88, 166, 255, 0.25);
+}
+
+/* Focus-visible for modern browsers (keyboard focus only) */
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+[role="menuitem"]:focus-visible,
+[role="option"]:focus-visible,
+[tabindex]:not([tabindex="-1"]):focus-visible {
+  outline: 2px solid var(--border-focus, #58a6ff);
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px rgba(88, 166, 255, 0.25);
+}
+
+/* Remove default focus for mouse clicks (use focus-visible instead) */
+button:focus:not(:focus-visible),
+a:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+select:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+[role="button"]:focus:not(:focus-visible),
+[role="tab"]:focus:not(:focus-visible) {
+  outline: 2px solid transparent;
+}
+
+/* ============================================================================
+   2. SKIP NAVIGATION LINK - Hidden link visible on focus, jumps to main content
+   ============================================================================ */
+
+.skip-to-main-content {
+  position: absolute;
+  top: -40px;
+  left: 0;
+  background: var(--accent, #58a6ff);
+  color: var(--bg-app, #16181f);
+  padding: 8px 16px;
+  text-decoration: none;
+  border-radius: 0 0 var(--radius-md, 8px) 0;
+  font-weight: 600;
+  z-index: 9999;
+}
+
+.skip-to-main-content:focus {
+  top: 0;
+  outline: 2px solid var(--border-focus, #58a6ff);
+}
+
+/* ============================================================================
+   3. HIGH CONTRAST MODE - Prefers-contrast override for better visibility
+   ============================================================================ */
+
+@media (prefers-contrast: more) {
+  :root {
+    --border-light: rgba(255, 255, 255, 0.24);
+    --text-secondary: #c5cdd9;
+    --text-muted: #b0b8c7;
+  }
+
+  button,
+  a,
+  input,
+  select,
+  textarea {
+    border-width: 2px;
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible,
+  [tabindex]:not([tabindex="-1"]):focus-visible {
+    outline-width: 3px;
+    box-shadow: 0 0 0 6px rgba(88, 166, 255, 0.35);
+  }
+
+  /* Increase contrast of text */
+  body {
+    color: #f0f0f5;
+  }
+
+  .text-muted {
+    color: #a8afbd;
+  }
+
+  .text-secondary {
+    color: #c5cdd9;
+  }
+
+  /* Enhance border visibility */
+  .border {
+    border-color: rgba(255, 255, 255, 0.28) !important;
+  }
+}
+
+/* ============================================================================
+   4. REDUCED MOTION - Disable animations for users who prefer reduced motion
+   ============================================================================ */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ============================================================================
+   5. SCREEN READER UTILITIES - Visually hidden but accessible to screen readers
+   ============================================================================ */
+
+/* Standard sr-only class for screen reader only content */
+.sr-only,
+.screen-reader-text {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* Visible on focus for skip links */
+.sr-only:focus,
+.screen-reader-text:focus {
+  position: static;
+  width: auto;
+  height: auto;
+  padding: inherit;
+  margin: inherit;
+  overflow: visible;
+  clip: auto;
+  white-space: normal;
+}
+
+/* ============================================================================
+   6. MINIMUM TOUCH TARGETS - Ensure clickable elements are at least 44x44px
+   ============================================================================ */
+
+/*
+ * Touch target sizing — scoped to avoid overriding app layout.
+ * The app's own CSS handles flex/grid layout for nav items, sidebar buttons, etc.
+ * Only enforce min-size on standalone interactive elements without app-specific classes.
+ */
+/* Touch target minimums — only for bare buttons without app-specific styling.
+   Buttons with custom classes (mp-*, t-btn, module-*, sidebar-*, etc.) handle
+   their own sizing via the Thomas button standard (tokens.css).
+   We use a pseudo-element tap area approach instead (see .btn-icon below). */
+input[type="checkbox"],
+input[type="radio"] {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Touch target for icon buttons — use pseudo-element tap area instead of inflating the button.
+   This keeps buttons visually 24px but provides a 44px tap target via ::after. */
+.btn-icon,
+button.btn-icon {
+  padding: 4px;
+  position: relative;
+}
+.btn-icon::after {
+  content: '';
+  position: absolute;
+  inset: -10px;
+  /* 44px effective tap area around a 24px button */
+}
+
+/* Spacing between adjacent touch targets — scoped to avoid breaking flex layouts */
+
+/* ============================================================================
+   7. FORM FIELD STYLING - Visible labels, error states with icons
+   ============================================================================ */
+
+/* Form labels — scoped to avoid overriding app-styled labels */
+label:not([class]) {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: 500;
+}
+
+/* Input styling — only apply to standalone form fields, not app-styled inputs */
+input:not([class]),
+textarea:not([class]),
+select:not([class]) {
+  border: 2px solid var(--border-light, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 8px);
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-primary, #ececf1);
+  font-family: inherit;
+  font-size: 16px;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: var(--text-muted, #929bb0);
+}
+
+/* Focus state */
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--border-focus, #58a6ff);
+  box-shadow: 0 0 0 3px rgba(88, 166, 255, 0.15);
+  outline: none;
+}
+
+/* Error state styling with visual indicator */
+input[aria-invalid="true"],
+textarea[aria-invalid="true"],
+select[aria-invalid="true"],
+.form-field.error input,
+.form-field.error textarea,
+.form-field.error select {
+  border-color: var(--danger-line, rgba(255, 120, 120, 0.42));
+  background-color: var(--danger-bg, rgba(255, 107, 107, 0.14));
+}
+
+/* Error message styling */
+.form-field-error,
+[role="alert"] {
+  color: var(--danger-ink, #ffd0d0);
+  font-size: 14px;
+  margin-top: 4px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* Error icon before message */
+.form-field-error::before {
+  content: "⚠";
+  font-weight: bold;
+  flex-shrink: 0;
+}
+
+/* Warning state */
+input[aria-invalid="false"],
+textarea[aria-invalid="false"],
+select[aria-invalid="false"],
+.form-field.success input,
+.form-field.success textarea,
+.form-field.success select {
+  border-color: var(--warn-line, rgba(255, 191, 71, 0.45));
+}
+
+/* ============================================================================
+   8. DIALOG/MODAL STYLING - Proper ARIA modal attributes
+   ============================================================================ */
+
+/* Dialog styling — scoped to avoid breaking app modals that use their own positioning */
+[role="dialog"]:not([class]),
+dialog:not([class]) {
+  background: var(--bg-surface, #1f232c);
+  border: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-lg, 12px);
+  padding: 24px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+  max-width: 90vw;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+[role="dialog"] h1,
+[role="dialog"] h2,
+[role="dialog"] h3,
+.modal h1,
+.modal h2,
+.modal h3 {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+
+/* Close button in dialog */
+[role="dialog"] .close-button,
+.modal .close-button {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary, #adb3c2);
+  font-size: 24px;
+  cursor: pointer;
+  padding: 8px;
+  min-width: 44px;
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+[role="dialog"] .close-button:focus-visible,
+.modal .close-button:focus-visible {
+  outline: 2px solid var(--border-focus, #58a6ff);
+  border-radius: var(--radius-md, 8px);
+}
+
+/* Dialog overlay/backdrop */
+.modal-overlay,
+[role="dialog"]::backdrop {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(2px);
+}
+
+/* ============================================================================
+   9. HEADING HIERARCHY - Ensure proper heading structure
+   ============================================================================ */
+
+/* Heading hierarchy — removed broad overrides to avoid clobbering app styles */
+
+/* ============================================================================
+   10. LINK STYLING - Distinguishable from surrounding text
+   ============================================================================ */
+
+/* Link styling — only for plain links without app classes */
+a:not([class]) {
+  color: var(--accent, #58a6ff);
+  text-decoration: underline;
+  text-underline-offset: 4px;
+}
+
+a:not([class]):hover {
+  color: var(--accent-strong, #2f81f7);
+}
+
+/* ============================================================================
+   11. BUTTON STYLING - Consistent and accessible button states
+   ============================================================================ */
+
+/* Button base — only cursor and transition, let app CSS handle layout */
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button:disabled:focus {
+  outline: none;
+}
+
+/* ============================================================================
+   12. LIST STYLING - Proper semantics for lists
+   ============================================================================ */
+
+/* List styling — removed broad overrides to avoid clobbering app flex/grid lists */
+
+/* ============================================================================
+   13. COLOR CONTRAST HELPERS - Ensure sufficient contrast
+   ============================================================================ */
+
+/* Text on surface backgrounds */
+.on-surface {
+  color: var(--text-primary, #ececf1);
+  background: var(--bg-surface, #1f232c);
+}
+
+.on-surface.secondary {
+  color: var(--text-secondary, #adb3c2);
+}
+
+.on-surface.muted {
+  color: var(--text-muted, #929bb0);
+}
+
+/* ============================================================================
+   14. ICON BUTTONS - Ensure accessible icon-only buttons
+   ============================================================================ */
+
+/* Icon button sizing — only enforce min-size, don't override display/alignment */
+[role="button"][aria-label]:not([class]),
+button[aria-label]:not([class]) {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* ============================================================================
+   15. LOADING STATES - Communicate loading with text and ARIA
+   ============================================================================ */
+
+.loading,
+[aria-busy="true"] {
+  position: relative;
+  opacity: 0.7;
+}
+
+.loading::after,
+[aria-busy="true"]::after {
+  content: " (loading)";
+  font-size: 0.9em;
+  color: var(--text-muted, #929bb0);
+}
+
+/* ============================================================================
+   16. DATA TABLES - Accessible table styling
+   ============================================================================ */
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin-bottom: 16px;
+}
+
+th {
+  font-weight: 600;
+  text-align: left;
+  padding: 12px;
+  border-bottom: 2px solid var(--border-light, rgba(255, 255, 255, 0.12));
+  background: rgba(255, 255, 255, 0.02);
+}
+
+td {
+  padding: 12px;
+  border-bottom: 1px solid var(--border-light, rgba(255, 255, 255, 0.12));
+}
+
+tr:focus-within {
+  background: rgba(88, 166, 255, 0.08);
+}
+
+/* ============================================================================
+   17. NOTIFICATION/STATUS MESSAGES - Clear visual feedback
+   ============================================================================ */
+
+[role="status"],
+[role="alert"],
+.alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-md, 8px);
+  margin-bottom: 16px;
+  border-left: 4px solid;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+[role="alert"],
+.alert-danger,
+.alert-error {
+  background: var(--danger-bg, rgba(255, 107, 107, 0.14));
+  border-left-color: var(--danger-line, rgba(255, 120, 120, 0.42));
+  color: var(--danger-ink, #ffd0d0);
+}
+
+[role="status"],
+.alert-success {
+  background: rgba(71, 215, 172, 0.14);
+  border-left-color: rgba(71, 215, 172, 0.45);
+  color: var(--accent-mint, #47d7ac);
+}
+
+.alert-warning {
+  background: var(--warn-bg, rgba(255, 191, 71, 0.16));
+  border-left-color: var(--warn-line, rgba(255, 191, 71, 0.45));
+  color: var(--warn-ink, #ffd89a);
+}
+
+.alert-info {
+  background: rgba(88, 166, 255, 0.14);
+  border-left-color: rgba(88, 166, 255, 0.45);
+  color: var(--accent, #58a6ff);
+}

@@ -1,0 +1,10 @@
+{
+  "keys": {
+    "dev-local-test-key-001": {
+      "label": "Local development key",
+      "active": true,
+      "created": "2026-03-02"
+    }
+  },
+  "_comment": "In production, generate unique API keys per Thomas installation. Keys are validated on download-token requests."
+}

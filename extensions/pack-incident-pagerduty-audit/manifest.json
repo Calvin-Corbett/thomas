@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-pagerduty-audit",
+  "name": "Incident Pagerduty Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "pagerduty",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.pagerduty",
+    "incident.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via pagerduty with audit mode policies."
+}

@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Thomas Mission Control</title>
+  <script src="https://unpkg.com/@phosphor-icons/web@1.1.0"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+  
+  <link rel="stylesheet" href="mission.style01.css">
+
+</head>
+<body>
+  <div class="container">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-header">
+        <div class="logo">
+          <i class="ph-rocket-launch"></i>
+          Thomas
+        </div>
+        <div class="subtitle">Mission Control v1.0</div>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-item active" data-tab="missions">
+          <i class="ph-list-checks"></i>
+          <span>Missions</span>
+        </div>
+        <div class="nav-item" data-tab="activity">
+          <i class="ph-activity"></i>
+          <span>Activity</span>
+        </div>
+        <div class="nav-item" data-tab="approvals">
+          <i class="ph-seal-check"></i>
+          <span>Approvals</span>
+        </div>
+      </div>
+
+      <div class="kpi-section">
+        <div class="kpi-card">
+          <div class="kpi-label">Completed Today</div>
+          <div class="kpi-value" id="kpi-completed">0</div>
+          <div class="kpi-subtext">missions</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Avg Completion</div>
+          <div class="kpi-value" id="kpi-completion-time">--</div>
+          <div class="kpi-subtext">minutes</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Success Rate</div>
+          <div class="kpi-value" id="kpi-success-rate">--%</div>
+          <div class="kpi-subtext">system-wide</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Active Agents</div>
+          <div class="kpi-value" id="kpi-active-agents">0</div>
+          <div class="kpi-subtext">online</div>
+        </div>
+
+        <div class="kpi-card">
+          <div class="kpi-label">Queue Depth</div>
+          <div class="kpi-value" id="kpi-queue-depth">0</div>
+          <div class="kpi-subtext">pending</div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <div class="header">
+        <div>
+          <h1>Mission Control</h1>
+        </div>
+        <div class="header-controls">
+          <button class="btn btn-secondary btn-sm toggle-filter" id="toggle-filter">
+            <i class="ph-funnel"></i>
+            Filters
+          </button>
+          <button class="btn btn-primary btn-sm" id="btn-new-mission">
+            <i class="ph-plus"></i>
+            New Mission
+          </button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" data-tab="missions">Missions</div>
+        <div class="tab" data-tab="activity">Activity Feed</div>
+        <div class="tab" data-tab="approvals">Approvals Queue</div>
+      </div>
+
+      <!-- Missions Tab -->
+      <div class="tab-content active" id="tab-missions">
+        <div style="overflow-x: auto;">
+          <table class="missions-table" id="missions-table">
+            <thead>
+              <tr>
+                <th onclick="sortTable(this)">Mission <i class="ph-arrow-up" style="font-size: 10px; margin-left: 4px;"></i></th>
+                <th onclick="sortTable(this)">Status</th>
+                <th onclick="sortTable(this)">Progress</th>
+                <th onclick="sortTable(this)">Agent</th>
+                <th onclick="sortTable(this)">Priority</th>
+                <th onclick="sortTable(this)">Created</th>
+              </tr>
+            </thead>
+            <tbody id="missions-list">
+              <tr>
+                <td colspan="6" class="empty-state">
+                  <div class="empty-state-icon"><i class="ph-inbox"></i></div>
+                  <div class="empty-state-title">No missions yet</div>
+                  <div>Create a new mission to get started</div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Activity Tab -->
+      <div class="tab-content" id="tab-activity">
+        <div class="activity-feed" id="activity-feed">
+          <div class="empty-state">
+            <div class="empty-state-icon"><i class="ph-radio-button-off"></i></div>
+            <div class="empty-state-title">No activity yet</div>
+            <div>Live events will appear here</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Approvals Tab -->
+      <div class="tab-content" id="tab-approvals">
+        <div id="approvals-list">
+          <div class="empty-state">
+            <div class="empty-state-icon"><i class="ph-check-circle"></i></div>
+            <div class="empty-state-title">All clear!</div>
+            <div>No pending approvals</div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Right Panel -->
+    <aside class="right-panel">
+      <div class="panel-section">
+        <div class="panel-title">Agent Status</div>
+        <div id="agents-grid">
+          <div class="empty-state" style="padding: 20px;">
+            <div class="empty-state-icon"><i class="ph-robot"></i></div>
+            <div class="empty-state-title">No agents connected</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="panel-section">
+        <div class="panel-title">Pending Approvals</div>
+        <div id="approvals-panel">
+          <div class="empty-state" style="padding: 20px;">
+            <div class="empty-state-icon"><i class="ph-seal-check"></i></div>
+            <div class="empty-state-title">No pending items</div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Modal for Creating Mission -->
+  <div class="modal" id="mission-modal">
+    <div class="modal-content">
+      <div class="modal-header">Create New Mission</div>
+      <form id="mission-form">
+        <div class="form-group">
+          <label class="form-label">Mission Name</label>
+          <input type="text" class="form-input" id="mission-name" placeholder="e.g., Data Analysis Report" required>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Goal Description</label>
+          <textarea class="form-textarea" id="mission-goal" placeholder="Describe what this mission should accomplish..." required></textarea>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Priority</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="priority" value="P1" required>
+              <span>P1 (Critical)</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="priority" value="P2">
+              <span>P2 (High)</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="priority" value="P3" checked>
+              <span>P3 (Med)</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="priority" value="P4">
+              <span>P4 (Low)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Assigned Agent</label>
+          <select class="form-select" id="mission-agent" required>
+            <option value="">Select an agent...</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Autonomy Level</label>
+          <select class="form-select" id="mission-autonomy" required>
+            <option value="assisted">Assisted (Ask for approval)</option>
+            <option value="semi-autonomous">Semi-Autonomous (Rare checks)</option>
+            <option value="autonomous">Autonomous (No approval needed)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Schedule</label>
+          <div class="radio-group">
+            <label class="radio-option">
+              <input type="radio" name="schedule-type" value="once" checked>
+              <span>Run once</span>
+            </label>
+            <label class="radio-option">
+              <input type="radio" name="schedule-type" value="cron">
+              <span>Recurring (Cron)</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="form-group" id="cron-group" style="display: none;">
+          <label class="form-label">Cron Expression</label>
+          <input type="text" class="form-input" id="mission-cron" placeholder="e.g., 0 9 * * MON">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label">Risk Class</label>
+          <select class="form-select" id="mission-risk" required>
+            <option value="low">Low Risk</option>
+            <option value="medium">Medium Risk</option>
+            <option value="high">High Risk (Requires approval)</option>
+          </select>
+        </div>
+
+        <div class="form-actions">
+          <button type="button" class="btn btn-cancel" onclick="closeModal()">Cancel</button>
+          <button type="submit" class="btn btn-primary">Create Mission</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toast-container"></div>
+
+  
+  <script src="mission.script01.js"></script>
+
+</body>
+</html>

@@ -1,0 +1,39 @@
+{
+  "policy_version": 1,
+  "defaults": {
+    "authz": "require_api_access",
+    "csrf": "same_origin_or_optional_custom_header"
+  },
+  "exceptions": [
+    {
+      "method": "POST",
+      "path": "/webhooks/receive/github",
+      "authz": "webhook_provider_signature_or_secret",
+      "csrf": "not_applicable_webhook_receiver",
+      "owner": "platform-security",
+      "reason": "Public webhook ingress is authenticated by provider-specific signature verification.",
+      "reviewed_on": "2026-02-22",
+      "expires_on": "2026-06-30"
+    },
+    {
+      "method": "POST",
+      "path": "/webhooks/receive/stripe",
+      "authz": "webhook_provider_signature_or_secret",
+      "csrf": "not_applicable_webhook_receiver",
+      "owner": "platform-security",
+      "reason": "Stripe webhook receiver relies on Stripe signature validation when configured and is intentionally public.",
+      "reviewed_on": "2026-02-22",
+      "expires_on": "2026-06-30"
+    },
+    {
+      "method": "POST",
+      "path": "/webhooks/receive/{id}",
+      "authz": "webhook_provider_signature_or_secret",
+      "csrf": "not_applicable_webhook_receiver",
+      "owner": "platform-security",
+      "reason": "Generic webhook ingress uses tenant-specific shared secret validation when secreted webhooks are configured.",
+      "reviewed_on": "2026-02-22",
+      "expires_on": "2026-06-30"
+    }
+  ]
+}

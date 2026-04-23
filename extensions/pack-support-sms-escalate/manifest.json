@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-sms-escalate",
+  "name": "Support Sms Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "sms",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.sms",
+    "support.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via sms with escalate mode policies."
+}

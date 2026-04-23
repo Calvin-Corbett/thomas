@@ -1,0 +1,14 @@
+{
+  "id": "pack-alerts-email",
+  "name": "Alerts Email Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "email",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.email",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via email."
+}

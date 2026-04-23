@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tool Management - Thomas AI Agent</title>
+    
+    <link rel="stylesheet" href="tool_management.style01.css">
+
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <div class="header-content">
+            <h1>
+                <div class="header-icon">⚙</div>
+                Tool Management
+            </h1>
+            <div class="search-bar">
+                <input type="text" id="searchInput" placeholder="Search tools...">
+            </div>
+            <div class="header-actions">
+                <button class="btn btn-secondary" id="refreshBtn">↻ Refresh</button>
+                <button class="btn btn-primary" id="newToolBtn">+ New Tool</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Sidebar -->
+        <aside class="sidebar">
+            <div class="sidebar-section">
+                <div class="sidebar-title">Categories</div>
+                <div class="category-filter">
+                    <button class="category-btn active" data-category="all">All Tools</button>
+                    <button class="category-btn" data-category="browser">Browser</button>
+                    <button class="category-btn" data-category="database">Database</button>
+                    <button class="category-btn" data-category="email">Email</button>
+                    <button class="category-btn" data-category="filesystem">File System</button>
+                    <button class="category-btn" data-category="cloud">Cloud</button>
+                    <button class="category-btn" data-category="code">Code</button>
+                    <button class="category-btn" data-category="search">Search</button>
+                    <button class="category-btn" data-category="voice">Voice</button>
+                    <button class="category-btn" data-category="custom">Custom</button>
+                </div>
+            </div>
+
+            <div class="sidebar-section">
+                <div class="sidebar-title">Statistics</div>
+                <div class="stats-box">
+                    <div class="stat-item">
+                        <span class="stat-label">Total Tools</span>
+                        <span class="stat-value" id="statTotal">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Active</span>
+                        <span class="stat-value" id="statActive">0</span>
+                    </div>
+                    <div class="stat-item">
+                        <span class="stat-label">Errors</span>
+                        <span class="stat-value" id="statErrors">0</span>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Tabs -->
+            <div class="tabs">
+                <button class="tab-btn active" data-tab="tools">Tools</button>
+                <button class="tab-btn" data-tab="logs">Execution Logs</button>
+                <button class="tab-btn" data-tab="health">Health</button>
+            </div>
+
+            <!-- Bulk Actions -->
+            <div class="bulk-actions" id="bulkActions">
+                <label class="bulk-select-all">
+                    <input type="checkbox" id="selectAllCheckbox">
+                    <span>Select All</span>
+                </label>
+                <span class="bulk-count"><span id="bulkCount">0</span> selected</span>
+                <div class="bulk-action-btns">
+                    <button class="btn btn-success" id="enableSelectedBtn">Enable</button>
+                    <button class="btn btn-secondary" id="disableSelectedBtn">Disable</button>
+                    <button class="btn btn-danger" id="deleteSelectedBtn">Delete</button>
+                </div>
+            </div>
+
+            <!-- Tools Tab -->
+            <div class="tab-content active" id="tools-tab">
+                <div class="tool-grid" id="toolGrid">
+                    <div class="empty-state">
+                        <div class="empty-state-icon">⚙</div>
+                        <div class="empty-state-title">Loading tools...</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Logs Tab -->
+            <div class="tab-content" id="logs-tab">
+                <div style="overflow-x: auto;">
+                    <table class="logs-table" id="logsTable">
+                        <thead>
+                            <tr>
+                                <th>Timestamp</th>
+                                <th>Tool</th>
+                                <th>Input</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                                <th>Output</th>
+                            </tr>
+                        </thead>
+                        <tbody id="logsBody">
+                            <tr><td colspan="6" style="text-align: center; padding: 2rem;">Loading logs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Health Tab -->
+            <div class="tab-content" id="health-tab">
+                <div class="health-grid" id="healthGrid">
+                    <div class="empty-state" style="grid-column: 1/-1;">
+                        <div class="empty-state-icon">❤</div>
+                        <div class="empty-state-title">Loading health data...</div>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Tool Detail Modal -->
+    <div class="modal" id="toolModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="modal-title" id="modalToolName"></h2>
+                <button class="modal-close" id="modalCloseBtn">&times;</button>
+            </div>
+            <div class="modal-tabs">
+                <button class="modal-tab-btn active" data-modal-tab="overview">Overview</button>
+                <button class="modal-tab-btn" data-modal-tab="config">Configuration</button>
+                <button class="modal-tab-btn" data-modal-tab="logs">Execution Log</button>
+                <button class="modal-tab-btn" data-modal-tab="health">Health</button>
+            </div>
+            <div class="modal-body">
+                <!-- Overview Tab -->
+                <div class="modal-tab-content active" id="modal-overview">
+                    <div class="form-group">
+                        <label>Description</label>
+                        <p id="modalDescription" style="color: #a0aec0;"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Category</label>
+                        <p id="modalCategory" style="color: #a0aec0;"></p>
+                    </div>
+                    <div class="form-group">
+                        <label>Parameters Schema</label>
+                        <pre id="modalParams" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                    </div>
+                    <div class="form-group">
+                        <label>Usage Examples</label>
+                        <pre id="modalExamples" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                    </div>
+                </div>
+
+                <!-- Config Tab -->
+                <div class="modal-tab-content" id="modal-config">
+                    <div id="configForm"></div>
+                    <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+                        <button class="btn btn-primary" id="saveConfigBtn">Save Configuration</button>
+                        <button class="btn btn-secondary" id="testToolBtn">Test Tool</button>
+                    </div>
+                    <div id="testResult" style="margin-top: 1.5rem; display: none;">
+                        <label>Test Result</label>
+                        <pre id="testResultText" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                    </div>
+                </div>
+
+                <!-- Logs Tab -->
+                <div class="modal-tab-content" id="modal-logs">
+                    <div style="overflow-x: auto;">
+                        <table class="logs-table" id="toolLogsTable">
+                            <thead>
+                                <tr>
+                                    <th>Timestamp</th>
+                                    <th>Status</th>
+                                    <th>Input</th>
+                                    <th>Output</th>
+                                    <th>Duration</th>
+                                </tr>
+                            </thead>
+                            <tbody id="toolLogsBody">
+                                <tr><td colspan="5" style="text-align: center; padding: 2rem;">No execution logs</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Health Tab -->
+                <div class="modal-tab-content" id="modal-health">
+                    <div class="health-grid">
+                        <div class="health-card">
+                            <div class="health-label">Success Rate</div>
+                            <div class="health-value" id="healthSuccessRate">-</div>
+                            <div class="health-bar">
+                                <div class="health-bar-fill" id="healthSuccessBar" style="width: 0%"></div>
+                            </div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-label">Avg Latency</div>
+                            <div class="health-value" id="healthLatency">-</div>
+                            <div class="health-meta">milliseconds</div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-label">Error Rate</div>
+                            <div class="health-value" id="healthErrorRate">-</div>
+                            <div class="health-bar">
+                                <div class="health-bar-fill" id="healthErrorBar" style="width: 0%; background: #e74c3c;"></div>
+                            </div>
+                        </div>
+                        <div class="health-card">
+                            <div class="health-label">Total Calls</div>
+                            <div class="health-value" id="healthTotalCalls">-</div>
+                            <div class="health-meta" id="healthLastCalled">Never</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- New Tool Modal -->
+    <div class="modal" id="newToolModal">
+        <div class="modal-content" style="max-width: 700px;">
+            <div class="modal-header">
+                <h2 class="modal-title">Create New Tool</h2>
+                <button class="modal-close" id="newToolCloseBtn">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label>Tool Name</label>
+                    <input type="text" id="newToolName" placeholder="e.g., PDF Reader">
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Category</label>
+                        <select id="newToolCategory">
+                            <option value="custom">Custom</option>
+                            <option value="browser">Browser</option>
+                            <option value="database">Database</option>
+                            <option value="email">Email</option>
+                            <option value="filesystem">File System</option>
+                            <option value="cloud">Cloud</option>
+                            <option value="code">Code</option>
+                            <option value="search">Search</option>
+                            <option value="voice">Voice</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Icon/Type</label>
+                        <input type="text" id="newToolIcon" placeholder="e.g., 📄">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Description</label>
+                    <textarea id="newToolDescription" placeholder="Describe what this tool does..."></textarea>
+                </div>
+                <div class="form-group">
+                    <label>Parameters Schema (JSON)</label>
+                    <div class="code-editor">
+                        <textarea id="newToolParams" placeholder='{"properties": {"param1": {"type": "string"}}}'>{"properties": {}}</textarea>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Implementation (Python)</label>
+                    <div class="code-editor">
+                        <textarea id="newToolCode" placeholder="def execute(params):&#10;    return {'result': 'success'}">def execute(params):
+    return {'result': 'success'}</textarea>
+                    </div>
+                </div>
+                <div style="display: flex; gap: 1rem;">
+                    <button class="btn btn-primary" id="createToolBtn">Create Tool</button>
+                    <button class="btn btn-secondary" id="testNewToolBtn">Test Implementation</button>
+                </div>
+                <div id="newToolTestResult" style="margin-top: 1.5rem; display: none;">
+                    <pre id="newToolTestText" style="background: #0f1419; padding: 1rem; border-radius: 6px; overflow-x: auto; color: #a0aec0; font-size: 0.85rem;"></pre>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    
+    <script src="tool_management.script01.js"></script>
+
+</body>
+</html>

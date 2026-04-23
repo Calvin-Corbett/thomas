@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-jira-audit",
+  "name": "Alerts Jira Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "jira",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.jira",
+    "alerts.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via jira with audit mode policies."
+}

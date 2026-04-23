@@ -1,0 +1,14 @@
+{
+  "id": "pack-incident-discord",
+  "name": "Incident Discord Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "discord",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.discord",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via discord."
+}

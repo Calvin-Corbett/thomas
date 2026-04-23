@@ -1,0 +1,147 @@
+repos:
+  - repo: local
+    hooks:
+      - id: thomas-ruff
+        name: Thomas Ruff
+        entry: python scripts/run_ruff_precommit.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-agent-safety-validation
+        name: Thomas Agent Safety Validation
+        entry: python scripts/validate_agent_changes.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-active-folder-guard
+        name: Thomas Active Folder Guard
+        entry: python scripts/active_folders.py guard-staged --auto-claim-staged --require-explicit-agent
+        language: system
+        pass_filenames: false
+
+      - id: thomas-precommit-skip-policy-gate
+        name: Thomas Pre-commit Skip Policy Gate
+        entry: python scripts/check_precommit_skip_policy.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-protected-files-gate
+        name: Thomas Protected Files Gate
+        entry: python scripts/check_protected_files_gate.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-plan-structure-gate
+        name: Thomas Plan Structure Gate
+        entry: python scripts/check_plan_structure_gate.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-core-overhead-guard
+        name: Thomas Core Overhead Guard
+        entry: python scripts/check_core_overhead_guard.py
+        language: system
+        pass_filenames: true
+
+      - id: thomas-worktree-rules-gate
+        name: Thomas Worktree Rules Gate
+        entry: python scripts/check_worktree_rules_gate.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-worktree-branch-guard
+        name: Thomas Worktree Branch Guard
+        entry: python scripts/check_worktree_branch_guard.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-claims-gate
+        name: Thomas Workboard Claims Gate
+        entry: python scripts/check_workboard_claims.py --require-identity-metadata
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-task-problems-gate
+        name: Thomas Workboard Task Problems Gate
+        entry: python scripts/check_workboard_task_problems.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-changed-files-gate
+        name: Thomas Workboard Changed Files Gate
+        entry: python scripts/check_workboard_changed_files.py --staged --require-identity-metadata
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-agent-claim-gate
+        name: Thomas Workboard Agent Claim Gate
+        entry: python scripts/check_workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-issue-tool-smoke
+        name: Thomas Workboard Issue Tool Smoke
+        entry: python scripts/workboard_issue.py --help
+        language: system
+        pass_filenames: false
+
+      - id: thomas-workboard-problem-record-smoke
+        name: Thomas Workboard Problem Record Smoke
+        entry: python scripts/workboard_problem_record.py --help
+        language: system
+        pass_filenames: false
+
+      - id: thomas-bulk-commit-guard
+        name: Thomas Bulk Commit Guard
+        entry: python scripts/check_bulk_commit_guard.py --max-files 50
+        language: system
+        pass_filenames: false
+
+      - id: thomas-commit-growth-guard
+        name: Thomas Commit Growth Guard
+        entry: python scripts/check_commit_growth_guard.py --max-growth 300
+        language: system
+        pass_filenames: false
+
+      - id: thomas-monolith-guard
+        name: Thomas Monolith Guard
+        entry: python scripts/check_monolith_guard.py --staged-only
+        language: system
+        pass_filenames: false
+
+      - id: thomas-monolith-filename-pattern-gate
+        name: Thomas Monolith filename pattern gate
+        entry: python scripts/check_monolith_filename_guard.py --staged-only
+        language: system
+        pass_filenames: false
+
+      - id: thomas-protected-deletion-guard
+        name: Thomas Protected Deletion Guard
+        entry: python scripts/check_deletions.py --staged-only
+        language: system
+        pass_filenames: false
+
+      - id: thomas-feature-registry-gate
+        name: Thomas Feature Registry Gate
+        entry: python scripts/check_feature_registry.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-repo-identity-gate
+        name: Thomas Repo Identity Gate
+        entry: python scripts/check_repo_identity.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-site-visual-proof-gate
+        name: Thomas Site Visual Proof Gate
+        entry: python scripts/check_site_visual_proof.py
+        language: system
+        pass_filenames: false
+
+      - id: thomas-merge-readiness
+        name: Thomas Merge Readiness
+        entry: python scripts/check_merge_readiness.py
+        language: system
+        pass_filenames: false
+        stages: [pre-push]

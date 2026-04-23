@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-discord-triage",
+  "name": "Analytics Discord Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "discord",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.discord",
+    "analytics.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via discord with triage mode policies."
+}

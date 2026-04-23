@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-webhook-detect",
+  "name": "Alerts Webhook Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "webhook",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.webhook",
+    "alerts.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via webhook with detect mode policies."
+}

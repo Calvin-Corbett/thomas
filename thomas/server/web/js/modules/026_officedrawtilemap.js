@@ -1,0 +1,243 @@
+// Extracted from part-013b.js
+// From officedrawtilemap
+
+            officeCanvasBox(ctx, x - (w / 2), y - (h / 2), w, h, '#6e7da0', 'rgba(54, 69, 95, 0.76)', 2);
+            officeCanvasBox(ctx, x - ((w * 0.62) / 2), y - (h * 0.16), w * 0.62, h * 0.35, '#96b3dd', 'rgba(55, 70, 99, 0.78)', 1);
+            officeCanvasBox(ctx, x - ((w * 0.2) / 2), y + (h * 0.22), w * 0.2, h * 0.14, '#f2d47e', 'rgba(88, 76, 42, 0.7)', 1);
+            return;
+        }
+        if (item.type === 'pingpong') {
+            officeCanvasBox(ctx, x - (w / 2), y - (h / 2), w, h, '#7ca7c6', 'rgba(56, 80, 108, 0.72)', 2);
+            officeCanvasBox(ctx, x - (w * 0.02), y - (h / 2), Math.max(1, w * 0.04), h, '#d8ecff');
+            officeCanvasBox(ctx, x - (w * 0.12), y + (h * 0.44), w * 0.08, h * 0.2, '#6b7f9f');
+            officeCanvasBox(ctx, x + (w * 0.04), y + (h * 0.44), w * 0.08, h * 0.2, '#6b7f9f');
+            return;
+        }
+        officeCanvasBox(ctx, x - (w / 2), y - (h / 2), w, h, '#8ea0bc', 'rgba(60, 77, 106, 0.66)', 2);
+    });
+}
+
+function officeDrawTilemap(canvas, rooms, corridors) {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const width = canvas.width;
+    const height = canvas.height;
+    const tile = 26;
+    const corridorFill = '#f3f8ff';
+    const corridorStroke = 'rgba(88, 116, 150, 0.82)';
+    const corridorJointFill = 'rgba(251, 254, 255, 0.98)';
+    const corridorShadow = 'rgba(18, 29, 46, 0.34)';
+    const spriteAtlas = officeGetSpriteAtlas();
+    const hallNodePxById = new Map();
+    OFFICE_HALL_NODES.forEach((node) => {
+        hallNodePxById.set(node.id, {
+            x: (node.x / 100) * width,
+            y: (node.y / 100) * height,
+        });
+    });
+
+    ctx.save();
+    ctx.imageSmoothingEnabled = true;
+    ctx.clearRect(0, 0, width, height);
+
+    officeCanvasBox(
+        ctx,
+        0,
+        0,
+        width,
+        height,
+        '#8eacc2',
+    );
+    officeCanvasBox(
+        ctx,
+        width * 0.02,
+        height * 0.02,
+        width * 0.96,
+        height * 0.96,
+        'rgba(214, 230, 240, 0.94)',
+    );
+
+    officeCanvasBox(
+        ctx,
+        width * 0.03,
+        height * 0.045,
+        width * 0.94,
+        height * 0.012,
+        'rgba(109, 137, 168, 0.5)',
+    );
+    officeCanvasBox(
+        ctx,
+        width * 0.03,
+        height * 0.9,
+        width * 0.94,
+        height * 0.01,
+        'rgba(72, 96, 125, 0.36)',
+    );
+
+    officeCanvasRoundedBox(
+        ctx,
+        width * 0.035,
+        height * 0.058,
+        width * 0.93,
+        height * 0.84,
+        Math.max(18, Math.min(width, height) * 0.024),
+        'rgba(224, 236, 246, 0.62)',
+    );
+
+    for (let y = 0; y < height; y += tile) {
+        for (let x = 0; x < width; x += tile) {
+            const checker = ((Math.floor(x / tile) + Math.floor(y / tile)) % 2) === 0;
+            officeCanvasBox(
+                ctx,
+                x,
+                y,
+                tile,
+                tile,
+                checker ? 'rgba(248, 252, 255, 0.14)' : 'rgba(137, 161, 188, 0.07)',
+            );
+        }
+    }
+
+    corridors.forEach((corridor, corridorIndex) => {
+        const x = (corridor.x / 100) * width;
+        const y = (corridor.y / 100) * height;
+        const w = (corridor.w / 100) * width;
+        const h = (corridor.h / 100) * height;
+        const radius = Math.max(4, Math.min(12, Math.min(w, h) * 0.46));
+        officeCanvasRoundedBox(ctx, x + 1.5, y + 2, Math.max(2, w - 1.5), Math.max(2, h - 1), radius, corridorShadow);
+        officeCanvasRoundedBox(ctx, x, y, w, h, corridorFill, corridorStroke, 2);
+        const corridorSpriteId = corridor.orientation === 'h'
+            ? (corridorIndex % 2 === 0 ? 'corridor_main' : 'corridor_polished')
+            : (corridorIndex % 2 === 0 ? 'corridor_alt' : 'corridor_soft');
+        officePaintSpriteFill(
+            ctx,
+            spriteAtlas,
+            corridorSpriteId,
+            x + 1,
+            y + 1,
+            Math.max(2, w - 2),
+            Math.max(2, h - 2),
+            20,
+            0.6,
+        );
+        const edgeGlow = 'rgba(255, 255, 255, 0.56)';
+        const edgeShade = 'rgba(54, 76, 108, 0.32)';
+        if (corridor.orientation === 'h') {
+            officeCanvasBox(ctx, x + 2, y + 1.6, Math.max(2, w - 4), Math.max(1.5, h * 0.12), edgeGlow);
+            officeCanvasBox(ctx, x + 2, y + h - Math.max(2.5, h * 0.14), Math.max(2, w - 4), Math.max(1.5, h * 0.12), edgeShade);
+        } else {
+            officeCanvasBox(ctx, x + 1.6, y + 2, Math.max(1.5, w * 0.12), Math.max(2, h - 4), edgeGlow);
+            officeCanvasBox(ctx, x + w - Math.max(2.5, w * 0.14), y + 2, Math.max(1.5, w * 0.12), Math.max(2, h - 4), edgeShade);
+        }
+
+        // Corridor rhythm marks give the map a clearer Gather-like walkway feel.
+        ctx.strokeStyle = 'rgba(106, 126, 158, 0.22)';
+        ctx.lineWidth = 1;
+        if (corridor.orientation === 'h') {
+            for (let markerX = x + 10; markerX < x + w - 10; markerX += 24) {
+                ctx.beginPath();
+                ctx.moveTo(markerX + 0.5, y + 4);
+                ctx.lineTo(markerX + 0.5, y + h - 4);
+                ctx.stroke();
+                officeCanvasCircle(ctx, markerX + 0.5, y + (h * 0.5), 1.3, 'rgba(150, 176, 212, 0.56)');
+            }
+        } else {
+            for (let markerY = y + 10; markerY < y + h - 10; markerY += 24) {
+                ctx.beginPath();
+                ctx.moveTo(x + 4, markerY + 0.5);
+                ctx.lineTo(x + w - 4, markerY + 0.5);
+                ctx.stroke();
+                officeCanvasCircle(ctx, x + (w * 0.5), markerY + 0.5, 1.3, 'rgba(150, 176, 212, 0.56)');
+            }
+        }
+
+        ctx.strokeStyle = 'rgba(66, 88, 122, 0.28)';
+        ctx.lineWidth = 1;
+        if (corridor.orientation === 'h') {
+            const seamY = y + (h / 2);
+            ctx.beginPath();
+            ctx.moveTo(x + 2, seamY + 0.5);
+            ctx.lineTo(x + w - 2, seamY + 0.5);
+            ctx.stroke();
+        } else {
+            const seamX = x + (w / 2);
+            ctx.beginPath();
+            ctx.moveTo(seamX + 0.5, y + 2);
+            ctx.lineTo(seamX + 0.5, y + h - 2);
+            ctx.stroke();
+        }
+    });
+
+    OFFICE_HALL_NODES.forEach((node) => {
+        const x = (node.x / 100) * width;
+        const y = (node.y / 100) * height;
+        const radius = 8.2;
+        officeCanvasCircle(ctx, x, y, radius + 2.7, 'rgba(194, 216, 240, 0.4)');
+        ctx.fillStyle = corridorJointFill;
+        ctx.beginPath();
+        ctx.arc(x, y, radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = 'rgba(111, 136, 170, 0.64)';
+        ctx.lineWidth = 1.5;
+        ctx.stroke();
+        ctx.fillStyle = 'rgba(137, 160, 194, 0.5)';
+        ctx.beginPath();
+        ctx.arc(x, y, 2.4, 0, Math.PI * 2);
+        ctx.fill();
+    });
+
+    officeDrawAmbientDecor(ctx, width, height);
+
+    rooms.forEach((room) => {
+        const rect = officeRoomPixels(room, width, height);
+        const palette = officeRoomThemePalette(room.theme || room.kind);
+        const wall = Math.max(9, Math.round(Math.min(rect.w, rect.h) * 0.068));
+        const cornerRadius = Math.max(8, Math.round(Math.min(rect.w, rect.h) * 0.084));
+        const innerRadius = Math.max(6, cornerRadius - Math.max(2, Math.round(wall * 0.4)));
+
+        officeCanvasRoundedBox(
+            ctx,
+            rect.x + 2,
+            rect.y + 3,
+            Math.max(4, rect.w - 1),
+            Math.max(4, rect.h - 1),
+            cornerRadius,
+            'rgba(27, 37, 56, 0.16)',
+        );
+
+        officeCanvasRoundedBox(ctx, rect.x, rect.y, rect.w, rect.h, cornerRadius, palette.wall, 'rgba(40, 54, 82, 0.68)', 2);
+        officeCanvasRoundedBox(
+            ctx,
+            rect.x + wall,
+            rect.y + wall,
+            Math.max(6, rect.w - (wall * 2)),
+            Math.max(6, rect.h - (wall * 2)),
+            innerRadius,
+            palette.floor,
+        );
+        officePaintSpriteFill(
+            ctx,
+            spriteAtlas,
+            officeRoomThemeFloorSprite(room.theme || room.kind),
+            rect.x + wall + 1,
+            rect.y + wall + 1,
+            Math.max(4, rect.w - (wall * 2) - 2),
+            Math.max(4, rect.h - (wall * 2) - 2),
+            18,
+            0.56,
+        );
+        officeCanvasRoundedBox(
+            ctx,
+            rect.x + (wall * 1.16),
+            rect.y + (wall * 1.16),
+            Math.max(4, rect.w - (wall * 2.32)),
+            Math.max(4, rect.h - (wall * 2.32)),
+            Math.max(4, innerRadius * 0.76),
+            'rgba(243, 249, 255, 0.05)',
+        );
+        officeCanvasBox(
+            ctx,
+            rect.x + 1,
+            rect.y + 1,
+            Math.max(2, rect.w - 2),

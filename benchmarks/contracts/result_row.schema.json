@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thomas.local/benchmarks/contracts/result_row.schema.json",
+  "title": "Thomas Benchmark Result Row",
+  "type": "object",
+  "required": [
+    "task_id",
+    "competitor",
+    "success",
+    "elapsed_seconds",
+    "follow_up_prompts",
+    "quality_score",
+    "validity"
+  ],
+  "properties": {
+    "task_id": { "type": "string", "minLength": 1 },
+    "competitor": { "type": "string", "minLength": 1 },
+    "success": { "type": "boolean" },
+    "elapsed_seconds": { "type": "number", "minimum": 0 },
+    "follow_up_prompts": { "type": "integer", "minimum": 0 },
+    "quality_score": { "type": "integer" },
+    "evidence": { "type": "string" },
+    "notes": { "type": "string" },
+    "artifact_success": { "type": "boolean" },
+    "response_confirmed": { "type": "boolean" },
+    "timed_out": { "type": "boolean" },
+    "runaway_guarded": { "type": "boolean" },
+    "runner_error_present": { "type": "boolean" },
+    "validity": {
+      "type": "string",
+      "enum": ["valid", "invalid_competitor_capability", "invalid_runner_config", "invalid_environment", "aborted"]
+    },
+    "invalid_reason": { "type": "string" },
+    "captured_at": { "type": "string" }
+  },
+  "additionalProperties": true
+}

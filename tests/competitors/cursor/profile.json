@@ -1,0 +1,38 @@
+{
+    "id":  "cursor",
+    "name":  "Cursor",
+    "vendor":  "Cursor",
+    "category":  "coding_agent",
+    "surfaces":  [
+                     "ide",
+                     "background_agent",
+                     "cli"
+                 ],
+    "live_streaming":  "yes",
+    "settings_depth":  "high",
+    "benchmark_mode":  "external_run_required",
+    "key_strengths":  [
+                          "Strong IDE-native agent UX",
+                          "Background agent workflows",
+                          "Good coding velocity focus"
+                      ],
+    "source_urls":  [
+                        "https://docs.cursor.com/en/chat/agent",
+                        "https://docs.cursor.com/en/background-agents",
+                        "https://docs.cursor.com/en/cli"
+                    ],
+    "confidence":  "medium",
+    "notes":  "Important benchmark for day-to-day agentic IDE usage.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  4,
+                                      "ux.live_streaming":  5,
+                                      "ux.settings_depth":  5,
+                                      "autonomy.supervision_modes":  4,
+                                      "integration.mcp_support":  3,
+                                      "integration.git_pr_workflows":  4,
+                                      "platform.self_hostability":  1,
+                                      "composite.provisional_mean":  3.71
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

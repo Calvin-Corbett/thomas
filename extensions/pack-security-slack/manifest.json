@@ -1,0 +1,14 @@
+{
+  "id": "pack-security-slack",
+  "name": "Security Slack Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "slack",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.slack",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via slack."
+}

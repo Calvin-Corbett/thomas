@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-jira-prevent",
+  "name": "Qa Jira Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "jira",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.jira",
+    "qa.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via jira with prevent mode policies."
+}

@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://thomas.local/benchmarks/contracts/endurance_pack.schema.json",
+  "title": "Thomas Endurance Benchmark Pack",
+  "type": "object",
+  "required": ["id", "name", "version", "family", "type", "report_metrics"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1 },
+    "version": { "type": "integer", "minimum": 1 },
+    "family": { "type": "string", "minLength": 1 },
+    "type": { "enum": ["endurance", "endurance_ladder"] },
+    "description": { "type": "string" },
+    "competitor_requirements": {
+      "type": "object",
+      "properties": {
+        "required_capability_class": {
+          "type": "string",
+          "enum": ["text_only", "tool_using_agent", "tool_using_multi_agent"]
+        }
+      },
+      "additionalProperties": false
+    },
+    "starting_snapshot_policy": { "type": "object" },
+    "stop_conditions": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "task_contract": { "type": "object" },
+    "report_metrics": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 }
+    },
+    "time_budget_minutes": { "type": "integer", "minimum": 1 },
+    "rungs": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "time_budget_minutes"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "time_budget_minutes": { "type": "integer", "minimum": 1 }
+        },
+        "additionalProperties": true
+      }
+    }
+  },
+  "additionalProperties": true
+}

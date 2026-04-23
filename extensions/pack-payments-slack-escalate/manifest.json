@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-slack-escalate",
+  "name": "Payments Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.slack",
+    "payments.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via slack with escalate mode policies."
+}

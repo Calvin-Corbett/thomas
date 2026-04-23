@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-discord-audit",
+  "name": "Ops Discord Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "discord",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.discord",
+    "ops.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via discord with audit mode policies."
+}

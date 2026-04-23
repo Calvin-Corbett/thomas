@@ -1,0 +1,527 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0840",
+  "title": "Browser workflow case 0840 (order_cancellation)",
+  "category": "order_cancellation",
+  "risk_level": "critical",
+  "objective": "Validate order_cancellation journey under roaming_handoff network conditions.",
+  "dimensions": {
+    "channel": "embedded_webview",
+    "region": "me-central",
+    "network_profile": "roaming_handoff",
+    "build_variant": "canary",
+    "locale": "fr-FR"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:order_cancellation",
+    "region:me-central",
+    "channel:embedded_webview",
+    "network:roaming_handoff"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "wait_for_selector",
+      "target": "[data-test='order_cancellation-01']",
+      "input": "case-0840-value-01",
+      "expect": "order_cancellation-expected-01",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "click",
+      "target": "[data-test='order_cancellation-02']",
+      "input": "case-0840-value-02",
+      "expect": "order_cancellation-expected-02",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "type",
+      "target": "[data-test='order_cancellation-03']",
+      "input": "case-0840-value-03",
+      "expect": "order_cancellation-expected-03",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "press",
+      "target": "[data-test='order_cancellation-04']",
+      "input": "case-0840-value-04",
+      "expect": "order_cancellation-expected-04",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "scroll_into_view",
+      "target": "[data-test='order_cancellation-05']",
+      "input": "case-0840-value-05",
+      "expect": "order_cancellation-expected-05",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "capture_screenshot",
+      "target": "[data-test='order_cancellation-06']",
+      "input": "case-0840-value-06",
+      "expect": "order_cancellation-expected-06",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "snapshot_dom",
+      "target": "[data-test='order_cancellation-07']",
+      "input": "case-0840-value-07",
+      "expect": "order_cancellation-expected-07",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "collect_console",
+      "target": "[data-test='order_cancellation-08']",
+      "input": "case-0840-value-08",
+      "expect": "order_cancellation-expected-08",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "collect_network",
+      "target": "[data-test='order_cancellation-09']",
+      "input": "case-0840-value-09",
+      "expect": "order_cancellation-expected-09",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "assert_text",
+      "target": "[data-test='order_cancellation-10']",
+      "input": "case-0840-value-10",
+      "expect": "order_cancellation-expected-10",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "assert_visibility",
+      "target": "[data-test='order_cancellation-11']",
+      "input": "case-0840-value-11",
+      "expect": "order_cancellation-expected-11",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "download_file",
+      "target": "[data-test='order_cancellation-12']",
+      "input": "case-0840-value-12",
+      "expect": "order_cancellation-expected-12",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "upload_file",
+      "target": "[data-test='order_cancellation-13']",
+      "input": "case-0840-value-13",
+      "expect": "order_cancellation-expected-13",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "switch_tab",
+      "target": "[data-test='order_cancellation-14']",
+      "input": "case-0840-value-14",
+      "expect": "order_cancellation-expected-14",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "close_tab",
+      "target": "[data-test='order_cancellation-15']",
+      "input": "case-0840-value-15",
+      "expect": "order_cancellation-expected-15",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "start_trace",
+      "target": "[data-test='order_cancellation-16']",
+      "input": "case-0840-value-16",
+      "expect": "order_cancellation-expected-16",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "stop_trace",
+      "target": "[data-test='order_cancellation-17']",
+      "input": "case-0840-value-17",
+      "expect": "order_cancellation-expected-17",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "export_pdf",
+      "target": "[data-test='order_cancellation-18']",
+      "input": "case-0840-value-18",
+      "expect": "order_cancellation-expected-18",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "check_a11y",
+      "target": "[data-test='order_cancellation-19']",
+      "input": "case-0840-value-19",
+      "expect": "order_cancellation-expected-19",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "open_url",
+      "target": "[data-test='order_cancellation-20']",
+      "input": "case-0840-value-20",
+      "expect": "order_cancellation-expected-20",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "wait_for_selector",
+      "target": "[data-test='order_cancellation-21']",
+      "input": "case-0840-value-21",
+      "expect": "order_cancellation-expected-21",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "click",
+      "target": "[data-test='order_cancellation-22']",
+      "input": "case-0840-value-22",
+      "expect": "order_cancellation-expected-22",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "type",
+      "target": "[data-test='order_cancellation-23']",
+      "input": "case-0840-value-23",
+      "expect": "order_cancellation-expected-23",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "press",
+      "target": "[data-test='order_cancellation-24']",
+      "input": "case-0840-value-24",
+      "expect": "order_cancellation-expected-24",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "visibility",
+      "query": "assert-order_cancellation-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "network",
+      "query": "assert-order_cancellation-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "console",
+      "query": "assert-order_cancellation-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "text",
+      "query": "assert-order_cancellation-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "visibility",
+      "query": "assert-order_cancellation-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "network",
+      "query": "assert-order_cancellation-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "console",
+      "query": "assert-order_cancellation-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "text",
+      "query": "assert-order_cancellation-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "visibility",
+      "query": "assert-order_cancellation-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "network",
+      "query": "assert-order_cancellation-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "console",
+      "query": "assert-order_cancellation-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "text",
+      "query": "assert-order_cancellation-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 1,
+    "max_warning_count": 2,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 21500
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 2
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": true,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0840/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0840/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0840/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0840/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "order_cancellation",
+    "embedded_webview",
+    "me-central",
+    "roaming_handoff",
+    "severity:critical"
+  ]
+}

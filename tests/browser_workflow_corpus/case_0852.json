@@ -1,0 +1,555 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0852",
+  "title": "Browser workflow case 0852 (workspace_onboard)",
+  "category": "workspace_onboard",
+  "risk_level": "critical",
+  "objective": "Validate workspace_onboard journey under roaming_handoff network conditions.",
+  "dimensions": {
+    "channel": "embedded_webview",
+    "region": "me-central",
+    "network_profile": "roaming_handoff",
+    "build_variant": "canary",
+    "locale": "fr-FR"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:workspace_onboard",
+    "region:me-central",
+    "channel:embedded_webview",
+    "network:roaming_handoff"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "upload_file",
+      "target": "[data-test='workspace_onboard-01']",
+      "input": "case-0852-value-01",
+      "expect": "workspace_onboard-expected-01",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "switch_tab",
+      "target": "[data-test='workspace_onboard-02']",
+      "input": "case-0852-value-02",
+      "expect": "workspace_onboard-expected-02",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "close_tab",
+      "target": "[data-test='workspace_onboard-03']",
+      "input": "case-0852-value-03",
+      "expect": "workspace_onboard-expected-03",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "start_trace",
+      "target": "[data-test='workspace_onboard-04']",
+      "input": "case-0852-value-04",
+      "expect": "workspace_onboard-expected-04",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "stop_trace",
+      "target": "[data-test='workspace_onboard-05']",
+      "input": "case-0852-value-05",
+      "expect": "workspace_onboard-expected-05",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "export_pdf",
+      "target": "[data-test='workspace_onboard-06']",
+      "input": "case-0852-value-06",
+      "expect": "workspace_onboard-expected-06",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "check_a11y",
+      "target": "[data-test='workspace_onboard-07']",
+      "input": "case-0852-value-07",
+      "expect": "workspace_onboard-expected-07",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "open_url",
+      "target": "[data-test='workspace_onboard-08']",
+      "input": "case-0852-value-08",
+      "expect": "workspace_onboard-expected-08",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "wait_for_selector",
+      "target": "[data-test='workspace_onboard-09']",
+      "input": "case-0852-value-09",
+      "expect": "workspace_onboard-expected-09",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "click",
+      "target": "[data-test='workspace_onboard-10']",
+      "input": "case-0852-value-10",
+      "expect": "workspace_onboard-expected-10",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "type",
+      "target": "[data-test='workspace_onboard-11']",
+      "input": "case-0852-value-11",
+      "expect": "workspace_onboard-expected-11",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "press",
+      "target": "[data-test='workspace_onboard-12']",
+      "input": "case-0852-value-12",
+      "expect": "workspace_onboard-expected-12",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "scroll_into_view",
+      "target": "[data-test='workspace_onboard-13']",
+      "input": "case-0852-value-13",
+      "expect": "workspace_onboard-expected-13",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "capture_screenshot",
+      "target": "[data-test='workspace_onboard-14']",
+      "input": "case-0852-value-14",
+      "expect": "workspace_onboard-expected-14",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "snapshot_dom",
+      "target": "[data-test='workspace_onboard-15']",
+      "input": "case-0852-value-15",
+      "expect": "workspace_onboard-expected-15",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "collect_console",
+      "target": "[data-test='workspace_onboard-16']",
+      "input": "case-0852-value-16",
+      "expect": "workspace_onboard-expected-16",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "collect_network",
+      "target": "[data-test='workspace_onboard-17']",
+      "input": "case-0852-value-17",
+      "expect": "workspace_onboard-expected-17",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "assert_text",
+      "target": "[data-test='workspace_onboard-18']",
+      "input": "case-0852-value-18",
+      "expect": "workspace_onboard-expected-18",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "assert_visibility",
+      "target": "[data-test='workspace_onboard-19']",
+      "input": "case-0852-value-19",
+      "expect": "workspace_onboard-expected-19",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "download_file",
+      "target": "[data-test='workspace_onboard-20']",
+      "input": "case-0852-value-20",
+      "expect": "workspace_onboard-expected-20",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "upload_file",
+      "target": "[data-test='workspace_onboard-21']",
+      "input": "case-0852-value-21",
+      "expect": "workspace_onboard-expected-21",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "switch_tab",
+      "target": "[data-test='workspace_onboard-22']",
+      "input": "case-0852-value-22",
+      "expect": "workspace_onboard-expected-22",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "close_tab",
+      "target": "[data-test='workspace_onboard-23']",
+      "input": "case-0852-value-23",
+      "expect": "workspace_onboard-expected-23",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "start_trace",
+      "target": "[data-test='workspace_onboard-24']",
+      "input": "case-0852-value-24",
+      "expect": "workspace_onboard-expected-24",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "stop_trace",
+      "target": "[data-test='workspace_onboard-25']",
+      "input": "case-0852-value-25",
+      "expect": "workspace_onboard-expected-25",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "export_pdf",
+      "target": "[data-test='workspace_onboard-26']",
+      "input": "case-0852-value-26",
+      "expect": "workspace_onboard-expected-26",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "visibility",
+      "query": "assert-workspace_onboard-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "network",
+      "query": "assert-workspace_onboard-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "console",
+      "query": "assert-workspace_onboard-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "text",
+      "query": "assert-workspace_onboard-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "visibility",
+      "query": "assert-workspace_onboard-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "network",
+      "query": "assert-workspace_onboard-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "console",
+      "query": "assert-workspace_onboard-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "text",
+      "query": "assert-workspace_onboard-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "visibility",
+      "query": "assert-workspace_onboard-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "network",
+      "query": "assert-workspace_onboard-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "console",
+      "query": "assert-workspace_onboard-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "text",
+      "query": "assert-workspace_onboard-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 1,
+    "max_warning_count": 2,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 23000
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 2
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0852/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0852/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0852/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0852/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "workspace_onboard",
+    "embedded_webview",
+    "me-central",
+    "roaming_handoff",
+    "severity:critical"
+  ]
+}

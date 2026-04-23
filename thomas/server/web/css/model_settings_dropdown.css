@@ -1,0 +1,344 @@
+/* ── Model Settings Gear Dropdown ────────────────────────────────────
+   Inline panel inside the Model Setup modal, triggered by a gear icon
+   next to the MODEL dropdown. Shows connection details, login status,
+   and quick actions per profile.
+   ──────────────────────────────────────────────────────────────────── */
+
+/* ── Select Row (model dropdown + gear inline) ──────────────────── */
+
+.msd-select-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    width: 100%;
+}
+
+.msd-select-row select,
+.msd-select-row .setup-fluid-select {
+    flex: 1;
+    min-width: 0;
+}
+
+/* ── Gear Button ─────────────────────────────────────────────────── */
+
+.model-settings-gear-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    border: 1px solid rgba(148, 163, 184, 0.15);
+    border-radius: 10px;
+    background: rgba(148, 163, 184, 0.06);
+    color: var(--text-secondary, #94a3b8);
+    cursor: pointer;
+    transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+    flex-shrink: 0;
+}
+
+.model-settings-gear-btn:hover {
+    color: var(--text-primary, #e2e8f0);
+    background: rgba(148, 163, 184, 0.14);
+    border-color: rgba(148, 163, 184, 0.25);
+}
+
+.model-settings-gear-btn:active {
+    background: rgba(148, 163, 184, 0.22);
+}
+
+.model-settings-gear-btn.active {
+    color: #a5b4fc;
+    background: rgba(99, 102, 241, 0.12);
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.model-settings-gear-btn i {
+    font-size: 17px;
+    transition: transform 0.3s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.model-settings-gear-btn:hover i {
+    transform: rotate(45deg);
+}
+
+.model-settings-gear-btn.active i {
+    transform: rotate(90deg);
+}
+
+/* ── Inline Panel (slides open below the select row) ────────────── */
+
+.model-settings-panel {
+    display: none;
+    margin-top: 10px;
+    border-radius: 12px;
+    border: 1px solid rgba(148, 163, 184, 0.12);
+    background: rgba(15, 23, 42, 0.6);
+    backdrop-filter: blur(16px) saturate(140%);
+    -webkit-backdrop-filter: blur(16px) saturate(140%);
+    box-shadow:
+        0 4px 16px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.04);
+    overflow: hidden;
+    animation: msdSlideIn 0.2s cubic-bezier(0.2, 0.9, 0.2, 1);
+}
+
+.model-settings-panel.open {
+    display: block;
+}
+
+@keyframes msdSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Header ──────────────────────────────────────────────────────── */
+
+.msd-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px 8px;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.msd-provider-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    background: rgba(99, 102, 241, 0.15);
+    color: #a5b4fc;
+}
+
+.msd-badge-codex {
+    background: rgba(16, 185, 129, 0.15);
+    color: #6ee7b7;
+}
+
+.msd-badge-local {
+    background: rgba(251, 191, 36, 0.15);
+    color: #fcd34d;
+}
+
+.msd-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    font-size: 11px;
+    font-weight: 500;
+}
+
+.msd-status i {
+    font-size: 13px;
+}
+
+.msd-status-ok {
+    color: #6ee7b7;
+}
+
+.msd-status-off {
+    color: #94a3b8;
+}
+
+/* ── Body / Rows ─────────────────────────────────────────────────── */
+
+.msd-body {
+    padding: 8px 14px;
+}
+
+.msd-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding: 3px 0;
+    gap: 12px;
+}
+
+.msd-label {
+    font-size: 11px;
+    color: var(--text-secondary, #94a3b8);
+    flex-shrink: 0;
+    white-space: nowrap;
+}
+
+.msd-value {
+    font-size: 11px;
+    color: var(--text-primary, #e2e8f0);
+    text-align: right;
+    word-break: break-all;
+    min-width: 0;
+}
+
+.msd-mono {
+    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', monospace;
+    font-size: 10px;
+    opacity: 0.85;
+}
+
+.msd-hint {
+    margin: 4px 0;
+    font-size: 11px;
+    color: var(--text-secondary, #94a3b8);
+    line-height: 1.45;
+}
+
+.msd-warn {
+    color: #fbbf24;
+}
+
+.msd-danger {
+    color: #f87171;
+}
+
+/* ── Actions ─────────────────────────────────────────────────────── */
+
+.msd-actions {
+    display: flex;
+    gap: 8px;
+    padding: 8px 14px 10px;
+    border-top: 1px solid rgba(148, 163, 184, 0.08);
+}
+
+.msd-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    flex: 1;
+    padding: 6px 12px;
+    border: none;
+    border-radius: 8px;
+    font-size: 11px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease, opacity 0.15s ease;
+    white-space: nowrap;
+}
+
+.msd-btn:active {
+    opacity: 0.85;
+}
+
+.msd-btn-primary {
+    background: rgba(99, 102, 241, 0.25);
+    color: #a5b4fc;
+}
+
+.msd-btn-primary:hover {
+    background: rgba(99, 102, 241, 0.35);
+}
+
+.msd-btn-secondary {
+    background: rgba(148, 163, 184, 0.12);
+    color: var(--text-secondary, #94a3b8);
+}
+
+.msd-btn-secondary:hover {
+    background: rgba(148, 163, 184, 0.2);
+    color: var(--text-primary, #e2e8f0);
+}
+
+.msd-btn-danger {
+    background: rgba(239, 68, 68, 0.12);
+    color: #f87171;
+}
+
+.msd-btn-danger:hover {
+    background: rgba(239, 68, 68, 0.22);
+}
+
+.msd-btn-danger-solid {
+    background: rgba(239, 68, 68, 0.25);
+    color: #fca5a5;
+}
+
+.msd-btn-success {
+    background: rgba(16, 185, 129, 0.2);
+    color: #6ee7b7;
+}
+
+.msd-btn-ghost {
+    background: transparent;
+    color: var(--text-secondary, #94a3b8);
+}
+
+.msd-btn-ghost:hover {
+    background: rgba(148, 163, 184, 0.1);
+}
+
+.msd-btn-sm {
+    padding: 5px 10px;
+    flex: 0;
+}
+
+/* ── Key Input ───────────────────────────────────────────────────── */
+
+.msd-key-input-wrap {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    width: 100%;
+}
+
+.msd-key-input {
+    flex: 1;
+    min-width: 0;
+    padding: 5px 10px;
+    border: 1px solid rgba(148, 163, 184, 0.2);
+    border-radius: 7px;
+    background: rgba(15, 23, 42, 0.5);
+    color: var(--text-primary, #e2e8f0);
+    font-size: 11px;
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    outline: none;
+    transition: border-color 0.15s ease;
+}
+
+.msd-key-input:focus {
+    border-color: rgba(99, 102, 241, 0.5);
+}
+
+.msd-key-input::placeholder {
+    color: var(--text-secondary, #64748b);
+}
+
+/* ── Loading / Empty / Error States ──────────────────────────────── */
+
+.msd-loading,
+.msd-empty,
+.msd-error {
+    padding: 16px 14px;
+    text-align: center;
+    font-size: 12px;
+    color: var(--text-secondary, #94a3b8);
+}
+
+.msd-error {
+    color: #f87171;
+}
+
+.msd-error small {
+    opacity: 0.7;
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────── */
+
+@keyframes msdSpin {
+    to { transform: rotate(360deg); }
+}
+
+.msd-spin {
+    display: inline-block;
+    animation: msdSpin 0.8s linear infinite;
+}

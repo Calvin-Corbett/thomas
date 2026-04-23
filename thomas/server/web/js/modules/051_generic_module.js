@@ -1,0 +1,46 @@
+// Extracted from part-026b.js
+// Generic module content
+
+        pathHint: 'C:/games/MyUnrealProject/MyGame.uproject',
+        launchLabel: 'Launch Unreal',
+    },
+    {
+        id: 'godot',
+        label: 'Godot',
+        tag: 'MIT',
+        summary: 'Fast open-source workflow and lightweight exports.',
+        pathHint: 'C:/games/MyGodotProject',
+        launchLabel: 'Launch Godot',
+    },
+    {
+        id: 'o3de',
+        label: 'O3DE',
+        tag: 'Open 3D',
+        summary: 'Large-scale simulation and advanced rendering stack.',
+        pathHint: 'C:/games/O3DE/Project',
+        launchLabel: 'Launch O3DE',
+    },
+    {
+        id: 'bevy',
+        label: 'Bevy',
+        tag: 'Rust',
+        summary: 'Data-driven ECS workflows for rapid prototypes.',
+        pathHint: 'C:/games/bevy-project',
+        launchLabel: 'Launch Bevy',
+    },
+    {
+        id: 'unity',
+        label: 'Unity',
+        tag: 'Connector',
+        summary: 'Connected through external editor bridge and CLI.',
+        pathHint: 'C:/games/UnityProject',
+        launchLabel: 'Launch Unity',
+    },
+    {
+        id: 'custom',
+        label: 'Custom Engine',
+        tag: 'SDK',
+        summary: 'Use Thomas plugin hooks for in-house runtimes.',
+        pathHint: 'C:/games/custom-engine',
+        launchLabel: 'Open Connector',
+    },

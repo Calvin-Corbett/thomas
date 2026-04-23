@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-webhook-escalate",
+  "name": "Alerts Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.webhook",
+    "alerts.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via webhook with escalate mode policies."
+}

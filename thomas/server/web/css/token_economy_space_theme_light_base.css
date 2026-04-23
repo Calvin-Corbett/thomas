@@ -1,0 +1,283 @@
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   LIGHT THEME â€” WORN NOTEBOOK
+   A well-loved journal. Organic paper texture, ink-stain warmth,
+   serif typography, hand-drawn feel. Its own world â€” not a
+   reskin of Nebula. Zero glassmorphism. Zero AI slop.
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+/* -- Base -- */
+body.te-theme-light {
+    background: #ebe5d9 !important;
+    color: #2c2420 !important;
+    font-family: 'Georgia', 'Palatino Linotype', 'Palatino', 'Book Antiqua', serif !important;
+}
+
+/* -- EVERYTHING uses serif in this theme (except icon fonts) -- */
+body.te-theme-light *:not(.ph):not([class*="ph-"]),
+body.te-theme-light input,
+body.te-theme-light select,
+body.te-theme-light textarea,
+body.te-theme-light button {
+    font-family: 'Georgia', 'Palatino Linotype', 'Palatino', 'Book Antiqua', serif !important;
+}
+/* Restore Phosphor icon font â€” the serif wildcard above must not clobber it */
+body.te-theme-light .ph,
+body.te-theme-light [class*="ph-"] {
+    font-family: 'Phosphor' !important;
+}
+
+/* -- Paper texture: organic stains and age marks, NOT a grid -- */
+body.te-theme-light::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background:
+        /* Big organic water stain patches â€” like real paper left near coffee */
+        radial-gradient(ellipse 40% 30% at 18% 22%, rgba(190, 165, 120, 0.07) 0%, transparent 70%),
+        radial-gradient(ellipse 35% 45% at 75% 60%, rgba(180, 155, 110, 0.06) 0%, transparent 65%),
+        radial-gradient(ellipse 50% 25% at 50% 85%, rgba(175, 150, 105, 0.05) 0%, transparent 60%),
+        /* Subtle warm aging â€” uneven yellowing like a real old page */
+        radial-gradient(ellipse 60% 50% at 30% 50%, rgba(210, 190, 150, 0.08) 0%, transparent 70%),
+        radial-gradient(ellipse 45% 60% at 80% 25%, rgba(200, 180, 140, 0.06) 0%, transparent 65%),
+        /* Overall warm wash */
+        linear-gradient(165deg,
+            #ede7dc 0%,
+            #e8e1d3 30%,
+            #ebe4d6 50%,
+            #e5ddd0 70%,
+            #e9e2d5 100%
+        );
+}
+body.te-theme-light::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    opacity: 0.5;
+    mix-blend-mode: multiply;
+    background:
+        /* Crumple fold shadows â€” wide, soft, organic */
+        radial-gradient(ellipse 70% 1.5px at 20% 35%, rgba(140, 120, 80, 0.12) 0%, transparent 100%),
+        radial-gradient(ellipse 1.5px 55% at 65% 45%, rgba(140, 120, 80, 0.09) 0%, transparent 100%),
+        radial-gradient(ellipse 55% 1.5px at 45% 72%, rgba(140, 120, 80, 0.10) 0%, transparent 100%),
+        /* Foxing spots â€” tiny age marks scattered on old paper */
+        radial-gradient(circle 3px at 12% 18%, rgba(160, 130, 80, 0.09) 0%, transparent 100%),
+        radial-gradient(circle 2px at 88% 45%, rgba(160, 130, 80, 0.07) 0%, transparent 100%),
+        radial-gradient(circle 4px at 35% 92%, rgba(160, 130, 80, 0.06) 0%, transparent 100%),
+        radial-gradient(circle 2px at 72% 8%, rgba(160, 130, 80, 0.08) 0%, transparent 100%),
+        radial-gradient(circle 3px at 55% 55%, rgba(160, 130, 80, 0.05) 0%, transparent 100%),
+        /* Coffee ring â€” bottom right corner, subtle */
+        radial-gradient(circle 35px at 85% 88%, transparent 55%, rgba(150, 120, 70, 0.04) 60%, transparent 75%);
+}
+
+/* -- Kill ALL space / Nebula / robot / game stuff -- */
+body.te-theme-light #spaceCanvas,
+body.te-theme-light #te-space-root,
+body.te-theme-light .scanline-overlay,
+body.te-theme-light .te-floater-bot,
+body.te-theme-light .te-ambient-bot,
+body.te-theme-light #te-idle-thomas,
+body.te-theme-light #chatAgentPresence,
+body.te-theme-light .chat-robot-world,
+body.te-theme-light .chat-robot-world-stage,
+body.te-theme-light #chatGameCanvas,
+body.te-theme-light #composerDinoCanvas,
+body.te-theme-light #officeMinimapCanvas,
+body.te-theme-light .te-game-overlay,
+body.te-theme-light .robot-notification-wrapper,
+body.te-theme-light .code-changed-toast {
+    display: none !important;
+    opacity: 0 !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+}
+
+/* -- Layout -- */
+body.te-theme-light .app-layout {
+    background: transparent !important;
+    position: relative;
+    z-index: 1;
+}
+body.te-theme-light .main-content,
+body.te-theme-light .chat-scroll-area {
+    background: transparent !important;
+}
+
+/* â”€â”€ SIDEBAR â€” journal index tab â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .sidebar {
+    background: #e0d8c9 !important;
+    border-right: 1px solid #c8bfab !important;
+    color: #3d3028 !important;
+    box-shadow: inset -4px 0 8px rgba(140, 120, 85, 0.06) !important;
+}
+/* Brand text â€” like a journal title, italic serif */
+body.te-theme-light .brand-text {
+    font-family: 'Georgia', 'Palatino', serif !important;
+    font-style: italic !important;
+    font-weight: 400 !important;
+    font-size: 18px !important;
+    letter-spacing: 0.02em !important;
+    text-transform: none !important;
+    color: #3d3028 !important;
+    text-shadow: none !important;
+}
+body.te-theme-light .sidebar *,
+body.te-theme-light .sidebar .nav-item,
+body.te-theme-light .sidebar .sidebar-chat-row,
+body.te-theme-light .sidebar strong,
+body.te-theme-light .sidebar span,
+body.te-theme-light .sidebar a,
+body.te-theme-light .sidebar i {
+    color: #4a3d30 !important;
+}
+body.te-theme-light .sidebar .sidebar-section-heading,
+body.te-theme-light .sidebar .sidebar-nav-divider {
+    color: #8a7a65 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.08em !important;
+    font-size: 0.68rem !important;
+    font-style: normal !important;
+}
+body.te-theme-light .sidebar .nav-item:hover,
+body.te-theme-light .sidebar .sidebar-chat-row:hover {
+    background: #d6cdbf !important;
+}
+body.te-theme-light .sidebar .nav-item.active {
+    background: #cfc5b3 !important;
+    border-left: 3px solid #8a7250 !important;
+}
+/* Sidebar header */
+body.te-theme-light .sidebar-header {
+    background: transparent !important;
+    border-bottom: 1px solid #c8bfab !important;
+}
+body.te-theme-light .sidebar .search-container,
+body.te-theme-light .sidebar .sidebar-search {
+    background: #e8e1d4 !important;
+    border: 1px solid #c8bfab !important;
+    border-radius: 2px !important;
+}
+/* Settings button â€” make it visible with a clear style */
+body.te-theme-light .sidebar .user-btn {
+    background: #d6cdbf !important;
+    border-top: 1px solid #c8bfab !important;
+}
+body.te-theme-light .sidebar .user-btn .ph-gear {
+    color: #5c4a35 !important;
+    font-size: 1.35rem !important;
+}
+/* Compose new chat button */
+body.te-theme-light .sidebar .sidebar-new-chat-btn,
+body.te-theme-light .sidebar .btn-icon {
+    color: #5c4a35 !important;
+    background: transparent !important;
+}
+
+/* â”€â”€ CHAT BUBBLES â€” handwritten notes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .message-row.is-assistant .message-content {
+    background: #f4efe6 !important;
+    color: #2c2420 !important;
+    border: 1px solid #d5c9b5 !important;
+    border-left: 3px solid #b8a480 !important;
+    border-radius: 1px !important;
+    box-shadow: 1px 2px 6px rgba(100, 80, 50, 0.05) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+body.te-theme-light .message-row.is-user .message-content {
+    background: #eae4d7 !important;
+    color: #2c2420 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 1px !important;
+    box-shadow: 1px 2px 6px rgba(100, 80, 50, 0.05) !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+body.te-theme-light .message-content,
+body.te-theme-light .message-content *,
+body.te-theme-light .message-author,
+body.te-theme-light .message-meta,
+body.te-theme-light .message-footer,
+body.te-theme-light .message-footer * {
+    color: #2c2420 !important;
+}
+body.te-theme-light .message-meta,
+body.te-theme-light .message-timestamp,
+body.te-theme-light .message-model-label {
+    color: #8a7a65 !important;
+    font-style: italic !important;
+}
+body.te-theme-light .message-author {
+    font-weight: 700 !important;
+    font-style: normal !important;
+}
+/* Message action buttons â€” subtle, paper-colored */
+body.te-theme-light .msg-action-btn {
+    background: transparent !important;
+    color: #a0907a !important;
+    border: none !important;
+}
+body.te-theme-light .msg-action-btn:hover {
+    color: #5c4a35 !important;
+    background: #ddd6c8 !important;
+}
+/* Robot avatar in chat â€” hide the techy one */
+body.te-theme-light .chat-robot-world-bubble {
+    background: transparent !important;
+    border: none !important;
+}
+body.te-theme-light .chat-robot-world-bubble-meta,
+body.te-theme-light .chat-robot-world-bubble-meta * {
+    color: #7a6b58 !important;
+}
+
+/* â”€â”€ COMPOSER â€” bottom of the notebook page â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .composer-container {
+    background: #e3dbd0 !important;
+    border-top: 1px solid #c8bfab !important;
+}
+body.te-theme-light .composer-box {
+    background: #f2ede4 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 2px !important;
+}
+body.te-theme-light .composer-box textarea,
+body.te-theme-light .composer-box input[type="text"],
+body.te-theme-light .composer-box .ql-editor {
+    background: transparent !important;
+    color: #2c2420 !important;
+    border: none !important;
+}
+body.te-theme-light .composer-box textarea::placeholder,
+body.te-theme-light textarea::placeholder {
+    color: #a0907a !important;
+    font-style: italic !important;
+}
+/* Composer buttons â€” pen/paper feel */
+body.te-theme-light .composer-box .btn-send,
+body.te-theme-light #sendBtn {
+    background: #5c4a35 !important;
+    color: #f5f0e8 !important;
+    border: none !important;
+    border-radius: 2px !important;
+}
+body.te-theme-light .composer-box .btn-send:hover,
+body.te-theme-light #sendBtn:hover {
+    background: #4a3a28 !important;
+}
+body.te-theme-light .composer-box .btn-icon,
+body.te-theme-light #attachBtn,
+body.te-theme-light #micBtn {
+    color: #7a6b58 !important;
+    background: transparent !important;
+    border: none !important;
+}
+body.te-theme-light #attachBtn:hover,
+body.te-theme-light #micBtn:hover {
+    color: #4a3d30 !important;
+}

@@ -1,0 +1,193 @@
+/* tokens.css */
+:root {
+    /* Unified Theme: Website Lock (Thomas Site) */
+    --theme-name: "Website Lock";
+    --bg-app: #16181f;
+    --bg-surface: #1f232c;
+    --bg-surface-hover: #242936;
+    --text-primary: #ececf1;
+    --text-secondary: #adb3c2;
+    --text-muted: #929bb0;
+    --border-light: rgba(255, 255, 255, 0.12);
+    --border-focus: #8a9aad;
+    --accent: #8a9aad;
+    --accent-strong: #6b7d8f;
+    --accent-mint: #47d7ac;
+    --warn-bg: rgba(255, 191, 71, 0.16);
+    --warn-line: rgba(255, 191, 71, 0.45);
+    --warn-ink: #ffd89a;
+    --danger-bg: rgba(255, 107, 107, 0.14);
+    --danger-line: rgba(255, 120, 120, 0.42);
+    --danger-ink: #ffd0d0;
+    --shadow-strong: 0 22px 60px rgba(0, 0, 0, 0.45);
+
+    /* Typography: System Native for professional precision */
+    --font-sans: Manrope, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+
+    /* Consistent Spacing */
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-5: 24px;
+    --space-6: 32px;
+    --space-8: 48px;
+
+    /* Radii */
+    --radius-sm: 4px;
+    --radius-md: 8px;
+    --radius-lg: 12px;
+    --radius-xl: 16px;
+    --radius-2xl: 24px;
+
+    /* Z-Index Scale */
+    --z-base: 0;
+    --z-sticky: 10;
+    --z-dropdown: 20;
+    --z-sidebar: 30;
+    --z-overlay: 40;
+    --z-modal: 50;
+    --z-toast: 60;
+    --z-tooltip: 70;
+    --z-skip-link: 9999;
+
+    /* ── Button Profile (Thomas Standard) ─────────────────────────────────
+       Thomas uses a SKINNY button profile across the entire UI.
+       All interactive buttons should reference these tokens.
+       Vertical padding is intentionally tight (3–5px) to keep UI dense.
+       ──────────────────────────────────────────────────────────────────── */
+    --btn-pad-y: 4px;
+    --btn-pad-x: 12px;
+    --btn-font-size: 12px;
+    --btn-font-weight: 600;
+    --btn-line-height: 1.4;
+    --btn-radius: var(--radius-sm);
+    --btn-transition: background 0.15s, border-color 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: var(--font-sans);
+    background:
+        radial-gradient(circle at 14% 12%, rgba(88, 166, 255, 0.2), rgba(88, 166, 255, 0) 34%),
+        radial-gradient(circle at 88% 8%, rgba(71, 215, 172, 0.12), rgba(71, 215, 172, 0) 30%),
+        radial-gradient(circle at 70% 90%, rgba(255, 178, 66, 0.12), rgba(255, 178, 66, 0) 32%),
+        var(--bg-app);
+    color: var(--text-primary);
+    line-height: 1.6;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    font-size: 16px;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(173, 179, 194, 0.44) rgba(17, 20, 26, 0.62);
+}
+
+*::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+    background: rgba(17, 20, 26, 0.74);
+    border-radius: 999px;
+}
+
+*::-webkit-scrollbar-thumb {
+    border-radius: 999px;
+    border: 2px solid rgba(17, 20, 26, 0.8);
+    background: rgba(173, 179, 194, 0.36);
+}
+
+*::-webkit-scrollbar-thumb:hover {
+    background: rgba(173, 179, 194, 0.52);
+}
+
+/* ── Thomas Button Standard ───────────────────────────────────────────────────
+   Reusable utility classes for the skinny button profile.
+   Usage: <button class="t-btn t-btn-accent">Label</button>
+   Variants: t-btn-accent, t-btn-mint, t-btn-ghost, t-btn-danger
+   ─────────────────────────────────────────────────────────────────────────── */
+.t-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: var(--btn-pad-y) var(--btn-pad-x);
+    border-radius: var(--btn-radius);
+    border: 1px solid var(--border-light);
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: var(--btn-font-size);
+    font-weight: var(--btn-font-weight);
+    font-family: var(--font-sans);
+    line-height: var(--btn-line-height);
+    cursor: pointer;
+    transition: var(--btn-transition);
+    white-space: nowrap;
+    flex-shrink: 0;
+    -webkit-font-smoothing: antialiased;
+}
+.t-btn:hover {
+    background: rgba(162, 191, 233, 0.08);
+    border-color: rgba(255, 255, 255, 0.20);
+    color: var(--text-primary);
+}
+.t-btn:active {
+    transform: scale(0.97);
+}
+.t-btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    pointer-events: none;
+}
+/* Accent blue variant */
+.t-btn-accent {
+    border-color: var(--accent);
+    color: var(--accent);
+    background: rgba(88, 166, 255, 0.06);
+}
+.t-btn-accent:hover {
+    background: rgba(88, 166, 255, 0.14);
+    border-color: var(--accent);
+    color: var(--accent);
+}
+/* Mint / success variant */
+.t-btn-mint {
+    border-color: var(--accent-mint);
+    color: var(--accent-mint);
+    background: rgba(71, 215, 172, 0.06);
+}
+.t-btn-mint:hover {
+    background: rgba(71, 215, 172, 0.14);
+    border-color: var(--accent-mint);
+    color: var(--accent-mint);
+}
+/* Ghost / minimal variant */
+.t-btn-ghost {
+    border-color: transparent;
+    background: transparent;
+}
+.t-btn-ghost:hover {
+    background: rgba(162, 191, 233, 0.10);
+    border-color: transparent;
+}
+/* Danger / destructive variant */
+.t-btn-danger {
+    border-color: var(--danger-line);
+    color: var(--danger-ink);
+    background: var(--danger-bg);
+}
+.t-btn-danger:hover {
+    background: rgba(255, 107, 107, 0.22);
+}

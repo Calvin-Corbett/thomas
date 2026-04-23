@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-teams-audit",
+  "name": "Fraud Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.teams",
+    "fraud.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via teams with audit mode policies."
+}

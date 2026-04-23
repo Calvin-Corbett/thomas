@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-pagerduty-escalate",
+  "name": "Qa Pagerduty Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "pagerduty",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.pagerduty",
+    "qa.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via pagerduty with escalate mode policies."
+}

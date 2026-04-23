@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-email-prevent",
+  "name": "Security Email Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "email",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.email",
+    "security.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via email with prevent mode policies."
+}

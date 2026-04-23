@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-sms-detect",
+  "name": "Security Sms Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "sms",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.sms",
+    "security.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via sms with detect mode policies."
+}

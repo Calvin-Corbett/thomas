@@ -1,0 +1,14 @@
+{
+  "id": "pack-qa-webhook",
+  "name": "Qa Webhook Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "webhook",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.webhook",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via webhook."
+}

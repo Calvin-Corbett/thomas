@@ -1,0 +1,40 @@
+.message-task-strip {
+    position: relative;
+    overflow: hidden;
+}
+
+.message-task-strip::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    background: rgba(112, 170, 255, 0.4);
+}
+
+.message-task-strip[data-state="running"],
+.message-task-strip[data-state="starting"] {
+    border-color: rgba(96, 183, 255, 0.34);
+    box-shadow: 0 16px 32px rgba(10, 32, 58, 0.34);
+}
+
+.message-task-strip[data-state="running"]::before,
+.message-task-strip[data-state="starting"]::before {
+    background: linear-gradient(180deg, rgba(110, 191, 255, 0.96), rgba(56, 129, 255, 0.52));
+}
+
+.message-task-strip[data-state="completed"]::before {
+    background: linear-gradient(180deg, rgba(94, 214, 166, 0.92), rgba(30, 120, 92, 0.5));
+}
+
+.message-task-strip[data-state="failed"]::before {
+    background: linear-gradient(180deg, rgba(255, 138, 138, 0.96), rgba(150, 52, 52, 0.55));
+}
+
+.message-task-strip-open {
+    background: rgba(17, 25, 40, 0.82);
+}
+
+.message-task-strip-open:hover {
+    border-color: rgba(136, 176, 232, 0.44);
+    background: rgba(21, 33, 52, 0.95);
+}

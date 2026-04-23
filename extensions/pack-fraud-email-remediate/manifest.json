@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-email-remediate",
+  "name": "Fraud Email Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "email",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.email",
+    "fraud.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via email with remediate mode policies."
+}

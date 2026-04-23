@@ -1,0 +1,74 @@
+﻿<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thomas Project Board</title>
+    <link rel="stylesheet" href="/static/css/tokens.css">
+    <link rel="stylesheet" href="/static/static/my_stuff.style01.css?v=20260318-project-board-3">
+    <script src="/static/static/my_stuff.script01.js?v=20260318-project-board-3" defer></script>
+</head>
+<body>
+    <main class="stuff-shell">
+        <header class="stuff-header">
+            <div class="stuff-header-copy">
+                <p class="stuff-kicker">Project Board</p>
+                <h1>Local apps, ready to move.</h1>
+                <p class="stuff-subtitle">Link a repo, launch it, troubleshoot it, and talk to Thomas inside a project-only lane without crowding the main chat.</p>
+            </div>
+            <div class="stuff-header-actions">
+                <button class="stuff-btn stuff-btn-ghost" id="refreshButton" type="button">Refresh Board</button>
+                <button class="stuff-btn stuff-btn-primary" id="openImportButton" type="button">Add Project</button>
+            </div>
+        </header>
+
+        <section class="stuff-statusbar" aria-live="polite">
+            <span class="stuff-status-pill" id="statusPill">Board</span>
+            <span class="stuff-status-text" id="statusText">Loading project board...</span>
+        </section>
+
+        <section class="stuff-board-view" id="boardView">
+            <div class="stuff-board-frame">
+                <div class="stuff-board" id="board" aria-label="Project board"></div>
+            </div>
+        </section>
+
+        <section class="stuff-detail-view hidden" id="detailView" aria-live="polite">
+            <button class="stuff-back-btn" id="backToBoardButton" type="button">Back to board</button>
+            <div class="stuff-detail-shell" id="detailShell"></div>
+        </section>
+
+        <section class="stuff-import-sheet hidden" id="importSheet" aria-live="polite">
+            <div class="stuff-import-card">
+                <div class="stuff-import-head">
+                    <div>
+                        <p class="stuff-kicker">Import A Repo</p>
+                        <h2>Give Thomas a real project folder</h2>
+                    </div>
+                    <button class="stuff-close-btn" id="closeImportButton" type="button" aria-label="Close import sheet">X</button>
+                </div>
+                <div class="stuff-dropzone" id="dropzone">
+                    <strong>Drop a repo folder here</strong>
+                    <span>Thomas will stage it, infer scope, detect launch and test paths, and build a project page inside Project Board.</span>
+                </div>
+                <div class="stuff-import-actions">
+                    <button class="stuff-btn stuff-btn-primary" id="pickFolderButton" type="button">Choose Folder</button>
+                    <button class="stuff-btn stuff-btn-ghost" id="toggleAdvancedButton" type="button">Paste Path Instead</button>
+                </div>
+                <div class="stuff-advanced hidden" id="advancedImport">
+                    <label class="stuff-field" for="projectPathInput">
+                        <span>Folder path</span>
+                        <input id="projectPathInput" name="path" type="text" autocomplete="off" placeholder="F:\DevHub\projects\FreedomTMS">
+                    </label>
+                    <label class="stuff-field" for="projectNameInput">
+                        <span>Display name <em>optional</em></span>
+                        <input id="projectNameInput" name="name" type="text" placeholder="Freedom TMS">
+                    </label>
+                    <button class="stuff-btn stuff-btn-primary" id="submitImportButton" type="button">Import Project</button>
+                </div>
+                <p class="stuff-import-note" id="importNote">Best path for everyday users: choose a folder and let Thomas do the first read for you.</p>
+            </div>
+        </section>
+    </main>
+</body>
+</html>

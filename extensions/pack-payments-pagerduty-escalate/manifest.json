@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-pagerduty-escalate",
+  "name": "Payments Pagerduty Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "pagerduty",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.pagerduty",
+    "payments.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via pagerduty with escalate mode policies."
+}

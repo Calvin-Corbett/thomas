@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-jira-detect",
+  "name": "Payments Jira Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "jira",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.jira",
+    "payments.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via jira with detect mode policies."
+}

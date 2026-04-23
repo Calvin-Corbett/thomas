@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-jira-prevent",
+  "name": "Compliance Jira Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "jira",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.jira",
+    "compliance.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via jira with prevent mode policies."
+}

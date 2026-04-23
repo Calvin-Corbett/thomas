@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-teams-triage",
+  "name": "Qa Teams Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "teams",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.teams",
+    "qa.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via teams with triage mode policies."
+}

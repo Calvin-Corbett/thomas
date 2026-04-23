@@ -1,0 +1,292 @@
+﻿/* -- Specific workspace overrides for known modules -- */
+
+/* Mission Control */
+body.te-theme-light .mission-control-view,
+body.te-theme-light [class*="mission-control"],
+body.te-theme-light .current-task-panel,
+body.te-theme-light .delegated-agents-panel,
+body.te-theme-light .priority-queue,
+body.te-theme-light .cron-jobs-panel,
+body.te-theme-light #missionWorkspace,
+body.te-theme-light .mission-workspace {
+    background: var(--te-light-bg, #ebe5d9) !important;
+    background-image: none !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+/* Kill ALL inline radial/linear gradients on workspace sections */
+body.te-theme-light [class*="-workspace"],
+body.te-theme-light [id*="Workspace"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+    background-image: none !important;
+}
+
+/* Virtual Office â€” uses inline gradient styles set by JS */
+body.te-theme-light .office-view,
+body.te-theme-light [class*="office-"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+body.te-theme-light .office-workspace,
+body.te-theme-light #officeWorkspace {
+    background: var(--te-light-bg, #ebe5d9) !important;
+    background-image: none !important;
+}
+body.te-theme-light .office-toolbar {
+    background: #ddd5c5 !important;
+    background-image: none !important;
+    border-bottom: 1px solid var(--te-light-border, #c8bfab) !important;
+}
+body.te-theme-light .office-toolbar * {
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .office-scene-wrap,
+body.te-theme-light .office-scene,
+body.te-theme-light #officeScene {
+    background: var(--te-light-bg-raised, #f2ede4) !important;
+    background-image: none !important;
+}
+body.te-theme-light .office-scene-wrap *,
+body.te-theme-light .office-scene * {
+    background-image: none !important;
+}
+/* Office minimap */
+body.te-theme-light .office-minimap-container {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+    border: 1px solid var(--te-light-border, #c8bfab) !important;
+}
+/* Office inner toolbar (JS-generated, no class) and blur shadows */
+body.te-theme-light .office-scene-wrap > div[style*="background"],
+body.te-theme-light .office-stage div[style*="background"][style*="rgba"] {
+    background: #ddd5c5 !important;
+    border: 1px solid var(--te-light-border, #c8bfab) !important;
+}
+/* Kill blur shadow overlays in office scene */
+body.te-theme-light .office-scene-wrap div[style*="filter: blur"],
+body.te-theme-light .office-stage div[style*="filter: blur"] {
+    background: transparent !important;
+    filter: none !important;
+}
+/* Office scene inner grid/floor â€” kill dark background */
+body.te-theme-light .office-scene > div[style*="background"] {
+    background: #f2ede4 !important;
+    background-color: #f2ede4 !important;
+    background-image: none !important;
+}
+/* All text in office workspace */
+body.te-theme-light .office-workspace *,
+body.te-theme-light #officeWorkspace *,
+body.te-theme-light .office-stage * {
+    color: var(--te-light-text, #2c2420) !important;
+}
+
+/* Token Economy â€” the TE widget uses .te-v3 with .te-* children.
+   ALL of them default to dark rgba(8,9,12,...) backgrounds. Override everything. */
+body.te-theme-light .token-economy-view,
+body.te-theme-light [class*="token-"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+body.te-theme-light .te-v3 {
+    background: var(--te-light-bg, #ebe5d9) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-topbar {
+    background: #ddd5c5 !important;
+    border-bottom: 1px solid var(--te-light-border, #c8bfab) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-topbar *,
+body.te-theme-light .te-topbar-title,
+body.te-theme-light .te-topbar-dim,
+body.te-theme-light .te-topbar-clock,
+body.te-theme-light .te-topbar-live {
+    color: var(--te-light-text-soft, #5c4a35) !important;
+}
+body.te-theme-light .te-hero {
+    background: var(--te-light-bg-raised, #f2ede4) !important;
+    border-bottom: 1px solid var(--te-light-border, #c8bfab) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-hero *,
+body.te-theme-light .te-hero-cost,
+body.te-theme-light .te-hero-dollar,
+body.te-theme-light .te-hero-whole,
+body.te-theme-light .te-hero-frac,
+body.te-theme-light .te-hero-sub,
+body.te-theme-light .te-hero-pipe {
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-datastrip {
+    background: #e6dfd2 !important;
+    border-bottom: 1px solid var(--te-light-border, #c8bfab) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-ds-cell,
+body.te-theme-light .te-ds-wide {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+    border: 1px solid var(--te-light-border, #c8bfab) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-ds-num,
+body.te-theme-light .te-ds-note,
+body.te-theme-light .te-datastrip * {
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-main {
+    background: var(--te-light-bg, #ebe5d9) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-col-left,
+body.te-theme-light .te-col-right {
+    background: transparent !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-spectrum,
+body.te-theme-light .te-empty-state,
+body.te-theme-light .te-empty-chart {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+    border: 1px solid var(--te-light-border, #c8bfab) !important;
+    color: var(--te-light-text-mute, #8a7a65) !important;
+}
+body.te-theme-light .te-terminal {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+    border: 1px solid var(--te-light-border, #c8bfab) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-term-line,
+body.te-theme-light .te-term-sys {
+    color: var(--te-light-text-mute, #8a7a65) !important;
+    font-style: italic !important;
+}
+body.te-theme-light .te-switch-track,
+body.te-theme-light .te-switch-bg {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+    border: 1px solid var(--te-light-border, #c8bfab) !important;
+}
+body.te-theme-light .te-sw-mul,
+body.te-theme-light .te-sw-name,
+body.te-theme-light .te-ro-desc,
+body.te-theme-light .te-ro-grid {
+    color: var(--te-light-text, #2c2420) !important;
+}
+body.te-theme-light .te-idle-viz {
+    background: transparent !important;
+}
+body.te-theme-light .te-burnstrip-fill {
+    background: var(--te-light-accent, #8a7250) !important;
+}
+/* Catch-all for ANY .te-* element inside .te-v3 that still has dark bg */
+body.te-theme-light .te-v3 [class^="te-"] {
+    background-color: transparent !important;
+}
+body.te-theme-light .te-v3 [class^="te-"]:not(.te-burnstrip-fill) {
+    color: var(--te-light-text, #2c2420) !important;
+}
+/* Re-apply specific backgrounds after the catch-all */
+body.te-theme-light .te-v3 .te-topbar {
+    background: #ddd5c5 !important;
+}
+body.te-theme-light .te-v3 .te-hero {
+    background: var(--te-light-bg-raised, #f2ede4) !important;
+}
+body.te-theme-light .te-v3 .te-datastrip {
+    background: #e6dfd2 !important;
+}
+body.te-theme-light .te-v3 .te-ds-cell,
+body.te-theme-light .te-v3 .te-ds-wide {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+}
+body.te-theme-light .te-v3 .te-spectrum,
+body.te-theme-light .te-v3 .te-empty-state,
+body.te-theme-light .te-v3 .te-terminal {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+}
+body.te-theme-light .te-v3 .te-switch-track,
+body.te-theme-light .te-v3 .te-switch-bg {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+}
+
+/* Marketplace */
+body.te-theme-light .marketplace-view,
+body.te-theme-light [class*="marketplace-"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+
+/* Channels */
+body.te-theme-light .channels-view,
+body.te-theme-light [class*="channel-"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+
+/* UI Editor */
+body.te-theme-light .editor-view,
+body.te-theme-light [class*="editor-"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+
+/* My Stuff */
+body.te-theme-light .my-stuff-view,
+body.te-theme-light [class*="my-stuff"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+
+/* Life Manager */
+body.te-theme-light .life-manager-view,
+body.te-theme-light [class*="life-manager"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+
+/* -- Sidebar text: FORCE readable dark text everywhere -- */
+body.te-theme-light .sidebar,
+body.te-theme-light .sidebar *,
+body.te-theme-light .sidebar span,
+body.te-theme-light .sidebar a,
+body.te-theme-light .sidebar p,
+body.te-theme-light .sidebar strong,
+body.te-theme-light .sidebar label,
+body.te-theme-light .sidebar div {
+    color: #3d3028 !important;
+}
+body.te-theme-light .sidebar .sidebar-section-heading {
+    color: #8a7a65 !important;
+}
+/* -- Nav items: some get Nebula's rgba(236,236,241,0.55) white from
+   base CSS with higher specificity. Use ID selectors to force dark text. -- */
+body.te-theme-light #navChatBtn,
+body.te-theme-light #navChatBtn *,
+body.te-theme-light #navChatBtn .nav-chat-label,
+body.te-theme-light #navChatBtn .nav-chat-label span,
+body.te-theme-light #navOfficeBtn,
+body.te-theme-light #navUiEditorBtn,
+body.te-theme-light #navMyStuffBtn,
+body.te-theme-light #navMissionBtn,
+body.te-theme-light #navChannelsBtn,
+body.te-theme-light #navMarketplaceBtn,
+body.te-theme-light #navTokenEconomyBtn,
+body.te-theme-light #navLifeManagerBtn,
+body.te-theme-light #settingsBtn {
+    color: #3d3028 !important;
+}
+/* Active nav item â€” slightly darker bg, keep dark text */
+body.te-theme-light .sidebar .nav-item.active,
+body.te-theme-light .sidebar .nav-item.active * {
+    color: #2c2420 !important;
+    background-color: #cfc5b3 !important;
+}
+/* Hover state */
+body.te-theme-light .sidebar .nav-item:hover {
+    color: #2c2420 !important;
+}
+/* Any nav item with data-workspace-id or other attributes â€” force color */
+body.te-theme-light .sidebar button.nav-item,
+body.te-theme-light .sidebar button.nav-item[data-workspace-id],
+body.te-theme-light .sidebar button.nav-item[data-nav-mode] {
+    color: #3d3028 !important;
+}
+
+/* -- Prevent ANY rgba transparency from creating dark overlays -- */
+body.te-theme-light [style*="rgba(0"],
+body.te-theme-light [style*="rgba(17"],
+body.te-theme-light [style*="rgba(22"],
+body.te-theme-light [style*="rgba(25"] {
+    background: transparent !important;
+}
+

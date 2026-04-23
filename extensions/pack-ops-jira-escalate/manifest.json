@@ -1,0 +1,16 @@
+{
+  "id": "pack-ops-jira-escalate",
+  "name": "Ops Jira Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "ops",
+  "target": "jira",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "ops.signal",
+    "ops.dispatch.jira",
+    "ops.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for ops workflows via jira with escalate mode policies."
+}

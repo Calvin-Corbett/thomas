@@ -1,0 +1,11 @@
+{
+  "canonical_repo_slug": "corbe/thomas",
+  "canonical_local_roots": [
+    "<repo_root>"
+  ],
+  "enforce_local_root_when_not_ci": true,
+  "allowed_remote_names": [
+    "origin",
+    "upstream"
+  ]
+}

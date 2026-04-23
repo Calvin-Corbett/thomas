@@ -1,0 +1,79 @@
+{
+  "id": "thomas_project_build_quality_suite_v1",
+  "name": "Thomas Project Build Quality Suite",
+  "version": 1,
+  "type": "project",
+  "family": "thomas_project_build_quality",
+  "description": "Small suite of isolated Python project fixtures that measure professional feature delivery, bugfix discipline, focused tests, commit hygiene, and truthful reporting.",
+  "fixture_path": "benchmarks/fixtures/python_todo_service",
+  "protocol": [
+    "Each task receives an isolated copy of its fixture.",
+    "Each fixture workspace is initialized as a fresh git repo before each run.",
+    "Success requires a passing focused check command and a truthful project report artifact.",
+    "Raw metrics are primary; weighted score is secondary."
+  ],
+  "competitor_requirements": {
+    "required_capability_class": "tool_using_agent"
+  },
+  "report_metrics": [
+    "validity_rate",
+    "project_success_rate",
+    "commit_count",
+    "verification_pass_count",
+    "verification_fail_count",
+    "changed_file_count",
+    "total_elapsed_seconds",
+    "follow_up_prompt_count",
+    "tool_call_count",
+    "runner_error_count",
+    "timeout_count",
+    "artifact_success_count",
+    "response_confirmed_count",
+    "remaining_blocker_count",
+    "token_usage"
+  ],
+  "tasks": [
+    {
+      "id": "todo_priority_summary",
+      "title": "Implement todo priority summary feature",
+      "fixture_path": "benchmarks/fixtures/python_todo_service",
+      "success_criteria": "Add the priority summary feature, keep list mode working, add focused tests, make at least one git commit, and write the required project report.",
+      "time_budget_seconds": 600,
+      "prompt": "You are working in a small Python CLI project.\n\nUse only this isolated workspace root for all file edits, commands, tests, and git operations:\n- {{workspace}}\n\nImplement a professional-quality priority summary feature.\n\nRequirements:\n- Add a summary helper that returns a JSON-serializable dict with keys: total, completed, open, and by_priority.\n- Add a CLI flag `--summary-json` that prints only that JSON summary.\n- Keep the existing `--list` behavior working.\n- Add or update focused tests instead of hand-waving the feature.\n- Keep the code small and readable; do not rewrite unrelated structure.\n- Create at least one git commit for the finished feature.\n\nBefore finishing, write a JSON report to this exact relative path:\n- runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json\n\nThat JSON must include these keys:\n- commit_shas_created\n- verification_runs\n- changed_files\n- feature_summary\n- remaining_blockers\n- best_next_step\n\nFormat `verification_runs` as a list of objects like:\n- {\"command\": \"python -m pytest ...\", \"passed\": true}\n\nIn your final response, mention: runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json",
+      "success": {
+        "response_contains": [
+          "runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json"
+        ],
+        "required_files": [
+          "runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json"
+        ],
+        "required_file_contains": {
+          "runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json": "\"commit_shas_created\""
+        },
+        "check_command": "python -m pytest checks/priority_summary_check.py -q",
+        "check_timeout_seconds": 60
+      }
+    },
+    {
+      "id": "order_quantity_pricing_bugfix",
+      "title": "Fix quantity-aware order pricing",
+      "fixture_path": "benchmarks/fixtures/python_order_service",
+      "success_criteria": "Fix the order summary pricing bug, keep CLI output working, add focused regression coverage, make at least one git commit, and write the required project report.",
+      "time_budget_seconds": 600,
+      "prompt": "You are working in a small Python order-pricing CLI project.\n\nUse only this isolated workspace root for all file edits, commands, tests, and git operations:\n- {{workspace}}\n\nFix the quantity-aware pricing bug professionally.\n\nRequirements:\n- `summarize_order()` must count total units, not just distinct lines.\n- `subtotal` must multiply quantity by unit price.\n- Each line payload must include quantity-aware `line_total`.\n- The default invoice text and `--json` mode must both use the corrected summary.\n- Add or update focused regression tests instead of hand-waving the fix.\n- Keep the code small and readable; do not rewrite unrelated structure.\n- Create at least one git commit for the finished bugfix.\n\nBefore finishing, write a JSON report to this exact relative path:\n- runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json\n\nThat JSON must include these keys:\n- commit_shas_created\n- verification_runs\n- changed_files\n- feature_summary\n- remaining_blockers\n- best_next_step\n\nFormat `verification_runs` as a list of objects like:\n- {\"command\": \"python -m pytest ...\", \"passed\": true}\n\nIn your final response, mention: runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json",
+      "success": {
+        "response_contains": [
+          "runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json"
+        ],
+        "required_files": [
+          "runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json"
+        ],
+        "required_file_contains": {
+          "runtime/agentic_bench/{{run_id}}/{{track}}/project_report.json": "\"commit_shas_created\""
+        },
+        "check_command": "python -m pytest checks/pricing_check.py -q",
+        "check_timeout_seconds": 60
+      }
+    }
+  ]
+}

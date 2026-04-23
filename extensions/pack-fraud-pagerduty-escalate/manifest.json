@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-pagerduty-escalate",
+  "name": "Fraud Pagerduty Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "pagerduty",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.pagerduty",
+    "fraud.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via pagerduty with escalate mode policies."
+}

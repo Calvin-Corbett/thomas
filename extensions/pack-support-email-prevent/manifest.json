@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-email-prevent",
+  "name": "Support Email Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "email",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.email",
+    "support.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via email with prevent mode policies."
+}

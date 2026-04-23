@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-teams-prevent",
+  "name": "Incident Teams Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "teams",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.teams",
+    "incident.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via teams with prevent mode policies."
+}

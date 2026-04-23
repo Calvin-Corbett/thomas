@@ -1,0 +1,14 @@
+{
+  "id": "pack-alerts-slack",
+  "name": "Alerts Slack Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "slack",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.slack",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via slack."
+}

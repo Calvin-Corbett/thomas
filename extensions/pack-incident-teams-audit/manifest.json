@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-teams-audit",
+  "name": "Incident Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.teams",
+    "incident.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via teams with audit mode policies."
+}

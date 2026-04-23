@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-slack-triage",
+  "name": "Analytics Slack Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "slack",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.slack",
+    "analytics.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via slack with triage mode policies."
+}
