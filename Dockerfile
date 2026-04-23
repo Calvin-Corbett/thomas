@@ -8,21 +8,13 @@ ENV THOMAS_ENV=${ENVIRONMENT}
 
 WORKDIR /app
 
-# Copy dependency files first for layer caching
+# Copy the server runtime dependency subset first for layer caching.
 COPY pyproject.toml README.md ./
-
-# Production: use lock file for reproducible builds
-# Development: install with dev/test extras
-COPY requirements-lock.txt ./
+COPY requirements-server.txt ./
 COPY thomas ./thomas
 
 RUN python -m pip install --upgrade pip && \
-    if [ "$ENVIRONMENT" = "production" ]; then \
-        python -m pip install --no-cache-dir -r requirements-lock.txt && \
-        python -m pip install --no-cache-dir ".[server]"; \
-    else \
-        python -m pip install --no-cache-dir ".[server,dev]"; \
-    fi
+    python -m pip install --no-cache-dir -r requirements-server.txt
 
 # Copy production config template (dev overrides via volume mount)
 COPY thomas.prod.toml ./thomas.prod.toml
