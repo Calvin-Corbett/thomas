@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-webhook-audit",
+  "name": "Qa Webhook Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "webhook",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.webhook",
+    "qa.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via webhook with audit mode policies."
+}

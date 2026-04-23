@@ -1,0 +1,83 @@
+{
+  "profile_id": "ios_app_store",
+  "description": "Apple App Store distribution profile.",
+  "source_rules": [
+    "apple.2.5.2",
+    "apple.4.7",
+    "apple.3.1.1",
+    "apple.5.1"
+  ],
+  "effective_from": "2026-02-20",
+  "deprecation_date": "",
+  "enforcement_level": "block",
+  "platforms": [
+    "ios"
+  ],
+  "distribution_channels": [
+    "app_store"
+  ],
+  "storefront_regions": [
+    "*"
+  ],
+  "allowed_component_types": [
+    "container",
+    "text",
+    "image",
+    "icon",
+    "button",
+    "input",
+    "toggle",
+    "list",
+    "tabs",
+    "chart",
+    "form",
+    "webview",
+    "map",
+    "video"
+  ],
+  "forbidden_component_types": [
+    "native_code_loader",
+    "dynamic_bridge",
+    "script"
+  ],
+  "allowed_permissions": [
+    "device.camera.read",
+    "device.location.read",
+    "device.mic.read",
+    "network.egress",
+    "notifications.send",
+    "storage.read",
+    "storage.write",
+    "ui.render"
+  ],
+  "allowed_runtime_capabilities": [
+    "camera",
+    "location",
+    "mic",
+    "notifications",
+    "push",
+    "storage",
+    "websocket"
+  ],
+  "blocked_url_schemes": [
+    "javascript",
+    "file",
+    "data",
+    "vbscript",
+    "intent"
+  ],
+  "allowed_webview_domains": [],
+  "allow_arbitrary_external_navigation": true,
+  "allowed_external_navigation_domains": [],
+  "require_store_billing_for_digital": true,
+  "require_moderation_for_ugc": true,
+  "required_moderation_controls": [
+    "report",
+    "block",
+    "terms_acceptance"
+  ],
+  "required_privacy_fields": [
+    "privacy_policy_url"
+  ],
+  "required_age_gate_for_ugc": true
+}

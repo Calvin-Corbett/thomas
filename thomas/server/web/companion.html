@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#12161f">
+  <meta name="application-name" content="Thomas Infinite">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Infinite">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>Thomas Infinite Companion</title>
+  <script src="https://unpkg.com/@phosphor-icons/web"></script>
+  <link rel="manifest" href="/static/companion.webmanifest?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/css/tokens.css?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/css/components.css?v=__THOMAS_VERSION__">
+  <link rel="stylesheet" href="/static/css/companion.css?v=__THOMAS_VERSION__">
+</head>
+<body class="companion-phone-host">
+  <div class="companion-device-stage">
+    <div class="companion-device-shell">
+      <main id="app" class="infinite-chat-app">
+        <nav class="infinite-top-nav">
+          <div class="model-select-wrapper">
+            <button id="modelSetupBtn" class="model-setup-btn" title="Configure Model">loading...</button>
+          </div>
+        </nav>
+
+        <nav class="infinite-mode-tabs" aria-label="Companion modes">
+          <button id="tabChat" class="infinite-mode-tab active" type="button" aria-current="page">Chat</button>
+          <button id="tabApps" class="infinite-mode-tab" type="button">Apps</button>
+          <button id="tabAdd" class="infinite-mode-tab" type="button">Setup</button>
+        </nav>
+
+        <section class="infinite-panels">
+          <section class="infinite-panel active" id="panelChat">
+            <section class="infinite-chat-screen">
+              <div class="infinite-chat-thread" id="chatThread" aria-live="polite"></div>
+            </section>
+
+            <footer class="infinite-chat-composer">
+              <div class="composer-box">
+                <form class="composer-input-row" id="chatForm">
+                  <textarea
+                    class="composer-textarea"
+                    id="chatInput"
+                    rows="1"
+                    maxlength="6000"
+                    placeholder="Message Thomas..."
+                    autofocus
+                  ></textarea>
+                  <button class="btn-send" id="chatSendBtn" type="submit" disabled>
+                    <i class="ph ph-arrow-up"></i>
+                  </button>
+                </form>
+              </div>
+            </footer>
+          </section>
+
+          <section class="infinite-panel" id="panelApps">
+            <header class="companion-panel-head">
+              <div>
+                <h2>App Store</h2>
+                <p id="appsMeta">Browse companion modules and push to this phone.</p>
+              </div>
+              <button class="settings-mini-btn" id="appsRefreshBtn" type="button">Refresh</button>
+            </header>
+            <div class="companion-app-list" id="appsList" aria-live="polite"></div>
+          </section>
+
+          <section class="infinite-panel" id="panelAdd">
+            <header class="companion-panel-head">
+              <div>
+                <h2>Device Setup</h2>
+                <p>Pair this phone with Thomas so app pushes and updates work.</p>
+              </div>
+            </header>
+            <form id="deviceSetupForm" class="companion-form">
+              <label class="form-group">
+                <span>Device ID</span>
+                <input id="deviceIdInput" class="form-control" type="text" placeholder="ios-1" required>
+              </label>
+              <label class="form-group">
+                <span>Platform</span>
+                <select id="devicePlatformInput" class="setup-fluid-select">
+                  <option value="ios">iOS</option>
+                  <option value="android">Android</option>
+                </select>
+              </label>
+              <label class="form-group">
+                <span>Distribution Channel</span>
+                <select id="deviceDistributionInput" class="setup-fluid-select">
+                  <option value="app_store">App Store</option>
+                  <option value="play_store">Play Store</option>
+                  <option value="internal">Internal</option>
+                </select>
+              </label>
+              <label class="form-group">
+                <span>Storefront Region</span>
+                <input id="deviceRegionInput" class="form-control" type="text" placeholder="US">
+              </label>
+              <label class="form-group">
+                <span>App Version</span>
+                <input id="deviceAppVersionInput" class="form-control" type="text" placeholder="1.0.0">
+              </label>
+              <label class="form-group">
+                <span>Companion Channel</span>
+                <select id="deviceChannelInput" class="setup-fluid-select">
+                  <option value="stable">stable</option>
+                  <option value="beta">beta</option>
+                </select>
+              </label>
+              <label class="form-group">
+                <span>Capabilities (comma separated)</span>
+                <input id="deviceCapsInput" class="form-control" type="text" placeholder="storage, websocket, push">
+              </label>
+              <div class="companion-form-actions">
+                <button class="btn-primary" id="deviceRegisterBtn" type="submit">Pair Device</button>
+              </div>
+              <p class="settings-inline-note" id="deviceSetupMeta">Device not paired yet.</p>
+            </form>
+          </section>
+        </section>
+
+        <div class="thomas-modal hidden" id="modelSetupModal">
+          <div class="modal-backdrop" id="modelSetupBackdrop"></div>
+          <div class="modal-content model-setup-content">
+            <div class="modal-header">
+              <h2>Model Setup</h2>
+              <button class="btn-icon" id="closeModelSetupBtn" type="button">
+                <i class="ph ph-x"></i>
+              </button>
+            </div>
+            <div class="modal-body">
+              <div class="form-group">
+                <label for="setupProfileSelector">Provider</label>
+                <select id="setupProfileSelector" class="setup-fluid-select"></select>
+              </div>
+              <div class="form-group">
+                <label for="setupModelSelector">Model</label>
+                <select id="setupModelSelector" class="setup-fluid-select"></select>
+              </div>
+              <div class="settings-inline-note" id="setupModelMeta">Select profile and model for this chat session.</div>
+            </div>
+            <div class="modal-footer">
+              <button class="settings-mini-btn" id="cancelModelSetupBtn" type="button">Cancel</button>
+              <button class="btn-primary" id="applyModelSetupBtn" type="button">Apply</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="hidden" aria-hidden="true">Companion Builder Ship /api/companion/v1</div>
+      </main>
+    </div>
+  </div>
+
+  <script type="module" src="/static/js/companion.js?v=__THOMAS_VERSION__"></script>
+</body>
+</html>

@@ -1,0 +1,117 @@
+﻿/* â”€â”€ HAMBURGER / NAV ICONS â€” unified style â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .sidebar-toggle,
+body.te-theme-light .sidebar-toggle i,
+body.te-theme-light .top-nav .btn-icon,
+body.te-theme-light .top-nav .btn-icon i,
+body.te-theme-light .top-nav .icon-btn-shared,
+body.te-theme-light .top-nav .icon-btn-shared i {
+    color: #7a6b58 !important;
+    background: transparent !important;
+}
+body.te-theme-light .sidebar-toggle:hover,
+body.te-theme-light .top-nav .btn-icon:hover {
+    background: #ddd5c5 !important;
+}
+
+/* â”€â”€ SIDEBAR CHAT LIST â€” more readable â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .sidebar-chat-row {
+    border-bottom: 1px solid rgba(200, 191, 171, 0.4) !important;
+    padding: 10px 12px !important;
+}
+body.te-theme-light .sidebar-chat-row .chat-title,
+body.te-theme-light .sidebar-chat-row strong {
+    color: #3d3028 !important;
+    font-weight: 600 !important;
+    font-style: normal !important;
+    font-size: 0.85rem !important;
+}
+body.te-theme-light .sidebar-chat-row .chat-meta,
+body.te-theme-light .sidebar-chat-row small,
+body.te-theme-light .sidebar-chat-row .chat-subtitle {
+    color: #8a7a65 !important;
+    font-style: italic !important;
+    font-size: 0.72rem !important;
+}
+
+/* â”€â”€ SEARCH BAR in sidebar â€” paper feel, higher contrast â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .sidebar .search-container input,
+body.te-theme-light .sidebar .sidebar-search input,
+body.te-theme-light .sidebar-search-input {
+    background: #f4efe6 !important;
+    color: #2c2420 !important;
+    border: 1px solid #b8a88e !important;
+}
+body.te-theme-light .sidebar .search-container input::placeholder,
+body.te-theme-light .sidebar .sidebar-search input::placeholder {
+    color: #7a6b58 !important;
+    font-style: italic !important;
+}
+
+/* â”€â”€ "SHOW MORE" toggle â€” match theme â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .show-more-toggle,
+body.te-theme-light .show-more-toggle * {
+    color: #7a6b58 !important;
+    background: transparent !important;
+}
+
+/* â”€â”€ CHAT SECTION HEADER (Chat dropdown) â€” make it distinct â”€â”€â”€â”€ */
+body.te-theme-light .sidebar .sidebar-section-toggle,
+body.te-theme-light .sidebar .sidebar-chat-header {
+    background: #d8d0c1 !important;
+    border: 1px solid #c8bfab !important;
+    border-radius: 2px !important;
+    color: #3d3028 !important;
+}
+
+/* â”€â”€ SCROLLBAR â€” leather bookmark â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light ::-webkit-scrollbar-thumb {
+    background: #c0ad90 !important;
+    border-radius: 1px !important;
+}
+body.te-theme-light ::-webkit-scrollbar-track {
+    background: #e2dbd0 !important;
+}
+
+/* â”€â”€ VERTICAL SPACE â€” maximize readable chat area â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+/* Suggestion bar â€” compact, no separator line eating space */
+body.te-theme-light .assistant-suggestion-rail {
+    padding: 4px 8px !important;
+    margin: 0 !important;
+    min-height: unset !important;
+    border-top: none !important;
+}
+body.te-theme-light .assistant-suggestion-title {
+    font-size: 0.62rem !important;
+    margin-bottom: 2px !important;
+    padding: 0 !important;
+}
+body.te-theme-light .assistant-suggestion-chip {
+    padding: 3px 10px !important;
+    font-size: 0.72rem !important;
+    margin: 1px 3px !important;
+}
+/* Composer container â€” push to very bottom, minimal padding */
+body.te-theme-light .composer-container {
+    padding: 6px 12px 4px !important;
+    margin: 0 !important;
+}
+body.te-theme-light .composer-box {
+    margin: 0 !important;
+    padding: 6px 10px !important;
+}
+/* Status bar â€” slim */
+body.te-theme-light .composer-status-bar {
+    padding: 2px 8px !important;
+    min-height: unset !important;
+}
+/* Disclaimer â€” super compact */
+body.te-theme-light .disclaimer {
+    padding: 2px 0 !important;
+    margin: 0 !important;
+}
+/* Top nav â€” slim */
+body.te-theme-light .top-nav {
+    padding: 4px 12px !important;
+    min-height: unset !important;
+}
+

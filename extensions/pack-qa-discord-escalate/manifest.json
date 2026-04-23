@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-discord-escalate",
+  "name": "Qa Discord Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "discord",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.discord",
+    "qa.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via discord with escalate mode policies."
+}

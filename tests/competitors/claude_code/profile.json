@@ -1,0 +1,37 @@
+{
+    "id":  "claude_code",
+    "name":  "Claude Code",
+    "vendor":  "Anthropic",
+    "category":  "coding_agent",
+    "surfaces":  [
+                     "cli",
+                     "desktop",
+                     "web",
+                     "api"
+                 ],
+    "live_streaming":  "yes",
+    "settings_depth":  "high",
+    "benchmark_mode":  "external_run_required",
+    "key_strengths":  [
+                          "Strong coding-agent workflow",
+                          "Good tool-use UX",
+                          "Mature product ergonomics"
+                      ],
+    "source_urls":  [
+                        "https://code.claude.com/docs/en/overview"
+                    ],
+    "confidence":  "high",
+    "notes":  "Closed product. Run in its own environment and compare exported artifacts.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  5,
+                                      "ux.live_streaming":  5,
+                                      "ux.settings_depth":  5,
+                                      "autonomy.supervision_modes":  4,
+                                      "integration.mcp_support":  4,
+                                      "integration.git_pr_workflows":  4,
+                                      "platform.self_hostability":  1,
+                                      "composite.provisional_mean":  4
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

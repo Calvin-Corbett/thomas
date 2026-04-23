@@ -1,0 +1,14 @@
+{
+  "id": "pack-incident-webhook",
+  "name": "Incident Webhook Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "webhook",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.webhook",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via webhook."
+}

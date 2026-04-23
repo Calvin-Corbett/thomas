@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Thomas Agent Settings</title>
+  <link rel="stylesheet" href="https://unpkg.com/@phosphor-icons/web@1.4.0/src/index.css" />
+  
+  <link rel="stylesheet" href="settings.style01.css">
+
+</head>
+<body>
+  <form id="legacySettingsCredentialForm" class="hidden" aria-hidden="true"></form>
+  <div class="settings-header">
+    <div class="header-top">
+      <h1>Settings</h1>
+      <div class="header-actions">
+        <div class="search-box">
+          <i class="ph ph-magnifying-glass"></i>
+          <input
+            type="text"
+            id="searchInput"
+            placeholder="Search settings..."
+            aria-label="Search settings"
+          />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <main>
+    <nav class="settings-sidebar" role="navigation" aria-label="Settings categories">
+      <ul class="sidebar-nav">
+        <li>
+          <button class="sidebar-nav-item active" data-section="general" aria-current="page">
+            <i class="ph ph-gear"></i>
+            <span>General</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="models" aria-label="Models & Providers settings">
+            <i class="ph ph-cpu"></i>
+            <span>Models & Providers</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="integrations" aria-label="Integrations settings">
+            <i class="ph ph-plug"></i>
+            <span>Integrations</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="autonomy" aria-label="Autonomy settings">
+            <i class="ph ph-robot"></i>
+            <span>Autonomy</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="privacy" aria-label="Privacy & Security settings">
+            <i class="ph ph-shield-check"></i>
+            <span>Privacy & Security</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="appearance" aria-label="Appearance settings">
+            <i class="ph ph-palette"></i>
+            <span>Appearance</span>
+          </button>
+        </li>
+        <li>
+          <button class="sidebar-nav-item" data-section="advanced" aria-label="Advanced settings">
+            <i class="ph ph-wrench"></i>
+            <span>Advanced</span>
+          </button>
+        </li>
+      </ul>
+    </nav>
+
+    <div class="settings-container">
+      <div class="settings-content">
+        <!-- General Settings -->
+        <div id="general" class="settings-panel active">
+          <div class="panel-title">General Settings</div>
+          <div class="panel-description">Configure basic Thomas agent behavior and preferences.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Agent Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Agent Name</div>
+                <div class="setting-description">Display name for this agent instance</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="agentName" class="text-input" placeholder="e.g., Thomas-Main" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Default Model</div>
+                <div class="setting-description">Primary AI model for most tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="defaultModel" class="dropdown-select">
+                  <option value="gpt-4">OpenAI GPT-4</option>
+                  <option value="gpt-3.5">OpenAI GPT-3.5 Turbo</option>
+                  <option value="claude-opus">Anthropic Claude Opus 4.6</option>
+                  <option value="claude-sonnet">Anthropic Claude Sonnet</option>
+                  <option value="gemini-pro">Google Gemini Pro</option>
+                  <option value="local-llama">Local Llama (Ollama)</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Default Provider</div>
+                <div class="setting-description">API provider to use by default</div>
+              </div>
+              <div class="setting-control">
+                <select id="defaultProvider" class="dropdown-select">
+                  <option value="openai">OpenAI</option>
+                  <option value="anthropic">Anthropic</option>
+                  <option value="google">Google</option>
+                  <option value="ollama">Ollama</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">User Experience</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Theme</div>
+                <div class="setting-description">Visual appearance preference</div>
+              </div>
+              <div class="setting-control">
+                <select id="theme" class="dropdown-select">
+                  <option value="dark">Dark</option>
+                  <option value="light">Light</option>
+                  <option value="system">System</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Language</div>
+                <div class="setting-description">Interface language</div>
+              </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Workflow Mode</div>
+                <div class="setting-description">Guided workflow is recommended for new users. Expert bypass shows less ceremony but keeps the same hard gates.</div>
+              </div>
+              <div class="setting-control">
+                <select id="workflowMode" class="dropdown-select">
+                  <option value="guided">Guided workflow (Recommended)</option>
+                  <option value="expert">Expert bypass</option>
+                </select>
+              </div>
+            </div>
+              <div class="setting-control">
+                <select id="language" class="dropdown-select">
+                  <option value="en">English</option>
+                  <option value="es">Español</option>
+                  <option value="fr">Français</option>
+                  <option value="de">Deutsch</option>
+                  <option value="ja">日本語</option>
+                  <option value="zh">中文</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Start on login</div>
+                <div class="setting-description">Automatically launch Thomas on system startup</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="startupBehavior" data-setting="startupBehavior" aria-label="Toggle start on login" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('general')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('general')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Models & Providers Settings -->
+        <div id="models" class="settings-panel">
+          <div class="panel-title">Models & Providers</div>
+          <div class="panel-description">Configure AI models and API provider credentials.</div>
+
+          <div class="settings-group">
+            <div class="group-title">OpenAI Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">API Key</div>
+                <div class="setting-description">Your OpenAI API key</div>
+              </div>
+              <div class="setting-control">
+                <div class="key-input-group">
+                  <input type="password" id="openaiKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-..." aria-label="OpenAI API key" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                    <i class="ph ph-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model Selection</div>
+                <div class="setting-description">Primary model for OpenAI tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="openaiModel" class="dropdown-select">
+                  <option value="gpt-4">GPT-4</option>
+                  <option value="gpt-3.5">GPT-3.5 Turbo</option>
+                  <option value="gpt-4-turbo">GPT-4 Turbo</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Anthropic Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">API Key</div>
+                <div class="setting-description">Your Anthropic API key</div>
+              </div>
+              <div class="setting-control">
+                <div class="key-input-group">
+                  <input type="password" id="anthropicKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="sk-ant-..." aria-label="Anthropic API key" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                    <i class="ph ph-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model Selection</div>
+                <div class="setting-description">Primary model for Anthropic tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="anthropicModel" class="dropdown-select">
+                  <option value="claude-opus">Claude Opus 4.6</option>
+                  <option value="claude-sonnet">Claude Sonnet</option>
+                  <option value="claude-haiku">Claude Haiku</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Google Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">API Key</div>
+                <div class="setting-description">Your Google API key</div>
+              </div>
+              <div class="setting-control">
+                <div class="key-input-group">
+                  <input type="password" id="googleKey" class="text-input key-input" form="legacySettingsCredentialForm" placeholder="AIza..." aria-label="Google API key" />
+                  <button class="visibility-toggle" onclick="toggleKeyVisibility(this)" aria-label="Toggle key visibility" tabindex="0">
+                    <i class="ph ph-eye"></i>
+                  </button>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model Selection</div>
+                <div class="setting-description">Primary model for Google tasks</div>
+              </div>
+              <div class="setting-control">
+                <select id="googleModel" class="dropdown-select">
+                  <option value="gemini-pro">Gemini Pro</option>
+                  <option value="gemini-pro-vision">Gemini Pro Vision</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Ollama Configuration</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Base URL</div>
+                <div class="setting-description">Ollama server endpoint</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="ollamaUrl" class="text-input" placeholder="http://localhost:11434" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Model</div>
+                <div class="setting-description">Local model name</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="ollamaModel" class="text-input" placeholder="llama2, mistral, neural-chat, etc." />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Model Defaults</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Temperature</div>
+                <div class="setting-description">Creativity level (0-2, lower = more focused)</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="temperature" class="number-input" min="0" max="2" step="0.1" value="0.7" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Max Tokens</div>
+                <div class="setting-description">Maximum response length</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="maxTokens" class="number-input" min="100" step="100" value="2000" />
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('models')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('models')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Integrations Settings -->
+        <div id="integrations" class="settings-panel">
+          <div class="panel-title">Integrations</div>
+          <div class="panel-description">Connect Thomas to external services and platforms.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Google Workspace</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="googleWorkspaceStatus">
+                <span class="status-indicator"></span>
+                <span>Not Connected</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Gmail & Calendar Access</div>
+                <div class="setting-description">Enable email and calendar integration</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="connectGoogleWorkspace()">
+                  <i class="ph ph-plug"></i>
+                  Connect
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Slack</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="slackStatus">
+                <span class="status-indicator"></span>
+                <span>Not Connected</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Workspace Connection</div>
+                <div class="setting-description">Connect to Slack workspace</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="connectSlack()">
+                  <i class="ph ph-plug"></i>
+                  Connect
+                </button>
+              </div>
+            </div>
+            <div class="setting-item" id="slackWebhookItem" style="display: none;">
+              <div class="setting-label">
+                <div class="setting-name">Webhook URL</div>
+                <div class="setting-description">Incoming webhook for notifications</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="slackWebhook" class="text-input" placeholder="https://hooks.slack.com/services/..." />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Notion</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="notionStatus">
+                <span class="status-indicator"></span>
+                <span>Not Connected</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Database Connection</div>
+                <div class="setting-description">Access Notion workspaces</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="connectNotion()">
+                  <i class="ph ph-plug"></i>
+                  Connect
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('integrations')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('integrations')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Autonomy Settings -->
+        <div id="autonomy" class="settings-panel">
+          <div class="panel-title">Autonomy</div>
+          <div class="panel-description">Control agent decision-making and automatic actions.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Autonomy Level</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Agent Autonomy</div>
+                <div class="setting-description">Decision-making capability level</div>
+              </div>
+              <div class="setting-control">
+                <select id="autonomyLevel" class="dropdown-select">
+                  <option value="L1">L1 - Manual Only (requires approval for all actions)</option>
+                  <option value="L2">L2 - Semi-Autonomous (approval for important actions)</option>
+                  <option value="L3">L3 - Mostly Autonomous (approval for risky actions only)</option>
+                  <option value="L4">L4 - Full Autonomy (self-governing within constraints)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Auto-Approval Thresholds</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Cost Limit</div>
+                <div class="setting-description">Max API cost per action without approval</div>
+              </div>
+              <div class="setting-control">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <span>$</span>
+                  <input type="number" id="costLimit" class="number-input" min="0" step="0.10" value="1.00" />
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Time Commitment</div>
+                <div class="setting-description">Max hours per task without approval</div>
+              </div>
+              <div class="setting-control">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input type="number" id="timeCommitment" class="number-input" min="0.25" step="0.25" value="4" />
+                  <span>hours</span>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Auto-approve with notification</div>
+                <div class="setting-description">Execute action and notify instead of requesting approval</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="autoApproveNotify" data-setting="autoApproveNotify" aria-label="Toggle auto-approve with notification" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Behavior</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Idle Timeout</div>
+                <div class="setting-description">Minutes before pausing autonomous actions</div>
+              </div>
+              <div class="setting-control">
+                <div style="display: flex; align-items: center; gap: 8px;">
+                  <input type="number" id="idleTimeout" class="number-input" min="5" step="5" value="30" />
+                  <span>min</span>
+                </div>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Take initiative on errors</div>
+                <div class="setting-description">Automatically retry or recover from failures</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="initiativeOnErrors" data-setting="initiativeOnErrors" aria-label="Toggle initiative on errors" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Tool Permissions</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Shell / Terminal Access</div>
+                <div class="setting-description">Allow Thomas to run shell commands (install packages, run scripts, etc.)</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowShell" data-setting="allowShell" aria-label="Toggle shell access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Browser / Web Browsing</div>
+                <div class="setting-description">Allow Thomas to open pages, click, type, and take screenshots in a browser</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowBrowser" data-setting="allowBrowser" aria-label="Toggle browser access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Git Operations</div>
+                <div class="setting-description">Allow Thomas to commit, push, pull, and manage repositories</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowGit" data-setting="allowGit" aria-label="Toggle git access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">File System Access</div>
+                <div class="setting-description">Allow Thomas to read, write, edit, and delete files</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="allowFilesystem" data-setting="allowFilesystem" aria-label="Toggle filesystem access" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Web Search</div>
+                <div class="setting-description">Allow Thomas to search the web for information</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="allowWebSearch" data-setting="allowWebSearch" aria-label="Toggle web search" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Email & Calendar</div>
+                <div class="setting-description">Allow Thomas to read and send emails, manage calendar events</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowEmail" data-setting="allowEmail" aria-label="Toggle email access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Database Access</div>
+                <div class="setting-description">Allow Thomas to query and modify databases</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowDatabase" data-setting="allowDatabase" aria-label="Toggle database access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">SSH / Remote Access</div>
+                <div class="setting-description">Allow Thomas to connect to remote servers via SSH</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="allowSSH" data-setting="allowSSH" aria-label="Toggle SSH access" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('autonomy')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('autonomy')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Privacy & Security Settings -->
+        <div id="privacy" class="settings-panel">
+          <div class="panel-title">Privacy & Security</div>
+          <div class="panel-description">Manage data privacy, security, and access controls.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Data Privacy</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Data Retention</div>
+                <div class="setting-description">How long to keep conversation history</div>
+              </div>
+              <div class="setting-control">
+                <select id="dataRetention" class="dropdown-select">
+                  <option value="7d">7 days</option>
+                  <option value="30d">30 days</option>
+                  <option value="90d">90 days</option>
+                  <option value="1y">1 year</option>
+                  <option value="forever">Forever</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Auto-delete sensitive data</div>
+                <div class="setting-description">Remove passwords, keys, and PII after retention period</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="autoDeleteSensitive" data-setting="autoDeleteSensitive" aria-label="Toggle auto-delete sensitive data" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Security</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Session Encryption</div>
+                <div class="setting-description">Encrypt all session data in transit and at rest</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="sessionEncryption" data-setting="sessionEncryption" aria-label="Toggle session encryption" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Rate Limiting</div>
+                <div class="setting-description">Maximum requests per minute</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="rateLimit" class="number-input" min="10" step="10" value="100" />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Domain Whitelist</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Allowed Domains</div>
+                <div class="setting-description">Domains this agent can access (one per line)</div>
+              </div>
+              <div class="setting-control">
+                <textarea id="allowedDomains" style="width: 100%; min-height: 120px; padding: 8px 12px; background-color: #262d3c; border: 1px solid #3a3f4e; border-radius: 6px; color: #e8eaed; font-size: 13px; font-family: 'Menlo', monospace; resize: vertical;" placeholder="example.com&#10;api.service.com&#10;*.company.com" aria-label="Allowed domains list"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('privacy')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('privacy')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Appearance Settings -->
+        <div id="appearance" class="settings-panel">
+          <div class="panel-title">Appearance</div>
+          <div class="panel-description">Customize the visual interface.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Interface</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Font Size</div>
+                <div class="setting-description">Base interface font size</div>
+              </div>
+              <div class="setting-control">
+                <select id="fontSize" class="dropdown-select">
+                  <option value="small">Small</option>
+                  <option value="normal" selected>Normal</option>
+                  <option value="large">Large</option>
+                  <option value="xlarge">Extra Large</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Sidebar Position</div>
+                <div class="setting-description">Where to display navigation sidebar</div>
+              </div>
+              <div class="setting-control">
+                <select id="sidebarPosition" class="dropdown-select">
+                  <option value="left" selected>Left</option>
+                  <option value="right">Right</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Compact Mode</div>
+                <div class="setting-description">Reduce spacing and sizes for more density</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="compactMode" data-setting="compactMode" aria-label="Toggle compact mode" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Chat & Messages</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Chat Bubble Style</div>
+                <div class="setting-description">Visual style for conversation bubbles</div>
+              </div>
+              <div class="setting-control">
+                <select id="bubbleStyle" class="dropdown-select">
+                  <option value="rounded" selected>Rounded</option>
+                  <option value="square">Square</option>
+                  <option value="minimal">Minimal</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Monospace Code</div>
+                <div class="setting-description">Use monospace font for code blocks</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="monospaceCode" data-setting="monospaceCode" aria-label="Toggle monospace code" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Notifications</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Desktop Notifications</div>
+                <div class="setting-description">Show system notifications for agent events</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="desktopNotifications" data-setting="desktopNotifications" aria-label="Toggle desktop notifications" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Sound Alerts</div>
+                <div class="setting-description">Play sound on important events</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="soundAlerts" data-setting="soundAlerts" aria-label="Toggle sound alerts" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('appearance')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('appearance')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+
+        <!-- Advanced Settings -->
+        <div id="advanced" class="settings-panel">
+          <div class="panel-title">Advanced</div>
+          <div class="panel-description">Technical configuration for developers and power users.</div>
+
+          <div class="settings-group">
+            <div class="group-title">Debugging</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Debug Mode</div>
+                <div class="setting-description">Enable detailed logging and debug information</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="debugMode" data-setting="debugMode" aria-label="Toggle debug mode" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Log Level</div>
+                <div class="setting-description">Verbosity of system logs</div>
+              </div>
+              <div class="setting-control">
+                <select id="logLevel" class="dropdown-select">
+                  <option value="error">Error Only</option>
+                  <option value="warn">Warnings & Errors</option>
+                  <option value="info" selected>Info & Above</option>
+                  <option value="debug">Debug & All</option>
+                  <option value="trace">Trace (Very Verbose)</option>
+                </select>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Plugin Management</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Plugin Directory</div>
+                <div class="setting-description">Path where custom plugins are loaded from</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="pluginDirectory" class="text-input" placeholder="/home/user/.thomas/plugins" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Auto-load Plugins</div>
+                <div class="setting-description">Automatically load plugins on startup</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch on" id="autoLoadPlugins" data-setting="autoLoadPlugins" aria-label="Toggle auto-load plugins" role="switch" aria-checked="true"></button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Custom Tools</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Tool Paths</div>
+                <div class="setting-description">Directories to search for custom tools (one per line)</div>
+              </div>
+              <div class="setting-control">
+                <textarea id="toolPaths" style="width: 100%; min-height: 100px; padding: 8px 12px; background-color: #262d3c; border: 1px solid #3a3f4e; border-radius: 6px; color: #e8eaed; font-size: 13px; font-family: 'Menlo', monospace; resize: vertical;" placeholder="/usr/local/lib/thomas-tools&#10;/home/user/custom-tools" aria-label="Custom tool paths"></textarea>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Database</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Connection String</div>
+                <div class="setting-description">Database connection URL</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="dbConnection" class="text-input" placeholder="postgresql://user:pass@localhost/thomas" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Connection Pool Size</div>
+                <div class="setting-description">Maximum concurrent database connections</div>
+              </div>
+              <div class="setting-control">
+                <input type="number" id="poolSize" class="number-input" min="1" step="1" value="10" />
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Maintenance</div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Cache</div>
+                <div class="setting-description">Clear in-memory and persistent caches</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="clearCache()">
+                  <i class="ph ph-trash"></i>
+                  Clear Cache
+                </button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Logs</div>
+                <div class="setting-description">Export or clear application logs</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-secondary" onclick="exportLogs()">
+                  <i class="ph ph-download"></i>
+                  Export Logs
+                </button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Reset All Settings</div>
+                <div class="setting-description">Restore all settings to factory defaults</div>
+              </div>
+              <div class="setting-control">
+                <button class="btn btn-danger" onclick="confirmReset()">
+                  <i class="ph ph-warning"></i>
+                  Reset All
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <div class="settings-group">
+            <div class="group-title">Isolated Desktop Mode</div>
+            <div style="margin-bottom: 16px;">
+              <div class="status-badge status-disconnected" id="isolatedDesktopStatusBadge">
+                <span class="status-indicator"></span>
+                <span id="isolatedDesktopStatusText">Not Enabled</span>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Enable Isolated Desktop Mode</div>
+                <div class="setting-description">Run desktop workflows in a dedicated worker instead of your live mouse session.</div>
+              </div>
+              <div class="setting-control">
+                <button class="toggle-switch" id="isolatedDesktopEnabled" data-setting="isolatedDesktopEnabled" aria-label="Toggle isolated desktop mode" role="switch" aria-checked="false"></button>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Worker VM Source</div>
+                <div class="setting-description">Tell Thomas whether to use an existing worker VM or create one from a template disk.</div>
+              </div>
+              <div class="setting-control">
+                <select id="isolatedDesktopVmSource" class="dropdown-select">
+                  <option value="unconfigured">Select a source</option>
+                  <option value="existing_vm">Use existing VM</option>
+                  <option value="template_disk">Create from template disk</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Worker VM Name</div>
+                <div class="setting-description">The Hyper-V VM Thomas will attach to or create.</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="isolatedDesktopVmName" class="text-input" placeholder="Bobs_Chromebook-desktop-vm" />
+              </div>
+            </div>
+            <div class="setting-item" id="isolatedDesktopTemplateItem">
+              <div class="setting-label">
+                <div class="setting-name">Template Disk Path</div>
+                <div class="setting-description">Path to a template VHDX Thomas can clone into a worker VM.</div>
+              </div>
+              <div class="setting-control">
+                <input type="text" id="isolatedDesktopTemplateVhdx" class="text-input" placeholder="C:\VMs\ThomasWorkerTemplate.vhdx" />
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Remote Trust Mode</div>
+                <div class="setting-description">How often Thomas should ask before using a remote worker fallback.</div>
+              </div>
+              <div class="setting-control">
+                <select id="isolatedDesktopTrustMode" class="dropdown-select">
+                  <option value="ask_every_time">Ask Every Time</option>
+                  <option value="remembered">Remember Choice</option>
+                  <option value="always_allow">Always Allow</option>
+                </select>
+              </div>
+            </div>
+            <div class="setting-item">
+              <div class="setting-label">
+                <div class="setting-name">Current State</div>
+                <div class="setting-description" id="isolatedDesktopNextAction">Enable isolated desktop mode in Thomas settings.</div>
+              </div>
+              <div class="setting-control">
+                <div class="setting-description" id="isolatedDesktopNote">No worker VM source configured yet.</div>
+              </div>
+            </div>
+            <div class="button-group desktop-mode-actions">
+              <button class="btn btn-primary" id="saveIsolatedDesktopButton" onclick="saveIsolatedDesktopSettings()">
+                <i class="ph ph-floppy-disk"></i>
+                Save Desktop Settings
+              </button>
+              <button class="btn btn-secondary" id="installHostServiceButton" onclick="installIsolatedDesktopMode()">
+                <i class="ph ph-shield-check"></i>
+                Install Host Service
+              </button>
+              <button class="btn btn-secondary" id="openViewerButton" onclick="openIsolatedDesktopViewer()">
+                <i class="ph ph-desktop"></i>
+                Open Viewer
+              </button>
+              <button class="btn btn-secondary" id="refreshDesktopStatusButton" onclick="refreshIsolatedDesktopStatus()">
+                <i class="ph ph-arrow-clockwise"></i>
+                Refresh Status
+              </button>
+            </div>
+          </div>
+
+          <div class="button-group">
+            <button class="btn btn-primary" onclick="saveSection('advanced')">
+              <i class="ph ph-check"></i>
+              Save Changes
+            </button>
+            <button class="btn btn-secondary" onclick="resetSection('advanced')">
+              <i class="ph ph-arrow-counterclockwise"></i>
+              Reset
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Toast Container -->
+  <div class="toast-container" id="toastContainer" role="status" aria-live="polite" aria-atomic="true"></div>
+
+  <!-- Confirmation Modal -->
+  <div class="modal-overlay" id="confirmModal">
+    <div class="modal">
+      <div class="modal-header">
+        <h2 class="modal-title">Confirm Action</h2>
+        <button class="modal-close" onclick="closeModal()" aria-label="Close modal">
+          <i class="ph ph-x"></i>
+        </button>
+      </div>
+      <div class="modal-body" id="confirmMessage"></div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" id="confirmButton" onclick="executeConfirm()">Confirm</button>
+      </div>
+    </div>
+  </div>
+
+  
+  <script src="settings.script01.js"></script>
+
+</body>
+</html>

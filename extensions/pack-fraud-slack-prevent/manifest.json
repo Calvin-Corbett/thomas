@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-slack-prevent",
+  "name": "Fraud Slack Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "slack",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.slack",
+    "fraud.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via slack with prevent mode policies."
+}

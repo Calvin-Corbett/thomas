@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-teams-prevent",
+  "name": "Qa Teams Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "teams",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.teams",
+    "qa.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via teams with prevent mode policies."
+}

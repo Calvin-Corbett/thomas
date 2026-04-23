@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-pagerduty-audit",
+  "name": "Alerts Pagerduty Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "pagerduty",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.pagerduty",
+    "alerts.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via pagerduty with audit mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-jira-escalate",
+  "name": "Incident Jira Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "jira",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.jira",
+    "incident.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via jira with escalate mode policies."
+}

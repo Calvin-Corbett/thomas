@@ -1,0 +1,53 @@
+from __future__ import annotations
+
+from thomas.server.desktop_plugins_manifest import (
+    DesktopPluginManifest,
+    build_plugin_bundle_bytes,
+    compute_plugin_bundle_sha256,
+    load_bundled_desktop_plugin_manifest,
+    load_desktop_plugin_manifest_from_data,
+    maybe_load_desktop_plugin_manifest,
+    resolve_bundled_plugin_dir,
+)
+from thomas.server.desktop_plugins_runtime import (
+    build_plugin_install_deep_link,
+    create_official_hosted_manifest,
+    create_plugin_store_api_key_file,
+    get_installed_plugin,
+    get_or_create_plugin_store_api_key,
+    install_bundled_plugin,
+    install_plugin_bundle_bytes,
+    install_plugin_bundle_file,
+    install_plugin_from_store,
+    is_plugin_enabled,
+    list_installed_plugins,
+    parse_plugin_install_deep_link,
+    resolve_installed_plugin_asset,
+    set_installed_plugin_enabled,
+    uninstall_plugin,
+)
+
+__all__ = [
+    "DesktopPluginManifest",
+    "build_plugin_bundle_bytes",
+    "build_plugin_install_deep_link",
+    "compute_plugin_bundle_sha256",
+    "create_official_hosted_manifest",
+    "create_plugin_store_api_key_file",
+    "get_installed_plugin",
+    "get_or_create_plugin_store_api_key",
+    "install_bundled_plugin",
+    "install_plugin_bundle_bytes",
+    "install_plugin_bundle_file",
+    "install_plugin_from_store",
+    "is_plugin_enabled",
+    "list_installed_plugins",
+    "load_bundled_desktop_plugin_manifest",
+    "load_desktop_plugin_manifest_from_data",
+    "maybe_load_desktop_plugin_manifest",
+    "parse_plugin_install_deep_link",
+    "resolve_bundled_plugin_dir",
+    "resolve_installed_plugin_asset",
+    "set_installed_plugin_enabled",
+    "uninstall_plugin",
+]

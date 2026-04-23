@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-discord-triage",
+  "name": "Alerts Discord Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "discord",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.discord",
+    "alerts.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via discord with triage mode policies."
+}

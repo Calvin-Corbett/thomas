@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-discord-escalate",
+  "name": "Analytics Discord Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "discord",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.discord",
+    "analytics.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via discord with escalate mode policies."
+}

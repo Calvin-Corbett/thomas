@@ -1,0 +1,14 @@
+{
+  "id": "pack-security-discord",
+  "name": "Security Discord Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "discord",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.discord",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via discord."
+}

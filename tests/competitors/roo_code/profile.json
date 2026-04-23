@@ -1,0 +1,34 @@
+{
+    "id":  "roo_code",
+    "name":  "Roo Code",
+    "vendor":  "Roo Code",
+    "category":  "open_source_agent",
+    "surfaces":  [
+                     "ide_extension"
+                 ],
+    "live_streaming":  "yes",
+    "settings_depth":  "medium",
+    "benchmark_mode":  "partial",
+    "key_strengths":  [
+                          "Open source editor integration",
+                          "Configurable behavior",
+                          "Broad model compatibility"
+                      ],
+    "source_urls":  [
+                        "https://docs.roocode.com/"
+                    ],
+    "confidence":  "medium",
+    "notes":  "Useful benchmark for community-driven IDE agent patterns.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  2,
+                                      "ux.live_streaming":  5,
+                                      "ux.settings_depth":  3,
+                                      "autonomy.supervision_modes":  4,
+                                      "integration.mcp_support":  4,
+                                      "integration.git_pr_workflows":  4,
+                                      "platform.self_hostability":  4,
+                                      "composite.provisional_mean":  3.71
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

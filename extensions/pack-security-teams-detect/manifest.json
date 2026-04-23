@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-teams-detect",
+  "name": "Security Teams Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "teams",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.teams",
+    "security.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via teams with detect mode policies."
+}

@@ -1,0 +1,421 @@
+from __future__ import annotations
+
+import os
+from collections.abc import Sequence
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
+
+from .types import PolicyContext, PolicyDecision
+
+
+def _norm(p: str) -> str:
+    return p.replace("\\", "/").rstrip("/")
+
+
+def _extract_paths(args: dict[str, Any]) -> list[str]:
+    """Heuristic extraction of path-like values from tool args."""
+    out: list[str] = []
+    keys = ("path", "paths", "src", "dst", "dest", "file", "filename", "directory", "dir", "target", "cwd", "root")
+    for k, v in args.items():
+        if k in keys:
+            if isinstance(v, str):
+                out.append(v)
+            elif isinstance(v, list):
+                out.extend([x for x in v if isinstance(x, str)])
+    # shell commands sometimes include paths; ignore here (handled separately)
+    return out
+
+
+def _is_mutating_tool(tool_name: str) -> bool:
+    tool = str(tool_name or "").strip().lower()
+    if not tool:
+        return False
+    if tool.startswith("diff."):
+        return True
+    return any(
+        token in tool
+        for token in (
+            "write",
+            "append",
+            "delete",
+            "remove",
+            "mkdir",
+            "rmdir",
+            "move",
+            "rename",
+            "copy",
+            "save",
+            "create",
+            "patch",
+        )
+    )
+
+
+def _resolve_path(p: str, cwd: str) -> Path:
+    try:
+        pp = Path(p)
+        if not pp.is_absolute():
+            pp = Path(cwd) / pp
+        # strict=False: do not require existence
+        return pp.resolve(strict=False)
+    except Exception:
+        return Path(cwd).resolve(strict=False) / p
+
+
+def _is_under(child: Path, root: Path) -> bool:
+    try:
+        child = child.resolve(strict=False)
+        root = root.resolve(strict=False)
+        child.relative_to(root)
+        return True
+    except Exception:
+        return False
+
+
+def _default_deny_roots(runtime_root: str) -> list[Path]:
+    home = Path.home()
+    roots: list[Path] = [
+        home / ".ssh",
+        home / ".aws",
+        home / ".gnupg",
+    ]
+    # Windows-ish
+    for env in ("APPDATA", "LOCALAPPDATA", "PROGRAMDATA"):
+        v = os.environ.get(env)
+        if v:
+            roots.append(Path(v) / "ssh")
+            roots.append(Path(v) / "Microsoft" / "Credentials")
+    # Thomas runtime secrets
+    if runtime_root:
+        rr = Path(runtime_root)
+        roots.append(rr / ".thomas")
+    return roots
+
+
+def _default_deny_paths(runtime_root: str) -> list[Path]:
+    out: list[Path] = []
+    if runtime_root:
+        rr = Path(runtime_root) / ".thomas"
+        out.extend(
+            [
+                rr / "secrets.json",
+                rr / "secrets.toml",
+                rr / "secrets.db",
+                rr / "audit.sqlite3",
+                rr / "runs.sqlite3",
+            ]
+        )
+    return out
+
+
+def _find_repo_root(cwd: str) -> Path | None:
+    current = Path(cwd or ".").resolve(strict=False)
+    for candidate in (current, *current.parents):
+        if (candidate / "agent_safety.toml").is_file() or (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _default_protected_repo_paths() -> set[str]:
+    try:
+        from agent_safety_config import config as _cfg
+
+        protected = {_norm(path) for path in _cfg.all_protected_files()}
+    except Exception:
+        protected = {
+            "AGENTS.md",
+            "GUARDRAILS.md",
+            "agent_safety.toml",
+            ".pre-commit-config.yaml",
+            "tests/test_architecture.py",
+            "thomas/_architecture.py",
+            "scripts/breakglass_auth.py",
+            "thomas/preferences/_db.py",
+            "thomas/preferences/_prefs.py",
+            "thomas/preferences/guardrails_policy.py",
+            "thomas/server/routes/preferences_aiohttp.py",
+            "thomas/server/routes/third_party_agent_access_aiohttp.py",
+            "thomas/tools/windows_auth.py",
+        }
+    return {path for path in protected if path}
+
+
+def _is_immutable_policy_doc(rel_path: str) -> bool:
+    basename = Path(str(rel_path or "")).name
+    return basename in {"AGENTS.md", "GUARDRAILS.md"}
+
+
+@dataclass(frozen=True)
+class Rule:
+    """Base class for policy rules.
+
+    Each rule evaluates a PolicyContext and returns an optional PolicyDecision.
+    If the rule matches, it returns a decision (allow, deny, or require_approval).
+    If the rule doesn't match, it returns None to indicate no decision.
+    """
+
+    id: str
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        """Apply rule to a policy context.
+
+        Evaluates the rule against the provided context. Returns a decision
+        if the rule matches, or None if it doesn't apply.
+
+        Args:
+            ctx: PolicyContext containing tool name, args, cwd, etc.
+
+        Returns:
+            PolicyDecision (allow, deny, require_approval) or None if rule doesn't match
+
+        Raises:
+            Various exceptions depending on rule implementation
+        """
+        # Default: no decision (rule doesn't match)
+        # Subclasses override to implement specific policy logic
+        return None
+
+
+# Maps preference-toggle group names to tool categories + exact tool names.
+# Values ending with "." are prefix matches; others are exact matches.
+_GROUP_TOOL_PATTERNS: dict[str, tuple[str, ...]] = {
+    "shell": ("shell.", "shell", "bash.exec", "powershell.exec", "cmd.exec", "sandbox.run", "sandbox.test_snippet"),
+    "file_write": (
+        "file.write",
+        "file.append",
+        "file.delete",
+        "file.mkdir",
+        "file.rmdir",
+        "file.move",
+        "file.rename",
+        "file.copy",
+        "file.save",
+        "file.create",
+    ),
+    "network": ("http.", "web_search", "web_fetch", "web."),
+    "browser": ("browser.",),
+    "channels": ("telegram.", "discord.", "slack.", "email.", "channel."),
+    "git": ("git.", "git_exec"),
+}
+# Fallback: map group names to tool categories for catch-all matching.
+_GROUP_CATEGORY_MAP: dict[str, tuple[str, ...]] = {
+    "shell": ("shell",),
+    "file_write": ("filesystem",),
+    "network": ("web",),
+    "browser": ("browser",),
+    "channels": (),
+    "git": ("git",),
+}
+
+
+@dataclass(frozen=True)
+class DenyToolGroupRule(Rule):
+    """Deny tools by named group (shell, file_write, network, browser, channels, git).
+
+    Matches by tool name pattern first, then falls back to tool category if a
+    tool_categories map is provided.
+    """
+
+    deny_groups: tuple[str, ...]
+    tool_categories: dict[str, str] = field(default_factory=dict)  # tool_name -> category
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        tn = ctx.tool_name
+        for group in self.deny_groups:
+            # Check explicit tool name patterns.
+            patterns = _GROUP_TOOL_PATTERNS.get(group, ())
+            for pat in patterns:
+                if pat.endswith(".") and tn.startswith(pat):
+                    return PolicyDecision.deny(
+                        f"Tool '{tn}' blocked by group:{group} deny policy.",
+                        rule_id=self.id,
+                        group=group,
+                    )
+                if tn == pat:
+                    return PolicyDecision.deny(
+                        f"Tool '{tn}' blocked by group:{group} deny policy.",
+                        rule_id=self.id,
+                        group=group,
+                    )
+            # Fallback: check tool category.
+            cats = _GROUP_CATEGORY_MAP.get(group, ())
+            if cats and self.tool_categories.get(tn, "") in cats:
+                return PolicyDecision.deny(
+                    f"Tool '{tn}' (category '{self.tool_categories[tn]}') blocked by group:{group} deny policy.",
+                    rule_id=self.id,
+                    group=group,
+                )
+        return None
+
+
+@dataclass(frozen=True)
+class DenyToolRule(Rule):
+    deny_tools: tuple[str, ...]
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        if ctx.tool_name in self.deny_tools:
+            return PolicyDecision.deny(f"Tool '{ctx.tool_name}' is denied by policy.", rule_id=self.id)
+        return None
+
+
+@dataclass(frozen=True)
+class AllowToolRule(Rule):
+    allow_tools: tuple[str, ...]
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        if ctx.tool_name in self.allow_tools:
+            return PolicyDecision.allow(f"Tool '{ctx.tool_name}' is allowed by policy.", rule_id=self.id)
+        return None
+
+
+@dataclass(frozen=True)
+class DenySecretReadRule(Rule):
+    """Deny reads of secret-ish locations."""
+
+    deny_roots: tuple[str, ...] = ()
+    deny_paths: tuple[str, ...] = ()
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        candidates = _extract_paths(ctx.args)
+        if not candidates:
+            return None
+
+        runtime_root = ctx.runtime_root or ""
+        roots = (
+            [_resolve_path(p, ctx.cwd) for p in self.deny_roots]
+            if self.deny_roots
+            else _default_deny_roots(runtime_root)
+        )
+        paths = (
+            [_resolve_path(p, ctx.cwd) for p in self.deny_paths]
+            if self.deny_paths
+            else _default_deny_paths(runtime_root)
+        )
+
+        for raw in candidates:
+            rp = _resolve_path(raw, ctx.cwd)
+            for dp in paths:
+                if rp == dp:
+                    return PolicyDecision.deny(f"Blocked access to protected file: {rp}", rule_id=self.id)
+            for root in roots:
+                if _is_under(rp, root):
+                    return PolicyDecision.deny(f"Blocked access under protected root: {root}", rule_id=self.id)
+        return None
+
+
+@dataclass(frozen=True)
+class RequireNativeAuthProtectedWriteRule(Rule):
+    """Require native OS auth for writes to protected repo internals."""
+
+    protected_paths: tuple[str, ...] = ()
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        if not _is_mutating_tool(ctx.tool_name):
+            return None
+        candidates = _extract_paths(ctx.args)
+        if not candidates:
+            return None
+        repo_root = _find_repo_root(ctx.cwd)
+        if repo_root is None:
+            return None
+
+        protected = set(self.protected_paths) if self.protected_paths else _default_protected_repo_paths()
+
+        for raw in candidates:
+            resolved = _resolve_path(raw, ctx.cwd)
+            if not _is_under(resolved, repo_root):
+                continue
+            rel = _norm(resolved.relative_to(repo_root).as_posix())
+            if rel in protected or _is_immutable_policy_doc(rel):
+                return PolicyDecision.require_approval(
+                    f"Editing protected Thomas internals requires native operating-system authorization: {rel}",
+                    rule_id=self.id,
+                    target=str(resolved),
+                    repo_path=rel,
+                    native_auth=True,
+                )
+        return None
+
+
+@dataclass(frozen=True)
+class RequireApprovalWriteOutsideSandboxRule(Rule):
+    """Require approval for writes outside sandbox_root."""
+
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        if not _is_mutating_tool(ctx.tool_name):
+            return None
+        sandbox = Path(ctx.sandbox_root).resolve(strict=False)
+        candidates = _extract_paths(ctx.args)
+        for raw in candidates:
+            rp = _resolve_path(raw, ctx.cwd)
+            if not _is_under(rp, sandbox):
+                return PolicyDecision.require_approval(
+                    f"Write/mutate outside sandbox root requires approval: {rp}",
+                    rule_id=self.id,
+                    target=str(rp),
+                    sandbox_root=str(sandbox),
+                )
+        return None
+
+
+@dataclass(frozen=True)
+class RequireApprovalGitPushRule(Rule):
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        tn = ctx.tool_name.lower()
+        if tn in ("git.push", "git", "git_exec"):
+            return PolicyDecision.require_approval("git push requires approval.", rule_id=self.id)
+        # shell tool sometimes used
+        cmd = ""
+        if "cmd" in ctx.args and isinstance(ctx.args["cmd"], str):
+            cmd = ctx.args["cmd"]
+        elif "command" in ctx.args and isinstance(ctx.args["command"], str):
+            cmd = ctx.args["command"]
+        if cmd and "git push" in cmd.lower():
+            return PolicyDecision.require_approval("git push via shell requires approval.", rule_id=self.id)
+        return None
+
+
+@dataclass(frozen=True)
+class RequireApprovalShellExecRule(Rule):
+    def apply(self, ctx: PolicyContext) -> PolicyDecision | None:
+        if ctx.tool_name.lower() in ("shell.exec", "shell", "bash.exec", "powershell.exec", "cmd.exec"):
+            return PolicyDecision.require_approval("Shell execution requires approval.", rule_id=self.id)
+        return None
+
+
+def default_rules(
+    *,
+    allow_tools: Sequence[str] = (),
+    deny_tools: Sequence[str] = (),
+    deny_roots: Sequence[str] = (),
+    deny_paths: Sequence[str] = (),
+    deny_groups: Sequence[str] = (),
+    tool_categories: dict[str, str] | None = None,
+) -> list[Rule]:
+    """Built-in rule library (order matters)."""
+    rules: list[Rule] = []
+    if allow_tools:
+        rules.append(AllowToolRule(id="allow_tools", allow_tools=tuple(allow_tools)))
+    # Group deny evaluated BEFORE individual deny so toggles take precedence.
+    if deny_groups:
+        rules.append(
+            DenyToolGroupRule(
+                id="deny_tool_groups",
+                deny_groups=tuple(deny_groups),
+                tool_categories=dict(tool_categories or {}),
+            )
+        )
+    if deny_tools:
+        rules.append(DenyToolRule(id="deny_tools", deny_tools=tuple(deny_tools)))
+
+    rules.extend(
+        [
+            DenySecretReadRule(id="deny_secret_reads", deny_roots=tuple(deny_roots), deny_paths=tuple(deny_paths)),
+            RequireNativeAuthProtectedWriteRule(id="approve_protected_internal_writes"),
+            RequireApprovalShellExecRule(id="approve_shell_exec"),
+            RequireApprovalGitPushRule(id="approve_git_push"),
+            RequireApprovalWriteOutsideSandboxRule(id="approve_write_outside_sandbox"),
+        ]
+    )
+    return rules

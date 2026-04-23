@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-pagerduty-triage",
+  "name": "Compliance Pagerduty Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "pagerduty",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.pagerduty",
+    "compliance.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via pagerduty with triage mode policies."
+}

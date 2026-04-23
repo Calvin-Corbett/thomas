@@ -1,0 +1,50 @@
+{
+  "id": "life-manager",
+  "plugin_id": "life-manager",
+  "name": "Life Manager",
+  "display_name": "Life Manager",
+  "version": "1.0.0",
+  "category": "productivity",
+  "categories": [
+    "productivity",
+    "automation"
+  ],
+  "target": "desktop",
+  "mode": "life_manager",
+  "mode_id": "life_manager",
+  "entrypoint": "hooks.py",
+  "publisher_id": "thomas-official",
+  "publisher_name": "Thomas",
+  "kind": "desktop_plugin",
+  "marketplace_type": "command_center",
+  "description": "Track daily tasks, agenda events, habits, and goals in one Thomas command center.",
+  "subtitle": "Tasks, agenda, habits, and goals in one local-first workspace.",
+  "icon": "ph-list-checks",
+  "api_namespace": "life-manager",
+  "capabilities": [
+    "life_manager.tasks",
+    "life_manager.agenda",
+    "life_manager.habits",
+    "life_manager.goals"
+  ],
+  "tags": [
+    "productivity",
+    "automation",
+    "command_center",
+    "workspace",
+    "official"
+  ],
+  "requires": [
+    "life-manager-foundation"
+  ],
+  "left_nav_behavior": "workspace",
+  "default_nav_section": "command_centers",
+  "default_nav_order": 520,
+  "surface": {
+    "entry_html": "web/index.html",
+    "title": "Life Manager",
+    "surface_mode": "immersive"
+  },
+  "sha256": "",
+  "signature": "bundled"
+}

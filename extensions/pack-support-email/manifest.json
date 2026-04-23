@@ -1,0 +1,14 @@
+{
+  "id": "pack-support-email",
+  "name": "Support Email Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "email",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.email",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via email."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-email-audit",
+  "name": "Analytics Email Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "email",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.email",
+    "analytics.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via email with audit mode policies."
+}

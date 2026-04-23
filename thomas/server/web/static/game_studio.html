@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Thomas Game Studio - Level Builder</title>
+    
+    <link rel="stylesheet" href="game_studio.style01.css">
+
+</head>
+<body>
+    <div class="container">
+        <!-- Toolbar -->
+        <div class="toolbar">
+            <div class="toolbar-section">
+                <label for="gameSelector">Game</label>
+                <select id="gameSelector">
+                    <option value="cloud-jump">Cloud Jump</option>
+                    <option value="jetpack">Jetpack Joyride</option>
+                    <option value="dino">Dino Run</option>
+                    <option value="custom">Custom</option>
+                </select>
+            </div>
+
+            <div class="toolbar-section">
+                <label for="levelSelector">Level</label>
+                <select id="levelSelector">
+                    <option value="">-- New Level --</option>
+                </select>
+                <input type="text" id="levelName" placeholder="Level name">
+            </div>
+
+            <div class="toolbar-section">
+                <label>Tools</label>
+                <button id="selectTool" class="active" title="Select (S)">Select</button>
+                <button id="paintTool" title="Paint (B)">Paint</button>
+                <button id="eraseTool" title="Erase (E)">Erase</button>
+                <button id="fillTool" title="Fill (F)">Fill</button>
+            </div>
+
+            <div class="toolbar-section">
+                <button id="gridToggle" class="active" title="Toggle Grid (G)">Grid</button>
+                <button id="undoBtn" title="Undo (Ctrl+Z)">Undo</button>
+                <button id="redoBtn" title="Redo (Ctrl+Y)">Redo</button>
+            </div>
+
+            <div class="toolbar-section">
+                <button id="zoomInBtn" title="Zoom In (+)">+</button>
+                <button id="zoomOutBtn" title="Zoom Out (-)">−</button>
+                <span class="scroll-info" id="zoomLevel">100%</span>
+            </div>
+
+            <div class="toolbar-section">
+                <button id="previewBtn" style="background: #27ae60; border-color: #2ecc71;">Preview</button>
+                <button id="saveBtn">Save</button>
+                <button id="exportBtn">Export JSON</button>
+            </div>
+        </div>
+
+        <!-- Main Content -->
+        <div class="content">
+            <!-- Asset Palette -->
+            <div class="palette" id="palette">
+                <div class="palette-section">
+                    <div class="palette-title">Ground</div>
+                    <div class="asset-item" data-type="tile" data-asset="ground-grass">Ground</div>
+                    <div class="asset-item" data-type="tile" data-asset="ground-stone">Stone</div>
+                    <div class="asset-item" data-type="tile" data-asset="ground-dirt">Dirt</div>
+                </div>
+
+                <div class="palette-section">
+                    <div class="palette-title">Platforms</div>
+                    <div class="asset-item" data-type="platform" data-asset="platform-small">Small</div>
+                    <div class="asset-item" data-type="platform" data-asset="platform-medium">Medium</div>
+                    <div class="asset-item" data-type="platform" data-asset="platform-large">Large</div>
+                </div>
+
+                <div class="palette-section">
+                    <div class="palette-title">Obstacles</div>
+                    <div class="asset-item" data-type="obstacle" data-asset="spike">Spike</div>
+                    <div class="asset-item" data-type="obstacle" data-asset="moving-block">Block</div>
+                    <div class="asset-item" data-type="obstacle" data-asset="saw">Saw</div>
+                </div>
+
+                <div class="palette-section">
+                    <div class="palette-title">Enemies</div>
+                    <div class="asset-item" data-type="enemy" data-asset="walker">Walker</div>
+                    <div class="asset-item" data-type="enemy" data-asset="flyer">Flyer</div>
+                    <div class="asset-item" data-type="enemy" data-asset="patrol">Patrol</div>
+                </div>
+
+                <div class="palette-section">
+                    <div class="palette-title">Collectibles</div>
+                    <div class="asset-item" data-type="collectible" data-asset="coin">Coin</div>
+                    <div class="asset-item" data-type="collectible" data-asset="gem">Gem</div>
+                    <div class="asset-item" data-type="collectible" data-asset="star">Star</div>
+                </div>
+
+                <div class="palette-section">
+                    <div class="palette-title">Power-ups</div>
+                    <div class="asset-item" data-type="powerup" data-asset="shield">Shield</div>
+                    <div class="asset-item" data-type="powerup" data-asset="speed-boost">Speed</div>
+                    <div class="asset-item" data-type="powerup" data-asset="invincible">Invincible</div>
+                </div>
+
+                <div class="palette-section">
+                    <div class="palette-title">Decoration</div>
+                    <div class="asset-item" data-type="decoration" data-asset="cloud">Cloud</div>
+                    <div class="asset-item" data-type="decoration" data-asset="tree">Tree</div>
+                    <div class="asset-item" data-type="decoration" data-asset="bush">Bush</div>
+                </div>
+
+                <div class="palette-section">
+                    <div class="palette-title">Spawn/Goal</div>
+                    <div class="asset-item" data-type="spawn" data-asset="spawn-point">Spawn</div>
+                    <div class="asset-item" data-type="goal" data-asset="goal-flag">Goal</div>
+                </div>
+            </div>
+
+            <!-- Editor Main -->
+            <div class="editor-main">
+                <div class="canvas-container" id="canvasContainer">
+                    <canvas id="gameCanvas"></canvas>
+                </div>
+
+                <!-- Scroll Controls -->
+                <div class="scroll-container">
+                    <label class="scroll-info">Scroll X:</label>
+                    <input type="range" id="scrollX" min="0" max="3200" value="0">
+                    <span class="scroll-info" id="scrollDisplay">0px</span>
+                </div>
+            </div>
+
+            <!-- Properties Panel -->
+            <div class="properties" id="properties">
+                <div class="properties-header">
+                    <div class="properties-title">Properties</div>
+                </div>
+                <div class="properties-content" id="propertiesContent">
+                    <div class="properties-empty">Select an element to edit properties</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="status-bar">
+            <span id="statusText">Ready</span>
+            <span id="coordDisplay">X: 0 Y: 0</span>
+        </div>
+    </div>
+
+    <!-- Preview Modal -->
+    <div class="modal" id="previewModal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Level Preview</h2>
+                <button class="close-btn" onclick="closePreview()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <iframe id="previewFrame" style="width: 100%; height: 100%; border: none;"></iframe>
+            </div>
+        </div>
+    </div>
+
+    <!-- Layer Panel (embedded in properties for simplicity) -->
+
+    
+    <script src="game_studio.script01.js"></script>
+
+                </body>
+                </html>
+            `;
+
+            frame.srcdoc = previewHTML;
+            updateStatus('Preview opened');
+        }
+
+        function closePreview() {
+            document.getElementById('previewModal').classList.remove('active');
+            updateStatus('Preview closed');
+        }
+
+        // ========== Utilities ==========
+        function updateScrollDisplay() {
+            document.getElementById('scrollDisplay').textContent = state.scrollX + 'px';
+            document.getElementById('scrollX').value = state.scrollX;
+        }
+
+        function updateStatus(message) {
+            document.getElementById('statusText').textContent = message;
+        }
+
+        function showNotification(message, type = 'default') {
+            const notification = document.createElement('div');
+            notification.className = `notification ${type}`;
+            notification.textContent = message;
+            document.body.appendChild(notification);
+
+            setTimeout(() => {
+                notification.style.animation = 'slideIn 0.3s ease reverse';
+                setTimeout(() => notification.remove(), 300);
+            }, 2000);
+        }
+
+        // ========== Global functions for property panel ==========
+        window.updateElementProperty = updateElementProperty;
+        window.deleteElement = deleteElement;
+        window.closePreview = closePreview;
+
+        // ========== Start ==========
+        init();
+    </script>
+</body>
+</html>

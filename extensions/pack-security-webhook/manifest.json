@@ -1,0 +1,14 @@
+{
+  "id": "pack-security-webhook",
+  "name": "Security Webhook Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "webhook",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.webhook",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via webhook."
+}

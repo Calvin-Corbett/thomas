@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-webhook-audit",
+  "name": "Support Webhook Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "webhook",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.webhook",
+    "support.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via webhook with audit mode policies."
+}

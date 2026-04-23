@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-jira-detect",
+  "name": "Compliance Jira Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "jira",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.jira",
+    "compliance.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via jira with detect mode policies."
+}

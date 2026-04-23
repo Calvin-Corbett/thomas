@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-webhook-remediate",
+  "name": "Qa Webhook Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "webhook",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.webhook",
+    "qa.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via webhook with remediate mode policies."
+}

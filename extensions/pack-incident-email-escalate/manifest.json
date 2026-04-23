@@ -1,0 +1,16 @@
+{
+  "id": "pack-incident-email-escalate",
+  "name": "Incident Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "incident",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "incident.signal",
+    "incident.dispatch.email",
+    "incident.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for incident workflows via email with escalate mode policies."
+}

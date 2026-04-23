@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-email-prevent",
+  "name": "Compliance Email Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "email",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.email",
+    "compliance.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via email with prevent mode policies."
+}

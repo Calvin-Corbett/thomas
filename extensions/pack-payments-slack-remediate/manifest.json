@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-slack-remediate",
+  "name": "Payments Slack Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "slack",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.slack",
+    "payments.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via slack with remediate mode policies."
+}

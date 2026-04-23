@@ -1,0 +1,583 @@
+{
+  "schema_version": "1.0",
+  "workflow_id": "browser-workflow-0669",
+  "title": "Browser workflow case 0669 (report_export)",
+  "category": "report_export",
+  "risk_level": "low",
+  "objective": "Validate report_export journey under packet_loss network conditions.",
+  "dimensions": {
+    "channel": "tablet_web",
+    "region": "eu-central",
+    "network_profile": "packet_loss",
+    "build_variant": "canary",
+    "locale": "en-US"
+  },
+  "preconditions": [
+    "gateway_online",
+    "browser_runtime_ready",
+    "credentials_seeded",
+    "tenant:report_export",
+    "region:eu-central",
+    "channel:tablet_web",
+    "network:packet_loss"
+  ],
+  "steps": [
+    {
+      "step": 1,
+      "action": "assert_text",
+      "target": "[data-test='report_export-01']",
+      "input": "case-0669-value-01",
+      "expect": "report_export-expected-01",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 2,
+      "action": "assert_visibility",
+      "target": "[data-test='report_export-02']",
+      "input": "case-0669-value-02",
+      "expect": "report_export-expected-02",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 3,
+      "action": "download_file",
+      "target": "[data-test='report_export-03']",
+      "input": "case-0669-value-03",
+      "expect": "report_export-expected-03",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 4,
+      "action": "upload_file",
+      "target": "[data-test='report_export-04']",
+      "input": "case-0669-value-04",
+      "expect": "report_export-expected-04",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 5,
+      "action": "switch_tab",
+      "target": "[data-test='report_export-05']",
+      "input": "case-0669-value-05",
+      "expect": "report_export-expected-05",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 6,
+      "action": "close_tab",
+      "target": "[data-test='report_export-06']",
+      "input": "case-0669-value-06",
+      "expect": "report_export-expected-06",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 7,
+      "action": "start_trace",
+      "target": "[data-test='report_export-07']",
+      "input": "case-0669-value-07",
+      "expect": "report_export-expected-07",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 8,
+      "action": "stop_trace",
+      "target": "[data-test='report_export-08']",
+      "input": "case-0669-value-08",
+      "expect": "report_export-expected-08",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 9,
+      "action": "export_pdf",
+      "target": "[data-test='report_export-09']",
+      "input": "case-0669-value-09",
+      "expect": "report_export-expected-09",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 10,
+      "action": "check_a11y",
+      "target": "[data-test='report_export-10']",
+      "input": "case-0669-value-10",
+      "expect": "report_export-expected-10",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 11,
+      "action": "open_url",
+      "target": "[data-test='report_export-11']",
+      "input": "case-0669-value-11",
+      "expect": "report_export-expected-11",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 12,
+      "action": "wait_for_selector",
+      "target": "[data-test='report_export-12']",
+      "input": "case-0669-value-12",
+      "expect": "report_export-expected-12",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 13,
+      "action": "click",
+      "target": "[data-test='report_export-13']",
+      "input": "case-0669-value-13",
+      "expect": "report_export-expected-13",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 14,
+      "action": "type",
+      "target": "[data-test='report_export-14']",
+      "input": "case-0669-value-14",
+      "expect": "report_export-expected-14",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 15,
+      "action": "press",
+      "target": "[data-test='report_export-15']",
+      "input": "case-0669-value-15",
+      "expect": "report_export-expected-15",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 16,
+      "action": "scroll_into_view",
+      "target": "[data-test='report_export-16']",
+      "input": "case-0669-value-16",
+      "expect": "report_export-expected-16",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 17,
+      "action": "capture_screenshot",
+      "target": "[data-test='report_export-17']",
+      "input": "case-0669-value-17",
+      "expect": "report_export-expected-17",
+      "timeout_ms": 1500,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 18,
+      "action": "snapshot_dom",
+      "target": "[data-test='report_export-18']",
+      "input": "case-0669-value-18",
+      "expect": "report_export-expected-18",
+      "timeout_ms": 1750,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 19,
+      "action": "collect_console",
+      "target": "[data-test='report_export-19']",
+      "input": "case-0669-value-19",
+      "expect": "report_export-expected-19",
+      "timeout_ms": 2000,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 20,
+      "action": "collect_network",
+      "target": "[data-test='report_export-20']",
+      "input": "case-0669-value-20",
+      "expect": "report_export-expected-20",
+      "timeout_ms": 2250,
+      "retry": 2,
+      "capture": {
+        "screenshot": true,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 21,
+      "action": "assert_text",
+      "target": "[data-test='report_export-21']",
+      "input": "case-0669-value-21",
+      "expect": "report_export-expected-21",
+      "timeout_ms": 2500,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 22,
+      "action": "assert_visibility",
+      "target": "[data-test='report_export-22']",
+      "input": "case-0669-value-22",
+      "expect": "report_export-expected-22",
+      "timeout_ms": 2750,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 23,
+      "action": "download_file",
+      "target": "[data-test='report_export-23']",
+      "input": "case-0669-value-23",
+      "expect": "report_export-expected-23",
+      "timeout_ms": 3000,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 24,
+      "action": "upload_file",
+      "target": "[data-test='report_export-24']",
+      "input": "case-0669-value-24",
+      "expect": "report_export-expected-24",
+      "timeout_ms": 3250,
+      "retry": 0,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": true
+      }
+    },
+    {
+      "step": 25,
+      "action": "switch_tab",
+      "target": "[data-test='report_export-25']",
+      "input": "case-0669-value-25",
+      "expect": "report_export-expected-25",
+      "timeout_ms": 3500,
+      "retry": 1,
+      "capture": {
+        "screenshot": false,
+        "dom": true,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 26,
+      "action": "close_tab",
+      "target": "[data-test='report_export-26']",
+      "input": "case-0669-value-26",
+      "expect": "report_export-expected-26",
+      "timeout_ms": 3750,
+      "retry": 2,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 27,
+      "action": "start_trace",
+      "target": "[data-test='report_export-27']",
+      "input": "case-0669-value-27",
+      "expect": "report_export-expected-27",
+      "timeout_ms": 1000,
+      "retry": 0,
+      "capture": {
+        "screenshot": false,
+        "dom": false,
+        "trace_event": false
+      }
+    },
+    {
+      "step": 28,
+      "action": "stop_trace",
+      "target": "[data-test='report_export-28']",
+      "input": "case-0669-value-28",
+      "expect": "report_export-expected-28",
+      "timeout_ms": 1250,
+      "retry": 1,
+      "capture": {
+        "screenshot": true,
+        "dom": false,
+        "trace_event": false
+      }
+    }
+  ],
+  "assertions": [
+    {
+      "id": "A01",
+      "kind": "network",
+      "query": "assert-report_export-01",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A02",
+      "kind": "console",
+      "query": "assert-report_export-02",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    },
+    {
+      "id": "A03",
+      "kind": "text",
+      "query": "assert-report_export-03",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8200000000000001
+      }
+    },
+    {
+      "id": "A04",
+      "kind": "visibility",
+      "query": "assert-report_export-04",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8300000000000001
+      }
+    },
+    {
+      "id": "A05",
+      "kind": "network",
+      "query": "assert-report_export-05",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8400000000000001
+      }
+    },
+    {
+      "id": "A06",
+      "kind": "console",
+      "query": "assert-report_export-06",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8500000000000001
+      }
+    },
+    {
+      "id": "A07",
+      "kind": "text",
+      "query": "assert-report_export-07",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8600000000000001
+      }
+    },
+    {
+      "id": "A08",
+      "kind": "visibility",
+      "query": "assert-report_export-08",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8700000000000001
+      }
+    },
+    {
+      "id": "A09",
+      "kind": "network",
+      "query": "assert-report_export-09",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.88
+      }
+    },
+    {
+      "id": "A10",
+      "kind": "console",
+      "query": "assert-report_export-10",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.89
+      }
+    },
+    {
+      "id": "A11",
+      "kind": "text",
+      "query": "assert-report_export-11",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.8
+      }
+    },
+    {
+      "id": "A12",
+      "kind": "visibility",
+      "query": "assert-report_export-12",
+      "expected": {
+        "status": "pass",
+        "threshold": 0.81
+      }
+    }
+  ],
+  "telemetry_expectations": {
+    "max_error_count": 2,
+    "max_warning_count": 3,
+    "required_events": [
+      "browser.session.start",
+      "browser.action.execute",
+      "browser.assertion.evaluate",
+      "browser.session.end"
+    ],
+    "latency_budget_ms": 21500
+  },
+  "recovery_paths": [
+    {
+      "code": "retry_navigation",
+      "enabled": true,
+      "max_attempts": 3
+    },
+    {
+      "code": "reopen_tab",
+      "enabled": false,
+      "max_attempts": 1
+    },
+    {
+      "code": "reset_profile",
+      "enabled": false,
+      "max_attempts": 1
+    }
+  ],
+  "artifacts": [
+    {
+      "type": "screenshot",
+      "path": "artifacts/0669/final.png"
+    },
+    {
+      "type": "trace",
+      "path": "artifacts/0669/trace.zip"
+    },
+    {
+      "type": "dom",
+      "path": "artifacts/0669/snapshot.html"
+    },
+    {
+      "type": "network",
+      "path": "artifacts/0669/network.json"
+    }
+  ],
+  "tags": [
+    "browser",
+    "workflow",
+    "report_export",
+    "tablet_web",
+    "eu-central",
+    "packet_loss",
+    "severity:low"
+  ]
+}

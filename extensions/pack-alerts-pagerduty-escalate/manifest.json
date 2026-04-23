@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-pagerduty-escalate",
+  "name": "Alerts Pagerduty Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "pagerduty",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.pagerduty",
+    "alerts.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via pagerduty with escalate mode policies."
+}

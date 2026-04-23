@@ -1,0 +1,16 @@
+{
+  "id": "pack-alerts-sms-remediate",
+  "name": "Alerts Sms Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "sms",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.sms",
+    "alerts.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via sms with remediate mode policies."
+}

@@ -1,0 +1,35 @@
+{
+    "id":  "antigravity",
+    "name":  "Antigravity",
+    "vendor":  "Antigravity",
+    "category":  "agentic_platform",
+    "surfaces":  [
+                     "web"
+                 ],
+    "live_streaming":  "unknown",
+    "settings_depth":  "low",
+    "benchmark_mode":  "watchlist",
+    "key_strengths":  [
+                          "Agentic platform claims",
+                          "Automation-oriented positioning",
+                          "Emerging ecosystem visibility"
+                      ],
+    "source_urls":  [
+                        "https://www.antigravity.im/",
+                        "https://www.webthatmatters.com/blog/all-about-antigravity-ai-platform"
+                    ],
+    "confidence":  "low",
+    "notes":  "Low-confidence entry pending official technical docs with benchmark hooks.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  2,
+                                      "ux.live_streaming":  1,
+                                      "ux.settings_depth":  1,
+                                      "autonomy.supervision_modes":  3,
+                                      "integration.mcp_support":  1,
+                                      "integration.git_pr_workflows":  2,
+                                      "platform.self_hostability":  1,
+                                      "composite.provisional_mean":  1.57
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

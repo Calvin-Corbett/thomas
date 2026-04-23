@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-email-escalate",
+  "name": "Fraud Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.email",
+    "fraud.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via email with escalate mode policies."
+}

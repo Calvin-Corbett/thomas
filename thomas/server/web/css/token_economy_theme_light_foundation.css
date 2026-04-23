@@ -1,0 +1,271 @@
+﻿/* â”€â”€ BETTER CONTRAST â€” differentiate sections more clearly â”€â”€â”€â”€â”€ */
+/* Make the sidebar slightly more distinct from the main area */
+body.te-theme-light .sidebar {
+    background: #ddd5c5 !important;
+}
+/* Chat area slightly lighter to contrast with sidebar and composer */
+body.te-theme-light .chat-scroll-area {
+    background: transparent !important;
+}
+/* Sidebar text â€” increase readability */
+body.te-theme-light .sidebar .sidebar-chat-row .chat-meta,
+body.te-theme-light .sidebar .sidebar-chat-row small,
+body.te-theme-light .sidebar .sidebar-chat-row .chat-subtitle {
+    color: #6a5b48 !important;
+}
+/* Workspace nav items â€” stronger text */
+body.te-theme-light .sidebar .nav-item {
+    color: #2c2420 !important;
+    font-weight: 500 !important;
+}
+body.te-theme-light .sidebar .nav-item i {
+    color: #5c4a35 !important;
+}
+
+/* â”€â”€ CATCH-ALL: any remaining canvas elements â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light canvas:not(#officeMinimapCanvas) {
+    display: none !important;
+}
+
+/* â”€â”€ ROBOT ALERT STAGE â€” the big overlay that covers everything â”€â”€ */
+body.te-theme-light .robot-alert-stage,
+body.te-theme-light #robotAlertStage {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+    width: 0 !important;
+    height: 0 !important;
+    overflow: hidden !important;
+    z-index: -1 !important;
+}
+
+/* â”€â”€ SIDEBAR FOOTER â€” kill the dark overlay strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .sidebar-footer {
+    background: transparent !important;
+    border-top: 1px solid #c8bfab !important;
+}
+
+/* â”€â”€ DEBUG DOCK â€” light notebook style, not dark â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .debug-dock {
+    background: #ebe5d9 !important;
+    border-left: 1px solid #c8bfab !important;
+    color: #2c2420 !important;
+    box-shadow: inset 4px 0 8px rgba(140, 120, 85, 0.06) !important;
+}
+body.te-theme-light .debug-dock *,
+body.te-theme-light .debug-dock h3,
+body.te-theme-light .debug-dock h4,
+body.te-theme-light .debug-dock label,
+body.te-theme-light .debug-dock span,
+body.te-theme-light .debug-dock p,
+body.te-theme-light .debug-dock pre,
+body.te-theme-light .debug-dock code,
+body.te-theme-light .debug-dock strong {
+    color: #3d3028 !important;
+}
+body.te-theme-light .debug-dock .debug-section,
+body.te-theme-light .debug-dock .debug-panel-section {
+    background: #f2ede4 !important;
+    border: 1px solid #d0c4b0 !important;
+    border-radius: 1px !important;
+}
+body.te-theme-light .debug-dock .debug-section-head,
+body.te-theme-light .debug-dock .debug-section-header {
+    background: #e6dfd2 !important;
+    border-bottom: 1px solid #d0c4b0 !important;
+    color: #3d3028 !important;
+}
+body.te-theme-light .debug-dock textarea,
+body.te-theme-light .debug-dock input,
+body.te-theme-light .debug-dock select {
+    background: #f0ebe2 !important;
+    color: #2c2420 !important;
+    border: 1px solid #c8bca8 !important;
+}
+body.te-theme-light .debug-dock pre,
+body.te-theme-light .debug-dock code {
+    background: #e6dfd5 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+}
+body.te-theme-light .debug-dock .debug-dock-header {
+    background: #e3dbd0 !important;
+    border-bottom: 1px solid #c8bfab !important;
+}
+body.te-theme-light .debug-dock button {
+    background: #e0d8ca !important;
+    color: #3d3028 !important;
+    border: 1px solid #c8bca8 !important;
+}
+body.te-theme-light .debug-dock button:hover {
+    background: #d6cebf !important;
+}
+body.te-theme-light .debug-dock ::-webkit-scrollbar-thumb {
+    background: #c0ad90 !important;
+}
+body.te-theme-light .debug-dock ::-webkit-scrollbar-track {
+    background: #e2dbd0 !important;
+}
+
+/* â”€â”€ HAMBURGER ICONS â€” force both to use the SAME mask icon â”€â”€â”€â”€â”€ */
+/* The base CSS uses different mask-images (sidebar-rail vs tools-dock) */
+/* For the light journal theme, both should look identical: simple list */
+body.te-theme-light #sidebarToggleBtn i::before,
+body.te-theme-light #debugDockToggleBtn i::before {
+    -webkit-mask-image: var(--th-icon-sidebar-rail) !important;
+    mask-image: var(--th-icon-sidebar-rail) !important;
+}
+body.te-theme-light #sidebarToggleBtn,
+body.te-theme-light #debugDockToggleBtn {
+    opacity: 0.7 !important;
+    width: 22px !important;
+    height: 22px !important;
+}
+body.te-theme-light #sidebarToggleBtn i,
+body.te-theme-light #debugDockToggleBtn i {
+    color: #5c4a35 !important;
+    width: 15px !important;
+    height: 15px !important;
+}
+body.te-theme-light #sidebarToggleBtn:hover,
+body.te-theme-light #debugDockToggleBtn:hover {
+    opacity: 1 !important;
+    background: #ddd5c5 !important;
+}
+
+/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   DYNAMIC THEME INHERITANCE â€” JOURNAL EDITION
+   This catch-all section ensures ANY workspace module (existing
+   or added via Marketplace in the future) automatically inherits
+   journal-style colors. It uses broad wildcard selectors so new
+   modules never render with dark/Nebula backgrounds. Individual
+   module rules above can override these if needed.
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+
+/* -- CSS custom properties for the journal palette -- */
+body.te-theme-light {
+    --te-light-bg:        #ebe5d9;
+    --te-light-bg-raised: #f2ede4;
+    --te-light-bg-inset:  #e3dbd0;
+    --te-light-bg-card:   #f4efe6;
+    --te-light-text:      #2c2420;
+    --te-light-text-soft: #5c4a35;
+    --te-light-text-mute: #8a7a65;
+    --te-light-border:    #c8bfab;
+    --te-light-accent:    #8a7250;
+    --te-light-hover:     #ddd5c5;
+}
+
+/* -- Global background catch-all for ALL content areas -- */
+body.te-theme-light .main-content,
+body.te-theme-light .workspace-view,
+body.te-theme-light .workspace-content,
+body.te-theme-light .workspace-panel,
+body.te-theme-light .module-view,
+body.te-theme-light .module-content,
+body.te-theme-light [class*="workspace-"],
+body.te-theme-light [class*="module-"],
+body.te-theme-light [class*="-panel"]:not(.settings-nav-panel),
+body.te-theme-light [class*="-view"],
+body.te-theme-light [class*="-content"]:not(.message-content),
+body.te-theme-light [class*="-screen"],
+body.te-theme-light [class*="-dashboard"],
+body.te-theme-light [class*="-page"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+    color: var(--te-light-text, #2c2420) !important;
+}
+
+/* -- Cards, sections, tiles â€” any raised surface -- */
+body.te-theme-light .card,
+body.te-theme-light [class*="-card"],
+body.te-theme-light [class*="-tile"],
+body.te-theme-light [class*="-section"]:not(.settings-section):not(.sidebar-section-heading),
+body.te-theme-light [class*="-block"],
+body.te-theme-light [class*="-widget"],
+body.te-theme-light [class*="-item"]:not(.nav-item):not(.sidebar-chat-row),
+body.te-theme-light [class*="-entry"],
+body.te-theme-light [class*="-row"]:not(.message-row):not(.switch-row):not(.sidebar-chat-row) {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+    color: var(--te-light-text, #2c2420) !important;
+    border-color: var(--te-light-border, #c8bfab) !important;
+}
+
+/* -- ALL text inside main content: force dark on light -- */
+body.te-theme-light .main-content *,
+body.te-theme-light .workspace-view *,
+body.te-theme-light [class*="workspace-"] *,
+body.te-theme-light [class*="module-"] * {
+    color: var(--te-light-text, #2c2420) !important;
+}
+
+/* -- Headings in workspace areas -- */
+body.te-theme-light .main-content h1,
+body.te-theme-light .main-content h2,
+body.te-theme-light .main-content h3,
+body.te-theme-light .main-content h4 {
+    color: #2c2420 !important;
+    font-family: 'Georgia', 'Palatino', serif !important;
+    text-shadow: none !important;
+}
+
+/* -- Badges, pills, status indicators â€” warm ink feel -- */
+body.te-theme-light [class*="-badge"],
+body.te-theme-light [class*="-status"],
+body.te-theme-light [class*="-tag"],
+body.te-theme-light [class*="-label"]:not(.chat-composer-control-label):not(.message-model-label) {
+    background: #e0d8ca !important;
+    color: #3d3028 !important;
+    border: 1px solid #c8bca8 !important;
+    text-shadow: none !important;
+}
+
+/* -- Buttons inside workspace areas -- */
+body.te-theme-light .main-content button:not(#sendBtn):not(#micBtn):not(#attachBtn):not(.msg-action-btn):not(.model-setup-btn),
+body.te-theme-light .main-content .btn,
+body.te-theme-light .main-content [class*="-btn"]:not(.model-setup-btn) {
+    background: #e0d8ca !important;
+    color: #3d3028 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 2px !important;
+    text-shadow: none !important;
+}
+body.te-theme-light .main-content button:hover,
+body.te-theme-light .main-content .btn:hover {
+    background: #d6cebf !important;
+}
+
+/* -- Tables inside workspace areas -- */
+body.te-theme-light .main-content table,
+body.te-theme-light .main-content th,
+body.te-theme-light .main-content td {
+    background: var(--te-light-bg-card, #f4efe6) !important;
+    color: var(--te-light-text, #2c2420) !important;
+    border-color: var(--te-light-border, #c8bfab) !important;
+}
+body.te-theme-light .main-content th {
+    background: #e6dfd2 !important;
+    font-weight: 700 !important;
+}
+
+/* -- Inputs inside workspace areas -- */
+body.te-theme-light .main-content input,
+body.te-theme-light .main-content select,
+body.te-theme-light .main-content textarea {
+    background: #f0ebe2 !important;
+    color: #2c2420 !important;
+    border: 1px solid #c8bca8 !important;
+}
+
+/* -- Gradient overrides â€” kill any dark gradients from base -- */
+body.te-theme-light .main-content [style*="gradient"],
+body.te-theme-light [class*="gradient"] {
+    background: var(--te-light-bg, #ebe5d9) !important;
+}
+
+/* -- Progress bars, meters -- */
+body.te-theme-light .main-content progress,
+body.te-theme-light .main-content [class*="progress"],
+body.te-theme-light .main-content [class*="meter"] {
+    background: #e0d8ca !important;
+}
+

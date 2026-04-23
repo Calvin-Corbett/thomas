@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-sms-prevent",
+  "name": "Support Sms Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "sms",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.sms",
+    "support.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via sms with prevent mode policies."
+}

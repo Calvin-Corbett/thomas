@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-email-triage",
+  "name": "Payments Email Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "email",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.email",
+    "payments.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via email with triage mode policies."
+}

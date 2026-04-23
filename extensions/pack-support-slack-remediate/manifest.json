@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-slack-remediate",
+  "name": "Support Slack Remediate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "slack",
+  "mode": "remediate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.slack",
+    "support.mode.remediate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via slack with remediate mode policies."
+}

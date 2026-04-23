@@ -1,0 +1,34 @@
+{
+    "id":  "cline",
+    "name":  "Cline",
+    "vendor":  "Cline",
+    "category":  "open_source_agent",
+    "surfaces":  [
+                     "ide_extension"
+                 ],
+    "live_streaming":  "yes",
+    "settings_depth":  "medium",
+    "benchmark_mode":  "partial",
+    "key_strengths":  [
+                          "Open source extensibility",
+                          "Model/provider flexibility",
+                          "Local-first workflow control"
+                      ],
+    "source_urls":  [
+                        "https://docs.cline.bot/home"
+                    ],
+    "confidence":  "medium",
+    "notes":  "Relevant for open extension architecture and local control comparisons.",
+    "provisional_metric_scores":  {
+                                      "surface.interface_coverage":  2,
+                                      "ux.live_streaming":  5,
+                                      "ux.settings_depth":  3,
+                                      "autonomy.supervision_modes":  4,
+                                      "integration.mcp_support":  4,
+                                      "integration.git_pr_workflows":  4,
+                                      "platform.self_hostability":  4,
+                                      "composite.provisional_mean":  3.71
+                                  },
+    "scoring_method":  "heuristic_from_public_docs",
+    "refreshed_at_utc":  "2026-02-21T19:39:12Z"
+}

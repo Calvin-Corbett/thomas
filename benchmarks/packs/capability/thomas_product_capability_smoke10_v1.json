@@ -1,0 +1,209 @@
+{
+  "id": "thomas_product_capability_smoke10_v1",
+  "name": "Thomas Product Capability Smoke 10",
+  "version": 1,
+  "type": "capability",
+  "family": "thomas_product_capability",
+  "description": "Ten repo-grounded and product-grounded Thomas capability tasks covering repo inspection, artifact writing, browser work, desktop work, and test execution.",
+  "protocol": [
+    "Run the agent through the real product lane, not a fake response-only harness.",
+    "Do not manually create artifacts outside the benchmark prompts.",
+    "Use tool execution, repo inspection, browser access, and desktop actions when needed.",
+    "Treat missing files, wrong formats, and unverifiable claims as failures."
+  ],
+  "competitor_requirements": {
+    "required_capability_class": "tool_using_agent"
+  },
+  "report_metrics": [
+    "validity_rate",
+    "success_rate",
+    "artifact_success_rate",
+    "response_confirmed_rate",
+    "timeout_count",
+    "runaway_guard_count",
+    "runner_error_count",
+    "avg_elapsed_seconds",
+    "avg_follow_up_prompts",
+    "avg_quality_score",
+    "evidence_coverage",
+    "weighted_score_base",
+    "weighted_score",
+    "credibility_weighted_score"
+  ],
+  "weights": {
+    "success_rate": 0.6,
+    "speed": 0.15,
+    "follow_up": 0.05,
+    "quality": 0.2
+  },
+  "quality_scale": {
+    "min": 1,
+    "max": 5
+  },
+  "tasks": [
+    {
+      "id": "config_default_model_json",
+      "title": "Config Default Model JSON",
+      "time_budget_seconds": 240,
+      "success_criteria": "Config Default Model JSON",
+      "prompt": "Use your tools to read thomas.toml and write {{artifact_dir}}/task01_config_default_model.json with JSON keys default_model and model_count. Return one line confirming task01_config_default_model.json was written.",
+      "success": {
+        "response_contains": ["task01_config_default_model.json"],
+        "required_files": ["{{artifact_dir}}/task01_config_default_model.json"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task01_config_default_model.json": "default_model"
+        },
+        "required_file_regex": {
+          "{{artifact_dir}}/task01_config_default_model.json": "model_count"
+        }
+      }
+    },
+    {
+      "id": "task_manager_route_report_md",
+      "title": "Task Manager Route Report",
+      "time_budget_seconds": 240,
+      "success_criteria": "Task Manager Route Report",
+      "prompt": "Use your tools to read thomas/server/routes/chat_v2.py and write {{artifact_dir}}/task18_task_manager_route_report.md describing how a task is acknowledged and dispatched. Include the phrases task_dispatched and specialists_used. Return one line confirming task18_task_manager_route_report.md was written.",
+      "success": {
+        "response_contains": ["task18_task_manager_route_report.md"],
+        "required_files": ["{{artifact_dir}}/task18_task_manager_route_report.md"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task18_task_manager_route_report.md": "task_dispatched"
+        },
+        "required_file_regex": {
+          "{{artifact_dir}}/task18_task_manager_route_report.md": "specialists_used"
+        }
+      }
+    },
+    {
+      "id": "pytest_worker_run_chat_task_report_txt",
+      "title": "Pytest Worker Run Chat Task Report",
+      "time_budget_seconds": 240,
+      "success_criteria": "Pytest Worker Run Chat Task Report",
+      "prompt": "Use your tools to run pytest tests/test_worker_run_chat_task.py -q and write {{artifact_dir}}/task24_pytest_worker_run_chat_task.txt with the final pass/fail line from pytest. Return one line confirming task24_pytest_worker_run_chat_task.txt was written.",
+      "success": {
+        "response_contains": ["task24_pytest_worker_run_chat_task.txt"],
+        "required_files": ["{{artifact_dir}}/task24_pytest_worker_run_chat_task.txt"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task24_pytest_worker_run_chat_task.txt": "passed"
+        },
+        "required_file_regex": {
+          "{{artifact_dir}}/task24_pytest_worker_run_chat_task.txt": "passed|failed"
+        }
+      }
+    },
+    {
+      "id": "benchmark_api_route_report_txt",
+      "title": "Benchmark API Route Report",
+      "time_budget_seconds": 240,
+      "success_criteria": "Benchmark API Route Report",
+      "prompt": "Use your tools to read thomas/demo/agentic_benchmark_runners.py and write {{artifact_dir}}/task28_benchmark_api_route.txt listing the Thomas API chat route path used by the benchmark runner. Return one line confirming task28_benchmark_api_route.txt was written.",
+      "success": {
+        "response_contains": ["task28_benchmark_api_route.txt"],
+        "required_files": ["{{artifact_dir}}/task28_benchmark_api_route.txt"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task28_benchmark_api_route.txt": "/api/v2/chat"
+        }
+      }
+    },
+    {
+      "id": "chat_stream_event_types_md",
+      "title": "Chat Stream Event Types Markdown",
+      "time_budget_seconds": 240,
+      "success_criteria": "Chat Stream Event Types Markdown",
+      "prompt": "Use your tools to read thomas/server/routes/chat_stream_events.py and write {{artifact_dir}}/task39_chat_stream_events.md with heading \"# Chat Stream Events\" and at least five event type names mentioned in the file. Return one line confirming task39_chat_stream_events.md was written.",
+      "success": {
+        "response_contains": ["task39_chat_stream_events.md"],
+        "required_files": ["{{artifact_dir}}/task39_chat_stream_events.md"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task39_chat_stream_events.md": "# Chat Stream Events"
+        },
+        "required_file_regex": {
+          "{{artifact_dir}}/task39_chat_stream_events.md": "done|tool_result|tool_start"
+        }
+      }
+    },
+    {
+      "id": "desktop_note_write_report_txt",
+      "title": "Desktop Note Write Report",
+      "time_budget_seconds": 240,
+      "success_criteria": "Desktop Note Write Report",
+      "prompt": "Use your tools to create the Desktop file {{desktop_dir}}/thomas-agentic-bench-note.txt with the exact single line THOMAS_AGENTIC_DESKTOP_NOTE=1. Then write {{artifact_dir}}/task46_desktop_note_report.txt containing the full Desktop path. Return one line confirming task46_desktop_note_report.txt was written.",
+      "success": {
+        "response_contains": ["task46_desktop_note_report.txt"],
+        "required_files": [
+          "{{artifact_dir}}/task46_desktop_note_report.txt",
+          "{{desktop_dir}}/thomas-agentic-bench-note.txt"
+        ],
+        "required_file_contains": {
+          "{{artifact_dir}}/task46_desktop_note_report.txt": "{{desktop_dir}}"
+        }
+      }
+    },
+    {
+      "id": "workspace_search_thomas_toml_txt",
+      "title": "Workspace Search Thomas Toml",
+      "time_budget_seconds": 240,
+      "success_criteria": "Workspace Search Thomas Toml",
+      "prompt": "Use your tools to find the file named thomas.toml in this workspace and write {{artifact_dir}}/task47_find_thomas_toml.txt containing the full path on a single line. Return one line confirming task47_find_thomas_toml.txt was written.",
+      "success": {
+        "response_contains": ["task47_find_thomas_toml.txt"],
+        "required_files": ["{{artifact_dir}}/task47_find_thomas_toml.txt"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task47_find_thomas_toml.txt": "thomas.toml"
+        },
+        "required_file_regex": {
+          "{{artifact_dir}}/task47_find_thomas_toml.txt": "thomas.toml"
+        }
+      }
+    },
+    {
+      "id": "web_openclaw_headline_txt",
+      "title": "Web OpenClaw Headline",
+      "time_budget_seconds": 240,
+      "success_criteria": "Web OpenClaw Headline",
+      "prompt": "Use your tools to open https://open-claw.org and write {{artifact_dir}}/task48_openclaw_headline.txt containing the main headline text from the page. Return one line confirming task48_openclaw_headline.txt was written.",
+      "success": {
+        "response_contains": ["task48_openclaw_headline.txt"],
+        "required_files": ["{{artifact_dir}}/task48_openclaw_headline.txt"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task48_openclaw_headline.txt": "OpenClaw"
+        }
+      }
+    },
+    {
+      "id": "web_openclaw_docs_url_txt",
+      "title": "Web OpenClaw Docs URL",
+      "time_budget_seconds": 240,
+      "success_criteria": "Web OpenClaw Docs URL",
+      "prompt": "Use your tools to open https://open-claw.org, click Docs, and write {{artifact_dir}}/task49_openclaw_docs_url.txt containing the final URL after the click. Return one line confirming task49_openclaw_docs_url.txt was written.",
+      "success": {
+        "response_contains": ["task49_openclaw_docs_url.txt"],
+        "required_files": ["{{artifact_dir}}/task49_openclaw_docs_url.txt"],
+        "required_file_contains": {
+          "{{artifact_dir}}/task49_openclaw_docs_url.txt": "docs"
+        },
+        "required_file_regex": {
+          "{{artifact_dir}}/task49_openclaw_docs_url.txt": "https?://"
+        }
+      }
+    },
+    {
+      "id": "desktop_calc_result_txt",
+      "title": "Desktop Calc Result",
+      "time_budget_seconds": 240,
+      "success_criteria": "Desktop Calc Result",
+      "prompt": "Use your tools to create the Desktop Python script {{desktop_dir}}/agentic_bench_calc.py that prints 323, run it, and write {{artifact_dir}}/task50_desktop_calc_result.txt containing exactly 323. Return one line confirming task50_desktop_calc_result.txt was written.",
+      "success": {
+        "response_contains": ["task50_desktop_calc_result.txt"],
+        "required_files": [
+          "{{artifact_dir}}/task50_desktop_calc_result.txt",
+          "{{desktop_dir}}/agentic_bench_calc.py"
+        ],
+        "required_file_contains": {
+          "{{artifact_dir}}/task50_desktop_calc_result.txt": "323"
+        }
+      }
+    }
+  ]
+}

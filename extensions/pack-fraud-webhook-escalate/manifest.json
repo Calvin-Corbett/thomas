@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-webhook-escalate",
+  "name": "Fraud Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.webhook",
+    "fraud.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via webhook with escalate mode policies."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-compliance-pagerduty-audit",
+  "name": "Compliance Pagerduty Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "compliance",
+  "target": "pagerduty",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "compliance.signal",
+    "compliance.dispatch.pagerduty",
+    "compliance.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for compliance workflows via pagerduty with audit mode policies."
+}

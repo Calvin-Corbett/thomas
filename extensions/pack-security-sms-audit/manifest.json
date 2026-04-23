@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-sms-audit",
+  "name": "Security Sms Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "sms",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.sms",
+    "security.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via sms with audit mode policies."
+}

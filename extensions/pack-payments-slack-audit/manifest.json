@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-slack-audit",
+  "name": "Payments Slack Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "slack",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.slack",
+    "payments.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via slack with audit mode policies."
+}

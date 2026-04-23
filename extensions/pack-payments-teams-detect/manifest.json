@@ -1,0 +1,16 @@
+{
+  "id": "pack-payments-teams-detect",
+  "name": "Payments Teams Detect Extension Pack",
+  "version": "1.0.0",
+  "category": "payments",
+  "target": "teams",
+  "mode": "detect",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "payments.signal",
+    "payments.dispatch.teams",
+    "payments.mode.detect",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for payments workflows via teams with detect mode policies."
+}

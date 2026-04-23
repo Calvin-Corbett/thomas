@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-email-escalate",
+  "name": "Analytics Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.email",
+    "analytics.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via email with escalate mode policies."
+}

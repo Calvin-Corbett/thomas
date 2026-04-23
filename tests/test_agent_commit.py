@@ -1,0 +1,660 @@
+from __future__ import annotations
+
+import importlib.util
+import json
+import subprocess
+import sys
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_module(name: str, path: Path):
+    spec = importlib.util.spec_from_file_location(name, path)
+    assert spec and spec.loader
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+mod = _load_module("agent_commit", ROOT / "scripts" / "agent_commit.py")
+
+
+def _git(repo: Path, *args: str) -> str:
+    proc = subprocess.run(["git", *args], cwd=repo, capture_output=True, text=True, check=True)
+    return str(proc.stdout or "").strip()
+
+
+def _write(path: Path, content: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content, encoding="utf-8")
+
+
+def _workboard_text(*claims: str) -> str:
+    claim_lines = "\n".join(f"- {claim}" for claim in claims) or "- none"
+    active_tasks = []
+    for idx, claim in enumerate(claims, start=1):
+        scope = claim.split("scope=", 1)[1].split(";", 1)[0]
+        agent = claim.split("agent=", 1)[1].split(";", 1)[0]
+        task = claim.split("task=", 1)[1]
+        active_tasks.append(f"- task_id=TASK-{idx}; agent={agent}; scope={scope}; summary={task}; status=in_progress")
+    active_block = "\n".join(active_tasks) or "- none"
+    return (
+        "# Workboard\n\n"
+        "## Agent Claims\n"
+        f"{claim_lines}\n\n"
+        "## Active Tasks\n"
+        f"{active_block}\n\n"
+        "## Up For Grabs\n"
+        "- none\n\n"
+        "## Issues / Blockers\n"
+        "- none\n"
+    )
+
+
+def _init_repo(tmp_path: Path, *, claims: tuple[str, ...]) -> tuple[Path, Path]:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q", "-b", "master")
+    _git(repo, "config", "user.name", "Test User")
+    _git(repo, "config", "user.email", "test@example.com")
+    _write(repo / "src" / "app.py", 'print("init")\n')
+    _write(repo / "docs" / "note.md", "init\n")
+    _write(repo / "CHANGELOG.md", "# Changelog\n")
+    _write(repo / "pyproject.toml", '[project]\nname = "demo"\nversion = "0.1.0"\n')
+    _write(repo / "thomas" / "__init__.py", '__version__ = "0.1.0"\n')
+    workboard = repo / "plans" / "thomas" / "WORKBOARD.md"
+    _write(workboard, _workboard_text(*claims))
+    _git(repo, "add", "-A")
+    _git(repo, "commit", "-qm", "init")
+    return repo, workboard
+
+
+def _passing_gates() -> tuple[tuple[str, tuple[str, ...]], ...]:
+    return (("ok", (sys.executable, "-c", 'print("gate ok")')),)
+
+
+def _approved_fallback_receipt(
+    *,
+    actor: str = "WORKSTATION\\corbe",
+    agent: str = "codex",
+    scopes: tuple[str, ...] = ("src/app.py",),
+    reason: str = "user approved scoped fallback",
+) -> object:
+    return mod.breakglass_auth.ScopeFallbackReceipt(
+        actor=actor,
+        agent=agent,
+        scopes=scopes,
+        reason=reason,
+        method=mod.breakglass_auth.WINDOWS_CREDENTIAL_METHOD,
+    )
+
+
+def test_site_visual_proof_gate_only_runs_for_site_paths() -> None:
+    assert mod._gate_applies("site_visual_proof", ["apps/site/src/app/page.tsx"], commit_class="private-checkpoint") is True
+    assert (
+        mod._gate_applies("site_visual_proof", ["apps/site/verification/ui-proof.json"], commit_class="private-checkpoint")
+        is True
+    )
+    assert (
+        mod._gate_applies(
+            "site_visual_proof",
+            ["scripts/agent_commit.py", "tests/test_commit_gate_split.py"],
+            commit_class="private-checkpoint",
+        )
+        is False
+    )
+    assert mod._gate_applies("boot_smoke", ["scripts/agent_commit.py"], commit_class="private-checkpoint") is True
+
+
+def test_release_update_gate_command_is_scoped_to_selected_paths() -> None:
+    command = mod._resolved_gate_command(
+        "release_update",
+        (sys.executable, "scripts/check_release_update_gate.py", "--no-include-untracked"),
+        selected_paths=("thomas/server/app.py", "CHANGELOG.md"),
+    )
+
+    assert command == [
+        sys.executable,
+        "scripts/check_release_update_gate.py",
+        "--no-include-untracked",
+        "--changed-file",
+        "thomas/server/app.py",
+        "--changed-file",
+        "CHANGELOG.md",
+    ]
+
+
+def test_non_release_gate_command_is_unchanged() -> None:
+    command = mod._resolved_gate_command(
+        "boot_smoke",
+        (sys.executable, "scripts/check_boot_smoke_gate.py"),
+        selected_paths=("thomas/server/app.py",),
+    )
+
+    assert command == [
+        sys.executable,
+        "scripts/check_boot_smoke_gate.py",
+    ]
+
+
+def test_release_gates_only_apply_to_release_commit_classes() -> None:
+    assert mod._gate_applies("release_update", ["src/app.py"], commit_class="private-checkpoint") is False
+    assert mod._gate_applies("changelog", ["src/app.py"], commit_class="private-checkpoint") is False
+    assert mod._gate_applies("release_update", ["src/app.py"], commit_class="publish-candidate") is True
+    assert mod._gate_applies("changelog", ["src/app.py"], commit_class="public-release") is True
+
+
+def test_agent_commit_succeeds_with_unrelated_dirty_paths(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("scoped")\n')
+    _write(repo / "docs" / "note.md", "dirty staged\n")
+    _git(repo, "add", "docs/note.md")
+    _write(repo / "outside.txt", "untracked\n")
+
+    result = mod.commit_scoped_changes(
+        message="feat: scoped commit",
+        agent="codex",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.commit_sha
+    status = _git(repo, "status", "--short")
+    assert "docs/note.md" in status
+    assert "outside.txt" in status
+    assert "src/app.py" not in status
+    body = _git(repo, "log", "-1", "--pretty=%B")
+    assert "Thomas-Agent: codex" in body
+    assert "Thomas-Commit-Class: private-checkpoint" in body
+    assert "Thomas-Commit-Mode: scoped-local" in body
+
+
+def test_agent_commit_fallback_succeeds_without_active_claim(tmp_path: Path, monkeypatch) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=docs; task=Other work",),
+    )
+    _write(repo / "src" / "app.py", 'print("fallback")\n')
+    monkeypatch.setattr(mod.breakglass_auth, "consume_scope_fallback_receipt", lambda receipt, **_: _approved_fallback_receipt())
+
+    result = mod.commit_scoped_changes(
+        message="feat: fallback commit",
+        agent="codex",
+        include_paths=["src/app.py"],
+        allow_scope_fallback=True,
+        fallback_reason="user approved scoped fallback",
+        fallback_receipt="receipt-123",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.scope_source == mod.FALLBACK_SOURCE
+    body = _git(repo, "log", "-1", "--pretty=%B")
+    assert "Thomas-Commit-Mode: scoped-fallback" in body
+    assert "Thomas-Fallback-Reason: user approved scoped fallback" in body
+    assert "Thomas-Fallback-Approved-By: WORKSTATION\\corbe" in body
+    assert f"Thomas-Fallback-Approval-Method: {mod.breakglass_auth.WINDOWS_CREDENTIAL_METHOD}" in body
+
+
+def test_agent_commit_fallback_accepts_literal_bracket_paths(tmp_path: Path, monkeypatch) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=docs; task=Other work",),
+    )
+    bracket_path = repo / "apps" / "site" / "src" / "app" / "[locale]" / "page.tsx"
+    _write(bracket_path, "export default function Page() { return null; }\n")
+    monkeypatch.setattr(
+        mod.breakglass_auth,
+        "consume_scope_fallback_receipt",
+        lambda receipt, **_: _approved_fallback_receipt(scopes=("apps/site/src/app/[locale]/page.tsx",)),
+    )
+
+    result = mod.commit_scoped_changes(
+        message="feat: bracket fallback commit",
+        agent="codex",
+        include_paths=["apps/site/src/app/[locale]/page.tsx"],
+        allow_scope_fallback=True,
+        fallback_reason="user approved scoped fallback",
+        fallback_receipt="receipt-123",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.scope_source == mod.FALLBACK_SOURCE
+    body = _git(repo, "log", "-1", "--pretty=%B")
+    assert "feat: bracket fallback commit" in body
+
+
+def test_agent_commit_preferred_fallback_can_override_active_claim_scope(tmp_path: Path, monkeypatch) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=docs; task=Docs work",),
+    )
+    _write(repo / "src" / "app.py", 'print("fallback")\n')
+    monkeypatch.setattr(
+        mod.breakglass_auth,
+        "consume_scope_fallback_receipt",
+        lambda receipt, **_: _approved_fallback_receipt(
+            scopes=("src/app.py",),
+            reason="maintenance checkpoint scope",
+        ),
+    )
+
+    result = mod.commit_scoped_changes(
+        message="feat: preferred fallback commit",
+        agent="codex",
+        include_paths=["src/app.py"],
+        allow_scope_fallback=True,
+        prefer_scope_fallback=True,
+        fallback_reason="maintenance checkpoint scope",
+        fallback_receipt="receipt-123",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.scope_source == mod.FALLBACK_SOURCE
+    body = _git(repo, "log", "-1", "--pretty=%B")
+    assert "Thomas-Fallback-Reason: maintenance checkpoint scope" in body
+
+
+def test_agent_commit_include_scope_expands_to_matching_changed_files(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: scope include expansion",
+        agent="codex",
+        include_paths=["src"],
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.selected_paths == ("src/app.py",)
+
+
+def test_agent_commit_fallback_requires_include_and_reason(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=docs; task=Other work",),
+    )
+    _write(repo / "src" / "app.py", 'print("fallback")\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: fallback commit",
+        agent="codex",
+        allow_scope_fallback=True,
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "claim_scope_mismatch"
+    assert result.scope_source == mod.FALLBACK_SOURCE
+    assert result.next_step
+    assert result.suggested_command
+
+
+def test_agent_commit_fallback_requires_receipt(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=docs; task=Other work",),
+    )
+    _write(repo / "src" / "app.py", 'print("fallback")\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: fallback commit",
+        agent="codex",
+        include_paths=["src/app.py"],
+        allow_scope_fallback=True,
+        fallback_reason="user approved scoped fallback",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "claim_scope_mismatch"
+    assert "requires --fallback-receipt" in result.message
+
+
+def test_agent_commit_fallback_rejects_overlap_with_other_claim(tmp_path: Path, monkeypatch) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=src; task=Other work",),
+    )
+    _write(repo / "src" / "app.py", 'print("fallback")\n')
+    monkeypatch.setattr(mod.breakglass_auth, "consume_scope_fallback_receipt", lambda receipt, **_: _approved_fallback_receipt())
+
+    result = mod.commit_scoped_changes(
+        message="feat: fallback commit",
+        agent="codex",
+        include_paths=["src/app.py"],
+        allow_scope_fallback=True,
+        fallback_reason="user approved scoped fallback",
+        fallback_receipt="receipt-123",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "claim_scope_mismatch"
+    assert "overlaps active workboard claim" in result.message
+
+
+def test_agent_commit_fallback_rejects_invalid_receipt(tmp_path: Path, monkeypatch) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=docs; task=Other work",),
+    )
+    _write(repo / "src" / "app.py", 'print("fallback")\n')
+    monkeypatch.setattr(mod.breakglass_auth, "consume_scope_fallback_receipt", lambda receipt, **_: None)
+
+    result = mod.commit_scoped_changes(
+        message="feat: fallback commit",
+        agent="codex",
+        include_paths=["src/app.py"],
+        allow_scope_fallback=True,
+        fallback_reason="user approved scoped fallback",
+        fallback_receipt="bad-receipt",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "claim_scope_mismatch"
+    assert "requires a valid unused fallback approval receipt" in result.message
+
+
+def test_agent_commit_fails_without_active_claim(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=claude; name=Claude; role=solo; parent=none; scope=src; task=Other work",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: missing claim",
+        agent="codex",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "claim_scope_mismatch"
+
+
+def test_agent_commit_fails_with_multiple_active_claims(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=(
+            "agent=codex; name=Codex; role=solo; parent=none; scope=src; task=One",
+            "agent=codex; name=Codex; role=solo; parent=none; scope=docs; task=Two",
+        ),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: too many claims",
+        agent="codex",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "claim_scope_mismatch"
+
+
+def test_agent_commit_rejects_include_outside_scope(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+    _write(repo / "docs" / "note.md", "changed\n")
+
+    result = mod.commit_scoped_changes(
+        message="feat: bad include",
+        agent="codex",
+        include_paths=["docs/note.md"],
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "claim_scope_mismatch"
+
+
+def test_agent_commit_reports_refactor_next_step_for_monolith_failures(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+
+    local_gates = (
+        (
+            "monolith_guard",
+            (
+                sys.executable,
+                "-c",
+                "import sys; print('Monolith guard FAILED: 1 violation(s).'); sys.exit(1)",
+            ),
+        ),
+    )
+    original = dict(mod.STRUCTURED_GATE_COMMANDS)
+    mod.STRUCTURED_GATE_COMMANDS["monolith_guard"] = (
+        sys.executable,
+        "-c",
+        (
+            "import json; "
+            "print(json.dumps({'violations':[{'path':'src/app.py','suggested_split_paths':['src/app_helpers.py','src/app_types.py']}]}, separators=(',', ':')))"
+        ),
+    )
+    try:
+        result = mod.commit_scoped_changes(
+            message="feat: monolith fail",
+            agent="codex",
+            repo_root=repo,
+            workboard_path=workboard,
+            local_gate_commands=local_gates,
+        )
+    finally:
+        mod.STRUCTURED_GATE_COMMANDS.clear()
+        mod.STRUCTURED_GATE_COMMANDS.update(original)
+
+    assert result.ok is False
+    assert result.blocker_class == "needs_refactor"
+    assert result.gate_name == "monolith_guard"
+    assert result.next_step
+    assert "src/app_helpers.py" in result.next_step
+
+
+def test_agent_commit_auto_includes_release_metadata_when_changed(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+    _write(repo / "CHANGELOG.md", "# Changelog\n\nnew\n")
+    _write(repo / "thomas" / "__init__.py", '__version__ = "0.1.1"\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: release trio",
+        agent="codex",
+        commit_class="publish-candidate",
+        dry_run=True,
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert "src/app.py" in result.selected_paths
+    assert "CHANGELOG.md" in result.selected_paths
+    assert "thomas/__init__.py" in result.selected_paths
+    assert "pyproject.toml" not in result.selected_paths
+
+
+def test_agent_commit_private_checkpoint_skips_release_metadata_even_when_changed(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+    _write(repo / "CHANGELOG.md", "# Changelog\n\nnew\n")
+    _write(repo / "thomas" / "__init__.py", '__version__ = "0.1.1"\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: checkpoint trio stays scoped",
+        agent="codex",
+        dry_run=True,
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.commit_class == "private-checkpoint"
+    assert result.selected_paths == ("src/app.py",)
+
+
+def test_agent_commit_does_not_include_release_metadata_when_clean(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: no release trio",
+        agent="codex",
+        dry_run=True,
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is True
+    assert result.selected_paths == ("src/app.py",)
+
+
+def test_agent_commit_reports_branch_race(tmp_path: Path, monkeypatch) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+    head = _git(repo, "rev-parse", "HEAD")
+    call_count = {"value": 0}
+    original_current_head = mod._current_head
+
+    def fake_current_head(repo_root: Path) -> str:
+        call_count["value"] += 1
+        if call_count["value"] >= 2:
+            return "f" * 40
+        return original_current_head(repo_root)
+
+    monkeypatch.setattr(mod, "_current_head", fake_current_head)
+
+    result = mod.commit_scoped_changes(
+        message="feat: race",
+        agent="codex",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=_passing_gates(),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "branch_race"
+    assert _git(repo, "rev-parse", "HEAD") == head
+
+
+def test_agent_commit_reports_local_gate_failure(tmp_path: Path) -> None:
+    repo, workboard = _init_repo(
+        tmp_path,
+        claims=("agent=codex; name=Codex; role=solo; parent=none; scope=src; task=Scoped commit",),
+    )
+    _write(repo / "src" / "app.py", 'print("changed")\n')
+
+    result = mod.commit_scoped_changes(
+        message="feat: gate fail",
+        agent="codex",
+        repo_root=repo,
+        workboard_path=workboard,
+        local_gate_commands=(("bad", (sys.executable, "-c", 'import sys; print("nope"); sys.exit(1)')),),
+    )
+
+    assert result.ok is False
+    assert result.blocker_class == "local_gate_failed"
+    assert result.gate_name == "bad"
+    assert "nope" in result.gate_output
+
+
+def test_sync_live_index_resets_selected_paths_to_head(monkeypatch, tmp_path: Path) -> None:
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    calls: list[list[str]] = []
+
+    def fake_run_git(repo_root: Path, args: tuple[str, ...] | list[str], **kwargs):
+        calls.append(list(args))
+
+        class Proc:
+            returncode = 0
+            stderr = ""
+            stdout = ""
+
+        return Proc()
+
+    monkeypatch.setattr(mod, "_run_git", fake_run_git)
+
+    mod._sync_live_index(repo, ["src/app.py", "CHANGELOG.md"])
+
+    assert calls == [["reset", "-q", "HEAD", "--", "src/app.py", "CHANGELOG.md"]]
+
+
+def test_agent_commit_run_json_emits_blocker_payload(monkeypatch, capsys) -> None:
+    fake_result = mod.CommitResult(
+        ok=False,
+        blocker_class="claim_scope_mismatch",
+        message="missing claim",
+        agent="codex",
+        branch=None,
+        claim_scopes=(),
+        selected_paths=(),
+        scope_source=mod.CLAIM_SOURCE,
+        next_step="claim the scope",
+        suggested_command='python scripts/agent_commit.py --agent codex --message "x"',
+    )
+    monkeypatch.setattr(mod, "commit_scoped_changes", lambda **kwargs: fake_result)
+
+    rc = mod.run(["--message", "feat: json", "--json"])
+    payload = json.loads(capsys.readouterr().out)
+
+    assert rc == 1
+    assert payload["message"] == "missing claim"
+    assert payload["next_step"] == "claim the scope"
+    assert payload["suggested_command"]

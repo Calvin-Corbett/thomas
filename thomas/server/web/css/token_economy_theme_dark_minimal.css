@@ -1,0 +1,179 @@
+﻿/* â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•
+   DARK THEME â€” MINIMAL B&W
+   Stripped-down black and white. Minimal, typographic, stark.
+   â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â•â• */
+body.te-theme-dark {
+    background: #0a0a0a !important;
+    color: #e8e8e8 !important;
+}
+body.te-theme-dark::before {
+    display: none !important;
+}
+/* Hide space canvas */
+body.te-theme-dark #spaceCanvas,
+body.te-theme-dark #te-space-root,
+body.te-theme-dark .scanline-overlay {
+    display: none !important;
+}
+body.te-theme-dark .app-layout {
+    background: #0a0a0a !important;
+}
+body.te-theme-dark .main-content,
+body.te-theme-dark .chat-scroll-area {
+    background: #0a0a0a !important;
+}
+body.te-theme-dark .sidebar {
+    background: #111111 !important;
+    border-right: 1px solid #222 !important;
+    color: #e8e8e8 !important;
+}
+body.te-theme-dark .sidebar *,
+body.te-theme-dark .sidebar a,
+body.te-theme-dark .sidebar i,
+body.te-theme-dark .sidebar strong,
+body.te-theme-dark .sidebar span {
+    color: #d0d0d0 !important;
+}
+body.te-theme-dark .sidebar .sidebar-section-heading {
+    color: #666 !important;
+}
+body.te-theme-dark .sidebar .sidebar-nav-item:hover,
+body.te-theme-dark .sidebar .sidebar-chat-row:hover {
+    background: #1a1a1a !important;
+}
+body.te-theme-dark .sidebar .sidebar-nav-item.active {
+    background: #1e1e1e !important;
+    border-left: 2px solid #e8e8e8 !important;
+}
+/* Messages */
+body.te-theme-dark .message-bubble {
+    background: #141414 !important;
+    color: #e8e8e8 !important;
+    border: 1px solid #222 !important;
+    border-radius: 2px !important;
+    box-shadow: none !important;
+}
+body.te-theme-dark .message-bubble.user-message {
+    background: #1a1a1a !important;
+    border-color: #2a2a2a !important;
+}
+body.te-theme-dark .message-content,
+body.te-theme-dark .message-content *,
+body.te-theme-dark .message-author {
+    color: #e8e8e8 !important;
+}
+body.te-theme-dark .message-meta {
+    color: #666 !important;
+}
+/* Composer */
+body.te-theme-dark .composer-container {
+    background: #0e0e0e !important;
+    border-top: 1px solid #222 !important;
+}
+body.te-theme-dark textarea,
+body.te-theme-dark .composer-input,
+body.te-theme-dark .composer-textarea {
+    background: #141414 !important;
+    color: #e8e8e8 !important;
+    border: 1px solid #333 !important;
+}
+body.te-theme-dark .top-nav {
+    background: #0e0e0e !important;
+    border-bottom: 1px solid #222 !important;
+    color: #e8e8e8 !important;
+}
+/* Settings */
+body.te-theme-dark #settingsModal {
+    background: #0a0a0a !important;
+    color: #e8e8e8 !important;
+}
+body.te-theme-dark .settings-section {
+    background: #111 !important;
+    border: 1px solid #222 !important;
+}
+body.te-theme-dark .settings-section-head h3 {
+    color: #e8e8e8 !important;
+}
+body.te-theme-dark .settings-section-head p,
+body.te-theme-dark .switch-row p {
+    color: #666 !important;
+}
+body.te-theme-dark .settings-section * {
+    color: #d0d0d0;
+}
+body.te-theme-dark .form-control,
+body.te-theme-dark .setup-fluid-select {
+    background: #1a1a1a !important;
+    color: #e8e8e8 !important;
+    border: 1px solid #333 !important;
+}
+body.te-theme-dark .settings-nav-link {
+    color: #666 !important;
+}
+body.te-theme-dark .settings-nav-link.active {
+    color: #e8e8e8 !important;
+    background: #1a1a1a !important;
+    border-left: 2px solid #e8e8e8 !important;
+}
+body.te-theme-dark .settings-screen-top {
+    background: #0e0e0e !important;
+    border-bottom: 1px solid #222 !important;
+}
+body.te-theme-dark .settings-screen-top *,
+body.te-theme-dark .settings-back-btn {
+    color: #e8e8e8 !important;
+}
+body.te-theme-dark .toggle-switch .slider {
+    background: #333 !important;
+}
+body.te-theme-dark .toggle-switch input:checked + .slider {
+    background: #e8e8e8 !important;
+}
+body.te-theme-dark .settings-mini-btn {
+    background: #1a1a1a !important;
+    color: #d0d0d0 !important;
+    border: 1px solid #333 !important;
+}
+body.te-theme-dark #saveSettingsBtn {
+    background: #e8e8e8 !important;
+    color: #0a0a0a !important;
+}
+body.te-theme-dark .welcome-screen { background: transparent !important; }
+body.te-theme-dark .welcome-title,
+body.te-theme-dark .welcome-screen * {
+    color: #e8e8e8 !important;
+    text-shadow: none !important;
+}
+
+.te-modelscope {
+    display: inline-flex;
+    gap: 6px;
+    align-items: center;
+}
+
+.te-modelscope-btn {
+    appearance: none;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.04);
+    color: inherit;
+    font: inherit;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-size: 10px;
+    line-height: 1;
+    padding: 5px 8px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+}
+
+.te-modelscope-btn:hover {
+    border-color: rgba(88, 166, 255, 0.35);
+    color: #f0f6ff;
+}
+
+.te-modelscope-btn.active {
+    background: rgba(88, 166, 255, 0.16);
+    border-color: rgba(88, 166, 255, 0.5);
+    color: #9ed0ff;
+}

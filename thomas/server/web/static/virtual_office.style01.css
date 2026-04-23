@@ -1,0 +1,218 @@
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0a0e1a;
+            color: #e0e0e0;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #container {
+            display: flex;
+            height: 100vh;
+            gap: 0;
+        }
+
+        #sidebar {
+            width: 280px;
+            background: #141b2d;
+            border-right: 2px solid #00d4ff;
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            padding: 16px;
+            gap: 20px;
+        }
+
+        #sidebar h2 {
+            color: #00d4ff;
+            font-size: 14px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin-bottom: 10px;
+            border-bottom: 1px solid #00d4ff;
+            padding-bottom: 8px;
+        }
+
+        .room-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .room-item {
+            padding: 8px 12px;
+            background: #1a2332;
+            border: 1px solid #2a3a52;
+            border-radius: 2px;
+            cursor: pointer;
+            font-size: 12px;
+            transition: all 0.2s;
+            color: #b0b0b0;
+        }
+
+        .room-item:hover {
+            background: #1f2a3f;
+            border-color: #00d4ff;
+            color: #00d4ff;
+        }
+
+        .room-item.active {
+            background: #00d4ff;
+            border-color: #00d4ff;
+            color: #0a0e1a;
+            font-weight: bold;
+        }
+
+        .agent-list {
+            display: flex;
+            flex-direction: column;
+            gap: 6px;
+        }
+
+        .agent-item {
+            padding: 8px 12px;
+            background: #1a2332;
+            border: 1px solid #2a3a52;
+            border-radius: 2px;
+            font-size: 11px;
+            color: #90c890;
+        }
+
+        #minimapContainer {
+            width: 100%;
+            height: 160px;
+            background: #0f1520;
+            border: 1px solid #2a3a52;
+            border-radius: 2px;
+            margin-top: 10px;
+        }
+
+        #minimap {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        #mainArea {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: #0a0e1a;
+        }
+
+        #canvasWrapper {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: linear-gradient(135deg, #0a0e1a 0%, #141b2d 100%);
+        }
+
+        #gameCanvas {
+            display: block;
+            position: absolute;
+            top: 0;
+            left: 0;
+            cursor: grab;
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        #gameCanvas:active {
+            cursor: grabbing;
+        }
+
+        #controls {
+            padding: 12px 16px;
+            background: #141b2d;
+            border-top: 2px solid #00d4ff;
+            display: flex;
+            gap: 16px;
+            align-items: center;
+            font-size: 12px;
+        }
+
+        .control-group {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+
+        .control-label {
+            color: #00d4ff;
+            font-weight: bold;
+            min-width: 80px;
+        }
+
+        .zoom-display {
+            color: #90c890;
+            font-weight: bold;
+            min-width: 50px;
+        }
+
+        #statusBar {
+            padding: 10px 16px;
+            background: #0a0e1a;
+            border-top: 1px solid #2a3a52;
+            font-size: 11px;
+            color: #606060;
+            display: flex;
+            gap: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            gap: 6px;
+        }
+
+        .status-label {
+            color: #00d4ff;
+        }
+
+        .status-value {
+            color: #90c890;
+        }
+
+        #sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        #sidebar::-webkit-scrollbar-track {
+            background: #0f1520;
+        }
+
+        #sidebar::-webkit-scrollbar-thumb {
+            background: #00d4ff;
+            border-radius: 4px;
+        }
+
+        #sidebar::-webkit-scrollbar-thumb:hover {
+            background: #00ffff;
+        }
+
+        #customization-panel {
+            position: fixed;
+            left: -350px;
+            top: 50%;
+            transform: translateY(-50%);
+            width: 330px;
+            max-height: 500px;
+            background-color: #1a1a2e;
+            border: 2px solid #0ff;
+            color: #0ff;
+            padding: 15px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            z-index: 999;
+            transition: left 0.3s ease;
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+            overflow-y: auto;
+        }
+    

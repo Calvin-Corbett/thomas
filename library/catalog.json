@@ -1,0 +1,131 @@
+{
+  "version": 1,
+  "entries": [
+    {
+      "id": "1771373416-core-ai-api-capability-matrix-2026-02-18",
+      "title": "Core AI API Capability Matrix (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "Major AI model providers and feature coverage: chat, tools, realtime, batch, embeddings, fine-tuning, multimodal.",
+      "source": "Official provider docs (xAI/OpenAI/Anthropic/Google/Mistral/Cohere/Groq/OpenRouter)",
+      "tags": [
+        "providers",
+        "api",
+        "capabilities",
+        "batch",
+        "realtime",
+        "tools",
+        "multimodal"
+      ],
+      "path": "entries/provider-api-research/1771373416-core-ai-api-capability-matrix-2026-02-18.md",
+      "created_ts_utc": 1771373416,
+      "updated_ts_utc": 1771373416,
+      "fingerprint": "a00e6acff54460248adbdd2e088281c9e7546398b59762081811aaefe2eaf8cf",
+      "query": "all major ai provider apis and features",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373424-media-api-capability-matrix-2026-02-18",
+      "title": "Media API Capability Matrix (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "Video/image/voice/STT/TTS API coverage across first-party and specialist providers.",
+      "source": "Official media/provider docs (xAI/OpenAI/Gemini/Runway/Pika/Stability/ElevenLabs/Deepgram/AssemblyAI/Replicate)",
+      "tags": [
+        "media",
+        "video",
+        "image",
+        "voice",
+        "stt",
+        "tts",
+        "providers"
+      ],
+      "path": "entries/provider-api-research/1771373424-media-api-capability-matrix-2026-02-18.md",
+      "created_ts_utc": 1771373424,
+      "updated_ts_utc": 1771373424,
+      "fingerprint": "7562133cc7141b6af26f10d0a7e39379bf3fd0c0d54af3b09e7a3d7c171a0404",
+      "query": "video voice stt tts api providers",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373433-cloud-control-plane-api-matrix-2026-02-18",
+      "title": "Cloud Control-Plane API Matrix (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "Cloud model control planes for routing, auth, tool calling, and batch operations.",
+      "source": "Official docs (AWS Bedrock/Azure OpenAI/Google Vertex/OpenRouter)",
+      "tags": [
+        "cloud",
+        "control-plane",
+        "routing",
+        "batch",
+        "auth",
+        "enterprise"
+      ],
+      "path": "entries/provider-api-research/1771373433-cloud-control-plane-api-matrix-2026-02-18.md",
+      "created_ts_utc": 1771373433,
+      "updated_ts_utc": 1771373433,
+      "fingerprint": "a2bd9ed6c99d783030383e4988e0fdf185fa452a80aa559f87272404ca8238b6",
+      "query": "cloud control plane ai api routing tools batch",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373439-grok-xai-priority-pack-for-thomas-2026-02-18",
+      "title": "Grok/xAI Priority Pack for Thomas (2026-02-18)",
+      "category": "provider-api-research",
+      "summary": "xAI-first implementation pack for chat/tools/batch/audio/image/video integration in Thomas.",
+      "source": "Official xAI docs",
+      "tags": [
+        "xai",
+        "grok",
+        "batch",
+        "video",
+        "audio",
+        "tools"
+      ],
+      "path": "entries/provider-api-research/1771373439-grok-xai-priority-pack-for-thomas-2026-02-18.md",
+      "created_ts_utc": 1771373439,
+      "updated_ts_utc": 1771373439,
+      "fingerprint": "0a8b318391922902312da17acad83edb4ea876d63ffaa5db9961b4401758f519",
+      "query": "grok pipeline docs and batch mode for long horizon tasks",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373446-thomas-agent-integration-backlog-2026-02-18",
+      "title": "Thomas Agent Integration Backlog (2026-02-18)",
+      "category": "architecture",
+      "summary": "Agent families and provider adapter backlog to scale Thomas across all API capabilities.",
+      "source": "Thomas architecture research synthesis",
+      "tags": [
+        "agents",
+        "architecture",
+        "providers",
+        "roadmap",
+        "autonomy"
+      ],
+      "path": "entries/architecture/1771373446-thomas-agent-integration-backlog-2026-02-18.md",
+      "created_ts_utc": 1771373446,
+      "updated_ts_utc": 1771373446,
+      "fingerprint": "9b1e60f1e0277ba4bf5c1ac8ed0965ec92c5bb0450877131f81b215efe687132",
+      "query": "make all the agents for api features video voice and beyond",
+      "auto_captured": false
+    },
+    {
+      "id": "1771373532-api-capability-onboarding-protocol",
+      "title": "API Capability Onboarding Protocol",
+      "category": "architecture",
+      "summary": "Required process for adding non-chat API capabilities (video, voice, batch, realtime, tools) with UI/CLI parity and tests.",
+      "source": "docs/API_CAPABILITY_ONBOARDING_PROTOCOL.md",
+      "tags": [
+        "protocol",
+        "onboarding",
+        "capabilities",
+        "parity",
+        "testing"
+      ],
+      "path": "entries/architecture/1771373532-api-capability-onboarding-protocol.md",
+      "created_ts_utc": 1771373532,
+      "updated_ts_utc": 1771373532,
+      "fingerprint": "60b45d0ff81018b3ee6c3ec770d22d798713c6938cab94343a88e180cbaf3965",
+      "query": "robust protocol for adding api capabilities",
+      "auto_captured": false
+    }
+  ]
+}

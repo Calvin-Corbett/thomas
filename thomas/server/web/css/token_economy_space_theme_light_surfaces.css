@@ -1,0 +1,237 @@
+﻿/* â”€â”€ SUGGESTION CHIPS â€” torn-off sticky notes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .assistant-suggestion-rail {
+    background: transparent !important;
+}
+body.te-theme-light .assistant-suggestion-title {
+    color: #8a7a65 !important;
+    font-style: italic !important;
+}
+body.te-theme-light .assistant-suggestion-dismiss {
+    color: #a0907a !important;
+    background: transparent !important;
+    border: none !important;
+}
+body.te-theme-light .assistant-suggestion-chip,
+body.te-theme-light .onboarding-action-chip,
+body.te-theme-light .onboarding-option-chip {
+    background: #f0ebe2 !important;
+    color: #4a3d30 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 1px !important;
+    font-style: italic !important;
+}
+body.te-theme-light .assistant-suggestion-chip:hover,
+body.te-theme-light .onboarding-action-chip:hover {
+    background: #e5ddd0 !important;
+}
+body.te-theme-light .assistant-suggestion-chip.primary {
+    background: #5c4a35 !important;
+    color: #f5f0e8 !important;
+    border-color: #4a3a28 !important;
+    font-style: normal !important;
+}
+
+/* â”€â”€ TOP NAV â€” notebook header strip â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .top-nav {
+    background: #e3dbd0 !important;
+    border-bottom: 1px solid #c8bfab !important;
+    color: #2c2420 !important;
+}
+body.te-theme-light .top-nav * {
+    color: #4a3d30 !important;
+}
+/* Model badge â€” plain italic text, no pill, no blur, no box. Just text on the bar. */
+body.te-theme-light .model-select-wrapper {
+    background: transparent !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    border: none !important;
+    box-shadow: none !important;
+}
+body.te-theme-light .model-setup-btn {
+    background: transparent !important;
+    border: none !important;
+    border-radius: 0 !important;
+    padding: 2px 6px !important;
+    font-size: 0.72rem !important;
+    font-style: italic !important;
+    color: #8a7a65 !important;
+    letter-spacing: 0.02em !important;
+    box-shadow: none !important;
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+}
+body.te-theme-light .model-setup-btn:hover {
+    background: transparent !important;
+    color: #5c4a35 !important;
+    text-decoration: underline !important;
+}
+body.te-theme-light .model-setup-btn * {
+    color: #8a7a65 !important;
+}
+
+/* â”€â”€ WELCOME SCREEN â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .welcome-screen {
+    background: transparent !important;
+}
+body.te-theme-light .welcome-title,
+body.te-theme-light .welcome-screen h1,
+body.te-theme-light .welcome-screen h2 {
+    color: #3d3028 !important;
+    text-shadow: none !important;
+    font-style: italic !important;
+    font-weight: 400 !important;
+}
+body.te-theme-light .welcome-screen p {
+    color: #5c4a35 !important;
+    text-shadow: none !important;
+}
+
+/* â”€â”€ SETTINGS â€” worn notebook pages â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light #settingsModal {
+    background: transparent !important;
+    color: #2c2420 !important;
+}
+body.te-theme-light .settings-section {
+    background: #f2ede4 !important;
+    border: 1px solid #d0c4b0 !important;
+    border-radius: 1px !important;
+    box-shadow: 1px 2px 6px rgba(100, 80, 50, 0.05) !important;
+}
+body.te-theme-light .settings-section-head h3 {
+    color: #3d3028 !important;
+    font-weight: 700 !important;
+}
+body.te-theme-light .settings-section-head p {
+    color: #7a6b58 !important;
+    font-style: italic !important;
+}
+body.te-theme-light .form-control,
+body.te-theme-light .setup-fluid-select {
+    background: #e8e2d6 !important;
+    color: #2c2420 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 1px !important;
+}
+/* Settings nav panel */
+body.te-theme-light .settings-nav-panel {
+    background: #e6dfd2 !important;
+    border: 1px solid #c8bfab !important;
+}
+body.te-theme-light .settings-nav-link {
+    color: #5c4a35 !important;
+}
+body.te-theme-light .settings-nav-link:hover {
+    background: #ddd5c5 !important;
+}
+body.te-theme-light .settings-nav-link.active {
+    color: #3d3028 !important;
+    background: #d6cebf !important;
+    border-left: 3px solid #8a7250 !important;
+}
+body.te-theme-light .settings-nav-search {
+    background: #f0ebe2 !important;
+    border: 1px solid #c8bca8 !important;
+}
+body.te-theme-light .settings-nav-search input {
+    color: #2c2420 !important;
+}
+body.te-theme-light .settings-nav-search input::placeholder {
+    color: #a0907a !important;
+    font-style: italic !important;
+}
+body.te-theme-light .settings-nav-search i {
+    color: #a0907a !important;
+}
+/* Labels and text in settings */
+body.te-theme-light label,
+body.te-theme-light .form-group label,
+body.te-theme-light strong,
+body.te-theme-light .switch-row strong {
+    color: #2c2420 !important;
+}
+body.te-theme-light #settingsModal label,
+body.te-theme-light #settingsModal .form-group label {
+    color: #5c4a35 !important;
+}
+body.te-theme-light #settingsModal input,
+body.te-theme-light #settingsModal select,
+body.te-theme-light #settingsModal textarea {
+    background: #f0ebe2 !important;
+    color: #2c2420 !important;
+    border: 1px solid #c8bca8 !important;
+}
+body.te-theme-light #settingsModal select option {
+    background: #f0ebe2;
+    color: #2c2420;
+}
+body.te-theme-light .switch-row p,
+body.te-theme-light .settings-inline-note {
+    color: #7a6b58 !important;
+    font-style: italic !important;
+}
+body.te-theme-light .settings-section * {
+    color: #2c2420;
+}
+body.te-theme-light .settings-section-head p,
+body.te-theme-light .switch-row p {
+    color: #7a6b58 !important;
+}
+/* Buttons */
+body.te-theme-light .settings-mini-btn {
+    background: #e0d8ca !important;
+    color: #3d3028 !important;
+    border: 1px solid #c8bca8 !important;
+    border-radius: 1px !important;
+}
+body.te-theme-light .settings-mini-btn:hover {
+    background: #d6cebf !important;
+}
+body.te-theme-light #saveSettingsBtn {
+    background: #5c4a35 !important;
+    color: #f5f0e8 !important;
+    border-radius: 1px !important;
+}
+body.te-theme-light #saveSettingsBtn:hover {
+    background: #4a3a28 !important;
+}
+/* Toggle switches */
+body.te-theme-light .toggle-switch .slider {
+    background: #c0b49e !important;
+    border-radius: 2px !important;
+}
+body.te-theme-light .toggle-switch input:checked + .slider {
+    background: #8a7250 !important;
+}
+/* Settings header */
+body.te-theme-light .settings-screen-top {
+    background: #e3dbd0 !important;
+    border-bottom: 1px solid #c8bfab !important;
+}
+body.te-theme-light .settings-screen-top *,
+body.te-theme-light .settings-suite-left h2,
+body.te-theme-light .settings-back-btn {
+    color: #2c2420 !important;
+}
+body.te-theme-light .settings-suite-left h2 {
+    font-style: italic !important;
+    font-weight: 400 !important;
+}
+
+/* â”€â”€ CODE BLOCKS â€” typewriter ink on paper â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light pre,
+body.te-theme-light code {
+    background: #e6dfd5 !important;
+    color: #3d3028 !important;
+    border: 1px solid #d4c9b8 !important;
+    font-family: 'Courier New', Courier, monospace !important;
+}
+
+/* â”€â”€ DISCLAIMER â€” bottom text â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
+body.te-theme-light .disclaimer,
+body.te-theme-light .disclaimer * {
+    color: #a09585 !important;
+    font-style: italic !important;
+    font-size: 0.72rem !important;
+}
+

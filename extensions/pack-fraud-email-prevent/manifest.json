@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-email-prevent",
+  "name": "Fraud Email Prevent Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "email",
+  "mode": "prevent",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.email",
+    "fraud.mode.prevent",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via email with prevent mode policies."
+}

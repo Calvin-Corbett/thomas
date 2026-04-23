@@ -1,0 +1,16 @@
+{
+  "id": "pack-analytics-teams-audit",
+  "name": "Analytics Teams Audit Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "teams",
+  "mode": "audit",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.teams",
+    "analytics.mode.audit",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via teams with audit mode policies."
+}

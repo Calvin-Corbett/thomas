@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-email-escalate",
+  "name": "Security Email Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "email",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.email",
+    "security.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via email with escalate mode policies."
+}

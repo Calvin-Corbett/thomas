@@ -1,0 +1,14 @@
+{
+  "id": "pack-alerts-discord",
+  "name": "Alerts Discord Extension Pack",
+  "version": "1.0.0",
+  "category": "alerts",
+  "target": "discord",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "alerts.signal",
+    "alerts.dispatch.discord",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for alerts workflows via discord."
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-email-triage",
+  "name": "Security Email Triage Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "email",
+  "mode": "triage",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.email",
+    "security.mode.triage",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via email with triage mode policies."
+}

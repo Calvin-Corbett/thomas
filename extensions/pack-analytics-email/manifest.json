@@ -1,0 +1,14 @@
+{
+  "id": "pack-analytics-email",
+  "name": "Analytics Email Extension Pack",
+  "version": "1.0.0",
+  "category": "analytics",
+  "target": "email",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "analytics.signal",
+    "analytics.dispatch.email",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for analytics workflows via email."
+}

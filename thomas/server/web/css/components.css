@@ -1,0 +1,24 @@
+/* components.css */
+/* Each import maps to a functional area of the UI. */
+/* 1 — Composer & attachments */
+@import url("./components_parts/composer-attachments.css?v=20260401-rename");
+@import url("./composer-attachments-runtime-state.css?v=20260422-task-ui");
+@import url("./components_parts/chat-game-animations.css?v=20260401-rename");
+/* 2 — Settings & setup */
+@import url("./components_parts/settings-panel.css?v=20260401-rename");
+@import url("./components_parts/easy-setup-ui.css?v=20260401-rename");
+/* 3 — Content panels & module cards */
+@import url("./components_parts/content-panels.css?v=20260401-rename");
+@import url("./components_parts/module-cards.css?v=20260401-rename");
+/* 4 — Workbench & marketplace */
+@import url("./components_parts/workbench-tools.css?v=20260401-rename");
+@import url("./components_parts/marketplace-workspace.css?v=20260401-rename");
+@import url("./components_parts/marketplace-channels.css?v=20260401-rename");
+@import url("./marketplace-channels-controls.css?v=20260422-controls");
+/* 5 — Tool calls, palette & chat interactions */
+@import url("./components_parts/tool-calls-chat.css?v=20260401-rename");
+@import url("./tool-calls-chat-task-state.css?v=20260422-task-ui");
+@import url("./components_parts/robot-portal-animations.css?v=20260401-rename");
+@import url("./components_parts/chat-robot-animations.css?v=20260401-rename");
+/* 6 — Agent delegation */
+@import url("./components_parts/agent-delegation.css?v=20260401-rename");

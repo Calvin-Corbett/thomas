@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "scan_roots": [
+    "."
+  ],
+  "hard_limits": {
+    "py": 1200,
+    "js": 1200,
+    "mjs": 1200,
+    "cjs": 1200,
+    "jsx": 1200,
+    "ts": 1200,
+    "tsx": 1200,
+    "css": 1600,
+    "html": 1000
+  },
+  "waiver_policy": {
+    "require_metadata": true,
+    "allow_legacy_reason": false,
+    "default_owner": "thomas-core",
+    "default_expires_on": "2026-06-30",
+    "default_max_growth_lines": 0,
+    "unbaselined_soft_limit_lines": 800,
+    "enforce_soft_limit_changed_only": true
+  },
+  "allowed_large_files": {
+    "thomas/cli/repl.py": {
+      "owner": "thomas-core",
+      "expires_on": "2026-06-30",
+      "max_lines": 2000,
+      "max_growth_lines": 0,
+      "reason": "REPL modularization is in-progress; bounded waiver until split lands."
+    },
+    "apps/site/src/app/globals.css": {
+      "owner": "thomas-site",
+      "expires_on": "2026-06-30",
+      "max_lines": 3800,
+      "max_growth_lines": 0,
+      "reason": "CSS decomposition tracked; temporary waiver keeps guard strict against further growth."
+    },
+    "thomas/server/web/js/runtime/034_workbench_editors_06.js": {
+      "owner": "thomas-core",
+      "expires_on": "2026-06-30",
+      "max_lines": 1400,
+      "max_growth_lines": 0,
+      "reason": "Single 1374-line render function (moduleRenderWorkbenchGameStudioOss); needs internal refactor to split further."
+    },
+    "thomas/server/web/js/runtime/044_model_setup_settings_05.js": {
+      "owner": "thomas-core",
+      "expires_on": "2026-06-30",
+      "max_lines": 1300,
+      "max_growth_lines": 0,
+      "reason": "Contains long UI editor render functions; needs internal refactor to split further."
+    }
+  }
+}

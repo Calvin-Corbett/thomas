@@ -1,0 +1,17 @@
+.composer-status-badge-background {
+    border-color: rgba(96, 183, 255, 0.34);
+    background: rgba(15, 38, 64, 0.88);
+    color: #eef6ff;
+    box-shadow: 0 0 0 1px rgba(96, 183, 255, 0.1), 0 0 18px rgba(41, 115, 214, 0.18);
+    animation: composerBackgroundTaskPulse 1.8s ease-in-out infinite;
+}
+
+@keyframes composerBackgroundTaskPulse {
+    0%,
+    100% {
+        box-shadow: 0 0 0 1px rgba(96, 183, 255, 0.08), 0 0 14px rgba(41, 115, 214, 0.14);
+    }
+    50% {
+        box-shadow: 0 0 0 1px rgba(96, 183, 255, 0.2), 0 0 24px rgba(41, 115, 214, 0.26);
+    }
+}

@@ -1,0 +1,16 @@
+{
+  "id": "pack-qa-slack-escalate",
+  "name": "Qa Slack Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "qa",
+  "target": "slack",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "qa.signal",
+    "qa.dispatch.slack",
+    "qa.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for qa workflows via slack with escalate mode policies."
+}

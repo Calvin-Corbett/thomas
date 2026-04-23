@@ -1,0 +1,16 @@
+{
+  "id": "pack-fraud-jira-escalate",
+  "name": "Fraud Jira Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "fraud",
+  "target": "jira",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "fraud.signal",
+    "fraud.dispatch.jira",
+    "fraud.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for fraud workflows via jira with escalate mode policies."
+}

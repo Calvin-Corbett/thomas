@@ -1,0 +1,16 @@
+{
+  "id": "pack-support-discord-escalate",
+  "name": "Support Discord Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "support",
+  "target": "discord",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "support.signal",
+    "support.dispatch.discord",
+    "support.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for support workflows via discord with escalate mode policies."
+}

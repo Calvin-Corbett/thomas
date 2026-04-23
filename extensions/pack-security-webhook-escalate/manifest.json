@@ -1,0 +1,16 @@
+{
+  "id": "pack-security-webhook-escalate",
+  "name": "Security Webhook Escalate Extension Pack",
+  "version": "1.0.0",
+  "category": "security",
+  "target": "webhook",
+  "mode": "escalate",
+  "entrypoint": "hooks.py",
+  "capabilities": [
+    "security.signal",
+    "security.dispatch.webhook",
+    "security.mode.escalate",
+    "healthcheck"
+  ],
+  "description": "Operational extension pack for security workflows via webhook with escalate mode policies."
+}
