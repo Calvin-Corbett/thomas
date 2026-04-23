@@ -138,7 +138,9 @@ def test_run_creates_clean_snapshot_repo_and_passes_preflight(tmp_path: Path) ->
 
     assert rc == 0
     assert status.strip() == ""
-    assert {"dev", "prod"}.issubset(branches)
+    assert "main" in branches
+    assert "dev" not in branches
+    assert "prod" not in branches
     assert (snapshot / "src" / "new_local.py").exists()
     assert not (snapshot / "scripts" / "local-cache.txt").exists()
     assert not (snapshot / "plans" / "thomas" / "PRIVATE.md").exists()

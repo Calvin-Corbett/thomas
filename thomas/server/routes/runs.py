@@ -44,6 +44,7 @@ def register_runs_routes(app: web.Application, config: Any) -> None:
     app[RUNS_CONFIG_KEY] = config
     app.router.add_get("/api/runs", handle_list_runs)
     app.router.add_get("/api/runs/{run_id}", handle_get_run)
+    app.router.add_post("/api/runs/{run_id}/cancel", handle_cancel_run)
     app.router.add_get("/api/runs/{run_id}/replay", handle_replay_run)
     app.router.add_get("/api/runs/{run_id}/events", handle_run_events)
     app.router.add_post("/api/runs/{run_id}/replay/seek", handle_replay_seek)
@@ -118,9 +119,26 @@ async def handle_get_run(request: web.Request) -> web.Response:
     run_id = request.match_info["run_id"]
     try:
         data = run_store.get_run(run_id)
-    except KeyError:
-        raise web.HTTPNotFound(text=f"run not found: {run_id}")
+    except KeyError as exc:
+        raise web.HTTPNotFound(text=f"run not found: {run_id}") from exc
     return web.json_response(data)
+
+
+async def handle_cancel_run(request: web.Request) -> web.Response:
+    _require_runs_access(request)
+    run_id = request.match_info["run_id"]
+    run_meta = _run_meta_row(request, run_id)
+    if run_meta is None:
+        return web.json_response({"ok": True, "run_id": run_id, "status": "not_found"})
+
+    ended_at = str(run_meta.get("ended_at") or "").strip()
+    if ended_at:
+        return web.json_response({"ok": True, "run_id": run_id, "status": "already_finished"})
+
+    updated = int(run_store.mark_run_dead(run_id, "cancel requested via api") or 0)
+    if updated > 0:
+        return web.json_response({"ok": True, "run_id": run_id, "status": "cancelled"})
+    return web.json_response({"ok": True, "run_id": run_id, "status": "already_finished"})
 
 
 async def handle_replay_run(request: web.Request) -> web.StreamResponse:
@@ -249,8 +267,8 @@ async def handle_export_run(request: web.Request) -> web.Response:
     run_id = request.match_info["run_id"]
     try:
         data = run_store.get_run(run_id)
-    except KeyError:
-        raise web.HTTPNotFound(text=f"run not found: {run_id}")
+    except KeyError as exc:
+        raise web.HTTPNotFound(text=f"run not found: {run_id}") from exc
 
     redaction_cfg = RedactionConfig.default()
     run_meta = redact_obj(data["run"], redaction_cfg)
@@ -551,7 +569,7 @@ async def _read_json_body(request: web.Request) -> dict[str, Any]:
     try:
         payload = await request.json()
     except Exception as e:
-        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}")
+        raise web.HTTPBadRequest(text=f"invalid json: {type(e).__name__}: {e}") from e
     if not isinstance(payload, dict):
         raise web.HTTPBadRequest(text="json body must be an object")
     return payload

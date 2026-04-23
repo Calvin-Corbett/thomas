@@ -189,7 +189,8 @@ def _setup_routes_and_handlers(
     async def api_security_mutating_routes(request: web.Request) -> web.Response:
         """Return security policy snapshot for mutating routes."""
         _require_api_access(request)
-        snapshot = app.get(APP_MUTATING_ROUTE_POLICY_SNAPSHOT, {})
+        snapshot = build_mutating_route_policy_snapshot(app.router)
+        app[APP_MUTATING_ROUTE_POLICY_SNAPSHOT] = snapshot
         return web.json_response(snapshot)
 
     async def api_engines(request: web.Request) -> web.Response:
@@ -596,9 +597,13 @@ def _setup_routes_and_handlers(
         try:
             from thomas.server.routes.webhooks_aiohttp import register_webhooks_routes
 
+            access_mode = (
+                str(getattr(getattr(config, "server", None), "access_mode", "local") or "local").strip().lower()
+            )
             register_webhooks_routes(
                 app_ref,
                 require_api_access=_require_api_access,
+                signature_enforcement_default=(access_mode == "remote"),
             )
         except (ImportError, ModuleNotFoundError, RuntimeError, KeyError, ValueError) as e:
             log.warning("Webhook routes unavailable: %s", e)

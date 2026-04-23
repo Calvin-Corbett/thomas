@@ -5,6 +5,10 @@ from pathlib import Path
 import scripts.github_publish_preflight as mod
 
 
+def test_default_required_branches_is_empty() -> None:
+    assert mod.DEFAULT_REQUIRED_BRANCHES == ()
+
+
 def test_blocked_tracked_files_detected() -> None:
     tracked = ["README.md", ".env", "keys/prod.pem", "src/app.py"]
     violations = mod._check_blocked_tracked_files(tracked)

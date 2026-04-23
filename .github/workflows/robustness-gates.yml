@@ -1,8 +1,18 @@
-﻿name: Robustness Gates
+name: Robustness Gates
 
 on:
   pull_request:
+    branches: [main]
   push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: robustness-gates-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   test-collection-gate:
@@ -22,407 +32,16 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[server,repl,test]"
+          python -m pip install "cryptography>=42.0"
           python -m pip install pytest pytest-asyncio pytest-aiohttp
 
       - name: Pytest collection gate
         run: |
           python -m pytest --collect-only -q
 
-  protocol-parity:
-    runs-on: ubuntu-latest
-    needs: [test-collection-gate]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[server,repl,test]"
-          python -m pip install pytest pytest-asyncio pytest-aiohttp ruff
-
-      - name: Resolve diff range
-        shell: bash
-        run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            echo "BASE_SHA=${{ github.event.pull_request.base.sha }}" >> "$GITHUB_ENV"
-            echo "HEAD_SHA=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_ENV"
-          else
-            echo "BASE_SHA=${{ github.event.before }}" >> "$GITHUB_ENV"
-            echo "HEAD_SHA=${{ github.sha }}" >> "$GITHUB_ENV"
-          fi
-
-      - name: Protected deletion/rename guard
-        run: |
-          python scripts/check_deletions.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
-      - name: Feature registry contract gate
-        run: |
-          python scripts/check_feature_registry.py
-
-      - name: Architecture fitness tests
-        run: |
-          python -m pytest tests/test_architecture.py -x --tb=short -q
-
-      - name: Model onboarding gate
-        run: |
-          python scripts/check_model_onboarding_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
-      - name: Module audit gate
-        run: |
-          python scripts/check_module_audit_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
-      - name: Monolith guard gate
-        run: |
-          python scripts/check_monolith_guard.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
-      - name: Single runtime boot gate
-        run: |
-          python -m pytest tests/test_ui_editor_rescue_surface.py tests/test_product_surface_copy.py -q
-
-      - name: Monolith split filename gate
-        run: |
-          python scripts/check_monolith_filename_guard.py
-
-      - name: Monolith baseline approval gate
-        run: |
-          python scripts/check_monolith_baseline_approval_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
-      - name: Repo hygiene gate
-        run: |
-          python scripts/check_repo_hygiene.py
-
-      - name: Plan structure gate
-        run: |
-          python scripts/check_plan_structure_gate.py
-
-      - name: Core overhead guard
-        run: |
-          python scripts/check_core_overhead_guard.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
-      - name: Worktree rules gate
-        run: |
-          python scripts/check_worktree_rules_gate.py
-
-      - name: Worktree branch guard
-        run: |
-          python scripts/check_worktree_branch_guard.py
-
-      - name: Workboard claims gate
-        run: |
-          python scripts/check_workboard_claims.py --require-identity-metadata
-
-      - name: Workboard changed-file ownership gate
-        run: |
-          python scripts/check_workboard_changed_files.py --base "${BASE_SHA}" --head "${HEAD_SHA}" --require-identity-metadata
-
-      - name: Workboard agent accountability gate
-        run: |
-          python - <<'PY'
-          from pathlib import Path
-          import subprocess
-          import sys
-          from scripts import check_workboard_claims as claims_gate
-
-          workboard = Path("plans/thomas/WORKBOARD.md")
-          violations, claims = claims_gate.evaluate_claims(workboard)
-          if violations:
-              print("Workboard agent accountability gate: FAIL")
-              for item in violations:
-                  print(f"- {item}")
-              raise SystemExit(1)
-
-          agents = sorted(
-              {
-                  str(claim.agent).strip()
-                  for claim in claims
-                  if str(claim.agent).strip()
-              },
-              key=str.lower,
-          )
-          if not agents:
-              print("Workboard agent accountability gate: PASS (no active claims)")
-              raise SystemExit(0)
-
-          for agent in agents:
-              cmd = [
-                  sys.executable,
-                  "scripts/check_workboard_agent_claim.py",
-                  "--workboard",
-                  str(workboard),
-                  "--agent",
-                  agent,
-                  "--enforce-parent-throughput",
-                  "--parent-target-workers",
-                  "2",
-                  "--parent-min-ready-suggestions",
-                  "2",
-              ]
-              proc = subprocess.run(cmd, capture_output=True, text=True)
-              output = (proc.stdout or "").strip()
-              if output:
-                  print(output)
-              if proc.returncode != 0:
-                  stderr = (proc.stderr or "").strip()
-                  if stderr:
-                      print(stderr)
-                  print(f"Workboard agent accountability gate: FAIL for agent '{agent}'")
-                  raise SystemExit(proc.returncode)
-
-          print(f"Workboard agent accountability gate: PASS ({len(agents)} agents checked)")
-          PY
-
-      - name: Workboard claim freshness gate
-        run: |
-          python scripts/check_workboard_claim_freshness.py --max-age-hours 72
-
-      - name: Workboard issue tooling smoke
-        run: |
-          python scripts/workboard_issue.py --help
-
-      - name: Workboard audit backstop gate
-        run: |
-          python scripts/workboard_audit_backstop.py
-
-      - name: Release update gate
-        run: |
-          python scripts/check_release_update_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
-
-      - name: Release hygiene gate
-        run: |
-          python scripts/check_release_hygiene.py
-
-      - name: Feature master sync gate
-        run: |
-          python scripts/sync_feature_master_list.py --check
-
-      - name: Surface parity gate
-        run: |
-          python scripts/check_surface_parity.py
-
-      - name: Feature catalog gate
-        run: |
-          python scripts/check_feature_catalog_gate.py
-
-      - name: Competitive scope gate
-        run: |
-          python scripts/check_competitive_scope_gate.py
-
-      - name: OpenClaw metric parity gate
-        run: |
-          python scripts/check_openclaw_metric_parity_gate.py
-
-      - name: Competitor freshness guard
-        run: |
-          python scripts/check_competitor_freshness_guard.py --max-age-days 7
-
-      - name: Competitor weekly delta alerting guard
-        run: |
-          python scripts/competitors/check_weekly_delta_alert.py --strict
-
-      - name: Chat control protocol gate
-        run: |
-          python scripts/check_chat_control_protocol.py
-
-      - name: Protocol safety tests
-        run: |
-          python -m pytest -q tests/test_llm_openai_tool_compat.py
-          python -m pytest -q tests/test_agent_loop_tool_policy.py
-          python -m pytest -q tests/test_tool_registry_resolution.py
-          python -m pytest -q tests/test_chat_controls.py
-          python -m pytest -q tests/test_server_chat_controls.py
-          python -m pytest -q tests/test_model_switching.py
-          python -m pytest -q tests/test_agent_loop_autonomy.py
-          python -m pytest -q tests/test_companion_policy_compliance.py
-          python -m pytest -q tests/test_server_companion_api.py
-          python -m pytest -q tests/test_openclaw_metric_parity_gate.py
-          python -m pytest -q tests/test_competitor_freshness_guard.py
-          python -m pytest -q scripts/competitors/tests/test_check_weekly_delta_alert.py
-          python -m pytest -q tests/prompt_pack/test_p127_gateway_restart_command.py
-          python -m pytest -q tests/prompt_pack/test_p136_gateway_auth_policy_enforcement.py
-          python -m pytest -q tests/test_system_config_validator.py
-          python -m pytest -q tests/test_system_soak_runner.py
-          python -m pytest -q tests/test_system_perf_probe.py
-          python -m pytest -q tests/test_onboarding_outcomes.py
-          python -m pytest -q tests/test_onboarding_outcomes_gate.py
-          python -m pytest -q tests/test_check_onboarding_outcomes_gate_script.py
-          python -m pytest -q tests/test_onboarding_recovery_e2e.py
-          python -m pytest -q tests/test_focus_scorecard.py
-          python -m pytest -q tests/test_cli_support_surfaces.py
-          python -m pytest -q tests/test_release_contracts.py
-          python -m pytest -q tests/test_release_hygiene.py
-          python -m pytest -q tests/test_extension_certification.py
-          python -m pytest -q tests/test_security_audit.py
-          python -m pytest -q tests/test_mutating_route_policy_exceptions.py
-          python -m pytest -q tests/test_cli_governance_release_ecosystem.py
-          python -m pytest -q tests/test_dependency_policy.py
-          python -m pytest -q tests/test_threat_model_cadence.py
-          python -m pytest -q tests/test_security_incident_drill.py
-          python -m pytest -q tests/test_web_ui_xss_regression.py
-          python -m pytest -q tests/test_persistence_and_workspace_corruption.py
-          python -m pytest -q tests/test_server_csrf_audit.py
-          python -m pytest -q tests/test_server_session_locking.py
-          python -m pytest -q tests/test_server_session_run_guard_modes.py
-          python -m pytest -q tests/test_monolith_baseline_approval_gate.py
-          python -m pytest -q tests/test_dev_artifact_tracking_guard.py
-          python -m pytest -q tests/test_check_workboard_claims_gate.py
-          python -m pytest -q tests/test_check_workboard_changed_files_gate.py
-          python -m pytest -q tests/test_check_workboard_claim_freshness.py
-          python -m pytest -q tests/test_workboard_claim_script.py
-          python -m pytest -q tests/test_check_workboard_agent_claim_gate.py
-          python -m pytest -q tests/test_agent_bootstrap_claim_script.py
-          python -m pytest -q tests/test_workboard_issue_script.py
-          python -m pytest -q tests/test_workboard_audit_backstop_script.py
-          python -m pytest -q tests/test_module_audit_registry.py
-          python -m pytest -q tests/test_check_module_audit_gate_script.py
-          python -m pytest -q tests/test_record_module_audit_script.py
-          python -m pytest -q tests/test_module_audit_status_script.py
-          python -m pytest -q tests/test_module_audit_sweep_script.py
-          python -m pytest -q tests/test_models_cli_subprocess_smoke.py
-          python -m pytest -q tests/test_check_release_lane_policy.py
-          python -m pytest -q tests/test_github_publish_preflight.py
-          python -m pytest -q tests/test_ci_workflow_guards.py
-
-      - name: Reliability tooling smoke
-        run: |
-          python scripts/config_validator.py --json
-          python scripts/soak_runner.py --command "echo ok" --iterations 3 --max-failure-rate 0.0 --json
-          python scripts/perf_probe.py --command "echo ok" --runs 5 --min-success-rate 1.0 --json
-          python scripts/onboarding_outcomes_report.py --days 7 --json
-          python scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning
-          python scripts/focus_scorecard.py --days 7 --json
-          python scripts/workboard_audit_backstop.py --json
-          python scripts/module_audit_status.py --max-age-hours 24 --json
-          python scripts/release_contract_check.py --json --strict
-          python scripts/extension_certify.py --json --strict
-
-      - name: Security program cadence checks
-        run: |
-          python scripts/dependency_policy_check.py --json --strict
-          python scripts/threat_model_cadence_check.py --path docs/THREAT_MODEL_WEB_API.md --max-age-days 30 --json --strict
-          python scripts/check_mutating_route_policy_exceptions.py --json --strict
-          python scripts/security_incident_drill.py --repo-root . --json
-          python scripts/security_audit.py --repo-root . --json --strict
-
-      - name: Core Python coverage signal
-        run: |
-          mkdir -p output/ci
-          python -m pytest \
-            tests/test_dispatch_router.py \
-            tests/test_agent_presence.py \
-            tests/test_agent_presence_additional.py \
-            tests/test_agent_presence_more.py \
-            tests/test_server_tools_api.py \
-            tests/test_server_chat_v2_max_mode.py \
-            tests/test_server_chat_v2_helpers.py \
-            tests/test_server_health_routes.py \
-            tests/test_chat_delegation.py \
-            tests/test_codex_provider_tools_policy.py \
-            tests/test_codex_provider_additional.py \
-            tests/test_orchestrator_brain_streaming.py \
-            tests/test_orchestrator_brain_status.py \
-            tests/test_orchestrator_brain_coverage.py \
-            tests/test_server_app_routes_init.py \
-            tests/test_server_app_core.py \
-            tests/test_config_env_override.py \
-            tests/test_config_runtime.py \
-            --cov=thomas.agent.dispatch \
-            --cov=thomas.core.agent_presence \
-            --cov=thomas.core.config \
-            --cov=thomas.server.app_core \
-            --cov=thomas.server.routes.chat_v2 \
-            --cov=thomas.server.app_routes_init \
-            --cov=thomas.server.chat_delegation \
-            --cov=thomas.marketplace.codex.provider \
-            --cov=thomas.marketplace.orchestrator.brain \
-            --cov-fail-under=88 \
-            --cov-report=term-missing:skip-covered \
-            --cov-report=xml:output/ci/core-python-coverage.xml \
-            -q
-
-      - name: Python dependency vulnerability scan
-        run: |
-          mkdir -p output/ci
-          python scripts/python_dependency_vulnerability_scan.py \
-            --target pyproject.toml \
-            --allow-unfixed \
-            --strict \
-            --json > output/ci/python-dependency-vulnerabilities.json
-          cat output/ci/python-dependency-vulnerabilities.json
-
-      - name: Core Python Bandit scan
-        run: |
-          mkdir -p output/ci
-          bandit -r \
-            thomas/agent/dispatch.py \
-            thomas/core/agent_presence.py \
-            thomas/core/config.py \
-            thomas/server/app_core.py \
-            thomas/server/routes/chat_v2.py \
-            thomas/server/app_routes_init.py \
-            thomas/server/chat_delegation.py \
-            thomas/marketplace/codex/provider.py \
-            thomas/marketplace/orchestrator/brain.py \
-            scripts/active_folders.py \
-            scripts/agent_bootstrap_claim.py \
-            scripts/agent_startup_router.py \
-            scripts/workboard_claim.py \
-            scripts/workboard_claim_ops.py \
-            scripts/workboard_claim_utils.py \
-            -lll -ii -f json -o output/ci/python-bandit-core.json
-          python - <<'PY'
-          import json
-          from pathlib import Path
-          payload = json.loads(Path("output/ci/python-bandit-core.json").read_text(encoding="utf-8"))
-          print(json.dumps({"results": len(payload.get("results", [])), "metrics": payload.get("metrics", {})}, indent=2))
-          PY
-
-      - name: Upload core Python quality artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: core-python-quality-signals
-          path: |
-            output/ci/core-python-coverage.xml
-            output/ci/python-dependency-vulnerabilities.json
-            output/ci/python-bandit-core.json
-          if-no-files-found: error
-
-
-  codebase-auto-checks:
-    runs-on: ubuntu-latest
-    needs: [protocol-parity]
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.12"
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e ".[server,repl,test]"
-          python -m pip install ruff
-
-      - name: Run full auto checks
-        env:
-          THOMAS_SKIP_BREAKGLASS: "1"
-          THOMAS_SKIP_TICKET: "CI-ROBUSTNESS-GATES"
-          THOMAS_SKIP_REASON: "CI-reviewed robustness-gates lane skips nested gate scripts to avoid duplicate execution."
-        run: |
-          python scripts/auto_checks.py --skip-gates
-
   security-regression:
     runs-on: ubuntu-latest
+    needs: [test-collection-gate]
     strategy:
       fail-fast: true
       matrix:
@@ -440,6 +59,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[server,repl,test]"
+          python -m pip install "cryptography>=42.0"
           python -m pip install pytest pytest-asyncio pytest-aiohttp
 
       - name: Security regression tests
@@ -450,6 +70,7 @@ jobs:
 
   full-test-matrix:
     runs-on: ubuntu-latest
+    needs: [test-collection-gate]
     strategy:
       fail-fast: true
       matrix:
@@ -467,6 +88,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e ".[server,repl,test]"
+          python -m pip install "cryptography>=42.0"
           python -m pip install pytest pytest-asyncio pytest-aiohttp
 
       - name: Matrix regression suite
@@ -483,9 +105,48 @@ jobs:
           python -m pytest -q tests/test_monolith_guard.py
           python -m pytest -q tests/test_monolith_baseline_approval_gate.py
 
+  quality-signals:
+    runs-on: ubuntu-latest
+    needs: [security-regression, full-test-matrix]
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -e ".[server,repl,test]"
+          python -m pip install "cryptography>=42.0"
+          python -m pip install build
+
+      - name: Build package
+        run: |
+          python -m build
+
+      - name: Publish preflight
+        run: |
+          python scripts/github_publish_preflight.py --json --strict
+
+      - name: Release hygiene gate
+        run: |
+          python scripts/check_release_hygiene.py
+
+      - name: Workflow and release contract tests
+        run: |
+          python -m pytest -q tests/test_ci_workflow_guards.py
+          python -m pytest -q tests/test_github_publish_snapshot.py
+          python -m pytest -q tests/test_github_publish_preflight.py
+          python -m pytest -q tests/test_release_hygiene.py
+          python -m pytest -q tests/test_release_contracts.py
+
   docker-smoke:
     runs-on: ubuntu-latest
-    needs: [protocol-parity, security-regression, codebase-auto-checks, full-test-matrix]
+    needs: [quality-signals]
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -500,7 +161,7 @@ jobs:
 
   required-gates:
     runs-on: ubuntu-latest
-    needs: [protocol-parity, codebase-auto-checks, security-regression, full-test-matrix, docker-smoke]
+    needs: [security-regression, full-test-matrix, quality-signals, docker-smoke]
     steps:
       - name: Required checks passed
         run: |
