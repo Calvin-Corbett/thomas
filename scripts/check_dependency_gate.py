@@ -25,7 +25,7 @@ VERIFICATION_RECORD = ROOT / ".git" / "agent_verification.json"
 
 DEPENDENCY_FILES = [
     "pyproject.toml",
-    "requirements-lock.txt",
+    "requirements-server.txt",
     "requirements.txt",
 ]
 

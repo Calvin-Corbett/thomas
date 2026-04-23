@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "max_tracked_root_files": 53,
+  "max_tracked_root_files": 52,
   "allowed_tracked_root_files": [
     ".dockerignore",
     ".env.example",
@@ -47,7 +47,6 @@
     "loc_counter.py",
     "pyproject.toml",
     "repair.cmd",
-    "requirements-lock.txt",
     "requirements-server.txt",
     "run-repl.cmd",
     "run-ui.cmd",

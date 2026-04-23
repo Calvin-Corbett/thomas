@@ -137,7 +137,7 @@ def run(argv: list[str] | None = None) -> int:
             print(f"   python -c \"import {failures[0]['module']}\"")
             print()
             print("3. Check for missing dependencies:")
-            print("   pip install -r requirements-lock.txt")
+            print('   pip install -e ".[server,repl]"')
             print()
             print("4. Full boot test:")
             print("   python -m thomas serve --port 0")

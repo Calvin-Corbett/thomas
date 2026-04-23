@@ -62,6 +62,12 @@ def test_container_runtime_requirements_match_pyproject_server_runtime() -> None
     assert actual == expected
 
 
+def test_legacy_full_requirements_lock_removed_from_public_release() -> None:
+    assert not Path("requirements-lock.txt").exists()
+    assert "requirements-server.txt" in Path("scripts/check_dependency_gate.py").read_text(encoding="utf-8")
+    assert "requirements-lock.txt" not in Path("DEPLOYMENT.md").read_text(encoding="utf-8")
+
+
 def test_github_publish_safety_targets_main_without_release_lanes() -> None:
     text = Path(".github/workflows/github-publish-safety.yml").read_text(encoding="utf-8")
     assert "branches: [main]" in text
