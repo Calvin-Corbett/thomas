@@ -15,8 +15,12 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_REPO_HYGIENE_BASELINE = ROOT / "docs" / "repo_hygiene_baseline.json"
 PUBLIC_SNAPSHOT_EXCLUDED_PREFIXES = (
+    ".pytest_cache/",
+    ".thomas/",
+    ".tmp/",
     "agent_memory/",
     "agent_vf/",
+    "apps/site/",
     "code_intake/",
     "library/entries/",
     "patches/",
@@ -24,11 +28,21 @@ PUBLIC_SNAPSHOT_EXCLUDED_PREFIXES = (
 )
 PUBLIC_SNAPSHOT_EXCLUDED_PATHS = {
     ".github/pull_request_template.md",
+    ".github/workflows/site-release.yml",
     "definitions/model-vs-os.md",
+    "docs/WEBSITE_RELEASE_FLOW.md",
+    "docs/ai/CHECKLISTS/agent-lane-ui-proof.md",
     "docs/evals/2026-02-21_webui_natural_behavior_eval.md",
     "docs/feature_13_dep_scanner.md",
+    "scripts/check_site_visual_proof.py",
+    "scripts/refresh_site_visual_proof.py",
+    "scripts/verify_site_visual_runtime.mjs",
     "tests/test_agent_memory_cli_workflow.py",
     "tests/test_agent_memory_workflow_evals.py",
+    "tests/test_check_site_visual_proof.py",
+    "tests/test_refresh_site_visual_proof.py",
+    "tests/test_server_marketplace_routes.py",
+    "tests/test_surface_parity.py",
 }
 
 

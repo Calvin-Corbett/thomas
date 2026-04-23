@@ -7,6 +7,10 @@ def test_nightly_reliability_workflow_removed_from_public_ci() -> None:
     assert not Path(".github/workflows/nightly-reliability.yml").exists()
 
 
+def test_pypi_publish_workflow_removed_from_public_ci() -> None:
+    assert not Path(".github/workflows/publish.yml").exists()
+
+
 def test_robustness_gates_targets_main_with_public_ci_suite() -> None:
     text = Path(".github/workflows/robustness-gates.yml").read_text(encoding="utf-8")
     assert "branches: [main]" in text
@@ -26,15 +30,6 @@ def test_robustness_gates_targets_main_with_public_ci_suite() -> None:
     assert "tests/test_release_contracts.py" in text
     assert "competitor" not in text.lower()
     assert "workboard" not in text.lower()
-
-
-def test_site_release_targets_main_and_handles_initial_push_history() -> None:
-    text = Path(".github/workflows/site-release.yml").read_text(encoding="utf-8")
-    assert "branches: [main]" in text
-    assert "deploy-preview" not in text
-    assert "git rev-parse --verify HEAD^" in text
-    assert "git hash-object -t tree /dev/null" in text
-    assert "vars.THOMAS_SITE_DEPLOY_ENABLED == 'true'" in text
 
 
 def test_github_publish_safety_targets_main_without_release_lanes() -> None:

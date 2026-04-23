@@ -10,10 +10,27 @@ def test_default_required_branches_is_empty() -> None:
 
 
 def test_blocked_tracked_files_detected() -> None:
-    tracked = ["README.md", ".env", "keys/prod.pem", "src/app.py"]
+    tracked = [
+        "README.md",
+        ".pytest_cache/README.md",
+        ".env",
+        ".github/workflows/site-release.yml",
+        ".tmp/mutating_route_policy_audit/.thomas/runs.sqlite3",
+        "apps/site/src/app/page.tsx",
+        "keys/prod.pem",
+        "scripts/check_site_visual_proof.py",
+        "tests/test_surface_parity.py",
+        "src/app.py",
+    ]
     violations = mod._check_blocked_tracked_files(tracked)
     assert ".env" in violations
+    assert ".pytest_cache/README.md" in violations
+    assert ".github/workflows/site-release.yml" in violations
+    assert ".tmp/mutating_route_policy_audit/.thomas/runs.sqlite3" in violations
+    assert "apps/site/src/app/page.tsx" in violations
     assert "keys/prod.pem" in violations
+    assert "scripts/check_site_visual_proof.py" in violations
+    assert "tests/test_surface_parity.py" in violations
 
 
 def test_scan_for_live_secrets_ignores_placeholders(tmp_path: Path) -> None:
