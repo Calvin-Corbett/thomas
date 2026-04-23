@@ -6,6 +6,7 @@ param(
   [switch]$Restart,
   [switch]$NoBrowser,
   [switch]$NoInstall,
+  [switch]$NoPrompt,
   [switch]$ConfirmedInstallChanges,
   [switch]$NoTray,
   [switch]$Tray,
@@ -207,7 +208,21 @@ function Confirm-LauncherMutation {
   Write-Host ("[thomas] {0} is required." -f $DisplayName)
   Write-Host ("[thomas] Why Thomas wants it: {0}" -f $Reason)
   Write-Host ("[thomas] Security tradeoff: {0}" -f $Tradeoff)
-  Write-Host "[thomas] Re-run with -ConfirmedInstallChanges or run scripts\\setup.ps1 to approve the change."
+  if ($NoPrompt) {
+    Write-Host "[thomas] Re-run with -ConfirmedInstallChanges or run scripts\\setup.ps1 to approve the change."
+    return $false
+  }
+
+  try {
+    $approve = (Read-Host "[thomas] Approve this local setup change now? [y/N]").Trim().ToLowerInvariant()
+  } catch {
+    $approve = ""
+  }
+  if ($approve -eq "y" -or $approve -eq "yes") {
+    return $true
+  }
+
+  Write-Host "[thomas] Setup change was not approved. Re-run with -ConfirmedInstallChanges or run scripts\\setup.ps1 to approve it."
   return $false
 }
 
