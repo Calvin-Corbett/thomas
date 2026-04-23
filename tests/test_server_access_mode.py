@@ -11,7 +11,22 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, ModelConfig, ServerConfig
 from thomas.marketplace.observability.run_db import connect, ensure_schema
+from thomas.preferences._utils import get_db_path
 from thomas.server.app import create_app
+
+
+class TestPreferencesStoreDbPath(unittest.TestCase):
+    def test_get_db_path_creates_missing_parent_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            data_dir = Path(tmp) / "nested" / "prefs"
+            self.assertFalse(data_dir.exists())
+
+            with patch.dict(os.environ, {"THOMAS_DATA_DIR": str(data_dir)}, clear=False):
+                db_path = Path(get_db_path())
+
+            self.assertEqual(db_path, (data_dir / "thomas.db").resolve())
+            self.assertTrue(data_dir.exists())
+            self.assertEqual(db_path.name, "thomas.db")
 
 
 class TestServerAccessModeLocal(AioHTTPTestCase):

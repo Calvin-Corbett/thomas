@@ -67,13 +67,17 @@ def utc_now_iso() -> str:
 def get_db_path() -> str:
     env_path = os.getenv("THOMAS_DB_PATH") or os.getenv("THOMAS_SQLITE_PATH")
     if env_path:
-        return env_path
+        resolved = Path(env_path).expanduser().resolve()
+        resolved.parent.mkdir(parents=True, exist_ok=True)
+        return str(resolved)
     try:
         from thomas.core.config import resolve_thomas_data_dir
 
-        return str((resolve_thomas_data_dir() / "thomas.db").resolve())
+        resolved = (resolve_thomas_data_dir() / "thomas.db").resolve()
     except Exception:
-        return str((Path.home() / ".thomas" / "thomas.db").resolve())
+        resolved = (Path.home() / ".thomas" / "thomas.db").resolve()
+    resolved.parent.mkdir(parents=True, exist_ok=True)
+    return str(resolved)
 
 
 def _derive_fernet_key_from_secret(secret: str) -> bytes:
