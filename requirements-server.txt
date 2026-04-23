@@ -13,3 +13,5 @@ aiohttp==3.13.3
 fastapi>=0.115
 python-multipart>=0.0.20
 sqlalchemy>=2.0
+cryptography>=42.0
+Pillow>=10.0
