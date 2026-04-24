@@ -9,9 +9,11 @@ Read these in order:
 
 1. `README.md` - user install path, product promise, and public-release stance.
 2. `docs/FEATURE_MATRIX.md` - feature status, audience, entry points, and tests.
-3. `docs/FUNCTIONALITY_INVENTORY.md` - capability inventory and readiness notes.
-4. `docs/REPO_MAP.md` - top-level directory map.
-5. `docs/ARCHITECTURE_OVERVIEW.md` - install/runtime/companion diagrams.
+3. `docs/AI_DEVELOPMENT_WORKFLOW.md` - mandatory AI-agent workflow and release
+   promotion rules.
+4. `docs/FUNCTIONALITY_INVENTORY.md` - capability inventory and readiness notes.
+5. `docs/REPO_MAP.md` - top-level directory map.
+6. `docs/ARCHITECTURE_OVERVIEW.md` - install/runtime/companion diagrams.
 
 Use `DOCUMENTATION_INDEX.md` after that when you need an area-specific doc.
 
@@ -34,6 +36,7 @@ and must keep authentication, policy, and audit boundaries intact.
 - Browser automation and visible browser smoke paths.
 - Companion platform scaffolding and the planned Infinite app direction.
 - Public release safety gates and GitHub Actions.
+- AI development workflow contract and release promotion rules.
 
 ## Status Discipline
 
@@ -58,6 +61,8 @@ it.
 - Do not add private website deployment instructions to the public branch.
 - Do not bypass guardrails, approval checks, release preflight, or repo hygiene
   checks to make a change pass.
+- Do not bypass the AI workflow contract in
+  `docs/AI_DEVELOPMENT_WORKFLOW.md`.
 - Prefer small, testable changes with clear public docs.
 - When touching installer, setup, networking, or GitHub release behavior, run the
   public safety gates before publishing.
@@ -68,6 +73,7 @@ Run these from the repo root:
 
 ```powershell
 python -m pytest tests\test_public_release_surface.py tests\test_product_surface_copy.py tests\test_public_repo_guidance.py -q
+python scripts\check_ai_workflow_contract.py
 python scripts\github_publish_preflight.py --json --strict --deep
 python scripts\check_repo_hygiene.py --require-clean-worktree --strict --json
 ```
