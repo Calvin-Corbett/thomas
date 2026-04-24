@@ -78,7 +78,7 @@ This file contains rules that ALL AI agents (Claude, Codex, GPT, Gemini, etc.) M
 ## Rule 4: No Duplicate Work
 
 - Before creating ANY new file, search for existing implementations.
-- Check: `thomas/tools/`, `thomas/core/`, `thomas/integrations/`, `Inbox/`
+- Check: `thomas/tools/`, `thomas/core/`, `thomas/integrations/`, and relevant public docs.
 - If a similar file exists, READ IT FIRST. Then extend or fix it.
 - Do not create `utils_v2.py` or `helper_new.py`. Fix the original.
 

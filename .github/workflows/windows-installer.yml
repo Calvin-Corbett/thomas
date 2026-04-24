@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload assets to, for example v0.14.60. Leave blank to build artifacts only."
+        description: "Release tag to upload assets to, for example v0.14.61. Leave blank to build artifacts only."
         required: false
         default: ""
       version:
