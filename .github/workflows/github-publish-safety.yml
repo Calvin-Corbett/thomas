@@ -39,6 +39,10 @@ jobs:
         run: |
           python scripts/github_publish_preflight.py --deep --json --strict
 
+      - name: AI workflow contract
+        run: |
+          python scripts/check_ai_workflow_contract.py
+
       - name: Release hygiene gate
         run: |
           python scripts/check_release_hygiene.py

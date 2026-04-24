@@ -14,9 +14,16 @@
 ## Validation
 
 - [ ] Focused tests:
+- [ ] AI workflow contract: `python scripts\check_ai_workflow_contract.py`
 - [ ] Public release surface tests:
 - [ ] `python scripts\github_publish_preflight.py --json --strict --deep`
 - [ ] `python scripts\check_repo_hygiene.py --require-clean-worktree --strict --json`
+
+## AI Workflow
+
+- [ ] I followed `docs/AI_DEVELOPMENT_WORKFLOW.md`.
+- [ ] This PR maps to a clear issue/task/scope.
+- [ ] If this changes public release behavior, the public hardening changes are ready to sync back to private development.
 
 ## Public Safety
 
