@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import hashlib
-import hmac
 import json
 import logging
 import os
@@ -27,8 +26,6 @@ PLUGIN_STORAGE_DIR = Path(
         str(Path(__file__).resolve().parent.parent / "plugins_registry"),
     )
 )
-SIGNING_SECRET_FILE = ".plugin-signing-secret"
-_SIGNING_SECRET_CACHE: str | None = None
 DOWNLOAD_TOKEN_TTL = 300
 RATE_LIMIT_PER_MINUTE = 60
 MAX_BUNDLE_SIZE = 50 * 1024 * 1024
@@ -43,6 +40,7 @@ DISALLOWED_PATTERNS = [
 _MARKETPLACE_TYPES = {"command_center", "plugin", "dependency", "integration"}
 _LEFT_NAV_BEHAVIORS = {"none", "workspace"}
 _DEFAULT_NAV_SECTIONS = {"command_centers", "installed"}
+_DOWNLOAD_TOKENS: dict[str, dict[str, Any]] = {}
 
 
 @dataclass
@@ -152,54 +150,22 @@ def _normalize_default_nav_section(data: dict[str, Any], marketplace_type: str, 
     return "installed"
 
 
-def _get_signing_secret() -> str:
-    global _SIGNING_SECRET_CACHE
-    if _SIGNING_SECRET_CACHE:
-        return _SIGNING_SECRET_CACHE
-    env_secret = _safe_text(os.environ.get("THOMAS_PLUGIN_SIGN_SECRET"))
-    if env_secret:
-        _SIGNING_SECRET_CACHE = env_secret
-        return env_secret
-    secret_path = PLUGIN_STORAGE_DIR / SIGNING_SECRET_FILE
-    try:
-        PLUGIN_STORAGE_DIR.mkdir(parents=True, exist_ok=True)
-        if secret_path.exists():
-            persisted = _safe_text(secret_path.read_text(encoding="utf-8"))
-            if persisted:
-                _SIGNING_SECRET_CACHE = persisted
-                return persisted
-        generated = secrets.token_hex(32)
-        secret_path.write_text(generated, encoding="utf-8")
-        _SIGNING_SECRET_CACHE = generated
-        return generated
-    except OSError:
-        generated = secrets.token_hex(32)
-        _SIGNING_SECRET_CACHE = generated
-        return generated
-
-
-def _sign_token(plugin_id: str, client_key: str, expires: int) -> str:
-    payload = f"{plugin_id}:{client_key}:{expires}"
-    sig = hmac.new(_get_signing_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
-    return f"{payload}:{sig}"
+def _issue_download_token(plugin_id: str, expires: int) -> str:
+    token = secrets.token_urlsafe(32)
+    _DOWNLOAD_TOKENS[token] = {"plugin_id": plugin_id, "expires": expires}
+    return token
 
 
 def _verify_token(token: str) -> dict[str, Any] | None:
-    parts = token.split(":")
-    if len(parts) != 4:
+    token = _safe_text(token)
+    payload = _DOWNLOAD_TOKENS.get(token)
+    if not isinstance(payload, dict):
         return None
-    plugin_id, client_key, expires_str, provided_sig = parts
-    try:
-        expires = int(expires_str)
-    except ValueError:
-        return None
+    expires = int(payload.get("expires") or 0)
     if time.time() > expires:
+        _DOWNLOAD_TOKENS.pop(token, None)
         return None
-    payload = f"{plugin_id}:{client_key}:{expires}"
-    expected_sig = hmac.new(_get_signing_secret().encode(), payload.encode(), hashlib.sha256).hexdigest()[:32]
-    if not hmac.compare_digest(provided_sig, expected_sig):
-        return None
-    return {"plugin_id": plugin_id, "client_key": client_key, "expires": expires}
+    return dict(payload)
 
 
 def _scan_bundle_content(bundle_path: Path) -> dict[str, str] | None:
@@ -520,7 +486,7 @@ async def api_plugin_manual_download(request: web.Request) -> web.StreamResponse
     plugin = get_registry().get_plugin(plugin_id, public_only=True)
     if not plugin:
         return web.json_response({"error": f"Plugin '{plugin_id}' not found"}, status=404)
-    token = _sign_token(plugin_id, "manual-download", int(time.time()) + DOWNLOAD_TOKEN_TTL)
+    token = _issue_download_token(plugin_id, int(time.time()) + DOWNLOAD_TOKEN_TTL)
     raise web.HTTPFound(location=f"/api/v1/plugins/download/{token}")
 
 
@@ -543,7 +509,7 @@ async def api_plugin_download_token(request: web.Request) -> web.Response:
     bundle = get_registry().get_bundle_path(plugin_id)
     if not bundle:
         return web.json_response({"error": "Plugin bundle not available for download"}, status=404)
-    token = _sign_token(plugin_id, client_key, int(time.time()) + DOWNLOAD_TOKEN_TTL)
+    token = _issue_download_token(plugin_id, int(time.time()) + DOWNLOAD_TOKEN_TTL)
     return web.json_response(
         {
             "token": token,

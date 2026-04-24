@@ -45423,10 +45423,13 @@ function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
 }
 
 function moduleUiEditorParseImportedHtml(htmlText) {
-    const parser = new DOMParser();
-    const sanitizedHtml = sanitizeRenderedHtml(safeString(htmlText));
-    const doc = parser.parseFromString(sanitizedHtml, 'text/html');
-    return moduleUiEditorSanitizeImportedHtmlDocument(doc);
+    const doc = document.implementation.createHTMLDocument('Imported Project');
+    const pre = doc.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.margin = '0';
+    pre.textContent = safeString(htmlText);
+    doc.body.appendChild(pre);
+    return doc;
 }
 
 function moduleUiEditorClamp(valueRaw, minRaw, maxRaw) {
@@ -47334,10 +47337,13 @@ function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
 }
 
 function moduleUiEditorParseImportedHtml(htmlText) {
-    const parser = new DOMParser();
-    const sanitizedHtml = sanitizeRenderedHtml(safeString(htmlText));
-    const doc = parser.parseFromString(sanitizedHtml, 'text/html');
-    return moduleUiEditorSanitizeImportedHtmlDocument(doc);
+    const doc = document.implementation.createHTMLDocument('Imported Project');
+    const pre = doc.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.margin = '0';
+    pre.textContent = safeString(htmlText);
+    doc.body.appendChild(pre);
+    return doc;
 }
 
 function moduleUiEditorClamp(valueRaw, minRaw, maxRaw) {
