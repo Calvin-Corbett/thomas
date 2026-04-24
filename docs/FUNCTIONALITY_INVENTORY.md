@@ -67,7 +67,7 @@ Thomas includes many domain modules under `thomas/marketplace/`. These are not a
 
 These surfaces were intentionally removed from the public branch:
 
-- Private release history before `0.14.59`.
+- Non-public release notes before `0.14.59`.
 - Old comparison packs, scoreboards, and generated test-output baselines.
 - Private website deployment surface and provider-specific deployment skills.
 - Agent handoff logs, orphan inventories, stale module-audit logs, and pre-public cleanup notes.

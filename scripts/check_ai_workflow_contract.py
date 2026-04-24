@@ -1,16 +1,80 @@
 #!/usr/bin/env python3
-"""Enforce the AI-operated development and release workflow contract."""
+"""Enforce the public AI contributor guardrail contract."""
 
 from __future__ import annotations
 
 import json
+import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+TEXT_SUFFIXES = {
+    ".cfg",
+    ".ini",
+    ".json",
+    ".md",
+    ".ps1",
+    ".py",
+    ".toml",
+    ".txt",
+    ".yaml",
+    ".yml",
+}
+SKIP_TEXT_SCAN_PATHS = {
+    "scripts/check_ai_workflow_contract.py",
+    "tests/test_ai_workflow_contract.py",
+}
+SKIP_TEXT_SCAN_PARTS = {
+    ".git",
+    ".mypy_cache",
+    ".pytest_cache",
+    ".venv",
+    "__pycache__",
+    "build",
+    "dist",
+    "node_modules",
+}
+
+
+def _join(*parts: str) -> str:
+    return "".join(parts)
+
+
+FORBIDDEN_PUBLIC_FILES = [
+    "docs/AI_DEVELOPMENT_WORKFLOW.md",
+    "docs/GITHUB_BRANCH_PROTECTION_SETUP.md",
+    "docs/GITHUB_PUBLISH_SAFETY_WORKFLOW.md",
+    "scripts/apply_branch_protection.ps1",
+    "scripts/apply_release_lanes.ps1",
+    "scripts/check_release_lane_policy.py",
+    "scripts/configure_github_branch_protection.py",
+    "scripts/setup_github_release_lanes.py",
+]
+
+FORBIDDEN_PUBLIC_PHRASES = [
+    _join("private repo", " is the source of development truth"),
+    _join("public repo", " is a sanitized release artifact"),
+    _join("sync public hardening", " back"),
+    _join("sanitized ", "public snapshot"),
+    _join("sanitized ", "release snapshot"),
+    _join("private ", "development branch"),
+    _join("private ", "release history"),
+    _join("private ", "changelog history"),
+    _join("cloudflare", "/site secrets"),
+    _join("github branch", " protection setup"),
+    _join("release ", "lanes"),
+    _join("set", "defaultdev"),
+    _join("dev", "` + `", "prod"),
+    _join("paste", "_token_here"),
+    _join("configure_", "github_branch_protection"),
+    _join("setup_", "github_release_lanes"),
+    _join("apply_", "release_lanes"),
+    _join("check_", "release_lane_policy"),
+]
 
 
 def _read(relative_path: str) -> str:
-    return (ROOT / relative_path).read_text(encoding="utf-8")
+    return (ROOT / relative_path).read_text(encoding="utf-8", errors="replace")
 
 
 def _exists(relative_path: str) -> bool:
@@ -67,11 +131,63 @@ def _contains_workflow_commands(
             failures.append(f"{relative_path} must execute: {needle}")
 
 
+def _tracked_files() -> list[str]:
+    try:
+        result = subprocess.run(
+            ["git", "ls-files"],
+            cwd=ROOT,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+    except Exception:
+        return [
+            str(path.relative_to(ROOT)).replace("\\", "/")
+            for path in ROOT.rglob("*")
+            if path.is_file()
+        ]
+    return [
+        line.strip().replace("\\", "/")
+        for line in result.stdout.splitlines()
+        if line.strip()
+    ]
+
+
+def _public_text_paths() -> list[str]:
+    paths: list[str] = []
+    for relative_path in _tracked_files():
+        normalized = relative_path.replace("\\", "/")
+        if normalized in SKIP_TEXT_SCAN_PATHS:
+            continue
+        path = ROOT / normalized
+        if not path.is_file() or path.suffix.lower() not in TEXT_SUFFIXES:
+            continue
+        if any(part in SKIP_TEXT_SCAN_PARTS for part in Path(normalized).parts):
+            continue
+        paths.append(normalized)
+    return paths
+
+
+def _check_forbidden_public_content(failures: list[str]) -> None:
+    for relative_path in FORBIDDEN_PUBLIC_FILES:
+        if _exists(relative_path):
+            failures.append(f"forbidden public maintainer artifact exists: {relative_path}")
+
+    lowered_phrases = [phrase.lower() for phrase in FORBIDDEN_PUBLIC_PHRASES]
+    for relative_path in _public_text_paths():
+        text = _read(relative_path).lower()
+        for phrase in lowered_phrases:
+            if phrase in text:
+                failures.append(
+                    f"{relative_path} contains forbidden public maintainer phrase: {phrase}"
+                )
+
+
 def evaluate() -> dict[str, object]:
     failures: list[str] = []
 
     required_files = [
-        "docs/AI_DEVELOPMENT_WORKFLOW.md",
+        "docs/AI_CONTRIBUTOR_GUARDRAILS.md",
         "docs/AGENT_START_HERE.md",
         "docs/FEATURE_MATRIX.md",
         ".github/copilot-instructions.md",
@@ -87,14 +203,14 @@ def evaluate() -> dict[str, object]:
         if not _exists(relative_path):
             failures.append(f"missing required workflow contract file: {relative_path}")
 
+    _check_forbidden_public_content(failures)
+
     _contains(
-        "docs/AI_DEVELOPMENT_WORKFLOW.md",
+        "docs/AI_CONTRIBUTOR_GUARDRAILS.md",
         [
-            "private repo is the source of development truth",
-            "public repo is a sanitized release artifact",
-            "Sync public hardening back to private",
-            "Do not publish ZIP download as the primary user path",
-            "One issue or task should map to one branch or one scoped commit",
+            "public contributors and AI assistants",
+            "Do not add secrets, personal notes, local caches, generated support bundles",
+            "Do not claim Partial, Prototype, Planned, or Internal work is finished",
             "scripts/check_ai_workflow_contract.py",
         ],
         failures,
@@ -102,7 +218,7 @@ def evaluate() -> dict[str, object]:
     _contains(
         "docs/AGENT_START_HERE.md",
         [
-            "docs/AI_DEVELOPMENT_WORKFLOW.md",
+            "docs/AI_CONTRIBUTOR_GUARDRAILS.md",
             "Do not bypass guardrails",
             "github_publish_preflight.py",
         ],
@@ -111,7 +227,7 @@ def evaluate() -> dict[str, object]:
     _contains(
         ".github/copilot-instructions.md",
         [
-            "docs/AI_DEVELOPMENT_WORKFLOW.md",
+            "docs/AI_CONTRIBUTOR_GUARDRAILS.md",
             "Do not bypass guardrails",
             "github_publish_preflight.py",
         ],
@@ -120,8 +236,8 @@ def evaluate() -> dict[str, object]:
     _contains(
         ".github/pull_request_template.md",
         [
-            "AI Workflow",
-            "docs/AI_DEVELOPMENT_WORKFLOW.md",
+            "AI Guardrails",
+            "docs/AI_CONTRIBUTOR_GUARDRAILS.md",
             "github_publish_preflight.py",
         ],
         failures,
@@ -129,8 +245,8 @@ def evaluate() -> dict[str, object]:
     _contains(
         "DOCUMENTATION_INDEX.md",
         [
-            "docs/AI_DEVELOPMENT_WORKFLOW.md",
-            "AI-operated development and release workflow",
+            "docs/AI_CONTRIBUTOR_GUARDRAILS.md",
+            "public AI contributor guardrails",
         ],
         failures,
     )
