@@ -36,6 +36,7 @@ BLOCKED_TRACKED_EXACT = {
     "docs/ai/CHECKLISTS/agent-lane-ui-proof.md",
     "module_analysis.csv",
     "scripts/check_site_visual_proof.py",
+    "scripts/export_site_marketplace_snapshot.py",
     "scripts/refresh_site_visual_proof.py",
     "scripts/verify_site_visual_runtime.mjs",
     "secrets.json",

@@ -21,7 +21,7 @@ Data loaders module for CSV, JSON, XML, Parquet with streaming and validation.
 
 ## Marketplace Destination
 
-Per Calvin (2026-03-18), all domain modules will become marketplace extensions.
+Long-term product direction: domain modules are intended to become marketplace extensions.
 Needs tool wrapping (`tools.py` inheriting from `thomas.tools.base.Tool`), a `manifest.json` for the marketplace, and testing before it can be shipped as an installable extension. The core code is ready — the gap is integration.
 
 See `docs/DOMAIN_MODULES_AUDIT.md` for the full audit findings.

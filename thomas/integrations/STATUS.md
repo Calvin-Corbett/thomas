@@ -34,7 +34,7 @@ These are good, clean utility modules that any integration can use.
 **Empty:**
 - `workspace_adapters.py` (7 lines) — essentially empty.
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision
 
 The integrations module is supposed to be Thomas's **master importer**:
 - Thomas should be able to read any other agentic tool's documentation,

@@ -23,7 +23,7 @@ source of truth for public claims.
 
 - Do not add secrets, personal notes, local caches, generated support bundles,
   credentials, account setup instructions, or non-public deployment details.
-- Do not add unrelated project notes, competitor comparisons, local experiment
+- Do not add unrelated project notes, market-comparison drafts, local experiment
   logs, or personal planning material.
 - Do not claim Partial, Prototype, Planned, or Internal work is finished.
 - Do not bypass guardrails, approvals, release preflight, repo hygiene, or

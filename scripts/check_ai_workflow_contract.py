@@ -60,7 +60,7 @@ FORBIDDEN_PUBLIC_PHRASES = [
     _join("private ", "development branch"),
     _join("private ", "release history"),
     _join("private ", "changelog history"),
-    _join("cloudflare", "/site secrets"),
+    _join("cloud", "flare/site secrets"),
     _join("github branch", " protection setup"),
     _join("release ", "lanes"),
     _join("set", "defaultdev"),
