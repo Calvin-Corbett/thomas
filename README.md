@@ -4,25 +4,18 @@ Thomas is a local-first AI workspace for chat, tools, memory, and automation.
 
 ## Download for Windows
 
-Normal users should download the installer, not the green **Code -> Download ZIP**
-source archive.
-
 [Download `ThomasSetup_0.14.59.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.59/ThomasSetup_0.14.59.exe)
 
 ## Quick Start on Windows
 
-Recommended fresh install: use the Windows installer above or download it from
-[`Releases`](https://github.com/Calvin-Corbett/thomas/releases).
+Fresh install: download the Windows installer above.
 
-1. Download `ThomasSetup_*.exe` from the latest GitHub release.
-2. Double-click the installer.
+1. Download `ThomasSetup_0.14.59.exe`.
+2. Double-click it.
 3. Click through the installer prompts.
 4. Leave **Finish setup and launch Thomas now** checked.
-5. Wait for the first-run setup window to finish. It creates the local runtime and launches Thomas.
-6. Complete Easy Setup in the app after the browser opens.
-
-Developer/manual fallback: download the repo from GitHub with **Code -> Download ZIP**,
-extract it, open the extracted `thomas` folder, and double-click `run-ui.cmd`.
+5. Wait for the first-run setup window to finish.
+6. Complete Easy Setup after the browser opens.
 
 If setup breaks, run `repair.cmd`. For installer first-run failures, send
 `runtime\logs\first_run_wizard.log` with the issue report. For a manual setup
