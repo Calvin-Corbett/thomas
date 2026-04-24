@@ -2,13 +2,34 @@
 
 Thomas is a local-first AI workspace for chat, tools, memory, and automation.
 
-Fresh install on Windows:
+## Quick Start on Windows
 
-1. Run `run-ui.cmd`.
-2. Open `http://127.0.0.1:8899` if it does not open automatically.
-3. Complete Easy Setup.
+Fresh install: run `run-ui.cmd`.
 
-If setup breaks, run `repair.cmd`. For manual setup, run `setup.cmd`. For startup diagnostics, run `bootdoctor.cmd`.
+1. Download the repo from GitHub with **Code -> Download ZIP**, or clone it with Git.
+2. Extract the ZIP if you downloaded one.
+3. Open the extracted `thomas` folder.
+4. Double-click `run-ui.cmd`.
+5. If Thomas asks to create `.venv` or install local runtime dependencies, approve it. These installs stay inside this repo folder.
+6. Open `http://127.0.0.1:8899` if the browser does not open automatically.
+7. Complete Easy Setup in the app.
+
+If setup breaks, run `repair.cmd`. For a manual setup pass, run `setup.cmd`. For startup diagnostics, run `bootdoctor.cmd`.
+
+## What to Expect
+
+- First launch creates a local Python virtual environment in `.venv`.
+- Thomas runs on your own machine by default.
+- Model/provider setup happens in Easy Setup after the web UI opens.
+- If Codex, Ollama, or API keys are not ready yet, Thomas should still start and show setup guidance.
+
+## Everyday Use
+
+Use Thomas first as a local chat workspace. Start the app with `run-ui.cmd`, open the browser UI, and use Easy Setup to connect the model path you want to use. You can add memory, tools, automation, and integrations after the basic chat path is working.
+
+## Grow Into Advanced Thomas Safely
+
+Thomas includes builder and automation surfaces, but you do not need them for first use. Keep the default local/protected posture until you understand what a tool or integration will do, and use `bootdoctor.cmd` or `repair.cmd` when setup state looks wrong.
 
 ## What Ships in This Repo
 
