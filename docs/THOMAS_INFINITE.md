@@ -3,6 +3,7 @@
 Last updated: 2026-03-18
 
 Thomas Infinite is the Infinite app: Thomas's companion app for Phase 02.
+Thomas Infinite is a companion app, not the full Thomas runtime.
 
 It is a private mobile companion connected to Thomas over Tailscale.
 It is where Thomas can send focused browser-driven surfaces, status views,
@@ -44,6 +45,15 @@ The intended user experience is:
 - Thomas can push that surface to Infinite
 - the user can open it inside the Infinite app like a personal tool
 
+The planned home-screen model is:
+- Infinite has a chat area for talking directly with the local Thomas runtime
+- Infinite has an app-grid area with icons for Thomas-built app surfaces
+- tapping an icon opens a focused app-like surface
+- Thomas keeps the app running locally, including browser-driven execution when
+  that is the safest prototype path
+- the phone is the private control/viewing surface, not the authority that
+  executes arbitrary code
+
 The important framing is that Infinite is still a companion app.
 It is just a much more capable companion app than a normal remote-control client.
 
@@ -61,5 +71,9 @@ If Infinite works, Thomas proves it can:
 - generate and ship focused surfaces
 - keep one trust boundary across devices
 - make software feel personal and on-demand
+
+The privacy goal is that useful app experiences can move between the local
+Thomas host and the user's phone without making public cloud hosting the default
+runtime assumption.
 
 Thomas OS is the bigger destination where those ideas stop living in one companion app and start shaping the whole machine.

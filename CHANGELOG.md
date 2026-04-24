@@ -5,7 +5,9 @@ working-branch notes are intentionally not included in the public repository.
 
 ## [Unreleased]
 
-- Public changelog entries after the initial snapshot will be added here.
+- Added public repo guidance docs: `docs/AGENT_START_HERE.md`, `docs/FEATURE_MATRIX.md`, `docs/REPO_MAP.md`, `docs/ARCHITECTURE_OVERVIEW.md`, and `docs/ROADMAP.md`.
+- Added GitHub issue templates, PR template, release template, and Copilot/agent guidance for install failures, bugs, features, and structured agent tasks.
+- Documented Infinite as the planned Phase 02 companion app and Thomas OS as a concept-stage Phase 03 direction.
 
 ## [0.14.60] - 2026-04-24
 

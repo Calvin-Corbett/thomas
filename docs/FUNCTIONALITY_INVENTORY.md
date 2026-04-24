@@ -9,6 +9,9 @@ is. Status words are intentionally plain:
 - Prototype: scaffold or early implementation; do not treat as dependable.
 - Internal: maintainer/developer support surface, not a normal user feature.
 
+For an agent-readable table with audience, entry points, and test evidence, use
+`docs/FEATURE_MATRIX.md`. This file stays as the concise public inventory.
+
 ## User-Facing Surfaces
 
 | Area | Capability | Status | Notes |
@@ -29,6 +32,7 @@ is. Status words are intentionally plain:
 | Asset Studio | Media/asset workflow hooks | Partial | Multiple connectors exist; end-to-end UX is still rough. |
 | Browser automation | Browser action/artifact commands | Beta | CLI and internal tool support exists for screenshots, DOM snapshots, accessibility snapshots, and browser control. |
 | Evolve mode | Self-improvement sessions and promotion workflow | Beta | CLI and mission-job support exist with tests. Treat as guarded advanced mode, not a beginner feature. |
+| Infinite app | Private mobile companion direction | Planned | Planned Phase 02 companion app for Tailscale-connected chat, approvals, status, and Thomas-built app surfaces. See `docs/THOMAS_INFINITE.md` and `docs/ROADMAP.md`. |
 
 ## Backend And Runtime
 
@@ -75,8 +79,9 @@ Start with these files in order:
 
 1. `README.md` for install and first-run behavior.
 2. `docs/FUNCTIONALITY_INVENTORY.md` for capability status.
-3. `docs/NETWORKING_AND_FIREWALL.md` for local/remote network posture.
-4. `DOCUMENTATION_INDEX.md` for stable docs.
-5. `docs/PROJECT_SCOPE.md` for public-release boundaries.
+3. `docs/FEATURE_MATRIX.md` for audience, entry points, and evidence.
+4. `docs/NETWORKING_AND_FIREWALL.md` for local/remote network posture.
+5. `DOCUMENTATION_INDEX.md` for stable docs.
+6. `docs/PROJECT_SCOPE.md` for public-release boundaries.
 
 Do not infer that every module under `thomas/marketplace/` is production-ready. Use the status labels above and inspect tests before changing a specific area.

@@ -5,6 +5,11 @@ This index points to the stable docs that make sense in the public release. Use 
 ## Start Here
 
 - [`README.md`](README.md) - install, first run, and public-release orientation
+- [`docs/AGENT_START_HERE.md`](docs/AGENT_START_HERE.md) - fastest safe route for AI agents and contributors
+- [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) - public feature/status matrix with audience, entry points, and evidence
+- [`docs/REPO_MAP.md`](docs/REPO_MAP.md) - top-level directory map and runtime area guide
+- [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md) - install, runtime, guardrail, and companion architecture diagrams
+- [`docs/ROADMAP.md`](docs/ROADMAP.md) - public roadmap, Infinite app direction, and Thomas OS concept notes
 - [`SECURITY.md`](SECURITY.md) - security policy and disclosure process
 - [`CHANGELOG.md`](CHANGELOG.md) - release history and notable behavior changes
 - [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) - known limitations and active rough edges
@@ -25,7 +30,10 @@ This index points to the stable docs that make sense in the public release. Use 
 | Area | Doc or Path | Purpose |
 |---|---|---|
 | Runtime overview | [`thomas/README.md`](thomas/README.md) | Map of the core runtime modules |
+| Repo map | [`docs/REPO_MAP.md`](docs/REPO_MAP.md) | Top-level folder guide for humans and agents |
+| Architecture overview | [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md) | High-level install, runtime, and companion diagrams |
 | Capability inventory | [`docs/FUNCTIONALITY_INVENTORY.md`](docs/FUNCTIONALITY_INVENTORY.md) | Feature status and user-facing readiness |
+| Feature matrix | [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) | Capability status with audience, entry points, and evidence |
 | Chat flow | [`docs/CHAT_EXECUTION_MODEL.md`](docs/CHAT_EXECUTION_MODEL.md) | End-to-end request and execution flow |
 | Chat and sessions | [`thomas/chat/README.md`](thomas/chat/README.md) | Conversation handling and context |
 | Core services | [`thomas/core/README.md`](thomas/core/README.md) | Config, models, events, and shared runtime services |
@@ -38,6 +46,7 @@ This index points to the stable docs that make sense in the public release. Use 
 | Specialists | [`thomas/specialists/`](thomas/specialists/) | Specialist implementations used by orchestration |
 | Scripts | [`scripts/README.md`](scripts/README.md) | Packaging, hygiene, automation, and checks |
 | Clients and companion apps | [`apps/`](apps/) | Companion/client surfaces shipped alongside the runtime |
+| Infinite app roadmap | [`docs/THOMAS_INFINITE.md`](docs/THOMAS_INFINITE.md) and [`docs/ROADMAP.md`](docs/ROADMAP.md) | Planned private mobile companion direction |
 
 ## Common Tasks
 
@@ -49,6 +58,8 @@ This index points to the stable docs that make sense in the public release. Use 
 - Add or modify a tool: read [`thomas/tools/README.md`](thomas/tools/README.md).
 - Work on memory or retrieval: read [`thomas/memory/README.md`](thomas/memory/README.md).
 - Package or publish the app: use [`installer/`](installer/) and [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER_GUIDE.md).
+- Hand an AI agent a task: start with [`docs/AGENT_START_HERE.md`](docs/AGENT_START_HERE.md), [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md), and the GitHub agent task issue template.
+- Understand the roadmap: read [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/THOMAS_INFINITE.md`](docs/THOMAS_INFINITE.md).
 
 ## Notes
 
