@@ -2,7 +2,7 @@
 # Thomas AI — Cross-platform installer for macOS and Linux.
 #
 # Usage:
-#   curl -fsSL https://raw.githubusercontent.com/thomas-ai-assistant/thomas/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Calvin-Corbett/thomas/main/install.sh | bash
 #   # or locally:
 #   bash install.sh
 set -euo pipefail
