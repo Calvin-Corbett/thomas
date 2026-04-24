@@ -4,17 +4,22 @@ Thomas is a local-first AI workspace for chat, tools, memory, and automation.
 
 ## Quick Start on Windows
 
-Fresh install: run `run-ui.cmd`.
+Recommended fresh install: download and run the Windows installer from
+[`Releases`](https://github.com/Calvin-Corbett/thomas/releases).
 
-1. Download the repo from GitHub with **Code -> Download ZIP**, or clone it with Git.
-2. Extract the ZIP if you downloaded one.
-3. Open the extracted `thomas` folder.
-4. Double-click `run-ui.cmd`.
-5. If Thomas asks to create `.venv` or install local runtime dependencies, approve it. These installs stay inside this repo folder.
-6. Open `http://127.0.0.1:8899` if the browser does not open automatically.
-7. Complete Easy Setup in the app.
+1. Download `ThomasSetup_*.exe` from the latest GitHub release.
+2. Double-click the installer.
+3. Click through the installer prompts.
+4. Leave **Finish setup and launch Thomas now** checked.
+5. Wait for the first-run setup window to finish. It creates the local runtime and launches Thomas.
+6. Complete Easy Setup in the app after the browser opens.
 
-If setup breaks, run `repair.cmd`. For a manual setup pass, run `setup.cmd`. For startup diagnostics, run `bootdoctor.cmd`.
+Developer/manual fallback: download the repo from GitHub with **Code -> Download ZIP**,
+extract it, open the extracted `thomas` folder, and double-click `run-ui.cmd`.
+
+If setup breaks, run `repair.cmd`. For installer first-run failures, send
+`runtime\logs\first_run_wizard.log` with the issue report. For a manual setup
+pass, run `setup.cmd`. For startup diagnostics, run `bootdoctor.cmd`.
 
 Thomas is local-only by default. If Windows Firewall prompts you, this is the
 local Python web server starting on `127.0.0.1`; see
