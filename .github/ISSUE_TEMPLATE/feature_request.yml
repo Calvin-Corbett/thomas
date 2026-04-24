@@ -1,0 +1,44 @@
+name: Feature request
+description: Suggest a capability or workflow improvement.
+title: "[Feature]: "
+labels:
+  - enhancement
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem should this solve?
+      description: Explain the user pain or workflow gap.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Describe the simplest useful version.
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Install/setup
+        - Chat UI
+        - Models/providers
+        - Memory
+        - Tools
+        - Automation/Mission Control
+        - Evolve mode
+        - Companion/Infinite
+        - Docs/GitHub
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Extra context
+      description: Links, screenshots, examples, constraints, or rough ideas.
+    validations:
+      required: false

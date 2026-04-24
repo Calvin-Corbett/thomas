@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Public docs
+    url: https://github.com/Calvin-Corbett/thomas/blob/main/DOCUMENTATION_INDEX.md
+    about: Start here for install, networking, feature status, and contributor guidance.

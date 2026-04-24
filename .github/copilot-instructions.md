@@ -1,0 +1,28 @@
+# Thomas Agent Instructions
+
+Start every task by reading `docs/AGENT_START_HERE.md` and
+`docs/FEATURE_MATRIX.md`. This repo is too large to infer product status from
+file existence alone.
+
+Core rules:
+
+- Keep the public default local-first and loopback-only.
+- Do not add secrets, personal notes, local caches, support ZIPs, or private
+  release history.
+- Do not describe Partial, Prototype, or Planned features as finished.
+- Do not bypass guardrails, approvals, release preflight, repo hygiene, or tests.
+- Prefer focused, testable changes and update docs when user-facing behavior
+  changes.
+- For install or GitHub release work, run the public safety checks before
+  proposing publication.
+
+Useful docs:
+
+- `README.md`
+- `DOCUMENTATION_INDEX.md`
+- `docs/AGENT_START_HERE.md`
+- `docs/FEATURE_MATRIX.md`
+- `docs/REPO_MAP.md`
+- `docs/ARCHITECTURE_OVERVIEW.md`
+- `docs/NETWORKING_AND_FIREWALL.md`
+- `docs/ROADMAP.md`

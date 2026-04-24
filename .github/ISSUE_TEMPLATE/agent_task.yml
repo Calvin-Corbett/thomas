@@ -1,0 +1,40 @@
+name: Agent task
+description: Give a coding/review agent a structured Thomas task.
+title: "[Agent Task]: "
+labels:
+  - agent-task
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Agents should read `docs/AGENT_START_HERE.md` and `docs/FEATURE_MATRIX.md` before changing code.
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: What should the agent accomplish?
+    validations:
+      required: true
+  - type: textarea
+    id: scope
+    attributes:
+      label: Files or areas in scope
+      description: List expected files, folders, or product areas.
+    validations:
+      required: false
+  - type: textarea
+    id: out_of_scope
+    attributes:
+      label: Out of scope
+      description: Anything the agent must not touch.
+    validations:
+      required: false
+  - type: textarea
+    id: validation
+    attributes:
+      label: Required validation
+      placeholder: |
+        python -m pytest ...
+        python scripts\github_publish_preflight.py --json --strict --deep
+    validations:
+      required: false
