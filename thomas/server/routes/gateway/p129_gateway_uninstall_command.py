@@ -7,7 +7,7 @@ uninstall action.
 Design goals:
 - Deterministic, machine-readable errors (stable `code` values).
 - Clear request/response contracts (TypedDict + dataclasses).
-- Thomas-native naming (no OpenClaw naming reuse).
+- Thomas-native naming.
 
 Uninstall behavior is intentionally conservative and idempotent:
 - If the Gateway footprint is missing, uninstall returns success with `already_absent=true`.

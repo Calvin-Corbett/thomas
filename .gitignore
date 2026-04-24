@@ -8,6 +8,7 @@ __pycache__/
 
 # Runtime state (memory index, logs, secrets, etc)
 .thomas/
+plans/thomas/
 runtime/
 thomas_state.json
 thomas_daily_report_*.md
@@ -31,7 +32,6 @@ inbox/**
 
 # Build output
 .open-next/
-apps/site/.open-next/
 
 # One-off local artifacts
 .meta_unreferenced_docs.txt
@@ -52,8 +52,6 @@ thomas/tmp_script.py
 nul
 =*
 module_analysis.csv
-Thomas_vs_OpenClaw_Comparison.docx
-thomas_vs_openclaw_subcommands.json
 claude-code-vs-thomas-comparison.html
 thomas-feature-inventory.html
 thomas-repo-review.html

@@ -40,8 +40,8 @@ _TYPE_LABELS = {
     "dependency": "Dependency",
     "integration": "Integration",
 }
-_CANONICAL_MARKETPLACE_STORE_URL = "https://thomas-site.thomasdevhub.workers.dev"
-_LEGACY_MARKETPLACE_STORE_URL = "https://thomas.dev"
+_CANONICAL_MARKETPLACE_STORE_URL = "https://github.com/Calvin-Corbett/thomas"
+_LEGACY_MARKETPLACE_STORE_URL = "https://github.com/Calvin-Corbett/thomas"
 
 
 def _safe_string(value: Any) -> str:

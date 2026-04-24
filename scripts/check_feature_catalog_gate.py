@@ -19,7 +19,7 @@ REQUIRED_HEADERS: list[str] = [
     "## Autonomy Platform",
     "## Model Platform",
     "## Memory And Knowledge",
-    "## Benchmarking And Demos",
+    "## Validation And Local Demos",
     "## Server, Security, And Operations",
 ]
 
@@ -45,9 +45,9 @@ REQUIRED_FEATURE_IDS: set[str] = {
     "memory.thread_and_global",
     "memory.fabric_v2",
     "library.research_store",
-    "demo.head_to_head_harness",
-    "demo.dual_browser_runner",
-    "demo.multi_run_campaign",
+    "validation.release_hygiene",
+    "validation.browser_smoke",
+    "validation.docker_smoke",
     "server.remote_access_control",
     "security.secret_storage",
     "observability.run_store_and_journal",

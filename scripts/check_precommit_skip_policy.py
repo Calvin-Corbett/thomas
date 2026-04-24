@@ -60,7 +60,6 @@ PROTECTED_SKIP_HOOKS: tuple[str, ...] = (
     "thomas-protected-deletion-guard",
     "thomas-feature-registry-gate",
     "thomas-repo-identity-gate",
-    "thomas-site-visual-proof-gate",
     "thomas-merge-readiness",
     "thomas-repo-hygiene-gate",
     "thomas-repo-clean-worktree-gate",

@@ -1,7 +1,7 @@
 """
 Gateway uninstall command (CLI).
 
-Thomas-native naming; no OpenClaw naming reuse.
+Thomas-native naming; Thomas-native naming.
 
 This command reuses the core uninstall implementation from the server route module so:
 - CLI and HTTP route share a single set of validations and error codes.

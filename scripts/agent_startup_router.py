@@ -38,11 +38,10 @@ LANE_CARD_PATHS = {
     "risky-edit": "docs/ai/CHECKLISTS/agent-lane-risky-edit.md",
     "multi-file": "docs/ai/CHECKLISTS/agent-lane-multi-file.md",
     "multi-agent": "docs/ai/CHECKLISTS/agent-lane-multi-agent.md",
-    "ui-proof": "docs/ai/CHECKLISTS/agent-lane-ui-proof.md",
+    "ui-proof": "docs/ai/CHECKLISTS/ui.md",
 }
 UI_PROOF_PREFIXES = (
-    "apps/site/src/app/",
-    "apps/site/src/components/",
+    "thomas/server/web/",
 )
 RISKY_PREFIXES = (
     "thomas/server/routes/",
@@ -404,9 +403,6 @@ def classify_task(
         reads.append("docs/REPO_STRUCTURE_PROTOCOL.md")
     if lane == "multi-agent":
         reads.extend([DEFAULT_WORKBOARD_READ, "docs/ops/TASK_ECOSYSTEM_PROTOCOL.md"])
-    if lane == "ui-proof":
-        reads.append("skills/ui-precision-guard/SKILL.md")
-
     checks = {
         "chat": [],
         "benchmark": [
@@ -439,8 +435,8 @@ def classify_task(
             "Mark READY and log ACK before bundling another agent's scope.",
         ],
         "ui-proof": [
-            "Run python scripts/refresh_site_visual_proof.py",
-            "Run python scripts/check_site_visual_proof.py",
+            "Run focused UI runtime tests for changed web assets.",
+            "Capture a browser screenshot when visual behavior changes.",
         ],
     }[lane]
     escalation = {

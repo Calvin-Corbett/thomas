@@ -3,7 +3,7 @@
 This module implements the Thomas-native behavior for restarting a local *node host*
 service (the background node process that connects back to a gateway).
 
-It intentionally does not reuse legacy/OpenClaw naming internally.
+It intentionally does not reuse legacy naming internally.
 
 Contracts
 ---------

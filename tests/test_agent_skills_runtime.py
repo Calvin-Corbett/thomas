@@ -71,7 +71,7 @@ def test_runtime_skills_selection_prefers_explicit_then_pinned(tmp_path: Path, m
     _write_skill(
         home_root / ".thomas", "pinned-skill", "Always include the pinned behavior.", "- Preserve the pinned workflow."
     )
-    _write_skill(home_root / ".thomas", "deploy-cloudflare", "Deploy Cloudflare workers carefully.", "- Verify routes.")
+    _write_skill(home_root / ".thomas", "deploy-edge", "Deploy edge workers carefully.", "- Verify routes.")
 
     state_path = cfg.memory.root_path / ".thomas" / "cli" / "skills.json"
     state_path.parent.mkdir(parents=True, exist_ok=True)
@@ -79,8 +79,8 @@ def test_runtime_skills_selection_prefers_explicit_then_pinned(tmp_path: Path, m
 
     selection = resolve_runtime_skills(
         cfg,
-        prompt_text="please use $explicit-skill and deploy this cloudflare worker",
-        relevance_text="deploy cloudflare worker release",
+        prompt_text="please use $explicit-skill and deploy this edge worker",
+        relevance_text="deploy edge worker release",
         route_path="coding_task",
         cwd=tmp_path,
         max_selected=3,

@@ -617,10 +617,10 @@ def test_capture_preference_stores_summary_and_verbatim(tmp_path: Path, monkeypa
 def test_sync_specialists_apply_writes_routing_rows(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
-        claims_block="- agent=Codex 2; scope=scripts/competitors; task=benchmark routing",
+        claims_block="- agent=Codex 2; scope=scripts/quality; task=benchmark routing",
         active_tasks_block=(
-            "- task_id=benchmark-routing; agent=Codex 2; scope=scripts/competitors; "
-            "summary=Benchmark OpenClaw latency and reliability lanes; status=active"
+            "- task_id=benchmark-routing; agent=Codex 2; scope=scripts/quality; "
+            "summary=Run quality benchmark latency and reliability lanes; status=active"
         ),
     )
 
@@ -643,8 +643,8 @@ def test_sync_specialists_apply_writes_routing_rows(tmp_path: Path, capsys) -> N
     assert payload["routed_task_count"] == 1
     assert "## Task Specialist Routing" in text
     assert "task_id=benchmark-routing;" in text
-    assert "task_type=competitor_benchmark;" in text
-    assert "specialist=specialist-competitor-benchmark;" in text
+    assert "task_type=quality_benchmark;" in text
+    assert "specialist=specialist-quality-benchmark;" in text
     assert gate.evaluate(workboard) == []
 
 
@@ -652,7 +652,7 @@ def test_specialist_for_task_resolves_from_board_task_id(tmp_path: Path, capsys)
     workboard = _write_workboard(
         tmp_path,
         up_for_grabs_block=(
-            "- task_id=cleanup-old-ui; scope=apps/site/src/components,docs; "
+            "- task_id=cleanup-old-ui; scope=thomas/server/web/js,docs; "
             "summary=cleanup unused legacy ui assets and stale docs; reported_by=Codex 2"
         ),
     )

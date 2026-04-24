@@ -69,7 +69,7 @@ function moduleBuildFlair(mode, signals, snapshot) {
         return [
             { label: 'Briefs', value: moduleFocusValue(signals?.research_briefs), tone: '' },
             { label: 'Citations', value: moduleFocusValue(signals?.research_citations), tone: '' },
-            { label: 'Watchlist', value: moduleFocusValue(signals?.research_competitors), tone: '' },
+            { label: 'Watchlist', value: moduleFocusValue(signals?.research_watchlist), tone: '' },
         ];
     }
     if (mode === 'people') {

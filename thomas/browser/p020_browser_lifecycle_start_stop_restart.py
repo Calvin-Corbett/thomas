@@ -6,7 +6,7 @@ Thomas already has browser automation/tooling. This module adds a *lifecycle* la
 - restart: stop then start (or call backend restart when available)
 
 Design goals:
-- Thomas-native naming (no OpenClaw reuse)
+- Thomas-native naming (no external tools reuse)
 - Small, typed contracts for automation
 - Deterministic, machine-readable errors
 - Backend-agnostic: adapts existing Thomas browser tooling (live_browser/tools.browser)

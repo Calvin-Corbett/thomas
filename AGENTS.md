@@ -137,25 +137,6 @@ Never bulk-delete. For EVERY file or function you want to remove:
 
 Most single-agent sessions do NOT need the sections below. The startup router will tell you when you do.
 
-### Website Dev Shortcut (Dev-Only)
-
-If a task mentions website/site/homepage/domain/Spline or the user asks for web changes:
-
-1. Start in `apps/site` immediately.
-2. Read `apps/site/README_DEV.md` first for current URLs and workflow.
-3. Run website commands from `apps/site` (`npm run dev`, `npm run typecheck`, deploy scripts).
-4. Apply skill `ui-precision-guard` at `skills/ui-precision-guard/SKILL.md` for any UI edit.
-5. For `thomas/server/web/**` UI files, use the repo-local `skills/ui-precision-guard` workflow.
-
-### Hard Gate: Website Visual Proof (All Agents)
-
-When UI files change in `apps/site/src/app/**` or `apps/site/src/components/**`, you must update verification artifacts and run:
-
-- `python scripts/refresh_site_visual_proof.py`
-- `python scripts/check_site_visual_proof.py`
-
-Enforcement: pre-commit hook `thomas-site-visual-proof-gate`, CI workflow `site-release.yml`.
-
 ### Runtime Skills (Model-Agnostic)
 
 Thomas resolves runtime skills at the orchestrator layer before model calls. Selection order: explicit skill mention > pinned skills from `.thomas/cli/skills.json` > relevance-ranked from discovered roots (`<thomas_install_root>/skills`, `~/.thomas/skills`, `<cwd>/.thomas/skills`, `<cwd>/skills`).

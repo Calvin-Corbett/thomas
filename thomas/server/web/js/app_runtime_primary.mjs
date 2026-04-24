@@ -3,10 +3,10 @@
  * Minimal, clean, vanilla JS to power the thoughtful interface.
  */
 
-// 
-//   GLOBAL STATE & CONSTANTS                                               
-//   Chat state, game constants, composer presets, DOM element refs          
-// 
+//
+//   GLOBAL STATE & CONSTANTS
+//   Chat state, game constants, composer presets, DOM element refs
+//
 
 // Basic State
 let chatHistory = [];
@@ -794,8 +794,8 @@ const UI_NAV_MODE_STORAGE_KEY = 'thomas.ui.nav_mode.v1';
 const UI_WORKSPACE_NAV_ORDER_STORAGE_KEY = 'thomas.ui.workspace_nav_order.v1';
 const UI_SIDEBAR_COLLAPSED_STORAGE_KEY = 'thomas.ui.sidebar_collapsed.v1';
 const UI_MARKETPLACE_STORE_URL_STORAGE_KEY = 'thomas.ui.marketplace_store_url.v1';
-const DEFAULT_MARKETPLACE_STORE_URL = 'https://thomas-site.thomasdevhub.workers.dev';
-const LEGACY_MARKETPLACE_STORE_URL = 'https://thomas.dev';
+const DEFAULT_MARKETPLACE_STORE_URL = 'https://github.com/Calvin-Corbett/thomas';
+const LEGACY_MARKETPLACE_STORE_URL = 'https://github.com/Calvin-Corbett/thomas';
 const UI_CHAT_LIST_EXPANDED_STORAGE_KEY = 'thomas.ui.chat_list_expanded.v1';
 const UI_ACTIVE_CHAT_STORAGE_KEY = 'thomas.ui.active_chat.v1';
 const UI_COMPACT_LAYOUT_MEDIA_QUERY = '(max-width: 760px)';
@@ -1047,7 +1047,7 @@ const OFFICE_DYNAMIC_ROOM_SLOTS = [
 const OFFICE_TASK_ROOM_RULES = [
     { pattern: /\b(code|coding|bug|fix|refactor|script|api|backend|frontend|test|suite|engineer(?:ing)?)\b/i, roomId: 'room-engineering' },
     { pattern: /\b(content|video|youtube|social|post|edit|thumbnail|brand|marketing)\b/i, roomId: 'room-content' },
-    { pattern: /\b(research|compare|competitor|benchmark|analysis|document|docs|investigate)\b/i, roomId: 'room-research' },
+    { pattern: /\b(research|compare|reference|benchmark|analysis|document|docs|investigate)\b/i, roomId: 'room-research' },
     { pattern: /\b(deploy|infra|infrastructure|ops|monitor|reliability|performance|server|hosting)\b/i, roomId: 'room-ops' },
     { pattern: /\b(plan|roadmap|strategy|scope|milestone|timeline)\b/i, roomId: 'room-planning' },
     { pattern: /\b(support|ticket|customer|feedback|help)\b/i, roomId: 'room-support' },
@@ -1087,10 +1087,10 @@ const OFFICE_AGENT_STYLE_COLOR_POOL = [
 ];
 const OFFICE_AGENT_COSTUME_POOL = ['none', 'cap', 'visor', 'headset', 'bowtie'];
 
-// 
-//   VIRTUAL OFFICE DATA                                                    
-//   Agent dialogue trees, robot status sayings, UI notification helpers    
-// 
+//
+//   VIRTUAL OFFICE DATA
+//   Agent dialogue trees, robot status sayings, UI notification helpers
+//
 
 const OFFICE_DIALOGUE = {
     startup: [
@@ -1298,7 +1298,7 @@ const OFFICE_PERSONA_LIBRARY = {
     },
 };
 
-//  Chat Robot Status Sayings 
+//  Chat Robot Status Sayings
 const CHAT_ROBOT_SAYINGS = {
     thinking: [
         'Booting response core...',
@@ -1809,10 +1809,10 @@ function chatWorldModeFromInterfacePrefs(interfacePrefs = {}) {
         : CHAT_WORLD_MODE_AMBIENT;
 }
 
-// 
-//   EASY SETUP / ONBOARDING                                               
-//   Setup wizard, path cards, dependency checks, telemetry, choice bubbles 
-// 
+//
+//   EASY SETUP / ONBOARDING
+//   Setup wizard, path cards, dependency checks, telemetry, choice bubbles
+//
 
 function onboardingNowIso() {
     return new Date().toISOString();
@@ -8440,10 +8440,10 @@ async function beginOnboardingInterview() {
     });
 }
 
-// 
-//   INITIALIZATION & COMPOSER                                              
-//   Main init(), composer setup, slash palette, message building           
-// 
+//
+//   INITIALIZATION & COMPOSER
+//   Main init(), composer setup, slash palette, message building
+//
 
 /**
  * Initialize the ultra-premium UI behaviors
@@ -8785,7 +8785,7 @@ function initComposer() {
         }
     });
 
-    //  Paste images from clipboard 
+    //  Paste images from clipboard
     composerTextarea.addEventListener('paste', (e) => {
         const items = e.clipboardData?.items;
         if (!items) return;
@@ -8807,7 +8807,7 @@ function initComposer() {
         }
     });
 
-    //  Drag-and-drop files onto composer 
+    //  Drag-and-drop files onto composer
     const composerArea = composerTextarea.closest('.composer') || composerTextarea.parentElement;
     if (composerArea) {
         let _dragCounter = 0;
@@ -8869,7 +8869,7 @@ function initComposer() {
     }
 }
 
-//  Slash Command Palette 
+//  Slash Command Palette
 const SLASH_COMMANDS = [
     { cmd: '/research',  desc: 'Deep research mode  thorough web search + synthesis' },
     { cmd: '/image',     desc: 'Generate an image from a description' },
@@ -9315,10 +9315,10 @@ function chatGameSetDinoSurfaceOpen(open) {
     }
 }
 
-// 
-//   CHAT GAMES                                                             
-//   Cloud Jump, Jetpack Joyride, Dino Run  physics, rendering, game loop  
-// 
+//
+//   CHAT GAMES
+//   Cloud Jump, Jetpack Joyride, Dino Run  physics, rendering, game loop
+//
 
 function chatGameSetCenterMuted(enable) {
     if (!appRoot) return;
@@ -11639,10 +11639,10 @@ function initChatGame() {
     });
 }
 
-// 
-//   ACTIONS & INTERACTIONS                                                 
-//   Send/stop, file attach, chat search, keyboard shortcuts, streaming     
-// 
+//
+//   ACTIONS & INTERACTIONS
+//   Send/stop, file attach, chat search, keyboard shortcuts, streaming
+//
 
 function initActions() {
     function prepareManualSendFromComposer() {
@@ -13739,7 +13739,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             if (bubbleMsgContent) bubbleMsgContent.classList.add('streaming-active');
         }
 
-        //  rAF-batched streaming render 
+        //  rAF-batched streaming render
         let _rafScheduled = false;
         function _scheduleStreamRender() {
             if (_rafScheduled) return;
@@ -14850,10 +14850,10 @@ function setGeneratingState(generating) {
     updateDebugDockSnapshot();
 }
 
-// 
-//   CHAT & MESSAGE RENDERING                                               
-//   Attachments, message bubbles, markdown, code blocks, robot alerts      
-// 
+//
+//   CHAT & MESSAGE RENDERING
+//   Attachments, message bubbles, markdown, code blocks, robot alerts
+//
 
 function renderAttachmentsPreview() {
     attachmentsPreview.replaceChildren();
@@ -15769,10 +15769,10 @@ function setActiveDebugTab(tabRaw = 'runtime') {
     void refreshDebugLiveData({ reason: `tab:${normalized}` });
 }
 
-// 
-//   DEBUG DOCK                                                             
-//   Runtime, system, models, tools, memory, runs, console, network panels  
-// 
+//
+//   DEBUG DOCK
+//   Runtime, system, models, tools, memory, runs, console, network panels
+//
 
 function initDebugDockTabs() {
     if (!debugDockTabs) return;
@@ -17089,10 +17089,10 @@ function formatSidebarTimestamp(epochMs) {
     }
 }
 
-// 
-//   SESSION & CHAT PERSISTENCE                                             
-//   Chat save/load, sidebar sessions, persistence helpers, animation locks 
-// 
+//
+//   SESSION & CHAT PERSISTENCE
+//   Chat save/load, sidebar sessions, persistence helpers, animation locks
+//
 
 function mapPersistedChatToSidebarSession(chatRaw) {
     if (!chatRaw || typeof chatRaw !== 'object') return null;
@@ -17290,10 +17290,10 @@ async function persistActiveChat({ quiet = true } = {}) {
     return ok;
 }
 
-// 
-//   VIRTUAL OFFICE                                                         
-//   Office sim, agent movement, room rendering, minimap, sprite painting   
-// 
+//
+//   VIRTUAL OFFICE
+//   Office sim, agent movement, room rendering, minimap, sprite painting
+//
 
 function officeClamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -25244,10 +25244,10 @@ function officeHandleDraftMinimapResizePointerUp(event) {
     state.minimapResizePointerId = null;
 }
 
-// 
-//   MISSION CONTROL                                                        
-//   Agent ops, job tracking, approvals, KPIs, timeline, room load          
-// 
+//
+//   MISSION CONTROL
+//   Agent ops, job tracking, approvals, KPIs, timeline, room load
+//
 
 function missionEnsureState() {
     if (missionState) {
@@ -26889,10 +26889,10 @@ function initMissionWorkspace() {
     }
 }
 
-// 
-//   CONTENT HUB                                                            
-//   Social platforms, workflows, scheduling, content track list            
-// 
+//
+//   CONTENT HUB
+//   Social platforms, workflows, scheduling, content track list
+//
 
 function contentEnsureState() {
     if (!contentWorkspace) return null;
@@ -27402,10 +27402,10 @@ function contentEnterMode() {
 
 function contentLeaveMode() {}
 
-// 
-//   MODULE SYSTEM (COMMAND CENTER)                                         
-//   19 nav modes, seeds, surfaces, workbench config, module state machine  
-// 
+//
+//   MODULE SYSTEM (COMMAND CENTER)
+//   19 nav modes, seeds, surfaces, workbench config, module state machine
+//
 
 const MODULE_NAV_MODES = Object.freeze([
     'dashboard',
@@ -27648,13 +27648,13 @@ const MODULE_MODE_SEEDS = Object.freeze({
         kpis: [
             { label: 'Open Briefs', key: 'research_briefs', meta: 'active deep dives' },
             { label: 'Citations', key: 'research_citations', meta: 'saved sources' },
-            { label: 'Competitors', key: 'research_competitors', meta: 'watchlist set' },
+            { label: 'Watchlist', key: 'research_watchlist', meta: 'watchlist set' },
             { label: 'Indexed Docs', key: 'research_docs', meta: 'searchable corpus' },
         ],
         actions: [
             { id: 'deep_research', label: 'Start Deep Research', meta: 'Run source-backed research flow.' },
             { id: 'ingest_docs', label: 'Ingest Documents', meta: 'Parse and index new material.' },
-            { id: 'compare_competitors', label: 'Compare Competitors', meta: 'Produce side-by-side report.' },
+            { id: 'compare_references', label: 'Compare References', meta: 'Produce side-by-side report.' },
             { id: 'export_brief', label: 'Export Brief', meta: 'Publish answer with receipts.' },
         ],
     },
@@ -28766,7 +28766,7 @@ function moduleEventTags(event) {
     if (/(3d|cad|print|mesh|slicer|stl|obj)/.test(text)) {
         tags.add('lab_3d');
     }
-    if (/(research|citation|source|brief|analysis|competitor|pdf)/.test(text)) {
+    if (/(research|citation|source|brief|analysis|reference|pdf)/.test(text)) {
         tags.add('research');
     }
     if (/(people|contact|client|vendor|relationship)/.test(text)) {
@@ -29134,7 +29134,7 @@ function moduleCollectSignals(snapshot = moduleBuildSnapshot()) {
         printer_uptime: null,
         research_briefs: researchSignals,
         research_citations: snapshot.events.filter((event) => /citation|source/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
-        research_competitors: snapshot.events.filter((event) => /competitor/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
+        research_watchlist: snapshot.events.filter((event) => /reference/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
         research_docs: snapshot.events.filter((event) => { const tags = moduleEventTags(event); return tags.has('research') && /doc|pdf|brief/i.test(safeString(event?.text) + ' ' + safeString(event?.type)); }).length,
         people_contacts: snapshot.sessions.length,
         people_followups: inboxNeedsReply,
@@ -29587,7 +29587,7 @@ function moduleBuildFocusCards(mode, snapshot, signals) {
         return [
             { label: 'Open Briefs', value: signals?.research_briefs, meta: 'active research tracks', tone: '' },
             { label: 'Citations', value: signals?.research_citations, meta: 'source-backed points', tone: '' },
-            { label: 'Competitor Watch', value: signals?.research_competitors, meta: 'tracked references', tone: '' },
+            { label: 'Market Watch', value: signals?.research_watchlist, meta: 'tracked references', tone: '' },
         ];
     }
     if (mode === 'people') {
@@ -29766,7 +29766,7 @@ function moduleBuildFlair(mode, signals, snapshot) {
         return [
             { label: 'Briefs', value: moduleFocusValue(signals?.research_briefs), tone: '' },
             { label: 'Citations', value: moduleFocusValue(signals?.research_citations), tone: '' },
-            { label: 'Watchlist', value: moduleFocusValue(signals?.research_competitors), tone: '' },
+            { label: 'Watchlist', value: moduleFocusValue(signals?.research_watchlist), tone: '' },
         ];
     }
     if (mode === 'people') {
@@ -30989,11 +30989,11 @@ function moduleLab3dHitShape(shapeRaw, pointRaw) {
         && (Number(point.y) || 0) <= (y + h);
 }
 
-// 
-//   WORKBENCH EDITORS                                                      
-//   Lab 3D, Automations, App Builder, Studio, Dev Studio, Game Studio,     
-//   Research Lab  rich interactive editors for each workbench mode         
-// 
+//
+//   WORKBENCH EDITORS
+//   Lab 3D, Automations, App Builder, Studio, Dev Studio, Game Studio,
+//   Research Lab  rich interactive editors for each workbench mode
+//
 
 function moduleRenderWorkbenchLab3dOss(container, wb) {
     if (!container || !wb) return false;
@@ -38994,7 +38994,7 @@ function moduleBuildSpecialCards(mode, snapshot, signals, definition) {
                 items: [
                     `Briefs: ${moduleFocusValue(signals?.research_briefs)}`,
                     `Citations: ${moduleFocusValue(signals?.research_citations)}`,
-                    `Competitor watch: ${moduleFocusValue(signals?.research_competitors)}`,
+                    `Market Watch: ${moduleFocusValue(signals?.research_watchlist)}`,
                 ],
             },
         ];
@@ -39567,7 +39567,7 @@ function moduleRenderMarketplaceSurface(container) {
     const activeFilter = safeString(marketplaceState?.filter).toLowerCase() || 'all';
     const generatedAt = safeString(marketplaceState?.generatedAt);
     const syncedAt = safeString(marketplaceState?.syncedAt || generatedAt);
-    const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'thomas.dev';
+    const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'public repo';
     const configuredStoreUrl = normalizeMarketplaceStoreUrl(
         safeString(marketplaceState?.pendingStoreUrl || marketplaceState?.storeUrl || moduleReadPreferredMarketplaceStoreUrl())
     );
@@ -41160,10 +41160,10 @@ function moduleRenderTriage(definition, mode) {
     });
 }
 
-// 
-//   MODULE RENDERING & DISPATCH                                            
-//   moduleRender(), moduleEnterMode(), initModuleWorkspace()               
-// 
+//
+//   MODULE RENDERING & DISPATCH
+//   moduleRender(), moduleEnterMode(), initModuleWorkspace()
+//
 
 function moduleRender(modeRaw, { touch = true } = {}) {
     const mode = MODULE_NAV_MODE_SET.has(modeRaw) ? modeRaw : 'dashboard';
@@ -42668,10 +42668,10 @@ function initContentWorkspace() {
     }
 }
 
-// 
-//   SIDEBAR & NAVIGATION                                                   
-//   Nav mode switching, chat list, office/content workspace init           
-// 
+//
+//   SIDEBAR & NAVIGATION
+//   Nav mode switching, chat list, office/content workspace init
+//
 
 function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const requestedMode = normalizeNavMode(mode);
@@ -42982,10 +42982,10 @@ function initSettingsSectionNavigation() {
     window.addEventListener('resize', queueSettingsSectionNavActiveUpdate);
 }
 
-// 
-//   INITIAL STATE & BOOT                                                   
-//   loadInitialState(), session creation, profile loading, preference sync 
-// 
+//
+//   INITIAL STATE & BOOT
+//   loadInitialState(), session creation, profile loading, preference sync
+//
 
 async function maybeHandleBootPluginInstall() {
     if (bootPluginInstallPromise) {
@@ -43628,10 +43628,10 @@ function initFeatures() {
     pushDebugEvent('runtime', 'UI initialized');
 }
 
-// 
-//   MODEL SETUP & SETTINGS                                                 
-//   Model selector, profile switching, settings form, save/load prefs      
-// 
+//
+//   MODEL SETUP & SETTINGS
+//   Model selector, profile switching, settings form, save/load prefs
+//
 
 function initModelSetup() {
     const closeModelSetupModal = () => {

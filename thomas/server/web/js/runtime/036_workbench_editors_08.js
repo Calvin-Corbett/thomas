@@ -37,7 +37,7 @@ function moduleRenderMarketplaceSurface(container) {
     const activeFilter = safeString(marketplaceState?.filter).toLowerCase() || 'all';
     const generatedAt = safeString(marketplaceState?.generatedAt);
     const syncedAt = safeString(marketplaceState?.syncedAt || generatedAt);
-    const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'thomas.dev';
+    const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'public repo';
     const configuredStoreUrl = normalizeMarketplaceStoreUrl(
         safeString(marketplaceState?.pendingStoreUrl || marketplaceState?.storeUrl || moduleReadPreferredMarketplaceStoreUrl())
     );
@@ -1187,4 +1187,3 @@ function moduleBuildChannelsConfigurePrompt(channel) {
         'List the exact credentials, permissions, APIs, and UI controls Thomas should own on the Thomas side.',
     ].join(' ');
 }
-

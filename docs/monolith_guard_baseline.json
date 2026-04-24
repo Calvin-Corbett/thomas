@@ -31,13 +31,6 @@
       "max_growth_lines": 0,
       "reason": "REPL modularization is in-progress; bounded waiver until split lands."
     },
-    "apps/site/src/app/globals.css": {
-      "owner": "thomas-site",
-      "expires_on": "2026-06-30",
-      "max_lines": 3800,
-      "max_growth_lines": 0,
-      "reason": "CSS decomposition tracked; temporary waiver keeps guard strict against further growth."
-    },
     "thomas/server/web/js/runtime/034_workbench_editors_06.js": {
       "owner": "thomas-core",
       "expires_on": "2026-06-30",

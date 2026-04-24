@@ -198,7 +198,7 @@ MODULES = {
         "tier": "infra",
         "depends_on": ["core", "agent", "autonomy"],
         "health": "yellow",
-        "debt": "test_suite_contract.py exceeds 835 lines",
+        "debt": "several generated helper files need ownership review",
         "description": "Plugin loading, lifecycle, certification",
     },
     "policy": {
@@ -258,18 +258,11 @@ MODULES = {
         "health": "green",
         "description": "Bridge to Codex/external providers",
     },
-    "benchmarks": {
-        "tier": "support",
-        "depends_on": ["core"],
-        "health": "green",
-        "description": "Benchmark suites, scoring, and reporting runtime",
-    },
     "demo": {
         "tier": "support",
         "depends_on": ["core", "agent", "cli", "tools", "plugins"],
-        "health": "yellow",
-        "debt": "harness.py exceeds 1130 lines, agent_comparison_suite_strict_checks.py exceeds 890 lines, agent_comparison_suite.py exceeds 880 lines, agent_comparison_suite_shared.py exceeds 880 lines",
-        "description": "Demo harnesses and comparison suites",
+        "health": "green",
+        "description": "Local project swarm demos and helper runtime",
     },
     "gateway": {
         "tier": "support",
@@ -1070,12 +1063,6 @@ MODULES = {
         "depends_on": ["core", "tools", "marketplace"],
         "health": "yellow",
         "description": "olap utilities",
-    },
-    "openclaw_compat": {
-        "tier": "support",
-        "depends_on": ["core", "tools", "marketplace"],
-        "health": "yellow",
-        "description": "openclaw compat utilities",
     },
     "orchestration": {
         "tier": "support",

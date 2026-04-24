@@ -15,7 +15,7 @@ The design goals here are:
 - Clear, machine-readable input/output contracts
 - Deterministic failure modes (stable error codes)
 - Compatibility with the existing Thomas registries via light duck-typing
-  (without reusing any OpenClaw naming)
+  (without reusing any legacy naming)
 
 Owned by prompt P106.
 """

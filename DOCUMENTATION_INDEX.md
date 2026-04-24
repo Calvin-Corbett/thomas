@@ -8,10 +8,13 @@ This index points to the stable docs that make sense in the public release. Use 
 - [`SECURITY.md`](SECURITY.md) - security policy and disclosure process
 - [`CHANGELOG.md`](CHANGELOG.md) - release history and notable behavior changes
 - [`KNOWN_ISSUES.md`](KNOWN_ISSUES.md) - known limitations and active rough edges
+- [`docs/FUNCTIONALITY_INVENTORY.md`](docs/FUNCTIONALITY_INVENTORY.md) - public capability map and readiness status
+- [`docs/NETWORKING_AND_FIREWALL.md`](docs/NETWORKING_AND_FIREWALL.md) - local-first networking and firewall guidance
 
 ## Install, Repair, and Deploy
 
 - [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER_GUIDE.md) - Windows installer build and packaging
+- [`docs/NETWORKING_AND_FIREWALL.md`](docs/NETWORKING_AND_FIREWALL.md) - firewall prompts, loopback defaults, and remote-access boundaries
 - [`docs/ops/DOCKER_DEPLOY.md`](docs/ops/DOCKER_DEPLOY.md) - Docker deployment and runtime notes
 - [`docs/ops/GATEWAY_SECURITY_RUNBOOK.md`](docs/ops/GATEWAY_SECURITY_RUNBOOK.md) - gateway security and incident-response guidance
 - [`docs/ops/RETRY_POLICY.md`](docs/ops/RETRY_POLICY.md) - retry behavior, failure handling, and backoff expectations
@@ -22,6 +25,7 @@ This index points to the stable docs that make sense in the public release. Use 
 | Area | Doc or Path | Purpose |
 |---|---|---|
 | Runtime overview | [`thomas/README.md`](thomas/README.md) | Map of the core runtime modules |
+| Capability inventory | [`docs/FUNCTIONALITY_INVENTORY.md`](docs/FUNCTIONALITY_INVENTORY.md) | Feature status and user-facing readiness |
 | Chat flow | [`docs/CHAT_EXECUTION_MODEL.md`](docs/CHAT_EXECUTION_MODEL.md) | End-to-end request and execution flow |
 | Chat and sessions | [`thomas/chat/README.md`](thomas/chat/README.md) | Conversation handling and context |
 | Core services | [`thomas/core/README.md`](thomas/core/README.md) | Config, models, events, and shared runtime services |
@@ -33,7 +37,7 @@ This index points to the stable docs that make sense in the public release. Use 
 | Orchestration | [`thomas/orchestrator/`](thomas/orchestrator/) | Routing and orchestration code |
 | Specialists | [`thomas/specialists/`](thomas/specialists/) | Specialist implementations used by orchestration |
 | Scripts | [`scripts/README.md`](scripts/README.md) | Packaging, hygiene, automation, and checks |
-| Clients and companion apps | [`apps/`](apps/) | Site and client surfaces shipped alongside the runtime |
+| Clients and companion apps | [`apps/`](apps/) | Companion/client surfaces shipped alongside the runtime |
 
 ## Common Tasks
 

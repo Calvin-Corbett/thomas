@@ -1,7 +1,7 @@
 """MCP (Model Context Protocol) bridge for Thomas tool registry.
 
 Exposes Thomas tools as an MCP server so that any MCP-compatible client
-(Claude Desktop, OpenClaw, LangGraph, etc.) can discover and invoke them.
+(Claude Desktop, external tools, LangGraph, etc.) can discover and invoke them.
 
 Supports both stdio and HTTP transports via the ``mcp`` Python SDK (FastMCP).
 

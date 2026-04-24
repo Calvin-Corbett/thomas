@@ -12,7 +12,7 @@ from thomas.server.routes.observability import record_event, update_metrics
 
 
 # Example 1: Track tool calls in a route handler
-async def example_tool_call_handler(request):
+async def example_site_call_handler(request):
     """Example of tracking a tool call event."""
     tool_name = request.query.get("tool")
     params = request.query.get("params", "{}")
@@ -223,7 +223,7 @@ SOURCE_AGENT_NAMING = {
 
 
 __all__ = [
-    "example_tool_call_handler",
+    "example_site_call_handler",
     "example_llm_request_handler",
     "example_agent_action",
     "example_error_handler",

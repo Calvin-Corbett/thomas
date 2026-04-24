@@ -6,7 +6,7 @@ Implements a Thomas-native **node stop** operation with:
 - A backend resolution layer that delegates to the existing Thomas node control
   implementation without hard-coding one internal API.
 
-This module intentionally does **not** reuse OpenClaw naming.
+This module intentionally does **not** reuse legacy naming.
 """
 
 from __future__ import annotations

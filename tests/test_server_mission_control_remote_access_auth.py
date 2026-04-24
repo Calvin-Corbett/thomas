@@ -30,29 +30,6 @@ class TestServerMissionControlRemoteAccessAuth(MissionControlRemoteAccessCase):
         self.assertTrue(events)
         self.assertEqual(str(events[0].get("type") or ""), "snapshot")
 
-    async def test_mission_benchmark_routes_require_remote_token(self):
-        no_auth_packs = await self.client.get("/api/mission/benchmarks/packs")
-        self.assertEqual(no_auth_packs.status, 401)
-
-        no_auth = await self.client.get("/api/mission/benchmarks/runs")
-        self.assertEqual(no_auth.status, 401)
-
-        with_auth_packs = await self.client.get(
-            "/api/mission/benchmarks/packs",
-            headers={"Authorization": "Bearer test-token"},
-        )
-        self.assertEqual(with_auth_packs.status, 200)
-        packs_payload = await with_auth_packs.json()
-        self.assertIs(packs_payload.get("ok"), True)
-
-        with_auth = await self.client.get(
-            "/api/mission/benchmarks/runs",
-            headers={"Authorization": "Bearer test-token"},
-        )
-        self.assertEqual(with_auth.status, 200)
-        payload = await with_auth.json()
-        self.assertIs(payload.get("ok"), True)
-
     async def test_mission_alert_notify_requires_remote_token(self):
         no_auth = await self.client.post("/api/mission/alerts/notify", json={})
         self.assertEqual(no_auth.status, 401)

@@ -44,13 +44,13 @@ SPECIALIST_RULES: tuple[SpecialistRule, ...] = (
         ),
     ),
     SpecialistRule(
-        task_type="competitor_benchmark",
-        specialist="specialist-competitor-benchmark",
+        task_type="quality_benchmark",
+        specialist="specialist-quality-benchmark",
         keywords=(
             "benchmark",
-            "openclaw",
-            "crewai",
-            "agent_comparison",
+            "quality benchmark",
+            "evaluation",
+            "agent quality",
             "baselines",
             "token efficiency",
             "latency",
@@ -107,7 +107,7 @@ SPECIALIST_RULES: tuple[SpecialistRule, ...] = (
         keywords=(
             "ui",
             "web-ui",
-            "apps/site",
+            "thomas/server/web",
             "operator",
             "companion",
             "frontend",

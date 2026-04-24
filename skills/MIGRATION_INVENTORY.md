@@ -3,7 +3,6 @@
 First-party Thomas-native skills currently shipped:
 - auto-skillify
 - capcut-video-editor
-- cloudflare-deploy
 - davinci-video-editor
 - develop-web-game
 - doc
@@ -35,7 +34,6 @@ First-party Thomas-native skills currently shipped:
 - speech
 - spreadsheet
 - stream-clip-pipeline
-- thomas-site-visual-proof
 - transcribe
 - ui-precision-guard
 - vercel-deploy

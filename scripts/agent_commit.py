@@ -40,13 +40,7 @@ COMMIT_CLASS_CHOICES: tuple[str, ...] = (
 )
 RELEASE_METADATA_COMMIT_CLASSES = frozenset({"publish-candidate", "public-release"})
 RELEASE_GATED_COMMIT_CLASSES = frozenset({"publish-candidate", "public-release"})
-PATH_SCOPED_GATES: dict[str, tuple[str, ...]] = {
-    "site_visual_proof": (
-        "apps/site/src/app/",
-        "apps/site/src/components/",
-        "apps/site/verification/",
-    ),
-}
+PATH_SCOPED_GATES: dict[str, tuple[str, ...]] = {}
 STRUCTURED_GATE_COMMANDS: dict[str, tuple[str, ...]] = {
     "bulk_commit_guard": (sys.executable, "scripts/check_bulk_commit_guard.py", "--json"),
     "commit_growth_guard": (sys.executable, "scripts/check_commit_growth_guard.py", "--json"),
@@ -118,7 +112,6 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "release_update",
         (sys.executable, "scripts/check_release_update_gate.py", "--no-include-untracked"),
     ),
-    ("site_visual_proof", (sys.executable, "scripts/check_site_visual_proof.py")),
     ("boot_smoke", (sys.executable, "scripts/check_boot_smoke_gate.py")),
     ("type_safety", (sys.executable, "scripts/check_type_safety_gate.py")),
     ("circular_imports", (sys.executable, "scripts/check_circular_imports_gate.py")),

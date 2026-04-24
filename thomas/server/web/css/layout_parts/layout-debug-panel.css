@@ -560,7 +560,7 @@
     animation: none;
 }
 
-/* Canonical blocky robot geometry mirrored from apps/site/src/components/pixel-agents.tsx. */
+/* Canonical blocky robot geometry for Thomas web UI agents. */
 .office-pixel-agent {
     --agent-primary: #9ad8ff;
     --agent-secondary: #5aaeff;

@@ -35,8 +35,8 @@ def test_browser_context_kwargs_ignore_https_errors() -> None:
 
 
 def test_same_target_url_ignores_trailing_slash_and_case() -> None:
-    assert mod._same_target_url("https://Open-Claw.org/", "https://open-claw.org") is True
-    assert mod._same_target_url("https://open-claw.org/docs", "https://open-claw.org") is False
+    assert mod._same_target_url("https://example-tool.org/", "https://example-tool.org") is True
+    assert mod._same_target_url("https://example-tool.org/docs", "https://example-tool.org") is False
 
 
 @pytest.mark.asyncio
@@ -47,7 +47,7 @@ async def test_browser_open_tool_returns_headline(monkeypatch: pytest.MonkeyPatc
             return self
 
         async def text_content(self) -> str:
-            return "OpenClaw: The AI that actually does things"
+            return "ExampleSite: The AI that actually does things"
 
     class _FakePage:
         url = "about:blank"
@@ -56,7 +56,7 @@ async def test_browser_open_tool_returns_headline(monkeypatch: pytest.MonkeyPatc
             return SimpleNamespace(status=200)
 
         async def title(self) -> str:
-            return "OpenClaw | The Open-Source Personal AI Assistant & Autonomous Agent"
+            return "ExampleSite | The Open-Source Personal AI Assistant & Autonomous Agent"
 
         def locator(self, selector: str) -> _FakeLocator:
             assert selector == "h1"
@@ -75,21 +75,21 @@ async def test_browser_open_tool_returns_headline(monkeypatch: pytest.MonkeyPatc
         return None
 
     async def _fake_extract_best_text(page) -> str:
-        return "OpenClaw body copy"
+        return "ExampleSite body copy"
 
     monkeypatch.setattr(mod, "_ensure_session_page", _fake_ensure_session_page)
     monkeypatch.setattr(mod, "_best_effort_stabilize", _fake_stabilize)
     monkeypatch.setattr(mod, "_extract_best_text", _fake_extract_best_text)
 
     result = await mod.BrowserOpenTool().execute(
-        {"url": "https://open-claw.org", "session": "headline-test", "headless": True}
+        {"url": "https://example-tool.org", "session": "headline-test", "headless": True}
     )
 
     assert result.ok is True
     assert result.error is None
-    assert result.data["headline"] == "OpenClaw: The AI that actually does things"
-    assert result.data["title"] == "OpenClaw | The Open-Source Personal AI Assistant & Autonomous Agent"
-    assert result.data["text"] == "OpenClaw body copy"
+    assert result.data["headline"] == "ExampleSite: The AI that actually does things"
+    assert result.data["title"] == "ExampleSite | The Open-Source Personal AI Assistant & Autonomous Agent"
+    assert result.data["text"] == "ExampleSite body copy"
 
 
 @pytest.mark.asyncio
@@ -103,7 +103,7 @@ async def test_browser_open_tool_headline_only_skips_heavy_text_extraction(monke
             return self
 
         async def text_content(self) -> str:
-            return "OpenClaw: The AI that actually does things"
+            return "ExampleSite: The AI that actually does things"
 
     class _FakePage:
         url = "about:blank"
@@ -113,7 +113,7 @@ async def test_browser_open_tool_headline_only_skips_heavy_text_extraction(monke
             return SimpleNamespace(status=200)
 
         async def title(self) -> str:
-            return "OpenClaw | The Open-Source Personal AI Assistant & Autonomous Agent"
+            return "ExampleSite | The Open-Source Personal AI Assistant & Autonomous Agent"
 
         async def wait_for_selector(self, *args, **kwargs):
             return None
@@ -141,19 +141,19 @@ async def test_browser_open_tool_headline_only_skips_heavy_text_extraction(monke
     async def _fake_extract_best_text(page) -> str:
         _ = page
         calls["extract"] += 1
-        return "OpenClaw body copy"
+        return "ExampleSite body copy"
 
     monkeypatch.setattr(mod, "_ensure_session_page", _fake_ensure_session_page)
     monkeypatch.setattr(mod, "_best_effort_stabilize", _fake_stabilize)
     monkeypatch.setattr(mod, "_extract_best_text", _fake_extract_best_text)
 
     result = await mod.BrowserOpenTool().execute(
-        {"url": "https://open-claw.org", "session": "headline-fast", "headless": True, "headline_only": True}
+        {"url": "https://example-tool.org", "session": "headline-fast", "headless": True, "headline_only": True}
     )
 
     assert result.ok is True
     assert result.error is None
-    assert result.data["headline"] == "OpenClaw: The AI that actually does things"
+    assert result.data["headline"] == "ExampleSite: The AI that actually does things"
     assert result.data["text"] == ""
     assert seen["wait_until"] == "commit"
     assert calls["stabilize"] == 0
@@ -169,12 +169,12 @@ async def test_browser_open_tool_navigation_only_skips_metadata_extraction(monke
 
         async def goto(self, *args, **kwargs):
             seen["wait_until"] = kwargs.get("wait_until")
-            self.url = "https://open-claw.org/"
+            self.url = "https://example-tool.org/"
             return SimpleNamespace(status=200)
 
         async def title(self) -> str:
             seen["title_calls"] += 1
-            return "OpenClaw"
+            return "ExampleSite"
 
         async def wait_for_selector(self, *args, **kwargs):
             seen["selector_waits"] += 1
@@ -193,7 +193,7 @@ async def test_browser_open_tool_navigation_only_skips_metadata_extraction(monke
 
     result = await mod.BrowserOpenTool().execute(
         {
-            "url": "https://open-claw.org",
+            "url": "https://example-tool.org",
             "session": "action-direct",
             "headless": True,
             "lane": "action",
@@ -204,7 +204,7 @@ async def test_browser_open_tool_navigation_only_skips_metadata_extraction(monke
 
     assert result.ok is True
     assert result.error is None
-    assert result.data == {"url": "https://open-claw.org/", "title": "", "headline": "", "text": ""}
+    assert result.data == {"url": "https://example-tool.org/", "title": "", "headline": "", "text": ""}
     assert seen["wait_until"] == "commit"
     assert seen["title_calls"] == 0
     assert seen["selector_waits"] == 0
@@ -221,7 +221,7 @@ async def test_browser_open_tool_read_lane_uses_commit_navigation_for_main_text(
             return self
 
         async def text_content(self) -> str:
-            return "OpenClaw: The AI that actually does things"
+            return "ExampleSite: The AI that actually does things"
 
     class _FakePage:
         url = "about:blank"
@@ -231,7 +231,7 @@ async def test_browser_open_tool_read_lane_uses_commit_navigation_for_main_text(
             return SimpleNamespace(status=200)
 
         async def title(self) -> str:
-            return "OpenClaw | The Open-Source Personal AI Assistant & Autonomous Agent"
+            return "ExampleSite | The Open-Source Personal AI Assistant & Autonomous Agent"
 
         async def wait_for_load_state(self, *args, **kwargs):
             calls["load_state"] += 1
@@ -258,20 +258,20 @@ async def test_browser_open_tool_read_lane_uses_commit_navigation_for_main_text(
     async def _fake_extract_best_text(page) -> str:
         _ = page
         calls["extract"] += 1
-        return "OpenClaw body copy"
+        return "ExampleSite body copy"
 
     monkeypatch.setattr(mod, "_ensure_session_page", _fake_ensure_session_page)
     monkeypatch.setattr(mod, "_best_effort_read_stabilize", _fake_read_stabilize)
     monkeypatch.setattr(mod, "_extract_best_text", _fake_extract_best_text)
 
     result = await mod.BrowserOpenTool().execute(
-        {"url": "https://open-claw.org", "session": "content-fast", "headless": True, "lane": "read"}
+        {"url": "https://example-tool.org", "session": "content-fast", "headless": True, "lane": "read"}
     )
 
     assert result.ok is True
     assert result.error is None
-    assert result.data["headline"] == "OpenClaw: The AI that actually does things"
-    assert result.data["text"] == "OpenClaw body copy"
+    assert result.data["headline"] == "ExampleSite: The AI that actually does things"
+    assert result.data["text"] == "ExampleSite body copy"
     assert seen["wait_until"] == "commit"
     assert calls["load_state"] == 1
     assert calls["read_stabilize"] == 1

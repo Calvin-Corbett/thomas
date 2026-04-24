@@ -142,7 +142,7 @@ async def test_classify_and_route_prefers_tools_for_explicit_tool_requests() -> 
     assert "explicit file or tool request" in routed.reasoning
 
     web_read = await brain._classify_and_route(
-        "Open https://open-claw.org and answer with only the exact main headline.",
+        "Open https://example-tool.org and answer with only the exact main headline.",
         ConversationManager(),
         MemoryContext(),
     )
@@ -507,10 +507,10 @@ async def test_handle_casual_fast_tools_route_uses_tools_specialist(monkeypatch:
         assert memory_ctx.working == ""
         assert memory_ctx.episodic == ""
         assert memory_ctx.semantic == ""
-        await kwargs["dispatcher"].emit_text("OpenClaw: The AI that actually does things")
+        await kwargs["dispatcher"].emit_text("ExampleSite: The AI that actually does things")
         return DelegationResult(
             specialist_id="tools",
-            content="OpenClaw: The AI that actually does things",
+            content="ExampleSite: The AI that actually does things",
             tool_calls=[{"type": "tool_result", "name": "direct.fetch_url"}],
             iterations=1,
             tokens_used=5,
@@ -521,7 +521,7 @@ async def test_handle_casual_fast_tools_route_uses_tools_specialist(monkeypatch:
     conversation = await brain._handle_casual(
         session_id="sess-fast-tools-casual",
         conversation=ConversationManager(),
-        prompt="Open https://open-claw.org and answer with only the exact main headline.",
+        prompt="Open https://example-tool.org and answer with only the exact main headline.",
         dispatcher=dispatcher,
         mode="auto",
         autonomy_level=3,
@@ -531,8 +531,8 @@ async def test_handle_casual_fast_tools_route_uses_tools_specialist(monkeypatch:
     )
 
     assert created_coordinators
-    assert "".join(dispatcher.text_parts) == "OpenClaw: The AI that actually does things"
-    assert conversation.last_assistant_message() == "OpenClaw: The AI that actually does things"
+    assert "".join(dispatcher.text_parts) == "ExampleSite: The AI that actually does things"
+    assert conversation.last_assistant_message() == "ExampleSite: The AI that actually does things"
     assert dispatcher.done_payloads[-1]["tool_calls"] == 1
     assert dispatcher.done_payloads[-1]["specialists_used"] == ["tools"]
 

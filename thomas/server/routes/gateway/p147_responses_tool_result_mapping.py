@@ -12,7 +12,7 @@ Design goals
     Body: {"tool_call_id": "...", "result": <any-json>, "is_error": false, ...}
 
 Notes
-- No OpenClaw naming reuse.
+- Thomas-native naming.
 - The mapping shape is intentionally "compat-friendly": it includes both a structured
   `content` array and an `output` convenience field (some downstream code prefers one).
 """

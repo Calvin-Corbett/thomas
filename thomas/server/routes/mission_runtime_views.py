@@ -9,7 +9,6 @@ from typing import Any
 from aiohttp import web
 
 from .mission_support import (
-    _BENCHMARK_ARTIFACTS,
     _RUN_ID_RE,
     _coerce_iso,
     _iso_to_epoch,
@@ -268,18 +267,18 @@ def _collect_benchmark_runs(runs_dir: Path, limit: int) -> list[dict[str, Any]]:
         pack_snapshot = _json_or_empty(run_dir / "task_pack.agentic.snapshot.json")
         if not pack_snapshot:
             pack_snapshot = _json_or_empty(run_dir / "task_pack.snapshot.json")
-        competitors_raw = scorecard.get("competitors")
-        if isinstance(competitors_raw, list):
-            competitors = [str(x) for x in competitors_raw if str(x or "").strip()]
+        references_raw = scorecard.get("references")
+        if isinstance(references_raw, list):
+            references = [str(x) for x in references_raw if str(x or "").strip()]
         else:
-            competitors = list((summary.get("competitors") or {}).keys())
+            references = list((summary.get("references") or {}).keys())
 
         ranking = summary.get("ranking") if isinstance(summary.get("ranking"), list) else []
         top = ranking[0] if ranking and isinstance(ranking[0], dict) else {}
-        top_competitor = str(top.get("competitor") or "").strip()
-        per_competitor = summary.get("competitors") if isinstance(summary.get("competitors"), dict) else {}
+        top_reference = str(top.get("reference") or "").strip()
+        per_reference = summary.get("references") if isinstance(summary.get("references"), dict) else {}
         top_metrics_raw = (
-            per_competitor.get(top_competitor) if isinstance(per_competitor.get(top_competitor), dict) else {}
+            per_reference.get(top_reference) if isinstance(per_reference.get(top_reference), dict) else {}
         )
         pack_tasks = pack_snapshot.get("tasks") if isinstance(pack_snapshot.get("tasks"), list) else []
         pack_tasks_total = len(pack_tasks)
@@ -303,15 +302,12 @@ def _collect_benchmark_runs(runs_dir: Path, limit: int) -> list[dict[str, Any]]:
             or _timestamp_iso(run_dir.stat().st_mtime)
         )
         artifacts: dict[str, str] = {}
-        for name in _BENCHMARK_ARTIFACTS:
-            if (run_dir / name).exists():
-                artifacts[name] = f"/api/mission/benchmarks/runs/{run_id}/artifact/{name}"
         out.append(
             {
                 "run_id": run_id,
                 "created_at": created_at,
-                "competitors": competitors,
-                "top_competitor": top_competitor,
+                "references": references,
+                "top_reference": top_reference,
                 "top_weighted_score": top.get("weighted_score"),
                 "status": run_status,
                 "run_options": {

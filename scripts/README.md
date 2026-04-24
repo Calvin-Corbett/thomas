@@ -53,9 +53,7 @@ Report results or make changes
 |---|---|
 | `check_feature_registry.py` | Feature tracking |
 | `check_feature_catalog_gate.py` | Catalog validation |
-| `check_competitive_scope_gate.py` | Competitive feature analysis |
 | `check_model_onboarding_gate.py` | LLM model onboarding |
-| `check_module_audit_gate.py` | Module audit trail |
 
 ### Release and Identity
 
@@ -72,7 +70,6 @@ Report results or make changes
 
 | Script | Purpose |
 |---|---|
-| `check_site_visual_proof.py` | Visual regression testing |
 | `check_surface_parity.py` | UI surface consistency |
 | `check_core_overhead_guard.py` | Core system overhead monitoring |
 
@@ -83,10 +80,8 @@ Report results or make changes
 | `audit_secrets.py` | Find exposed secrets |
 | `audit_tool_sizes.py` | Tool size analysis |
 | `check_chat_control_protocol.py` | Chat control verification |
-| `check_competitor_freshness_guard.py` | Competitive intelligence freshness |
 | `check_repl_scope.py` | REPL scope checking |
 | `agent_identity.py` | Agent identity utilities |
-| `append_handoff.py` | Append handoff messages |
 | `active_folders.py` | Track active development folders |
 
 ### Bootstrap and Setup

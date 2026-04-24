@@ -502,65 +502,65 @@ class CancellationAnalytics:
         return timing
 
 
-class CompetitiveRouteAnalysis:
-    """Analyze competitive landscape on routes."""
+class RouteMarketAnalysis:
+    """Analyze market pricing on routes."""
 
     def __init__(self) -> None:
-        """Initialize competitive analyzer."""
-        self._competitor_prices: dict[str, dict[str, Decimal]] = {}
+        """Initialize route market analyzer."""
+        self._market_prices: dict[str, dict[str, Decimal]] = {}
 
-    def record_competitor_price(
+    def record_market_price(
         self,
         route: str,
         airline: str,
         price: Decimal,
     ) -> None:
         """
-        Record competitor price.
+        Record market price.
 
         Args:
             route: Route code
             airline: Airline name
             price: Price
         """
-        if route not in self._competitor_prices:
-            self._competitor_prices[route] = {}
+        if route not in self._market_prices:
+            self._market_prices[route] = {}
 
-        self._competitor_prices[route][airline] = price
+        self._market_prices[route][airline] = price
 
-    def get_competitive_position(
+    def get_market_position(
         self,
         route: str,
         our_price: Decimal,
     ) -> dict[str, any]:
         """
-        Analyze competitive position.
+        Analyze market position.
 
         Args:
             route: Route code
             our_price: Our price
 
         Returns:
-            Competitive analysis
+            Market analysis
         """
-        competitors = self._competitor_prices.get(route, {})
+        market_prices_by_airline = self._market_prices.get(route, {})
 
-        if not competitors:
-            return {"route": route, "competitors": 0}
+        if not market_prices_by_airline:
+            return {"route": route, "market_price_count": 0}
 
-        competitor_prices = list(competitors.values())
-        avg_competitor_price = sum(competitor_prices) / len(competitor_prices)
-        min_price = min(competitor_prices)
-        max_price = max(competitor_prices)
+        market_prices = list(market_prices_by_airline.values())
+        avg_market_price = sum(market_prices) / len(market_prices)
+        min_price = min(market_prices)
+        max_price = max(market_prices)
 
         price_position = (our_price - min_price) / (max_price - min_price) if max_price > min_price else 0.5
 
         return {
             "route": route,
             "our_price": our_price,
-            "competitor_count": len(competitors),
-            "average_competitor_price": avg_competitor_price,
-            "min_competitor_price": min_price,
-            "max_competitor_price": max_price,
+            "market_price_count": len(market_prices_by_airline),
+            "average_market_price": avg_market_price,
+            "min_market_price": min_price,
+            "max_market_price": max_price,
             "price_position": price_position,  # 0.0 = cheapest, 1.0 = most expensive
         }

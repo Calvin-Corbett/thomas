@@ -16,10 +16,15 @@ Fresh install: run `run-ui.cmd`.
 
 If setup breaks, run `repair.cmd`. For a manual setup pass, run `setup.cmd`. For startup diagnostics, run `bootdoctor.cmd`.
 
+Thomas is local-only by default. If Windows Firewall prompts you, this is the
+local Python web server starting on `127.0.0.1`; see
+[`docs/NETWORKING_AND_FIREWALL.md`](docs/NETWORKING_AND_FIREWALL.md).
+
 ## What to Expect
 
 - First launch creates a local Python virtual environment in `.venv`.
 - Thomas runs on your own machine by default.
+- The default web UI address is `http://127.0.0.1:8899`, not a public IP.
 - Model/provider setup happens in Easy Setup after the web UI opens.
 - If Codex, Ollama, or API keys are not ready yet, Thomas should still start and show setup guidance.
 
@@ -39,9 +44,18 @@ Thomas includes builder and automation surfaces, but you do not need them for fi
 - `scripts/` - automation, quality, packaging, and maintenance helpers
 - `tests/` - regression and release checks
 
+## Functionality Status
+
+The public capability map is in
+[`docs/FUNCTIONALITY_INVENTORY.md`](docs/FUNCTIONALITY_INVENTORY.md). It
+separates user-facing features, backend/runtime systems, marketplace/domain
+modules, and removed private-release artifacts.
+
 ## Documentation
 
 - `DOCUMENTATION_INDEX.md` - stable docs hub for the public release
+- `docs/FUNCTIONALITY_INVENTORY.md` - capability list with readiness notes
+- `docs/NETWORKING_AND_FIREWALL.md` - local-first networking and firewall guidance
 - `docs/CHAT_EXECUTION_MODEL.md` - chat and execution flow
 - `docs/WINDOWS_INSTALLER_GUIDE.md` - Windows installer build and packaging
 - `docs/ops/DOCKER_DEPLOY.md` - container deployment

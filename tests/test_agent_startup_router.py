@@ -66,15 +66,15 @@ def test_router_classifies_simple_edit_lane(tmp_path: Path) -> None:
 
     assert payload["lane"] == "simple-edit"
     assert payload["workboard_required"] is True
-    assert "plans/thomas/WORKBOARD.md" in payload["required_reads"]
+    assert ".thomas/WORKBOARD.md" in payload["required_reads"]
     assert payload["required_checks"][0] == "Bootstrap a workboard claim before implementation."
     assert "docs/AGENT_FILE_EDITING_RULES.md" in payload["required_reads"]
 
 
 def test_router_classifies_ui_proof_lane(tmp_path: Path) -> None:
     payload = mod.classify_task(
-        summary="Update the website hero",
-        paths=["apps/site/src/app/page.tsx"],
+        summary="Update the local web UI header",
+        paths=["thomas/server/web/js/app_runtime_primary.mjs"],
         edit_intent=True,
         benchmark_mode=False,
         tracked_work=False,
@@ -86,7 +86,7 @@ def test_router_classifies_ui_proof_lane(tmp_path: Path) -> None:
 
     assert payload["lane"] == "ui-proof"
     assert payload["workboard_required"] is True
-    assert "skills/ui-precision-guard/SKILL.md" in payload["required_reads"]
+    assert "docs/ai/CHECKLISTS/ui.md" in payload["required_reads"]
 
 
 def test_router_escalates_claim_conflict_to_risky_lane(tmp_path: Path) -> None:

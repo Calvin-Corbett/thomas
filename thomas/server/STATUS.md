@@ -62,7 +62,7 @@ Thomas is **the everything assistant.** Key identity points:
   auto-generated or batch-created. Need to assess which are real vs empty.
 - **Mission system** (`mission*.py` — 10 route files): Spread across
   `mission.py`, `mission_approvals.py`, `mission_autonomy_runtime.py`,
-  `mission_benchmark_routes.py`, `mission_content_hub.py`,
+  `mission_content_hub.py`,
   `mission_content_hub_constants.py`, `mission_control_routes.py`,
   `mission_cron.py`, `mission_runtime_views.py`, `mission_support.py`,
   `mission_tasks.py`, `mission_workflows.py`. This is fragmented —

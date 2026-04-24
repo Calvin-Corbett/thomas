@@ -46,12 +46,6 @@ _GREEN_SUPPORT_FILES = (
     "docs/AGENT_FILE_EDITING_RULES.md",
     "docs/ai/AGENT_ROUTER.md",
     "docs/ai/CHECKLISTS/agent-lane-chat.md",
-    "apps/site/src/lib/site-config.ts",
-    "apps/site/src/app/marketplace/page.tsx",
-    "apps/site/src/app/api/marketplace/catalog/route.ts",
-    "apps/site/src/app/api/v1/plugins/catalog/route.ts",
-    "apps/site/src/app/api/v1/plugins/download-token/route.ts",
-    "apps/site/src/app/api/v1/plugins/[pluginId]/route.ts",
 )
 
 _IGNORE_NAMES = {

@@ -7,7 +7,7 @@ This document defines how Thomas is organized so any agent can enter the repo an
 ## 1) Top-Level Intent
 
 - `thomas/`: product runtime and server code.
-- `apps/`: product surfaces and platform clients (`apps/site` website, `apps/android`, `apps/ios`, `apps/macos`, `apps/shared` scaffolds).
+- `apps/`: optional platform clients and companion app scaffolds, when present.
 - `tests/`: automated test coverage for product behavior.
 - `docs/`: stable specs/protocols/reference docs (not active execution plans).
 - `plans/thomas/`: active execution plans, workboards, and planning artifacts.

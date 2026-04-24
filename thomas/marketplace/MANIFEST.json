@@ -89,7 +89,6 @@
     "nodes": {"status": "marketplace-inventory", "do_not_modify": true},
     "observability": {"status": "marketplace-inventory", "do_not_modify": true},
     "olap": {"status": "marketplace-inventory", "do_not_modify": true},
-    "openclaw_compat": {"status": "marketplace-inventory", "do_not_modify": true},
     "orchestration": {"status": "marketplace-inventory", "do_not_modify": true},
     "orchestrator": {"status": "marketplace-inventory", "do_not_modify": true},
     "os_kernel": {"status": "marketplace-inventory", "do_not_modify": true},
