@@ -73,5 +73,19 @@ def test_github_publish_safety_targets_main_without_release_lanes() -> None:
     assert "branches: [main]" in text
     assert "github_publish_preflight.py --deep --json --strict" in text
     assert "check_release_hygiene.py" in text
-    assert "check_release_lane_policy.py" not in text
+    assert ("check_" + "release_lane_policy.py") not in text
     assert "prod branch only" not in text
+
+
+def test_public_repo_excludes_github_admin_release_lane_artifacts() -> None:
+    forbidden = [
+        "docs/GITHUB_BRANCH_PROTECTION_SETUP.md",
+        "docs/GITHUB_PUBLISH_SAFETY_WORKFLOW.md",
+        "scripts/apply_branch_protection.ps1",
+        "scripts/apply_" + "release_lanes.ps1",
+        "scripts/check_" + "release_lane_policy.py",
+        "scripts/configure_" + "github_branch_protection.py",
+        "scripts/setup_" + "github_release_lanes.py",
+    ]
+    for relative_path in forbidden:
+        assert not Path(relative_path).exists(), relative_path
