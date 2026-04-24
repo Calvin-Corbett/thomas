@@ -27,6 +27,46 @@ def _contains(relative_path: str, required: list[str], failures: list[str]) -> N
             failures.append(f"{relative_path} must contain: {needle}")
 
 
+def _workflow_run_lines(text: str) -> list[str]:
+    """Return executable lines from GitHub Actions run blocks."""
+    lines = text.splitlines()
+    commands: list[str] = []
+    in_run_block = False
+    block_indent = 0
+
+    for raw_line in lines:
+        stripped = raw_line.strip()
+        indent = len(raw_line) - len(raw_line.lstrip(" "))
+
+        if stripped.startswith("run: |") or stripped.startswith("run: >"):
+            in_run_block = True
+            block_indent = indent
+            continue
+        if in_run_block and stripped and indent <= block_indent:
+            in_run_block = False
+        if not in_run_block:
+            continue
+        if not stripped or stripped.startswith("#"):
+            continue
+        commands.append(stripped)
+
+    return commands
+
+
+def _contains_workflow_commands(
+    relative_path: str,
+    required: list[str],
+    failures: list[str],
+) -> None:
+    if not _exists(relative_path):
+        failures.append(f"missing required file: {relative_path}")
+        return
+    commands = _workflow_run_lines(_read(relative_path))
+    for needle in required:
+        if not any(needle in command for command in commands):
+            failures.append(f"{relative_path} must execute: {needle}")
+
+
 def evaluate() -> dict[str, object]:
     failures: list[str] = []
 
@@ -102,7 +142,7 @@ def evaluate() -> dict[str, object]:
         ],
         failures,
     )
-    _contains(
+    _contains_workflow_commands(
         ".github/workflows/github-publish-safety.yml",
         [
             "github_publish_preflight.py --deep --json --strict",
@@ -111,7 +151,7 @@ def evaluate() -> dict[str, object]:
         ],
         failures,
     )
-    _contains(
+    _contains_workflow_commands(
         ".github/workflows/robustness-gates.yml",
         [
             "tests/test_ai_workflow_contract.py",
