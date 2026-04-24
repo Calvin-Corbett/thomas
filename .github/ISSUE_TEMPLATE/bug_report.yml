@@ -1,0 +1,58 @@
+name: Bug report
+description: Report a reproducible Thomas bug.
+title: "[Bug]: "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this for bugs after Thomas is installed. If install or startup failed, use the install failure template instead.
+  - type: textarea
+    id: summary
+    attributes:
+      label: What happened?
+      description: Describe the bug and what you expected to happen.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open Thomas
+        2. Click ...
+        3. See ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Thomas version
+      placeholder: "0.14.60"
+    validations:
+      required: false
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - Chat UI
+        - Easy Setup
+        - Model/provider setup
+        - Memory
+        - Tools
+        - Mission Control
+        - Evolve mode
+        - Companion/Infinite
+        - Installer/support
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs or screenshots
+      description: Attach screenshots, browser console output, or relevant log snippets. Do not paste secrets.
+    validations:
+      required: false

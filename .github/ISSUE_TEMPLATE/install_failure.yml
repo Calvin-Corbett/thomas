@@ -1,0 +1,54 @@
+name: Install or startup failure
+description: Report a failed installer, first-run wizard, firewall, or startup path.
+title: "[Install]: "
+labels:
+  - install
+  - support
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before filing, run `support.cmd` from the Thomas folder and attach the ZIP from `runtime\support\` if it was created. The bundle is designed to redact sensitive values.
+  - type: dropdown
+    id: failure_stage
+    attributes:
+      label: Where did it fail?
+      options:
+        - Downloading the installer
+        - Running the installer
+        - First-run setup window
+        - Browser did not open
+        - Easy Setup/model setup
+        - Firewall/network warning
+        - Launch after install
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: visible_error
+    attributes:
+      label: What did you see?
+      description: Include the exact error text if possible.
+    validations:
+      required: true
+  - type: input
+    id: windows_version
+    attributes:
+      label: Windows version
+      placeholder: "Windows 11 23H2"
+    validations:
+      required: false
+  - type: textarea
+    id: support_bundle
+    attributes:
+      label: Support bundle
+      description: Attach the ZIP from `runtime\support\` or explain why `support.cmd` could not run.
+    validations:
+      required: false
+  - type: textarea
+    id: firewall
+    attributes:
+      label: Firewall or security software message
+      description: If a firewall blocked something, paste the message or attach a screenshot. Thomas should default to `127.0.0.1:8899`.
+    validations:
+      required: false
