@@ -21,7 +21,6 @@ NODE_EXACT_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+(?:[-+][0-9A-Za-z.-]+)?$")
 NODE_WORKSPACE_RE = re.compile(r"^workspace:")
 
 MANAGED_NODE_PROJECTS = (
-    ("apps/site", "apps/site/package.json", "apps/site/package-lock.json"),
     (
         "thomas/integrations/discord_bridge_service",
         "thomas/integrations/discord_bridge_service/package.json",

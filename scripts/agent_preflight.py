@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from thomas.benchmarks.benchmark_lane import get_benchmark_context
+from thomas.core.benchmark_lane import get_benchmark_context
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:

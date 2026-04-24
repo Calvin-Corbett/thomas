@@ -92,8 +92,10 @@ def test_run_optional_deep_checks_includes_claim_integrity(monkeypatch, tmp_path
         stdout = ""
         stderr = ""
 
-    def _fake_run(cmd, cwd=None, capture_output=None, text=None):  # type: ignore[no-untyped-def]
+    def _fake_run(cmd, cwd=None, capture_output=None, text=None, env=None, timeout=None):  # type: ignore[no-untyped-def]
         commands.append(list(cmd))
+        assert env["THOMAS_TASK_MANAGER_LOOP_ENABLED"] == "0"
+        assert timeout == mod.DEEP_CHECK_TIMEOUT_SECONDS
         return _Proc()
 
     monkeypatch.setattr(mod.subprocess, "run", _fake_run)

@@ -69,7 +69,7 @@ function moduleBuildFlair(mode, signals, snapshot) {
         return [
             { label: 'Briefs', value: moduleFocusValue(signals?.research_briefs), tone: '' },
             { label: 'Citations', value: moduleFocusValue(signals?.research_citations), tone: '' },
-            { label: 'Watchlist', value: moduleFocusValue(signals?.research_competitors), tone: '' },
+            { label: 'Watchlist', value: moduleFocusValue(signals?.research_watchlist), tone: '' },
         ];
     }
     if (mode === 'people') {
@@ -269,25 +269,25 @@ function moduleWorkbenchOssCatalog(modeRaw) {
     if (mode === 'app_builder') {
         return [
             {
-                title: 'Appsmith',
-                license: 'Apache-2.0',
-                docsUrl: 'https://github.com/appsmithorg/appsmith',
+                title: 'Admin Panel Runtime',
+                license: 'OSS-compatible',
+                docsUrl: '',
                 why: 'Internal tools and admin panels',
-                command: 'docker run --pull always --rm -p 80:80 -p 443:443 -v appsmith-stacks:/appsmith-stacks appsmith/appsmith-ce',
+                command: 'Use the exported page DSL with your preferred internal app runtime.',
             },
             {
-                title: 'Budibase',
-                license: 'GPLv3',
-                docsUrl: 'https://github.com/Budibase/budibase',
-                why: 'Low-code app + automation platform',
-                command: 'curl -s https://raw.githubusercontent.com/Budibase/budibase/master/hosting/docker-compose.yaml -o budibase-docker-compose.yaml',
+                title: 'Builder Runtime',
+                license: 'Project-specific',
+                docsUrl: '',
+                why: 'Low-code app and automation handoff',
+                command: 'Export builder DSL, then map it to your chosen builder runtime.',
             },
             {
-                title: 'NocoBase',
-                license: 'AGPL-3.0',
-                docsUrl: 'https://github.com/nocobase/nocobase',
-                why: 'Extensible enterprise low-code',
-                command: 'npm create nocobase-app@latest',
+                title: 'Workflow Runtime',
+                license: 'Project-specific',
+                docsUrl: '',
+                why: 'Extensible workflow-backed app surfaces',
+                command: 'Export HTML or builder DSL and connect it to your workflow runtime.',
             },
         ];
     }
@@ -1137,4 +1137,3 @@ function moduleWorkbenchOperatorPreamble(container, modeRaw) {
     `;
     container.appendChild(panel);
 }
-

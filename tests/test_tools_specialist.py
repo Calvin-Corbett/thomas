@@ -23,7 +23,7 @@ from thomas.marketplace.specialists.tools import (
 def test_should_force_tool_first_matches_explicit_tool_requests() -> None:
     assert _should_force_tool_first("Use your tools to create a file in the repo.") is True
     assert _should_force_tool_first("Run a command and show me the output.") is True
-    assert _should_force_tool_first("Open https://open-claw.org and answer with only the exact main headline.") is True
+    assert _should_force_tool_first("Open https://example-tool.org and answer with only the exact main headline.") is True
     assert _should_force_tool_first("Build me a game on my Desktop.") is False
     assert _should_force_tool_first("Tell me a joke about snakes.") is False
 
@@ -84,18 +84,18 @@ def test_extract_strict_output_prefers_tool_facts_for_common_probe_shapes() -> N
     assert (
         _extract_strict_output(
             "Use your tools to open the page and answer with only the exact main headline on the page.",
-            "Checking now.\nOpenClaw: The AI that actually does things",
-            ["OpenClaw: The AI that actually does things"],
+            "Checking now.\nExampleSite: The AI that actually does things",
+            ["ExampleSite: The AI that actually does things"],
         )
-        == "OpenClaw: The AI that actually does things"
+        == "ExampleSite: The AI that actually does things"
     )
     assert (
         _extract_strict_output(
             "Use your tools to open the page and answer with only the exact main headline on the page.",
-            "I’m opening the page directly and checking the visible primary heading text.OpenClaw: The AI that actually does things",
+            "I’m opening the page directly and checking the visible primary heading text.ExampleSite: The AI that actually does things",
             [],
         )
-        == "OpenClaw: The AI that actually does things"
+        == "ExampleSite: The AI that actually does things"
     )
     assert (
         _extract_strict_output(
@@ -142,15 +142,15 @@ def test_extract_strict_output_prefers_tool_facts_for_common_probe_shapes() -> N
 def test_extract_main_headline_text_prefers_h1_then_meta_then_title() -> None:
     assert (
         _extract_main_headline_text(
-            "<html><head><title>Fallback Title</title></head><body><h1>OpenClaw: The AI that actually does things</h1></body></html>"
+            "<html><head><title>Fallback Title</title></head><body><h1>ExampleSite: The AI that actually does things</h1></body></html>"
         )
-        == "OpenClaw: The AI that actually does things"
+        == "ExampleSite: The AI that actually does things"
     )
     assert (
         _extract_main_headline_text(
-            '<html><head><meta property="og:title" content="OpenClaw Meta Title"><title>Fallback Title</title></head><body></body></html>'
+            '<html><head><meta property="og:title" content="ExampleSite Meta Title"><title>Fallback Title</title></head><body></body></html>'
         )
-        == "OpenClaw Meta Title"
+        == "ExampleSite Meta Title"
     )
 
 
@@ -159,11 +159,11 @@ async def test_fetch_browser_title_prefers_title_then_headline(monkeypatch: pyte
     async def _fake_execute(self, args):  # noqa: ANN001
         _ = self
         assert args["headline_only"] is True
-        return SimpleNamespace(ok=True, data={"title": "OpenClaw Home", "headline": "Ignored Headline", "text": ""}, error=None)
+        return SimpleNamespace(ok=True, data={"title": "ExampleSite Home", "headline": "Ignored Headline", "text": ""}, error=None)
 
     monkeypatch.setattr(mod.BrowserOpenTool, "execute", _fake_execute)
 
-    assert await _fetch_browser_title("https://open-claw.org") == "OpenClaw Home"
+    assert await _fetch_browser_title("https://example-tool.org") == "ExampleSite Home"
 
 
 @pytest.mark.asyncio
@@ -175,11 +175,11 @@ async def test_fetch_browser_title_retries_with_fresh_session_after_initial_fail
         calls.append(dict(args))
         if len(calls) == 1:
             return SimpleNamespace(ok=False, data=None, error="startup race")
-        return SimpleNamespace(ok=True, data={"title": "OpenClaw Home", "headline": "", "text": ""}, error=None)
+        return SimpleNamespace(ok=True, data={"title": "ExampleSite Home", "headline": "", "text": ""}, error=None)
 
     monkeypatch.setattr(mod.BrowserOpenTool, "execute", _fake_execute)
 
-    assert await _fetch_browser_title("https://open-claw.org") == "OpenClaw Home"
+    assert await _fetch_browser_title("https://example-tool.org") == "ExampleSite Home"
     assert [call["session"] for call in calls] == ["headline-read", "headline-read-retry"]
     assert all(call.get("headline_only") is True for call in calls)
 
@@ -193,9 +193,9 @@ async def test_fetch_browser_main_text_prefers_extracted_text(monkeypatch: pytes
         return SimpleNamespace(
             ok=True,
             data={
-                "title": "OpenClaw Home",
-                "headline": "OpenClaw: The AI that actually does things",
-                "text": "OpenClaw helps you automate local machine work quickly.",
+                "title": "ExampleSite Home",
+                "headline": "ExampleSite: The AI that actually does things",
+                "text": "ExampleSite helps you automate local machine work quickly.",
             },
             error=None,
         )
@@ -203,6 +203,6 @@ async def test_fetch_browser_main_text_prefers_extracted_text(monkeypatch: pytes
     monkeypatch.setattr(mod.BrowserOpenTool, "execute", _fake_execute)
 
     assert (
-        await _fetch_browser_main_text("https://open-claw.org")
-        == "OpenClaw helps you automate local machine work quickly."
+        await _fetch_browser_main_text("https://example-tool.org")
+        == "ExampleSite helps you automate local machine work quickly."
     )

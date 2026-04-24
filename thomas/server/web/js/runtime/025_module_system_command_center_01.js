@@ -243,13 +243,13 @@ const MODULE_MODE_SEEDS = Object.freeze({
         kpis: [
             { label: 'Open Briefs', key: 'research_briefs', meta: 'active deep dives' },
             { label: 'Citations', key: 'research_citations', meta: 'saved sources' },
-            { label: 'Competitors', key: 'research_competitors', meta: 'watchlist set' },
+            { label: 'Watchlist', key: 'research_watchlist', meta: 'watchlist set' },
             { label: 'Indexed Docs', key: 'research_docs', meta: 'searchable corpus' },
         ],
         actions: [
             { id: 'deep_research', label: 'Start Deep Research', meta: 'Run source-backed research flow.' },
             { id: 'ingest_docs', label: 'Ingest Documents', meta: 'Parse and index new material.' },
-            { id: 'compare_competitors', label: 'Compare Competitors', meta: 'Produce side-by-side report.' },
+            { id: 'compare_references', label: 'Compare References', meta: 'Produce side-by-side report.' },
             { id: 'export_brief', label: 'Export Brief', meta: 'Publish answer with receipts.' },
         ],
     },

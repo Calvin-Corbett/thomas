@@ -287,11 +287,11 @@ class TestProducts:
         assert len(updated_deal.products) == 0
 
 
-class TestCompetitors:
-    """Test competitive tracking."""
+class TestAlternativeVendors:
+    """Test alternative vendor tracking."""
 
-    def test_add_competitor(self, deal_manager: DealManager) -> None:
-        """Test adding a competitor to a deal."""
+    def test_add_alternative_vendor(self, deal_manager: DealManager) -> None:
+        """Test adding an alternative vendor to a deal."""
         deal = deal_manager.create_deal(
             name="Test Deal",
             company_id="company-1",
@@ -303,12 +303,12 @@ class TestCompetitors:
             owner="John",
         )
 
-        deal_manager.add_competitor(deal.id, "Competitor A")
+        deal_manager.add_alternative_vendor(deal.id, "Vendor A")
 
-        competitors = deal_manager.get_competitors(deal.id)
+        alternative_vendors = deal_manager.get_alternative_vendors(deal.id)
 
-        assert len(competitors) == 1
-        assert "Competitor A" in competitors
+        assert len(alternative_vendors) == 1
+        assert "Vendor A" in alternative_vendors
 
 
 class TestDealCloning:

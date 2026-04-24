@@ -43,7 +43,7 @@ def _is_frontend_file(path: str) -> bool:
 
 def _find_eslint() -> str | None:
     """Find ESLint binary — check node_modules first, then PATH."""
-    for apps_dir in ("apps/site", "apps", "."):
+    for apps_dir in ("apps", "."):
         local = ROOT / apps_dir / "node_modules" / ".bin" / "eslint"
         if local.exists():
             return str(local)
@@ -52,7 +52,7 @@ def _find_eslint() -> str | None:
 
 def _find_tsc() -> str | None:
     """Find TypeScript compiler."""
-    for apps_dir in ("apps/site", "apps", "."):
+    for apps_dir in ("apps", "."):
         local = ROOT / apps_dir / "node_modules" / ".bin" / "tsc"
         if local.exists():
             return str(local)

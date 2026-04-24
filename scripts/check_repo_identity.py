@@ -164,7 +164,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         default=DEFAULT_POLICY_PATH,
         help=f"Repo identity policy JSON path (default: {DEFAULT_POLICY_PATH}).",
     )
-    parser.add_argument("--expected-slug", default="", help="Canonical repo slug override, for example `corbe/thomas`.")
+    parser.add_argument("--expected-slug", default="", help="Canonical repo slug override, for example `owner/thomas`.")
     parser.add_argument(
         "--canonical-root",
         action="append",

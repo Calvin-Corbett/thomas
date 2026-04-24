@@ -4,6 +4,7 @@ import hashlib
 import io
 import json
 import logging
+import re
 import zipfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,6 +24,7 @@ _DEFAULT_PLUGIN_STORE_API_KEY = "local-dev-install-key"
 _MARKETPLACE_TYPES = {"command_center", "plugin", "dependency", "integration"}
 _LEFT_NAV_BEHAVIORS = {"none", "workspace"}
 _DEFAULT_NAV_SECTIONS = {"command_centers", "installed"}
+_PLUGIN_ID_PATTERN = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 
 
 def _utc_now_iso() -> str:
@@ -58,6 +60,13 @@ def _safe_rel_path(path_raw: str) -> str:
     if normalized.startswith("/") or ".." in PurePosixPath(normalized).parts:
         raise ValueError("unsafe relative path")
     return normalized
+
+
+def _safe_plugin_id(plugin_id_raw: str) -> str:
+    plugin_id = _safe_text(plugin_id_raw)
+    if not _PLUGIN_ID_PATTERN.fullmatch(plugin_id):
+        raise ValueError("unsafe plugin_id")
+    return plugin_id
 
 
 def _normalize_categories(data: dict[str, Any]) -> list[str]:
@@ -157,15 +166,16 @@ def _iter_plugin_files(plugin_dir: Path) -> list[tuple[Path, Path]]:
 
 
 def build_plugin_bundle_bytes(plugin_dir: Path, plugin_id: str) -> bytes:
+    safe_plugin_id = _safe_plugin_id(plugin_id)
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for source_path, rel_path in _iter_plugin_files(plugin_dir):
-            archive.write(source_path, arcname=str(PurePosixPath(plugin_id, *rel_path.parts)))
+            archive.write(source_path, arcname=str(PurePosixPath(safe_plugin_id, *rel_path.parts)))
     return buffer.getvalue()
 
 
 def compute_plugin_bundle_sha256(plugin_dir: Path, plugin_id: str) -> str:
-    return hashlib.sha256(build_plugin_bundle_bytes(plugin_dir, plugin_id)).hexdigest()
+    return hashlib.sha256(build_plugin_bundle_bytes(plugin_dir, _safe_plugin_id(plugin_id))).hexdigest()
 
 
 @dataclass(frozen=True)
@@ -258,6 +268,11 @@ def load_desktop_plugin_manifest_from_data(
     errors: list[str] = []
     if not plugin_id:
         errors.append("plugin_id is required")
+    else:
+        try:
+            plugin_id = _safe_plugin_id(plugin_id)
+        except ValueError:
+            errors.append("plugin_id may only contain letters, numbers, dots, underscores, and dashes")
     if not display_name:
         errors.append("display_name is required")
     if kind != "desktop_plugin":
@@ -322,7 +337,7 @@ def load_desktop_plugin_manifest_from_data(
 
 def resolve_bundled_plugin_dir(plugin_id: str, *, extensions_root: Path | None = None) -> Path | None:
     root = (extensions_root or EXTENSIONS_ROOT).resolve()
-    candidate = (root / plugin_id).resolve()
+    candidate = (root / _safe_plugin_id(plugin_id)).resolve()
     try:
         candidate.relative_to(root)
     except ValueError:

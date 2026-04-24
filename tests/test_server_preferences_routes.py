@@ -271,7 +271,7 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
                 return_value=SimpleNamespace(
                     ok=True,
                     message="approved",
-                    actor="WORKSTATION\\corbe",
+                    actor="WORKSTATION\\operator",
                     method="windows-credential-dialog",
                     cancelled=False,
                     receipt="receipt-123",
@@ -279,7 +279,7 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
             ),
             patch(
                 "scripts.breakglass_auth.consume_breakglass_toggle_receipt",
-                return_value=SimpleNamespace(actor="WORKSTATION\\corbe", method="windows-credential-dialog"),
+                return_value=SimpleNamespace(actor="WORKSTATION\\operator", method="windows-credential-dialog"),
             ),
         ):
             resp = await self.client.post(
@@ -299,7 +299,7 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
         security = (prefs.get("advanced") or {}).get("security") or {}
         self.assertTrue(bool(security.get("human_breakglass_enabled", False)))
         self.assertTrue(bool(security.get("human_breakglass_changed_at")))
-        self.assertEqual(str(security.get("human_breakglass_changed_by") or ""), "WORKSTATION\\corbe")
+        self.assertEqual(str(security.get("human_breakglass_changed_by") or ""), "WORKSTATION\\operator")
 
     async def test_breakglass_opt_in_route_denies_when_local_auth_fails(self):
         with patch(
@@ -307,7 +307,7 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
             return_value=SimpleNamespace(
                 ok=False,
                 message="denied",
-                actor="WORKSTATION\\corbe",
+                actor="WORKSTATION\\operator",
                 method="windows-credential-dialog",
                 cancelled=False,
                 receipt=None,

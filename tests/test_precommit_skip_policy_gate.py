@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import scripts.check_precommit_skip_policy as mod
 
 
-def _approve_breakglass(monkeypatch, *, actor: str = "WORKSTATION\\corbe") -> None:
+def _approve_breakglass(monkeypatch, *, actor: str = "WORKSTATION\\operator") -> None:
     monkeypatch.setattr(
         mod,
         "authorize_breakglass",
@@ -106,7 +106,7 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     assert payload["skip_hook_count"] == 2
     assert payload["breakglass_human_verified"] is True
     assert payload["breakglass_auth_method"] == "windows-credential-dialog"
-    assert payload["breakglass_authorized_by"] == "WORKSTATION\\corbe"
+    assert payload["breakglass_authorized_by"] == "WORKSTATION\\operator"
     assert audit_log.exists()
     rows = [line for line in audit_log.read_text(encoding="utf-8").splitlines() if line.strip()]
     assert len(rows) == 1
@@ -120,7 +120,7 @@ def test_records_audit_log_on_valid_skip(tmp_path: Path, capsys, monkeypatch) ->
     assert logged["staged_files"] == ["AGENTS.md", "scripts/workboard_issue.py"]
     assert logged["breakglass_human_verified"] is True
     assert logged["breakglass_auth_method"] == "windows-credential-dialog"
-    assert logged["breakglass_authorized_by"] == "WORKSTATION\\corbe"
+    assert logged["breakglass_authorized_by"] == "WORKSTATION\\operator"
 
 
 def test_fails_when_protected_hook_skipped_without_breakglass(tmp_path: Path, capsys, monkeypatch) -> None:

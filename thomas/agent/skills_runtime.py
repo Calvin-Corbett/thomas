@@ -118,7 +118,7 @@ def _keyword_tokens(text: str) -> list[str]:
     raw = re.findall(r"[a-z0-9][a-z0-9._-]{1,60}", src)
     out: list[str] = []
     for token in raw:
-        # Keep dense identifiers (for example "cloudflare-deploy"), but skip
+        # Keep dense identifiers (for example "edge-deploy"), but skip
         # low-signal short words.
         if len(token) < 3 and token not in {"ui", "ux"}:
             continue

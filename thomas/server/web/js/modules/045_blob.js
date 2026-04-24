@@ -20,12 +20,12 @@
             window.setTimeout(() => URL.revokeObjectURL(url), 5000);
             return;
         }
-        if (action === 'export_appsmith') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToAppsmith(wb), 'Appsmith Page JSON');
+        if (action === 'export_page_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToPageDsl(wb), 'Page DSL JSON');
             return;
         }
-        if (action === 'export_budibase') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBudibase(wb), 'Budibase App JSON');
+        if (action === 'export_builder_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBuilderDsl(wb), 'Builder DSL JSON');
             return;
         }
         if (action === 'reset') {

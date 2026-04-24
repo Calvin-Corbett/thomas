@@ -58,14 +58,14 @@ def test_gate_passes_with_matching_agent_claim(tmp_path: Path, monkeypatch, caps
 def test_gate_passes_with_matching_literal_bracket_claim(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
-        "- agent=Codex 2; scope=apps/site/src/app/[locale]/page.tsx; task=locale page",
+        "- agent=Codex 2; scope=thomas/server/web/js/[locale]/view.mjs; task=locale page",
         active_tasks_block=(
-            "- task_id=locale-page; agent=Codex 2; scope=apps/site/src/app/[locale]/page.tsx; "
+            "- task_id=locale-page; agent=Codex 2; scope=thomas/server/web/js/[locale]/view.mjs; "
             "summary=locale page; status=active"
         ),
     )
     monkeypatch.setenv("AGENT_ID", "codex 2")
-    monkeypatch.setattr(mod, "_staged_files", lambda: ["apps/site/src/app/[locale]/page.tsx"])
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["thomas/server/web/js/[locale]/view.mjs"])
 
     rc = mod.run(["--workboard", str(workboard), "--enforce-staged-scope"])
     out = capsys.readouterr().out

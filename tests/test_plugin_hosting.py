@@ -105,13 +105,14 @@ class TestPluginHostingRoutes(AioHTTPTestCase):
         self._tmpdir = tempfile.TemporaryDirectory(ignore_cleanup_errors=True)
         self._previous_registry = plugin_hosting._registry
         self._previous_storage_dir = plugin_hosting.PLUGIN_STORAGE_DIR
-        self._previous_secret_cache = plugin_hosting._SIGNING_SECRET_CACHE
+        self._previous_download_tokens = dict(plugin_hosting._DOWNLOAD_TOKENS)
 
     def tearDown(self) -> None:
         try:
             plugin_hosting._registry = self._previous_registry
             plugin_hosting.PLUGIN_STORAGE_DIR = self._previous_storage_dir
-            plugin_hosting._SIGNING_SECRET_CACHE = self._previous_secret_cache
+            plugin_hosting._DOWNLOAD_TOKENS.clear()
+            plugin_hosting._DOWNLOAD_TOKENS.update(self._previous_download_tokens)
             self._tmpdir.cleanup()
         finally:
             super().tearDown()
@@ -260,36 +261,36 @@ def test_verify_bundle_accepts_clean_bundle(tmp_path: Path) -> None:
     assert "sha256" in result
 
 
-def test_signing_secret_persists_without_env(tmp_path: Path, monkeypatch) -> None:
-    monkeypatch.delenv("THOMAS_PLUGIN_SIGN_SECRET", raising=False)
-    monkeypatch.setattr(plugin_hosting, "PLUGIN_STORAGE_DIR", tmp_path)
-    monkeypatch.setattr(plugin_hosting, "_SIGNING_SECRET_CACHE", None, raising=False)
+def test_download_tokens_are_memory_only_and_expire(monkeypatch) -> None:
+    now = int(plugin_hosting.time.time())
+    token = plugin_hosting._issue_download_token("life-manager", now + 60)
 
-    first = plugin_hosting._get_signing_secret()
-    monkeypatch.setattr(plugin_hosting, "_SIGNING_SECRET_CACHE", None, raising=False)
-    second = plugin_hosting._get_signing_secret()
+    assert plugin_hosting._verify_token(token)["plugin_id"] == "life-manager"
 
-    assert first == second
-    assert (tmp_path / plugin_hosting.SIGNING_SECRET_FILE).exists()
+    monkeypatch.setattr(plugin_hosting.time, "time", lambda: now + 61)
+
+    assert plugin_hosting._verify_token(token) is None
+    assert token not in plugin_hosting._DOWNLOAD_TOKENS
 
 
 def test_parse_plugin_install_deep_link_roundtrip() -> None:
-    link = build_plugin_install_deep_link("life-manager", "https://thomas.dev", channel="stable")
+    link = build_plugin_install_deep_link("life-manager", "https://github.com/Calvin-Corbett/thomas", channel="stable")
     parsed = parse_plugin_install_deep_link(link)
 
     assert parsed == {
         "plugin_id": "life-manager",
-        "store": "https://thomas.dev",
+        "store": "https://github.com/Calvin-Corbett/thomas",
         "channel": "stable",
     }
 
 
 def test_parse_plugin_install_deep_link_rejects_invalid_inputs() -> None:
     invalid_links = [
-        "https://thomas.dev/plugins/life-manager",
-        "thomas://open-plugin?plugin_id=life-manager&store=https%3A%2F%2Fthomas.dev",
-        "thomas://install-plugin?store=https%3A%2F%2Fthomas.dev",
+        "https://example.invalid/plugins/life-manager",
+        "thomas://open-plugin?plugin_id=life-manager&store=https%3A%2F%2Fexample.invalid",
+        "thomas://install-plugin?store=https%3A%2F%2Fexample.invalid",
         "thomas://install-plugin?plugin_id=life-manager",
+        "thomas://install-plugin?plugin_id=life-manager&store=https%3A%2F%2Fexample.invalid",
     ]
 
     for link in invalid_links:

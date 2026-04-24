@@ -1,7 +1,7 @@
 """
 Browser tracing: start, stop, and export.
 
-This module is intentionally "Thomas-native" (no OpenClaw naming reuse). It provides:
+This module is intentionally "Thomas-native". It provides:
 
 - Explicit input/output contracts (dataclasses).
 - Deterministic, machine-readable errors (BrowserTraceError with stable codes).

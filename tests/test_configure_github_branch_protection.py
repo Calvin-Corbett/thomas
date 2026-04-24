@@ -6,11 +6,11 @@ import scripts.configure_github_branch_protection as mod
 
 
 def test_repo_slug_parses_https_remote() -> None:
-    assert mod._repo_slug_from_remote("https://github.com/corbe/thomas.git") == "corbe/thomas"
+    assert mod._repo_slug_from_remote("https://github.com/example/thomas.git") == "example/thomas"
 
 
 def test_repo_slug_parses_ssh_remote() -> None:
-    assert mod._repo_slug_from_remote("git@github.com:corbe/thomas.git") == "corbe/thomas"
+    assert mod._repo_slug_from_remote("git@github.com:example/thomas.git") == "example/thomas"
 
 
 def test_repo_slug_returns_none_for_non_github() -> None:
@@ -57,19 +57,19 @@ def test_diff_profile_reports_mismatches() -> None:
 
 
 def test_dry_run_json_includes_payload(capsys, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_default_repo_slug", lambda: "corbe/thomas")
+    monkeypatch.setattr(mod, "_default_repo_slug", lambda: "example/thomas")
     rc = mod.run(["--dry-run", "--json"])
     payload = json.loads(capsys.readouterr().out)
 
     assert rc == 0
     assert payload["ok"] is True
     assert payload["action"] == "dry_run"
-    assert payload["repo"] == "corbe/thomas"
+    assert payload["repo"] == "example/thomas"
     assert payload["payload"]["required_status_checks"]["contexts"] == ["required-gates"]
 
 
 def test_check_requires_token_when_not_dry_run(capsys, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_default_repo_slug", lambda: "corbe/thomas")
+    monkeypatch.setattr(mod, "_default_repo_slug", lambda: "example/thomas")
     rc = mod.run(["--check", "--json"])
     payload = json.loads(capsys.readouterr().out)
 
@@ -79,7 +79,7 @@ def test_check_requires_token_when_not_dry_run(capsys, monkeypatch) -> None:
 
 
 def test_apply_verifies_after_put(capsys, monkeypatch) -> None:
-    monkeypatch.setattr(mod, "_default_repo_slug", lambda: "corbe/thomas")
+    monkeypatch.setattr(mod, "_default_repo_slug", lambda: "example/thomas")
 
     calls = []
 

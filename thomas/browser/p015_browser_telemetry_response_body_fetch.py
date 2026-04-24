@@ -5,7 +5,7 @@ request/response identifier (commonly a CDP `requestId`), this module retrieves
 the associated response body from the active browser backend.
 
 Design goals
-- Thomas-native naming (no OpenClaw surface re-use).
+- Thomas-native naming.
 - Clear, typed input/output contracts.
 - Deterministic, machine-readable errors.
 - Backend-agnostic: works with any backend that can expose a response-body fetch.

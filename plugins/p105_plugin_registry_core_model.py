@@ -8,7 +8,7 @@ Why this exists:
 - Agents need a structured view of what tools exist and where they came from.
 
 Design goals:
-- Thomas-native naming (no OpenClaw naming reuse).
+- Thomas-native naming and contracts.
 - Defensive introspection: works across a range of plugin styles.
 - Deterministic error codes and stable output ordering.
 """

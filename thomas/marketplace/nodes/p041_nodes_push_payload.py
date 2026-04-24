@@ -5,7 +5,7 @@ This module is designed to be usable from both:
 * CLI commands (``thomas.cli.commands.*``)
 * HTTP routes / automations (e.g. aiohttp handlers)
 
-The implementation intentionally stays *Thomas-native* and avoids any OpenClaw
+The implementation intentionally stays *Thomas-native* and avoids any external tools
 terminology.
 
 Contracts

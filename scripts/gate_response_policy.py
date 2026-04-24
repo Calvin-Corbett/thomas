@@ -142,14 +142,6 @@ _AUTO_REMEDIATE_POLICIES: dict[str, GateResponsePolicy] = {
         summary="Release-update drift should be repaired and retried.",
         next_step="Update the release metadata/docs expected by the gate, then retry.",
     ),
-    "site_visual_proof": GateResponsePolicy(
-        gate="site_visual_proof",
-        response_class="auto_remediate",
-        continue_after_fix=True,
-        stop_immediately=False,
-        summary="UI proof failures should trigger proof refresh/check steps, not an abandoned task.",
-        next_step="Run the required visual-proof refresh/check commands, fix the mismatch, then retry.",
-    ),
     "changelog": GateResponsePolicy(
         gate="changelog",
         response_class="auto_remediate",
@@ -305,8 +297,6 @@ def suggested_retry_command(*, gate_name: str, agent: str, message: str) -> str 
         "workboard_agent_claim",
     }:
         return f'python scripts/agent_bootstrap_claim.py --agent "{agent}" --task "{safe_message}" --no-auto-dispatch'
-    if gate_name == "site_visual_proof":
-        return "python scripts/refresh_site_visual_proof.py; python scripts/check_site_visual_proof.py"
     if gate_name == "release_update":
         return "python scripts/check_release_update_gate.py --changed-file <path>"
     if gate_name == "monolith_guard":

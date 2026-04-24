@@ -1,4 +1,4 @@
-"""Executable OpenClaw-compatible alias commands for Thomas CLI.
+"""Executable compatibility alias commands for Thomas CLI.
 
 This is a facade module that imports and re-exports compat commands from
 specialized submodules to keep individual files under the 800-line limit.

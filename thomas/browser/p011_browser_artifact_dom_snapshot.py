@@ -18,7 +18,7 @@ Capture strategies (in order)
 3) HTML fallback: page.content() / document.documentElement.outerHTML
 
 Notes
-- This module does *not* rely on any OpenClaw naming.
+- This module does *not* rely on any legacy naming.
 - This module is intentionally conservative about importing other Thomas modules
   (config is resolved best-effort).
 """

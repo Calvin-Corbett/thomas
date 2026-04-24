@@ -44,7 +44,7 @@ MODULE_DESCRIPTIONS: dict[str, str] = {
     "scripts/": "build and safety scripts (automation, hooks, checks)",
     "tests/": "test files (automated verification)",
     "docs/": "documentation",
-    "apps/site": "the Thomas website",
+    "thomas/server/web": "the local web UI assets",
 }
 
 # File patterns that are noteworthy

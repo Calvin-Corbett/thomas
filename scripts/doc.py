@@ -41,7 +41,6 @@ AGENT_ENV_KEYS: tuple[str, ...] = (
 
 GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Model onboarding gate", (PY, "scripts/check_model_onboarding_gate.py")),
-    ("Module audit gate", (PY, "scripts/check_module_audit_gate.py")),
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
     ("Pre-commit skip policy gate", (PY, "scripts/check_precommit_skip_policy.py")),
     ("Workboard claims gate", (PY, "scripts/check_workboard_claims.py")),
@@ -53,8 +52,6 @@ GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
     ("Release hygiene gate", (PY, "scripts/check_release_hygiene.py")),
     ("Surface parity gate", (PY, "scripts/check_surface_parity.py")),
     ("Feature catalog gate", (PY, "scripts/check_feature_catalog_gate.py")),
-    ("Competitive scope gate", (PY, "scripts/check_competitive_scope_gate.py")),
-    ("OpenClaw metric parity gate", (PY, "scripts/check_openclaw_metric_parity_gate.py")),
     ("Chat control protocol gate", (PY, "scripts/check_chat_control_protocol.py")),
 )
 
@@ -71,7 +68,6 @@ CRITICAL_TEST_FILES: Sequence[str] = (
     "tests/test_realtime_ws.py",
     "tests/test_companion_policy_compliance.py",
     "tests/test_server_companion_api.py",
-    "tests/test_openclaw_metric_parity_gate.py",
 )
 
 

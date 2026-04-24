@@ -13,7 +13,7 @@ Why JSONL?
 - Append-only.
 - Low friction for automation and server use without a database.
 
-No OpenClaw identifiers are used; this is Thomas-native behavior.
+No legacy identifiers are used; this is Thomas-native behavior.
 """
 
 from __future__ import annotations

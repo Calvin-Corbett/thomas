@@ -48,4 +48,4 @@ This checks:
 
 - The public repo only publishes the sanitized release snapshot.
 - GitHub Actions validates the public repo directly on `main`.
-- Cloudflare site assets and site deployment automation stay outside the public release snapshot by default.
+- Private website assets and deployment automation stay outside the public release snapshot by default.

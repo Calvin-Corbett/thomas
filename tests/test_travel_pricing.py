@@ -210,7 +210,7 @@ class TestPriceComparison:
     """Test price comparison engine."""
 
     def test_record_price(self, comparison_engine):
-        """Test recording competitor prices."""
+        """Test recording market prices."""
         comparison_engine.record_price("JFK-LAX", "AA", Decimal("250"))
         comparison_engine.record_price("JFK-LAX", "UA", Decimal("280"))
 

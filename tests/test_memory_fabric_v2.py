@@ -88,7 +88,7 @@ class TestMemoryFabricV2(unittest.TestCase):
             thread_id=None,
             subject="user",
             predicate="deployment_target",
-            obj="cloudflare workers",
+            obj="edge workers",
             confidence=0.9,
         )
         self.fabric.update_thread_settings(
@@ -101,7 +101,7 @@ class TestMemoryFabricV2(unittest.TestCase):
         )
 
         res = self.fabric.retrieve(thread_id, "deployment target", budget_tokens=500)
-        self.assertIn("cloudflare workers", res.pack_text.lower())
+        self.assertIn("edge workers", res.pack_text.lower())
         self.assertNotIn("thread local note", res.pack_text.lower())
 
     def test_trace_contains_score_breakdown(self):
