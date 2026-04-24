@@ -155,6 +155,36 @@ class TestServerPreferencesRoutesLocal(AioHTTPTestCase):
         data = await resp.json()
         self.assertEqual(str((data.get("profile") or {}).get("review_depth") or ""), "simple")
 
+    async def test_onboarding_completion_can_persist_active_model_profile(self):
+        resp = await self.client.patch(
+            "/api/preferences",
+            json={
+                "advanced": {
+                    "model": {
+                        "active_profile": "local",
+                        "model_id": "dummy",
+                        "reasoning_effort": "high",
+                    }
+                },
+                "onboarding": {
+                    "setup_completed": True,
+                    "version": 4,
+                    "current_step": "completed",
+                    "connection_method": "local",
+                    "answers": {"connection_path": "local"},
+                },
+            },
+        )
+        self.assertEqual(resp.status, 200)
+        data = await resp.json()
+        model = (data.get("advanced") or {}).get("model") or {}
+        onboarding = data.get("onboarding") or {}
+        self.assertEqual(str(model.get("active_profile") or ""), "local")
+        self.assertEqual(str(model.get("model_id") or ""), "dummy")
+        self.assertEqual(str(model.get("reasoning_effort") or ""), "high")
+        self.assertTrue(bool(onboarding.get("setup_completed")))
+        self.assertEqual(str(onboarding.get("current_step") or ""), "completed")
+
     async def test_security_defaults_exposed_in_preferences(self):
         resp = await self.client.get("/api/preferences")
         self.assertEqual(resp.status, 200)

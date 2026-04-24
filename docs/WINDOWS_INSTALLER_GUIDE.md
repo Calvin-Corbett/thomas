@@ -25,7 +25,7 @@ No manual Python/Codex setup steps are required during install.
 The public release workflow is `.github/workflows/windows-installer.yml`.
 
 Use **Actions -> Windows Installer -> Run workflow** and pass the release tag,
-for example `v0.14.59`. The workflow:
+for example `v0.14.60`. The workflow:
 
 - installs Inno Setup on the hosted Windows runner
 - runs `scripts\build_windows_installer.ps1`
@@ -39,7 +39,7 @@ The workflow also runs automatically when a GitHub release is published.
 From repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_installer.ps1 -Version 0.14.59
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_installer.ps1 -Version 0.14.60
 ```
 
 Or:

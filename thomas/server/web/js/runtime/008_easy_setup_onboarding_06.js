@@ -1,5 +1,12 @@
 async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
     await persistInstallGuardProfile(easySetupState.securityProfile);
+    const verifiedProfile = safeString(easySetupState.verifiedProfile);
+    const verifiedModelId = verifiedProfile
+        ? (resolveActiveModelIdForProfile(verifiedProfile) || defaultModelIdForProfile(verifiedProfile))
+        : '';
+    const verifiedReasoningEffort = verifiedProfile
+        ? (normalizeReasoningEffort(activeReasoningEffort) || resolveProfileReasoningEffort(verifiedProfile) || 'medium')
+        : '';
     const onboardingAnswers = {
         ...(getOnboardingFromPrefs()?.answers || {}),
         ...(easySetupState.interviewAnswers || {}),
@@ -17,6 +24,11 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
         notifications: { desktop: derived.desktopNotifications },
         profile: { profile_type: derived.profileType },
         advanced: {
+            model: verifiedProfile ? {
+                active_profile: verifiedProfile,
+                model_id: verifiedModelId,
+                reasoning_effort: verifiedReasoningEffort || 'medium',
+            } : undefined,
             runtime: {
                 default_mode: derived.defaultMode,
                 default_token_economy: derived.tokenEconomy,
@@ -56,6 +68,9 @@ async function applyOnboardingCompletion({ skippedInterview = false } = {}) {
         throw new Error(reason || `Failed to finalize onboarding (${res.status})`);
     }
     currentPreferences = await res.json();
+    if (verifiedProfile && typeof applyProfileSelection === 'function') {
+        applyProfileSelection(verifiedProfile, { allowLocalBackup: true });
+    }
 
     if (derived.sessionOnlyMemory && sessionId) {
         await fetch(`/api/preferences?thread_id=${encodeURIComponent(sessionId)}`, {

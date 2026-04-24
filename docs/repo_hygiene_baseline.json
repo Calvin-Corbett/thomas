@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "max_tracked_root_files": 50,
+  "max_tracked_root_files": 51,
   "allowed_tracked_root_files": [
     ".dockerignore",
     ".env.example",
@@ -50,6 +50,7 @@
     "run-ui.cmd",
     "setup.cmd",
     "sitecustomize.py",
+    "support.cmd",
     "thomas.prod.toml",
     "thomas.toml"
   ],

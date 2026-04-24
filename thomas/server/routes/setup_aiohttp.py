@@ -489,6 +489,19 @@ def register_setup_routes(
             if action not in seen_actions:
                 next_actions.append(action)
 
+        access_mode = str(cfg.server.access_mode or "local").strip().lower() or "local"
+        local_url = "http://127.0.0.1:8899/"
+        network_scope = "loopback-only" if access_mode == "local" else "remote-authenticated"
+        firewall_guidance = (
+            "Default local mode is same-computer only. Open Thomas at http://127.0.0.1:8899/ "
+            "on this PC; router port forwarding and LAN/public IP access are not required."
+            if access_mode == "local"
+            else "Remote mode is enabled. Use a private authenticated deployment path and do not expose Thomas publicly."
+        )
+        if access_mode == "local" and firewall_guidance not in seen_actions:
+            next_actions.append(firewall_guidance)
+            seen_actions.add(firewall_guidance)
+
         return web.json_response(
             {
                 "ok": bool(config_report.get("ok", False)),
@@ -496,7 +509,10 @@ def register_setup_routes(
                 "runtime": {
                     "python_version": sys.version,
                     "data_dir": str(cfg.memory.root_path),
-                    "access_mode": str(cfg.server.access_mode or "local"),
+                    "access_mode": access_mode,
+                    "local_url": local_url,
+                    "network_scope": network_scope,
+                    "firewall_guidance": firewall_guidance,
                 },
                 "next_actions": next_actions,
             }

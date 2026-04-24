@@ -7,6 +7,13 @@ working-branch notes are intentionally not included in the public repository.
 
 - Public changelog entries after the initial snapshot will be added here.
 
+## [0.14.60] - 2026-04-24
+
+- Added `support.cmd` and `scripts/support_bundle.ps1` to collect redacted install/startup diagnostics in `runtime\support\`.
+- Fixed Easy Setup completion so the verified model profile is persisted as the active profile and applied immediately.
+- Added local networking/firewall guidance to setup diagnostics for `127.0.0.1:8899` troubleshooting.
+- Hardened the Windows installer workflow with a silent install and first-run wizard smoke test.
+
 ## [0.14.59] - 2026-04-24
 
 - Published the first public Thomas snapshot.
