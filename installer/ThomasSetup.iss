@@ -3,9 +3,10 @@
   #define MyAppVersion "0.0.0-dev"
 #endif
 #define MyAppPublisher "Thomas"
-#define MyAppURL "http://127.0.0.1:8899"
+#define MyAppURL "https://github.com/Calvin-Corbett/thomas"
 #define MyAppExeName "run-ui.cmd"
 #define MyAppLauncherName "launch-thomas.vbs"
+#define MyFirstRunName "scripts\first-run.cmd"
 #define MyRepairExeName "repair.cmd"
 
 [Setup]
@@ -42,10 +43,11 @@ Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createalls
 
 [Icons]
 Name: "{group}\Thomas"; Filename: "{app}\{#MyAppLauncherName}"; WorkingDir: "{app}"
+Name: "{group}\Thomas First Run Setup"; Filename: "{app}\{#MyFirstRunName}"; WorkingDir: "{app}"
 Name: "{group}\Thomas (Console)"; Filename: "{app}\{#MyAppExeName}"; WorkingDir: "{app}"
 Name: "{group}\Repair Thomas"; Filename: "{app}\{#MyRepairExeName}"; WorkingDir: "{app}"
 Name: "{group}\Uninstall Thomas"; Filename: "{uninstallexe}"
 Name: "{autodesktop}\Thomas"; Filename: "{app}\{#MyAppLauncherName}"; WorkingDir: "{app}"; Tasks: desktopicon
 
 [Run]
-Filename: "{app}\{#MyAppLauncherName}"; Description: "Launch Thomas now"; Flags: nowait postinstall skipifsilent
+Filename: "{app}\{#MyFirstRunName}"; Parameters: "-ConfirmedInstallChanges"; Description: "Finish setup and launch Thomas now"; Flags: nowait postinstall skipifsilent

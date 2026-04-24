@@ -1,0 +1,100 @@
+name: Windows Installer
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to upload assets to, for example v0.14.59. Leave blank to build artifacts only."
+        required: false
+        default: ""
+      version:
+        description: "Installer version. Leave blank to infer from tag or pyproject.toml."
+        required: false
+        default: ""
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Windows installer
+    runs-on: windows-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Resolve installer metadata
+        id: meta
+        shell: pwsh
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || '' }}
+          INPUT_TAG: ${{ inputs.tag || '' }}
+          INPUT_VERSION: ${{ inputs.version || '' }}
+          REF_TYPE: ${{ github.ref_type }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          $tag = ""
+          if ($env:EVENT_NAME -eq "release" -and -not [string]::IsNullOrWhiteSpace($env:RELEASE_TAG)) {
+            $tag = $env:RELEASE_TAG
+          } elseif (-not [string]::IsNullOrWhiteSpace($env:INPUT_TAG)) {
+            $tag = $env:INPUT_TAG
+          } elseif ($env:REF_TYPE -eq "tag") {
+            $tag = $env:REF_NAME
+          }
+
+          $version = $env:INPUT_VERSION
+          if ([string]::IsNullOrWhiteSpace($version) -and -not [string]::IsNullOrWhiteSpace($tag)) {
+            $version = $tag -replace '^v', ''
+          }
+          if ([string]::IsNullOrWhiteSpace($version)) {
+            $match = Select-String -Path pyproject.toml -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+            if (-not $match) { throw "Could not infer installer version." }
+            $version = [string]$match.Matches[0].Groups[1].Value
+          }
+
+          "tag=$tag" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Installer version: $version"
+          if ($tag) { Write-Host "Release tag: $tag" } else { Write-Host "No release tag supplied; artifacts only." }
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (-not (Test-Path $iscc)) {
+            $iscc = "C:\Program Files\Inno Setup 6\ISCC.exe"
+          }
+          if (-not (Test-Path $iscc)) {
+            throw "ISCC.exe was not found after Inno Setup install."
+          }
+          "ISCC_PATH=$iscc" >> $env:GITHUB_ENV
+
+      - name: Build installer
+        shell: pwsh
+        run: |
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows_installer.ps1 -Version "${{ steps.meta.outputs.version }}"
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: thomas-windows-installer-${{ steps.meta.outputs.version }}
+          if-no-files-found: error
+          path: |
+            dist/installer/ThomasSetup_${{ steps.meta.outputs.version }}.exe
+            dist/installer/Thomas_source_${{ steps.meta.outputs.version }}.zip
+
+      - name: Upload release assets
+        if: steps.meta.outputs.tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release upload "${{ steps.meta.outputs.tag }}" `
+            "dist/installer/ThomasSetup_${{ steps.meta.outputs.version }}.exe" `
+            "dist/installer/Thomas_source_${{ steps.meta.outputs.version }}.zip" `
+            --clobber
