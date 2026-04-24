@@ -7,6 +7,7 @@ commits, tags, and optionally pushes to trigger PyPI publish.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 import sys
@@ -18,6 +19,11 @@ except ImportError:
     from thomas._vendor import click_shim as click  # type: ignore
 
 logger = logging.getLogger(__name__)
+
+
+def _maintainer_commands_enabled() -> bool:
+    value = str(os.environ.get("THOMAS_ENABLE_MAINTAINER_COMMANDS") or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 def _find_project_root() -> Path | None:
@@ -103,7 +109,7 @@ def _write_version(root: Path, new_version: str) -> list:
 def register_release_commands(cli_group: click.Group) -> None:
     """Register the release command with the CLI."""
 
-    @cli_group.command("release")
+    @cli_group.command("release", hidden=True)
     @click.argument("part", type=click.Choice(["major", "minor", "patch"]), default="patch")
     @click.option("--dry-run", is_flag=True, help="Show what would happen without doing it")
     @click.option("--push/--no-push", default=True, help="Push commit and tag to remote")
@@ -116,6 +122,12 @@ def register_release_commands(cli_group: click.Group) -> None:
           thomas release minor    # 0.11.78 -> 0.12.0
           thomas release major    # 0.11.78 -> 1.0.0
         """
+        if not _maintainer_commands_enabled():
+            raise click.ClickException(
+                "The release command is maintainer-only in public builds. "
+                "Use the GitHub Releases installer for normal updates."
+            )
+
         root = _find_project_root()
         if not root:
             click.echo(

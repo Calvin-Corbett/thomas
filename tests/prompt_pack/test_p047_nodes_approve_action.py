@@ -35,7 +35,7 @@ def test_approve_action_success_writes_jsonl(tmp_path: Path, monkeypatch: pytest
     req = NodesApproveActionRequest(
         action_id="act-123",
         node_ids=("node-a", "node-b", "node-a"),
-        approver="calvin",
+        approver="Example User",
         comment="ship it",
         state_path=str(ledger),
         approved_at=approved_at,
@@ -45,7 +45,7 @@ def test_approve_action_success_writes_jsonl(tmp_path: Path, monkeypatch: pytest
 
     assert result.action_id == "act-123"
     assert result.approved_nodes == ("node-a", "node-b")  # de-duped, order preserved
-    assert result.approver == "calvin"
+    assert result.approver == "Example User"
     assert result.comment == "ship it"
     assert result.approved_at == "2025-01-02T03:04:05Z"
     assert result.ledger_path == str(ledger)
@@ -59,7 +59,7 @@ def test_approve_action_success_writes_jsonl(tmp_path: Path, monkeypatch: pytest
     assert record["action_id"] == "act-123"
     assert record["approved"] is True
     assert record["approved_nodes"] == ["node-a", "node-b"]
-    assert record["approver"] == "calvin"
+    assert record["approver"] == "Example User"
     assert record["comment"] == "ship it"
     assert record["approved_at"] == "2025-01-02T03:04:05Z"
     assert record["scope"] == "nodes"

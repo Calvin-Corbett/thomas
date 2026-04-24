@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "max_tracked_root_files": 51,
+  "max_tracked_root_files": 47,
   "allowed_tracked_root_files": [
     ".dockerignore",
     ".env.example",
@@ -14,7 +14,6 @@
     "ARCHITECTURE.md",
     "CHANGELOG.md",
     "CLAUDE.md",
-    "CLAUDE_CODE_GAP_ANALYSIS.md",
     "CONTRIBUTING_AI.md",
     "DEPLOYMENT.md",
     "DOCUMENTATION_INDEX.md",
@@ -24,11 +23,8 @@
     "KNOWN_ISSUES.md",
     "LICENSE",
     "MANIFEST.in",
-    "PLAN-UI-UPGRADE.md",
     "PROJECT_INDEX.md",
-    "PROJECT_MANAGEMENT_RULES.md",
     "README.md",
-    "REPO_CANONICAL_RULES.md",
     "SECURITY.md",
     "SOUL.md",
     "WORKTREE_RULES.md",

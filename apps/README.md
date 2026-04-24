@@ -2,7 +2,6 @@
 
 This directory holds all client-facing delivery surfaces and shared contracts:
 
-- `site/`: Public website (Next.js), install/distribution landing pages, support content.
 - `android/`: Android phone app client scaffold.
 - `ios/`: iOS phone app client scaffold.
 - `macos/`: macOS desktop client scaffold.
@@ -13,4 +12,6 @@ Quick routing:
 - Phone apps: `android/`, `ios/`
 - Desktop client: `macos/`
 - Shared SDK/contracts: `shared/`
-- Public website: `site/`
+
+The private website/deployment surface is intentionally not part of the public
+runtime repository.

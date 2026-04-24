@@ -239,7 +239,7 @@ class TestMemoryCoordinator:
         from thomas.chat.memory_layers import MemoryCoordinator
 
         cm = ConversationManager()
-        cm = cm.append_message("user", "Help my cousin learn quarterback basics.")
+        cm = cm.append_message("user", "Help a new learner understand quarterback basics.")
         cm = cm.append_message("assistant", "What age range?")
         cm = cm.append_message("user", "Make a PDF quiz pack with an answer key.")
 
@@ -334,7 +334,7 @@ class TestMemoryCoordinator:
         coord = MemoryCoordinator(memory_engine=_Memory(), session_id="thread-123")
         await coord.capture_episode(
             turn_number=7,
-            user_message="Make a football quiz PDF for my cousin.",
+            user_message="Make a football quiz PDF for a new learner.",
             assistant_response="I will research and draft the PDF quiz pack.",
             specialist="reasoning",
         )

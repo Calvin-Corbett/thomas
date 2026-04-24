@@ -51,10 +51,10 @@ This is the self-serve support surface for production Thomas operators.
 - Check: response headers on web routes.
 - Action: restore default header middleware and rerun server access tests.
 
-7. CI gate deadlock on site checks
+7. CI gate deadlock on required checks
 - Signal: required check stays pending with no run.
-- Check: workflow trigger paths and branch filter behavior.
-- Action: ensure site required workflow runs on all PRs.
+- Check: workflow trigger paths, branch filters, and required-check names.
+- Action: ensure required public workflows run on all PRs.
 
 8. Config drift between environments
 - Signal: works locally, fails in CI/prod.

@@ -36,7 +36,7 @@ def _env_bool(name: str, default: bool | None = None) -> bool | None:
 
 @dataclass
 class GuardrailsSettings:
-    enabled: bool = False
+    enabled: bool = True
     approval_timeout_s: int = 60
     no_human_mode: str = "human"
     # If true, only certain tools require approvals; otherwise use rules.

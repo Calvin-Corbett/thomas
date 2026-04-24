@@ -21,7 +21,7 @@ Domain skeleton. All files are import-safe stubs with `__getattr__` hooks that p
 
 ## Marketplace Destination
 
-Per Calvin (2026-03-18), all domain modules will become marketplace extensions.
+Long-term product direction: domain modules are intended to become marketplace extensions.
 Would need to be built from scratch to become a marketplace extension.
 
 See `docs/DOMAIN_MODULES_AUDIT.md` for the full audit findings.
