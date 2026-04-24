@@ -40,7 +40,7 @@ _TYPE_LABELS = {
     "dependency": "Dependency",
     "integration": "Integration",
 }
-_CANONICAL_MARKETPLACE_STORE_URL = "https://github.com/Calvin-Corbett/thomas"
+_CANONICAL_MARKETPLACE_STORE_URL = ""
 _LEGACY_MARKETPLACE_STORE_URL = "https://github.com/Calvin-Corbett/thomas"
 _MARKETPLACE_PUBLIC_HOSTS = {"github.com", "raw.githubusercontent.com"}
 _MARKETPLACE_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
@@ -139,7 +139,6 @@ def _candidate_marketplace_store_urls(preferred_store_url: str = "") -> list[str
         _safe_string(os.environ.get("THOMAS_MARKETPLACE_STORE_URL")).strip(),
         _safe_string(os.environ.get("SITE_URL")).strip(),
         _CANONICAL_MARKETPLACE_STORE_URL,
-        _LEGACY_MARKETPLACE_STORE_URL,
     ):
         candidate = _safe_string(raw).strip().rstrip("/")
         try:
@@ -773,9 +772,14 @@ def register_marketplace_catalog_routes(
                 log.warning("Hosted marketplace sync failed for %s: %s", candidate_store_url, exc)
 
         if remote_payload is None:
-            fallback_payload = _build_local_sync_payload(app, store_url=store_url, channel=channel)
+            fallback_store_url = store_url if attempted_store_urls else ""
+            fallback_payload = _build_local_sync_payload(app, store_url=fallback_store_url, channel=channel)
             if last_error is not None:
                 fallback_payload["sync_error"] = f"Unable to sync marketplace catalog from {store_url}: {last_error}"
+            else:
+                fallback_payload["sync_source"] = "local_catalog"
+                fallback_payload["degraded"] = False
+                fallback_payload["warning"] = ""
             fallback_payload["attempted_store_urls"] = attempted_store_urls
             filtered = [
                 row

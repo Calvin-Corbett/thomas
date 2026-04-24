@@ -10,6 +10,7 @@ from aiohttp.test_utils import AioHTTPTestCase
 
 from thomas.core.config import AppConfig, MemoryConfig, ModelConfig, ServerConfig
 from thomas.server.app import create_app
+from thomas.server.routes import marketplace_catalog_aiohttp as marketplace_routes
 
 
 @contextmanager
@@ -61,6 +62,17 @@ class TestMarketplaceRoutePolicy(AioHTTPTestCase):
             server=ServerConfig(access_mode="local"),
         )
         return create_app(cfg)
+
+    async def test_marketplace_sync_without_store_uses_local_catalog(self):
+        response = await self.client.get("/api/marketplace/sync")
+        self.assertEqual(response.status, 200)
+        body = await response.json()
+
+        self.assertEqual(body.get("sync_source"), "local_catalog")
+        self.assertEqual(body.get("store_url"), "")
+        self.assertEqual(body.get("attempted_store_urls"), [])
+        self.assertFalse(body.get("degraded"))
+        self.assertEqual(body.get("warning"), "")
 
     async def test_marketplace_sync_hides_hidden_and_scaffold_rows(self):
         payload = {
@@ -131,3 +143,10 @@ class TestMarketplaceRoutePolicy(AioHTTPTestCase):
         ids = [str(row.get("id") or "") for row in rows]
         self.assertEqual(ids, ["life-manager", "catalog-only-pack"])
         self.assertEqual(body.get("total"), 2)
+
+
+def test_default_marketplace_store_url_requires_explicit_api_origin(monkeypatch):
+    monkeypatch.delenv("THOMAS_MARKETPLACE_STORE_URL", raising=False)
+    monkeypatch.delenv("SITE_URL", raising=False)
+
+    assert marketplace_routes._default_marketplace_store_url() == ""
