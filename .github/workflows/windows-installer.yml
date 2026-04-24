@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload assets to, for example v0.14.61. Leave blank to build artifacts only."
+        description: "Release tag to upload assets to, for example v0.14.62. Leave blank to build artifacts only."
         required: false
         default: ""
       version:
@@ -16,6 +16,9 @@ on:
 
 permissions:
   contents: write
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   build:
@@ -79,12 +82,62 @@ jobs:
         run: |
           powershell -NoProfile -ExecutionPolicy Bypass -File scripts\build_windows_installer.ps1 -Version "${{ steps.meta.outputs.version }}"
 
+      - name: Sign installer if certificate is configured
+        id: sign
+        shell: pwsh
+        env:
+          WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64 }}
+          WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD }}
+        run: |
+          $version = "${{ steps.meta.outputs.version }}"
+          $setupExe = Join-Path $PWD "dist\installer\ThomasSetup_$version.exe"
+          if (-not (Test-Path $setupExe)) { throw "Installer was not built: $setupExe" }
+
+          if (
+            [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64) -or
+            [string]::IsNullOrWhiteSpace($env:WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD)
+          ) {
+            "signed=false" >> $env:GITHUB_OUTPUT
+            Write-Warning "Code-signing secrets are not configured. Installer will be uploaded unsigned."
+            exit 0
+          }
+
+          $certPath = Join-Path $env:RUNNER_TEMP "thomas-code-signing.pfx"
+          try {
+            [IO.File]::WriteAllBytes(
+              $certPath,
+              [Convert]::FromBase64String($env:WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64)
+            )
+
+            $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse -ErrorAction SilentlyContinue |
+              Sort-Object FullName -Descending |
+              Select-Object -First 1 -ExpandProperty FullName
+            if (-not $signtool) { throw "signtool.exe was not found on the Windows runner." }
+
+            & $signtool sign /fd SHA256 /td SHA256 /tr http://timestamp.digicert.com /f $certPath /p $env:WINDOWS_CODE_SIGNING_CERTIFICATE_PASSWORD $setupExe
+            if ($LASTEXITCODE -ne 0) { throw "signtool sign failed with exit code $LASTEXITCODE" }
+
+            & $signtool verify /pa /v $setupExe
+            if ($LASTEXITCODE -ne 0) { throw "signtool verify failed with exit code $LASTEXITCODE" }
+
+            "signed=true" >> $env:GITHUB_OUTPUT
+          } finally {
+            Remove-Item -Force $certPath -ErrorAction SilentlyContinue
+          }
+
       - name: Smoke test installer
         shell: pwsh
         run: |
           $version = "${{ steps.meta.outputs.version }}"
           $setupExe = Join-Path $PWD "dist\installer\ThomasSetup_$version.exe"
           if (-not (Test-Path $setupExe)) { throw "Installer was not built: $setupExe" }
+
+          if ("${{ steps.sign.outputs.signed }}" -eq "true") {
+            $signature = Get-AuthenticodeSignature $setupExe
+            if ($signature.Status -ne "Valid") {
+              throw "Signed installer signature is not valid: $($signature.Status)"
+            }
+          }
 
           $installDir = Join-Path $env:RUNNER_TEMP "thomas-installer-smoke"
           $installLog = Join-Path $env:RUNNER_TEMP "thomas-installer-smoke-install.log"

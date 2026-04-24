@@ -5,6 +5,7 @@ This index points to the stable docs that make sense in the public release. Use 
 ## Start Here
 
 - [`README.md`](README.md) - install, first run, and public-release orientation
+- [`docs/INSTALL.md`](docs/INSTALL.md) - simple Windows install path for non-developers
 - [`docs/AGENT_START_HERE.md`](docs/AGENT_START_HERE.md) - fastest safe route for AI agents and contributors
 - [`docs/AI_CONTRIBUTOR_GUARDRAILS.md`](docs/AI_CONTRIBUTOR_GUARDRAILS.md) - public AI contributor guardrails
 - [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) - public feature/status matrix with audience, entry points, and evidence
@@ -20,6 +21,7 @@ This index points to the stable docs that make sense in the public release. Use 
 ## Install, Repair, and Deploy
 
 - [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER_GUIDE.md) - Windows installer build and packaging
+- [`docs/INSTALL.md`](docs/INSTALL.md) - normal user install and install-failure recovery
 - [`docs/NETWORKING_AND_FIREWALL.md`](docs/NETWORKING_AND_FIREWALL.md) - firewall prompts, loopback defaults, and remote-access boundaries
 - [`docs/ops/DOCKER_DEPLOY.md`](docs/ops/DOCKER_DEPLOY.md) - Docker deployment and runtime notes
 - [`docs/ops/GATEWAY_SECURITY_RUNBOOK.md`](docs/ops/GATEWAY_SECURITY_RUNBOOK.md) - gateway security and incident-response guidance

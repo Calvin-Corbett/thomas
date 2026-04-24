@@ -10,13 +10,17 @@ opt into integrations, remote access, or advanced builder workflows.
 
 ## Download for Windows
 
-[Download `ThomasSetup_0.14.61.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.61/ThomasSetup_0.14.61.exe)
+[Download `ThomasSetup_0.14.62.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.62/ThomasSetup_0.14.62.exe)
+
+Use the `.exe` installer from Releases. Do not use the GitHub source ZIP unless
+you are developing Thomas. For the simple install path, see
+[`docs/INSTALL.md`](docs/INSTALL.md).
 
 ## Quick Start on Windows
 
 Fresh install: download the Windows installer above.
 
-1. Download `ThomasSetup_0.14.61.exe`.
+1. Download `ThomasSetup_0.14.62.exe`.
 2. Double-click it.
 3. Click through the installer prompts.
 4. Leave **Finish setup and launch Thomas now** checked.
@@ -106,6 +110,8 @@ labels in the feature matrix are the public source of truth.
 
 - [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) - stable docs hub for the
   public release
+- [`docs/INSTALL.md`](docs/INSTALL.md) - simple Windows install path and
+  install-failure recovery
 - [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) - user-facing,
   backend, agent-facing, and planned capability status
 - [`docs/FUNCTIONALITY_INVENTORY.md`](docs/FUNCTIONALITY_INVENTORY.md) -
