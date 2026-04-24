@@ -109,3 +109,22 @@ def test_public_release_documents_status_and_local_networking() -> None:
     networking = (ROOT / "docs" / "NETWORKING_AND_FIREWALL.md").read_text(encoding="utf-8")
     assert "127.0.0.1:8899" in networking
     assert "does not configure router port forwarding" in networking
+
+
+def test_public_install_and_feature_docs_do_not_show_mojibake() -> None:
+    public_paths = (
+        "docs/FEATURE_MASTER_LIST.md",
+        "install.cmd",
+        "install.sh",
+        "scripts/run-ui.ps1",
+        "scripts/sync_feature_master_list.py",
+    )
+    mojibake_fragments = ("â", "Ã", "�")
+    violations: list[tuple[str, str]] = []
+    for rel in public_paths:
+        text = (ROOT / rel).read_text(encoding="utf-8", errors="replace")
+        for fragment in mojibake_fragments:
+            if fragment in text:
+                violations.append((rel, fragment))
+
+    assert violations == []

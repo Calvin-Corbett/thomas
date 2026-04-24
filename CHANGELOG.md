@@ -5,12 +5,17 @@ working-branch notes are intentionally not included in the public repository.
 
 ## [Unreleased]
 
+- No unreleased changes.
+
+## [0.14.61] - 2026-04-24
+
 - Added public repo guidance docs: `docs/AGENT_START_HERE.md`, `docs/FEATURE_MATRIX.md`, `docs/REPO_MAP.md`, `docs/ARCHITECTURE_OVERVIEW.md`, and `docs/ROADMAP.md`.
 - Added GitHub issue templates, PR template, release template, and Copilot/agent guidance for install failures, bugs, features, and structured agent tasks.
 - Documented Infinite as the planned Phase 02 companion app and Thomas OS as a concept-stage Phase 03 direction.
 - Removed stale private/internal repo guidance, website-only helpers, and personal example text from the public snapshot.
 - Hid maintainer-only release commands from normal CLI help and gated release publishing behind an explicit maintainer environment flag.
 - Enabled runtime guardrails by default for fresh public profiles so `/api/health` boots cleanly instead of degraded.
+- Cleaned public install/source guidance, feature-list output, and stale intake-folder wording so the GitHub surface is easier for users and agents to read.
 
 ## [0.14.60] - 2026-04-24
 

@@ -79,6 +79,6 @@ def test_github_workflow_smoke_tests_silent_installer() -> None:
 def test_readme_is_installer_first() -> None:
     readme = _read("README.md")
 
-    assert "Download `ThomasSetup_0.14.60.exe`" in readme
+    assert "Download `ThomasSetup_0.14.61.exe`" in readme
     assert "Code -> Download ZIP" not in readme
     assert "first_run_wizard.log" in readme

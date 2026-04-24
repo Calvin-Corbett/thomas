@@ -10,10 +10,10 @@ def test_feature_master_sync_writes_and_checks(tmp_path: Path) -> None:
     repo = tmp_path
     (repo / "docs").mkdir(parents=True, exist_ok=True)
     (repo / "thomas" / "core").mkdir(parents=True, exist_ok=True)
-    (repo / "Inbox").mkdir(parents=True, exist_ok=True)
+    (repo / "source_packs").mkdir(parents=True, exist_ok=True)
 
     (repo / "thomas" / "core" / "tool_factory.py").write_text("# ok\n", encoding="utf-8")
-    (repo / "Inbox" / "pack.zip").write_text("zip", encoding="utf-8")
+    (repo / "source_packs" / "pack.zip").write_text("zip", encoding="utf-8")
 
     manifest = {
         "version": 1,
@@ -31,15 +31,15 @@ def test_feature_master_sync_writes_and_checks(tmp_path: Path) -> None:
                 "name": "Feature A",
                 "location": "thomas/core/a.py",
                 "code_paths": ["thomas/core/a.py"],
-                "inbox_globs": ["Inbox/**/pack.zip"],
+                "source_pack_globs": ["source_packs/**/pack.zip"],
             }
         ],
-        "inbox_packs": [
+        "source_packs": [
             {
                 "name": "Pack B",
                 "location": "thomas/core/b.py",
                 "code_paths": ["thomas/core/b.py"],
-                "inbox_globs": ["Inbox/**/pack.zip"],
+                "source_pack_globs": ["source_packs/**/pack.zip"],
                 "source_zip": "pack.zip",
             }
         ],
@@ -60,8 +60,8 @@ def test_feature_master_sync_writes_and_checks(tmp_path: Path) -> None:
     )
     assert rc == 0
     text = master_path.read_text(encoding="utf-8")
-    assert "✅ DONE" in text
-    assert "📦 INBOX" in text
+    assert "DONE" in text
+    assert "PACK FOUND" in text
 
     rc = sync.run(
         [

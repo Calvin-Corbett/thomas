@@ -10,13 +10,13 @@ from pathlib import Path
 from typing import Any
 
 STATUS_DONE = "DONE"
-STATUS_INBOX = "INBOX"
+STATUS_PACK_FOUND = "PACK_FOUND"
 STATUS_MISSING = "MISSING"
 
 STATUS_LABELS: dict[str, str] = {
-    STATUS_DONE: "✅ DONE",
-    STATUS_INBOX: "📦 INBOX",
-    STATUS_MISSING: "🚧 MISSING",
+    STATUS_DONE: "DONE",
+    STATUS_PACK_FOUND: "PACK FOUND",
+    STATUS_MISSING: "MISSING",
 }
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -51,9 +51,11 @@ def _existing_code_paths(repo_root: Path, item: dict[str, Any]) -> list[str]:
     return _dedupe_keep_order(out)
 
 
-def _existing_inbox_matches(repo_root: Path, item: dict[str, Any]) -> list[str]:
+def _existing_source_pack_matches(repo_root: Path, item: dict[str, Any]) -> list[str]:
     out: list[str] = []
-    for raw in item.get("inbox_globs", []) or []:
+    globs = list(item.get("source_pack_globs", []) or [])
+    globs.extend(item.get("inbox_globs", []) or [])
+    for raw in globs:
         pattern = str(raw).strip()
         if not pattern:
             continue
@@ -71,9 +73,9 @@ def evaluate_item(repo_root: Path, item: dict[str, Any]) -> tuple[str, list[str]
     code_hits = _existing_code_paths(repo_root, item)
     if code_hits:
         return STATUS_DONE, code_hits, []
-    inbox_hits = _existing_inbox_matches(repo_root, item)
-    if inbox_hits:
-        return STATUS_INBOX, [], inbox_hits
+    source_pack_hits = _existing_source_pack_matches(repo_root, item)
+    if source_pack_hits:
+        return STATUS_PACK_FOUND, [], source_pack_hits
     return STATUS_MISSING, [], []
 
 
@@ -98,23 +100,23 @@ def _missing_note(item: dict[str, Any]) -> str:
     return "Needs implementation."
 
 
-def _inbox_note(inbox_hits: list[str]) -> str:
-    if inbox_hits:
-        return f"Inbox pack found: `{Path(inbox_hits[0]).name}`"
-    return "Inbox pack detected."
+def _source_pack_note(source_pack_hits: list[str]) -> str:
+    if source_pack_hits:
+        return f"Source pack found: `{Path(source_pack_hits[0]).name}`"
+    return "Source pack detected."
 
 
 def _render_foundation(repo_root: Path, items: list[dict[str, Any]]) -> tuple[list[str], dict[str, int]]:
     lines: list[str] = []
-    counts = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
+    counts = {STATUS_DONE: 0, STATUS_PACK_FOUND: 0, STATUS_MISSING: 0}
     for item in items:
-        status, _, inbox_hits = evaluate_item(repo_root, item)
+        status, _, source_pack_hits = evaluate_item(repo_root, item)
         counts[status] += 1
         feature = str(item.get("name") or "").strip() or "Unknown"
         location = _normalize(str(item.get("location") or ""))
         notes = str(item.get("notes") or "").strip()
-        if status == STATUS_INBOX and not notes:
-            notes = _inbox_note(inbox_hits)
+        if status == STATUS_PACK_FOUND and not notes:
+            notes = _source_pack_note(source_pack_hits)
         if status == STATUS_MISSING and not notes:
             notes = _missing_note(item)
         lines.append(
@@ -132,41 +134,41 @@ def _render_foundation(repo_root: Path, items: list[dict[str, Any]]) -> tuple[li
 
 def _render_features(repo_root: Path, items: list[dict[str, Any]]) -> tuple[list[str], dict[str, int]]:
     lines: list[str] = []
-    counts = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
+    counts = {STATUS_DONE: 0, STATUS_PACK_FOUND: 0, STATUS_MISSING: 0}
     for item in sorted(items, key=lambda row: int(row.get("id", 0) or 0)):
-        status, code_hits, inbox_hits = evaluate_item(repo_root, item)
+        status, code_hits, source_pack_hits = evaluate_item(repo_root, item)
         counts[status] += 1
         num = int(item.get("id", 0) or 0)
         feature = str(item.get("name") or "").strip() or "Unknown"
         if status == STATUS_DONE:
             note = _done_note(item, code_hits)
-        elif status == STATUS_INBOX:
-            note = _inbox_note(inbox_hits)
+        elif status == STATUS_PACK_FOUND:
+            note = _source_pack_note(source_pack_hits)
         else:
             note = _missing_note(item)
         lines.append(_table_row([str(num), f"**{feature}**", STATUS_LABELS[status], note]))
     return lines, counts
 
 
-def _render_inbox(repo_root: Path, items: list[dict[str, Any]]) -> tuple[list[str], dict[str, int]]:
+def _render_source_packs(repo_root: Path, items: list[dict[str, Any]]) -> tuple[list[str], dict[str, int]]:
     lines: list[str] = []
-    counts = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
+    counts = {STATUS_DONE: 0, STATUS_PACK_FOUND: 0, STATUS_MISSING: 0}
     for item in items:
-        status, code_hits, inbox_hits = evaluate_item(repo_root, item)
+        status, code_hits, source_pack_hits = evaluate_item(repo_root, item)
         counts[status] += 1
         feature = str(item.get("name") or "").strip() or "Unknown"
         if status == STATUS_DONE:
             source = _done_note(item, code_hits)
-        elif status == STATUS_INBOX:
-            source = str(item.get("source_zip") or "").strip() or _inbox_note(inbox_hits)
+        elif status == STATUS_PACK_FOUND:
+            source = str(item.get("source_zip") or "").strip() or _source_pack_note(source_pack_hits)
         else:
-            source = str(item.get("missing_note") or "").strip() or "No inbox pack and no implementation found."
+            source = str(item.get("missing_note") or "").strip() or "No source pack and no implementation found."
         lines.append(_table_row([f"**{feature}**", STATUS_LABELS[status], source]))
     return lines, counts
 
 
 def _sum_counts(parts: Iterable[dict[str, int]]) -> dict[str, int]:
-    total = {STATUS_DONE: 0, STATUS_INBOX: 0, STATUS_MISSING: 0}
+    total = {STATUS_DONE: 0, STATUS_PACK_FOUND: 0, STATUS_MISSING: 0}
     for row in parts:
         for key in total:
             total[key] += int(row.get(key, 0) or 0)
@@ -178,24 +180,24 @@ def build_document(
 ) -> tuple[str, dict[str, int]]:
     foundation = manifest.get("foundation")
     features = manifest.get("features")
-    inbox_packs = manifest.get("inbox_packs")
-    if not isinstance(foundation, list) or not isinstance(features, list) or not isinstance(inbox_packs, list):
-        raise ValueError("Manifest must include list fields: foundation, features, inbox_packs.")
+    source_packs = manifest.get("source_packs", manifest.get("inbox_packs"))
+    if not isinstance(foundation, list) or not isinstance(features, list) or not isinstance(source_packs, list):
+        raise ValueError("Manifest must include list fields: foundation, features, source_packs.")
 
     core_lines, core_counts = _render_foundation(repo_root, foundation)
     feature_lines, feature_counts = _render_features(repo_root, features)
-    inbox_lines, inbox_counts = _render_inbox(repo_root, inbox_packs)
-    totals = _sum_counts([core_counts, feature_counts, inbox_counts])
+    source_pack_lines, source_pack_counts = _render_source_packs(repo_root, source_packs)
+    totals = _sum_counts([core_counts, feature_counts, source_pack_counts])
 
     stamp = date_stamp or datetime.now(timezone.utc).date().isoformat()
     lines: list[str] = [
-        "# Thomas Project - Feature Master List",
+        "# Thomas Feature Master List",
         "",
         "**Status Legend:**",
         "",
-        "- ✅ **DONE**: Implemented and merged into codebase.",
-        "- 📦 **INBOX**: Feature pack ZIP found in `Inbox/`, needs integration.",
-        "- 🚧 **MISSING**: No code found and no inbox pack located.",
+        "- **DONE**: Implemented in the current codebase.",
+        "- **PACK FOUND**: Source package found locally; not a public shipping claim.",
+        "- **MISSING**: No implementation found in the current codebase.",
         "",
         "## Core Modules (Foundation)",
         "",
@@ -216,20 +218,20 @@ def build_document(
     lines.extend(
         [
             "",
-            "## Additional Feature Packs (Inbox)",
+            "## Candidate Feature Packs",
             "",
-            "| Feature | Status | Source ZIP |",
+            "| Feature | Status | Source / Notes |",
             "| :--- | :--- | :--- |",
         ]
     )
-    lines.extend(inbox_lines)
+    lines.extend(source_pack_lines)
     lines.extend(
         [
             "",
             "---",
             f"**Last Updated:** {stamp}",
             "**Source of Truth:** Generated from `docs/feature_master_manifest.json` via `python scripts/sync_feature_master_list.py`.",
-            f"**Summary:** {totals[STATUS_DONE]} done, {totals[STATUS_INBOX]} inbox, {totals[STATUS_MISSING]} missing.",
+            f"**Summary:** {totals[STATUS_DONE]} done, {totals[STATUS_PACK_FOUND]} source packs, {totals[STATUS_MISSING]} missing.",
             "",
         ]
     )
@@ -244,7 +246,7 @@ def _resolve_path(repo_root: Path, raw_path: str) -> Path:
 
 
 def run(argv: Sequence[str] | None = None) -> int:
-    parser = argparse.ArgumentParser(description="Sync docs/FEATURE_MASTER_LIST.md with detected code + inbox status.")
+    parser = argparse.ArgumentParser(description="Sync docs/FEATURE_MASTER_LIST.md with detected code and source-pack status.")
     parser.add_argument("--repo-root", default=None, help="Repository root (default: inferred from script location).")
     parser.add_argument("--manifest", default=DEFAULT_MANIFEST, help=f"Manifest path (default: {DEFAULT_MANIFEST}).")
     parser.add_argument("--master", default=DEFAULT_MASTER, help=f"Master list path (default: {DEFAULT_MASTER}).")
@@ -327,7 +329,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         else:
             print(
                 "Feature master sync gate: OK "
-                f"({totals[STATUS_DONE]} done, {totals[STATUS_INBOX]} inbox, {totals[STATUS_MISSING]} missing)"
+                f"({totals[STATUS_DONE]} done, {totals[STATUS_PACK_FOUND]} source packs, {totals[STATUS_MISSING]} missing)"
             )
         return 0
 
@@ -354,7 +356,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     else:
         print(
             f"Feature master list {action}: {master_path} "
-            f"({totals[STATUS_DONE]} done, {totals[STATUS_INBOX]} inbox, {totals[STATUS_MISSING]} missing)"
+            f"({totals[STATUS_DONE]} done, {totals[STATUS_PACK_FOUND]} source packs, {totals[STATUS_MISSING]} missing)"
         )
     return 0
 

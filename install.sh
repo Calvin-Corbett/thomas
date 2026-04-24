@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Thomas AI — Cross-platform installer for macOS and Linux.
+# Thomas AI - Cross-platform source installer for macOS and Linux.
 #
 # Usage:
 #   curl -fsSL https://raw.githubusercontent.com/Calvin-Corbett/thomas/main/install.sh | bash
@@ -19,7 +19,7 @@ ok()    { printf "${GREEN}[thomas]${NC} %s\n" "$*"; }
 warn()  { printf "${YELLOW}[thomas]${NC} %s\n" "$*"; }
 fail()  { printf "${RED}[thomas]${NC} %s\n" "$*"; exit 1; }
 
-# ── Step 1: Check Python ────────────────────────────────────
+# Step 1: Check Python
 info "Checking Python installation..."
 
 PYTHON=""
@@ -41,7 +41,7 @@ fi
 
 ok "Found $PYTHON ($($PYTHON --version 2>&1))"
 
-# ── Step 2: Determine install directory ─────────────────────
+# Step 2: Determine install directory
 INSTALL_DIR="${THOMAS_INSTALL_DIR:-$(pwd)}"
 if [ ! -f "$INSTALL_DIR/pyproject.toml" ]; then
     # Try to find it relative to script location
@@ -54,7 +54,7 @@ if [ ! -f "$INSTALL_DIR/pyproject.toml" ]; then
 fi
 info "Installing from: $INSTALL_DIR"
 
-# ── Step 3: Virtual environment (optional) ──────────────────
+# Step 3: Virtual environment (optional)
 USE_VENV=false
 if [ "${THOMAS_NO_VENV:-}" != "1" ]; then
     printf "${CYAN}[thomas]${NC} Create a virtual environment? [Y/n] "
@@ -80,7 +80,7 @@ if $USE_VENV; then
     ok "Activated venv"
 fi
 
-# ── Step 4: Install Thomas ──────────────────────────────────
+# Step 4: Install Thomas
 info "Installing Thomas..."
 cd "$INSTALL_DIR"
 
@@ -92,15 +92,15 @@ fi
 
 ok "Thomas installed successfully"
 
-# ── Step 5: Verify installation ─────────────────────────────
+# Step 5: Verify installation
 info "Verifying installation..."
 if $PYTHON -m thomas --help &>/dev/null; then
     ok "thomas CLI works"
 else
-    warn "thomas CLI verification failed — may need PATH adjustment"
+    warn "thomas CLI verification failed - may need PATH adjustment"
 fi
 
-# ── Step 6: Run setup wizard ────────────────────────────────
+# Step 6: Run setup wizard
 if [ ! -f "thomas.toml" ] && [ ! -f "$HOME/.thomas/thomas.toml" ]; then
     printf "\n${CYAN}[thomas]${NC} Run the setup wizard now? [Y/n] "
     read -r answer </dev/tty 2>/dev/null || answer="y"
@@ -111,18 +111,18 @@ if [ ! -f "thomas.toml" ] && [ ! -f "$HOME/.thomas/thomas.toml" ]; then
         info "Skipped. Run 'thomas setup' when ready."
     fi
 else
-    ok "Config already exists — skipping setup wizard"
+    ok "Config already exists - skipping setup wizard"
 fi
 
-# ── Step 7: Shell alias suggestion ──────────────────────────
+# Step 7: Shell alias suggestion
 printf "\n"
 ok "Installation complete!"
 printf "\n"
 info "Quick start:"
-printf "  ${YELLOW}thomas chat \"hello\"${NC}    — single query\n"
-printf "  ${YELLOW}thomas repl${NC}              — interactive mode\n"
-printf "  ${YELLOW}thomas serve${NC}             — web UI at localhost:8899\n"
-printf "  ${YELLOW}thomas doctor${NC}            — check system health\n"
+printf "  ${YELLOW}thomas chat \"hello\"${NC}    - single query\n"
+printf "  ${YELLOW}thomas repl${NC}              - interactive mode\n"
+printf "  ${YELLOW}thomas serve${NC}             - web UI at localhost:8899\n"
+printf "  ${YELLOW}thomas doctor${NC}            - check system health\n"
 printf "\n"
 
 if $USE_VENV; then
