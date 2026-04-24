@@ -113,7 +113,11 @@ def test_public_release_documents_status_and_local_networking() -> None:
 
 def test_public_install_and_feature_docs_do_not_show_mojibake() -> None:
     public_paths = (
+        "README.md",
+        "KNOWN_ISSUES.md",
+        "docs/INSTALL.md",
         "docs/FEATURE_MASTER_LIST.md",
+        "docs/WINDOWS_INSTALLER_GUIDE.md",
         "install.cmd",
         "install.sh",
         "scripts/run-ui.ps1",

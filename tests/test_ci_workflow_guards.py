@@ -28,6 +28,7 @@ def test_pypi_publish_workflow_removed_from_public_ci() -> None:
 def test_robustness_gates_targets_main_with_public_ci_suite() -> None:
     text = Path(".github/workflows/robustness-gates.yml").read_text(encoding="utf-8")
     assert "branches: [main]" in text
+    assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true" in text
     assert "test-collection-gate" in text
     assert "security-regression" in text
     assert "full-test-matrix" in text
@@ -71,6 +72,7 @@ def test_legacy_full_requirements_lock_removed_from_public_release() -> None:
 def test_github_publish_safety_targets_main_without_release_lanes() -> None:
     text = Path(".github/workflows/github-publish-safety.yml").read_text(encoding="utf-8")
     assert "branches: [main]" in text
+    assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true" in text
     assert "github_publish_preflight.py --deep --json --strict" in text
     assert "check_release_hygiene.py" in text
     assert ("check_" + "release_lane_policy.py") not in text
