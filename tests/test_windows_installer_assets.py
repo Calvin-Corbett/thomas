@@ -54,11 +54,13 @@ def test_github_workflow_builds_and_uploads_installer_asset() -> None:
     assert "scripts\\build_windows_installer.ps1" in workflow
     assert "ThomasSetup_${{ steps.meta.outputs.version }}.exe" in workflow
     assert "gh release upload" in workflow
+    release_upload_block = workflow.split("gh release upload", 1)[1]
+    assert "Thomas_source_${{ steps.meta.outputs.version }}.zip" not in release_upload_block
 
 
 def test_readme_is_installer_first() -> None:
     readme = _read("README.md")
 
-    assert "ThomasSetup_" in readme
-    assert "Code -> Download ZIP" in readme
+    assert "Download `ThomasSetup_0.14.59.exe`" in readme
+    assert "Code -> Download ZIP" not in readme
     assert "first_run_wizard.log" in readme

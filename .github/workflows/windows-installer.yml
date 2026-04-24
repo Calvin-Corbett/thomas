@@ -96,5 +96,4 @@ jobs:
         run: |
           gh release upload "${{ steps.meta.outputs.tag }}" `
             "dist/installer/ThomasSetup_${{ steps.meta.outputs.version }}.exe" `
-            "dist/installer/Thomas_source_${{ steps.meta.outputs.version }}.zip" `
             --clobber
