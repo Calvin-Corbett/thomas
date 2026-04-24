@@ -1649,10 +1649,12 @@ function createAgentActivityRow(agentId, status, currentTask, elapsedMs) {
 function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs) {
     if (!container) return;
     let existing = null;
+    const agentKey = safeString(agentId);
     try {
-        existing = container.querySelector(`[data-agent-id="${CSS.escape(agentId)}"]`);
+        existing = container.querySelector(`[data-agent-id="${CSS.escape(agentKey)}"]`);
     } catch {
-        existing = container.querySelector(`[data-agent-id="${agentId.replace(/"/g, '\\"')}"]`);
+        const fallbackAgentKey = agentKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        existing = container.querySelector(`[data-agent-id="${fallbackAgentKey}"]`);
     }
     if (existing) {
         existing.dataset.status = status || 'running';
@@ -1820,13 +1822,22 @@ function onboardingNowIso() {
 
 function createOnboardingTelemetrySessionId() {
     try {
-        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-            return window.crypto.randomUUID();
+        const cryptoApi = window.crypto || globalThis.crypto;
+        if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+            return cryptoApi.randomUUID();
+        }
+        if (cryptoApi && typeof cryptoApi.getRandomValues === 'function') {
+            const bytes = new Uint8Array(16);
+            cryptoApi.getRandomValues(bytes);
+            return `session_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
         }
     } catch {
         // Fallback below.
     }
-    return `session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const perfPart = safeString(window.performance && window.performance.now && window.performance.now())
+        .replace(/[^0-9a-z]/gi, '')
+        .slice(0, 12);
+    return `session_${Date.now().toString(36)}_${perfPart || 'local'}`;
 }
 
 function ensureOnboardingTelemetryClock() {
@@ -29966,25 +29977,25 @@ function moduleWorkbenchOssCatalog(modeRaw) {
     if (mode === 'app_builder') {
         return [
             {
-                title: 'Appsmith',
-                license: 'Apache-2.0',
-                docsUrl: 'https://github.com/appsmithorg/appsmith',
+                title: 'Admin Panel Runtime',
+                license: 'OSS-compatible',
+                docsUrl: '',
                 why: 'Internal tools and admin panels',
-                command: 'docker run --pull always --rm -p 80:80 -p 443:443 -v appsmith-stacks:/appsmith-stacks appsmith/appsmith-ce',
+                command: 'Use the exported page DSL with your preferred internal app runtime.',
             },
             {
-                title: 'Budibase',
-                license: 'GPLv3',
-                docsUrl: 'https://github.com/Budibase/budibase',
-                why: 'Low-code app + automation platform',
-                command: 'curl -s https://raw.githubusercontent.com/Budibase/budibase/master/hosting/docker-compose.yaml -o budibase-docker-compose.yaml',
+                title: 'Builder Runtime',
+                license: 'Project-specific',
+                docsUrl: '',
+                why: 'Low-code app and automation handoff',
+                command: 'Export builder DSL, then map it to your chosen builder runtime.',
             },
             {
-                title: 'NocoBase',
-                license: 'AGPL-3.0',
-                docsUrl: 'https://github.com/nocobase/nocobase',
-                why: 'Extensible enterprise low-code',
-                command: 'npm create nocobase-app@latest',
+                title: 'Workflow Runtime',
+                license: 'Project-specific',
+                docsUrl: '',
+                why: 'Extensible workflow-backed app surfaces',
+                command: 'Export HTML or builder DSL and connect it to your workflow runtime.',
             },
         ];
     }
@@ -32934,7 +32945,7 @@ function moduleRenderWorkbenchAutomations(container, wb) {
     }
 }
 
-function moduleWorkbenchAppSchemaToAppsmith(wb) {
+function moduleWorkbenchAppSchemaToPageDsl(wb) {
     const components = Array.isArray(wb?.components) ? wb.components : [];
     const widgets = components.map((component, index) => ({
         widgetName: safeString(component.label) || `Widget${index + 1}`,
@@ -32956,7 +32967,7 @@ function moduleWorkbenchAppSchemaToAppsmith(wb) {
     };
 }
 
-function moduleWorkbenchAppSchemaToBudibase(wb) {
+function moduleWorkbenchAppSchemaToBuilderDsl(wb) {
     const components = Array.isArray(wb?.components) ? wb.components : [];
     return {
         app: {
@@ -33131,8 +33142,8 @@ function moduleRenderWorkbenchAppBuilderOss(container, wb) {
                 <button type="button" class="module-item-btn" data-app-action="export">Export</button>
                 <button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button>
                 <button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button>
-                <button type="button" class="module-item-btn" data-app-action="export_appsmith">Appsmith JSON</button>
-                <button type="button" class="module-item-btn" data-app-action="export_budibase">Budibase JSON</button>
+                <button type="button" class="module-item-btn" data-app-action="export_page_dsl">Page DSL JSON</button>
+                <button type="button" class="module-item-btn" data-app-action="export_builder_dsl">Builder DSL JSON</button>
                 <button type="button" class="module-item-btn" data-app-action="reset">Reset</button>
             </div>
         </aside>
@@ -33452,12 +33463,12 @@ function moduleRenderWorkbenchAppBuilderOss(container, wb) {
             window.setTimeout(() => URL.revokeObjectURL(url), 5000);
             return;
         }
-        if (action === 'export_appsmith') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToAppsmith(wb), 'Appsmith Page JSON');
+        if (action === 'export_page_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToPageDsl(wb), 'Page DSL JSON');
             return;
         }
-        if (action === 'export_budibase') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBudibase(wb), 'Budibase App JSON');
+        if (action === 'export_builder_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBuilderDsl(wb), 'Builder DSL JSON');
             return;
         }
         if (action === 'reset') {
@@ -33558,7 +33569,7 @@ function moduleRenderWorkbenchAppBuilder(container, wb) {
     const shell = document.createElement('section');
     shell.className = 'module-wb-shell module-wb-shell-app';
     shell.innerHTML = `
-        <aside class="module-wb-side-card"><h4>UI Blocks</h4><div class="module-wb-palette" data-app-palette></div>${moduleWorkbenchRenderProjectControls('app_builder', 'App Projects')}<div class="module-wb-inspector-actions"><button type="button" class="module-item-btn" data-app-action="preview">Preview</button><button type="button" class="module-item-btn" data-app-action="publish">Publish</button><button type="button" class="module-item-btn" data-app-action="export">Export</button><button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button><button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button><button type="button" class="module-item-btn" data-app-action="export_appsmith">Appsmith JSON</button><button type="button" class="module-item-btn" data-app-action="export_budibase">Budibase JSON</button><button type="button" class="module-item-btn" data-app-action="clear">Clear</button></div></aside>
+                <aside class="module-wb-side-card"><h4>UI Blocks</h4><div class="module-wb-palette" data-app-palette></div>${moduleWorkbenchRenderProjectControls('app_builder', 'App Projects')}<div class="module-wb-inspector-actions"><button type="button" class="module-item-btn" data-app-action="preview">Preview</button><button type="button" class="module-item-btn" data-app-action="publish">Publish</button><button type="button" class="module-item-btn" data-app-action="export">Export</button><button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button><button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button><button type="button" class="module-item-btn" data-app-action="export_page_dsl">Page DSL JSON</button><button type="button" class="module-item-btn" data-app-action="export_builder_dsl">Builder DSL JSON</button><button type="button" class="module-item-btn" data-app-action="clear">Clear</button></div></aside>
         <section class="module-wb-stage-card"><div class="module-wb-stage-head"><span class="module-wb-stage-title">Layout</span><span class="module-wb-stage-meta" data-app-status></span></div><div class="module-wb-device-switch"><button type="button" class="module-item-btn" data-app-device="desktop">Desktop</button><button type="button" class="module-item-btn" data-app-device="mobile">Mobile</button></div><div class="module-wb-app-list" data-app-list></div><div class="module-wb-preview-frame-wrap"><div class="module-wb-stage-head"><span class="module-wb-stage-title">Runtime Preview</span><span class="module-wb-stage-meta">live</span></div><iframe class="module-wb-preview-frame" data-app-preview sandbox="allow-scripts"></iframe></div></section>
         <aside class="module-wb-inspector-card" data-app-inspector></aside>
         ${moduleWorkbenchRenderOssStack('app_builder')}
@@ -33670,8 +33681,8 @@ function moduleRenderWorkbenchAppBuilder(container, wb) {
                 window.open(url, '_blank', 'noopener');
                 window.setTimeout(() => URL.revokeObjectURL(url), 5000);
             }
-            if (action === 'export_appsmith') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToAppsmith(wb), 'Appsmith Page JSON');
-            if (action === 'export_budibase') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBudibase(wb), 'Budibase App JSON');
+            if (action === 'export_page_dsl') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToPageDsl(wb), 'Page DSL JSON');
+            if (action === 'export_builder_dsl') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBuilderDsl(wb), 'Builder DSL JSON');
             if (action === 'clear') { wb.components = []; wb.selectedId = ''; }
             renderAll();
             return;
@@ -33929,7 +33940,10 @@ function moduleWorkbenchStudioFfmpegConcatCommand(wb) {
     if (!media.length) {
         return 'ffmpeg -f concat -safe 0 -i clips.txt -c copy output.mp4';
     }
-    const lines = media.map((asset) => `file '${safeString(asset.name).replace(/'/g, "\\'")}'`);
+    const lines = media.map((asset) => {
+        const fileName = safeString(asset.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `file '${fileName}'`;
+    });
     return [
         '# 1) Save this as clips.txt',
         ...lines,
@@ -45387,6 +45401,34 @@ function moduleUiEditorResolvePath(baseDirRaw, relativeRaw) {
     return resolved.join('/');
 }
 
+function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
+    if (!doc || !doc.querySelectorAll) return doc;
+    doc.querySelectorAll('script,iframe,object,embed,base').forEach((node) => node.remove());
+    doc.querySelectorAll('*').forEach((node) => {
+        if (!(node instanceof Element)) return;
+        Array.from(node.attributes || []).forEach((attr) => {
+            const name = safeString(attr.name).toLowerCase();
+            const value = safeString(attr.value).trim();
+            if (name.startsWith('on') || name === 'srcdoc') {
+                node.removeAttribute(attr.name);
+                return;
+            }
+            if ((name === 'href' || name === 'src' || name === 'xlink:href' || name === 'action' || name === 'formaction')
+                && /^(javascript:|vbscript:|data:text\/html)/i.test(value)) {
+                node.removeAttribute(attr.name);
+            }
+        });
+    });
+    return doc;
+}
+
+function moduleUiEditorParseImportedHtml(htmlText) {
+    const parser = new DOMParser();
+    // lgtm[js/html-constructed-from-input] Folder imports are sanitized immediately and loaded into a script-disabled preview.
+    const doc = parser.parseFromString(safeString(htmlText), 'text/html');
+    return moduleUiEditorSanitizeImportedHtmlDocument(doc);
+}
+
 function moduleUiEditorClamp(valueRaw, minRaw, maxRaw) {
     const value = Number(valueRaw);
     const min = Number(minRaw);
@@ -45843,8 +45885,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     if (!entryFile) return { ok: false, reason: 'Could not read entry HTML file.' };
 
     const htmlText = await entryFile.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, 'text/html');
+    const doc = moduleUiEditorParseImportedHtml(htmlText);
     const baseDir = preferred.includes('/') ? preferred.slice(0, preferred.lastIndexOf('/')) : '';
     const blobMap = new Map();
 
@@ -45877,7 +45918,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     rewriteAttr('link[href]', 'href');
     rewriteAttr('a[href]', 'href');
 
-    const serialized = '<!doctype html>\n' + (doc.documentElement ? doc.documentElement.outerHTML : htmlText);
+    const serialized = '<!doctype html>\n' + (doc.documentElement ? doc.documentElement.outerHTML : '');
     return {
         ok: true,
         project: {
@@ -46093,11 +46134,13 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         const id = safeString(project && project.id);
         const rawUrl = safeString(project && project.url);
         const trustedProject = id === 'ui-project-thomas'
-            || type === 'imported'
             || rawUrl === '/'
             || rawUrl.startsWith('/');
         if (trustedProject) {
             return '';
+        }
+        if (type === 'srcdoc') {
+            return 'allow-same-origin';
         }
         return 'allow-scripts allow-forms allow-popups allow-modals';
     };
@@ -46353,11 +46396,14 @@ function moduleUiEditorNormalizeShellPluginBootstrapSource(urlRaw) {
     const source = moduleUiEditorNormalizeGitHubRawUrl(urlRaw);
     if (!source) return { ok: false, reason: 'Missing plugin URL.' };
     if (!/^(https?):\/\//i.test(source)) {
-        return { ok: false, reason: 'Plugin URL must use http or https.' };
+        return { ok: false, reason: 'Plugin URL must use https.' };
     }
     try {
         const parsed = new URL(source);
         const host = safeString(parsed.hostname).toLowerCase();
+        if (safeString(parsed.protocol).toLowerCase() !== 'https:') {
+            return { ok: false, reason: 'Plugin URL must use https.' };
+        }
         if (!MODULE_UI_EDITOR_PLUGIN_BOOTSTRAP_ALLOWLIST.includes(host)) {
             return { ok: false, reason: 'Plugin URL host is not allowlisted.' };
         }
@@ -47086,13 +47132,26 @@ function moduleUiEditorParseShellPluginCards(rawCards) {
 }
 
 function moduleUiEditorNormalizeGitHubRawUrl(urlRaw) {
-    const url = safeString(urlRaw);
+    const url = safeString(urlRaw).trim();
     if (!url) return '';
-    if (url.includes('raw.githubusercontent.com')) return url;
-    if (/^https?:\/\/github\.com\//i.test(url) && /\/blob\//i.test(url)) {
-        return url
-            .replace('https://github.com/', 'https://raw.githubusercontent.com/')
-            .replace('/blob/', '/');
+    try {
+        const parsed = new URL(url);
+        const host = safeString(parsed.hostname).toLowerCase();
+        if (host === 'raw.githubusercontent.com' && parsed.protocol === 'https:') {
+            return parsed.href;
+        }
+        if (host === 'github.com' && parsed.protocol === 'https:') {
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            const blobIndex = parts.indexOf('blob');
+            if (blobIndex === 2 && parts.length > 4) {
+                const [owner, repo] = parts;
+                const branch = parts[3];
+                const path = parts.slice(4).map(encodeURIComponent).join('/');
+                return `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${path}`;
+            }
+        }
+    } catch (_error) {
+        return url;
     }
     return url;
 }
@@ -47251,6 +47310,34 @@ function moduleUiEditorResolvePath(baseDirRaw, relativeRaw) {
         resolved.push(part);
     });
     return resolved.join('/');
+}
+
+function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
+    if (!doc || !doc.querySelectorAll) return doc;
+    doc.querySelectorAll('script,iframe,object,embed,base').forEach((node) => node.remove());
+    doc.querySelectorAll('*').forEach((node) => {
+        if (!node || Number(node.nodeType) !== 1) return;
+        Array.from(node.attributes || []).forEach((attr) => {
+            const name = safeString(attr.name).toLowerCase();
+            const value = safeString(attr.value).trim();
+            if (name.startsWith('on') || name === 'srcdoc') {
+                node.removeAttribute(attr.name);
+                return;
+            }
+            if ((name === 'href' || name === 'src' || name === 'xlink:href' || name === 'action' || name === 'formaction')
+                && /^(javascript:|vbscript:|data:text\/html)/i.test(value)) {
+                node.removeAttribute(attr.name);
+            }
+        });
+    });
+    return doc;
+}
+
+function moduleUiEditorParseImportedHtml(htmlText) {
+    const parser = new DOMParser();
+    // lgtm[js/html-constructed-from-input] Folder imports are sanitized immediately and loaded into a script-disabled preview.
+    const doc = parser.parseFromString(safeString(htmlText), 'text/html');
+    return moduleUiEditorSanitizeImportedHtmlDocument(doc);
 }
 
 function moduleUiEditorClamp(valueRaw, minRaw, maxRaw) {
@@ -48023,8 +48110,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     if (!entryFile) return { ok: false, reason: 'Could not read entry HTML file.' };
 
     const htmlText = await entryFile.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, 'text/html');
+    const doc = moduleUiEditorParseImportedHtml(htmlText);
     const baseDir = preferred.includes('/') ? preferred.slice(0, preferred.lastIndexOf('/')) : '';
     const assetMap = new Map();
 
@@ -48058,7 +48144,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     await rewriteAttr('link[href]', 'href');
     await rewriteAttr('a[href]', 'href');
 
-    const serialized = '<!doctype html>\\n' + (doc.documentElement ? doc.documentElement.outerHTML : htmlText);
+    const serialized = '<!doctype html>\\n' + (doc.documentElement ? doc.documentElement.outerHTML : '');
     return {
         ok: true,
         project: {
@@ -48969,11 +49055,13 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         const id = safeString(project && project.id);
         const rawUrl = safeString(project && project.url);
         const trustedProject = id === 'ui-project-thomas'
-            || type === 'imported'
             || rawUrl === '/'
             || rawUrl.startsWith('/');
         if (trustedProject) {
             return '';
+        }
+        if (type === 'srcdoc') {
+            return 'allow-same-origin';
         }
         return 'allow-scripts allow-forms allow-popups allow-modals';
     };

@@ -77,7 +77,7 @@ def _passing_gates() -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 def _approved_fallback_receipt(
     *,
-    actor: str = "WORKSTATION\\corbe",
+    actor: str = "WORKSTATION\\operator",
     agent: str = "codex",
     scopes: tuple[str, ...] = ("src/app.py",),
     reason: str = "user approved scoped fallback",
@@ -188,7 +188,7 @@ def test_agent_commit_fallback_succeeds_without_active_claim(tmp_path: Path, mon
     body = _git(repo, "log", "-1", "--pretty=%B")
     assert "Thomas-Commit-Mode: scoped-fallback" in body
     assert "Thomas-Fallback-Reason: user approved scoped fallback" in body
-    assert "Thomas-Fallback-Approved-By: WORKSTATION\\corbe" in body
+    assert "Thomas-Fallback-Approved-By: WORKSTATION\\operator" in body
     assert f"Thomas-Fallback-Approval-Method: {mod.breakglass_auth.WINDOWS_CREDENTIAL_METHOD}" in body
 
 

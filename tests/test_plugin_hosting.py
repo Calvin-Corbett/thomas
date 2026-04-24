@@ -274,12 +274,12 @@ def test_signing_secret_persists_without_env(tmp_path: Path, monkeypatch) -> Non
 
 
 def test_parse_plugin_install_deep_link_roundtrip() -> None:
-    link = build_plugin_install_deep_link("life-manager", "https://example.invalid", channel="stable")
+    link = build_plugin_install_deep_link("life-manager", "https://github.com/Calvin-Corbett/thomas", channel="stable")
     parsed = parse_plugin_install_deep_link(link)
 
     assert parsed == {
         "plugin_id": "life-manager",
-        "store": "https://example.invalid",
+        "store": "https://github.com/Calvin-Corbett/thomas",
         "channel": "stable",
     }
 
@@ -290,6 +290,7 @@ def test_parse_plugin_install_deep_link_rejects_invalid_inputs() -> None:
         "thomas://open-plugin?plugin_id=life-manager&store=https%3A%2F%2Fexample.invalid",
         "thomas://install-plugin?store=https%3A%2F%2Fexample.invalid",
         "thomas://install-plugin?plugin_id=life-manager",
+        "thomas://install-plugin?plugin_id=life-manager&store=https%3A%2F%2Fexample.invalid",
     ]
 
     for link in invalid_links:

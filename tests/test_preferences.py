@@ -350,7 +350,7 @@ def test_human_breakglass_toggle_requires_fresh_receipt(tmp_db, monkeypatch):
         "consume_breakglass_toggle_receipt",
         lambda receipt: (
             breakglass_auth.BreakglassToggleReceipt(
-                actor="WORKSTATION\\corbe",
+                actor="WORKSTATION\\operator",
                 method=breakglass_auth.WINDOWS_CREDENTIAL_METHOD,
             )
             if receipt == "receipt-123"
@@ -364,7 +364,7 @@ def test_human_breakglass_toggle_requires_fresh_receipt(tmp_db, monkeypatch):
         changed_by="codex",
     )
     assert updated.advanced.security.human_breakglass_enabled is True
-    assert updated.advanced.security.human_breakglass_changed_by == "WORKSTATION\\corbe"
+    assert updated.advanced.security.human_breakglass_changed_by == "WORKSTATION\\operator"
 
 
 def test_guardrails_allow_strengthening_but_block_weakening_on_generic_patch(tmp_db):

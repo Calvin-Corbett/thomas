@@ -57,8 +57,8 @@ function moduleRenderWorkbenchAppBuilderOss(container, wb) {
                 <button type="button" class="module-item-btn" data-app-action="export">Export</button>
                 <button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button>
                 <button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button>
-                <button type="button" class="module-item-btn" data-app-action="export_appsmith">Appsmith JSON</button>
-                <button type="button" class="module-item-btn" data-app-action="export_budibase">Budibase JSON</button>
+                <button type="button" class="module-item-btn" data-app-action="export_page_dsl">Page DSL JSON</button>
+                <button type="button" class="module-item-btn" data-app-action="export_builder_dsl">Builder DSL JSON</button>
                 <button type="button" class="module-item-btn" data-app-action="reset">Reset</button>
             </div>
         </aside>
@@ -378,12 +378,12 @@ function moduleRenderWorkbenchAppBuilderOss(container, wb) {
             window.setTimeout(() => URL.revokeObjectURL(url), 5000);
             return;
         }
-        if (action === 'export_appsmith') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToAppsmith(wb), 'Appsmith Page JSON');
+        if (action === 'export_page_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToPageDsl(wb), 'Page DSL JSON');
             return;
         }
-        if (action === 'export_budibase') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBudibase(wb), 'Budibase App JSON');
+        if (action === 'export_builder_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBuilderDsl(wb), 'Builder DSL JSON');
             return;
         }
         if (action === 'reset') {
@@ -484,7 +484,7 @@ function moduleRenderWorkbenchAppBuilder(container, wb) {
     const shell = document.createElement('section');
     shell.className = 'module-wb-shell module-wb-shell-app';
     shell.innerHTML = `
-        <aside class="module-wb-side-card"><h4>UI Blocks</h4><div class="module-wb-palette" data-app-palette></div>${moduleWorkbenchRenderProjectControls('app_builder', 'App Projects')}<div class="module-wb-inspector-actions"><button type="button" class="module-item-btn" data-app-action="preview">Preview</button><button type="button" class="module-item-btn" data-app-action="publish">Publish</button><button type="button" class="module-item-btn" data-app-action="export">Export</button><button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button><button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button><button type="button" class="module-item-btn" data-app-action="export_appsmith">Appsmith JSON</button><button type="button" class="module-item-btn" data-app-action="export_budibase">Budibase JSON</button><button type="button" class="module-item-btn" data-app-action="clear">Clear</button></div></aside>
+        <aside class="module-wb-side-card"><h4>UI Blocks</h4><div class="module-wb-palette" data-app-palette></div>${moduleWorkbenchRenderProjectControls('app_builder', 'App Projects')}<div class="module-wb-inspector-actions"><button type="button" class="module-item-btn" data-app-action="preview">Preview</button><button type="button" class="module-item-btn" data-app-action="publish">Publish</button><button type="button" class="module-item-btn" data-app-action="export">Export</button><button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button><button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button><button type="button" class="module-item-btn" data-app-action="export_page_dsl">Page DSL JSON</button><button type="button" class="module-item-btn" data-app-action="export_builder_dsl">Builder DSL JSON</button><button type="button" class="module-item-btn" data-app-action="clear">Clear</button></div></aside>
         <section class="module-wb-stage-card"><div class="module-wb-stage-head"><span class="module-wb-stage-title">Layout</span><span class="module-wb-stage-meta" data-app-status></span></div><div class="module-wb-device-switch"><button type="button" class="module-item-btn" data-app-device="desktop">Desktop</button><button type="button" class="module-item-btn" data-app-device="mobile">Mobile</button></div><div class="module-wb-app-list" data-app-list></div><div class="module-wb-preview-frame-wrap"><div class="module-wb-stage-head"><span class="module-wb-stage-title">Runtime Preview</span><span class="module-wb-stage-meta">live</span></div><iframe class="module-wb-preview-frame" data-app-preview sandbox="allow-scripts"></iframe></div></section>
         <aside class="module-wb-inspector-card" data-app-inspector></aside>
         ${moduleWorkbenchRenderOssStack('app_builder')}
@@ -596,8 +596,8 @@ function moduleRenderWorkbenchAppBuilder(container, wb) {
                 window.open(url, '_blank', 'noopener');
                 window.setTimeout(() => URL.revokeObjectURL(url), 5000);
             }
-            if (action === 'export_appsmith') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToAppsmith(wb), 'Appsmith Page JSON');
-            if (action === 'export_budibase') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBudibase(wb), 'Budibase App JSON');
+            if (action === 'export_page_dsl') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToPageDsl(wb), 'Page DSL JSON');
+            if (action === 'export_builder_dsl') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBuilderDsl(wb), 'Builder DSL JSON');
             if (action === 'clear') { wb.components = []; wb.selectedId = ''; }
             renderAll();
             return;
@@ -1176,4 +1176,3 @@ function moduleStudioDownloadDataUrl(filenameRaw, dataUrlRaw) {
         anchor.remove();
     }, 80);
 }
-

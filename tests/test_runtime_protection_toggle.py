@@ -38,7 +38,7 @@ def test_runtime_protection_requires_flag_and_receipt(tmp_path: Path, monkeypatc
     receipt.write_text(
         json.dumps(
             {
-                "actor": "WORKSTATION\\corbe",
+            "actor": "WORKSTATION\\operator",
                 "method": "windows-credential-dialog",
                 "disabled_at": "2026-04-10T20:00:00+0000",
                 "expires_at": 1_300.0,
@@ -81,7 +81,7 @@ def test_runtime_protection_rejects_expired_receipt(tmp_path: Path, monkeypatch)
     receipt.write_text(
         json.dumps(
             {
-                "actor": "WORKSTATION\\corbe",
+            "actor": "WORKSTATION\\operator",
                 "method": "windows-credential-dialog",
                 "disabled_at": "2026-04-10T20:00:00+0000",
                 "expires_at": 999.0,
@@ -98,7 +98,7 @@ def test_cmd_off_writes_expiring_receipt(tmp_path: Path, monkeypatch, capsys) ->
     repo.mkdir()
     monkeypatch.setattr(mod, "_state_root", lambda: tmp_path / "state")
     monkeypatch.setattr(mod, "_authenticate_windows", lambda: True)
-    monkeypatch.setenv("USERNAME", "corbe")
+    monkeypatch.setenv("USERNAME", "operator")
     monkeypatch.setattr(mod.time, "time", lambda: 1_000.0)
     monkeypatch.setattr(mod.time, "strftime", lambda fmt, ts=None: "2026-04-13 12:00:00")
     monkeypatch.setattr(mod.time, "localtime", lambda value=None: value)

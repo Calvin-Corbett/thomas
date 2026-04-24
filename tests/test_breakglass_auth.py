@@ -40,7 +40,7 @@ def test_authorize_breakglass_requires_opt_in(monkeypatch) -> None:
 def test_authorize_breakglass_uses_windows_prompt(monkeypatch) -> None:
     monkeypatch.setattr(mod.os, "name", "nt")
     monkeypatch.setattr(mod, "_human_breakglass_enabled", lambda: True)
-    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\corbe")
+    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\operator")
     monkeypatch.setattr(mod, "_show_breakglass_confirmation_dialog", lambda **_: True)
     monkeypatch.setattr(
         mod,
@@ -48,7 +48,7 @@ def test_authorize_breakglass_uses_windows_prompt(monkeypatch) -> None:
         lambda **_: mod.BreakglassAuthorization(
             ok=True,
             message="approved",
-            actor="WORKSTATION\\corbe",
+            actor="WORKSTATION\\operator",
             method=mod.WINDOWS_CREDENTIAL_METHOD,
             cancelled=False,
         ),
@@ -63,7 +63,7 @@ def test_authorize_breakglass_uses_windows_prompt(monkeypatch) -> None:
     )
 
     assert result.ok is True
-    assert result.actor == "WORKSTATION\\corbe"
+    assert result.actor == "WORKSTATION\\operator"
     assert result.method == mod.WINDOWS_CREDENTIAL_METHOD
 
 
@@ -74,24 +74,24 @@ def test_build_windows_prompt_copy_explains_current_user_sign_in() -> None:
         ticket="OPS-42",
         reason="Need a human-authenticated protected-file override for the governance patch.",
         skip_hooks=["thomas-protected-files-gate", "thomas-active-folder-guard"],
-        current_user="WORKSTATION\\corbe",
+        current_user="WORKSTATION\\operator",
     )
-    caption, message = mod._build_windows_prompt_copy(current_user="WORKSTATION\\corbe")
+    caption, message = mod._build_windows_prompt_copy(current_user="WORKSTATION\\operator")
 
     assert title == mod.WINDOWS_CONFIRMATION_CAPTION
     assert instruction == "Approve protected Thomas change?"
-    assert "Account: WORKSTATION\\corbe" in content
+    assert "Account: WORKSTATION\\operator" in content
     assert "Requested by: Codex" in content
     assert "Continue to open the Windows sign-in prompt." in content
     assert caption == mod.WINDOWS_CREDENTIAL_CAPTION
-    assert "Account: WORKSTATION\\corbe" in message
+    assert "Account: WORKSTATION\\operator" in message
     assert "PIN, password, or Windows Hello" in message
     assert "thomas-protected-files-gate" in content
 
 
 def test_authorize_breakglass_toggle_mints_single_use_receipt(monkeypatch) -> None:
     monkeypatch.setattr(mod.os, "name", "nt")
-    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\corbe")
+    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\operator")
     monkeypatch.setattr(mod, "_show_breakglass_confirmation_dialog", lambda **_: True)
     monkeypatch.setattr(
         mod,
@@ -99,7 +99,7 @@ def test_authorize_breakglass_toggle_mints_single_use_receipt(monkeypatch) -> No
         lambda **_: mod.BreakglassAuthorization(
             ok=True,
             message="approved",
-            actor="WORKSTATION\\corbe",
+            actor="WORKSTATION\\operator",
             method=mod.WINDOWS_CREDENTIAL_METHOD,
             cancelled=False,
         ),
@@ -111,14 +111,14 @@ def test_authorize_breakglass_toggle_mints_single_use_receipt(monkeypatch) -> No
     assert result.receipt
     receipt = mod.consume_breakglass_toggle_receipt(result.receipt)
     assert receipt is not None
-    assert receipt.actor == "WORKSTATION\\corbe"
+    assert receipt.actor == "WORKSTATION\\operator"
     assert receipt.method == mod.WINDOWS_CREDENTIAL_METHOD
     assert mod.consume_breakglass_toggle_receipt(result.receipt) is None
 
 
 def test_authorize_breakglass_toggle_reports_cancelled_confirmation(monkeypatch) -> None:
     monkeypatch.setattr(mod.os, "name", "nt")
-    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\corbe")
+    monkeypatch.setattr(mod, "_current_windows_sam_name", lambda: "WORKSTATION\\operator")
     monkeypatch.setattr(mod, "_show_breakglass_confirmation_dialog", lambda **_: False)
 
     result = mod.authorize_breakglass_toggle(enabled=False)
@@ -137,7 +137,7 @@ def test_authorize_scope_fallback_mints_single_use_receipt(tmp_path: Path, monke
         lambda **_: mod.BreakglassAuthorization(
             ok=True,
             message="approved",
-            actor="WORKSTATION\\corbe",
+            actor="WORKSTATION\\operator",
             method=mod.WINDOWS_CREDENTIAL_METHOD,
         ),
     )
@@ -157,7 +157,7 @@ def test_authorize_scope_fallback_mints_single_use_receipt(tmp_path: Path, monke
         reason="user approved scoped fallback",
     )
     assert receipt is not None
-    assert receipt.actor == "WORKSTATION\\corbe"
+    assert receipt.actor == "WORKSTATION\\operator"
     assert receipt.method == mod.WINDOWS_CREDENTIAL_METHOD
     assert mod.consume_scope_fallback_receipt(
         result.receipt,
@@ -171,7 +171,7 @@ def test_consume_scope_fallback_receipt_rejects_mismatched_scope_or_reason(tmp_p
     receipts_dir = tmp_path / "receipts"
     monkeypatch.setattr(mod, "_scope_fallback_receipts_dir", lambda: receipts_dir)
     receipt = mod._issue_scope_fallback_receipt(
-        actor="WORKSTATION\\corbe",
+        actor="WORKSTATION\\operator",
         method=mod.WINDOWS_CREDENTIAL_METHOD,
         agent="codex",
         scopes=("src/app.py",),
@@ -189,7 +189,7 @@ def test_consume_scope_fallback_receipt_rejects_mismatched_scope_or_reason(tmp_p
     )
 
     receipt = mod._issue_scope_fallback_receipt(
-        actor="WORKSTATION\\corbe",
+        actor="WORKSTATION\\operator",
         method=mod.WINDOWS_CREDENTIAL_METHOD,
         agent="codex",
         scopes=("src/app.py",),

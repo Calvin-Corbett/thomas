@@ -25,6 +25,7 @@ from thomas.server.desktop_plugins_manifest import (
     _plugin_store_identity_path,
     _read_json_file,
     _safe_int,
+    _safe_plugin_id,
     _safe_rel_path,
     _safe_text,
     _string_list,
@@ -35,6 +36,9 @@ from thomas.server.desktop_plugins_manifest import (
     load_bundled_desktop_plugin_manifest,
     load_desktop_plugin_manifest_from_data,
 )
+
+_PLUGIN_STORE_PUBLIC_HOSTS = {"github.com", "raw.githubusercontent.com"}
+_PLUGIN_STORE_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def _load_installed_registry(config: AppConfig) -> dict[str, Any]:
@@ -77,7 +81,38 @@ def _remove_installed_record(config: AppConfig, plugin_id: str) -> None:
 
 
 def _installed_plugin_dir(config: AppConfig, plugin_id: str) -> Path:
-    return _installed_plugins_root(config) / plugin_id
+    return _installed_plugins_root(config) / _safe_plugin_id(plugin_id)
+
+
+def _validate_plugin_store_url(store_url_raw: str) -> str:
+    parsed = urlparse(_safe_text(store_url_raw))
+    host = _safe_text(parsed.hostname).lower()
+    scheme = _safe_text(parsed.scheme).lower()
+    if not scheme or not host:
+        raise ValueError("store_url must include a scheme and host")
+    if parsed.username or parsed.password:
+        raise ValueError("store_url must not include credentials")
+    if host in _PLUGIN_STORE_LOOPBACK_HOSTS:
+        if scheme not in {"http", "https"}:
+            raise ValueError("loopback store_url must use http or https")
+    elif host in _PLUGIN_STORE_PUBLIC_HOSTS:
+        if scheme != "https":
+            raise ValueError("public store_url must use https")
+        if host == "github.com" and not parsed.path.rstrip("/").lower().startswith("/calvin-corbett/thomas"):
+            raise ValueError("github store_url must point at the Thomas public repository")
+    else:
+        raise ValueError("store_url host is not allowlisted")
+    return parsed.geturl().rstrip("/")
+
+
+def _resolve_store_relative_url(base_url: str, relative_url_raw: str) -> str:
+    relative_url = _safe_text(relative_url_raw)
+    parsed = urlparse(relative_url)
+    if parsed.scheme or parsed.netloc:
+        raise ValueError("download_url must be relative to the plugin store")
+    resolved = urljoin(base_url.rstrip("/") + "/", relative_url.lstrip("/"))
+    _validate_plugin_store_url(resolved)
+    return resolved
 
 
 def _delete_installed_plugin_payload(config: AppConfig, plugin_id: str) -> bool:
@@ -174,7 +209,11 @@ def list_installed_plugins(config: AppConfig, *, include_disabled: bool = True) 
             continue
         if not include_disabled and not row["enabled"]:
             continue
-        if not _installed_plugin_dir(config, row["plugin_id"]).exists():
+        try:
+            installed_dir = _installed_plugin_dir(config, row["plugin_id"])
+        except ValueError:
+            continue
+        if not installed_dir.exists():
             continue
         out.append(row)
     return out
@@ -478,7 +517,8 @@ def install_plugin_from_store(
     channel: str = "stable",
     _visited: set[str] | None = None,
 ) -> dict[str, Any]:
-    base_url = _safe_text(store_url).rstrip("/")
+    plugin_id = _safe_plugin_id(plugin_id)
+    base_url = _validate_plugin_store_url(store_url)
     if not base_url:
         raise ValueError("store_url is required")
 
@@ -500,7 +540,7 @@ def install_plugin_from_store(
         )
         token_response.raise_for_status()
         token_payload = token_response.json()
-        download_url = urljoin(base_url + "/", _safe_text(token_payload.get("download_url")).lstrip("/"))
+        download_url = _resolve_store_relative_url(base_url, _safe_text(token_payload.get("download_url")))
         bundle_response = client.get(download_url)
         bundle_response.raise_for_status()
         bundle_bytes = bundle_response.content
@@ -542,11 +582,12 @@ def parse_plugin_install_deep_link(url_raw: str) -> dict[str, str]:
     channel = _safe_text((query.get("channel") or ["stable"])[0]) or "stable"
     if not plugin_id:
         raise ValueError("plugin_id is required")
+    plugin_id = _safe_plugin_id(plugin_id)
     if not store:
         raise ValueError("store is required")
     return {
         "plugin_id": plugin_id,
-        "store": store,
+        "store": _validate_plugin_store_url(store),
         "channel": channel,
     }
 
