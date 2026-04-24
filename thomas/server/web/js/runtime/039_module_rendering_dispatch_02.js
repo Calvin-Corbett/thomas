@@ -700,7 +700,17 @@ async function fetchModels() {
                 || safeString(window.localStorage.getItem('thomas_active_profile'));
             const savedProfileMeta = savedProfile ? availableModelProfiles.find(m => m.name === savedProfile) : null;
             const hasPersistedProfile = Boolean(safeString(currentPreferences?.advanced?.model?.active_profile));
-            const targetProfile = (savedProfileMeta && savedProfileMeta.active)
+            const savedProfileProvider = safeString(savedProfileMeta?.provider).toLowerCase();
+            const savedProfileUsable = Boolean(
+                savedProfileMeta
+                && (
+                    savedProfileMeta.has_api_key
+                    || savedProfileProvider === 'codex'
+                    || savedProfileProvider === 'ollama'
+                    || savedProfileProvider === 'local'
+                )
+            );
+            const targetProfile = savedProfileUsable
                 ? savedProfile
                 : (data.default || (active[0] && active[0].name) || (availableModelProfiles[0] && availableModelProfiles[0].name) || '');
 
@@ -1035,4 +1045,3 @@ function initFeatures() {
 //   MODEL SETUP & SETTINGS                                                 
 //   Model selector, profile switching, settings form, save/load prefs      
 // 
-

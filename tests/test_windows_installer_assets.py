@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
 
 
@@ -58,9 +57,28 @@ def test_github_workflow_builds_and_uploads_installer_asset() -> None:
     assert "Thomas_source_${{ steps.meta.outputs.version }}.zip" not in release_upload_block
 
 
+def test_github_workflow_smoke_tests_silent_installer() -> None:
+    workflow = _read(".github/workflows/windows-installer.yml")
+
+    assert "Smoke test installer" in workflow
+    assert "/VERYSILENT" in workflow
+    assert "/SUPPRESSMSGBOXES" in workflow
+    assert "/DIR=$installDir" in workflow
+    assert "launch-thomas.vbs" in workflow
+    assert "support.cmd" in workflow
+    assert "scripts\\first-run.cmd" in workflow
+    assert "scripts\\first_run_wizard.ps1" in workflow
+    assert "scripts\\run-ui.ps1" in workflow
+    assert "-ConfirmedInstallChanges -NoPrompt -NoLaunch -NoBrowser" in workflow
+    assert ".venv\\Scripts\\python.exe" in workflow
+    assert "runtime\\setup\\last_setup.txt" in workflow
+    assert "runtime\\logs\\first_run_wizard.log" in workflow
+    assert "unins000.exe" in workflow
+
+
 def test_readme_is_installer_first() -> None:
     readme = _read("README.md")
 
-    assert "Download `ThomasSetup_0.14.59.exe`" in readme
+    assert "Download `ThomasSetup_0.14.60.exe`" in readme
     assert "Code -> Download ZIP" not in readme
     assert "first_run_wizard.log" in readme

@@ -12,7 +12,8 @@ def _read_text(relative_path: str) -> str:
 def test_readme_surfaces_user_first_story() -> None:
     readme = _read_text("README.md")
     assert readme.startswith("# Thomas")
-    assert "Fresh install: run `run-ui.cmd`" in readme
+    assert "Fresh install: download the Windows installer above." in readme
+    assert "ThomasSetup_0.14.60.exe" in readme
     assert "## Everyday Use" in readme
     assert "## Grow Into Advanced Thomas Safely" in readme
 
