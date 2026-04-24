@@ -8,6 +8,21 @@ $ErrorActionPreference = "Stop"
 $Root = (Resolve-Path (Join-Path $PSScriptRoot "..")).Path
 Set-Location $Root
 
+function Get-ProjectVersion {
+  $pyproject = Join-Path $Root "pyproject.toml"
+  if (-not (Test-Path $pyproject)) { return "" }
+  $match = Select-String -Path $pyproject -Pattern '^version\s*=\s*"([^"]+)"' | Select-Object -First 1
+  if (-not $match) { return "" }
+  return [string]$match.Matches[0].Groups[1].Value
+}
+
+if ($Version -eq "0.0.0-dev") {
+  $projectVersion = Get-ProjectVersion
+  if ($projectVersion) {
+    $Version = $projectVersion
+  }
+}
+
 $DistDir = Join-Path $Root "dist\installer"
 $StageDir = Join-Path $DistDir ("staging_{0}" -f (Get-Date -Format "yyyyMMdd_HHmmss"))
 New-Item -ItemType Directory -Force -Path $DistDir | Out-Null
@@ -29,46 +44,39 @@ function Get-IsccPath {
 Write-Host "[thomas] Preparing installer staging directory..."
 New-Item -ItemType Directory -Force -Path $StageDir | Out-Null
 
-$robocopyArgs = @(
-  $Root,
-  $StageDir,
-  "/E",
-  "/XD", ".git", ".venv", "node_modules", "runtime", "dist", "pack", "output", "logs", "__pycache__", ".pytest_cache", ".mypy_cache", ".ruff_cache", "nul",
-  "/XF", "*.pyc", "*.pyo", "*.zip", "nul",
-  "/R:2",
-  "/W:2",
-  "/NFL",
-  "/NDL",
-  "/NJH",
-  "/NJS",
-  "/NP"
-)
+$trackedFiles = & git ls-files
+if ($LASTEXITCODE -ne 0 -or -not $trackedFiles) {
+  throw "[thomas] git ls-files failed; installer builds require a git checkout."
+}
 
-& robocopy @robocopyArgs | Out-Null
-$rc = $LASTEXITCODE
-if ($rc -gt 7) {
-  throw "[thomas] robocopy staging failed (exit $rc)"
+foreach ($rel in $trackedFiles) {
+  if ([string]::IsNullOrWhiteSpace($rel)) { continue }
+  $src = Join-Path $Root $rel
+  if (-not (Test-Path -LiteralPath $src -PathType Leaf)) { continue }
+  $dest = Join-Path $StageDir $rel
+  $destDir = Split-Path -Parent $dest
+  New-Item -ItemType Directory -Force -Path $destDir | Out-Null
+  Copy-Item -LiteralPath $src -Destination $dest -Force
 }
 
 $sourceZip = Join-Path $DistDir ("Thomas_source_{0}.zip" -f $Version)
 if (Test-Path $sourceZip) {
   Remove-Item -Force $sourceZip
 }
-$zipItems = Get-ChildItem -Path $StageDir -Recurse -File -Force -ErrorAction SilentlyContinue |
-  Where-Object { $_.Name -ne "nul" } |
-  Select-Object -ExpandProperty FullName
+$zipItems = Get-ChildItem -Path $StageDir -Recurse -File -Force -ErrorAction SilentlyContinue
 if (-not $zipItems -or $zipItems.Count -eq 0) {
   throw "[thomas] staging directory is empty after filtering; cannot create source bundle"
 }
-Compress-Archive -Path $zipItems -DestinationPath $sourceZip -CompressionLevel Optimal
+Add-Type -AssemblyName System.IO.Compression.FileSystem
+[System.IO.Compression.ZipFile]::CreateFromDirectory($StageDir, $sourceZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 Write-Host ("[thomas] Source bundle: {0}" -f $sourceZip)
-try {
-  Remove-Item -Recurse -Force $StageDir -ErrorAction SilentlyContinue
-} catch {
-  # non-blocking cleanup
-}
 
 if ($SkipCompile) {
+  try {
+    Remove-Item -Recurse -Force $StageDir -ErrorAction SilentlyContinue
+  } catch {
+    # non-blocking cleanup
+  }
   Write-Host "[thomas] Skipping Inno Setup compile (--SkipCompile)."
   exit 0
 }
@@ -80,7 +88,7 @@ if (-not $iscc) {
   exit 2
 }
 
-$iss = Join-Path $Root "installer\ThomasSetup.iss"
+$iss = Join-Path $StageDir "installer\ThomasSetup.iss"
 if (-not (Test-Path $iss)) {
   throw "[thomas] Missing Inno Setup script: $iss"
 }
@@ -89,6 +97,17 @@ Write-Host ("[thomas] Compiling installer with Inno Setup: {0}" -f $iscc)
 & $iscc "/DMyAppVersion=$Version" $iss
 if ($LASTEXITCODE -ne 0) {
   throw "[thomas] ISCC compile failed (exit $LASTEXITCODE)"
+}
+
+$stageExe = Join-Path $StageDir ("dist\installer\ThomasSetup_{0}.exe" -f $Version)
+if (-not (Test-Path $stageExe)) {
+  throw "[thomas] Expected installer was not produced: $stageExe"
+}
+Copy-Item -LiteralPath $stageExe -Destination $DistDir -Force
+try {
+  Remove-Item -Recurse -Force $StageDir -ErrorAction SilentlyContinue
+} catch {
+  # non-blocking cleanup
 }
 
 Write-Host ("[thomas] Installer output directory: {0}" -f $DistDir)
