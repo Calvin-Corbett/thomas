@@ -12,7 +12,6 @@ from thomas.server.desktop_plugins_manifest import (
 from thomas.server.desktop_plugins_runtime import (
     build_plugin_install_deep_link,
     create_official_hosted_manifest,
-    create_plugin_store_api_key_file,
     get_installed_plugin,
     get_or_create_plugin_store_api_key,
     install_bundled_plugin,
@@ -33,7 +32,6 @@ __all__ = [
     "build_plugin_install_deep_link",
     "compute_plugin_bundle_sha256",
     "create_official_hosted_manifest",
-    "create_plugin_store_api_key_file",
     "get_installed_plugin",
     "get_or_create_plugin_store_api_key",
     "install_bundled_plugin",

@@ -533,12 +533,20 @@ def _resolve_pack_dir(extensions_root: Path, plugin_id: str) -> Path | None:
     except ValueError:
         return None
     extensions_root = extensions_root.resolve()
-    candidate = (extensions_root / safe_plugin_id).resolve()
     try:
-        candidate.relative_to(extensions_root)
-    except ValueError:
+        children = list(extensions_root.iterdir())
+    except OSError:
         return None
-    return candidate if candidate.is_dir() else None
+    for child in children:
+        if child.name != safe_plugin_id or not child.is_dir():
+            continue
+        candidate = child.resolve()
+        try:
+            candidate.relative_to(extensions_root)
+        except ValueError:
+            return None
+        return candidate
+    return None
 
 
 def _iter_pack_files(pack_dir: Path) -> list[tuple[Path, Path]]:
@@ -558,7 +566,7 @@ def _iter_pack_files(pack_dir: Path) -> list[tuple[Path, Path]]:
 
 
 def _build_pack_archive(plugin_id: str, pack_dir: Path) -> bytes:
-    safe_plugin_id = _safe_plugin_id(plugin_id)
+    _safe_plugin_id(plugin_id)
     files = _iter_pack_files(pack_dir)
     if not files:
         raise FileNotFoundError(f"Plugin '{plugin_id}' does not contain any downloadable files")
@@ -566,7 +574,7 @@ def _build_pack_archive(plugin_id: str, pack_dir: Path) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for source_path, rel_path in files:
-            archive.write(source_path, arcname=str(PurePosixPath(safe_plugin_id, *rel_path.parts)))
+            archive.write(source_path, arcname=str(PurePosixPath("plugin", *rel_path.parts)))
     return buffer.getvalue()
 
 
@@ -1050,7 +1058,7 @@ def register_marketplace_catalog_routes(
             raise web.HTTPForbidden(text="Plugin asset is not available") from exc
         except (FileNotFoundError, ValueError) as exc:
             raise web.HTTPNotFound(text="Plugin asset was not found") from exc
-        return web.FileResponse(asset, headers={"Cache-Control": "no-store"})
+        return web.Response(body=asset.read_bytes(), headers={"Cache-Control": "no-store"})
 
     app.router.add_get("/api/marketplace/plugins", api_marketplace_plugins)
     app.router.add_get("/api/marketplace/sync", api_marketplace_sync)

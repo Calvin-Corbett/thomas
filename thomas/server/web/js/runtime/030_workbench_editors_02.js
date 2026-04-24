@@ -855,7 +855,10 @@ function moduleWorkbenchStudioFfmpegConcatCommand(wb) {
     if (!media.length) {
         return 'ffmpeg -f concat -safe 0 -i clips.txt -c copy output.mp4';
     }
-    const lines = media.map((asset) => `file '${safeString(asset.name).replace(/'/g, "\\'")}'`);
+    const lines = media.map((asset) => {
+        const fileName = safeString(asset.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `file '${fileName}'`;
+    });
     return [
         '# 1) Save this as clips.txt',
         ...lines,

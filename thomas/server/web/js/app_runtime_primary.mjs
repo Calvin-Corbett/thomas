@@ -45424,8 +45424,8 @@ function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
 
 function moduleUiEditorParseImportedHtml(htmlText) {
     const parser = new DOMParser();
-    // lgtm[js/html-constructed-from-input] Folder imports are sanitized immediately and loaded into a script-disabled preview.
-    const doc = parser.parseFromString(safeString(htmlText), 'text/html');
+    const sanitizedHtml = sanitizeRenderedHtml(safeString(htmlText));
+    const doc = parser.parseFromString(sanitizedHtml, 'text/html');
     return moduleUiEditorSanitizeImportedHtmlDocument(doc);
 }
 
@@ -47335,8 +47335,8 @@ function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
 
 function moduleUiEditorParseImportedHtml(htmlText) {
     const parser = new DOMParser();
-    // lgtm[js/html-constructed-from-input] Folder imports are sanitized immediately and loaded into a script-disabled preview.
-    const doc = parser.parseFromString(safeString(htmlText), 'text/html');
+    const sanitizedHtml = sanitizeRenderedHtml(safeString(htmlText));
+    const doc = parser.parseFromString(sanitizedHtml, 'text/html');
     return moduleUiEditorSanitizeImportedHtmlDocument(doc);
 }
 

@@ -16,7 +16,8 @@ from typing import Any
 
 from aiohttp import web
 
-from thomas.server.desktop_plugins import build_plugin_install_deep_link, create_plugin_store_api_key_file
+from thomas.server.desktop_plugins import build_plugin_install_deep_link
+from thomas.server.desktop_plugins_manifest import _DEFAULT_PLUGIN_STORE_API_KEY
 
 log = logging.getLogger(__name__)
 
@@ -253,7 +254,6 @@ class PluginRegistry:
     def __init__(self, storage_dir: Path):
         self._dir = storage_dir
         self._plugins_dir = storage_dir / "plugins"
-        self._api_keys_file = storage_dir / "api_keys.json"
         self._reports_file = storage_dir / "reports.json"
         self._catalog_cache: list[PluginManifest] | None = None
         self._catalog_mtime: float = 0.0
@@ -261,7 +261,6 @@ class PluginRegistry:
     def ensure_storage(self) -> None:
         self._dir.mkdir(parents=True, exist_ok=True)
         self._plugins_dir.mkdir(parents=True, exist_ok=True)
-        create_plugin_store_api_key_file(self._dir)
         if not self._reports_file.exists():
             self._reports_file.write_text(json.dumps({"reports": []}, indent=2), encoding="utf-8")
 
@@ -400,16 +399,8 @@ class PluginRegistry:
         return {"valid": True, "sha256": actual_hash, "size_bytes": bundle_path.stat().st_size}
 
     def validate_api_key(self, key: str) -> bool:
-        if not key:
-            return False
-        try:
-            payload = json.loads(self._api_keys_file.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError):
-            return False
-        keys = payload.get("keys") if isinstance(payload, dict) else {}
-        if not isinstance(keys, dict):
-            return False
-        return key in keys and bool(keys[key].get("active", True))
+        expected = _safe_text(os.environ.get("THOMAS_PLUGIN_STORE_API_KEY")) or _DEFAULT_PLUGIN_STORE_API_KEY
+        return bool(key and expected and secrets.compare_digest(key, expected))
 
     def record_download(self, plugin_id: str) -> None:
         manifest_path = self._plugins_dir / plugin_id / "manifest.json"
