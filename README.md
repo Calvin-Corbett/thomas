@@ -2,9 +2,16 @@
 
 Thomas is a local-first AI workspace for chat, tools, memory, and automation.
 
+## Download for Windows
+
+Normal users should download the installer, not the green **Code -> Download ZIP**
+source archive.
+
+[Download `ThomasSetup_0.14.59.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.59/ThomasSetup_0.14.59.exe)
+
 ## Quick Start on Windows
 
-Recommended fresh install: download and run the Windows installer from
+Recommended fresh install: use the Windows installer above or download it from
 [`Releases`](https://github.com/Calvin-Corbett/thomas/releases).
 
 1. Download `ThomasSetup_*.exe` from the latest GitHub release.
