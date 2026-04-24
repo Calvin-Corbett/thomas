@@ -9,7 +9,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def _tracked_files() -> list[str]:
     raw = subprocess.check_output(["git", "ls-files"], cwd=ROOT, text=True)
-    return sorted(line.strip().replace("\\", "/") for line in raw.splitlines() if line.strip())
+    files: list[str] = []
+    for line in raw.splitlines():
+        rel = line.strip().replace("\\", "/")
+        if rel and (ROOT / rel).exists():
+            files.append(rel)
+    return sorted(files)
 
 
 def test_public_release_excludes_private_and_stale_surfaces() -> None:
@@ -32,11 +37,17 @@ def test_public_release_excludes_private_and_stale_surfaces() -> None:
         "MODULE_REGISTRY.md",
         "THOMAS_FEATURE_INVENTORY.md",
         "docs/PRE_PUBLIC_CLEANUP.md",
+        "CLAUDE_CODE_GAP_ANALYSIS.md",
+        "PLAN-UI-UPGRADE.md",
+        "PROJECT_MANAGEMENT_RULES.md",
+        "REPO_CANONICAL_RULES.md",
         "docs/OPEN" + "CLAW_PARITY.md",
         "docs/launch/LAUNCH_GATE_SCOREBOARD_2026-02-25.md",
         "docs/ops/agent_handoff_log.md",
         "docs/ops/module_audit_log.json",
         "docs/ops/repo_orphan_inventory.md",
+        "docs/thomas-core-vs-marketplace-triage.md",
+        "scripts/export_site_marketplace_snapshot.py",
     }
 
     violations = [
@@ -54,6 +65,12 @@ def test_public_release_text_avoids_private_surface_terms() -> None:
         "cloud" + "flare",
         "com" + "petitor",
         "thomas" + "devhub",
+        "bobs" + "_chromebook",
+        "calvinaustin" + "31",
+        "for_" + "chatgpt_builds",
+        "inbox/" + "_ready_to_integrate",
+        "publish" + "-clean",
+        "my " + "cousin",
     )
     skipped_suffixes = {
         ".gif",

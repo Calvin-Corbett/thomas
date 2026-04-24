@@ -237,31 +237,49 @@ class TestCommandRegistration(unittest.TestCase):
         group = click.Group("test")
         register_release_commands(group)
         self.assertIn("release", group.commands)
+        self.assertTrue(group.commands["release"].hidden)
 
+    def test_release_command_requires_maintainer_env(self):
+        from click.testing import CliRunner
 
+        from thomas.cli.commands.release import register_release_commands
+
+        try:
+            import click
+        except ImportError:
+            from thomas._vendor import click_shim as click
+        group = click.Group("test")
+        register_release_commands(group)
+
+        result = CliRunner().invoke(group, ["release", "patch", "--dry-run"])
+        self.assertNotEqual(result.exit_code, 0)
+        self.assertIn("maintainer-only", result.output)
 class TestGithubWorkflow(unittest.TestCase):
-    """Verify the publish workflow exists and is valid."""
+    """Verify public GitHub workflows match the release surface."""
 
     def _project_root(self):
         return Path(__file__).resolve().parent.parent
 
-    def test_publish_workflow_exists(self):
-        path = self._project_root() / ".github" / "workflows" / "publish.yml"
+    def test_windows_installer_workflow_exists(self):
+        path = self._project_root() / ".github" / "workflows" / "windows-installer.yml"
         self.assertTrue(path.exists())
 
-    def test_workflow_triggers_on_tags(self):
-        text = (self._project_root() / ".github" / "workflows" / "publish.yml").read_text()
-        self.assertIn("tags:", text)
-        self.assertIn("'v*'", text)
+    def test_windows_installer_workflow_triggers_on_release(self):
+        text = (self._project_root() / ".github" / "workflows" / "windows-installer.yml").read_text()
+        self.assertIn("release:", text)
+        self.assertIn("types: [published]", text)
 
-    def test_workflow_uses_trusted_publishing(self):
-        text = (self._project_root() / ".github" / "workflows" / "publish.yml").read_text()
-        self.assertIn("id-token: write", text)
+    def test_public_repo_does_not_ship_pypi_publish_workflow(self):
+        path = self._project_root() / ".github" / "workflows" / "publish.yml"
+        self.assertFalse(path.exists())
 
-    def test_workflow_checks_for_data_leaks(self):
-        text = (self._project_root() / ".github" / "workflows" / "publish.yml").read_text()
-        self.assertIn("runtime/", text)
-        self.assertIn("sqlite3", text)
+    def test_installer_workflow_smoke_tests_and_uploads_exe_only(self):
+        text = (self._project_root() / ".github" / "workflows" / "windows-installer.yml").read_text()
+        self.assertIn("Smoke test installer", text)
+        self.assertIn("gh release upload", text)
+        release_upload_block = text.split("gh release upload", 1)[1]
+        self.assertIn("ThomasSetup_${{ steps.meta.outputs.version }}.exe", release_upload_block)
+        self.assertNotIn("Thomas_source_${{ steps.meta.outputs.version }}.zip", release_upload_block)
 
 
 class TestExplicitUpdatePolicy(unittest.TestCase):

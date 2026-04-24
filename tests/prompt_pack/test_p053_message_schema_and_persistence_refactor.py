@@ -20,10 +20,10 @@ def test_success_persists_and_can_list(tmp_path: Path, monkeypatch: pytest.Monke
     db_path = tmp_path / "msg.sqlite3"
     monkeypatch.setenv("THOMAS_MESSAGE_STORE", str(db_path))
 
-    result = ingest_and_persist({"text": "hello", "channel": "ops", "sender": "calvin"})
+    result = ingest_and_persist({"text": "hello", "channel": "ops", "sender": "Example User"})
     assert result.record.text == "hello"
     assert result.record.channel == "ops"
-    assert result.record.sender == "calvin"
+    assert result.record.sender == "Example User"
     assert Path(result.store_path) == db_path
     assert result.inserted is True
 

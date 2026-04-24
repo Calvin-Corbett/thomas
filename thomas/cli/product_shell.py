@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from collections.abc import Mapping, Sequence
 from typing import Any
 
@@ -35,6 +36,8 @@ def _command_rows(group: click.Group, names: Sequence[str]) -> list[tuple[str, s
         command = group.commands.get(name)
         if command is None:
             continue
+        if getattr(command, "hidden", False):
+            continue
         desc = str(command.get_short_help_str(limit=88) or "").strip()
         rows.append((name, desc))
     return rows
@@ -48,8 +51,15 @@ def _other_command_rows(group: click.Group, excluded: set[str]) -> list[tuple[st
         command = group.commands.get(name)
         if command is None:
             continue
+        if getattr(command, "hidden", False):
+            continue
         rows.append((name, str(command.get_short_help_str(limit=88) or "").strip()))
     return rows
+
+
+def _show_advanced_help() -> bool:
+    value = str(os.environ.get("THOMAS_SHOW_ADVANCED_HELP") or "").strip().lower()
+    return value in {"1", "true", "yes", "on"}
 
 
 class ProductShellGroup(click.Group):
@@ -81,8 +91,15 @@ class ProductShellGroup(click.Group):
             formatter.write_dl(build_rows)
 
         if other_rows:
-            with formatter.section("More Commands"):
-                formatter.write_dl(other_rows)
+            if _show_advanced_help():
+                with formatter.section("More Commands"):
+                    formatter.write_dl(other_rows)
+            else:
+                formatter.write_paragraph()
+                formatter.write_text(
+                    "Advanced/internal commands are hidden from the default help. "
+                    "Set THOMAS_SHOW_ADVANCED_HELP=1 to inspect additional commands."
+                )
 
 
 def build_status_experience(payload: Mapping[str, Any]) -> dict[str, Any]:

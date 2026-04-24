@@ -657,7 +657,7 @@ async def test_synthesise_and_casual_cover_empty_and_passthrough_cases(monkeypat
 
 def test_history_recall_response_prefers_substantive_prior_user_request() -> None:
     conversation = [
-        {"role": "user", "content": "I'm trying to help my cousin with football quizzes."},
+        {"role": "user", "content": "I'm trying to help a new learner with football quizzes."},
         {"role": "assistant", "content": "What do you want me to make?"},
         {
             "role": "user",
@@ -668,7 +668,7 @@ def test_history_recall_response_prefers_substantive_prior_user_request() -> Non
     ]
 
     reply = _history_recall_response(
-        "Earlier in this chat, what had I asked you to make for my cousin?",
+        "Earlier in this chat, what had I asked you to make for the learner?",
         conversation,
     )
 
@@ -679,7 +679,7 @@ def test_history_recall_response_prefers_substantive_prior_user_request() -> Non
 
 def test_history_recall_response_handles_two_things_wording() -> None:
     conversation = [
-        {"role": "user", "content": "Remember this: I need a quarterback PDF quiz pack for my cousin."},
+        {"role": "user", "content": "Remember this: I need a quarterback PDF quiz pack for a new learner."},
         {"role": "assistant", "content": "Noted."},
         {"role": "user", "content": "Write me a 3-question sample quiz right here in chat."},
     ]
@@ -690,4 +690,4 @@ def test_history_recall_response_handles_two_things_wording() -> None:
     )
 
     assert 'Right before this, you asked me to "Write me a 3-question sample quiz right here in chat"' in reply
-    assert 'and before that you asked me to "Remember this: I need a quarterback PDF quiz pack for my cousin"' in reply
+    assert 'and before that you asked me to "Remember this: I need a quarterback PDF quiz pack for a new learner"' in reply

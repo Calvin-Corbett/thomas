@@ -4,7 +4,7 @@
 |------------------|--------------------------------------------------------|
 | Status           | scaffold (ALL files are source placeholders)           |
 | Last assessed    | 2026-03-18                                             |
-| Assessed by      | claude-opus-4-6 (Cowork session) + Calvin (product owner)|
+| Assessed by      | internal product review|
 | Used in prod     | no — nothing imports this module                       |
 | Has real tests   | no                                                     |
 | Blocking issues  | 100% placeholder, zero functional code                 |
@@ -27,7 +27,7 @@ Supposed to be the runtime guardrails enforcement layer for Thomas. Currently
 ## What This Is Supposed To Be
 
 Based on the naming convention, the broader security architecture, and
-Calvin's product vision (security is PRIORITY #1), this module should be
+The product vision makes security PRIORITY #1, so this module should be
 the **runtime enforcement layer** — the thing that actually stops Thomas
 from doing dangerous stuff without permission:
 
@@ -37,7 +37,7 @@ actual execution. Every action Thomas takes should pass through this engine.
 It checks the action against policies and decides: allow, require approval,
 or block.
 
-This is where Calvin's internet-access gating would live: Thomas is about
+This is where internet-access gating would live: Thomas is about
 to make an HTTP request → engine intercepts → checks policy → requires
 password if policy says so.
 
@@ -49,7 +49,7 @@ The engine should integrate with:
 
 ### `policies.py` — Policy Definitions
 The rules that the engine enforces. What's allowed without asking, what needs
-a simple confirm, what needs OS-level password authentication. Calvin's
+a simple confirm, what needs OS-level password authentication. the product's
 multi-stage security levels would be defined here:
 
 - Level 1: "Let AI do whatever" — all policies permissive

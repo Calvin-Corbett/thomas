@@ -24,7 +24,7 @@ already has rule evaluation logic. The guardrails module should be the
 runtime layer that invokes this engine at the right interception points.
 
 Also connects to the security vision: the multi-stage security levels
-(Calvin's priority #1) would be defined as policy rule sets here.
+(project priority #1) would be defined as policy rule sets here.
 
 ## Known Gaps
 

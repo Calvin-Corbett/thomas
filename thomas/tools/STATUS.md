@@ -53,7 +53,7 @@ agent decides to call a tool → tool_exec resolves it from the registry →
 calls `execute()` → returns ToolResult back to the agent.
 
 The tools module is how Thomas earns the "everything assistant" title. Each
-tool is an installable capability. The marketplace vision (from Calvin) means
+tool is an installable capability. The marketplace vision (from product planning) means
 new tools should eventually be installable through the marketplace too.
 
 ## Known Gaps

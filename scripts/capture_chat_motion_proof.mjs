@@ -8,8 +8,14 @@ import { fileURLToPath } from "node:url";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..");
-const siteRequire = createRequire(path.join(repoRoot, "apps", "site", "package.json"));
-const { chromium } = siteRequire("playwright");
+const require = createRequire(import.meta.url);
+let chromium;
+try {
+  ({ chromium } = require("playwright"));
+} catch (error) {
+  console.error("Playwright is required for chat motion proof capture. Install the Node test dependencies before running this script.");
+  process.exit(2);
+}
 
 function parseArgs(argv) {
   const options = {

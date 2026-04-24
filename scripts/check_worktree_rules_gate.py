@@ -12,10 +12,10 @@ DEFAULT_AGENTS = ROOT / "AGENTS.md"
 DEFAULT_RULES = ROOT / "WORKTREE_RULES.md"
 
 REQUIRED_AGENTS_SNIPPETS = [
-    "## Worktree discipline (required)",
+    "## Worktree Discipline",
     "Read `WORKTREE_RULES.md` before making edits.",
     "Use only the explicitly assigned worktree path for the task.",
-    "If no worktree is specified, use the canonical development worktree reported by `git worktree list` for `master`.",
+    "If no worktree is specified, use the current repo root.",
     "Do not edit multiple worktrees in one task unless explicitly requested.",
     "Do not create, remove, move, or rebind worktrees without explicit user approval.",
     "If branch/worktree intent is unclear, stop and ask before editing.",
@@ -26,7 +26,8 @@ REQUIRED_RULES_SNIPPETS = [
     "# Worktree Rules (Required)",
     "Current worktrees:",
     "Use `git worktree list --porcelain` as the source of truth for local branch paths.",
-    "`master` is the default development path.",
+    "`main` is the public branch users should care about.",
+    "If no worktree is specified, use the current repo root.",
     "If git status --porcelain is not clean, do not start normal implementation work in that repo",
 ]
 

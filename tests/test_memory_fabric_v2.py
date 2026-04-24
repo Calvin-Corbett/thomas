@@ -16,7 +16,7 @@ class TestMemoryFabricV2(unittest.TestCase):
 
     def test_ingest_and_retrieve_includes_profile(self):
         thread_id = "t1"
-        self.fabric.ingest_episode(thread_id, "user", "My name is Calvin", ts_ms=1700000000000)
+        self.fabric.ingest_episode(thread_id, "user", "My name is Example User", ts_ms=1700000000000)
         self.fabric.ingest_episode(thread_id, "user", "My son's name is Hudson", ts_ms=1700000001000)
         self.fabric.ingest_episode(thread_id, "user", "I run Freedom Transit trucking company", ts_ms=1700000002000)
 
@@ -28,7 +28,7 @@ class TestMemoryFabricV2(unittest.TestCase):
         thread_id = "t2"
         self.fabric.upsert_profile_hints(
             thread_id=thread_id,
-            hints=[{"key": "preferred_name", "value": "Calvin", "confidence": 0.9}],
+            hints=[{"key": "preferred_name", "value": "Example User", "confidence": 0.9}],
             source_episode_id=None,
             ts_ms=1700000000000,
         )
@@ -45,7 +45,7 @@ class TestMemoryFabricV2(unittest.TestCase):
         thread_id = "t2b"
         self.fabric.upsert_profile_hints(
             thread_id=thread_id,
-            hints=[{"key": "preferred_name", "value": "Calvin", "confidence": 0.95}],
+            hints=[{"key": "preferred_name", "value": "Example User", "confidence": 0.95}],
             source_episode_id=None,
             ts_ms=1700000000000,
         )
@@ -62,7 +62,7 @@ class TestMemoryFabricV2(unittest.TestCase):
         ).fetchone()
         self.assertIsNotNone(row)
         assert row is not None
-        self.assertEqual(str(row["value"]), "Calvin")
+        self.assertEqual(str(row["value"]), "Example User")
         self.assertAlmostEqual(float(row["confidence"]), 0.95, places=6)
 
     def test_fact_contradiction_detection(self):
@@ -106,7 +106,7 @@ class TestMemoryFabricV2(unittest.TestCase):
 
     def test_trace_contains_score_breakdown(self):
         thread_id = "t5"
-        self.fabric.ingest_episode(thread_id, "user", "My name is Calvin", ts_ms=1700000000000)
+        self.fabric.ingest_episode(thread_id, "user", "My name is Example User", ts_ms=1700000000000)
         res = self.fabric.retrieve(thread_id, "what is my name", budget_tokens=500)
         trace = self.fabric.get_trace(res.trace_id)
         self.assertIsNotNone(trace)
@@ -117,7 +117,7 @@ class TestMemoryFabricV2(unittest.TestCase):
 
     def test_retrieve_falls_back_when_fts_query_syntax_is_invalid(self):
         thread_id = "t5b"
-        self.fabric.ingest_episode(thread_id, "user", "My name is Calvin", ts_ms=1700000000000)
+        self.fabric.ingest_episode(thread_id, "user", "My name is Example User", ts_ms=1700000000000)
         # Bare '?' is invalid FTS5 query syntax; retrieval should still succeed via LIKE fallback.
         res = self.fabric.retrieve(thread_id, "?", budget_tokens=500)
         self.assertTrue(isinstance(res.pack_text, str))
@@ -148,7 +148,7 @@ class TestMemoryFabricV2(unittest.TestCase):
         thread_id = "t7"
         self.fabric.upsert_profile_hints(
             thread_id=thread_id,
-            hints=[{"key": "preferred_name", "value": "Calvin", "confidence": 0.92}],
+            hints=[{"key": "preferred_name", "value": "Example User", "confidence": 0.92}],
             source_episode_id=None,
             ts_ms=1700000000000,
         )

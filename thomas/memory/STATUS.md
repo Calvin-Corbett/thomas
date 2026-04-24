@@ -4,7 +4,7 @@
 |------------------|----------------------------------------------------------|
 | Status           | wip (v2 Fabric has real architecture, key subsystems placeholder) |
 | Last assessed    | 2026-03-18                                               |
-| Assessed by      | claude-opus-4-6 (Cowork session) + Calvin (product owner)|
+| Assessed by      | internal product review|
 | Used in prod     | partially — v2 Fabric is wired, episodic layer not yet   |
 | Has real tests   | partial (fabric FTS fallback tested, others unclear)      |
 | Blocking issues  | 4 core files are source placeholders                     |
@@ -14,7 +14,7 @@
 Thomas's memory system. 7,300 lines across 33 files in two generations:
 a v1 layer (top-level files) and a v2 "Memory Fabric" (in `v2/`).
 
-## Product Vision (from Calvin, 2026-03-18)
+## Product Vision
 
 **Memory is PRIORITY #2 for the entire project** (after security).
 It is Thomas's #1 differentiator as a product. The vision:
@@ -23,7 +23,7 @@ It is Thomas's #1 differentiator as a product. The vision:
 - A combination of every strong memory approach that exists — episodic,
   semantic, knowledge graph, profile hints, contradiction detection,
   retrieval-augmented, reranked, time-decayed, compiled
-- AI-researched architecture: Calvin had AI study memory systems deeply
+- AI-researched architecture: Example User had AI study memory systems deeply
   and designed this to be the best-of-everything approach
 - Cross-session, detailed, personal — Thomas should remember everything
   you tell it and surface relevant context unprompted
@@ -33,7 +33,7 @@ It is Thomas's #1 differentiator as a product. The vision:
 
 ### Connection to Preferences
 
-Memory and preferences are deeply connected. Calvin's vision includes a
+Memory and preferences are deeply connected. the product vision includes a
 background AI model (cloud or local, user's choice) that processes
 conversations and extracts important information into an indexed preference
 profile. This profile feeds back into memory retrieval — so Thomas doesn't

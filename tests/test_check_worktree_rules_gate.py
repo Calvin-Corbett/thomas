@@ -10,10 +10,10 @@ def test_worktree_rules_gate_passes_with_dirty_worktree_policy(tmp_path: Path, c
     agents.write_text(
         "\n".join(
             [
-                "## Worktree discipline (required)",
+                "## Worktree Discipline",
                 "Read `WORKTREE_RULES.md` before making edits.",
                 "Use only the explicitly assigned worktree path for the task.",
-                "If no worktree is specified, use the canonical development worktree reported by `git worktree list` for `master`.",
+                "If no worktree is specified, use the current repo root.",
                 "Do not edit multiple worktrees in one task unless explicitly requested.",
                 "Do not create, remove, move, or rebind worktrees without explicit user approval.",
                 "If branch/worktree intent is unclear, stop and ask before editing.",
@@ -29,7 +29,8 @@ def test_worktree_rules_gate_passes_with_dirty_worktree_policy(tmp_path: Path, c
                 "# Worktree Rules (Required)",
                 "Current worktrees:",
                 "- Use `git worktree list --porcelain` as the source of truth for local branch paths.",
-                "- `master` is the default development path.",
+                "- `main` is the public branch users should care about.",
+                "- If no worktree is specified, use the current repo root.",
                 "If `git status --porcelain` is not clean, do not start normal implementation work in that repo until it is cleaned or an explicit audited dirty-worktree override is being used for cleanup/remediation.",
             ]
         ),
@@ -48,10 +49,10 @@ def test_worktree_rules_gate_fails_when_dirty_worktree_policy_missing(tmp_path: 
     agents.write_text(
         "\n".join(
             [
-                "## Worktree discipline (required)",
+                "## Worktree Discipline",
                 "Read `WORKTREE_RULES.md` before making edits.",
                 "Use only the explicitly assigned worktree path for the task.",
-                "If no worktree is specified, use the canonical development worktree reported by `git worktree list` for `master`.",
+                "If no worktree is specified, use the current repo root.",
                 "Do not edit multiple worktrees in one task unless explicitly requested.",
                 "Do not create, remove, move, or rebind worktrees without explicit user approval.",
                 "If branch/worktree intent is unclear, stop and ask before editing.",

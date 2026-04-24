@@ -95,6 +95,32 @@ def test_cli_root_help_surfaces_start_here_shell(tmp_path: Path) -> None:
     assert "status" in result.output
 
 
+def test_cli_root_help_hides_internal_commands_by_default(tmp_path: Path) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(cli, ["-c", str(cfg), "--help"])
+    assert result.exit_code == 0, result.output
+    assert "Advanced/internal commands are hidden from the default help" in result.output
+    assert "More Commands" not in result.output
+    assert "release" not in result.output
+    assert "PyPI publish" not in result.output
+
+
+def test_cli_root_help_can_show_advanced_non_hidden_commands(tmp_path: Path) -> None:
+    cfg = _write_min_config(tmp_path)
+    runner = CliRunner()
+    result = runner.invoke(
+        cli,
+        ["-c", str(cfg), "--help"],
+        env={"THOMAS_SHOW_ADVANCED_HELP": "1"},
+    )
+    assert result.exit_code == 0, result.output
+    assert "More Commands" in result.output
+    assert "config" in result.output
+    assert "\n  release  " not in result.output
+    assert "PyPI publish" not in result.output
+
+
 def test_cli_status_json_includes_readiness_and_next_steps(tmp_path: Path, monkeypatch) -> None:
     cfg = _write_min_config(tmp_path)
     monkeypatch.setattr(cli_runtime_ops, "git_status_porcelain_lines", lambda _repo_root: [])
