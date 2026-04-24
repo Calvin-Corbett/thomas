@@ -78,11 +78,7 @@ caches/
 
 # Local archives / handoff bundles
 tasks/
-!plans/
-!plans/thomas/
-!plans/thomas/tasks/
-!plans/thomas/tasks/**/
-!plans/thomas/tasks/**/PLAN.md
+plans/
 archives/
 _archive/
 
