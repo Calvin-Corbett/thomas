@@ -47,11 +47,24 @@ function Confirm-Step {
   return ($answer -eq "y" -or $answer -eq "yes")
 }
 
+function Write-SupportInstructions {
+  $supportDir = Join-Path $Root "runtime\support"
+  Write-Host ""
+  Write-Host "[thomas] What to try next:"
+  Write-Host "[thomas] 1. Run repair.cmd from the Thomas install folder, then launch Thomas again."
+  Write-Host "[thomas] 2. Run bootdoctor.cmd for startup diagnostics."
+  Write-Host "[thomas] 3. Run support.cmd and attach the ZIP from runtime\support\ to a GitHub install issue."
+  Write-Host ("[thomas] Support ZIP folder: {0}" -f $supportDir)
+  Write-Host "[thomas] Install issue form: https://github.com/Calvin-Corbett/thomas/issues/new?template=install_failure.yml"
+  Write-Host ("[thomas] Expected local browser URL after setup: http://127.0.0.1:{0}/" -f $Port)
+}
+
 function Fail-Setup {
   param([Parameter(Mandatory = $true)][string]$Message)
   Write-Host ""
   Write-Host ("[thomas] ERROR: {0}" -f $Message)
   Write-Host ("[thomas] Setup log: {0}" -f $LogPath)
+  Write-SupportInstructions
   if (-not $NoPrompt) {
     Read-Host "[thomas] Press Enter to close"
   }

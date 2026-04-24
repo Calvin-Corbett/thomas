@@ -4,7 +4,7 @@
 > discover a recurring issue that cost significant debugging time. This file is
 > the project's cross-session memory for common pitfalls.
 >
-> Last updated: 2026-04-24 (v0.14.61).
+> Last updated: 2026-04-24 (v0.14.62).
 
 ---
 
@@ -15,9 +15,9 @@
 **Cause:** An unhandled Python exception propagated through the aiohttp middleware. The `exception_logger` middleware (app.py ~line 522) logs the full traceback to the server console.
 
 **Diagnosis:**
-1. Check the server console/terminal for `[thomas] Unhandled exception on POST /api/chat` â€” the traceback will be right there.
+1. Check the server console/terminal for `[thomas] Unhandled exception on POST /api/chat` - the traceback will be right there.
 2. Common root causes:
-   - **LLM backend down or misconfigured** â€” API key missing, model not available, provider unreachable
+   - **LLM backend down or misconfigured** - API key missing, model not available, provider unreachable
    - **Connection timeout** to the model provider
    - **Client disconnected** mid-stream (the `send()` function now handles this gracefully as of v0.11.60)
    - **Pydantic ValidationError** on webhook/API routes that don't validate input
@@ -42,7 +42,7 @@
 
 ---
 
-## 3. parity_compat.py Has Lazy Imports â€” Don't Delete Modules Without Checking
+## 3. parity_compat.py Has Lazy Imports - Don't Delete Modules Without Checking
 
 **Symptom:** CLI commands crash with `ModuleNotFoundError` after deleting a module.
 
@@ -82,7 +82,7 @@ This checks dependency direction, file sizes, and architectural constraints.
 
 ---
 
-## 6. Frontend Caching â€” User Sees Old JS/CSS
+## 6. Frontend Caching - User Sees Old JS/CSS
 
 **Symptom:** User reports UI behavior that doesn't match the code.
 
@@ -218,9 +218,8 @@ When you discover a problem that:
 - Could easily trip up a future agent
 
 Add it here with:
-1. **Symptom** â€” what the user/agent sees
-2. **Cause** â€” why it happens
-3. **Diagnosis** â€” how to identify it
-4. **Fix** â€” how to resolve it
-5. **Prevention** â€” how to avoid it in the future
-
+1. **Symptom** - what the user/agent sees
+2. **Cause** - why it happens
+3. **Diagnosis** - how to identify it
+4. **Fix** - how to resolve it
+5. **Prevention** - how to avoid it in the future

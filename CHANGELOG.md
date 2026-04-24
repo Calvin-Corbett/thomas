@@ -7,6 +7,19 @@ working-branch notes are intentionally not included in the public repository.
 
 - No unreleased changes.
 
+## [0.14.62] - 2026-04-24
+
+- Added a public install landing page that directs normal users to the Windows
+  release installer instead of the source ZIP.
+- Added optional trusted Windows installer code-signing support to the GitHub
+  release workflow. Signing is skipped unless maintainer certificate secrets are
+  configured.
+- Added first-run failure guidance that points users to `repair.cmd`,
+  `bootdoctor.cmd`, `support.cmd`, the support ZIP folder, and the GitHub
+  install-failure issue form.
+- Opted public GitHub Actions workflows into GitHub's Node 24 JavaScript action
+  runtime compatibility path.
+
 ## [0.14.61] - 2026-04-24
 
 - Added public repo guidance docs: `docs/AGENT_START_HERE.md`, `docs/FEATURE_MATRIX.md`, `docs/REPO_MAP.md`, `docs/ARCHITECTURE_OVERVIEW.md`, and `docs/ROADMAP.md`.

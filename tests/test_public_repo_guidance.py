@@ -34,6 +34,7 @@ def test_readme_and_index_surface_public_guidance() -> None:
     index = _read("DOCUMENTATION_INDEX.md")
 
     for required in (
+        "docs/INSTALL.md",
         "docs/AGENT_START_HERE.md",
         "docs/FEATURE_MATRIX.md",
         "docs/REPO_MAP.md",
@@ -42,7 +43,7 @@ def test_readme_and_index_surface_public_guidance() -> None:
         assert required in readme
         assert required in index
 
-    assert "ThomasSetup_0.14.61.exe" in readme
+    assert "ThomasSetup_0.14.62.exe" in readme
     assert "support.cmd" in readme
 
 
