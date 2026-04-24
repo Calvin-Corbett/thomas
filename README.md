@@ -4,22 +4,24 @@ Thomas is a local-first AI workspace for chat, tools, memory, and automation.
 
 ## Download for Windows
 
-[Download `ThomasSetup_0.14.59.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.59/ThomasSetup_0.14.59.exe)
+[Download `ThomasSetup_0.14.60.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.60/ThomasSetup_0.14.60.exe)
 
 ## Quick Start on Windows
 
 Fresh install: download the Windows installer above.
 
-1. Download `ThomasSetup_0.14.59.exe`.
+1. Download `ThomasSetup_0.14.60.exe`.
 2. Double-click it.
 3. Click through the installer prompts.
 4. Leave **Finish setup and launch Thomas now** checked.
 5. Wait for the first-run setup window to finish.
 6. Complete Easy Setup after the browser opens.
 
-If setup breaks, run `repair.cmd`. For installer first-run failures, send
-`runtime\logs\first_run_wizard.log` with the issue report. For a manual setup
-pass, run `setup.cmd`. For startup diagnostics, run `bootdoctor.cmd`.
+If setup breaks, run `support.cmd` and send the ZIP it creates in
+`runtime\support\` with the issue report. The bundle includes
+`runtime\logs\first_run_wizard.log` when that log exists. For quick
+self-repair, run `repair.cmd`. For a manual setup pass, run `setup.cmd`. For
+startup diagnostics, run `bootdoctor.cmd`.
 
 Thomas is local-only by default. If Windows Firewall prompts you, this is the
 local Python web server starting on `127.0.0.1`; see

@@ -4,7 +4,7 @@
 > discover a recurring issue that cost significant debugging time. This file is
 > the project's cross-session memory for common pitfalls.
 >
-> Last updated: 2026-03-01 (v0.14.17).
+> Last updated: 2026-04-24 (v0.14.60).
 
 ---
 
@@ -30,7 +30,7 @@
 
 ## 2. Corrupted Unicode Characters in Python Files
 
-**Symptom:** Strings contain `â€"` or `â€™` or similar garbled text instead of em-dashes, smart quotes, etc.
+**Symptom:** Strings contain garbled UTF-8/CP1252 sequences instead of em-dashes, smart quotes, etc.
 
 **Cause:** Double-encoding of UTF-8. Happens when files are edited in tools that re-encode UTF-8 as CP1252 then back to UTF-8, or when AI generates text with smart quotes that gets mangled by the editor.
 

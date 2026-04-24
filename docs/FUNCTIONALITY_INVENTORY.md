@@ -13,7 +13,8 @@ is. Status words are intentionally plain:
 
 | Area | Capability | Status | Notes |
 |---|---|---|---|
-| Install | `run-ui.cmd`, `setup.cmd`, `repair.cmd`, `bootdoctor.cmd` | Stable | Primary Windows path. Creates `.venv` inside the repo and installs local runtime dependencies. |
+| Install | `ThomasSetup_0.14.60.exe` | Stable | Recommended public Windows path. Download from GitHub Releases, run the installer, keep Finish setup and launch checked, then complete Easy Setup in the browser. |
+| Install fallback | `run-ui.cmd`, `setup.cmd`, `repair.cmd`, `bootdoctor.cmd`, `support.cmd` | Stable | Manual support path if the installer or first-run wizard fails. `support.cmd` creates a redacted ZIP under `runtime\support\`; setup creates `.venv` inside the repo and installs local runtime dependencies. |
 | Web UI | Browser chat workspace | Beta | Main user surface. Starts locally and supports setup, chat, model controls, progress, and tool/result display. |
 | Easy Setup | First-run model/provider setup | Beta | Guides users into Codex, local, or API-backed profiles. Some provider flows still depend on external credentials being ready. |
 | CLI | `thomas` command group and REPL | Beta | Useful for diagnostics and advanced use. Non-engineer UX is less polished than the browser UI. |
@@ -43,8 +44,8 @@ is. Status words are intentionally plain:
 | Companion API | Device/companion policy and routes | Partial | Public code exists; app-store/device release path is not first-run ready. |
 | Gateway/API compatibility | Gateway commands, OpenAI-style request/response route support | Partial | Useful for advanced users. Needs more public examples before calling it stable. |
 | Data/library | Local library and research-store plumbing | Partial | Durable storage exists. Public workflows need clearer guidance. |
-| Repair/doctor | Boot diagnostics and startup recovery | Stable | Important support path when install or startup fails. |
-| Packaging | Dockerfile, installer assets, release hygiene checks | Beta | Docker smoke and packaging checks run in CI; installer publishing still needs maintainer steps. |
+| Repair/doctor | Boot diagnostics and startup recovery | Stable | Important support path when install or startup fails. First-run failures are logged to `runtime/logs/first_run_wizard.log`. |
+| Packaging | Windows installer workflow, Dockerfile, release hygiene checks | Beta | GitHub Actions builds and uploads the EXE release asset, keeps release uploads EXE-only, and smoke-tests the silent installer path in CI. |
 
 ## Domain And Marketplace Modules
 

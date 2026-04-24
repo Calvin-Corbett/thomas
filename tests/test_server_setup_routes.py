@@ -128,8 +128,12 @@ class TestSetupRoutesLocal(AioHTTPTestCase):
         self.assertIn("runtime", body)
         self.assertIn("python_version", body["runtime"])
         self.assertIn("access_mode", body["runtime"])
+        self.assertEqual(body["runtime"]["local_url"], "http://127.0.0.1:8899/")
+        self.assertEqual(body["runtime"]["network_scope"], "loopback-only")
+        self.assertIn("same-computer only", body["runtime"]["firewall_guidance"])
         self.assertIn("next_actions", body)
         self.assertIsInstance(body["next_actions"], list)
+        self.assertTrue(any("127.0.0.1:8899" in item for item in body["next_actions"]))
 
     # ── /api/setup/repair ──
 
