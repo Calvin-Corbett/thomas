@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -103,6 +104,7 @@ SCAN_SKIP_SUFFIXES = (
     ".gz",
 )
 MAX_SCAN_BYTES = 2_000_000
+DEEP_CHECK_TIMEOUT_SECONDS = 300
 SECRET_PATTERNS: tuple[tuple[str, re.Pattern[str]], ...] = (
     ("openai_api_key", re.compile(r"\bsk-[A-Za-z0-9]{20,}\b")),
     ("github_pat", re.compile(r"\bghp_[A-Za-z0-9]{36}\b")),
@@ -360,6 +362,9 @@ def _check_toml_safety(repo_root: Path) -> list[str]:
 
 def _run_optional_deep_checks(repo_root: Path) -> list[str]:
     failures: list[str] = []
+    env = os.environ.copy()
+    env.setdefault("PYTHONUNBUFFERED", "1")
+    env.setdefault("THOMAS_TASK_MANAGER_LOOP_ENABLED", "0")
     commands = [
         [sys.executable, "scripts/check_repo_hygiene.py", "--require-clean-worktree", "--strict", "--json"],
         [sys.executable, "scripts/check_release_hygiene.py"],
@@ -367,7 +372,21 @@ def _run_optional_deep_checks(repo_root: Path) -> list[str]:
         [sys.executable, "scripts/security_audit.py", "--repo-root", ".", "--json", "--strict"],
     ]
     for cmd in commands:
-        proc = subprocess.run(cmd, cwd=repo_root, capture_output=True, text=True)
+        try:
+            proc = subprocess.run(
+                cmd,
+                cwd=repo_root,
+                capture_output=True,
+                text=True,
+                env=env,
+                timeout=DEEP_CHECK_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            failures.append(
+                f"{' '.join(cmd)} timed out after {DEEP_CHECK_TIMEOUT_SECONDS}s: "
+                f"{str(exc.stderr or exc.stdout or '').strip()}"
+            )
+            continue
         if proc.returncode != 0:
             stderr = (proc.stderr or "").strip()
             stdout = (proc.stdout or "").strip()
