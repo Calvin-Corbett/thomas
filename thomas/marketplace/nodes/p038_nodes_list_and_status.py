@@ -2,7 +2,7 @@
 
 Thomas-native implementation for listing configured nodes and probing their status.
 
-This module intentionally avoids any OpenClaw naming reuse. It exposes a small,
+This module intentionally uses Thomas-native naming. It exposes a small,
 deterministic API that can be used by CLI and server layers.
 
 Key properties

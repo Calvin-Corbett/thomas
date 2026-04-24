@@ -129,7 +129,7 @@ _CONTENT_HUB_CHECKLIST_TEMPLATE: List[Dict[str, Any]] = [
             "Idea inbox from notes/URLs/transcripts.",
             "Brief templates with hook, promise, CTA, persona, and legal fields.",
             "Campaign goals, deliverables, dependencies, and owner tracking.",
-            "Research panel for competitor examples, hashtags, and evergreen FAQ angles.",
+            "Research panel for reference examples, hashtags, and evergreen FAQ angles.",
         ],
     },
     {
@@ -192,7 +192,7 @@ _CONTENT_HUB_CHECKLIST_TEMPLATE: List[Dict[str, Any]] = [
         "title": "10) Social Listening and Trend Intel",
         "summary": "Track brand/keyword movement and convert trends into content plans.",
         "items": [
-            "Keyword, hashtag, mention, and competitor tracking.",
+            "Keyword, hashtag, mention, and reference tracking.",
             "Topic clusters and optional sentiment scoring.",
             "Trend detection and inspiration board with reusable hook taxonomy.",
             "AI assist to convert trend signals into pillar-ready post concepts.",

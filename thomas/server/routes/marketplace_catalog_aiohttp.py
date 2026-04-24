@@ -16,10 +16,10 @@ from aiohttp import web
 from thomas.marketplace.surface_policy import classify_marketplace_row, row_is_visible
 from thomas.plugins.extension_catalog_runtime import load_extension_catalog
 from thomas.server.app_keys import APP_CONFIG
+from thomas.server.desktop_plugins_manifest import _safe_plugin_id
 from thomas.server.desktop_plugins import (
     install_bundled_plugin,
     install_plugin_bundle_bytes,
-    install_plugin_bundle_file,
     install_plugin_from_store,
     list_installed_plugins,
     maybe_load_desktop_plugin_manifest,
@@ -40,8 +40,10 @@ _TYPE_LABELS = {
     "dependency": "Dependency",
     "integration": "Integration",
 }
-_CANONICAL_MARKETPLACE_STORE_URL = "https://thomas-site.thomasdevhub.workers.dev"
-_LEGACY_MARKETPLACE_STORE_URL = "https://thomas.dev"
+_CANONICAL_MARKETPLACE_STORE_URL = ""
+_LEGACY_MARKETPLACE_STORE_URL = "https://github.com/Calvin-Corbett/thomas"
+_MARKETPLACE_PUBLIC_HOSTS = {"github.com", "raw.githubusercontent.com"}
+_MARKETPLACE_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def _safe_string(value: Any) -> str:
@@ -109,6 +111,27 @@ def _default_marketplace_store_url() -> str:
     return _CANONICAL_MARKETPLACE_STORE_URL
 
 
+def _validate_marketplace_store_url(store_url_raw: str) -> str:
+    parsed = urlparse(_safe_string(store_url_raw).strip())
+    host = _safe_string(parsed.hostname).lower()
+    scheme = _safe_string(parsed.scheme).lower()
+    if not scheme or not host:
+        raise ValueError("Marketplace store URL must include a scheme and host")
+    if parsed.username or parsed.password:
+        raise ValueError("Marketplace store URL must not include credentials")
+    if host in _MARKETPLACE_LOOPBACK_HOSTS:
+        if scheme not in {"http", "https"}:
+            raise ValueError("Loopback marketplace store URL must use http or https")
+    elif host in _MARKETPLACE_PUBLIC_HOSTS:
+        if scheme != "https":
+            raise ValueError("Public marketplace store URL must use https")
+        if host == "github.com" and not parsed.path.rstrip("/").lower().startswith("/calvin-corbett/thomas"):
+            raise ValueError("GitHub marketplace store URL must point at the Thomas public repository")
+    else:
+        raise ValueError("Marketplace store URL host is not allowlisted")
+    return parsed.geturl().rstrip("/")
+
+
 def _candidate_marketplace_store_urls(preferred_store_url: str = "") -> list[str]:
     candidates: list[str] = []
     for raw in (
@@ -116,9 +139,12 @@ def _candidate_marketplace_store_urls(preferred_store_url: str = "") -> list[str
         _safe_string(os.environ.get("THOMAS_MARKETPLACE_STORE_URL")).strip(),
         _safe_string(os.environ.get("SITE_URL")).strip(),
         _CANONICAL_MARKETPLACE_STORE_URL,
-        _LEGACY_MARKETPLACE_STORE_URL,
     ):
         candidate = _safe_string(raw).strip().rstrip("/")
+        try:
+            candidate = _validate_marketplace_store_url(candidate)
+        except ValueError:
+            continue
         if candidate and candidate not in candidates:
             candidates.append(candidate)
     return candidates
@@ -320,6 +346,7 @@ def _summarize_marketplace_facets(rows: list[dict[str, Any]]) -> tuple[list[dict
 
 
 async def _load_hosted_marketplace_catalog(*, store_url: str, channel: str) -> dict[str, Any]:
+    store_url = _validate_marketplace_store_url(store_url)
     catalog_urls = [
         urljoin(store_url.rstrip("/") + "/", f"api/marketplace/catalog?channel={quote(channel, safe='')}"),
         urljoin(store_url.rstrip("/") + "/", f"api/v1/plugins/catalog?channel={quote(channel, safe='')}"),
@@ -500,12 +527,25 @@ def _parse_int(value: str, default: int, *, minimum: int, maximum: int) -> int:
 
 
 def _resolve_pack_dir(extensions_root: Path, plugin_id: str) -> Path | None:
-    candidate = (extensions_root / plugin_id).resolve()
     try:
-        candidate.relative_to(extensions_root)
+        safe_plugin_id = _safe_plugin_id(plugin_id)
     except ValueError:
         return None
-    return candidate if candidate.is_dir() else None
+    extensions_root = extensions_root.resolve()
+    try:
+        children = list(extensions_root.iterdir())
+    except OSError:
+        return None
+    for child in children:
+        if child.name != safe_plugin_id or not child.is_dir():
+            continue
+        candidate = child.resolve()
+        try:
+            candidate.relative_to(extensions_root)
+        except ValueError:
+            return None
+        return candidate
+    return None
 
 
 def _iter_pack_files(pack_dir: Path) -> list[tuple[Path, Path]]:
@@ -525,6 +565,7 @@ def _iter_pack_files(pack_dir: Path) -> list[tuple[Path, Path]]:
 
 
 def _build_pack_archive(plugin_id: str, pack_dir: Path) -> bytes:
+    _safe_plugin_id(plugin_id)
     files = _iter_pack_files(pack_dir)
     if not files:
         raise FileNotFoundError(f"Plugin '{plugin_id}' does not contain any downloadable files")
@@ -532,7 +573,7 @@ def _build_pack_archive(plugin_id: str, pack_dir: Path) -> bytes:
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, mode="w", compression=zipfile.ZIP_DEFLATED) as archive:
         for source_path, rel_path in files:
-            archive.write(source_path, arcname=str(PurePosixPath(plugin_id, *rel_path.parts)))
+            archive.write(source_path, arcname=str(PurePosixPath("plugin", *rel_path.parts)))
     return buffer.getvalue()
 
 
@@ -731,9 +772,14 @@ def register_marketplace_catalog_routes(
                 log.warning("Hosted marketplace sync failed for %s: %s", candidate_store_url, exc)
 
         if remote_payload is None:
-            fallback_payload = _build_local_sync_payload(app, store_url=store_url, channel=channel)
+            fallback_store_url = store_url if attempted_store_urls else ""
+            fallback_payload = _build_local_sync_payload(app, store_url=fallback_store_url, channel=channel)
             if last_error is not None:
                 fallback_payload["sync_error"] = f"Unable to sync marketplace catalog from {store_url}: {last_error}"
+            else:
+                fallback_payload["sync_source"] = "local_catalog"
+                fallback_payload["degraded"] = False
+                fallback_payload["warning"] = ""
             fallback_payload["attempted_store_urls"] = attempted_store_urls
             filtered = [
                 row
@@ -830,8 +876,9 @@ def register_marketplace_catalog_routes(
     async def api_marketplace_plugin_download(request: web.Request) -> web.Response:
         require_api_access(request)
 
-        plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
-        if not plugin_id:
+        try:
+            plugin_id = _safe_plugin_id(_safe_string(request.match_info.get("plugin_id")).strip())
+        except ValueError:
             return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
 
         try:
@@ -881,8 +928,9 @@ def register_marketplace_catalog_routes(
     async def api_marketplace_install(request: web.Request) -> web.Response:
         require_api_access(request)
         config = app[APP_CONFIG]
-        plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
-        if not plugin_id:
+        try:
+            plugin_id = _safe_plugin_id(_safe_string(request.match_info.get("plugin_id")).strip())
+        except ValueError:
             return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
         body = await _read_optional_json(request)
         store_url = _safe_string(body.get("store") or body.get("store_url"))
@@ -930,8 +978,9 @@ def register_marketplace_catalog_routes(
     async def api_marketplace_uninstall(request: web.Request) -> web.Response:
         require_api_access(request)
         config = app[APP_CONFIG]
-        plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
-        if not plugin_id:
+        try:
+            plugin_id = _safe_plugin_id(_safe_string(request.match_info.get("plugin_id")).strip())
+        except ValueError:
             return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
         deleted = uninstall_plugin(config, plugin_id)
         if not deleted:
@@ -941,7 +990,10 @@ def register_marketplace_catalog_routes(
     async def api_marketplace_enable(request: web.Request) -> web.Response:
         require_api_access(request)
         config = app[APP_CONFIG]
-        plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
+        try:
+            plugin_id = _safe_plugin_id(_safe_string(request.match_info.get("plugin_id")).strip())
+        except ValueError:
+            return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
         try:
             plugin = set_installed_plugin_enabled(config, plugin_id, True)
         except FileNotFoundError as exc:
@@ -951,7 +1003,10 @@ def register_marketplace_catalog_routes(
     async def api_marketplace_disable(request: web.Request) -> web.Response:
         require_api_access(request)
         config = app[APP_CONFIG]
-        plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
+        try:
+            plugin_id = _safe_plugin_id(_safe_string(request.match_info.get("plugin_id")).strip())
+        except ValueError:
+            return web.json_response({"ok": False, "error": "plugin_id is required"}, status=400)
         try:
             plugin = set_installed_plugin_enabled(config, plugin_id, False)
         except FileNotFoundError as exc:
@@ -982,13 +1037,9 @@ def register_marketplace_catalog_routes(
                     require_signature=True,
                 )
             else:
-                body = await _read_optional_json(request)
-                bundle_path = Path(_safe_string(body.get("path"))).expanduser().resolve()
-                plugin = install_plugin_bundle_file(
-                    config,
-                    bundle_path,
-                    source={"type": "file_import", "path": str(bundle_path)},
-                    require_signature=True,
+                return web.json_response(
+                    {"ok": False, "error": "Upload a signed plugin bundle file."},
+                    status=400,
                 )
         except (FileNotFoundError, ValueError) as exc:
             return web.json_response({"ok": False, "error": str(exc)}, status=400)
@@ -1000,15 +1051,18 @@ def register_marketplace_catalog_routes(
     async def plugin_asset(request: web.Request) -> web.StreamResponse:
         require_api_access(request)
         config = app[APP_CONFIG]
-        plugin_id = _safe_string(request.match_info.get("plugin_id")).strip()
+        try:
+            plugin_id = _safe_plugin_id(_safe_string(request.match_info.get("plugin_id")).strip())
+        except ValueError as exc:
+            raise web.HTTPNotFound(text="Plugin asset was not found") from exc
         asset_path = _safe_string(request.match_info.get("asset_path")).strip()
         try:
             asset = resolve_installed_plugin_asset(config, plugin_id, asset_path)
         except PermissionError as exc:
-            raise web.HTTPForbidden(text=str(exc)) from exc
+            raise web.HTTPForbidden(text="Plugin asset is not available") from exc
         except (FileNotFoundError, ValueError) as exc:
-            raise web.HTTPNotFound(text=str(exc)) from exc
-        return web.FileResponse(asset, headers={"Cache-Control": "no-store"})
+            raise web.HTTPNotFound(text="Plugin asset was not found") from exc
+        return web.Response(body=asset.read_bytes(), headers={"Cache-Control": "no-store"})
 
     app.router.add_get("/api/marketplace/plugins", api_marketplace_plugins)
     app.router.add_get("/api/marketplace/sync", api_marketplace_sync)

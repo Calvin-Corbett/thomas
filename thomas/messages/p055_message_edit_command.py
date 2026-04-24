@@ -4,7 +4,7 @@ This module implements the *core* behavior for editing an existing message in an
 external messaging channel.
 
 Design goals:
-- **Thomas-native** naming and contracts (no OpenClaw naming reused).
+- **Thomas-native** naming and contracts (Thomas-native namingd).
 - **Clear contracts**: dataclasses for input/output.
 - **Deterministic failures**: stable error codes and messages.
 - **Adapter flexibility**: support a variety of editor/client method shapes.

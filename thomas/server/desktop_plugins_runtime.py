@@ -22,9 +22,9 @@ from thomas.server.desktop_plugins_manifest import (
     DesktopPluginManifest,
     _installed_plugins_root,
     _installed_registry_path,
-    _plugin_store_identity_path,
     _read_json_file,
     _safe_int,
+    _safe_plugin_id,
     _safe_rel_path,
     _safe_text,
     _string_list,
@@ -35,6 +35,9 @@ from thomas.server.desktop_plugins_manifest import (
     load_bundled_desktop_plugin_manifest,
     load_desktop_plugin_manifest_from_data,
 )
+
+_PLUGIN_STORE_PUBLIC_HOSTS = {"github.com", "raw.githubusercontent.com"}
+_PLUGIN_STORE_LOOPBACK_HOSTS = {"localhost", "127.0.0.1", "::1"}
 
 
 def _load_installed_registry(config: AppConfig) -> dict[str, Any]:
@@ -77,7 +80,39 @@ def _remove_installed_record(config: AppConfig, plugin_id: str) -> None:
 
 
 def _installed_plugin_dir(config: AppConfig, plugin_id: str) -> Path:
-    return _installed_plugins_root(config) / plugin_id
+    digest = hashlib.sha256(_safe_plugin_id(plugin_id).encode("utf-8")).hexdigest()
+    return _installed_plugins_root(config) / digest[:32]
+
+
+def _validate_plugin_store_url(store_url_raw: str) -> str:
+    parsed = urlparse(_safe_text(store_url_raw))
+    host = _safe_text(parsed.hostname).lower()
+    scheme = _safe_text(parsed.scheme).lower()
+    if not scheme or not host:
+        raise ValueError("store_url must include a scheme and host")
+    if parsed.username or parsed.password:
+        raise ValueError("store_url must not include credentials")
+    if host in _PLUGIN_STORE_LOOPBACK_HOSTS:
+        if scheme not in {"http", "https"}:
+            raise ValueError("loopback store_url must use http or https")
+    elif host in _PLUGIN_STORE_PUBLIC_HOSTS:
+        if scheme != "https":
+            raise ValueError("public store_url must use https")
+        if host == "github.com" and not parsed.path.rstrip("/").lower().startswith("/calvin-corbett/thomas"):
+            raise ValueError("github store_url must point at the Thomas public repository")
+    else:
+        raise ValueError("store_url host is not allowlisted")
+    return parsed.geturl().rstrip("/")
+
+
+def _resolve_store_relative_url(base_url: str, relative_url_raw: str) -> str:
+    relative_url = _safe_text(relative_url_raw)
+    parsed = urlparse(relative_url)
+    if parsed.scheme or parsed.netloc:
+        raise ValueError("download_url must be relative to the plugin store")
+    resolved = urljoin(base_url.rstrip("/") + "/", relative_url.lstrip("/"))
+    _validate_plugin_store_url(resolved)
+    return resolved
 
 
 def _delete_installed_plugin_payload(config: AppConfig, plugin_id: str) -> bool:
@@ -174,7 +209,11 @@ def list_installed_plugins(config: AppConfig, *, include_disabled: bool = True) 
             continue
         if not include_disabled and not row["enabled"]:
             continue
-        if not _installed_plugin_dir(config, row["plugin_id"]).exists():
+        try:
+            installed_dir = _installed_plugin_dir(config, row["plugin_id"])
+        except ValueError:
+            continue
+        if not installed_dir.exists():
             continue
         out.append(row)
     return out
@@ -445,7 +484,16 @@ def resolve_installed_plugin_asset(config: AppConfig, plugin_id: str, asset_path
         raise PermissionError(f"Plugin '{plugin_id}' is disabled")
     rel_path = _safe_rel_path(asset_path_raw)
     root = _installed_plugin_dir(config, plugin_id).resolve()
-    candidate = (root / PurePosixPath(rel_path)).resolve()
+    candidate = root
+    for part in PurePosixPath(rel_path).parts:
+        try:
+            child = next((entry for entry in candidate.iterdir() if entry.name == part), None)
+        except OSError as exc:
+            raise FileNotFoundError(f"Asset '{rel_path}' was not found") from exc
+        if child is None:
+            raise FileNotFoundError(f"Asset '{rel_path}' was not found")
+        candidate = child
+    candidate = candidate.resolve()
     try:
         candidate.relative_to(root)
     except ValueError as exc:
@@ -459,15 +507,7 @@ def get_or_create_plugin_store_api_key(config: AppConfig) -> str:
     env_key = _safe_text(os.environ.get("THOMAS_PLUGIN_STORE_API_KEY"))
     if env_key:
         return env_key
-    path = _plugin_store_identity_path(config)
-    payload = _read_json_file(path, {})
-    if isinstance(payload, dict):
-        api_key = _safe_text(payload.get("api_key"))
-        if api_key:
-            return api_key
-    api_key = _DEFAULT_PLUGIN_STORE_API_KEY
-    _write_json_file(path, {"api_key": api_key, "created_at": _utc_now_iso()})
-    return api_key
+    return _DEFAULT_PLUGIN_STORE_API_KEY
 
 
 def install_plugin_from_store(
@@ -478,7 +518,8 @@ def install_plugin_from_store(
     channel: str = "stable",
     _visited: set[str] | None = None,
 ) -> dict[str, Any]:
-    base_url = _safe_text(store_url).rstrip("/")
+    plugin_id = _safe_plugin_id(plugin_id)
+    base_url = _validate_plugin_store_url(store_url)
     if not base_url:
         raise ValueError("store_url is required")
 
@@ -500,7 +541,7 @@ def install_plugin_from_store(
         )
         token_response.raise_for_status()
         token_payload = token_response.json()
-        download_url = urljoin(base_url + "/", _safe_text(token_payload.get("download_url")).lstrip("/"))
+        download_url = _resolve_store_relative_url(base_url, _safe_text(token_payload.get("download_url")))
         bundle_response = client.get(download_url)
         bundle_response.raise_for_status()
         bundle_bytes = bundle_response.content
@@ -542,11 +583,12 @@ def parse_plugin_install_deep_link(url_raw: str) -> dict[str, str]:
     channel = _safe_text((query.get("channel") or ["stable"])[0]) or "stable"
     if not plugin_id:
         raise ValueError("plugin_id is required")
+    plugin_id = _safe_plugin_id(plugin_id)
     if not store:
         raise ValueError("store is required")
     return {
         "plugin_id": plugin_id,
-        "store": store,
+        "store": _validate_plugin_store_url(store),
         "channel": channel,
     }
 
@@ -556,23 +598,6 @@ def build_plugin_install_deep_link(plugin_id: str, store: str, *, channel: str =
     store_value = quote(_safe_text(store), safe="")
     channel_value = quote(_safe_text(channel) or "stable", safe="")
     return f"thomas://install-plugin?plugin_id={plugin}&store={store_value}&channel={channel_value}"
-
-
-def create_plugin_store_api_key_file(storage_dir: Path, api_key: str | None = None) -> None:
-    key_value = _safe_text(api_key) or _DEFAULT_PLUGIN_STORE_API_KEY
-    payload = _read_json_file(storage_dir / "api_keys.json", {"keys": {}})
-    if not isinstance(payload, dict):
-        payload = {"keys": {}}
-    keys = payload.get("keys")
-    if not isinstance(keys, dict):
-        keys = {}
-    keys[key_value] = {
-        "label": "Local Desktop Install Identity",
-        "active": True,
-        "created_at": _utc_now_iso(),
-    }
-    payload["keys"] = keys
-    _write_json_file(storage_dir / "api_keys.json", payload)
 
 
 def create_official_hosted_manifest(

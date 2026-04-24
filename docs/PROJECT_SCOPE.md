@@ -1,87 +1,32 @@
-# Project Scope: Thomas
+# Thomas Project Scope
 
-Thomas is an autonomous AI execution platform for public use, not a localhost-only assistant.
+Thomas is a local-first AI workspace for chat, tools, memory, automation, and
+operator workflows. The public release is scoped around helping a user run a
+private assistant on their own machine first, then opt into integrations or
+remote deployment only when they understand the security posture.
 
-## Consumer Mission (Permanent)
+## Product Priorities
 
-Thomas exists to deliver consumer value first: reliable execution, strong safety, fast response,
-predictable cost, and clear operator control.
-Outperforming OpenClaw is a quality instrument to improve those outcomes, not the sole product purpose.
+1. Start reliably on Windows from `run-ui.cmd`.
+2. Keep the default runtime local to `127.0.0.1`.
+3. Make model setup, repair, and diagnostics understandable to non-engineers.
+4. Provide guarded tool execution with visible approvals and audit trails.
+5. Surface automation, memory, workflows, and integrations without requiring a
+   user to understand the whole codebase.
 
-## Competitive Program (Release-Bound)
+## Public Release Boundaries
 
-For release planning, Thomas must be measurably better than the currently released OpenClaw baseline
-on capability surface and execution outcomes.
-Scope for this program is not considered complete unless the win gates below are met.
+- Public releases must not include private research notes, old launch
+  scoreboards, personal handoff logs, local test-output archives, or private web
+  deployment instructions.
+- Public releases should document product capabilities and limitations in
+  `docs/FUNCTIONALITY_INVENTORY.md`.
+- Public releases should keep development automation that protects the project,
+  but remove stale artifacts that only describe historical private work.
 
-## OpenClaw Baseline Lock
+## Non-Goals For The First Public Snapshot
 
-- Baseline system: OpenClaw.
-- Pinned baseline artifact: `demo/baselines/openclaw.current.json`.
-- Current pinned OpenClaw baseline commit: `fa6c0e1b` (captured 2026-03-06 from `origin/main`).
-- Baseline revision policy: the exact OpenClaw commit/tag used for head-to-head runs must be recorded in release notes and benchmark artifacts.
-- Baseline environment parity: same hardware tier, same provider tier, same task corpus, same timeout budgets.
-- Baseline refresh cadence: monthly or when OpenClaw releases a major capability update.
-
-## Capability Contract (Must Exist)
-
-Thomas must deliver all of the following:
-
-- Hybrid deployment:
-  - local mode (single-user, local hardware, local models)
-  - remote mode (public/business-hosted server, authenticated and rate-limited)
-- Hybrid model orchestration:
-  - local model providers + cloud/API model providers
-  - policy/capability routing across profiles
-  - shared tool/event semantics across providers
-- Execution-first autonomy:
-  - objective/step state machine with persistence
-  - approvals, audit chain, retries, recovery/reconciliation
-  - long-horizon execution modes (including batch/scheduled paths)
-  - operator-visible mission control workspace for live agent state, movement, and intervention controls
-- Workflow intelligence:
-  - chain, parallel, routing, evaluator-optimizer strategies
-  - capability-aware fallback for profile/capability mismatch
-- Extensibility:
-  - stable connector/tool protocol for external integrations
-  - strict onboarding gates for new model providers/capabilities
-- Workbench operator-mode baseline:
-  - studio/workbench tabs are AI-first control surfaces where Thomas executes jobs
-  - tabs prioritize dispatch, monitoring, and output review over manual full-editor replication
-  - user-created tabs inherit operator-mode semantics by default
-
-## Hard Win Gates (Must All Pass)
-
-Against the pinned currently released OpenClaw baseline on the same benchmark suite:
-
-- Task Success Rate: Thomas must be at least `+10` percentage points.
-- p95 Time-to-First-Useful-Output: Thomas must be at least `20%` faster.
-- Crash-Free Run Rate: Thomas must be at least `99.5%`.
-- Autonomous Recovery Success (provider/tool failures): Thomas must be at least `95%` within `<=30s`.
-- Unsafe Action Block Rate: Thomas must be at least `99%`.
-- False Block Rate (safe action blocked): Thomas must be `<=5%`.
-- Cross-Provider Pass Rate: same task corpus must pass on at least `3` distinct provider profiles.
-- Cost-per-Success: median token+tool cost per successful task must be no worse than OpenClaw by more than `5%`.
-
-## Evidence Policy
-
-- No subjective release claims without benchmark evidence.
-- OpenClaw outperformance is necessary for this release program, but not sufficient on its own; consumer reliability/safety/cost gates are required.
-- "Better than OpenClaw" may be stated only when every hard win gate is green.
-- Gate status must remain green for two consecutive weekly benchmark runs before claiming durable superiority.
-
-## Non-Goals
-
-- Regressing to localhost-only assumptions.
-- Provider-specific behavior that breaks shared tool/event contracts.
-- Shipping model onboarding changes without validation evidence.
-- Claiming "better than OpenClaw" using ad-hoc demos without reproducible benchmark artifacts.
-
-## Enforcement
-
-- Competitive scope gate: `scripts/check_competitive_scope_gate.py`
-- OpenClaw metric parity gate: `scripts/check_openclaw_metric_parity_gate.py`
-- Model onboarding gate: `scripts/check_model_onboarding_gate.py`
-- API capability onboarding protocol: `docs/API_CAPABILITY_ONBOARDING_PROTOCOL.md`
-- Surface parity gate: `scripts/check_surface_parity.py`
-- Robustness CI workflow: `.github/workflows/robustness-gates.yml`
+- No hosted SaaS promise.
+- No default LAN or public internet binding.
+- No claim that every marketplace/scaffold module is production complete.
+- No private website deployment surface in the public runtime branch.

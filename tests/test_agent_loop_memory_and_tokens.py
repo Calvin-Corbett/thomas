@@ -276,11 +276,11 @@ class TestAgentLoopMemoryAndTokens(unittest.TestCase):
 
     def test_validate_memory_relevance_prefers_query_term_coverage(self) -> None:
         strong = validate_memory_relevance(
-            "deployment target cloudflare workers",
-            "Durable memory: deployment target is Cloudflare Workers.",
+            "deployment target edge workers",
+            "Durable memory: deployment target is edge workers.",
         )
         weak = validate_memory_relevance(
-            "deployment target cloudflare workers",
+            "deployment target edge workers",
             "Durable memory: favorite pizza toppings are mushrooms and olives.",
         )
 

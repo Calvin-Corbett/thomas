@@ -1,4 +1,4 @@
-"""Mission Control routes and benchmark UI APIs - facade for modular mission handlers.
+"""Mission Control routes - facade for modular mission handlers.
 
 This module orchestrates route registration by importing from specialized mission modules:
 - mission_tasks.py: Task CRUD and management
@@ -17,10 +17,8 @@ from aiohttp import web
 
 from .mission_approvals import build_mission_approvals_handlers
 from .mission_autonomy_runtime import build_mission_autonomy_helpers
-from .mission_benchmark_routes import register_mission_benchmark_routes
 from .mission_control_routes import build_mission_control_routes
 from .mission_cron import build_mission_cron_handlers
-from .mission_support import _discover_repo_root
 from .mission_tasks import build_mission_task_handlers
 from .mission_workflows import build_mission_workflow_handlers
 
@@ -51,9 +49,6 @@ def register_mission_routes(
         run_store_enabled_key: App key for run store enabled flag
         run_store_module_key: App key for run store module
     """
-    repo_root = _discover_repo_root(web_dir)
-    runs_dir = (repo_root / "demo" / "agentic-runs").resolve()
-
     # Build mission control helpers
     api_mission_control, api_mission_stream, _mission_approvals_payload = build_mission_control_routes(
         app,
@@ -143,21 +138,3 @@ def register_mission_routes(
     )
     app.router.add_post("/api/mission/alerts/notify", api_mission_alert_notify)
 
-    # Benchmark routes registration
-    benchmark_jobs = {}
-    benchmark_tasks = {}
-    benchmark_procs = {}
-    import asyncio
-
-    benchmark_lock = asyncio.Lock()
-
-    register_mission_benchmark_routes(
-        app,
-        repo_root=repo_root,
-        runs_dir=runs_dir,
-        require_api_access=require_api_access,
-        benchmark_jobs=benchmark_jobs,
-        benchmark_tasks=benchmark_tasks,
-        benchmark_procs=benchmark_procs,
-        benchmark_lock=benchmark_lock,
-    )

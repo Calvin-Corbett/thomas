@@ -202,12 +202,6 @@ def test_sync_blue_to_green_includes_support_docs_and_assets(tmp_path: Path) -> 
         "docs/ai/AGENT_ROUTER.md": "router\n",
         "docs/ai/CHECKLISTS/agent-lane-chat.md": "chat lane\n",
         "extensions/catalog.json": "{}\n",
-        "apps/site/src/lib/site-config.ts": "export const config = {};\n",
-        "apps/site/src/app/marketplace/page.tsx": "export default function Page() { return null; }\n",
-        "apps/site/src/app/api/marketplace/catalog/route.ts": "export async function GET() { return Response.json({}); }\n",
-        "apps/site/src/app/api/v1/plugins/catalog/route.ts": "export async function GET() { return Response.json({}); }\n",
-        "apps/site/src/app/api/v1/plugins/download-token/route.ts": "export async function GET() { return Response.json({}); }\n",
-        "apps/site/src/app/api/v1/plugins/[pluginId]/route.ts": "export async function GET() { return Response.json({}); }\n",
     }
     for rel, text in support_files.items():
         path = tmp_path / rel

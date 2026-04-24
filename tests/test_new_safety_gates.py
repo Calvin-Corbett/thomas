@@ -347,13 +347,13 @@ class TestProtectedFilesGate:
 
     def test_run_blocks_nested_agents_file(self, monkeypatch, capsys):
         """Nested AGENTS.md files should be protected even if config forgot the exact path."""
-        monkeypatch.setattr(protected_gate, "_staged_files", lambda: ["apps/site/AGENTS.md"])
+        monkeypatch.setattr(protected_gate, "_staged_files", lambda: ["thomas/server/web/AGENTS.md"])
 
         rc = protected_gate.run([])
         out = capsys.readouterr().out
 
         assert rc == 1
-        assert "apps/site/AGENTS.md" in out
+        assert "thomas/server/web/AGENTS.md" in out
         assert "immutable policy document" in out
 
 

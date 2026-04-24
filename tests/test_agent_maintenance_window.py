@@ -87,7 +87,7 @@ def test_reset_maintenance_window_writes_audit_entry(tmp_path: Path, monkeypatch
     log_path.write_text("{\"event\":\"checkpoint_failed\"}\n", encoding="utf-8")
     monkeypatch.setattr(window, "maintenance_log_path", lambda *_args, **_kwargs: log_path)
     monkeypatch.setattr(window, "maintenance_audit_log_path", lambda *_args, **_kwargs: audit_path)
-    monkeypatch.setattr(window, "_authenticate_maintenance_reset", lambda: {"ok": True, "actor": "CORBE\\corbe", "method": "windows-credential-dialog", "cancelled": False})
+    monkeypatch.setattr(window, "_authenticate_maintenance_reset", lambda: {"ok": True, "actor": "WORKSTATION\\operator", "method": "windows-credential-dialog", "cancelled": False})
     payload = window.reset_maintenance_window(root=tmp_path, reason="Reset after local debugging.", now=datetime(2026, 4, 10, 12, 0, tzinfo=timezone.utc))
     assert payload["ok"] is True
     assert payload["reset"] is True

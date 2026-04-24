@@ -22,7 +22,7 @@ class DealManager:
         """Initialize the deal manager."""
         self._deals: dict[str, Deal] = {}
         self._deal_scores: dict[str, float] = {}
-        self._competitive_deals: dict[str, list[str]] = {}
+        self._alternative_vendors_by_deal: dict[str, list[str]] = {}
 
     def create_deal(
         self,
@@ -127,8 +127,8 @@ class DealManager:
         del self._deals[deal_id]
         if deal_id in self._deal_scores:
             del self._deal_scores[deal_id]
-        if deal_id in self._competitive_deals:
-            del self._competitive_deals[deal_id]
+        if deal_id in self._alternative_vendors_by_deal:
+            del self._alternative_vendors_by_deal[deal_id]
 
     def list_deals(self) -> list[Deal]:
         """Get all deals.
@@ -340,42 +340,42 @@ class DealManager:
 
         deal.products = [p for p in deal.products if p["id"] != product_id]
 
-    def add_competitor(
+    def add_alternative_vendor(
         self,
         deal_id: str,
-        competitor_name: str,
+        vendor_name: str,
     ) -> None:
-        """Track a competitor in a deal.
+        """Track an alternative vendor in a deal.
 
         Args:
             deal_id: Deal identifier
-            competitor_name: Name of competing vendor
+            vendor_name: Name of alternative vendor
 
         Raises:
             DealNotFoundError: If deal not found
         """
         self.get_deal(deal_id)
 
-        if deal_id not in self._competitive_deals:
-            self._competitive_deals[deal_id] = []
+        if deal_id not in self._alternative_vendors_by_deal:
+            self._alternative_vendors_by_deal[deal_id] = []
 
-        if competitor_name not in self._competitive_deals[deal_id]:
-            self._competitive_deals[deal_id].append(competitor_name)
+        if vendor_name not in self._alternative_vendors_by_deal[deal_id]:
+            self._alternative_vendors_by_deal[deal_id].append(vendor_name)
 
-    def get_competitors(self, deal_id: str) -> list[str]:
-        """Get all competitors tracked for a deal.
+    def get_alternative_vendors(self, deal_id: str) -> list[str]:
+        """Get all alternative vendors tracked for a deal.
 
         Args:
             deal_id: Deal identifier
 
         Returns:
-            List of competitor names
+            List of alternative vendor names
 
         Raises:
             DealNotFoundError: If deal not found
         """
         self.get_deal(deal_id)
-        return self._competitive_deals.get(deal_id, []).copy()
+        return self._alternative_vendors_by_deal.get(deal_id, []).copy()
 
     def clone_deal(
         self,
@@ -417,9 +417,9 @@ class DealManager:
         self._deals[new_deal.id] = new_deal
         self._deal_scores[new_deal.id] = self._deal_scores.get(deal_id, 50.0)
 
-        # Clone competitive deals
-        if deal_id in self._competitive_deals:
-            self._competitive_deals[new_deal.id] = self._competitive_deals[deal_id].copy()
+        # Clone vendor context for similar opportunities.
+        if deal_id in self._alternative_vendors_by_deal:
+            self._alternative_vendors_by_deal[new_deal.id] = self._alternative_vendors_by_deal[deal_id].copy()
 
         return new_deal
 
@@ -447,12 +447,12 @@ class DealManager:
 
         avg_lost_value = sum(d.value for d in lost_deals) / len(lost_deals) if lost_deals else Decimal(0)
 
-        # Identify common competitors in lost deals
-        lost_competitors: dict[str, int] = {}
+        # Identify common alternative vendors in lost deals.
+        lost_alternative_vendors: dict[str, int] = {}
         for deal_id in closed_lost_deals:
-            competitors = self.get_competitors(deal_id)
-            for comp in competitors:
-                lost_competitors[comp] = lost_competitors.get(comp, 0) + 1
+            alternative_vendors = self.get_alternative_vendors(deal_id)
+            for vendor in alternative_vendors:
+                lost_alternative_vendors[vendor] = lost_alternative_vendors.get(vendor, 0) + 1
 
         return {
             "total_deals": total_deals,
@@ -461,7 +461,11 @@ class DealManager:
             "win_rate": win_rate,
             "avg_won_value": avg_won_value,
             "avg_lost_value": avg_lost_value,
-            "top_competitors": sorted(lost_competitors.items(), key=lambda x: x[1], reverse=True)[:5],
+            "top_alternative_vendors": sorted(
+                lost_alternative_vendors.items(),
+                key=lambda x: x[1],
+                reverse=True,
+            )[:5],
         }
 
     def get_deals_by_owner(self, owner: str) -> list[Deal]:

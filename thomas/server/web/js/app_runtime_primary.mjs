@@ -3,10 +3,10 @@
  * Minimal, clean, vanilla JS to power the thoughtful interface.
  */
 
-// 
-//   GLOBAL STATE & CONSTANTS                                               
-//   Chat state, game constants, composer presets, DOM element refs          
-// 
+//
+//   GLOBAL STATE & CONSTANTS
+//   Chat state, game constants, composer presets, DOM element refs
+//
 
 // Basic State
 let chatHistory = [];
@@ -794,8 +794,8 @@ const UI_NAV_MODE_STORAGE_KEY = 'thomas.ui.nav_mode.v1';
 const UI_WORKSPACE_NAV_ORDER_STORAGE_KEY = 'thomas.ui.workspace_nav_order.v1';
 const UI_SIDEBAR_COLLAPSED_STORAGE_KEY = 'thomas.ui.sidebar_collapsed.v1';
 const UI_MARKETPLACE_STORE_URL_STORAGE_KEY = 'thomas.ui.marketplace_store_url.v1';
-const DEFAULT_MARKETPLACE_STORE_URL = 'https://thomas-site.thomasdevhub.workers.dev';
-const LEGACY_MARKETPLACE_STORE_URL = 'https://thomas.dev';
+const DEFAULT_MARKETPLACE_STORE_URL = '';
+const LEGACY_MARKETPLACE_STORE_URL = 'https://github.com/Calvin-Corbett/thomas';
 const UI_CHAT_LIST_EXPANDED_STORAGE_KEY = 'thomas.ui.chat_list_expanded.v1';
 const UI_ACTIVE_CHAT_STORAGE_KEY = 'thomas.ui.active_chat.v1';
 const UI_COMPACT_LAYOUT_MEDIA_QUERY = '(max-width: 760px)';
@@ -1047,7 +1047,7 @@ const OFFICE_DYNAMIC_ROOM_SLOTS = [
 const OFFICE_TASK_ROOM_RULES = [
     { pattern: /\b(code|coding|bug|fix|refactor|script|api|backend|frontend|test|suite|engineer(?:ing)?)\b/i, roomId: 'room-engineering' },
     { pattern: /\b(content|video|youtube|social|post|edit|thumbnail|brand|marketing)\b/i, roomId: 'room-content' },
-    { pattern: /\b(research|compare|competitor|benchmark|analysis|document|docs|investigate)\b/i, roomId: 'room-research' },
+    { pattern: /\b(research|compare|reference|benchmark|analysis|document|docs|investigate)\b/i, roomId: 'room-research' },
     { pattern: /\b(deploy|infra|infrastructure|ops|monitor|reliability|performance|server|hosting)\b/i, roomId: 'room-ops' },
     { pattern: /\b(plan|roadmap|strategy|scope|milestone|timeline)\b/i, roomId: 'room-planning' },
     { pattern: /\b(support|ticket|customer|feedback|help)\b/i, roomId: 'room-support' },
@@ -1087,10 +1087,10 @@ const OFFICE_AGENT_STYLE_COLOR_POOL = [
 ];
 const OFFICE_AGENT_COSTUME_POOL = ['none', 'cap', 'visor', 'headset', 'bowtie'];
 
-// 
-//   VIRTUAL OFFICE DATA                                                    
-//   Agent dialogue trees, robot status sayings, UI notification helpers    
-// 
+//
+//   VIRTUAL OFFICE DATA
+//   Agent dialogue trees, robot status sayings, UI notification helpers
+//
 
 const OFFICE_DIALOGUE = {
     startup: [
@@ -1298,7 +1298,7 @@ const OFFICE_PERSONA_LIBRARY = {
     },
 };
 
-//  Chat Robot Status Sayings 
+//  Chat Robot Status Sayings
 const CHAT_ROBOT_SAYINGS = {
     thinking: [
         'Booting response core...',
@@ -1649,10 +1649,12 @@ function createAgentActivityRow(agentId, status, currentTask, elapsedMs) {
 function upsertAgentActivity(container, agentId, status, currentTask, elapsedMs) {
     if (!container) return;
     let existing = null;
+    const agentKey = safeString(agentId);
     try {
-        existing = container.querySelector(`[data-agent-id="${CSS.escape(agentId)}"]`);
+        existing = container.querySelector(`[data-agent-id="${CSS.escape(agentKey)}"]`);
     } catch {
-        existing = container.querySelector(`[data-agent-id="${agentId.replace(/"/g, '\\"')}"]`);
+        const fallbackAgentKey = agentKey.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+        existing = container.querySelector(`[data-agent-id="${fallbackAgentKey}"]`);
     }
     if (existing) {
         existing.dataset.status = status || 'running';
@@ -1809,10 +1811,10 @@ function chatWorldModeFromInterfacePrefs(interfacePrefs = {}) {
         : CHAT_WORLD_MODE_AMBIENT;
 }
 
-// 
-//   EASY SETUP / ONBOARDING                                               
-//   Setup wizard, path cards, dependency checks, telemetry, choice bubbles 
-// 
+//
+//   EASY SETUP / ONBOARDING
+//   Setup wizard, path cards, dependency checks, telemetry, choice bubbles
+//
 
 function onboardingNowIso() {
     return new Date().toISOString();
@@ -1820,13 +1822,22 @@ function onboardingNowIso() {
 
 function createOnboardingTelemetrySessionId() {
     try {
-        if (window.crypto && typeof window.crypto.randomUUID === 'function') {
-            return window.crypto.randomUUID();
+        const cryptoApi = window.crypto || globalThis.crypto;
+        if (cryptoApi && typeof cryptoApi.randomUUID === 'function') {
+            return cryptoApi.randomUUID();
+        }
+        if (cryptoApi && typeof cryptoApi.getRandomValues === 'function') {
+            const bytes = new Uint8Array(16);
+            cryptoApi.getRandomValues(bytes);
+            return `session_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('')}`;
         }
     } catch {
         // Fallback below.
     }
-    return `session_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+    const perfPart = safeString(window.performance && window.performance.now && window.performance.now())
+        .replace(/[^0-9a-z]/gi, '')
+        .slice(0, 12);
+    return `session_${Date.now().toString(36)}_${perfPart || 'local'}`;
 }
 
 function ensureOnboardingTelemetryClock() {
@@ -8440,10 +8451,10 @@ async function beginOnboardingInterview() {
     });
 }
 
-// 
-//   INITIALIZATION & COMPOSER                                              
-//   Main init(), composer setup, slash palette, message building           
-// 
+//
+//   INITIALIZATION & COMPOSER
+//   Main init(), composer setup, slash palette, message building
+//
 
 /**
  * Initialize the ultra-premium UI behaviors
@@ -8785,7 +8796,7 @@ function initComposer() {
         }
     });
 
-    //  Paste images from clipboard 
+    //  Paste images from clipboard
     composerTextarea.addEventListener('paste', (e) => {
         const items = e.clipboardData?.items;
         if (!items) return;
@@ -8807,7 +8818,7 @@ function initComposer() {
         }
     });
 
-    //  Drag-and-drop files onto composer 
+    //  Drag-and-drop files onto composer
     const composerArea = composerTextarea.closest('.composer') || composerTextarea.parentElement;
     if (composerArea) {
         let _dragCounter = 0;
@@ -8869,7 +8880,7 @@ function initComposer() {
     }
 }
 
-//  Slash Command Palette 
+//  Slash Command Palette
 const SLASH_COMMANDS = [
     { cmd: '/research',  desc: 'Deep research mode  thorough web search + synthesis' },
     { cmd: '/image',     desc: 'Generate an image from a description' },
@@ -9315,10 +9326,10 @@ function chatGameSetDinoSurfaceOpen(open) {
     }
 }
 
-// 
-//   CHAT GAMES                                                             
-//   Cloud Jump, Jetpack Joyride, Dino Run  physics, rendering, game loop  
-// 
+//
+//   CHAT GAMES
+//   Cloud Jump, Jetpack Joyride, Dino Run  physics, rendering, game loop
+//
 
 function chatGameSetCenterMuted(enable) {
     if (!appRoot) return;
@@ -11639,10 +11650,10 @@ function initChatGame() {
     });
 }
 
-// 
-//   ACTIONS & INTERACTIONS                                                 
-//   Send/stop, file attach, chat search, keyboard shortcuts, streaming     
-// 
+//
+//   ACTIONS & INTERACTIONS
+//   Send/stop, file attach, chat search, keyboard shortcuts, streaming
+//
 
 function initActions() {
     function prepareManualSendFromComposer() {
@@ -13739,7 +13750,7 @@ async function streamChatResponse(payload, { userContext = '', existingBubbleId 
             if (bubbleMsgContent) bubbleMsgContent.classList.add('streaming-active');
         }
 
-        //  rAF-batched streaming render 
+        //  rAF-batched streaming render
         let _rafScheduled = false;
         function _scheduleStreamRender() {
             if (_rafScheduled) return;
@@ -14850,10 +14861,10 @@ function setGeneratingState(generating) {
     updateDebugDockSnapshot();
 }
 
-// 
-//   CHAT & MESSAGE RENDERING                                               
-//   Attachments, message bubbles, markdown, code blocks, robot alerts      
-// 
+//
+//   CHAT & MESSAGE RENDERING
+//   Attachments, message bubbles, markdown, code blocks, robot alerts
+//
 
 function renderAttachmentsPreview() {
     attachmentsPreview.replaceChildren();
@@ -15769,10 +15780,10 @@ function setActiveDebugTab(tabRaw = 'runtime') {
     void refreshDebugLiveData({ reason: `tab:${normalized}` });
 }
 
-// 
-//   DEBUG DOCK                                                             
-//   Runtime, system, models, tools, memory, runs, console, network panels  
-// 
+//
+//   DEBUG DOCK
+//   Runtime, system, models, tools, memory, runs, console, network panels
+//
 
 function initDebugDockTabs() {
     if (!debugDockTabs) return;
@@ -17089,10 +17100,10 @@ function formatSidebarTimestamp(epochMs) {
     }
 }
 
-// 
-//   SESSION & CHAT PERSISTENCE                                             
-//   Chat save/load, sidebar sessions, persistence helpers, animation locks 
-// 
+//
+//   SESSION & CHAT PERSISTENCE
+//   Chat save/load, sidebar sessions, persistence helpers, animation locks
+//
 
 function mapPersistedChatToSidebarSession(chatRaw) {
     if (!chatRaw || typeof chatRaw !== 'object') return null;
@@ -17290,10 +17301,10 @@ async function persistActiveChat({ quiet = true } = {}) {
     return ok;
 }
 
-// 
-//   VIRTUAL OFFICE                                                         
-//   Office sim, agent movement, room rendering, minimap, sprite painting   
-// 
+//
+//   VIRTUAL OFFICE
+//   Office sim, agent movement, room rendering, minimap, sprite painting
+//
 
 function officeClamp(value, min, max) {
     return Math.max(min, Math.min(max, value));
@@ -25244,10 +25255,10 @@ function officeHandleDraftMinimapResizePointerUp(event) {
     state.minimapResizePointerId = null;
 }
 
-// 
-//   MISSION CONTROL                                                        
-//   Agent ops, job tracking, approvals, KPIs, timeline, room load          
-// 
+//
+//   MISSION CONTROL
+//   Agent ops, job tracking, approvals, KPIs, timeline, room load
+//
 
 function missionEnsureState() {
     if (missionState) {
@@ -26889,10 +26900,10 @@ function initMissionWorkspace() {
     }
 }
 
-// 
-//   CONTENT HUB                                                            
-//   Social platforms, workflows, scheduling, content track list            
-// 
+//
+//   CONTENT HUB
+//   Social platforms, workflows, scheduling, content track list
+//
 
 function contentEnsureState() {
     if (!contentWorkspace) return null;
@@ -27402,10 +27413,10 @@ function contentEnterMode() {
 
 function contentLeaveMode() {}
 
-// 
-//   MODULE SYSTEM (COMMAND CENTER)                                         
-//   19 nav modes, seeds, surfaces, workbench config, module state machine  
-// 
+//
+//   MODULE SYSTEM (COMMAND CENTER)
+//   19 nav modes, seeds, surfaces, workbench config, module state machine
+//
 
 const MODULE_NAV_MODES = Object.freeze([
     'dashboard',
@@ -27648,13 +27659,13 @@ const MODULE_MODE_SEEDS = Object.freeze({
         kpis: [
             { label: 'Open Briefs', key: 'research_briefs', meta: 'active deep dives' },
             { label: 'Citations', key: 'research_citations', meta: 'saved sources' },
-            { label: 'Competitors', key: 'research_competitors', meta: 'watchlist set' },
+            { label: 'Watchlist', key: 'research_watchlist', meta: 'watchlist set' },
             { label: 'Indexed Docs', key: 'research_docs', meta: 'searchable corpus' },
         ],
         actions: [
             { id: 'deep_research', label: 'Start Deep Research', meta: 'Run source-backed research flow.' },
             { id: 'ingest_docs', label: 'Ingest Documents', meta: 'Parse and index new material.' },
-            { id: 'compare_competitors', label: 'Compare Competitors', meta: 'Produce side-by-side report.' },
+            { id: 'compare_references', label: 'Compare References', meta: 'Produce side-by-side report.' },
             { id: 'export_brief', label: 'Export Brief', meta: 'Publish answer with receipts.' },
         ],
     },
@@ -28766,7 +28777,7 @@ function moduleEventTags(event) {
     if (/(3d|cad|print|mesh|slicer|stl|obj)/.test(text)) {
         tags.add('lab_3d');
     }
-    if (/(research|citation|source|brief|analysis|competitor|pdf)/.test(text)) {
+    if (/(research|citation|source|brief|analysis|reference|pdf)/.test(text)) {
         tags.add('research');
     }
     if (/(people|contact|client|vendor|relationship)/.test(text)) {
@@ -29134,7 +29145,7 @@ function moduleCollectSignals(snapshot = moduleBuildSnapshot()) {
         printer_uptime: null,
         research_briefs: researchSignals,
         research_citations: snapshot.events.filter((event) => /citation|source/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
-        research_competitors: snapshot.events.filter((event) => /competitor/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
+        research_watchlist: snapshot.events.filter((event) => /reference/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
         research_docs: snapshot.events.filter((event) => { const tags = moduleEventTags(event); return tags.has('research') && /doc|pdf|brief/i.test(safeString(event?.text) + ' ' + safeString(event?.type)); }).length,
         people_contacts: snapshot.sessions.length,
         people_followups: inboxNeedsReply,
@@ -29587,7 +29598,7 @@ function moduleBuildFocusCards(mode, snapshot, signals) {
         return [
             { label: 'Open Briefs', value: signals?.research_briefs, meta: 'active research tracks', tone: '' },
             { label: 'Citations', value: signals?.research_citations, meta: 'source-backed points', tone: '' },
-            { label: 'Competitor Watch', value: signals?.research_competitors, meta: 'tracked references', tone: '' },
+            { label: 'Market Watch', value: signals?.research_watchlist, meta: 'tracked references', tone: '' },
         ];
     }
     if (mode === 'people') {
@@ -29766,7 +29777,7 @@ function moduleBuildFlair(mode, signals, snapshot) {
         return [
             { label: 'Briefs', value: moduleFocusValue(signals?.research_briefs), tone: '' },
             { label: 'Citations', value: moduleFocusValue(signals?.research_citations), tone: '' },
-            { label: 'Watchlist', value: moduleFocusValue(signals?.research_competitors), tone: '' },
+            { label: 'Watchlist', value: moduleFocusValue(signals?.research_watchlist), tone: '' },
         ];
     }
     if (mode === 'people') {
@@ -29966,25 +29977,25 @@ function moduleWorkbenchOssCatalog(modeRaw) {
     if (mode === 'app_builder') {
         return [
             {
-                title: 'Appsmith',
-                license: 'Apache-2.0',
-                docsUrl: 'https://github.com/appsmithorg/appsmith',
+                title: 'Admin Panel Runtime',
+                license: 'OSS-compatible',
+                docsUrl: '',
                 why: 'Internal tools and admin panels',
-                command: 'docker run --pull always --rm -p 80:80 -p 443:443 -v appsmith-stacks:/appsmith-stacks appsmith/appsmith-ce',
+                command: 'Use the exported page DSL with your preferred internal app runtime.',
             },
             {
-                title: 'Budibase',
-                license: 'GPLv3',
-                docsUrl: 'https://github.com/Budibase/budibase',
-                why: 'Low-code app + automation platform',
-                command: 'curl -s https://raw.githubusercontent.com/Budibase/budibase/master/hosting/docker-compose.yaml -o budibase-docker-compose.yaml',
+                title: 'Builder Runtime',
+                license: 'Project-specific',
+                docsUrl: '',
+                why: 'Low-code app and automation handoff',
+                command: 'Export builder DSL, then map it to your chosen builder runtime.',
             },
             {
-                title: 'NocoBase',
-                license: 'AGPL-3.0',
-                docsUrl: 'https://github.com/nocobase/nocobase',
-                why: 'Extensible enterprise low-code',
-                command: 'npm create nocobase-app@latest',
+                title: 'Workflow Runtime',
+                license: 'Project-specific',
+                docsUrl: '',
+                why: 'Extensible workflow-backed app surfaces',
+                command: 'Export HTML or builder DSL and connect it to your workflow runtime.',
             },
         ];
     }
@@ -30989,11 +31000,11 @@ function moduleLab3dHitShape(shapeRaw, pointRaw) {
         && (Number(point.y) || 0) <= (y + h);
 }
 
-// 
-//   WORKBENCH EDITORS                                                      
-//   Lab 3D, Automations, App Builder, Studio, Dev Studio, Game Studio,     
-//   Research Lab  rich interactive editors for each workbench mode         
-// 
+//
+//   WORKBENCH EDITORS
+//   Lab 3D, Automations, App Builder, Studio, Dev Studio, Game Studio,
+//   Research Lab  rich interactive editors for each workbench mode
+//
 
 function moduleRenderWorkbenchLab3dOss(container, wb) {
     if (!container || !wb) return false;
@@ -32934,7 +32945,7 @@ function moduleRenderWorkbenchAutomations(container, wb) {
     }
 }
 
-function moduleWorkbenchAppSchemaToAppsmith(wb) {
+function moduleWorkbenchAppSchemaToPageDsl(wb) {
     const components = Array.isArray(wb?.components) ? wb.components : [];
     const widgets = components.map((component, index) => ({
         widgetName: safeString(component.label) || `Widget${index + 1}`,
@@ -32956,7 +32967,7 @@ function moduleWorkbenchAppSchemaToAppsmith(wb) {
     };
 }
 
-function moduleWorkbenchAppSchemaToBudibase(wb) {
+function moduleWorkbenchAppSchemaToBuilderDsl(wb) {
     const components = Array.isArray(wb?.components) ? wb.components : [];
     return {
         app: {
@@ -33131,8 +33142,8 @@ function moduleRenderWorkbenchAppBuilderOss(container, wb) {
                 <button type="button" class="module-item-btn" data-app-action="export">Export</button>
                 <button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button>
                 <button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button>
-                <button type="button" class="module-item-btn" data-app-action="export_appsmith">Appsmith JSON</button>
-                <button type="button" class="module-item-btn" data-app-action="export_budibase">Budibase JSON</button>
+                <button type="button" class="module-item-btn" data-app-action="export_page_dsl">Page DSL JSON</button>
+                <button type="button" class="module-item-btn" data-app-action="export_builder_dsl">Builder DSL JSON</button>
                 <button type="button" class="module-item-btn" data-app-action="reset">Reset</button>
             </div>
         </aside>
@@ -33452,12 +33463,12 @@ function moduleRenderWorkbenchAppBuilderOss(container, wb) {
             window.setTimeout(() => URL.revokeObjectURL(url), 5000);
             return;
         }
-        if (action === 'export_appsmith') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToAppsmith(wb), 'Appsmith Page JSON');
+        if (action === 'export_page_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToPageDsl(wb), 'Page DSL JSON');
             return;
         }
-        if (action === 'export_budibase') {
-            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBudibase(wb), 'Budibase App JSON');
+        if (action === 'export_builder_dsl') {
+            moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBuilderDsl(wb), 'Builder DSL JSON');
             return;
         }
         if (action === 'reset') {
@@ -33558,7 +33569,7 @@ function moduleRenderWorkbenchAppBuilder(container, wb) {
     const shell = document.createElement('section');
     shell.className = 'module-wb-shell module-wb-shell-app';
     shell.innerHTML = `
-        <aside class="module-wb-side-card"><h4>UI Blocks</h4><div class="module-wb-palette" data-app-palette></div>${moduleWorkbenchRenderProjectControls('app_builder', 'App Projects')}<div class="module-wb-inspector-actions"><button type="button" class="module-item-btn" data-app-action="preview">Preview</button><button type="button" class="module-item-btn" data-app-action="publish">Publish</button><button type="button" class="module-item-btn" data-app-action="export">Export</button><button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button><button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button><button type="button" class="module-item-btn" data-app-action="export_appsmith">Appsmith JSON</button><button type="button" class="module-item-btn" data-app-action="export_budibase">Budibase JSON</button><button type="button" class="module-item-btn" data-app-action="clear">Clear</button></div></aside>
+                <aside class="module-wb-side-card"><h4>UI Blocks</h4><div class="module-wb-palette" data-app-palette></div>${moduleWorkbenchRenderProjectControls('app_builder', 'App Projects')}<div class="module-wb-inspector-actions"><button type="button" class="module-item-btn" data-app-action="preview">Preview</button><button type="button" class="module-item-btn" data-app-action="publish">Publish</button><button type="button" class="module-item-btn" data-app-action="export">Export</button><button type="button" class="module-item-btn" data-app-action="export_html">Export HTML</button><button type="button" class="module-item-btn" data-app-action="open_preview">Open Preview</button><button type="button" class="module-item-btn" data-app-action="export_page_dsl">Page DSL JSON</button><button type="button" class="module-item-btn" data-app-action="export_builder_dsl">Builder DSL JSON</button><button type="button" class="module-item-btn" data-app-action="clear">Clear</button></div></aside>
         <section class="module-wb-stage-card"><div class="module-wb-stage-head"><span class="module-wb-stage-title">Layout</span><span class="module-wb-stage-meta" data-app-status></span></div><div class="module-wb-device-switch"><button type="button" class="module-item-btn" data-app-device="desktop">Desktop</button><button type="button" class="module-item-btn" data-app-device="mobile">Mobile</button></div><div class="module-wb-app-list" data-app-list></div><div class="module-wb-preview-frame-wrap"><div class="module-wb-stage-head"><span class="module-wb-stage-title">Runtime Preview</span><span class="module-wb-stage-meta">live</span></div><iframe class="module-wb-preview-frame" data-app-preview sandbox="allow-scripts"></iframe></div></section>
         <aside class="module-wb-inspector-card" data-app-inspector></aside>
         ${moduleWorkbenchRenderOssStack('app_builder')}
@@ -33670,8 +33681,8 @@ function moduleRenderWorkbenchAppBuilder(container, wb) {
                 window.open(url, '_blank', 'noopener');
                 window.setTimeout(() => URL.revokeObjectURL(url), 5000);
             }
-            if (action === 'export_appsmith') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToAppsmith(wb), 'Appsmith Page JSON');
-            if (action === 'export_budibase') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBudibase(wb), 'Budibase App JSON');
+            if (action === 'export_page_dsl') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToPageDsl(wb), 'Page DSL JSON');
+            if (action === 'export_builder_dsl') moduleWorkbenchCopyJson(moduleWorkbenchAppSchemaToBuilderDsl(wb), 'Builder DSL JSON');
             if (action === 'clear') { wb.components = []; wb.selectedId = ''; }
             renderAll();
             return;
@@ -33929,7 +33940,10 @@ function moduleWorkbenchStudioFfmpegConcatCommand(wb) {
     if (!media.length) {
         return 'ffmpeg -f concat -safe 0 -i clips.txt -c copy output.mp4';
     }
-    const lines = media.map((asset) => `file '${safeString(asset.name).replace(/'/g, "\\'")}'`);
+    const lines = media.map((asset) => {
+        const fileName = safeString(asset.name).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+        return `file '${fileName}'`;
+    });
     return [
         '# 1) Save this as clips.txt',
         ...lines,
@@ -38994,7 +39008,7 @@ function moduleBuildSpecialCards(mode, snapshot, signals, definition) {
                 items: [
                     `Briefs: ${moduleFocusValue(signals?.research_briefs)}`,
                     `Citations: ${moduleFocusValue(signals?.research_citations)}`,
-                    `Competitor watch: ${moduleFocusValue(signals?.research_competitors)}`,
+                    `Market Watch: ${moduleFocusValue(signals?.research_watchlist)}`,
                 ],
             },
         ];
@@ -39567,7 +39581,7 @@ function moduleRenderMarketplaceSurface(container) {
     const activeFilter = safeString(marketplaceState?.filter).toLowerCase() || 'all';
     const generatedAt = safeString(marketplaceState?.generatedAt);
     const syncedAt = safeString(marketplaceState?.syncedAt || generatedAt);
-    const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'thomas.dev';
+    const sourceLabel = safeString(marketplaceState?.sourceLabel) || safeString(marketplaceState?.storeUrl) || 'public repo';
     const configuredStoreUrl = normalizeMarketplaceStoreUrl(
         safeString(marketplaceState?.pendingStoreUrl || marketplaceState?.storeUrl || moduleReadPreferredMarketplaceStoreUrl())
     );
@@ -41160,10 +41174,10 @@ function moduleRenderTriage(definition, mode) {
     });
 }
 
-// 
-//   MODULE RENDERING & DISPATCH                                            
-//   moduleRender(), moduleEnterMode(), initModuleWorkspace()               
-// 
+//
+//   MODULE RENDERING & DISPATCH
+//   moduleRender(), moduleEnterMode(), initModuleWorkspace()
+//
 
 function moduleRender(modeRaw, { touch = true } = {}) {
     const mode = MODULE_NAV_MODE_SET.has(modeRaw) ? modeRaw : 'dashboard';
@@ -42668,10 +42682,10 @@ function initContentWorkspace() {
     }
 }
 
-// 
-//   SIDEBAR & NAVIGATION                                                   
-//   Nav mode switching, chat list, office/content workspace init           
-// 
+//
+//   SIDEBAR & NAVIGATION
+//   Nav mode switching, chat list, office/content workspace init
+//
 
 function setSidebarNavMode(mode = 'chat', { persist = true } = {}) {
     const requestedMode = normalizeNavMode(mode);
@@ -42982,10 +42996,10 @@ function initSettingsSectionNavigation() {
     window.addEventListener('resize', queueSettingsSectionNavActiveUpdate);
 }
 
-// 
-//   INITIAL STATE & BOOT                                                   
-//   loadInitialState(), session creation, profile loading, preference sync 
-// 
+//
+//   INITIAL STATE & BOOT
+//   loadInitialState(), session creation, profile loading, preference sync
+//
 
 async function maybeHandleBootPluginInstall() {
     if (bootPluginInstallPromise) {
@@ -43628,10 +43642,10 @@ function initFeatures() {
     pushDebugEvent('runtime', 'UI initialized');
 }
 
-// 
-//   MODEL SETUP & SETTINGS                                                 
-//   Model selector, profile switching, settings form, save/load prefs      
-// 
+//
+//   MODEL SETUP & SETTINGS
+//   Model selector, profile switching, settings form, save/load prefs
+//
 
 function initModelSetup() {
     const closeModelSetupModal = () => {
@@ -45387,6 +45401,37 @@ function moduleUiEditorResolvePath(baseDirRaw, relativeRaw) {
     return resolved.join('/');
 }
 
+function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
+    if (!doc || !doc.querySelectorAll) return doc;
+    doc.querySelectorAll('script,iframe,object,embed,base').forEach((node) => node.remove());
+    doc.querySelectorAll('*').forEach((node) => {
+        if (!(node instanceof Element)) return;
+        Array.from(node.attributes || []).forEach((attr) => {
+            const name = safeString(attr.name).toLowerCase();
+            const value = safeString(attr.value).trim();
+            if (name.startsWith('on') || name === 'srcdoc') {
+                node.removeAttribute(attr.name);
+                return;
+            }
+            if ((name === 'href' || name === 'src' || name === 'xlink:href' || name === 'action' || name === 'formaction')
+                && /^(javascript:|vbscript:|data:text\/html)/i.test(value)) {
+                node.removeAttribute(attr.name);
+            }
+        });
+    });
+    return doc;
+}
+
+function moduleUiEditorParseImportedHtml(htmlText) {
+    const doc = document.implementation.createHTMLDocument('Imported Project');
+    const pre = doc.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.margin = '0';
+    pre.textContent = safeString(htmlText);
+    doc.body.appendChild(pre);
+    return doc;
+}
+
 function moduleUiEditorClamp(valueRaw, minRaw, maxRaw) {
     const value = Number(valueRaw);
     const min = Number(minRaw);
@@ -45843,8 +45888,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     if (!entryFile) return { ok: false, reason: 'Could not read entry HTML file.' };
 
     const htmlText = await entryFile.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, 'text/html');
+    const doc = moduleUiEditorParseImportedHtml(htmlText);
     const baseDir = preferred.includes('/') ? preferred.slice(0, preferred.lastIndexOf('/')) : '';
     const blobMap = new Map();
 
@@ -45877,7 +45921,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     rewriteAttr('link[href]', 'href');
     rewriteAttr('a[href]', 'href');
 
-    const serialized = '<!doctype html>\n' + (doc.documentElement ? doc.documentElement.outerHTML : htmlText);
+    const serialized = '<!doctype html>\n' + (doc.documentElement ? doc.documentElement.outerHTML : '');
     return {
         ok: true,
         project: {
@@ -46093,11 +46137,13 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         const id = safeString(project && project.id);
         const rawUrl = safeString(project && project.url);
         const trustedProject = id === 'ui-project-thomas'
-            || type === 'imported'
             || rawUrl === '/'
             || rawUrl.startsWith('/');
         if (trustedProject) {
             return '';
+        }
+        if (type === 'srcdoc') {
+            return 'allow-same-origin';
         }
         return 'allow-scripts allow-forms allow-popups allow-modals';
     };
@@ -46353,11 +46399,14 @@ function moduleUiEditorNormalizeShellPluginBootstrapSource(urlRaw) {
     const source = moduleUiEditorNormalizeGitHubRawUrl(urlRaw);
     if (!source) return { ok: false, reason: 'Missing plugin URL.' };
     if (!/^(https?):\/\//i.test(source)) {
-        return { ok: false, reason: 'Plugin URL must use http or https.' };
+        return { ok: false, reason: 'Plugin URL must use https.' };
     }
     try {
         const parsed = new URL(source);
         const host = safeString(parsed.hostname).toLowerCase();
+        if (safeString(parsed.protocol).toLowerCase() !== 'https:') {
+            return { ok: false, reason: 'Plugin URL must use https.' };
+        }
         if (!MODULE_UI_EDITOR_PLUGIN_BOOTSTRAP_ALLOWLIST.includes(host)) {
             return { ok: false, reason: 'Plugin URL host is not allowlisted.' };
         }
@@ -47086,13 +47135,26 @@ function moduleUiEditorParseShellPluginCards(rawCards) {
 }
 
 function moduleUiEditorNormalizeGitHubRawUrl(urlRaw) {
-    const url = safeString(urlRaw);
+    const url = safeString(urlRaw).trim();
     if (!url) return '';
-    if (url.includes('raw.githubusercontent.com')) return url;
-    if (/^https?:\/\/github\.com\//i.test(url) && /\/blob\//i.test(url)) {
-        return url
-            .replace('https://github.com/', 'https://raw.githubusercontent.com/')
-            .replace('/blob/', '/');
+    try {
+        const parsed = new URL(url);
+        const host = safeString(parsed.hostname).toLowerCase();
+        if (host === 'raw.githubusercontent.com' && parsed.protocol === 'https:') {
+            return parsed.href;
+        }
+        if (host === 'github.com' && parsed.protocol === 'https:') {
+            const parts = parsed.pathname.split('/').filter(Boolean);
+            const blobIndex = parts.indexOf('blob');
+            if (blobIndex === 2 && parts.length > 4) {
+                const [owner, repo] = parts;
+                const branch = parts[3];
+                const path = parts.slice(4).map(encodeURIComponent).join('/');
+                return `https://raw.githubusercontent.com/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/${encodeURIComponent(branch)}/${path}`;
+            }
+        }
+    } catch (_error) {
+        return url;
     }
     return url;
 }
@@ -47251,6 +47313,37 @@ function moduleUiEditorResolvePath(baseDirRaw, relativeRaw) {
         resolved.push(part);
     });
     return resolved.join('/');
+}
+
+function moduleUiEditorSanitizeImportedHtmlDocument(doc) {
+    if (!doc || !doc.querySelectorAll) return doc;
+    doc.querySelectorAll('script,iframe,object,embed,base').forEach((node) => node.remove());
+    doc.querySelectorAll('*').forEach((node) => {
+        if (!node || Number(node.nodeType) !== 1) return;
+        Array.from(node.attributes || []).forEach((attr) => {
+            const name = safeString(attr.name).toLowerCase();
+            const value = safeString(attr.value).trim();
+            if (name.startsWith('on') || name === 'srcdoc') {
+                node.removeAttribute(attr.name);
+                return;
+            }
+            if ((name === 'href' || name === 'src' || name === 'xlink:href' || name === 'action' || name === 'formaction')
+                && /^(javascript:|vbscript:|data:text\/html)/i.test(value)) {
+                node.removeAttribute(attr.name);
+            }
+        });
+    });
+    return doc;
+}
+
+function moduleUiEditorParseImportedHtml(htmlText) {
+    const doc = document.implementation.createHTMLDocument('Imported Project');
+    const pre = doc.createElement('pre');
+    pre.style.whiteSpace = 'pre-wrap';
+    pre.style.margin = '0';
+    pre.textContent = safeString(htmlText);
+    doc.body.appendChild(pre);
+    return doc;
 }
 
 function moduleUiEditorClamp(valueRaw, minRaw, maxRaw) {
@@ -48023,8 +48116,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     if (!entryFile) return { ok: false, reason: 'Could not read entry HTML file.' };
 
     const htmlText = await entryFile.text();
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(htmlText, 'text/html');
+    const doc = moduleUiEditorParseImportedHtml(htmlText);
     const baseDir = preferred.includes('/') ? preferred.slice(0, preferred.lastIndexOf('/')) : '';
     const assetMap = new Map();
 
@@ -48058,7 +48150,7 @@ async function moduleUiEditorProjectFromFiles(filesRaw) {
     await rewriteAttr('link[href]', 'href');
     await rewriteAttr('a[href]', 'href');
 
-    const serialized = '<!doctype html>\\n' + (doc.documentElement ? doc.documentElement.outerHTML : htmlText);
+    const serialized = '<!doctype html>\\n' + (doc.documentElement ? doc.documentElement.outerHTML : '');
     return {
         ok: true,
         project: {
@@ -48969,11 +49061,13 @@ moduleRenderWorkbenchAppBuilder = function moduleRenderWorkbenchAppBuilderUiEdit
         const id = safeString(project && project.id);
         const rawUrl = safeString(project && project.url);
         const trustedProject = id === 'ui-project-thomas'
-            || type === 'imported'
             || rawUrl === '/'
             || rawUrl.startsWith('/');
         if (trustedProject) {
             return '';
+        }
+        if (type === 'srcdoc') {
+            return 'allow-same-origin';
         }
         return 'allow-scripts allow-forms allow-popups allow-modals';
     };

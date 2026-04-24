@@ -1,6 +1,6 @@
 """Thomas-native message unpin command.
 
-This module intentionally avoids any OpenClaw naming. It provides a small,
+This module intentionally avoids any legacy naming. It provides a small,
 deterministic contract for unpinning a message from a channel across supported
 messaging backends.
 

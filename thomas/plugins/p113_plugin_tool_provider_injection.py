@@ -9,7 +9,7 @@ The goal is to validate that:
 - The injected provider's tools become discoverable/invokable through the registry.
 - Failures are deterministic and machine-readable for automation.
 
-This file intentionally avoids any OpenClaw naming reuse.
+This file intentionally uses Thomas-native naming.
 """
 
 from __future__ import annotations

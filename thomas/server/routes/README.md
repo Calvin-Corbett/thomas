@@ -37,7 +37,6 @@ Streams response back as JSON/SSE
 | `mission_cron.py` | Internal | Scheduled task execution |
 | `mission_tasks.py` | `/tasks/*` | Task operations |
 | `mission_workflows.py` | `/workflows/*` | Workflow definitions |
-| `mission_benchmark_routes.py` | `/benchmark/*` | Benchmarking endpoints |
 | `mission_content_hub.py` | `/content/*` | Content library |
 | `plugin_hosting.py` | `/plugins/*` | Plugin management |
 | `companion_aiohttp.py` | `/companion/*` | Mobile companion API |

@@ -133,12 +133,6 @@ repos:
         language: system
         pass_filenames: false
 
-      - id: thomas-site-visual-proof-gate
-        name: Thomas Site Visual Proof Gate
-        entry: python scripts/check_site_visual_proof.py
-        language: system
-        pass_filenames: false
-
       - id: thomas-merge-readiness
         name: Thomas Merge Readiness
         entry: python scripts/check_merge_readiness.py

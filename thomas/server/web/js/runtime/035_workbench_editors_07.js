@@ -332,7 +332,7 @@ function moduleBuildSpecialCards(mode, snapshot, signals, definition) {
                 items: [
                     `Briefs: ${moduleFocusValue(signals?.research_briefs)}`,
                     `Citations: ${moduleFocusValue(signals?.research_citations)}`,
-                    `Competitor watch: ${moduleFocusValue(signals?.research_competitors)}`,
+                    `Market Watch: ${moduleFocusValue(signals?.research_watchlist)}`,
                 ],
             },
         ];

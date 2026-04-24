@@ -86,10 +86,10 @@ def test_curator_promotes_episode_facts_incrementally(tmp_path, monkeypatch) -> 
     mem = AutonomyMemoryEngine(cfg, enable_legacy=False, enable_v2=True)
     mem.start()
     try:
-        mem.add_event("telegram:7", "user_message", "my deployment target is cloudflare workers")
+        mem.add_event("telegram:7", "user_message", "my deployment target is edge workers")
 
         immediate = mem.retrieve("deployment target", thread="telegram:8", budget=1000, mode="auto")
-        assert "cloudflare workers" in immediate.text.lower()
+        assert "edge workers" in immediate.text.lower()
 
         before = int(mem.stats().get("v2_facts", 0))
         first = mem.run_curator(force=True)

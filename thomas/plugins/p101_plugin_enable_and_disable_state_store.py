@@ -6,7 +6,7 @@ This module implements a small JSON-backed store that remembers whether a plugin
 is enabled or disabled across runs.
 
 Design goals:
-- Thomas-native naming and contracts (no OpenClaw naming reuse).
+- Thomas-native naming and contracts.
 - Deterministic, machine-friendly errors.
 - Minimal dependencies; safe for use from CLI and agent/gateway layers.
 

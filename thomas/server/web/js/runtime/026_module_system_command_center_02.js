@@ -219,7 +219,7 @@ function moduleEventTags(event) {
     if (/(3d|cad|print|mesh|slicer|stl|obj)/.test(text)) {
         tags.add('lab_3d');
     }
-    if (/(research|citation|source|brief|analysis|competitor|pdf)/.test(text)) {
+    if (/(research|citation|source|brief|analysis|reference|pdf)/.test(text)) {
         tags.add('research');
     }
     if (/(people|contact|client|vendor|relationship)/.test(text)) {
@@ -587,7 +587,7 @@ function moduleCollectSignals(snapshot = moduleBuildSnapshot()) {
         printer_uptime: null,
         research_briefs: researchSignals,
         research_citations: snapshot.events.filter((event) => /citation|source/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
-        research_competitors: snapshot.events.filter((event) => /competitor/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
+        research_watchlist: snapshot.events.filter((event) => /reference/i.test(`${safeString(event?.text)} ${safeString(event?.type)}`)).length,
         research_docs: snapshot.events.filter((event) => { const tags = moduleEventTags(event); return tags.has('research') && /doc|pdf|brief/i.test(safeString(event?.text) + ' ' + safeString(event?.type)); }).length,
         people_contacts: snapshot.sessions.length,
         people_followups: inboxNeedsReply,
@@ -1040,7 +1040,7 @@ function moduleBuildFocusCards(mode, snapshot, signals) {
         return [
             { label: 'Open Briefs', value: signals?.research_briefs, meta: 'active research tracks', tone: '' },
             { label: 'Citations', value: signals?.research_citations, meta: 'source-backed points', tone: '' },
-            { label: 'Competitor Watch', value: signals?.research_competitors, meta: 'tracked references', tone: '' },
+            { label: 'Market Watch', value: signals?.research_watchlist, meta: 'tracked references', tone: '' },
         ];
     }
     if (mode === 'people') {

@@ -913,7 +913,7 @@ function moduleRenderWorkbenchAutomations(container, wb) {
     }
 }
 
-function moduleWorkbenchAppSchemaToAppsmith(wb) {
+function moduleWorkbenchAppSchemaToPageDsl(wb) {
     const components = Array.isArray(wb?.components) ? wb.components : [];
     const widgets = components.map((component, index) => ({
         widgetName: safeString(component.label) || `Widget${index + 1}`,
@@ -935,7 +935,7 @@ function moduleWorkbenchAppSchemaToAppsmith(wb) {
     };
 }
 
-function moduleWorkbenchAppSchemaToBudibase(wb) {
+function moduleWorkbenchAppSchemaToBuilderDsl(wb) {
     const components = Array.isArray(wb?.components) ? wb.components : [];
     return {
         app: {
@@ -1050,4 +1050,3 @@ small { color: #9ab5d4; font-size: 10px; }
 </html>
     `.trim();
 }
-

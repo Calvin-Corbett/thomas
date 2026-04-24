@@ -30,11 +30,11 @@ def test_cross_thread_retrieval_can_use_global_user_facts(tmp_path) -> None:  # 
     mem = AutonomyMemoryEngine(_cfg(tmp_path), enable_legacy=False, enable_v2=True)
     mem.start()
     try:
-        mem.add_event("telegram:1", "user_message", "my deployment target is cloudflare workers")
+        mem.add_event("telegram:1", "user_message", "my deployment target is edge workers")
 
         ctx_other = mem.retrieve("deployment target", thread="telegram:2", budget=900, mode="auto")
 
-        assert "cloudflare workers" in ctx_other.text.lower()
+        assert "edge workers" in ctx_other.text.lower()
     finally:
         mem.close()
 

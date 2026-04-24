@@ -850,8 +850,8 @@ const UI_NAV_MODE_STORAGE_KEY = 'thomas.ui.nav_mode.v1';
 const UI_WORKSPACE_NAV_ORDER_STORAGE_KEY = 'thomas.ui.workspace_nav_order.v1';
 const UI_SIDEBAR_COLLAPSED_STORAGE_KEY = 'thomas.ui.sidebar_collapsed.v1';
 const UI_MARKETPLACE_STORE_URL_STORAGE_KEY = 'thomas.ui.marketplace_store_url.v1';
-const DEFAULT_MARKETPLACE_STORE_URL = 'https://thomas-site.thomasdevhub.workers.dev';
-const LEGACY_MARKETPLACE_STORE_URL = 'https://thomas.dev';
+const DEFAULT_MARKETPLACE_STORE_URL = '';
+const LEGACY_MARKETPLACE_STORE_URL = 'https://github.com/Calvin-Corbett/thomas';
 const UI_CHAT_LIST_EXPANDED_STORAGE_KEY = 'thomas.ui.chat_list_expanded.v1';
 const UI_ACTIVE_CHAT_STORAGE_KEY = 'thomas.ui.active_chat.v1';
 const UI_COMPACT_LAYOUT_MEDIA_QUERY = '(max-width: 760px)';
@@ -1103,7 +1103,7 @@ const OFFICE_DYNAMIC_ROOM_SLOTS = [
 const OFFICE_TASK_ROOM_RULES = [
     { pattern: /\b(code|coding|bug|fix|refactor|script|api|backend|frontend|test|suite|engineer(?:ing)?)\b/i, roomId: 'room-engineering' },
     { pattern: /\b(content|video|youtube|social|post|edit|thumbnail|brand|marketing)\b/i, roomId: 'room-content' },
-    { pattern: /\b(research|compare|competitor|benchmark|analysis|document|docs|investigate)\b/i, roomId: 'room-research' },
+    { pattern: /\b(research|compare|reference|benchmark|analysis|document|docs|investigate)\b/i, roomId: 'room-research' },
     { pattern: /\b(deploy|infra|infrastructure|ops|monitor|reliability|performance|server|hosting)\b/i, roomId: 'room-ops' },
     { pattern: /\b(plan|roadmap|strategy|scope|milestone|timeline)\b/i, roomId: 'room-planning' },
     { pattern: /\b(support|ticket|customer|feedback|help)\b/i, roomId: 'room-support' },
@@ -1143,4 +1143,4 @@ const OFFICE_AGENT_STYLE_COLOR_POOL = [
 ];
 const OFFICE_AGENT_COSTUME_POOL = ['none', 'cap', 'visor', 'headset', 'bowtie'];
 
-// 
+//

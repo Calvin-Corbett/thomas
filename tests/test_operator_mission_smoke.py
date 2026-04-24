@@ -32,7 +32,6 @@ def test_mission_routes_register_core_control_and_autopilot_endpoints() -> None:
         "/api/mission/jobs",
         "/api/mission/jobs/{job_id}/cancel",
         "/api/mission/autopilot/objectives",
-        "/api/mission/benchmarks/run",
     )
     for path in required_paths:
         assert f'"{path}"' in text

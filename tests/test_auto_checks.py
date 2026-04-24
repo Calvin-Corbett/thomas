@@ -16,7 +16,7 @@ def _enable_breakglass(monkeypatch) -> None:
         lambda **_: SimpleNamespace(
             ok=True,
             message="approved",
-            actor="WORKSTATION\\corbe",
+            actor="WORKSTATION\\operator",
             method="windows-credential-dialog",
             cancelled=False,
         ),

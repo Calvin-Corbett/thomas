@@ -16,23 +16,23 @@ async def test_direct_fast_path_fetches_headline_and_returns_exact_text(monkeypa
     specialist = ToolSpecialist(config=None, llm=None, tools=None)
 
     async def _fake_fetch(url: str) -> str:
-        return "OpenClaw: The AI that actually does things"
+        return "ExampleSite: The AI that actually does things"
 
     monkeypatch.setattr(mod, "_fetch_browser_headline", _fake_fetch)
 
     events = []
     async for event in specialist._run_direct_fast_path(
-        "Use your tools to open https://open-claw.org and answer with only the exact main headline on the page.",
+        "Use your tools to open https://example-tool.org and answer with only the exact main headline on the page.",
         _direct_token(),
     ):
         events.append(event)
 
     assert [event["type"] for event in events] == ["tool_start", "tool_result", "text", "done"]
     assert events[0]["name"] == "direct.fetch_url"
-    assert events[0]["args"] == {"url": "https://open-claw.org"}
-    assert events[1]["result"] == "OpenClaw: The AI that actually does things"
-    assert events[2]["text"] == "OpenClaw: The AI that actually does things"
-    assert events[3]["content"] == "OpenClaw: The AI that actually does things"
+    assert events[0]["args"] == {"url": "https://example-tool.org"}
+    assert events[1]["result"] == "ExampleSite: The AI that actually does things"
+    assert events[2]["text"] == "ExampleSite: The AI that actually does things"
+    assert events[3]["content"] == "ExampleSite: The AI that actually does things"
 
 
 @pytest.mark.asyncio
@@ -40,22 +40,22 @@ async def test_direct_fast_path_fetches_title_and_returns_exact_text(monkeypatch
     specialist = ToolSpecialist(config=None, llm=None, tools=None)
 
     async def _fake_fetch(url: str) -> str:
-        return "OpenClaw Home"
+        return "ExampleSite Home"
 
     monkeypatch.setattr(mod, "_fetch_browser_title", _fake_fetch)
 
     events = []
     async for event in specialist._run_direct_fast_path(
-        "Use your tools to open https://open-claw.org and answer with only the exact page title.",
+        "Use your tools to open https://example-tool.org and answer with only the exact page title.",
         _direct_token(),
     ):
         events.append(event)
 
     assert [event["type"] for event in events] == ["tool_start", "tool_result", "text", "done"]
     assert events[0]["name"] == "direct.fetch_url"
-    assert events[1]["result"] == "OpenClaw Home"
-    assert events[2]["text"] == "OpenClaw Home"
-    assert events[3]["content"] == "OpenClaw Home"
+    assert events[1]["result"] == "ExampleSite Home"
+    assert events[2]["text"] == "ExampleSite Home"
+    assert events[3]["content"] == "ExampleSite Home"
 
 
 @pytest.mark.asyncio
@@ -63,22 +63,22 @@ async def test_direct_fast_path_fetches_main_text_and_returns_exact_text(monkeyp
     specialist = ToolSpecialist(config=None, llm=None, tools=None)
 
     async def _fake_fetch(url: str) -> str:
-        return "OpenClaw helps you automate local machine work quickly."
+        return "ExampleSite helps you automate local machine work quickly."
 
     monkeypatch.setattr(mod, "_fetch_browser_main_text", _fake_fetch)
 
     events = []
     async for event in specialist._run_direct_fast_path(
-        "Use your tools to open https://open-claw.org and answer with only the exact main text.",
+        "Use your tools to open https://example-tool.org and answer with only the exact main text.",
         _direct_token(),
     ):
         events.append(event)
 
     assert [event["type"] for event in events] == ["tool_start", "tool_result", "text", "done"]
     assert events[0]["name"] == "direct.fetch_url"
-    assert events[1]["result"] == "OpenClaw helps you automate local machine work quickly."
-    assert events[2]["text"] == "OpenClaw helps you automate local machine work quickly."
-    assert events[3]["content"] == "OpenClaw helps you automate local machine work quickly."
+    assert events[1]["result"] == "ExampleSite helps you automate local machine work quickly."
+    assert events[2]["text"] == "ExampleSite helps you automate local machine work quickly."
+    assert events[3]["content"] == "ExampleSite helps you automate local machine work quickly."
 
 
 @pytest.mark.asyncio
@@ -90,7 +90,7 @@ async def test_direct_fast_path_clicks_label_and_returns_exact_reply(monkeypatch
     async def _fake_open(self, args):  # noqa: ANN001
         _ = self
         open_calls.append(dict(args))
-        return SimpleNamespace(ok=True, data={"url": "https://open-claw.org/docs"}, error=None)
+        return SimpleNamespace(ok=True, data={"url": "https://example-tool.org/docs"}, error=None)
 
     async def _fake_click(self, args):  # noqa: ANN001
         _ = self
@@ -102,7 +102,7 @@ async def test_direct_fast_path_clicks_label_and_returns_exact_reply(monkeypatch
 
     events = []
     async for event in specialist._run_direct_fast_path(
-        "Use your tools to open https://open-claw.org and click Docs, then answer with only OK.",
+        "Use your tools to open https://example-tool.org and click Docs, then answer with only OK.",
         _direct_token(),
     ):
         events.append(event)
@@ -137,13 +137,13 @@ async def test_headline_fast_path_falls_back_to_codex_when_direct_fetch_fails(mo
                 {
                     "name": "browser_read",
                     "id": "call-headline",
-                    "output": "OpenClaw: The AI that actually does things",
+                    "output": "ExampleSite: The AI that actually does things",
                 },
             ),
             _FakeCodexEvent(
                 "token",
                 {
-                    "text": "Opening the site now and extracting the hero copy.\nOpenClaw: The AI that actually does things"
+                    "text": "Opening the site now and extracting the hero copy.\nExampleSite: The AI that actually does things"
                 },
             ),
             _FakeCodexEvent("done"),
@@ -153,7 +153,7 @@ async def test_headline_fast_path_falls_back_to_codex_when_direct_fetch_fails(mo
 
     events = await _collect_events(
         specialist,
-        "Use your tools to open https://open-claw.org and answer with only the exact main headline on the page.",
+        "Use your tools to open https://example-tool.org and answer with only the exact main headline on the page.",
     )
 
     assert [event["type"] for event in events] == [
@@ -167,5 +167,5 @@ async def test_headline_fast_path_falls_back_to_codex_when_direct_fetch_fails(mo
     assert events[0]["name"] == "direct.fetch_url"
     assert events[1]["ok"] is False
     assert events[2]["name"] == "browser_read"
-    assert events[4]["text"] == "OpenClaw: The AI that actually does things"
-    assert events[5]["content"] == "OpenClaw: The AI that actually does things"
+    assert events[4]["text"] == "ExampleSite: The AI that actually does things"
+    assert events[5]["content"] == "ExampleSite: The AI that actually does things"

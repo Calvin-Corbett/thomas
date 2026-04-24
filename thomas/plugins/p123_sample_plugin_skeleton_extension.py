@@ -15,7 +15,7 @@ Behavior:
 - Optional config JSON provides a prefix
 - Optional transformations: uppercase, repeat
 
-It intentionally avoids OpenClaw naming conventions.
+It intentionally avoids legacy naming conventions.
 """
 
 from __future__ import annotations

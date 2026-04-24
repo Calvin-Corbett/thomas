@@ -22,7 +22,7 @@ Proxy support (optional):
   Optional: THOMAS_GATEWAY_RESPONSES_API_KEY (Bearer)
 
 Notes:
-- This is intentionally "Thomas-native" and does not reuse any OpenClaw naming.
+- This is intentionally "Thomas-native" and does not reuse any legacy naming.
 - The streaming event catalog is minimal but structurally compatible; expand as needed.
 """
 

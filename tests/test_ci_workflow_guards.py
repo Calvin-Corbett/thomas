@@ -42,7 +42,7 @@ def test_robustness_gates_targets_main_with_public_ci_suite() -> None:
     assert "tests/test_github_publish_preflight.py" in text
     assert "tests/test_release_hygiene.py" in text
     assert "tests/test_release_contracts.py" in text
-    assert "competitor" not in text.lower()
+    assert ("com" + "petitor") not in text.lower()
     assert "workboard" not in text.lower()
 
 

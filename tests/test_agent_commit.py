@@ -77,7 +77,7 @@ def _passing_gates() -> tuple[tuple[str, tuple[str, ...]], ...]:
 
 def _approved_fallback_receipt(
     *,
-    actor: str = "WORKSTATION\\corbe",
+    actor: str = "WORKSTATION\\operator",
     agent: str = "codex",
     scopes: tuple[str, ...] = ("src/app.py",),
     reason: str = "user approved scoped fallback",
@@ -91,20 +91,7 @@ def _approved_fallback_receipt(
     )
 
 
-def test_site_visual_proof_gate_only_runs_for_site_paths() -> None:
-    assert mod._gate_applies("site_visual_proof", ["apps/site/src/app/page.tsx"], commit_class="private-checkpoint") is True
-    assert (
-        mod._gate_applies("site_visual_proof", ["apps/site/verification/ui-proof.json"], commit_class="private-checkpoint")
-        is True
-    )
-    assert (
-        mod._gate_applies(
-            "site_visual_proof",
-            ["scripts/agent_commit.py", "tests/test_commit_gate_split.py"],
-            commit_class="private-checkpoint",
-        )
-        is False
-    )
+def test_commit_gate_applies_when_not_path_scoped() -> None:
     assert mod._gate_applies("boot_smoke", ["scripts/agent_commit.py"], commit_class="private-checkpoint") is True
 
 
@@ -201,7 +188,7 @@ def test_agent_commit_fallback_succeeds_without_active_claim(tmp_path: Path, mon
     body = _git(repo, "log", "-1", "--pretty=%B")
     assert "Thomas-Commit-Mode: scoped-fallback" in body
     assert "Thomas-Fallback-Reason: user approved scoped fallback" in body
-    assert "Thomas-Fallback-Approved-By: WORKSTATION\\corbe" in body
+    assert "Thomas-Fallback-Approved-By: WORKSTATION\\operator" in body
     assert f"Thomas-Fallback-Approval-Method: {mod.breakglass_auth.WINDOWS_CREDENTIAL_METHOD}" in body
 
 
@@ -210,18 +197,18 @@ def test_agent_commit_fallback_accepts_literal_bracket_paths(tmp_path: Path, mon
         tmp_path,
         claims=("agent=claude; name=Claude; role=solo; parent=none; scope=docs; task=Other work",),
     )
-    bracket_path = repo / "apps" / "site" / "src" / "app" / "[locale]" / "page.tsx"
-    _write(bracket_path, "export default function Page() { return null; }\n")
+    bracket_path = repo / "thomas" / "server" / "web" / "js" / "[locale]" / "view.mjs"
+    _write(bracket_path, "export function render() { return null; }\n")
     monkeypatch.setattr(
         mod.breakglass_auth,
         "consume_scope_fallback_receipt",
-        lambda receipt, **_: _approved_fallback_receipt(scopes=("apps/site/src/app/[locale]/page.tsx",)),
+        lambda receipt, **_: _approved_fallback_receipt(scopes=("thomas/server/web/js/[locale]/view.mjs",)),
     )
 
     result = mod.commit_scoped_changes(
         message="feat: bracket fallback commit",
         agent="codex",
-        include_paths=["apps/site/src/app/[locale]/page.tsx"],
+        include_paths=["thomas/server/web/js/[locale]/view.mjs"],
         allow_scope_fallback=True,
         fallback_reason="user approved scoped fallback",
         fallback_receipt="receipt-123",

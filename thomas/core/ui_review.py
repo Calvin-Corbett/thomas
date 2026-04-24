@@ -24,7 +24,6 @@ _INTENT_STOPWORDS = {
 _UI_REVIEW_EXTS = {".css", ".js", ".jsx", ".ts", ".tsx", ".html"}
 _UI_REVIEW_PREFIXES = (
     "thomas/server/web/",
-    "apps/site/src/",
 )
 
 

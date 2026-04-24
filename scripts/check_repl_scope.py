@@ -25,10 +25,6 @@ SCOPE_POLICIES: dict[str, ScopePolicy] = {
     "repl": ScopePolicy(
         disallow_prefixes=(
             "thomas/server/web/",
-            "apps/site/",
-            "apps/site/src/app/",
-            "apps/site/src/components/",
-            "docs/site/",
         )
     )
 }

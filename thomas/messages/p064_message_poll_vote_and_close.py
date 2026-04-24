@@ -9,7 +9,7 @@ Design goals:
 - Deterministic errors: stable error codes and structured details for automation.
 - Friendly to CLI + automation: a small wrapper can emit stable JSON.
 
-The code intentionally avoids OpenClaw naming reuse. The only "P064" reference is
+The code intentionally uses Thomas-native naming. The only "P064" reference is
 for internal prompt-pack tracking.
 """
 

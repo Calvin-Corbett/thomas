@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import re
+import sys
 from collections.abc import Sequence
 from pathlib import Path
 
@@ -17,6 +18,8 @@ from thomas.marketplace.observability.run_db import resolve_runs_db_path
 from thomas.marketplace.security.security_audit import run_security_audit
 
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
 
 
 def _read(path: Path) -> str:

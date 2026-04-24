@@ -5,7 +5,7 @@ P057 - Message search command (core logic).
 This module provides a small, testable implementation for searching messages.
 
 Design goals
-- Thomas-native naming and behavior (no OpenClaw naming reuse)
+- Thomas-native naming and behavior
 - Clear input/output contracts
 - Deterministic, machine-readable errors
 - Works in "automation" contexts via JSON serialization helpers

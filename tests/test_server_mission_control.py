@@ -680,30 +680,5 @@ class TestServerMissionControl(AioHTTPTestCase):
         resp = await self.client.get("/api/mission/stream?max_updates=1&interval=oops")
         self.assertEqual(resp.status, 400)
 
-    async def test_mission_benchmark_routes_return_payloads(self):
-        packs_resp = await self.client.get("/api/mission/benchmarks/packs")
-        self.assertEqual(packs_resp.status, 200)
-        packs_payload = await packs_resp.json()
-        self.assertIs(packs_payload.get("ok"), True)
-        self.assertIn("packs", packs_payload)
-        self.assertIn("default_pack", packs_payload)
-        packs = packs_payload.get("packs") or []
-        self.assertGreaterEqual(len(packs), 1)
-        self.assertTrue(str((packs[0] or {}).get("key") or "").strip())
-
-        runs_resp = await self.client.get("/api/mission/benchmarks/runs?limit=5")
-        self.assertEqual(runs_resp.status, 200)
-        runs_payload = await runs_resp.json()
-        self.assertIs(runs_payload.get("ok"), True)
-        self.assertIn("runs", runs_payload)
-        self.assertIn("runs_dir", runs_payload)
-
-        jobs_resp = await self.client.get("/api/mission/benchmarks/jobs")
-        self.assertEqual(jobs_resp.status, 200)
-        jobs_payload = await jobs_resp.json()
-        self.assertIs(jobs_payload.get("ok"), True)
-        self.assertIn("jobs", jobs_payload)
-
-
 if __name__ == "__main__":
     unittest.main()

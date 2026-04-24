@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "max_tracked_root_files": 52,
+  "max_tracked_root_files": 50,
   "allowed_tracked_root_files": [
     ".dockerignore",
     ".env.example",
@@ -24,7 +24,6 @@
     "KNOWN_ISSUES.md",
     "LICENSE",
     "MANIFEST.in",
-    "MODULE_REGISTRY.md",
     "PLAN-UI-UPGRADE.md",
     "PROJECT_INDEX.md",
     "PROJECT_MANAGEMENT_RULES.md",
@@ -32,7 +31,6 @@
     "REPO_CANONICAL_RULES.md",
     "SECURITY.md",
     "SOUL.md",
-    "THOMAS_FEATURE_INVENTORY.md",
     "WORKTREE_RULES.md",
     "_healthcheck.py",
     "agent_safety.toml",
@@ -58,7 +56,6 @@
   "forbidden_tracked_prefixes": [
     ".playwright-cli/",
     ".thomas/",
-    "apps/site/.next/",
     "demo/agentic-runs/",
     "library/entries/research-notes/",
     "logs/",

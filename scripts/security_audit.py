@@ -5,7 +5,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
+
+# Security audits inspect the app surface; they should not start runtime monitor loops.
+os.environ.setdefault("THOMAS_TASK_MANAGER_LOOP_ENABLED", "0")
 
 from thomas.marketplace.security.security_audit import run_security_audit
 

@@ -9,7 +9,7 @@ exposed as a Thomas tool.
 
 Design goals
 ------------
-- Thomas-native naming (no OpenClaw naming reuse).
+- Thomas-native naming.
 - Deterministic errors for invalid input and registration failures.
 - Low coupling to the rest of the codebase (registry API discovered at runtime).
 
