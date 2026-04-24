@@ -15,9 +15,9 @@ def _write_manifest(repo_root: Path) -> Path:
                 "code_paths": ["thomas/core/module.py"],
             },
             {
-                "name": "Core Inbox",
+                "name": "Core Pack",
                 "location": "thomas/core/inbox_module.py",
-                "inbox_globs": ["Inbox/core-inbox-*.zip"],
+                "source_pack_globs": ["source_packs/core-pack-*.zip"],
             },
             {
                 "name": "Core Missing",
@@ -37,11 +37,11 @@ def _write_manifest(repo_root: Path) -> Path:
                 "location": "thomas/features/missing.py",
             },
         ],
-        "inbox_packs": [
+        "source_packs": [
             {
-                "name": "Pack Inbox",
-                "source_zip": "Inbox/pack.zip",
-                "inbox_globs": ["Inbox/pack.zip"],
+                "name": "Candidate Pack",
+                "source_zip": "source_packs/pack.zip",
+                "source_pack_globs": ["source_packs/pack.zip"],
             }
         ],
     }
@@ -54,11 +54,11 @@ def _write_manifest(repo_root: Path) -> Path:
 def _seed_repo_files(repo_root: Path) -> None:
     (repo_root / "thomas" / "core").mkdir(parents=True, exist_ok=True)
     (repo_root / "thomas" / "features").mkdir(parents=True, exist_ok=True)
-    (repo_root / "Inbox").mkdir(parents=True, exist_ok=True)
+    (repo_root / "source_packs").mkdir(parents=True, exist_ok=True)
     (repo_root / "thomas" / "core" / "module.py").write_text("x = 1\n", encoding="utf-8")
     (repo_root / "thomas" / "features" / "ready.py").write_text("y = 1\n", encoding="utf-8")
-    (repo_root / "Inbox" / "core-inbox-01.zip").write_text("zip", encoding="utf-8")
-    (repo_root / "Inbox" / "pack.zip").write_text("zip", encoding="utf-8")
+    (repo_root / "source_packs" / "core-pack-01.zip").write_text("zip", encoding="utf-8")
+    (repo_root / "source_packs" / "pack.zip").write_text("zip", encoding="utf-8")
 
 
 def test_build_document_computes_expected_status_counts(tmp_path: Path) -> None:
@@ -69,7 +69,7 @@ def test_build_document_computes_expected_status_counts(tmp_path: Path) -> None:
     doc, totals = mod.build_document(tmp_path, manifest, date_stamp="2026-02-25")
 
     assert totals[mod.STATUS_DONE] == 2
-    assert totals[mod.STATUS_INBOX] == 2
+    assert totals[mod.STATUS_PACK_FOUND] == 2
     assert totals[mod.STATUS_MISSING] == 2
     assert "**Last Updated:** 2026-02-25" in doc
 
@@ -120,7 +120,7 @@ def test_run_json_output_reports_action_and_totals(tmp_path: Path, capsys) -> No
     assert payload["gate"] == "feature_master_sync"
     assert payload["action"] in {"updated", "already up to date"}
     assert payload["totals"][mod.STATUS_DONE] == 2
-    assert payload["totals"][mod.STATUS_INBOX] == 2
+    assert payload["totals"][mod.STATUS_PACK_FOUND] == 2
     assert payload["totals"][mod.STATUS_MISSING] == 2
 
 

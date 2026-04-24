@@ -11,7 +11,7 @@ This document defines how Thomas is organized so any agent can enter the repo an
 - `tests/`: automated test coverage for product behavior.
 - `docs/`: stable specs/protocols/reference docs (not active execution plans).
 - `plans/thomas/`: active execution plans, workboards, and planning artifacts.
-- `docs/inbox/`, `.inbox_extract_*`, `Installed_Features/`: external drops and unpacked intake artifacts (not source of truth).
+- Local intake/archive folders are ignored by Git and are not public source of truth.
 
 ## 2) Canonical Planning Layout
 
@@ -66,8 +66,8 @@ If there is conflict:
 - `plans/thomas/README.md` must reference every non-generated plan file.
 
 ### 4.5 Intake/Archive
-- `docs/inbox/`, `.inbox_extract_*`, `Installed_Features/` are intake/archive zones.
-- Do not treat intake files as production source of truth until integrated.
+- Local intake/archive folders are ignored by Git and should not be linked as public source.
+- Do not treat intake files as production source of truth until integrated into tracked code and docs.
 
 ## 5) Change Hygiene Requirements
 

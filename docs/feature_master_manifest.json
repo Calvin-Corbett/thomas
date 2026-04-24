@@ -59,8 +59,8 @@
         "thomas/core/rag_index.py",
         "thomas/memory/v2/fabric.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_memory_fabric_v2_patch_revB.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_memory_fabric_v2_patch_revB.zip"
       ]
     },
     {
@@ -71,8 +71,8 @@
         "thomas/vision/api.py",
         "thomas/vision/handler.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_feature_pack_multimodal_vision_v3.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_feature_pack_multimodal_vision_v3.zip"
       ]
     },
     {
@@ -83,9 +83,9 @@
         "thomas/realtime/stt.py",
         "thomas/realtime/ws_handler.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/*wake_word*.zip",
-        "Inbox/**/*human_assistant_layer*.zip"
+      "source_pack_globs": [
+        "source_packs/**/*wake_word*.zip",
+        "source_packs/**/*human_assistant_layer*.zip"
       ]
     },
     {
@@ -119,8 +119,8 @@
       "code_paths": [
         "thomas/intake/clipboard_watcher.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/*clipboard*screenshot*intake*.zip"
+      "source_pack_globs": [
+        "source_packs/**/*clipboard*screenshot*intake*.zip"
       ]
     },
     {
@@ -179,8 +179,8 @@
         "thomas/server/routes/search.py",
         "thomas/core/search_history.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_feature_pack_conversation_export_share_v3.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_feature_pack_conversation_export_share_v3.zip"
       ]
     },
     {
@@ -200,8 +200,8 @@
         "thomas/notifications/api.py",
         "thomas/server/web/notifications.js"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_feature_pack_smart_notification_center_best.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_feature_pack_smart_notification_center_best.zip"
       ]
     },
     {
@@ -220,8 +220,8 @@
         "thomas/watcher/watcher.py",
         "thomas/watcher/api.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_feature_pack_watcher_ULTIMATE.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_feature_pack_watcher_ULTIMATE.zip"
       ]
     },
     {
@@ -233,7 +233,7 @@
       ]
     }
   ],
-  "inbox_packs": [
+  "source_packs": [
     {
       "name": "Swarm Mode",
       "location": "thomas/agent/swarm.py",
@@ -241,8 +241,8 @@
         "thomas/agent/swarm.py",
         "thomas/server/swarm_mode.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_swarm_mode.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_swarm_mode.zip"
       ],
       "source_zip": "thomas_swarm_mode.zip"
     },
@@ -253,9 +253,9 @@
         "thomas/server/routes/runs.py",
         "thomas/observability/run_store_replay.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_feature_run_replay_debugger.zip",
-        "Inbox/**/thomas_time_travel_debugger.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_feature_run_replay_debugger.zip",
+        "source_packs/**/thomas_time_travel_debugger.zip"
       ],
       "source_zip": "thomas_feature_run_replay_debugger.zip + thomas_time_travel_debugger.zip"
     },
@@ -266,8 +266,8 @@
         "thomas/policy/policy.py",
         "thomas/agent/guarded_tools.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_guardrails.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_guardrails.zip"
       ],
       "source_zip": "thomas_guardrails.zip"
     },
@@ -277,8 +277,8 @@
       "code_paths": [
         "thomas/autonomy/plugin.py"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_plugin_loader_feature_pack_best.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_plugin_loader_feature_pack_best.zip"
       ],
       "source_zip": "thomas_plugin_loader_feature_pack_best.zip"
     },
@@ -289,8 +289,8 @@
         "thomas/preferences/store.py",
         "thomas/server/web/settings.html"
       ],
-      "inbox_globs": [
-        "Inbox/**/thomas_feature_pack_user_preferences_best.zip"
+      "source_pack_globs": [
+        "source_packs/**/thomas_feature_pack_user_preferences_best.zip"
       ],
       "source_zip": "thomas_feature_pack_user_preferences_best.zip"
     }
