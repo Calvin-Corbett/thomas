@@ -6,7 +6,7 @@ This index points to the stable docs that make sense in the public release. Use 
 
 - [`README.md`](README.md) - install, first run, and public-release orientation
 - [`docs/AGENT_START_HERE.md`](docs/AGENT_START_HERE.md) - fastest safe route for AI agents and contributors
-- [`docs/AI_DEVELOPMENT_WORKFLOW.md`](docs/AI_DEVELOPMENT_WORKFLOW.md) - AI-operated development and release workflow
+- [`docs/AI_CONTRIBUTOR_GUARDRAILS.md`](docs/AI_CONTRIBUTOR_GUARDRAILS.md) - public AI contributor guardrails
 - [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md) - public feature/status matrix with audience, entry points, and evidence
 - [`docs/REPO_MAP.md`](docs/REPO_MAP.md) - top-level directory map and runtime area guide
 - [`docs/ARCHITECTURE_OVERVIEW.md`](docs/ARCHITECTURE_OVERVIEW.md) - install, runtime, guardrail, and companion architecture diagrams
@@ -24,7 +24,6 @@ This index points to the stable docs that make sense in the public release. Use 
 - [`docs/ops/DOCKER_DEPLOY.md`](docs/ops/DOCKER_DEPLOY.md) - Docker deployment and runtime notes
 - [`docs/ops/GATEWAY_SECURITY_RUNBOOK.md`](docs/ops/GATEWAY_SECURITY_RUNBOOK.md) - gateway security and incident-response guidance
 - [`docs/ops/RETRY_POLICY.md`](docs/ops/RETRY_POLICY.md) - retry behavior, failure handling, and backoff expectations
-- [`docs/GITHUB_PUBLISH_SAFETY_WORKFLOW.md`](docs/GITHUB_PUBLISH_SAFETY_WORKFLOW.md) - maintainer workflow for preparing public releases
 
 ## Architecture and Code Areas
 
@@ -60,7 +59,7 @@ This index points to the stable docs that make sense in the public release. Use 
 - Work on memory or retrieval: read [`thomas/memory/README.md`](thomas/memory/README.md).
 - Package or publish the app: use [`installer/`](installer/) and [`docs/WINDOWS_INSTALLER_GUIDE.md`](docs/WINDOWS_INSTALLER_GUIDE.md).
 - Hand an AI agent a task: start with [`docs/AGENT_START_HERE.md`](docs/AGENT_START_HERE.md), [`docs/FEATURE_MATRIX.md`](docs/FEATURE_MATRIX.md), and the GitHub agent task issue template.
-- Enforce AI-run development: read [`docs/AI_DEVELOPMENT_WORKFLOW.md`](docs/AI_DEVELOPMENT_WORKFLOW.md) and run `python scripts\check_ai_workflow_contract.py`.
+- Enforce public AI guardrails: read [`docs/AI_CONTRIBUTOR_GUARDRAILS.md`](docs/AI_CONTRIBUTOR_GUARDRAILS.md) and run `python scripts\check_ai_workflow_contract.py`.
 - Understand the roadmap: read [`docs/ROADMAP.md`](docs/ROADMAP.md) and [`docs/THOMAS_INFINITE.md`](docs/THOMAS_INFINITE.md).
 
 ## Notes

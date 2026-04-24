@@ -19,14 +19,14 @@
 - [ ] `python scripts\github_publish_preflight.py --json --strict --deep`
 - [ ] `python scripts\check_repo_hygiene.py --require-clean-worktree --strict --json`
 
-## AI Workflow
+## AI Guardrails
 
-- [ ] I followed `docs/AI_DEVELOPMENT_WORKFLOW.md`.
+- [ ] I followed `docs/AI_CONTRIBUTOR_GUARDRAILS.md`.
 - [ ] This PR maps to a clear issue/task/scope.
-- [ ] If this changes public release behavior, the public hardening changes are ready to sync back to private development.
+- [ ] If this changes public release behavior, I ran or documented the public safety checks.
 
 ## Public Safety
 
-- [ ] No secrets, local caches, personal notes, generated support bundles, or private release history.
+- [ ] No secrets, local caches, personal notes, generated support bundles, or non-public release notes.
 - [ ] No public claim was upgraded without tests/docs/evidence.
 - [ ] README/docs were updated if user-facing behavior changed.

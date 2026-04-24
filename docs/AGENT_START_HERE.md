@@ -9,8 +9,7 @@ Read these in order:
 
 1. `README.md` - user install path, product promise, and public-release stance.
 2. `docs/FEATURE_MATRIX.md` - feature status, audience, entry points, and tests.
-3. `docs/AI_DEVELOPMENT_WORKFLOW.md` - mandatory AI-agent workflow and release
-   promotion rules.
+3. `docs/AI_CONTRIBUTOR_GUARDRAILS.md` - public-safe AI and contributor rules.
 4. `docs/FUNCTIONALITY_INVENTORY.md` - capability inventory and readiness notes.
 5. `docs/REPO_MAP.md` - top-level directory map.
 6. `docs/ARCHITECTURE_OVERVIEW.md` - install/runtime/companion diagrams.
@@ -36,7 +35,7 @@ and must keep authentication, policy, and audit boundaries intact.
 - Browser automation and visible browser smoke paths.
 - Companion platform scaffolding and the planned Infinite app direction.
 - Public release safety gates and GitHub Actions.
-- AI development workflow contract and release promotion rules.
+- Public AI contributor guardrails and GitHub Actions checks.
 
 ## Status Discipline
 
@@ -57,12 +56,12 @@ it.
 - Keep the default server bound to `127.0.0.1` unless a task is explicitly about
   remote deployment.
 - Do not add secrets, personal notes, local caches, generated support bundles, or
-  private release history.
-- Do not add private website deployment instructions to the public branch.
+  non-public release history.
+- Do not add non-public website deployment instructions to the public branch.
 - Do not bypass guardrails, approval checks, release preflight, or repo hygiene
   checks to make a change pass.
-- Do not bypass the AI workflow contract in
-  `docs/AI_DEVELOPMENT_WORKFLOW.md`.
+- Do not bypass the public AI guardrail contract in
+  `docs/AI_CONTRIBUTOR_GUARDRAILS.md`.
 - Prefer small, testable changes with clear public docs.
 - When touching installer, setup, networking, or GitHub release behavior, run the
   public safety gates before publishing.

@@ -60,9 +60,6 @@ Report results or make changes
 | Script | Purpose |
 |---|---|
 | `check_repo_identity.py` | Repository identity validation |
-| `apply_release_lanes.ps1` | PowerShell: Apply release lanes |
-| `apply_branch_protection.ps1` | PowerShell: Branch protection setup |
-| `check_release_lane_policy.py` | Release lane enforcement |
 | `agent_bootstrap_claim.py` | Agent initialization claim |
 | `check_claim_integrity.py` | Validate agent claims |
 
@@ -301,7 +298,7 @@ Scripts are typically run in CI/CD pipelines:
 
 1. Pre-commit hooks: `check_*.py` validators
 2. Pull request checks: `auto_checks.py`
-3. Release process: `check_release_*.py` and `apply_release_*.ps1`
+3. Release validation: `check_release_*.py`
 4. Scheduled tasks: `workboard_task_manager.py` runs periodically
 
 ## For AI Agents
