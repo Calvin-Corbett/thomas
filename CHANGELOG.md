@@ -7,6 +7,18 @@ working-branch notes are intentionally not included in the public repository.
 
 - No unreleased changes.
 
+## [0.14.63] - 2026-04-24
+
+- Added a bundled Windows dependency wheelhouse to the installer build so
+  first-run setup can install Python dependencies without downloading from PyPI.
+- Updated the Windows installer workflow to set up Python for packaging and
+  verify that release smoke tests use the bundled wheelhouse.
+- Added first-run dependency source tracking in
+  `runtime\setup\dependency_install_source.txt`.
+- Added automatic support-bundle creation when the first-run setup wizard fails.
+- Documented the near-offline installer path and the remaining Python install
+  dependency when Python is missing.
+
 ## [0.14.62] - 2026-04-24
 
 - Added a public install landing page that directs normal users to the Windows

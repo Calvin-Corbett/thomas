@@ -20,7 +20,14 @@ def test_first_run_wizard_is_visible_and_logs_failures() -> None:
     assert '".[server,repl]"' in wizard
     assert "-ConfirmedInstallChanges" in wizard
     assert "https://www.python.org/downloads/windows/" in wizard
+    assert "Install-DependenciesFromWheelhouse" in wizard
+    assert "bundled offline wheelhouse" in wizard
+    assert "dependency_install_source.txt" in wizard
+    assert "bundled-wheelhouse" in wizard
     assert "What to try next:" in wizard
+    assert "New-FailureSupportBundle" in wizard
+    assert "scripts\\support_bundle.ps1" in wizard
+    assert "A support ZIP was created automatically" in wizard
     assert "repair.cmd" in wizard
     assert "bootdoctor.cmd" in wizard
     assert "support.cmd" in wizard
@@ -54,10 +61,12 @@ def test_github_workflow_builds_and_uploads_installer_asset() -> None:
     workflow = _read(".github/workflows/windows-installer.yml")
 
     assert "FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true" in workflow
+    assert "actions/setup-python@v5" in workflow
     assert "workflow_dispatch:" in workflow
     assert "types: [published]" in workflow
     assert "contents: write" in workflow
     assert "choco install innosetup" in workflow
+    assert "scripts\\build_installer_wheelhouse.py" not in workflow
     assert "scripts\\build_windows_installer.ps1" in workflow
     assert "ThomasSetup_${{ steps.meta.outputs.version }}.exe" in workflow
     assert "gh release upload" in workflow
@@ -86,11 +95,14 @@ def test_github_workflow_smoke_tests_silent_installer() -> None:
     assert "/DIR=$installDir" in workflow
     assert "launch-thomas.vbs" in workflow
     assert "support.cmd" in workflow
+    assert "installer\\wheelhouse\\WHEELHOUSE_MANIFEST.json" in workflow
     assert "scripts\\first-run.cmd" in workflow
     assert "scripts\\first_run_wizard.ps1" in workflow
     assert "scripts\\run-ui.ps1" in workflow
     assert "-ConfirmedInstallChanges -NoPrompt -NoLaunch -NoBrowser" in workflow
     assert ".venv\\Scripts\\python.exe" in workflow
+    assert "runtime\\setup\\dependency_install_source.txt" in workflow
+    assert "bundled-wheelhouse" in workflow
     assert "runtime\\setup\\last_setup.txt" in workflow
     assert "runtime\\logs\\first_run_wizard.log" in workflow
     assert "unins000.exe" in workflow
@@ -99,7 +111,7 @@ def test_github_workflow_smoke_tests_silent_installer() -> None:
 def test_readme_is_installer_first() -> None:
     readme = _read("README.md")
 
-    assert "Download `ThomasSetup_0.14.62.exe`" in readme
+    assert "Download `ThomasSetup_0.14.63.exe`" in readme
     assert "docs/INSTALL.md" in readme
     assert "Do not use the GitHub source ZIP unless" in readme
     assert "Code -> Download ZIP" not in readme
@@ -109,7 +121,7 @@ def test_readme_is_installer_first() -> None:
 def test_install_doc_keeps_normal_users_on_release_installer() -> None:
     install_doc = _read("docs/INSTALL.md")
 
-    assert "ThomasSetup_0.14.62.exe" in install_doc
+    assert "ThomasSetup_0.14.63.exe" in install_doc
     assert "Do not use the GitHub source ZIP unless" in install_doc
     assert "https://github.com/Calvin-Corbett/thomas/releases/latest" in install_doc
     assert "http://127.0.0.1:8899/" in install_doc
@@ -117,3 +129,18 @@ def test_install_doc_keeps_normal_users_on_release_installer() -> None:
     assert "WINDOWS_CODE_SIGNING_CERTIFICATE_BASE64" not in install_doc
     assert "support.cmd" in install_doc
     assert "install_failure.yml" in install_doc
+
+
+def test_build_script_creates_offline_wheelhouse_for_installer() -> None:
+    build_script = _read("scripts/build_windows_installer.ps1")
+    wheelhouse_script = _read("scripts/build_installer_wheelhouse.py")
+
+    assert "SkipWheelhouse" in build_script
+    assert "installer\\wheelhouse" in build_script
+    assert "WHEELHOUSE_MANIFEST.json" in build_script
+    assert "scripts\\build_installer_wheelhouse.py" in build_script
+    assert "DEFAULT_WINDOWS_PYTHON_VERSIONS" in wheelhouse_script
+    assert '"310", "311", "312", "313"' in wheelhouse_script
+    assert "--only-binary=:all:" in wheelhouse_script
+    assert "--platform" in wheelhouse_script
+    assert "requirements.txt" in wheelhouse_script
