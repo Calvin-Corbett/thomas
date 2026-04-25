@@ -4,7 +4,7 @@
 > discover a recurring issue that cost significant debugging time. This file is
 > the project's cross-session memory for common pitfalls.
 >
-> Last updated: 2026-04-24 (v0.14.62).
+> Last updated: 2026-04-24 (v0.14.63).
 
 ---
 

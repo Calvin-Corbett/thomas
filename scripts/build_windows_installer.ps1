@@ -1,6 +1,7 @@
 param(
   [string]$Version = "0.0.0-dev",
-  [switch]$SkipCompile
+  [switch]$SkipCompile,
+  [switch]$SkipWheelhouse
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +71,25 @@ if (-not $zipItems -or $zipItems.Count -eq 0) {
 Add-Type -AssemblyName System.IO.Compression.FileSystem
 [System.IO.Compression.ZipFile]::CreateFromDirectory($StageDir, $sourceZip, [System.IO.Compression.CompressionLevel]::Optimal, $false)
 Write-Host ("[thomas] Source bundle: {0}" -f $sourceZip)
+
+if (-not $SkipWheelhouse) {
+  $python = Get-Command python -ErrorAction SilentlyContinue
+  if (-not $python -or -not $python.Source) {
+    throw "[thomas] python was not found; installer wheelhouse builds require Python."
+  }
+
+  $wheelhouseDir = Join-Path $StageDir "installer\wheelhouse"
+  Write-Host ("[thomas] Building offline installer wheelhouse: {0}" -f $wheelhouseDir)
+  & $python.Source "scripts\build_installer_wheelhouse.py" --dest $wheelhouseDir
+  if ($LASTEXITCODE -ne 0) {
+    throw "[thomas] installer wheelhouse build failed (exit $LASTEXITCODE)"
+  }
+  if (-not (Test-Path (Join-Path $wheelhouseDir "WHEELHOUSE_MANIFEST.json") -PathType Leaf)) {
+    throw "[thomas] installer wheelhouse manifest was not produced."
+  }
+} else {
+  Write-Host "[thomas] Skipping offline installer wheelhouse build (--SkipWheelhouse)."
+}
 
 if ($SkipCompile) {
   try {

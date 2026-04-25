@@ -43,7 +43,7 @@ def test_readme_and_index_surface_public_guidance() -> None:
         assert required in readme
         assert required in index
 
-    assert "ThomasSetup_0.14.62.exe" in readme
+    assert "ThomasSetup_0.14.63.exe" in readme
     assert "support.cmd" in readme
 
 

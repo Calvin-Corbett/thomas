@@ -48,9 +48,13 @@ function Confirm-Step {
 }
 
 function Write-SupportInstructions {
+  param([string]$BundlePath = "")
   $supportDir = Join-Path $Root "runtime\support"
   Write-Host ""
   Write-Host "[thomas] What to try next:"
+  if ($BundlePath) {
+    Write-Host ("[thomas] A support ZIP was created automatically: {0}" -f $BundlePath)
+  }
   Write-Host "[thomas] 1. Run repair.cmd from the Thomas install folder, then launch Thomas again."
   Write-Host "[thomas] 2. Run bootdoctor.cmd for startup diagnostics."
   Write-Host "[thomas] 3. Run support.cmd and attach the ZIP from runtime\support\ to a GitHub install issue."
@@ -59,12 +63,51 @@ function Write-SupportInstructions {
   Write-Host ("[thomas] Expected local browser URL after setup: http://127.0.0.1:{0}/" -f $Port)
 }
 
+function New-FailureSupportBundle {
+  $supportScript = Join-Path $Root "scripts\support_bundle.ps1"
+  if (-not (Test-Path $supportScript -PathType Leaf)) {
+    Write-Host "[thomas] support_bundle.ps1 was not found; automatic support bundle skipped."
+    return ""
+  }
+
+  Stop-TranscriptIfRunning
+
+  $outputDir = Join-Path $Root "runtime\support"
+  Write-Host ""
+  Write-Host "[thomas] Creating automatic support bundle for this failure."
+  $old = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try {
+    $output = & powershell -NoProfile -ExecutionPolicy Bypass -File $supportScript -OutputDir $outputDir 2>&1
+    $bundlePath = ""
+    foreach ($line in $output) {
+      $text = [string]$line
+      Write-Host $text
+      $match = [regex]::Match($text, "Support bundle written:\s*(.+)$")
+      if ($match.Success) {
+        $bundlePath = $match.Groups[1].Value.Trim()
+      }
+    }
+    if ($LASTEXITCODE -ne 0) {
+      Write-Host ("[thomas] Automatic support bundle failed with exit code {0}." -f $LASTEXITCODE)
+      return ""
+    }
+    return $bundlePath
+  } catch {
+    Write-Host ("[thomas] Automatic support bundle failed: {0}" -f $_.Exception.Message)
+    return ""
+  } finally {
+    $ErrorActionPreference = $old
+  }
+}
+
 function Fail-Setup {
   param([Parameter(Mandatory = $true)][string]$Message)
   Write-Host ""
   Write-Host ("[thomas] ERROR: {0}" -f $Message)
   Write-Host ("[thomas] Setup log: {0}" -f $LogPath)
-  Write-SupportInstructions
+  $bundlePath = New-FailureSupportBundle
+  Write-SupportInstructions -BundlePath $bundlePath
   if (-not $NoPrompt) {
     Read-Host "[thomas] Press Enter to close"
   }
@@ -161,6 +204,73 @@ function Invoke-VenvPython {
   return Invoke-Native $venvPy $Args
 }
 
+function Get-InstallerWheelhouse {
+  $wheelhouse = Join-Path $Root "installer\wheelhouse"
+  $manifest = Join-Path $wheelhouse "WHEELHOUSE_MANIFEST.json"
+  if ((Test-Path $manifest -PathType Leaf) -and (Get-ChildItem -Path $wheelhouse -Filter "*.whl" -File -ErrorAction SilentlyContinue | Select-Object -First 1)) {
+    return $wheelhouse
+  }
+  return ""
+}
+
+function Write-DependencyInstallSource {
+  param([Parameter(Mandatory = $true)][string]$Source)
+  $setupDir = Join-Path $Root "runtime\setup"
+  New-Item -ItemType Directory -Force -Path $setupDir | Out-Null
+  Set-Content -Path (Join-Path $setupDir "dependency_install_source.txt") -Encoding UTF8 -Value $Source
+}
+
+function Install-DependenciesFromWheelhouse {
+  param([Parameter(Mandatory = $true)][string]$Wheelhouse)
+
+  Write-Step ("Installing Thomas dependencies from bundled offline wheelhouse: {0}" -f $Wheelhouse)
+  $code = Invoke-VenvPython @(
+    "-m", "pip", "install",
+    "--upgrade",
+    "--no-index",
+    "--find-links", $Wheelhouse,
+    "pip",
+    "setuptools>=69",
+    "wheel",
+    "--disable-pip-version-check"
+  )
+  if ($code -ne 0) { return $code }
+
+  return Invoke-VenvPython @(
+    "-m", "pip", "install",
+    "--no-index",
+    "--find-links", $Wheelhouse,
+    "-e", ".[server,repl]",
+    "--disable-pip-version-check"
+  )
+}
+
+function Install-DependenciesFromOnlineIndex {
+  Write-Step "Installing Thomas dependencies from the online Python package index. This can take several minutes."
+  $code = Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "pip", "--disable-pip-version-check")
+  if ($code -ne 0) { return $code }
+
+  return Invoke-VenvPython @("-m", "pip", "install", "-e", ".[server,repl]", "--disable-pip-version-check")
+}
+
+function Install-ThomasDependencies {
+  $wheelhouse = Get-InstallerWheelhouse
+  if ($wheelhouse) {
+    $code = Install-DependenciesFromWheelhouse -Wheelhouse $wheelhouse
+    if ($code -eq 0) {
+      Write-DependencyInstallSource "bundled-wheelhouse"
+      return
+    }
+    Write-Step ("Bundled offline wheelhouse install failed with exit code {0}. Retrying with the online package index." -f $code)
+  }
+
+  $code = Install-DependenciesFromOnlineIndex
+  if ($code -ne 0) {
+    Fail-Setup "Python dependency install failed."
+  }
+  Write-DependencyInstallSource "online-index"
+}
+
 function Assert-PathInsideRoot {
   param([Parameter(Mandatory = $true)][string]$Path)
   $rootFull = [System.IO.Path]::GetFullPath($Root).TrimEnd("\")
@@ -207,12 +317,7 @@ if (-not (Test-Path $venvPy)) {
   }
 }
 
-Write-Step "Installing Thomas dependencies. This can take several minutes on first install."
-$code = Invoke-VenvPython @("-m", "pip", "install", "--upgrade", "pip", "--disable-pip-version-check")
-if ($code -ne 0) { Fail-Setup "pip upgrade failed." }
-
-$code = Invoke-VenvPython @("-m", "pip", "install", "-e", ".[server,repl]", "--disable-pip-version-check")
-if ($code -ne 0) { Fail-Setup "Python dependency install failed." }
+Install-ThomasDependencies
 
 $code = Invoke-VenvPython @("-c", "import aiohttp, cryptography, httpx, prompt_toolkit; from PIL import Image")
 if ($code -ne 0) { Fail-Setup "Dependency verification failed." }

@@ -10,7 +10,7 @@ opt into integrations, remote access, or advanced builder workflows.
 
 ## Download for Windows
 
-[Download `ThomasSetup_0.14.62.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.62/ThomasSetup_0.14.62.exe)
+[Download `ThomasSetup_0.14.63.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.63/ThomasSetup_0.14.63.exe)
 
 Use the `.exe` installer from Releases. Do not use the GitHub source ZIP unless
 you are developing Thomas. For the simple install path, see
@@ -20,7 +20,7 @@ you are developing Thomas. For the simple install path, see
 
 Fresh install: download the Windows installer above.
 
-1. Download `ThomasSetup_0.14.62.exe`.
+1. Download `ThomasSetup_0.14.63.exe`.
 2. Double-click it.
 3. Click through the installer prompts.
 4. Leave **Finish setup and launch Thomas now** checked.
@@ -58,6 +58,8 @@ For a fuller status map, read
 ## What to Expect
 
 - First launch creates a local Python virtual environment in `.venv`.
+- The Windows installer includes a bundled dependency wheelhouse so first-run
+  setup should not need to download Python packages from PyPI.
 - Thomas runs on your own machine by default.
 - The default web UI address is `http://127.0.0.1:8899`, not a public IP.
 - Model/provider setup happens in Easy Setup after the web UI opens.

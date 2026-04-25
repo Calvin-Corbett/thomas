@@ -26,7 +26,7 @@ Audience words:
 
 | Feature | Audience | Status | Entry points | Evidence | Notes |
 |---|---|---|---|---|---|
-| Windows installer | User-facing | Stable | `ThomasSetup_0.14.62.exe`, `installer/`, `.github/workflows/windows-installer.yml` | `tests/test_windows_installer_assets.py` | Recommended public install path. CI smoke-tests silent install and first-run wizard assets. |
+| Windows installer | User-facing | Stable | `ThomasSetup_0.14.63.exe`, `installer/`, `.github/workflows/windows-installer.yml` | `tests/test_windows_installer_assets.py` | Recommended public install path. CI smoke-tests silent install and first-run wizard assets. |
 | First-run wizard | User-facing | Stable | `scripts/first_run_wizard.ps1`, `scripts/first-run.cmd` | `tests/test_windows_installer_assets.py`, `tests/test_setup_wizard.py` | Creates local runtime state and hands off to browser Easy Setup. |
 | Easy Setup | User-facing | Beta | `/api/setup/*`, web UI setup modal | `tests/test_server_setup_routes.py`, `tests/test_web_evolve_chat_ux.py` | Guides model/provider setup. Provider credentials still depend on the user's local environment. |
 | Repair path | User-facing | Stable | `repair.cmd`, `setup.cmd`, `bootdoctor.cmd` | `tests/test_bootdoctor_cli.py`, `tests/test_launcher_boot_recovery_contract.py` | Main self-repair path for broken setup or startup state. |
