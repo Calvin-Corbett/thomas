@@ -55,6 +55,11 @@ def test_inno_setup_runs_first_run_and_uses_public_urls() -> None:
     assert "#define MyFirstRunName \"scripts\\first-run.cmd\"" in setup
     assert "Thomas First Run Setup" in setup
     assert "Finish setup and launch Thomas now" in setup
+    assert "installer\\wheelhouse\\*" in setup
+    assert "skipifsourcedoesntexist nocompression solidbreak" in setup
+    main_file_entry = setup.split('Source: "..\\installer\\wheelhouse\\*"', 1)[0]
+    assert "Excludes:" in main_file_entry
+    assert "installer\\wheelhouse\\*" in main_file_entry
 
 
 def test_github_workflow_builds_and_uploads_installer_asset() -> None:
@@ -88,30 +93,37 @@ def test_github_workflow_can_code_sign_installer_when_configured() -> None:
 
 def test_github_workflow_smoke_tests_silent_installer() -> None:
     workflow = _read(".github/workflows/windows-installer.yml")
+    smoke_script = _read("scripts/smoke_windows_installer.ps1")
 
     assert "Smoke test installer" in workflow
-    assert "/VERYSILENT" in workflow
-    assert "/SUPPRESSMSGBOXES" in workflow
-    assert "/DIR=$installDir" in workflow
-    assert "launch-thomas.vbs" in workflow
-    assert "support.cmd" in workflow
-    assert "installer\\wheelhouse\\WHEELHOUSE_MANIFEST.json" in workflow
-    assert "scripts\\first-run.cmd" in workflow
-    assert "scripts\\first_run_wizard.ps1" in workflow
-    assert "scripts\\run-ui.ps1" in workflow
-    assert "-ConfirmedInstallChanges -NoPrompt -NoLaunch -NoBrowser" in workflow
-    assert ".venv\\Scripts\\python.exe" in workflow
-    assert "runtime\\setup\\dependency_install_source.txt" in workflow
-    assert "bundled-wheelhouse" in workflow
-    assert "runtime\\setup\\last_setup.txt" in workflow
-    assert "runtime\\logs\\first_run_wizard.log" in workflow
-    assert "unins000.exe" in workflow
+    assert "scripts\\smoke_windows_installer.ps1" in workflow
+    assert "-RequireBundledWheelhouse" in workflow
+    assert "Smoke test downloaded release asset" in workflow
+    assert "gh release download" in workflow
+    assert "Downloaded release asset hash mismatch" in workflow
+
+    assert "/VERYSILENT" in smoke_script
+    assert "/SUPPRESSMSGBOXES" in smoke_script
+    assert "/DIR=$InstallDir" in smoke_script
+    assert "launch-thomas.vbs" in smoke_script
+    assert "support.cmd" in smoke_script
+    assert "installer\\wheelhouse\\WHEELHOUSE_MANIFEST.json" in smoke_script
+    assert "scripts\\first-run.cmd" in smoke_script
+    assert "scripts\\first_run_wizard.ps1" in smoke_script
+    assert "scripts\\run-ui.ps1" in smoke_script
+    assert "-ConfirmedInstallChanges -NoPrompt -NoLaunch -NoBrowser" in smoke_script
+    assert ".venv\\Scripts\\python.exe" in smoke_script
+    assert "runtime\\setup\\dependency_install_source.txt" in smoke_script
+    assert "bundled-wheelhouse" in smoke_script
+    assert "runtime\\setup\\last_setup.txt" in smoke_script
+    assert "runtime\\logs\\first_run_wizard.log" in smoke_script
+    assert "unins000.exe" in smoke_script
 
 
 def test_readme_is_installer_first() -> None:
     readme = _read("README.md")
 
-    assert "Download `ThomasSetup_0.14.63.exe`" in readme
+    assert "Download `ThomasSetup_0.14.64.exe`" in readme
     assert "docs/INSTALL.md" in readme
     assert "Do not use the GitHub source ZIP unless" in readme
     assert "Code -> Download ZIP" not in readme
@@ -121,7 +133,7 @@ def test_readme_is_installer_first() -> None:
 def test_install_doc_keeps_normal_users_on_release_installer() -> None:
     install_doc = _read("docs/INSTALL.md")
 
-    assert "ThomasSetup_0.14.63.exe" in install_doc
+    assert "ThomasSetup_0.14.64.exe" in install_doc
     assert "Do not use the GitHub source ZIP unless" in install_doc
     assert "https://github.com/Calvin-Corbett/thomas/releases/latest" in install_doc
     assert "http://127.0.0.1:8899/" in install_doc
@@ -144,3 +156,17 @@ def test_build_script_creates_offline_wheelhouse_for_installer() -> None:
     assert "--only-binary=:all:" in wheelhouse_script
     assert "--platform" in wheelhouse_script
     assert "requirements.txt" in wheelhouse_script
+
+
+def test_installer_smoke_script_checks_installed_assets_and_wheelhouse_source() -> None:
+    smoke_script = _read("scripts/smoke_windows_installer.ps1")
+
+    assert "Assert-SafeTempPath" in smoke_script
+    assert ".Equals($root" in smoke_script
+    assert "$rootWithSeparator" in smoke_script
+    assert "ThomasSetup" not in smoke_script
+    assert "/VERYSILENT" in smoke_script
+    assert "installer\\wheelhouse\\WHEELHOUSE_MANIFEST.json" in smoke_script
+    assert "first_run_wizard.ps1" in smoke_script
+    assert "dependency_install_source.txt" in smoke_script
+    assert "bundled-wheelhouse" in smoke_script

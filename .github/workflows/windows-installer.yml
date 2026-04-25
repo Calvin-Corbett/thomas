@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Release tag to upload assets to, for example v0.14.63. Leave blank to build artifacts only."
+        description: "Release tag to upload assets to, for example v0.14.64. Leave blank to build artifacts only."
         required: false
         default: ""
       version:
@@ -144,68 +144,12 @@ jobs:
             }
           }
 
-          $installDir = Join-Path $env:RUNNER_TEMP "thomas-installer-smoke"
-          $installLog = Join-Path $env:RUNNER_TEMP "thomas-installer-smoke-install.log"
-          $uninstallLog = Join-Path $env:RUNNER_TEMP "thomas-installer-smoke-uninstall.log"
-          Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
-
-          try {
-            $install = Start-Process -FilePath $setupExe -ArgumentList @(
-              "/VERYSILENT",
-              "/SUPPRESSMSGBOXES",
-              "/NORESTART",
-              "/DIR=$installDir",
-              "/LOG=$installLog"
-            ) -Wait -PassThru
-            if ($install.ExitCode -ne 0) { throw "Installer exited with code $($install.ExitCode). Log: $installLog" }
-
-            $expectedFiles = @(
-              "launch-thomas.vbs",
-              "support.cmd",
-              "installer\wheelhouse\WHEELHOUSE_MANIFEST.json",
-              "scripts\first-run.cmd",
-              "scripts\first_run_wizard.ps1",
-              "scripts\run-ui.ps1"
-            )
-            foreach ($relativePath in $expectedFiles) {
-              $path = Join-Path $installDir $relativePath
-              if (-not (Test-Path $path -PathType Leaf)) { throw "Expected installed file is missing: $relativePath" }
-            }
-
-            $wizard = Join-Path $installDir "scripts\first_run_wizard.ps1"
-            & powershell -NoProfile -ExecutionPolicy Bypass -File $wizard -ConfirmedInstallChanges -NoPrompt -NoLaunch -NoBrowser
-            if ($LASTEXITCODE -ne 0) { throw "First-run wizard exited with code $LASTEXITCODE" }
-
-            $expectedRuntimeFiles = @(
-              ".venv\Scripts\python.exe",
-              "runtime\setup\dependency_install_source.txt",
-              "runtime\setup\last_setup.txt",
-              "runtime\logs\first_run_wizard.log"
-            )
-            foreach ($relativePath in $expectedRuntimeFiles) {
-              $path = Join-Path $installDir $relativePath
-              if (-not (Test-Path $path -PathType Leaf)) { throw "Expected runtime file is missing: $relativePath" }
-            }
-
-            $installSource = (Get-Content (Join-Path $installDir "runtime\setup\dependency_install_source.txt") -Raw).Trim()
-            if ($installSource -ne "bundled-wheelhouse") {
-              throw "Expected dependency install source to be bundled-wheelhouse, got: $installSource"
-            }
-          } finally {
-            $uninstaller = Join-Path $installDir "unins000.exe"
-            if (Test-Path $uninstaller) {
-              $uninstall = Start-Process -FilePath $uninstaller -ArgumentList @(
-                "/VERYSILENT",
-                "/SUPPRESSMSGBOXES",
-                "/NORESTART",
-                "/LOG=$uninstallLog"
-              ) -Wait -PassThru
-              if ($uninstall.ExitCode -ne 0) {
-                Write-Warning "Uninstaller exited with code $($uninstall.ExitCode). Log: $uninstallLog"
-              }
-            }
-            Remove-Item -Recurse -Force $installDir -ErrorAction SilentlyContinue
-          }
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke_windows_installer.ps1 `
+            -SetupExe $setupExe `
+            -InstallDir (Join-Path $env:RUNNER_TEMP "thomas-installer-smoke") `
+            -InstallLog (Join-Path $env:RUNNER_TEMP "thomas-installer-smoke-install.log") `
+            -UninstallLog (Join-Path $env:RUNNER_TEMP "thomas-installer-smoke-uninstall.log") `
+            -RequireBundledWheelhouse
 
       - name: Upload workflow artifact
         uses: actions/upload-artifact@v4
@@ -225,3 +169,39 @@ jobs:
           gh release upload "${{ steps.meta.outputs.tag }}" `
             "dist/installer/ThomasSetup_${{ steps.meta.outputs.version }}.exe" `
             --clobber
+
+      - name: Smoke test downloaded release asset
+        if: steps.meta.outputs.tag != ''
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = "${{ steps.meta.outputs.version }}"
+          $tag = "${{ steps.meta.outputs.tag }}"
+          $assetName = "ThomasSetup_$version.exe"
+          $builtExe = Join-Path $PWD "dist\installer\$assetName"
+          $downloadDir = Join-Path $env:RUNNER_TEMP "thomas-release-asset-download"
+          Remove-Item -Recurse -Force $downloadDir -ErrorAction SilentlyContinue
+          New-Item -ItemType Directory -Force -Path $downloadDir | Out-Null
+
+          $downloadedExe = Join-Path $downloadDir $assetName
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            Remove-Item -Force $downloadedExe -ErrorAction SilentlyContinue
+            gh release download $tag --repo "${{ github.repository }}" --pattern $assetName --dir $downloadDir
+            if ($LASTEXITCODE -eq 0 -and (Test-Path $downloadedExe)) { break }
+            if ($attempt -eq 5) { throw "Could not download release asset $assetName from $tag." }
+            Start-Sleep -Seconds (5 * $attempt)
+          }
+
+          $builtHash = (Get-FileHash $builtExe -Algorithm SHA256).Hash
+          $downloadedHash = (Get-FileHash $downloadedExe -Algorithm SHA256).Hash
+          if ($downloadedHash -ne $builtHash) {
+            throw "Downloaded release asset hash mismatch. built=$builtHash downloaded=$downloadedHash"
+          }
+
+          powershell -NoProfile -ExecutionPolicy Bypass -File scripts\smoke_windows_installer.ps1 `
+            -SetupExe $downloadedExe `
+            -InstallDir (Join-Path $env:RUNNER_TEMP "thomas-downloaded-installer-smoke") `
+            -InstallLog (Join-Path $env:RUNNER_TEMP "thomas-downloaded-installer-smoke-install.log") `
+            -UninstallLog (Join-Path $env:RUNNER_TEMP "thomas-downloaded-installer-smoke-uninstall.log") `
+            -RequireBundledWheelhouse

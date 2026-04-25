@@ -16,7 +16,7 @@ For an agent-readable table with audience, entry points, and test evidence, use
 
 | Area | Capability | Status | Notes |
 |---|---|---|---|
-| Install | `ThomasSetup_0.14.63.exe` | Stable | Recommended public Windows path. Download from GitHub Releases, run the installer, keep Finish setup and launch checked, then complete Easy Setup in the browser. |
+| Install | `ThomasSetup_0.14.64.exe` | Stable | Recommended public Windows path. Download from GitHub Releases, run the installer, keep Finish setup and launch checked, then complete Easy Setup in the browser. |
 | Install fallback | `run-ui.cmd`, `setup.cmd`, `repair.cmd`, `bootdoctor.cmd`, `support.cmd` | Stable | Manual support path if the installer or first-run wizard fails. `support.cmd` creates a redacted ZIP under `runtime\support\`; setup creates `.venv` inside the repo and installs local runtime dependencies. |
 | Web UI | Browser chat workspace | Beta | Main user surface. Starts locally and supports setup, chat, model controls, progress, and tool/result display. |
 | Easy Setup | First-run model/provider setup | Beta | Guides users into Codex, local, or API-backed profiles. Some provider flows still depend on external credentials being ready. |

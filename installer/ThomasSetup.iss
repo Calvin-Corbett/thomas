@@ -39,7 +39,8 @@ Name: "desktopicon"; Description: "Create a desktop shortcut"; GroupDescription:
 
 [Files]
 Source: "..\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; \
-  Excludes: ".git\*;.venv\*;node_modules\*;runtime\*;dist\*;pack\*;output\*;logs\*;__pycache__\*;.pytest_cache\*;.mypy_cache\*;.ruff_cache\*;*.pyc;*.pyo;*.zip"
+  Excludes: ".git\*;.venv\*;node_modules\*;runtime\*;dist\*;pack\*;output\*;logs\*;installer\wheelhouse\*;__pycache__\*;.pytest_cache\*;.mypy_cache\*;.ruff_cache\*;*.pyc;*.pyo;*.zip"
+Source: "..\installer\wheelhouse\*"; DestDir: "{app}\installer\wheelhouse"; Flags: ignoreversion recursesubdirs createallsubdirs skipifsourcedoesntexist nocompression solidbreak
 
 [Icons]
 Name: "{group}\Thomas"; Filename: "{app}\{#MyAppLauncherName}"; WorkingDir: "{app}"

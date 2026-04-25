@@ -10,7 +10,7 @@ opt into integrations, remote access, or advanced builder workflows.
 
 ## Download for Windows
 
-[Download `ThomasSetup_0.14.63.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.63/ThomasSetup_0.14.63.exe)
+[Download `ThomasSetup_0.14.64.exe`](https://github.com/Calvin-Corbett/thomas/releases/download/v0.14.64/ThomasSetup_0.14.64.exe)
 
 Use the `.exe` installer from Releases. Do not use the GitHub source ZIP unless
 you are developing Thomas. For the simple install path, see
@@ -20,7 +20,7 @@ you are developing Thomas. For the simple install path, see
 
 Fresh install: download the Windows installer above.
 
-1. Download `ThomasSetup_0.14.63.exe`.
+1. Download `ThomasSetup_0.14.64.exe`.
 2. Double-click it.
 3. Click through the installer prompts.
 4. Leave **Finish setup and launch Thomas now** checked.
