@@ -25,12 +25,14 @@ No manual Python/Codex setup steps are required during install.
 The public release workflow is `.github/workflows/windows-installer.yml`.
 
 Use **Actions -> Windows Installer -> Run workflow** and pass the release tag,
-for example `v0.14.62`. The workflow:
+for example `v0.14.63`. The workflow:
 
 - installs Inno Setup on the hosted Windows runner
+- sets up Python 3.12 for packaging
+- builds `installer\wheelhouse\` with Windows wheels for supported Python versions
 - runs `scripts\build_windows_installer.ps1`
 - optionally signs `ThomasSetup_<version>.exe` when trusted certificate secrets are configured
-- smoke-tests a silent install and the first-run wizard
+- smoke-tests a silent install and verifies the first-run wizard used the bundled wheelhouse
 - uploads `ThomasSetup_<version>.exe` and `Thomas_source_<version>.zip` as workflow artifacts
 - uploads only `ThomasSetup_<version>.exe` to the GitHub release when a tag is provided
 
@@ -58,8 +60,12 @@ installer smoke test.
 From repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_installer.ps1 -Version 0.14.62
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_installer.ps1 -Version 0.14.63
 ```
+
+The default build creates an offline wheelhouse under the temporary installer
+staging tree and includes it in the `.exe`. For a quick local packaging check
+that does not download dependency wheels, add `-SkipWheelhouse`.
 
 Or:
 
@@ -91,11 +97,16 @@ The first-run wizard:
 - checks for Python 3.10+
 - offers to install Python 3.12 through `winget` when available
 - creates `.venv`
-- installs `.[server,repl]` dependencies
+- installs `.[server,repl]` dependencies from the bundled offline wheelhouse
+  when present
+- falls back to the online Python package index only if the wheelhouse is absent
+  or cannot be used
 - writes default Thomas setup state
 - launches Thomas on `127.0.0.1:8899`
 
-Logs are written to `runtime\logs\first_run_wizard.log`.
+Logs are written to `runtime\logs\first_run_wizard.log`. The dependency source
+is written to `runtime\setup\dependency_install_source.txt` as either
+`bundled-wheelhouse` or `online-index`.
 
 After setup is complete, Start Menu and desktop shortcuts run
 `launch-thomas.vbs`, which starts Thomas hidden and opens the browser. If `.venv`
@@ -111,6 +122,8 @@ release page rather than a local build:
 2. Install into a clean folder or a fresh Windows profile.
 3. Keep **Finish setup and launch Thomas now** checked.
 4. Confirm the first-run wizard creates `.venv`, writes
-   `runtime\setup\last_setup.txt`, and opens `http://127.0.0.1:8899/`.
+   `runtime\setup\last_setup.txt`, writes `bundled-wheelhouse` to
+   `runtime\setup\dependency_install_source.txt`, and opens
+   `http://127.0.0.1:8899/`.
 5. If setup fails, run `support.cmd` and confirm a ZIP appears under
    `runtime\support\`.
