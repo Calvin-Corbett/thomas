@@ -25,7 +25,7 @@ No manual Python/Codex setup steps are required during install.
 The public release workflow is `.github/workflows/windows-installer.yml`.
 
 Use **Actions -> Windows Installer -> Run workflow** and pass the release tag,
-for example `v0.14.63`. The workflow:
+for example `v0.14.64`. The workflow:
 
 - installs Inno Setup on the hosted Windows runner
 - sets up Python 3.12 for packaging
@@ -35,6 +35,8 @@ for example `v0.14.63`. The workflow:
 - smoke-tests a silent install and verifies the first-run wizard used the bundled wheelhouse
 - uploads `ThomasSetup_<version>.exe` and `Thomas_source_<version>.zip` as workflow artifacts
 - uploads only `ThomasSetup_<version>.exe` to the GitHub release when a tag is provided
+- downloads the uploaded release asset, verifies its SHA256 against the built
+  installer, and smoke-tests the downloaded `.exe`
 
 The workflow also runs automatically when a GitHub release is published.
 
@@ -60,12 +62,18 @@ installer smoke test.
 From repo root:
 
 ```powershell
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_installer.ps1 -Version 0.14.63
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\build_windows_installer.ps1 -Version 0.14.64
 ```
 
 The default build creates an offline wheelhouse under the temporary installer
 staging tree and includes it in the `.exe`. For a quick local packaging check
 that does not download dependency wheels, add `-SkipWheelhouse`.
+
+The Inno script keeps `installer\wheelhouse\` out of the main recursive file
+entry and adds it back with `nocompression solidbreak`. Wheel files are already
+compressed; keeping them out of the main solid compression stream reduces
+installer bootstrap fragility and makes local release smoke tests closer to a
+normal user download.
 
 Or:
 

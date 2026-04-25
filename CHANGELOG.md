@@ -7,6 +7,15 @@ working-branch notes are intentionally not included in the public repository.
 
 - No unreleased changes.
 
+## [0.14.64] - 2026-04-24
+
+- Hardened the Windows installer packaging by keeping bundled wheel files out
+  of the main Inno solid compression stream and installing them with
+  `nocompression solidbreak`.
+- Added release-surface tests that enforce the wheelhouse packaging rule and a
+  workflow smoke check for the downloaded GitHub release asset.
+- Updated public install docs to point at the corrected Windows installer.
+
 ## [0.14.63] - 2026-04-24
 
 - Added a bundled Windows dependency wheelhouse to the installer build so

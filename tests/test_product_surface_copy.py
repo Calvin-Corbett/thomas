@@ -13,7 +13,7 @@ def test_readme_surfaces_user_first_story() -> None:
     readme = _read_text("README.md")
     assert readme.startswith("# Thomas")
     assert "Fresh install: download the Windows installer above." in readme
-    assert "ThomasSetup_0.14.63.exe" in readme
+    assert "ThomasSetup_0.14.64.exe" in readme
     assert "## Everyday Use" in readme
     assert "## Grow Into Advanced Thomas Safely" in readme
 

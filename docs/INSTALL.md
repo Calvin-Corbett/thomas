@@ -5,7 +5,7 @@ you are a developer who wants to read or modify the code.
 
 ## Normal Install
 
-1. Download `ThomasSetup_0.14.63.exe` from the latest release:
+1. Download `ThomasSetup_0.14.64.exe` from the latest release:
    <https://github.com/Calvin-Corbett/thomas/releases/latest>
 2. Double-click the downloaded `.exe`.
 3. Keep **Finish setup and launch Thomas now** checked.
