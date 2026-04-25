@@ -27,7 +27,11 @@ function Assert-SafeTempPath {
   }
 
   foreach ($root in ($allowedRoots | Select-Object -Unique)) {
-    if ($full.StartsWith($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+    if ($full.Equals($root, [System.StringComparison]::OrdinalIgnoreCase)) {
+      throw "Refusing to clean temp root itself: $full"
+    }
+    $rootWithSeparator = $root + [System.IO.Path]::DirectorySeparatorChar
+    if ($full.StartsWith($rootWithSeparator, [System.StringComparison]::OrdinalIgnoreCase)) {
       return
     }
   }

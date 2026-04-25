@@ -162,6 +162,8 @@ def test_installer_smoke_script_checks_installed_assets_and_wheelhouse_source() 
     smoke_script = _read("scripts/smoke_windows_installer.ps1")
 
     assert "Assert-SafeTempPath" in smoke_script
+    assert ".Equals($root" in smoke_script
+    assert "$rootWithSeparator" in smoke_script
     assert "ThomasSetup" not in smoke_script
     assert "/VERYSILENT" in smoke_script
     assert "installer\\wheelhouse\\WHEELHOUSE_MANIFEST.json" in smoke_script
