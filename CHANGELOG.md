@@ -10,6 +10,7 @@ Versioning: Semantic Versioning.
 - Warning: The current release is an early-stage, fast-built/"vibe-coded" branch and should be treated as beta-quality until a stabilization pass is completed.
 
 ### Added
+- crew.brief: Added Layer 1 auto-checkpoint (`scripts/heartbeat.py --checkpoint` with `--force/--dry-run/--agent` flags, backed by `thomas/system/heartbeat_checkpoint.py` + `heartbeat_checkpoint_io.py`). Each tick checks the worktree against the active workboard claim and runs `scripts/agent_commit.py` to land a tagged checkpoint; failures (no claim, scope miss, gate reject) are recorded under `runtime/heartbeat_dirty/` instead of raising. Configurable via `THOMAS_HEARTBEAT_CHECKPOINT_INTERVAL_MINUTES` (default 5), `THOMAS_HEARTBEAT_DISABLE_CHECKPOINT`, and `THOMAS_HEARTBEAT_FORCE_CHECKPOINT`. Tests in `tests/test_heartbeat_checkpoint.py`.
 - evolve: Added a green-side health ledger, mandatory refactor pass, and interactive evolve wizard scaffolding so evolve sessions can prioritize stale or oversized files before creative passes.
 - workboard: Synced the missing `space-bg-always-on` task artifacts so the workboard/task-problem gates can validate the current board state again.
 
