@@ -170,7 +170,7 @@ def register_chatops_commands(
     @click.pass_context
     def dg_status(ctx: click.Context) -> None:
         """Show blue/green paths and whether the green slot is present."""
-        from thomas.upgrade.doppelganger import get_paths
+        from thomas.forge.anvil.doppelganger import get_paths
 
         paths = get_paths()
         click.echo("Doppelganger paths:")
@@ -189,7 +189,7 @@ def register_chatops_commands(
     @click.pass_context
     def dg_sync(ctx: click.Context) -> None:
         """Sync Blue -> Green (creates/updates the green sandbox working copy)."""
-        from thomas.upgrade.doppelganger import get_paths, sync_blue_to_green
+        from thomas.forge.anvil.doppelganger import get_paths, sync_blue_to_green
 
         paths = get_paths()
         paths.dg_root.mkdir(parents=True, exist_ok=True)
@@ -205,7 +205,7 @@ def register_chatops_commands(
     @click.pass_context
     def dg_test(ctx: click.Context, sync_from_blue: bool) -> None:
         """Run tests in Green (uses isolated green venv)."""
-        from thomas.upgrade.doppelganger import (
+        from thomas.forge.anvil.doppelganger import (
             get_paths,
             run_green_tests,
             sync_blue_to_green,
@@ -231,7 +231,7 @@ def register_chatops_commands(
     @click.pass_context
     def dg_serve_green(ctx: click.Context, host: str, port: int, sync_from_blue: bool) -> None:
         """Run the server from Green using an isolated runtime root (no real memory/secrets)."""
-        from thomas.upgrade.doppelganger import (
+        from thomas.forge.anvil.doppelganger import (
             get_paths,
             run_green_server,
             sync_blue_to_green,
@@ -257,7 +257,7 @@ def register_chatops_commands(
     @click.pass_context
     def dg_promote(ctx: click.Context, stop_port: int) -> None:
         """Promote Green -> Blue (with backup)."""
-        from thomas.upgrade.doppelganger import get_paths, latest_backup, promote_green_to_blue
+        from thomas.forge.anvil.doppelganger import get_paths, latest_backup, promote_green_to_blue
 
         paths = get_paths()
         if not paths.green_root.exists():
@@ -280,7 +280,7 @@ def register_chatops_commands(
     @click.pass_context
     def dg_rollback(ctx: click.Context, backup_path: str | None) -> None:
         """Rollback Blue to the latest (or specified) backup snapshot."""
-        from thomas.upgrade.doppelganger import get_paths, rollback
+        from thomas.forge.anvil.doppelganger import get_paths, rollback
 
         paths = get_paths()
         backup = Path(backup_path).resolve() if backup_path else None

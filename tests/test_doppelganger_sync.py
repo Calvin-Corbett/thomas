@@ -9,7 +9,7 @@ def _write(p: Path, text: str) -> None:
 
 
 def test_sync_tree_mirrors_and_deletes(tmp_path: Path) -> None:
-    from thomas.upgrade.doppelganger import _sync_tree
+    from thomas.forge.anvil.doppelganger import _sync_tree
 
     src = tmp_path / "src"
     dst = tmp_path / "dst"
