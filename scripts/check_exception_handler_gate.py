@@ -65,16 +65,17 @@ def _staged_files() -> list[str]:
 def _added_line_ranges(rel_path: str) -> set[int]:
     """Get the set of line numbers that are NEW in the staged version.
 
-    Uses git diff --cached -U0 to find which lines were actually added
-    (not just shifted). This eliminates false positives from the ratchet
-    when code is inserted above existing handlers.
+    Uses git diff --cached -U0 -M to find which lines were actually added
+    (not just shifted). The -M flag enables rename detection so a moved
+    file is not reported as a wholesale add+delete pair (which would mark
+    every line of the destination as ``new``).
 
     Returns a set of line numbers (1-based) that are genuinely new.
     """
     import re
 
     proc = subprocess.run(
-        ["git", "diff", "--cached", "-U0", "--", rel_path],
+        ["git", "diff", "--cached", "-U0", "-M", "--", rel_path],
         cwd=ROOT,
         capture_output=True,
         text=True,
@@ -92,6 +93,36 @@ def _added_line_ranges(rel_path: str) -> set[int]:
             for i in range(start, start + count):
                 added_lines.add(i)
     return added_lines
+
+
+def _is_pure_rename(rel_path: str) -> bool:
+    """True if rel_path is the destination of a pure rename (R100).
+
+    A pure rename has identical content to its source -- the broad-except
+    clauses inside it were not introduced by this commit, they were merely
+    moved. The ratchet should not flag pre-existing violations as new.
+    """
+    proc = subprocess.run(
+        ["git", "diff", "--cached", "--name-status", "-M", "--", rel_path],
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        return False
+    for line in proc.stdout.splitlines():
+        # name-status output for rename: "R<similarity>\told_path\tnew_path"
+        # R100 = identical content; R<100 means edits in addition to the move.
+        parts = line.split("\t")
+        if len(parts) >= 3 and parts[0].startswith("R"):
+            similarity_str = parts[0][1:]
+            try:
+                similarity = int(similarity_str)
+            except ValueError:
+                continue
+            if similarity == 100 and parts[2] == rel_path:
+                return True
+    return False
 
 
 def _git_show_head(rel_path: str) -> str | None:
@@ -199,6 +230,10 @@ def run(argv: list[str] | None = None) -> int:
             continue
 
         if ratchet_enabled:
+            # Pure renames (R100) carry pre-existing violations forward by
+            # definition -- nothing was introduced in this commit. Skip.
+            if _is_pure_rename(rel_path):
+                continue
             # Use diff hunks to determine which violations are truly new.
             # Only flag handlers whose line numbers fall within added hunks.
             # This eliminates false positives from handlers that merely
