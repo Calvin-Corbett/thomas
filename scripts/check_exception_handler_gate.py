@@ -62,37 +62,58 @@ def _staged_files() -> list[str]:
     return [line.strip() for line in proc.stdout.splitlines() if line.strip()]
 
 
-def _added_line_ranges(rel_path: str) -> set[int]:
-    """Get the set of line numbers that are NEW in the staged version.
+_HUNKS_CACHE: dict[str, set[int]] | None = None
 
-    Uses git diff --cached -U0 -M to find which lines were actually added
-    (not just shifted). The -M flag enables rename detection so a moved
-    file is not reported as a wholesale add+delete pair (which would mark
-    every line of the destination as ``new``).
 
-    Returns a set of line numbers (1-based) that are genuinely new.
+def _added_lines_per_file() -> dict[str, set[int]]:
+    """Parse one unfiltered staged diff into ``{dest_path: added_lines}``.
+
+    Rename detection requires the diff to include both ends of the move,
+    which a path-filtered ``-- <new_path>`` invocation would hide. We run
+    one ``git diff --cached -U0 -M`` and split the output by ``+++ b/``
+    boundaries so each destination's hunks are attributed correctly. The
+    result is cached for the lifetime of the gate run.
     """
+    global _HUNKS_CACHE
+    if _HUNKS_CACHE is not None:
+        return _HUNKS_CACHE
+
     import re
 
     proc = subprocess.run(
-        ["git", "diff", "--cached", "-U0", "-M", "--", rel_path],
+        ["git", "diff", "--cached", "-U0", "-M"],
         cwd=ROOT,
         capture_output=True,
         text=True,
     )
+    result: dict[str, set[int]] = {}
     if proc.returncode != 0:
-        return set()
+        _HUNKS_CACHE = result
+        return result
 
-    added_lines: set[int] = set()
+    current_path: str | None = None
     for line in proc.stdout.splitlines():
-        # Parse @@ hunk headers: @@ -old_start,old_count +new_start,new_count @@
-        hunk_match = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
-        if hunk_match:
-            start = int(hunk_match.group(1))
-            count = int(hunk_match.group(2)) if hunk_match.group(2) else 1
-            for i in range(start, start + count):
-                added_lines.add(i)
-    return added_lines
+        if line.startswith("+++ b/"):
+            current_path = line[len("+++ b/"):]
+            result.setdefault(current_path, set())
+        elif line.startswith("+++ /dev/null"):
+            current_path = None
+        elif line.startswith("@@") and current_path is not None:
+            hunk_match = re.match(r"^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@", line)
+            if hunk_match:
+                start = int(hunk_match.group(1))
+                count = int(hunk_match.group(2)) if hunk_match.group(2) else 1
+                if count == 0:
+                    continue
+                for i in range(start, start + count):
+                    result[current_path].add(i)
+    _HUNKS_CACHE = result
+    return result
+
+
+def _added_line_ranges(rel_path: str) -> set[int]:
+    """Return line numbers that are genuinely new in ``rel_path``."""
+    return _added_lines_per_file().get(rel_path, set())
 
 
 _RENAME_CACHE: dict[str, set[str]] | None = None
