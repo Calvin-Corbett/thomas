@@ -10,7 +10,7 @@ try:
 except ImportError:
     from thomas._vendor import click_shim as click  # type: ignore
 
-from thomas.upgrade.evolve import (
+from thomas.forge.anvil.evolve import (
     DEFAULT_EVOLVE_OBJECTIVE,
     DEFAULT_EVOLVE_PRINCIPLES,
     DEFAULT_VERIFY_COMMANDS,

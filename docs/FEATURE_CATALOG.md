@@ -61,7 +61,7 @@ Update rule:
 - [server.remote_access_control] Local/remote access modes with API token and request rate limiting. (Paths: `thomas/server/app.py`)
 - [security.secret_storage] Secure provider secret management for API keys. (Paths: `thomas/server/secrets.py`)
 - [observability.run_store_and_journal] Run/event persistence with filtering and retention controls. (Paths: `thomas/observability/run_store.py`, `thomas/observability/journal.py`)
-- [upgrade.doppelganger] Blue/green upgrade workflow and rollback controls. (Paths: `thomas/upgrade/doppelganger.py`, `thomas/cli/main.py`)
+- [forge.anvil.doppelganger] Blue/green upgrade workflow and rollback controls. (Paths: `thomas/forge/anvil/doppelganger.py`, `thomas/cli/main.py`)
 
 ## observability.run_replay
 

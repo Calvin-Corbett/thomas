@@ -138,7 +138,7 @@ _OPTIONAL_TOOL_MODULES = [
     ("thomas.tray_agent.tools", "register_tray_agent_tools"),
     ("thomas.tsdb.tools", "register_tsdb_tools"),
     ("thomas.units.tools", "register_units_tools"),
-    ("thomas.upgrade.tools", "register_upgrade_tools"),
+    ("thomas.forge.anvil.tools", "register_anvil_tools"),
     ("thomas.validation.tools", "register_validation_tools"),
     ("thomas.vision.tools", "register_vision_tools"),
     ("thomas.visualization.tools", "register_visualization_tools"),

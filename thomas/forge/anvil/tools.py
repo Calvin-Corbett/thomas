@@ -321,8 +321,8 @@ class UpgradePromoteGreenToBlutool(Tool):
             return ToolResult(ok=False, error=str(e))
 
 
-def register_upgrade_tools(registry):
-    """Register upgrade tools with the tool registry."""
+def register_anvil_tools(registry):
+    """Register Anvil (self-mod / blue-green / evolve) tools with the registry."""
     tools = [
         UpgradeGetPathsTool(),
         UpgradeSyncBlueToGreenTool(),

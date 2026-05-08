@@ -93,7 +93,7 @@ MODULES = {
             "vision",
             "security",
             "codex",
-            "upgrade",
+            "forge",
             "library",
             "observability",
             "skills",
@@ -369,11 +369,11 @@ MODULES = {
         "health": "green",
         "description": "System tray agent for background operation",
     },
-    "upgrade": {
-        "tier": "support",
+    "forge": {
+        "tier": "infra",
         "depends_on": ["core", "tools"],
         "health": "green",
-        "description": "Self-upgrade and migration logic",
+        "description": "Praxis.Forge construction umbrella -- Anvil (self-mod / Doppelganger Protocol / Evolve runtime). Future sub-pieces: Gates, Intake, Publish.",
     },
     "watcher": {
         "tier": "support",
@@ -897,12 +897,6 @@ MODULES = {
         "health": "yellow",
         "description": "codegen utilities",
     },
-    "cost": {
-        "tier": "support",
-        "depends_on": ["core", "marketplace"],
-        "health": "yellow",
-        "description": "cost utilities",
-    },
     "crews": {
         "tier": "support",
         "depends_on": ["core", "tools", "marketplace"],
@@ -975,12 +969,6 @@ MODULES = {
         "health": "yellow",
         "description": "etl monitor utilities",
     },
-    "eval": {
-        "tier": "support",
-        "depends_on": ["core"],
-        "health": "yellow",
-        "description": "eval utilities",
-    },
     "event_platform": {
         "tier": "support",
         "depends_on": ["core", "tools", "marketplace"],
@@ -1016,12 +1004,6 @@ MODULES = {
         "depends_on": ["core", "tools", "marketplace"],
         "health": "yellow",
         "description": "graph engine utilities",
-    },
-    "guardrails": {
-        "tier": "support",
-        "depends_on": ["core", "marketplace"],
-        "health": "yellow",
-        "description": "guardrails utilities",
     },
     "jobs": {
         "tier": "support",
@@ -1076,12 +1058,6 @@ MODULES = {
         "depends_on": ["core", "tools", "marketplace"],
         "health": "yellow",
         "description": "openclaw compat utilities",
-    },
-    "orchestration": {
-        "tier": "support",
-        "depends_on": ["core", "marketplace"],
-        "health": "yellow",
-        "description": "orchestration utilities",
     },
     "orchestrator": {
         "tier": "support",
@@ -1154,12 +1130,6 @@ MODULES = {
         "depends_on": ["core", "orchestrator", "marketplace"],
         "health": "yellow",
         "description": "specialists utilities",
-    },
-    "telemetry": {
-        "tier": "support",
-        "depends_on": ["core", "marketplace"],
-        "health": "yellow",
-        "description": "telemetry utilities",
     },
     "tracing": {
         "tier": "support",

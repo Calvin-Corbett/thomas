@@ -7,8 +7,8 @@ from pathlib import Path
 from click.testing import CliRunner
 
 from thomas.cli.commands.evolve import evolve
-from thomas.upgrade import evolve as evolve_runtime
-from thomas.upgrade.doppelganger import get_paths, sync_blue_to_green
+from thomas.forge.anvil import evolve as evolve_runtime
+from thomas.forge.anvil.doppelganger import get_paths, sync_blue_to_green
 
 
 def _seed_repo(root: Path) -> None:
