@@ -24,9 +24,16 @@ Versioning: Semantic Versioning.
 - safety: Release-scope skip-policy coverage now protects the bulk-commit and commit-growth hooks, while split-runtime surface parity checks point at the live rescue/runtime files instead of removed legacy paths.
 
 ### Fixed
+- workboard: Cleaned up stale workboard claim from `older-than-hour-commit` (merged at `68eaf673`; tooling bug prevented automatic release).
 - workboard: Repaired a truncated `openclaw-parity-stabilization` task-plan entry that was leaving `plans/thomas/WORKBOARD.md` in an invalid state.
 - startup: Boot Doctor recovery scripts now point at the real `runtime/boot_doctor` and `scripts/bootdoctor.ps1` paths instead of corrupted control-character paths that could not launch.
 - web: The rescue loader now targets the real `063_module_studio_comfy_style_id_*` split files, and mobile robot alerts clamp inside narrow viewports instead of overflowing off-screen.
+
+### Removed
+- praxis pre-rename cleanup: Deleted zero-importer placeholder packages `thomas/eval/`, `thomas/guardrails/`, and `thomas/tools/gateway/`.
+- praxis pre-rename cleanup: Deleted `thomas/cost/` shim plus `thomas/marketplace/cost/` target (zero importers on both ends; Pattern 2 re-export anti-pattern).
+- praxis pre-rename cleanup: Deleted `thomas/orchestration/` shim plus `thomas/marketplace/orchestration/` target (same pattern).
+- praxis pre-rename cleanup: Deleted `thomas/telemetry/` shim plus `thomas/marketplace/telemetry/` target (same pattern).
 
 ## [0.14.55] - 2026-03-29
 
