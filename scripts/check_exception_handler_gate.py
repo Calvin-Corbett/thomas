@@ -95,34 +95,47 @@ def _added_line_ranges(rel_path: str) -> set[int]:
     return added_lines
 
 
-def _is_pure_rename(rel_path: str) -> bool:
-    """True if rel_path is the destination of a pure rename (R100).
+_RENAME_CACHE: dict[str, set[str]] | None = None
 
-    A pure rename has identical content to its source -- the broad-except
-    clauses inside it were not introduced by this commit, they were merely
-    moved. The ratchet should not flag pre-existing violations as new.
+
+def _pure_rename_destinations() -> set[str]:
+    """Return paths that are pure-rename destinations (R100) in the staged diff.
+
+    Rename detection requires the diff to include both ends of the move, so
+    we run one unfiltered ``git diff`` per gate invocation and cache the
+    result. A path-filtered diff would hide the deleted source and prevent
+    git from pairing the entries.
     """
+    global _RENAME_CACHE
+    if _RENAME_CACHE is not None:
+        return _RENAME_CACHE.get("pure", set())
     proc = subprocess.run(
-        ["git", "diff", "--cached", "--name-status", "-M", "--", rel_path],
+        ["git", "diff", "--cached", "--name-status", "-M"],
         cwd=ROOT,
         capture_output=True,
         text=True,
     )
-    if proc.returncode != 0:
-        return False
-    for line in proc.stdout.splitlines():
-        # name-status output for rename: "R<similarity>\told_path\tnew_path"
-        # R100 = identical content; R<100 means edits in addition to the move.
-        parts = line.split("\t")
-        if len(parts) >= 3 and parts[0].startswith("R"):
-            similarity_str = parts[0][1:]
-            try:
-                similarity = int(similarity_str)
-            except ValueError:
-                continue
-            if similarity == 100 and parts[2] == rel_path:
-                return True
-    return False
+    pure: set[str] = set()
+    if proc.returncode == 0:
+        for line in proc.stdout.splitlines():
+            # name-status for rename: "R<similarity>\told_path\tnew_path"
+            # R100 = identical content; R<100 means edits in addition to the move.
+            parts = line.split("\t")
+            if len(parts) >= 3 and parts[0].startswith("R"):
+                similarity_str = parts[0][1:]
+                try:
+                    similarity = int(similarity_str)
+                except ValueError:
+                    continue
+                if similarity == 100:
+                    pure.add(parts[2])
+    _RENAME_CACHE = {"pure": pure}
+    return pure
+
+
+def _is_pure_rename(rel_path: str) -> bool:
+    """True if rel_path is the destination of a pure rename (R100)."""
+    return rel_path in _pure_rename_destinations()
 
 
 def _git_show_head(rel_path: str) -> str | None:
