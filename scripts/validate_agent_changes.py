@@ -12,6 +12,7 @@ from __future__ import annotations
 import ast
 import subprocess
 import sys
+from pathlib import Path
 
 from agent_safety_config import load_config
 
@@ -120,13 +121,16 @@ def check_python_syntax(staged_files: list[str]) -> tuple[bool, list[str]]:
 
     failed_files: list[tuple[str, str]] = []
     for py_file in python_files:
+        # Skip files deleted in this commit -- they have no syntax to validate.
+        if not Path(py_file).exists():
+            continue
         try:
             with open(py_file, encoding="utf-8") as handle:
                 ast.parse(handle.read())
         except SyntaxError as exc:
             failed_files.append((py_file, str(exc)))
-        except Exception as exc:  # pragma: no cover - defensive
-            failed_files.append((py_file, f"Parse error: {exc}"))
+        except (OSError, ValueError) as exc:
+            failed_files.append((py_file, f"Read error: {exc}"))
 
     if not failed_files:
         return True, []
