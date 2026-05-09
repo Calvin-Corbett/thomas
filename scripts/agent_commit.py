@@ -226,8 +226,12 @@ def _parse_status_paths(repo_root: Path) -> list[str]:
         status = entry[:2]
         token = entry[3:] if len(entry) > 3 else entry
         if "R" in status or "C" in status:
+            # Porcelain-v1 -z rename format: "<XY> <new-path>\0<old-path>\0".
+            # ``token`` already holds the NEW path; the next entry is the
+            # OLD path. Consume that iterator entry but keep ``token`` as
+            # the new path so working-tree changes are correctly attributed
+            # to the destination.
             if index + 1 < len(entries) and str(entries[index + 1] or ""):
-                token = str(entries[index + 1] or "")
                 index += 1
         normalized = _normalize_path(token)
         if normalized and normalized not in changed:
