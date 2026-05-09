@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import scripts.github_publish_preflight as mod
+import scripts.forge.publish.preflight as mod
 
 
 def test_blocked_tracked_files_detected() -> None:
