@@ -167,7 +167,7 @@ def _init_snapshot_repo(snapshot_root: Path, *, origin_url: str) -> None:
 def _run_preflight(snapshot_root: Path, *, deep: bool) -> dict[str, Any]:
     cmd = [
         "python",
-        "scripts/github_publish_preflight.py",
+        "scripts/forge/publish/preflight.py",
         "--json",
         "--strict",
     ]
