@@ -44,7 +44,7 @@ jobs:
 
       - name: Publish preflight (deep)
         run: |
-          python scripts/forge/publish/preflight.py --deep --json --strict
+          python scripts/github_publish_preflight.py --deep --json --strict
 
       - name: Production launch smoke (prod branch only)
         if: github.ref_name == 'prod'
