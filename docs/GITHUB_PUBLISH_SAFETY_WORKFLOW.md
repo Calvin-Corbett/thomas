@@ -73,7 +73,7 @@ GitHub will run:
 Run this from repo root:
 
 ```powershell
-python scripts/forge/publish/preflight.py --deep --strict
+python scripts/github_publish_preflight.py --deep --strict
 ```
 
 This checks:

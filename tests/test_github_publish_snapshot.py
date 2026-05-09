@@ -4,7 +4,7 @@ import json
 import subprocess
 from pathlib import Path
 
-import scripts.forge.publish.snapshot as mod
+import scripts.github_publish_snapshot as mod
 
 
 def _git(repo: Path, *args: str) -> str:
@@ -67,9 +67,9 @@ def test_run_creates_clean_snapshot_repo_and_passes_preflight(tmp_path: Path) ->
         "[server]\naccess_mode='local'\nallow_unauthenticated_version=false\napi_token=''\n\n[tools]\nallow_shell=false\n",
         encoding="utf-8",
     )
-    publish_dir = repo / "scripts" / "forge" / "publish"
-    publish_dir.mkdir(parents=True)
-    (publish_dir / "preflight.py").write_text(
+    scripts_dir = repo / "scripts"
+    scripts_dir.mkdir()
+    (scripts_dir / "github_publish_preflight.py").write_text(
         "import json, sys\nprint(json.dumps({'ok': True, 'errors': [], 'warnings': [], 'argv': sys.argv[1:]}))\n",
         encoding="utf-8",
     )
