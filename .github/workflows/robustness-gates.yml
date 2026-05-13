@@ -81,7 +81,7 @@ jobs:
 
       - name: Monolith guard gate
         run: |
-          python scripts/check_monolith_guard.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
+          python scripts/forge/gates/monolith_guard.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Single runtime boot gate
         run: |
@@ -89,11 +89,11 @@ jobs:
 
       - name: Monolith split filename gate
         run: |
-          python scripts/check_monolith_filename_guard.py
+          python scripts/forge/gates/monolith_filename_guard.py
 
       - name: Monolith baseline approval gate
         run: |
-          python scripts/check_monolith_baseline_approval_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
+          python scripts/forge/gates/monolith_baseline_approval_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Repo hygiene gate
         run: |
@@ -105,7 +105,7 @@ jobs:
 
       - name: Core overhead guard
         run: |
-          python scripts/check_core_overhead_guard.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
+          python scripts/forge/gates/core_overhead_guard.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Worktree rules gate
         run: |

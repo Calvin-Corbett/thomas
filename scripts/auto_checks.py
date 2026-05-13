@@ -57,8 +57,8 @@ CORE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 )
 
 GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("Monolith split filename gate", (PY, "scripts/check_monolith_filename_guard.py")),
-    ("Monolith guard gate", (PY, "scripts/check_monolith_guard.py")),
+    ("Monolith split filename gate", (PY, "scripts/forge/gates/monolith_filename_guard.py")),
+    ("Monolith guard gate", (PY, "scripts/forge/gates/monolith_guard.py")),
     ("Repo hygiene gate", (PY, "scripts/check_repo_hygiene.py")),
     ("Plan structure gate", (PY, "scripts/check_plan_structure_gate.py")),
     ("Pre-commit skip policy gate", (PY, "scripts/check_precommit_skip_policy.py")),

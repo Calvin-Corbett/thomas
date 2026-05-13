@@ -854,11 +854,11 @@ def _check_config_valid() -> CheckResult:
     tags=("arch",),
 )
 def _check_monolith_guard() -> CheckResult:
-    script_path = ROOT / "scripts" / "check_monolith_guard.py"
+    script_path = ROOT / "scripts" / "forge" / "gates" / "monolith_guard.py"
     baseline_path = ROOT / "docs" / "monolith_guard_baseline.json"
 
     if not script_path.exists():
-        return CheckResult("monolith_guard", "warn", "check_monolith_guard.py not found")
+        return CheckResult("monolith_guard", "warn", "monolith_guard.py not found")
 
     try:
         proc = subprocess.run(

@@ -18,7 +18,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 FRONTEND_PREFIXES = ("apps/", "web-ui/")
 FRONTEND_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs"}
 

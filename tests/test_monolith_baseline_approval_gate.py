@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.check_monolith_baseline_approval_gate import (
+from scripts.forge.gates.monolith_baseline_approval_gate import (
     apply_approval_file_change_requirement,
     evaluate_relaxation_gate,
 )

@@ -28,8 +28,7 @@ import os
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-
+ROOT = Path(__file__).resolve().parents[3]
 # ── Configurable limits ──────────────────────────────────────────────────
 # Maximum net lines a single file may grow in one commit.
 DEFAULT_MAX_GROWTH = 300

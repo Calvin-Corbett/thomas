@@ -2,7 +2,7 @@ import json
 import subprocess
 from pathlib import Path
 
-from scripts.check_monolith_guard import run_guard
+from scripts.forge.gates.monolith_guard import run_guard
 
 
 def _write_lines(path: Path, n: int) -> None:

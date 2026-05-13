@@ -39,8 +39,8 @@ PATH_SCOPED_GATES: dict[str, tuple[str, ...]] = {
 LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("protected_files", (sys.executable, "scripts/check_protected_files_gate.py")),
     ("agent_safety", (sys.executable, "scripts/validate_agent_changes.py")),
-    ("exception_handler", (sys.executable, "scripts/check_exception_handler_gate.py")),
-    ("duplicate_filename", (sys.executable, "scripts/check_duplicate_filename_gate.py")),
+    ("exception_handler", (sys.executable, "scripts/forge/gates/exception_handler_gate.py")),
+    ("duplicate_filename", (sys.executable, "scripts/forge/gates/duplicate_filename_gate.py")),
     (
         "active_folder_guard",
         (
@@ -55,7 +55,7 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         ),
     ),
     ("precommit_skip_policy", (sys.executable, "scripts/check_precommit_skip_policy.py")),
-    ("core_overhead", (sys.executable, "scripts/check_core_overhead_guard.py")),
+    ("core_overhead", (sys.executable, "scripts/forge/gates/core_overhead_guard.py")),
     ("worktree_rules", (sys.executable, "scripts/check_worktree_rules_gate.py")),
     ("worktree_branch", (sys.executable, "scripts/check_worktree_branch_guard.py")),
     ("workboard_claims", (sys.executable, "scripts/check_workboard_claims.py", "--require-identity-metadata")),
@@ -88,10 +88,10 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("workboard_issue_smoke", (sys.executable, "scripts/workboard_issue.py", "--help")),
     ("workboard_problem_record_smoke", (sys.executable, "scripts/workboard_problem_record.py", "--help")),
-    ("monolith_guard", (sys.executable, "scripts/check_monolith_guard.py", "--staged-only")),
+    ("monolith_guard", (sys.executable, "scripts/forge/gates/monolith_guard.py", "--staged-only")),
     (
         "monolith_filename_guard",
-        (sys.executable, "scripts/check_monolith_filename_guard.py", "--staged-only"),
+        (sys.executable, "scripts/forge/gates/monolith_filename_guard.py", "--staged-only"),
     ),
     ("protected_deletion", (sys.executable, "scripts/check_deletions.py", "--staged-only")),
     ("feature_registry", (sys.executable, "scripts/check_feature_registry.py")),
@@ -101,9 +101,9 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (sys.executable, "scripts/check_release_update_gate.py", "--no-include-untracked"),
     ),
     ("site_visual_proof", (sys.executable, "scripts/check_site_visual_proof.py")),
-    ("boot_smoke", (sys.executable, "scripts/check_boot_smoke_gate.py")),
-    ("type_safety", (sys.executable, "scripts/check_type_safety_gate.py")),
-    ("circular_imports", (sys.executable, "scripts/check_circular_imports_gate.py")),
+    ("boot_smoke", (sys.executable, "scripts/forge/gates/boot_smoke_gate.py")),
+    ("type_safety", (sys.executable, "scripts/forge/gates/type_safety_gate.py")),
+    ("circular_imports", (sys.executable, "scripts/forge/gates/circular_imports_gate.py")),
     ("changelog", (sys.executable, "scripts/check_changelog_gate.py")),
 )
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"

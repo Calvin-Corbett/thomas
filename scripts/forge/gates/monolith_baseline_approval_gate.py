@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence, Set
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BASELINE = "docs/monolith_guard_baseline.json"
 DEFAULT_APPROVALS = "docs/ops/monolith_baseline_approvals.json"
 

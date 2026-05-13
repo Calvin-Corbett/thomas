@@ -20,7 +20,7 @@ REPO_ROOT_FALLBACK = SCRIPT_DIR.parent
 if str(REPO_ROOT_FALLBACK) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT_FALLBACK))
 
-from scripts.check_monolith_guard import (
+from scripts.forge.gates.monolith_guard import (
     DEFAULT_BASELINE,
     DEFAULT_HARD_LIMITS,
     DEFAULT_SCAN_ROOTS,

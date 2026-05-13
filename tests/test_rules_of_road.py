@@ -50,7 +50,7 @@ def test_coding_write_with_verification_and_tests_passes():
             {
                 "name": "shell.exec",
                 "ok": True,
-                "command": "python scripts/check_monolith_guard.py",
+                "command": "python scripts/forge/gates/monolith_guard.py",
                 "path": "",
             },
         ],
@@ -234,7 +234,7 @@ def test_coding_placeholder_backed_write_without_completion_note_fails(tmp_path)
             {
                 "name": "shell.exec",
                 "ok": True,
-                "command": "python scripts/check_monolith_guard.py",
+                "command": "python scripts/forge/gates/monolith_guard.py",
                 "path": "",
             },
         ],
@@ -290,7 +290,7 @@ def test_coding_placeholder_backed_write_with_completion_note_passes(tmp_path) -
             {
                 "name": "shell.exec",
                 "ok": True,
-                "command": "python scripts/check_monolith_guard.py",
+                "command": "python scripts/forge/gates/monolith_guard.py",
                 "path": "",
             },
         ],

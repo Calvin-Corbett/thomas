@@ -310,5 +310,5 @@ def suggested_retry_command(*, gate_name: str, agent: str, message: str) -> str 
     if gate_name == "release_update":
         return "python scripts/check_release_update_gate.py --changed-file <path>"
     if gate_name == "monolith_guard":
-        return "python scripts/check_monolith_guard.py --staged-only"
+        return "python scripts/forge/gates/monolith_guard.py --staged-only"
     return None
