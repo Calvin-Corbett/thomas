@@ -28,7 +28,7 @@ _SHELL_VERIFY_RE = re.compile(
     re.I,
 )
 _MONOLITH_GUARD_RE = re.compile(
-    r"\bcheck_monolith_guard(?:\.py)?\b",
+    r"\bmonolith_guard(?:\.py)?\b",
     re.I,
 )
 _ISSUE_WORD_RE = re.compile(
@@ -296,7 +296,7 @@ def evaluate_rules(
                 "Monolith guard ran after code edits",
                 required=True,
                 passed=monolith_guard_ran,
-                detail="Run `python scripts/check_monolith_guard.py` after code mutations.",
+                detail="Run `python scripts/forge/gates/monolith_guard.py` after code mutations.",
             )
         if placeholder_reports:
             detail = (

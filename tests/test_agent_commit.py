@@ -105,13 +105,13 @@ def test_release_update_gate_command_is_scoped_to_selected_paths() -> None:
 def test_non_release_gate_command_is_unchanged() -> None:
     command = mod._resolved_gate_command(
         "boot_smoke",
-        (sys.executable, "scripts/check_boot_smoke_gate.py"),
+        (sys.executable, "scripts/forge/gates/boot_smoke_gate.py"),
         selected_paths=("thomas/server/app.py",),
     )
 
     assert command == [
         sys.executable,
-        "scripts/check_boot_smoke_gate.py",
+        "scripts/forge/gates/boot_smoke_gate.py",
     ]
 
 

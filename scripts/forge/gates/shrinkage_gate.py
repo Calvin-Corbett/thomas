@@ -20,7 +20,7 @@ import json
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 VERIFICATION_RECORD = ROOT / ".git" / "agent_verification.json"
 
 SHRINKAGE_THRESHOLD = 0.30  # 30%

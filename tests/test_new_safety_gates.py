@@ -14,9 +14,9 @@ import pytest
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-from check_circular_imports_gate import FORBIDDEN_PAIRS, _extract_thomas_imports
-from check_duplicate_filename_gate import FORBIDDEN_PREFIXES, FORBIDDEN_SUFFIXES, _is_scoped_code_file
-from check_exception_handler_gate import (
+from forge.gates.circular_imports_gate import FORBIDDEN_PAIRS, _extract_thomas_imports
+from forge.gates.duplicate_filename_gate import FORBIDDEN_PREFIXES, FORBIDDEN_SUFFIXES, _is_scoped_code_file
+from forge.gates.exception_handler_gate import (
     _find_broad_handlers,
 )
 import check_protected_files_gate as protected_gate
@@ -28,7 +28,7 @@ from check_protected_files_gate import PROTECTED_ENFORCEMENT_SCRIPTS, PROTECTED_
 
 
 class TestExceptionHandlerGate:
-    """Tests for check_exception_handler_gate.py."""
+    """Tests for exception_handler_gate.py."""
 
     def test_catches_bare_except(self):
         """Bare `except:` without logging+reraise should be caught."""
@@ -113,7 +113,7 @@ class TestExceptionHandlerGate:
 
 
 class TestDuplicateFilenameGate:
-    """Tests for check_duplicate_filename_gate.py."""
+    """Tests for duplicate_filename_gate.py."""
 
     @pytest.mark.parametrize(
         "name",
@@ -191,7 +191,7 @@ class TestDuplicateFilenameGate:
 
 
 class TestCircularImportsGate:
-    """Tests for check_circular_imports_gate.py."""
+    """Tests for circular_imports_gate.py."""
 
     def test_detects_standard_import(self):
         """Standard `from thomas.X import Y` should be detected."""
@@ -382,11 +382,11 @@ class TestWorktreeCleanCheck:
 
 
 class TestTypeSafetyGate:
-    """Tests for check_type_safety_gate.py."""
+    """Tests for type_safety_gate.py."""
 
     def test_enabled_modules_exist(self):
         """All configured type-safety files should exist in the repo."""
-        from check_type_safety_gate import _enabled_modules
+        from forge.gates.type_safety_gate import _enabled_modules
 
         repo_root = Path(__file__).resolve().parent.parent
         for module_path in _enabled_modules():
@@ -398,13 +398,13 @@ class TestTypeSafetyGate:
 
     def test_is_enabled_matches_exact_files(self):
         """_is_enabled should match exact file paths."""
-        from check_type_safety_gate import _is_enabled
+        from forge.gates.type_safety_gate import _is_enabled
 
         assert _is_enabled("thomas/core/__init__.py") is True
 
     def test_is_enabled_rejects_non_enabled(self):
         """_is_enabled should reject files not in the enabled list."""
-        from check_type_safety_gate import _is_enabled
+        from forge.gates.type_safety_gate import _is_enabled
 
         assert _is_enabled("thomas/agent/loop.py") is False
         assert _is_enabled("thomas/server/app.py") is False
@@ -418,9 +418,9 @@ class TestWindowsSafeConsoleOutput:
         "script_name",
         [
             "validate_agent_changes.py",
-            "check_duplicate_filename_gate.py",
-            "check_boot_smoke_gate.py",
-            "check_exception_handler_gate.py",
+            "forge/gates/duplicate_filename_gate.py",
+            "forge/gates/boot_smoke_gate.py",
+            "forge/gates/exception_handler_gate.py",
         ],
     )
     def test_no_emoji_banners_in_targeted_hooks(self, script_name):

@@ -16,8 +16,7 @@ from fnmatch import fnmatch
 from pathlib import Path
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
-
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_HARD_LIMITS: dict[str, int] = {
     "py": 1200,
     "js": 1200,

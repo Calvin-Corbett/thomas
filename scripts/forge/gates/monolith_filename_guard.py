@@ -22,8 +22,7 @@ import subprocess
 from collections.abc import Iterable
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-
+ROOT = Path(__file__).resolve().parents[3]
 FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (
     # .partNN.ext — e.g. app.part3.js
     re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),

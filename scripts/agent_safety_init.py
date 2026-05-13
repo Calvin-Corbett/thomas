@@ -33,12 +33,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 HOOK_SCRIPTS = [
     "agent_safety_config.py",
     "check_protected_files_gate.py",
-    "check_exception_handler_gate.py",
-    "check_duplicate_filename_gate.py",
-    "check_circular_imports_gate.py",
+    "forge/gates/exception_handler_gate.py",
+    "forge/gates/duplicate_filename_gate.py",
+    "forge/gates/circular_imports_gate.py",
     "check_changelog_gate.py",
-    "check_boot_smoke_gate.py",
-    "check_type_safety_gate.py",
+    "forge/gates/boot_smoke_gate.py",
+    "forge/gates/type_safety_gate.py",
     "post_commit_audit.py",
     "install_post_commit_hook.py",
     "validate_agent_changes.py",
@@ -202,19 +202,19 @@ def _generate_precommit_entries() -> str:
 
       - id: agent-safety-exception-handlers
         name: Agent Safety - Exception Handlers
-        entry: python scripts/check_exception_handler_gate.py
+        entry: python scripts/forge/gates/exception_handler_gate.py
         language: system
         pass_filenames: false
 
       - id: agent-safety-duplicate-filenames
         name: Agent Safety - Duplicate Filenames
-        entry: python scripts/check_duplicate_filename_gate.py
+        entry: python scripts/forge/gates/duplicate_filename_gate.py
         language: system
         pass_filenames: false
 
       - id: agent-safety-circular-imports
         name: Agent Safety - Circular Imports
-        entry: python scripts/check_circular_imports_gate.py
+        entry: python scripts/forge/gates/circular_imports_gate.py
         language: system
         pass_filenames: false
 
@@ -226,7 +226,7 @@ def _generate_precommit_entries() -> str:
 
       - id: agent-safety-boot-smoke
         name: Agent Safety - Boot Smoke
-        entry: python scripts/check_boot_smoke_gate.py
+        entry: python scripts/forge/gates/boot_smoke_gate.py
         language: system
         pass_filenames: false
     """)
@@ -287,6 +287,7 @@ def run(argv: list[str] | None = None) -> int:
         if dst.exists():
             print(f"  [skip] scripts/{script_name} already exists")
             continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(src, dst)
         copied += 1
     print(f"  [copied] {copied} hook scripts to scripts/")

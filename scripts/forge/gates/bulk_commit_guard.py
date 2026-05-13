@@ -27,8 +27,7 @@ import os
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
-
+ROOT = Path(__file__).resolve().parents[3]
 # Maximum number of files that may be staged in a single commit.
 # 50 is generous — most real feature commits touch 5-15 files.
 # If you genuinely need to commit 50+ files (e.g. a migration), you

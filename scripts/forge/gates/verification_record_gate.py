@@ -25,7 +25,7 @@ import json
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 RECORD_PATH = ROOT / ".git" / "agent_verification.json"
 
 # How many code files trigger the verification requirement

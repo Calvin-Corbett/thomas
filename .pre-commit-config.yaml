@@ -40,7 +40,7 @@ repos:
 
       - id: thomas-core-overhead-guard
         name: Thomas Core Overhead Guard
-        entry: python scripts/check_core_overhead_guard.py
+        entry: python scripts/forge/gates/core_overhead_guard.py
         language: system
         pass_filenames: true
 
@@ -94,25 +94,25 @@ repos:
 
       - id: thomas-bulk-commit-guard
         name: Thomas Bulk Commit Guard
-        entry: python scripts/check_bulk_commit_guard.py --max-files 50
+        entry: python scripts/forge/gates/bulk_commit_guard.py --max-files 50
         language: system
         pass_filenames: false
 
       - id: thomas-commit-growth-guard
         name: Thomas Commit Growth Guard
-        entry: python scripts/check_commit_growth_guard.py --max-growth 300
+        entry: python scripts/forge/gates/commit_growth_guard.py --max-growth 300
         language: system
         pass_filenames: false
 
       - id: thomas-monolith-guard
         name: Thomas Monolith Guard
-        entry: python scripts/check_monolith_guard.py --staged-only
+        entry: python scripts/forge/gates/monolith_guard.py --staged-only
         language: system
         pass_filenames: false
 
       - id: thomas-monolith-filename-pattern-gate
         name: Thomas Monolith filename pattern gate
-        entry: python scripts/check_monolith_filename_guard.py --staged-only
+        entry: python scripts/forge/gates/monolith_filename_guard.py --staged-only
         language: system
         pass_filenames: false
 

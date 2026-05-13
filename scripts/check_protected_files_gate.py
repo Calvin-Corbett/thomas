@@ -67,7 +67,7 @@ except ImportError:
         "scripts/validate_agent_changes.py",
         "scripts/check_protected_files_gate.py",
         "scripts/check_precommit_skip_policy.py",
-        "scripts/check_exception_handler_gate.py",
+        "scripts/forge/gates/exception_handler_gate.py",
         "scripts/agent_safety_config.py",
         "scripts/post_commit_audit.py",
         "scripts/agent_commit.py",

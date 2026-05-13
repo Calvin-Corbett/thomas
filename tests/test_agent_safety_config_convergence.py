@@ -9,9 +9,9 @@ import pytest
 SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
-import check_exception_handler_gate as exception_gate
+from forge.gates import exception_handler_gate as exception_gate
 import check_precommit_skip_policy as skip_gate
-import check_type_safety_gate as type_gate
+from forge.gates import type_safety_gate as type_gate
 import validate_agent_changes as validate_gate
 from agent_safety_config import clear_config_cache
 
