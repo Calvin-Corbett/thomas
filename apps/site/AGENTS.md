@@ -27,7 +27,7 @@ then you must update all of:
 
 The gate is enforced by:
 
-- `python scripts/check_site_visual_proof.py` (repo root)
+- `python scripts/forge/gates/site_visual_proof.py` (repo root)
 - `python scripts/refresh_site_visual_proof.py` (runtime verify + pixel diff + proof refresh + re-check)
 - pre-commit hook: `thomas-site-visual-proof-gate`
 - CI workflow: `.github/workflows/site-release.yml`

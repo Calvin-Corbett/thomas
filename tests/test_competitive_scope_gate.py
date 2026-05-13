@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_competitive_scope_gate as gate
+import scripts.forge.gates.competitive_scope_gate as gate
 
 
 def _valid_scope_text() -> str:

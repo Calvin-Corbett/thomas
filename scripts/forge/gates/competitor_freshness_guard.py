@@ -8,9 +8,14 @@ import json
 from collections.abc import Sequence
 from datetime import datetime, timezone
 from pathlib import Path
+
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_SUITE_CONFIG = ROOT / "demo" / "baselines" / "agent_comparison_suite.current.json"
 DEFAULT_ARTIFACT_PATHS_REL = {
     "latest_json": "docs/openclaw_gap_runs/latest_full_suite_compare.json",

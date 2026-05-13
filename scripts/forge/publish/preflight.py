@@ -258,8 +258,8 @@ def _check_toml_safety(repo_root: Path) -> list[str]:
 def _run_optional_deep_checks(repo_root: Path) -> list[str]:
     failures: list[str] = []
     commands = [
-        [sys.executable, "scripts/check_repo_hygiene.py", "--require-clean-worktree", "--strict", "--json"],
-        [sys.executable, "scripts/check_release_hygiene.py"],
+        [sys.executable, "scripts/forge/gates/repo_hygiene.py", "--require-clean-worktree", "--strict", "--json"],
+        [sys.executable, "scripts/forge/gates/release_hygiene.py"],
         [sys.executable, "scripts/forge/gates/claim_integrity.py", "--json"],
         [sys.executable, "scripts/security_audit.py", "--repo-root", ".", "--json", "--strict"],
     ]

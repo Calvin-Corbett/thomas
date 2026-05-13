@@ -59,17 +59,17 @@ CORE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
 GATE_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("Monolith split filename gate", (PY, "scripts/forge/gates/monolith_filename_guard.py")),
     ("Monolith guard gate", (PY, "scripts/forge/gates/monolith_guard.py")),
-    ("Repo hygiene gate", (PY, "scripts/check_repo_hygiene.py")),
+    ("Repo hygiene gate", (PY, "scripts/forge/gates/repo_hygiene.py")),
     ("Plan structure gate", (PY, "scripts/forge/gates/plan_structure_gate.py")),
     ("Pre-commit skip policy gate", (PY, "scripts/forge/gates/precommit_skip_policy.py")),
-    ("Surface parity gate", (PY, "scripts/check_surface_parity.py")),
+    ("Surface parity gate", (PY, "scripts/forge/gates/surface_parity.py")),
     ("Workboard claims gate", (PY, "scripts/forge/gates/workboard_claims.py")),
     ("Workboard task problems gate", (PY, "scripts/forge/gates/workboard_task_problems.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
     ("Workboard problem recorder smoke", (PY, "scripts/workboard_problem_record.py", "--help")),
     ("Feature master sync gate", (PY, "scripts/sync_feature_master_list.py", "--check")),
-    ("Release hygiene gate", (PY, "scripts/check_release_hygiene.py")),
-    ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
+    ("Release hygiene gate", (PY, "scripts/forge/gates/release_hygiene.py")),
+    ("Release update gate", (PY, "scripts/forge/gates/release_update_gate.py")),
 )
 
 TEST_STEPS: tuple[tuple[str, tuple[str, ...]], ...] = (
@@ -238,7 +238,7 @@ def _resolved_gate_steps(require_clean_worktree: bool) -> tuple[tuple[str, tuple
     steps: list[tuple[str, tuple[str, ...]]] = []
     for label, cmd in GATE_STEPS:
         if label == "Repo hygiene gate" and not require_clean_worktree:
-            steps.append((label, (PY, "scripts/check_repo_hygiene.py", "--no-require-clean-worktree")))
+            steps.append((label, (PY, "scripts/forge/gates/repo_hygiene.py", "--no-require-clean-worktree")))
         else:
             steps.append((label, cmd))
     return tuple(steps)

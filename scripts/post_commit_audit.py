@@ -44,7 +44,7 @@ AGENT_CONTEXT_ENV_KEYS = AGENT_ENV_KEYS + (
     "CODEX_SESSION_ID",
 )
 
-# Keep this aligned with scripts/check_changelog_gate.py so post-commit
+# Keep this aligned with scripts/forge/gates/changelog_gate.py so post-commit
 # audit can detect a bypassed missing changelog and auto-revert agent commits.
 try:
     from agent_safety_config import config as _cfg

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_repo_hygiene as mod
+import scripts.forge.gates.repo_hygiene as mod
 
 
 def test_evaluate_worktree_clean_partitions_status_lines() -> None:

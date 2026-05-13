@@ -40,22 +40,22 @@ AGENT_ENV_KEYS: tuple[str, ...] = (
 )
 
 GATE_COMMANDS: Sequence[tuple[str, Sequence[str]]] = (
-    ("Model onboarding gate", (PY, "scripts/check_model_onboarding_gate.py")),
-    ("Module audit gate", (PY, "scripts/check_module_audit_gate.py")),
+    ("Model onboarding gate", (PY, "scripts/forge/gates/model_onboarding_gate.py")),
+    ("Module audit gate", (PY, "scripts/forge/gates/module_audit_gate.py")),
     ("Plan structure gate", (PY, "scripts/forge/gates/plan_structure_gate.py")),
     ("Pre-commit skip policy gate", (PY, "scripts/forge/gates/precommit_skip_policy.py")),
     ("Workboard claims gate", (PY, "scripts/forge/gates/workboard_claims.py")),
     ("Workboard task problems gate", (PY, "scripts/forge/gates/workboard_task_problems.py")),
-    ("Repo identity gate", (PY, "scripts/check_repo_identity.py")),
+    ("Repo identity gate", (PY, "scripts/forge/gates/repo_identity.py")),
     ("Workboard issue tool smoke", (PY, "scripts/workboard_issue.py", "--help")),
     ("Workboard problem recorder smoke", (PY, "scripts/workboard_problem_record.py", "--help")),
-    ("Release update gate", (PY, "scripts/check_release_update_gate.py")),
-    ("Release hygiene gate", (PY, "scripts/check_release_hygiene.py")),
-    ("Surface parity gate", (PY, "scripts/check_surface_parity.py")),
-    ("Feature catalog gate", (PY, "scripts/check_feature_catalog_gate.py")),
-    ("Competitive scope gate", (PY, "scripts/check_competitive_scope_gate.py")),
-    ("OpenClaw metric parity gate", (PY, "scripts/check_openclaw_metric_parity_gate.py")),
-    ("Chat control protocol gate", (PY, "scripts/check_chat_control_protocol.py")),
+    ("Release update gate", (PY, "scripts/forge/gates/release_update_gate.py")),
+    ("Release hygiene gate", (PY, "scripts/forge/gates/release_hygiene.py")),
+    ("Surface parity gate", (PY, "scripts/forge/gates/surface_parity.py")),
+    ("Feature catalog gate", (PY, "scripts/forge/gates/feature_catalog_gate.py")),
+    ("Competitive scope gate", (PY, "scripts/forge/gates/competitive_scope_gate.py")),
+    ("OpenClaw metric parity gate", (PY, "scripts/forge/gates/openclaw_metric_parity_gate.py")),
+    ("Chat control protocol gate", (PY, "scripts/forge/gates/chat_control_protocol.py")),
 )
 
 CRITICAL_TEST_FILES: Sequence[str] = (

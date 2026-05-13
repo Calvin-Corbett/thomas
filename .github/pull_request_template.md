@@ -13,8 +13,8 @@
 - [ ] `pyproject.toml` version updated (if behavior/user-visible change)
 - [ ] `thomas/__init__.py` version updated (if behavior/user-visible change)
 - [ ] `CHANGELOG.md` updated
-- [ ] `python scripts/check_release_hygiene.py` passes
-- [ ] `python scripts/check_release_update_gate.py` passes
+- [ ] `python scripts/forge/gates/release_hygiene.py` passes
+- [ ] `python scripts/forge/gates/release_update_gate.py` passes
 
 ## Plan/Structure Hygiene
 

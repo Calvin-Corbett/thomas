@@ -25,7 +25,7 @@ def _enable_breakglass(monkeypatch) -> None:
 
 def test_gate_steps_include_surface_parity() -> None:
     assert any(
-        label == "Surface parity gate" and tuple(cmd) == (mod.PY, "scripts/check_surface_parity.py")
+        label == "Surface parity gate" and tuple(cmd) == (mod.PY, "scripts/forge/gates/surface_parity.py")
         for label, cmd in mod.GATE_STEPS
     )
 

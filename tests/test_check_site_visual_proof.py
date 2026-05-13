@@ -5,7 +5,7 @@ import json
 from datetime import datetime, timezone
 from pathlib import Path
 
-import scripts.check_site_visual_proof as mod
+import scripts.forge.gates.site_visual_proof as mod
 
 
 def _sha256(path: Path) -> str:

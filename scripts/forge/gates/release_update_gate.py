@@ -10,13 +10,18 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
     import tomllib
 except Exception:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 ROOT_DIRNAME = ROOT.name
 
 REQUIRED_FILES: set[str] = {
@@ -185,7 +190,7 @@ def _git_show_text(rev: str, rel_path: str) -> str | None:
 
 def _check_release_hygiene_script() -> tuple[bool, str]:
     proc = subprocess.run(
-        [sys.executable, "scripts/check_release_hygiene.py"],
+        [sys.executable, "scripts/forge/gates/release_hygiene.py"],
         cwd=ROOT,
         capture_output=True,
         text=True,

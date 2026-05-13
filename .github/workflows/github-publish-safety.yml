@@ -34,7 +34,7 @@ jobs:
       - name: Release lane policy (PR to prod must be dev -> prod)
         if: github.event_name == 'pull_request'
         run: |
-          python scripts/check_release_lane_policy.py \
+          python scripts/forge/gates/release_lane_policy.py \
             --base "${{ github.base_ref }}" \
             --head "${{ github.head_ref }}" \
             --require-base prod \

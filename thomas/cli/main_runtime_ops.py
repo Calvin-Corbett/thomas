@@ -87,7 +87,7 @@ def git_status_porcelain_lines(repo_root: Path) -> list[str]:
 def status_cmd(
     ctx: click.Context, as_json: bool, strict: bool, strict_worktree: bool, repo_presence: bool = False
 ) -> None:
-    from scripts.check_repo_hygiene import evaluate_worktree_clean
+    from scripts.forge.gates.repo_hygiene import evaluate_worktree_clean
 
     from thomas import __version__
 
@@ -195,7 +195,7 @@ def status_cmd(
 
 
 def repo_clean_cmd(apply: bool, include_ignored: bool, as_json: bool, strict: bool) -> None:
-    from scripts.check_repo_hygiene import evaluate_worktree_clean
+    from scripts.forge.gates.repo_hygiene import evaluate_worktree_clean
 
     repo_root = repo_root_from_cli_file()
     try:

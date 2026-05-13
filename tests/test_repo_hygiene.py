@@ -3,7 +3,7 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
-from scripts.check_repo_hygiene import (
+from scripts.forge.gates.repo_hygiene import (
     evaluate_generated_artifacts,
     evaluate_hygiene,
     evaluate_worktree_change_budget,
@@ -65,7 +65,7 @@ def test_repo_hygiene_worktree_clean_passes() -> None:
 
 def test_repo_hygiene_worktree_dirty_classifies_paths() -> None:
     status_lines = [
-        "M  scripts/check_repo_hygiene.py",
+        "M  scripts/forge/gates/repo_hygiene.py",
         " M thomas/core/config.py",
         "MM thomas/cli/main.py",
         "?? scratch/local.txt",
@@ -75,7 +75,7 @@ def test_repo_hygiene_worktree_dirty_classifies_paths() -> None:
     assert result["summary"]["staged_count"] == 2
     assert result["summary"]["unstaged_count"] == 2
     assert result["summary"]["untracked_count"] == 1
-    assert "scripts/check_repo_hygiene.py" in result["staged_paths"]
+    assert "scripts/forge/gates/repo_hygiene.py" in result["staged_paths"]
     assert "thomas/core/config.py" in result["unstaged_paths"]
     assert "thomas/cli/main.py" in result["staged_paths"]
     assert "thomas/cli/main.py" in result["unstaged_paths"]

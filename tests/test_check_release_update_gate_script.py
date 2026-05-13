@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import scripts.check_release_update_gate as mod
+import scripts.forge.gates.release_update_gate as mod
 
 
 def test_product_surface_excludes_architecture_manifest() -> None:

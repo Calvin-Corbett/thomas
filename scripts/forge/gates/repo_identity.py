@@ -10,9 +10,14 @@ import re
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_POLICY_PATH = "docs/ops/repo_identity_policy.json"
 ENV_CANONICAL_ROOT = "THOMAS_CANONICAL_REPO_ROOT"
 REPO_ROOT_TOKENS = {"<repo_root>", "${repo_root}", "%repo_root%", "{repo_root}", "$repo_root"}

@@ -306,9 +306,9 @@ def suggested_retry_command(*, gate_name: str, agent: str, message: str) -> str 
     }:
         return f'python scripts/agent_bootstrap_claim.py --agent "{agent}" --task "{safe_message}" --no-auto-dispatch'
     if gate_name == "site_visual_proof":
-        return "python scripts/refresh_site_visual_proof.py; python scripts/check_site_visual_proof.py"
+        return "python scripts/refresh_site_visual_proof.py; python scripts/forge/gates/site_visual_proof.py"
     if gate_name == "release_update":
-        return "python scripts/check_release_update_gate.py --changed-file <path>"
+        return "python scripts/forge/gates/release_update_gate.py --changed-file <path>"
     if gate_name == "monolith_guard":
         return "python scripts/forge/gates/monolith_guard.py --staged-only"
     return None

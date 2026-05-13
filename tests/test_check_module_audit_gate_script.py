@@ -4,7 +4,7 @@ import hashlib
 from datetime import datetime, timezone
 from pathlib import Path
 
-import scripts.check_module_audit_gate as mod
+import scripts.forge.gates.module_audit_gate as mod
 
 
 def _now_iso() -> str:

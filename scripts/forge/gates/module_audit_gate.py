@@ -9,6 +9,11 @@ from collections.abc import Iterable, Sequence
 from datetime import datetime, timezone
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 _ROOT = Path(__file__).resolve().parent.parent
 if str(_ROOT) not in sys.path:
     sys.path.insert(0, str(_ROOT))
@@ -21,7 +26,7 @@ from thomas.marketplace.observability.module_audit import (
     touched_modules,
 )
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 ROOT_DIRNAME = ROOT.name
 REQUIRED_CHANGED = {"CHANGELOG.md", "docs/ops/module_audit_log.json"}
 READY_STATUSES = {"pass", "warn", "fail"}

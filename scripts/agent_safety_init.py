@@ -36,7 +36,7 @@ HOOK_SCRIPTS = [
     "forge/gates/exception_handler_gate.py",
     "forge/gates/duplicate_filename_gate.py",
     "forge/gates/circular_imports_gate.py",
-    "check_changelog_gate.py",
+    "forge/gates/changelog_gate.py",
     "forge/gates/boot_smoke_gate.py",
     "forge/gates/type_safety_gate.py",
     "post_commit_audit.py",
@@ -220,7 +220,7 @@ def _generate_precommit_entries() -> str:
 
       - id: agent-safety-changelog
         name: Agent Safety - Changelog
-        entry: python scripts/check_changelog_gate.py
+        entry: python scripts/forge/gates/changelog_gate.py
         language: system
         pass_filenames: false
 

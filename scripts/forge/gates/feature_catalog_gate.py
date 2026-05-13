@@ -9,7 +9,12 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+ROOT = Path(__file__).resolve().parents[3]
 CATALOG = ROOT / "docs" / "FEATURE_CATALOG.md"
 
 REQUIRED_HEADERS: list[str] = [

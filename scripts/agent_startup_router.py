@@ -434,7 +434,7 @@ def classify_task(
         ],
         "ui-proof": [
             "Run python scripts/refresh_site_visual_proof.py",
-            "Run python scripts/check_site_visual_proof.py",
+            "Run python scripts/forge/gates/site_visual_proof.py",
         ],
     }[lane]
     escalation = {
