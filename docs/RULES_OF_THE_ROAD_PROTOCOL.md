@@ -25,16 +25,16 @@ Job type can be requested explicitly (`job_type`) or inferred from intent route 
 - If code/file mutation is detected, at least one verification action is required
   (readback, diff, lint/check, test, etc).
 - Optional strict mode can require explicit test execution for code edits.
-- Monolith guard must run after code edits (`python scripts/check_monolith_guard.py`)
+- Monolith guard must run after code edits (`python scripts/forge/gates/monolith_guard.py`)
   so oversized files are blocked consistently across sessions.
   - In CI, monolith guard should run with git range context
-    (`python scripts/check_monolith_guard.py --base <base> --head <head>`)
+    (`python scripts/forge/gates/monolith_guard.py --base <base> --head <head>`)
     so `max_growth_lines` caps for baselined hotspots are enforced.
   - Baseline relaxations (new baselined files, `max_lines` increases, growth-cap relaxations)
     require explicit approval entries and must pass
-    `python scripts/check_monolith_baseline_approval_gate.py --base <base> --head <head>`.
+    `python scripts/forge/gates/monolith_baseline_approval_gate.py --base <base> --head <head>`.
 - Repo hygiene guard should run after code edits
-  (`python scripts/check_repo_hygiene.py`) so root/file-layout drift is caught early.
+  (`python scripts/forge/gates/repo_hygiene.py`) so root/file-layout drift is caught early.
 - Feature master list must remain generated from manifest
   (`python scripts/sync_feature_master_list.py --check`).
 

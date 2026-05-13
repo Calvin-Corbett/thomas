@@ -26,55 +26,55 @@ Report results or make changes
 | `workboard_worker.py` | Execute commands assigned on workboard |
 | `workboard_message.py` | Send messages between workboard agents |
 | `workboard_swarm.py` | Launch multi-agent swarm from workboard |
-| `check_workboard_claims.py` | Verify agent claims on workboard |
-| `check_workboard_agent_claim.py` | Validate a specific agent's claim |
-| `check_workboard_changed_files.py` | What files did workboard change |
-| `check_workboard_task_problems.py` | Identify task failures on workboard |
-| `check_workboard_claim_freshness.py` | Are workboard claims still valid |
+| `forge/gates/workboard_claims.py` | Verify agent claims on workboard |
+| `forge/gates/workboard_agent_claim.py` | Validate a specific agent's claim |
+| `forge/gates/workboard_changed_files.py` | What files did workboard change |
+| `forge/gates/workboard_task_problems.py` | Identify task failures on workboard |
+| `forge/gates/workboard_claim_freshness.py` | Are workboard claims still valid |
 
 ### Quality and Compliance Checks
 
 | Script | Purpose |
 |---|---|
 | `auto_checks.py` | Run all quality checks |
-| `check_monolith_guard.py` | Verify monolith files are valid (Python split parts) |
-| `check_monolith_filename_guard.py` | Monolith naming rules |
-| `check_monolith_baseline_approval_gate.py` | Baseline size checks |
-| `check_precommit_skip_policy.py` | Pre-commit hook enforcement |
-| `check_deletions.py` | Verify deleted files are safe to delete |
-| `check_release_hygiene.py` | Release process validation |
-| `check_release_update_gate.py` | Version and changelog checks |
-| `check_repo_hygiene.py` | General repository health |
-| `check_placeholder_completion_policy.py` | Find incomplete placeholders |
+| `forge/gates/monolith_guard.py` | Verify monolith files are valid (Python split parts) |
+| `forge/gates/monolith_filename_guard.py` | Monolith naming rules |
+| `forge/gates/monolith_baseline_approval_gate.py` | Baseline size checks |
+| `forge/gates/precommit_skip_policy.py` | Pre-commit hook enforcement |
+| `forge/gates/deletions.py` | Verify deleted files are safe to delete |
+| `forge/gates/release_hygiene.py` | Release process validation |
+| `forge/gates/release_update_gate.py` | Version and changelog checks |
+| `forge/gates/repo_hygiene.py` | General repository health |
+| `forge/gates/placeholder_completion_policy.py` | Find incomplete placeholders |
 
 ### Features and Catalog
 
 | Script | Purpose |
 |---|---|
-| `check_feature_registry.py` | Feature tracking |
-| `check_feature_catalog_gate.py` | Catalog validation |
-| `check_competitive_scope_gate.py` | Competitive feature analysis |
-| `check_model_onboarding_gate.py` | LLM model onboarding |
-| `check_module_audit_gate.py` | Module audit trail |
+| `forge/gates/feature_registry.py` | Feature tracking |
+| `forge/gates/feature_catalog_gate.py` | Catalog validation |
+| `forge/gates/competitive_scope_gate.py` | Competitive feature analysis |
+| `forge/gates/model_onboarding_gate.py` | LLM model onboarding |
+| `forge/gates/module_audit_gate.py` | Module audit trail |
 
 ### Release and Identity
 
 | Script | Purpose |
 |---|---|
-| `check_repo_identity.py` | Repository identity validation |
+| `forge/gates/repo_identity.py` | Repository identity validation |
 | `apply_release_lanes.ps1` | PowerShell: Apply release lanes |
 | `apply_branch_protection.ps1` | PowerShell: Branch protection setup |
-| `check_release_lane_policy.py` | Release lane enforcement |
+| `forge/gates/release_lane_policy.py` | Release lane enforcement |
 | `agent_bootstrap_claim.py` | Agent initialization claim |
-| `check_claim_integrity.py` | Validate agent claims |
+| `forge/gates/claim_integrity.py` | Validate agent claims |
 
 ### Visualization and Verification
 
 | Script | Purpose |
 |---|---|
-| `check_site_visual_proof.py` | Visual regression testing |
-| `check_surface_parity.py` | UI surface consistency |
-| `check_core_overhead_guard.py` | Core system overhead monitoring |
+| `forge/gates/site_visual_proof.py` | Visual regression testing |
+| `forge/gates/surface_parity.py` | UI surface consistency |
+| `forge/gates/core_overhead_guard.py` | Core system overhead monitoring |
 
 ### Utilities
 
@@ -82,9 +82,9 @@ Report results or make changes
 |---|---|
 | `audit_secrets.py` | Find exposed secrets |
 | `audit_tool_sizes.py` | Tool size analysis |
-| `check_chat_control_protocol.py` | Chat control verification |
-| `check_competitor_freshness_guard.py` | Competitive intelligence freshness |
-| `check_repl_scope.py` | REPL scope checking |
+| `forge/gates/chat_control_protocol.py` | Chat control verification |
+| `forge/gates/competitor_freshness_guard.py` | Competitive intelligence freshness |
+| `forge/gates/repl_scope.py` | REPL scope checking |
 | `agent_identity.py` | Agent identity utilities |
 | `append_handoff.py` | Append handoff messages |
 | `active_folders.py` | Track active development folders |
@@ -281,7 +281,7 @@ def run_check(name, validator):
 ```bash
 python scripts/workboard_task_manager.py
 python scripts/auto_checks.py --verbose
-python scripts/check_monolith_guard.py --fix
+python scripts/forge/gates/monolith_guard.py --fix
 ```
 
 ### With options:
@@ -294,7 +294,7 @@ python scripts/workboard_task_manager.py --dry-run
 python scripts/auto_checks.py -v
 
 # Fix issues automatically
-python scripts/check_monolith_guard.py --fix
+python scripts/forge/gates/monolith_guard.py --fix
 
 # Specific checks only
 python scripts/auto_checks.py --checks monolith,release
@@ -318,7 +318,7 @@ python scripts/auto_checks.py
 
 ### To verify monolith integrity:
 ```bash
-python scripts/check_monolith_guard.py
+python scripts/forge/gates/monolith_guard.py
 ```
 
 ### To interact with workboard:
@@ -339,7 +339,7 @@ python scripts/auto_checks.py --verbose
 
 ### To validate a release:
 ```bash
-python scripts/check_release_hygiene.py
+python scripts/forge/gates/release_hygiene.py
 ```
 
 ## Important Files Referenced

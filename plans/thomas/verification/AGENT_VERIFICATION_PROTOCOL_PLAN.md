@@ -34,13 +34,13 @@ The agent creates the record by running a structured verification sequence:
 - Agent must create `tests/test_<module>_<feature>.py` alongside any new feature
 - Agent must RUN the tests and capture the output
 - Verification record must include: test file path, pass/fail count, test output hash
-- Pre-commit hook: `check_verification_record_gate.py` — blocks commit if record is missing or shows failures
+- Pre-commit hook: `forge/gates/verification_record_gate.py` — blocks commit if record is missing or shows failures
 
 **Why this works:** The agent can't just SAY it tested — the record includes the actual pytest output. If the tests fail, the record shows it. If there are no tests, there's no record.
 
 ### Gap 2: Silent Code Deletion (Agent guts files)
 **Current state:** Agent can delete 400 lines from a 500-line file without detection.
-**Fix:** `check_shrinkage_gate.py` — flag files that shrink by more than 30% in one commit.
+**Fix:** `forge/gates/shrinkage_gate.py` — flag files that shrink by more than 30% in one commit.
 
 **Mechanism:**
 - Pre-commit hook compares staged file line count vs HEAD
@@ -51,7 +51,7 @@ The agent creates the record by running a structured verification sequence:
 
 ### Gap 3: No Test Requirement
 **Current state:** Agent can add features with zero tests.
-**Fix:** `check_test_coverage_gate.py` — require test file changes when source files change.
+**Fix:** `forge/gates/test_coverage_gate.py` — require test file changes when source files change.
 
 **Mechanism:**
 - If 3+ files under `thomas/` are staged, at least one file under `tests/` must also be staged
@@ -65,7 +65,7 @@ The agent creates the record by running a structured verification sequence:
 **Fix:** Add ESLint + TypeScript checks to the pre-commit pipeline for `apps/`.
 
 **Mechanism:**
-- Add `check_frontend_lint_gate.py` that runs ESLint on staged `.ts`/`.tsx` files
+- Add `forge/gates/frontend_lint_gate.py` that runs ESLint on staged `.ts`/`.tsx` files
 - Add TypeScript type checking via `tsc --noEmit` on staged frontend files
 - Only triggers when `apps/` files are staged
 
@@ -73,7 +73,7 @@ The agent creates the record by running a structured verification sequence:
 
 ### Gap 5: Agent Can Add Dependencies Freely
 **Current state:** No check on dependency additions.
-**Fix:** `check_dependency_gate.py` — flag new imports and dependency changes.
+**Fix:** `forge/gates/dependency_gate.py` — flag new imports and dependency changes.
 
 **Mechanism:**
 - If `pyproject.toml`, `requirements-lock.txt`, or `package.json` are staged, the verification record must include a `dependencies_reviewed` field
@@ -95,7 +95,7 @@ The agent creates the record by running a structured verification sequence:
 
 ### Gap 7: Enormous Commits
 **Current state:** No limit on commit size.
-**Fix:** `check_commit_scope_gate.py` — warn/block when too many files are staged.
+**Fix:** `forge/gates/commit_scope_gate.py` — warn/block when too many files are staged.
 
 **Mechanism:**
 - If >20 files are staged in one commit, require the verification record to include a `scope_justification` field
@@ -178,7 +178,7 @@ The agent creates the record by running a structured verification sequence:
 ## Implementation Order
 
 1. **Verification record format + gate** (closes gaps 1, 2, 3, 7, 10)
-   - Create `check_verification_record_gate.py`
+   - Create `forge/gates/verification_record_gate.py`
    - Create `scripts/create_verification_record.py` (helper for agents)
    - Add to pre-commit and skip policy
 
@@ -190,13 +190,13 @@ The agent creates the record by running a structured verification sequence:
    - Add config files to `agent_safety.toml` protected list
 
 4. **Test coverage gate** (strengthens gap 3)
-   - Create `check_test_coverage_gate.py`
+   - Create `forge/gates/test_coverage_gate.py`
 
 5. **Frontend lint gate** (closes gap 4)
-   - Create `check_frontend_lint_gate.py`
+   - Create `forge/gates/frontend_lint_gate.py`
 
 6. **Dependency gate** (closes gap 5)
-   - Create `check_dependency_gate.py`
+   - Create `forge/gates/dependency_gate.py`
 
 7. **Self-review protocol** (closes gap 6)
    - Add to verification record format

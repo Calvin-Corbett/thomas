@@ -86,5 +86,5 @@ def test_release_update_can_explicitly_run_release_hygiene(monkeypatch, capsys) 
     out = capsys.readouterr().out
 
     assert rc == 1
-    assert "check_release_hygiene.py failed" in out
+    assert "release_hygiene.py failed" in out
     assert "release hygiene: FAIL" in out

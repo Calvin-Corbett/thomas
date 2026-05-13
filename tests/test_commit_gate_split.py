@@ -16,7 +16,7 @@ def _load_module(name: str, path: Path):
 
 ROOT = Path(__file__).resolve().parent.parent
 agent_commit = _load_module('agent_commit', ROOT / 'scripts' / 'agent_commit.py')
-merge_readiness = _load_module('check_merge_readiness', ROOT / 'scripts' / 'check_merge_readiness.py')
+merge_readiness = _load_module('check_merge_readiness', ROOT / 'scripts' / 'forge' / 'gates' / 'merge_readiness.py')
 
 
 def test_precommit_config_moves_global_gates_to_merge_readiness() -> None:

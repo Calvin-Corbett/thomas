@@ -77,8 +77,8 @@ When a behavioral or user-visible change is shipped:
   - `pyproject.toml`
   - `thomas/__init__.py`
 - add changelog entry in `CHANGELOG.md`.
-- run `python scripts/check_release_hygiene.py` before closing work.
-- run `python scripts/check_release_update_gate.py` to enforce diff-aware update policy.
+- run `python scripts/forge/gates/release_hygiene.py` before closing work.
+- run `python scripts/forge/gates/release_update_gate.py` to enforce diff-aware update policy.
 
 ## 5.2 Plan update discipline
 When a plan-driven milestone changes:
@@ -97,7 +97,7 @@ Before closing work, agents should confirm:
 3. Are version/changelog rules satisfied for shipped behavior changes?
 4. Are tests present for behavior changes?
 5. Are docs/spec updates in the right folder (`docs/` vs `plans/`)?
-6. Did `python scripts/check_plan_structure_gate.py` pass?
+6. Did `python scripts/forge/gates/plan_structure_gate.py` pass?
 
 ## 7) Current Canonical Plan Paths (Thomas)
 
@@ -118,15 +118,15 @@ These may exist as pointers and are intentional:
 
 ## 9) Automation Gates
 
-- `python scripts/check_plan_structure_gate.py`
+- `python scripts/forge/gates/plan_structure_gate.py`
   - fails if active plan files drift outside `plans/`
   - fails if pointer redirects are missing/broken
   - fails if workboard/plan hub references are stale
 
-- `python scripts/check_release_update_gate.py`
+- `python scripts/forge/gates/release_update_gate.py`
   - diff-aware enforcement for version/changelog updates on product-surface changes
 
-- `python scripts/check_release_hygiene.py`
+- `python scripts/forge/gates/release_hygiene.py`
   - validates version consistency (`pyproject.toml` vs `thomas/__init__.py`)
   - validates changelog section presence
 

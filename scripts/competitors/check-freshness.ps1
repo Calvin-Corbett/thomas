@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 
 $repoRoot = Get-ThomasRepoRoot
 $python = Get-ThomasPython -RepoRoot $repoRoot
-$scriptPath = Join-Path $repoRoot "scripts\check_competitor_freshness_guard.py"
+$scriptPath = Join-Path $repoRoot "scripts\forge\gates\competitor_freshness_guard.py"
 
 $args = @(
     $scriptPath,

@@ -40,7 +40,7 @@ Gateway endpoints can trigger control-plane actions (including restarts). Assume
 
 ## Verification Checklist
 
-1. `python scripts/check_release_hygiene.py`
+1. `python scripts/forge/gates/release_hygiene.py`
 2. `python scripts/doc.py`
 3. targeted gateway tests:
 - `python -m pytest -q tests/prompt_pack/test_p127_gateway_restart_command.py`

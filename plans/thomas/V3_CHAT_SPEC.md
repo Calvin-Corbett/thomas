@@ -202,7 +202,7 @@ No hard 500-line limit. Real code varies. Guidelines:
 - **Hard limit: 2,000 lines** — If a file hits this, it MUST be split. No single file should be this big in V3.
 - **Monolith threshold: 5,000+ lines** — This is what V2's 41K monolith is. Never again.
 
-The monolith guard script (`scripts/check_monolith_guard.py`) already enforces limits. V3 files just need to stay reasonable.
+The monolith guard script (`scripts/forge/gates/monolith_guard.py`) already enforces limits. V3 files just need to stay reasonable.
 
 ## Implementation Phases
 

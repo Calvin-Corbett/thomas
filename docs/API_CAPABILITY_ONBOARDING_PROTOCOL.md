@@ -45,8 +45,8 @@ Goal: ship capabilities safely, with parity across UI/CLI and durable docs in li
 3. Run required checks:
 
 ```bash
-python scripts/check_chat_control_protocol.py
-python scripts/check_surface_parity.py
+python scripts/forge/gates/chat_control_protocol.py
+python scripts/forge/gates/surface_parity.py
 python -m pytest <targeted-tests>
 ```
 

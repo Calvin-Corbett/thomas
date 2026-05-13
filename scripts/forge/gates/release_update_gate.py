@@ -279,7 +279,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     if bool(args.enforce_release_hygiene):
         ok_hygiene, hygiene_output = _check_release_hygiene_script()
         if not ok_hygiene:
-            violations.append("check_release_hygiene.py failed")
+            violations.append("release_hygiene.py failed")
 
     if violations:
         print("Release update gate: FAIL")

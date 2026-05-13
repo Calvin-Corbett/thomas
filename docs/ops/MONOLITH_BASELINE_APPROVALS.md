@@ -12,7 +12,7 @@ Large-file baseline bumps should be explicit and auditable. Without an approval 
 CI enforces:
 
 ```bash
-python scripts/check_monolith_baseline_approval_gate.py --base <base> --head <head>
+python scripts/forge/gates/monolith_baseline_approval_gate.py --base <base> --head <head>
 ```
 
 The gate fails when any of the following are detected in the diff range unless approved:

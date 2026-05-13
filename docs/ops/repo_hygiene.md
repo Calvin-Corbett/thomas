@@ -27,19 +27,19 @@ Canonical baseline:
 Gate command:
 
 ```bash
-python scripts/check_repo_hygiene.py
+python scripts/forge/gates/repo_hygiene.py
 ```
 
 Canonical identity guard:
 
 ```bash
-python scripts/check_repo_identity.py
+python scripts/forge/gates/repo_identity.py
 ```
 
 Layout-only mode (skip clean-worktree enforcement):
 
 ```bash
-python scripts/check_repo_hygiene.py --no-require-clean-worktree
+python scripts/forge/gates/repo_hygiene.py --no-require-clean-worktree
 ```
 
 Local cleanup helper (untracked + ignored junk artifacts):
