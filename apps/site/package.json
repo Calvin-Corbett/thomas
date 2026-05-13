@@ -9,7 +9,7 @@
     "start": "next start",
     "lint": "npm run typecheck",
     "typecheck": "tsc --noEmit",
-    "verify:visual": "python ../../scripts/check_site_visual_proof.py",
+    "verify:visual": "python ../../scripts/forge/gates/site_visual_proof.py",
     "verify:visual:runtime": "node ../../scripts/verify_site_visual_runtime.mjs",
     "verify:visual:refresh": "python ../../scripts/refresh_site_visual_proof.py",
     "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",

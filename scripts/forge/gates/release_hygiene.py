@@ -6,6 +6,11 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
     import tomllib
 except Exception:  # pragma: no cover
@@ -16,9 +21,7 @@ from thomas.marketplace.observability.onboarding_outcomes_gate import evaluate_o
 from thomas.marketplace.observability.run_db import resolve_runs_db_path
 from thomas.marketplace.security.security_audit import run_security_audit
 
-ROOT = Path(__file__).resolve().parents[1]
-
-
+ROOT = Path(__file__).resolve().parents[3]
 def _read(path: Path) -> str:
     return path.read_text(encoding="utf-8")
 

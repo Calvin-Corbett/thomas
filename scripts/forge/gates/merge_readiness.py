@@ -8,13 +8,18 @@ import json
 import subprocess
 import sys
 from pathlib import Path
+
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from typing import Sequence
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 MERGE_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("repo_hygiene", (sys.executable, "scripts/check_repo_hygiene.py")),
+    ("repo_hygiene", (sys.executable, "scripts/forge/gates/repo_hygiene.py")),
     ("plan_structure", (sys.executable, "scripts/forge/gates/plan_structure_gate.py")),
-    ("release_hygiene", (sys.executable, "scripts/check_release_hygiene.py")),
+    ("release_hygiene", (sys.executable, "scripts/forge/gates/release_hygiene.py")),
     (
         "architecture",
         (sys.executable, "-m", "pytest", "-p", "no:cacheprovider", "tests/test_architecture.py", "-x", "--tb=short", "-q"),

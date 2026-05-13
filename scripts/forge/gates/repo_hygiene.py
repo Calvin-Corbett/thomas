@@ -7,6 +7,11 @@ import json
 import subprocess
 from collections.abc import Iterable, Sequence
 from pathlib import Path
+
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any
 
 try:
@@ -19,7 +24,7 @@ except ImportError:  # pragma: no cover
         sys.path.insert(0, str(ROOT))
     from scripts.agent_safety_config import load_config
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_BASELINE = "docs/repo_hygiene_baseline.json"
 
 

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_competitor_freshness_guard as mod
+import scripts.forge.gates.competitor_freshness_guard as mod
 
 
 def _write_json(path: Path, payload: dict) -> None:

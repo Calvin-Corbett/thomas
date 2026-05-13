@@ -23,7 +23,7 @@ def test_precommit_config_moves_global_gates_to_merge_readiness() -> None:
     content = (ROOT / '.pre-commit-config.yaml').read_text(encoding='utf-8')
 
     assert 'id: thomas-merge-readiness' in content
-    assert 'entry: python scripts/check_merge_readiness.py' in content
+    assert 'entry: python scripts/forge/gates/merge_readiness.py' in content
     assert 'stages: [pre-push]' in content
     assert 'id: thomas-repo-hygiene-gate' not in content
     assert 'id: thomas-release-hygiene-gate' not in content

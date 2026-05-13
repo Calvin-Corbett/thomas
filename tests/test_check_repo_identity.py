@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_repo_identity as mod
+import scripts.forge.gates.repo_identity as mod
 
 
 def test_extract_slug_from_remote_handles_https_and_ssh() -> None:

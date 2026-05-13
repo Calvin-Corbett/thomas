@@ -17,7 +17,7 @@ When changing UI in `apps/site/src/app/**` or `apps/site/src/components/**`:
 
 1. Run `python scripts/refresh_site_visual_proof.py` from repo root.
 2. Confirm it refreshed all files above.
-3. If needed, run `python scripts/check_site_visual_proof.py` for a manual gate check.
+3. If needed, run `python scripts/forge/gates/site_visual_proof.py` for a manual gate check.
 
 Pixel-diff policy:
 

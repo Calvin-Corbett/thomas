@@ -73,11 +73,11 @@ jobs:
 
       - name: Model onboarding gate
         run: |
-          python scripts/check_model_onboarding_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
+          python scripts/forge/gates/model_onboarding_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Module audit gate
         run: |
-          python scripts/check_module_audit_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
+          python scripts/forge/gates/module_audit_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Monolith guard gate
         run: |
@@ -97,7 +97,7 @@ jobs:
 
       - name: Repo hygiene gate
         run: |
-          python scripts/check_repo_hygiene.py
+          python scripts/forge/gates/repo_hygiene.py
 
       - name: Plan structure gate
         run: |
@@ -193,11 +193,11 @@ jobs:
 
       - name: Release update gate
         run: |
-          python scripts/check_release_update_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
+          python scripts/forge/gates/release_update_gate.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Release hygiene gate
         run: |
-          python scripts/check_release_hygiene.py
+          python scripts/forge/gates/release_hygiene.py
 
       - name: Feature master sync gate
         run: |
@@ -205,23 +205,23 @@ jobs:
 
       - name: Surface parity gate
         run: |
-          python scripts/check_surface_parity.py
+          python scripts/forge/gates/surface_parity.py
 
       - name: Feature catalog gate
         run: |
-          python scripts/check_feature_catalog_gate.py
+          python scripts/forge/gates/feature_catalog_gate.py
 
       - name: Competitive scope gate
         run: |
-          python scripts/check_competitive_scope_gate.py
+          python scripts/forge/gates/competitive_scope_gate.py
 
       - name: OpenClaw metric parity gate
         run: |
-          python scripts/check_openclaw_metric_parity_gate.py
+          python scripts/forge/gates/openclaw_metric_parity_gate.py
 
       - name: Competitor freshness guard
         run: |
-          python scripts/check_competitor_freshness_guard.py --max-age-days 7
+          python scripts/forge/gates/competitor_freshness_guard.py --max-age-days 7
 
       - name: Competitor weekly delta alerting guard
         run: |
@@ -229,7 +229,7 @@ jobs:
 
       - name: Chat control protocol gate
         run: |
-          python scripts/check_chat_control_protocol.py
+          python scripts/forge/gates/chat_control_protocol.py
 
       - name: Protocol safety tests
         run: |
@@ -296,7 +296,7 @@ jobs:
           python scripts/soak_runner.py --command "echo ok" --iterations 3 --max-failure-rate 0.0 --json
           python scripts/perf_probe.py --command "echo ok" --runs 5 --min-success-rate 1.0 --json
           python scripts/onboarding_outcomes_report.py --days 7 --json
-          python scripts/check_onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning
+          python scripts/forge/gates/onboarding_outcomes_gate.py --days 7 --json --strict --ignore-low-sample-warning
           python scripts/focus_scorecard.py --days 7 --json
           python scripts/workboard_audit_backstop.py --json
           python scripts/module_audit_status.py --max-age-hours 24 --json
@@ -307,7 +307,7 @@ jobs:
         run: |
           python scripts/dependency_policy_check.py --json --strict
           python scripts/threat_model_cadence_check.py --path docs/THREAT_MODEL_WEB_API.md --max-age-days 30 --json --strict
-          python scripts/check_mutating_route_policy_exceptions.py --json --strict
+          python scripts/forge/gates/mutating_route_policy_exceptions.py --json --strict
           python scripts/security_incident_drill.py --repo-root . --json
           python scripts/security_audit.py --repo-root . --json --strict
 

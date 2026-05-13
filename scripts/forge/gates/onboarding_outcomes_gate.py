@@ -6,6 +6,11 @@ import argparse
 import json
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 from thomas.marketplace.observability.onboarding_outcomes import build_onboarding_outcome_report
 from thomas.marketplace.observability.onboarding_outcomes_gate import evaluate_onboarding_outcomes_gate
 from thomas.marketplace.observability.run_db import resolve_runs_db_path

@@ -9,9 +9,14 @@ import subprocess
 from collections.abc import Iterable, Sequence
 from datetime import datetime
 from pathlib import Path
+
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 PROOF_FILE = "apps/site/verification/ui-proof.json"
 REQUIRED_RUNTIME_REPORT_PATH = "apps/site/verification/runtime-report.json"
 EXPECTED_GENERATOR_SCRIPT = "scripts/refresh_site_visual_proof.py"

@@ -410,6 +410,6 @@
   },
   "commands": [
     "node C:\\Users\\corbe\\Thomas\\scripts\\verify_site_visual_runtime.mjs --host 127.0.0.1 --port 3108 --timeout-ms 180000 --output-dir C:\\Users\\corbe\\Thomas\\output\\site-visual-proof --report C:\\Users\\corbe\\Thomas\\output\\site-visual-proof\\runtime-report.json",
-    "python scripts/check_site_visual_proof.py"
+    "python scripts/forge/gates/site_visual_proof.py"
   ]
 }

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_onboarding_outcomes_gate as mod
+import scripts.forge.gates.onboarding_outcomes_gate as mod
 
 
 def _patch_gate(monkeypatch, *, warnings: list[str], errors: list[str], ok: bool = True) -> None:

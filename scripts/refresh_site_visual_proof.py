@@ -319,7 +319,7 @@ def _write_proof(
         "screenshots": screenshots,
         "metrics": metrics,
         "assertions": assertions,
-        "commands": [" ".join(command), "python scripts/check_site_visual_proof.py"],
+        "commands": [" ".join(command), "python scripts/forge/gates/site_visual_proof.py"],
     }
 
     PROOF_FILE.write_text(f"{json.dumps(payload, ensure_ascii=False, indent=2)}\n", encoding="utf-8")
@@ -372,7 +372,7 @@ def run(argv: Sequence[str] | None = None) -> int:
     payload = _write_proof(runtime_report, screenshots, command=verify_command)
 
     if not args.no_post_check:
-        _run([sys.executable, "scripts/check_site_visual_proof.py"], cwd=ROOT)
+        _run([sys.executable, "scripts/forge/gates/site_visual_proof.py"], cwd=ROOT)
 
     print("Site visual proof refresh: PASS")
     print(f"- proof file: {_rel_to_root(PROOF_FILE)}")

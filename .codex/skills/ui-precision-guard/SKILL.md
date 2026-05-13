@@ -24,7 +24,7 @@ Use this skill for any website UI change where tiny alignment/regression mistake
    - Normal: `python scripts/refresh_site_visual_proof.py`
    - Intentional baseline reset: `python scripts/refresh_site_visual_proof.py --init-pixel-baseline`
 4. Validate gate explicitly:
-   - `python scripts/check_site_visual_proof.py`
+   - `python scripts/forge/gates/site_visual_proof.py`
 5. Review generated artifacts before claiming success:
    - `apps/site/verification/screenshots/full-page.png`
    - `apps/site/verification/screenshots/footer-focus.png`

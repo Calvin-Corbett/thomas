@@ -11,7 +11,12 @@ import json
 import re
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+ROOT = Path(__file__).resolve().parents[3]
 SCOPE_DOC = ROOT / "docs" / "PROJECT_SCOPE.md"
 BASELINE_DOC = ROOT / "demo" / "baselines" / "openclaw.current.json"
 

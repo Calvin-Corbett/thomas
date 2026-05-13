@@ -95,16 +95,16 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ),
     ("protected_deletion", (sys.executable, "scripts/forge/gates/deletions.py", "--staged-only")),
     ("feature_registry", (sys.executable, "scripts/forge/gates/feature_registry.py")),
-    ("repo_identity", (sys.executable, "scripts/check_repo_identity.py")),
+    ("repo_identity", (sys.executable, "scripts/forge/gates/repo_identity.py")),
     (
         "release_update",
-        (sys.executable, "scripts/check_release_update_gate.py", "--no-include-untracked"),
+        (sys.executable, "scripts/forge/gates/release_update_gate.py", "--no-include-untracked"),
     ),
-    ("site_visual_proof", (sys.executable, "scripts/check_site_visual_proof.py")),
+    ("site_visual_proof", (sys.executable, "scripts/forge/gates/site_visual_proof.py")),
     ("boot_smoke", (sys.executable, "scripts/forge/gates/boot_smoke_gate.py")),
     ("type_safety", (sys.executable, "scripts/forge/gates/type_safety_gate.py")),
     ("circular_imports", (sys.executable, "scripts/forge/gates/circular_imports_gate.py")),
-    ("changelog", (sys.executable, "scripts/check_changelog_gate.py")),
+    ("changelog", (sys.executable, "scripts/forge/gates/changelog_gate.py")),
 )
 FALLBACK_SCOPE_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK"
 FALLBACK_REASON_ENV = "THOMAS_WORKBOARD_SCOPE_FALLBACK_REASON"

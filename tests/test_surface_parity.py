@@ -5,7 +5,7 @@ import sys
 from pathlib import Path
 
 import pytest
-import scripts.check_surface_parity as mod
+import scripts.forge.gates.surface_parity as mod
 
 
 def test_extract_call_source_stops_at_matching_paren() -> None:

@@ -57,7 +57,7 @@ jobs:
         working-directory: .
         shell: bash
         run: |
-          python3 scripts/check_site_visual_proof.py \
+          python3 scripts/forge/gates/site_visual_proof.py \
             --base "${{ steps.diff.outputs.base }}" \
             --head "${{ steps.diff.outputs.head }}" \
             --json > site-visual-proof-gate.json

@@ -12,7 +12,12 @@ import re
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+ROOT = Path(__file__).resolve().parents[3]
 SERVER_EVENT_SOURCES: Sequence[Path] = (
     ROOT / "thomas" / "server" / "routes" / "chat_stream_events.py",
     ROOT / "thomas" / "server" / "routes" / "chat_request_execution.py",

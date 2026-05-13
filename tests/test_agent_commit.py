@@ -87,13 +87,13 @@ def test_site_visual_proof_gate_only_runs_for_site_paths() -> None:
 def test_release_update_gate_command_is_scoped_to_selected_paths() -> None:
     command = mod._resolved_gate_command(
         "release_update",
-        (sys.executable, "scripts/check_release_update_gate.py", "--no-include-untracked"),
+        (sys.executable, "scripts/forge/gates/release_update_gate.py", "--no-include-untracked"),
         selected_paths=("thomas/server/app.py", "CHANGELOG.md"),
     )
 
     assert command == [
         sys.executable,
-        "scripts/check_release_update_gate.py",
+        "scripts/forge/gates/release_update_gate.py",
         "--no-include-untracked",
         "--changed-file",
         "thomas/server/app.py",

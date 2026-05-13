@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 
-import scripts.check_release_lane_policy as mod
+import scripts.forge.gates.release_lane_policy as mod
 
 
 def test_lane_policy_passes_for_dev_to_prod() -> None:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import scripts.check_release_hygiene as mod
+import scripts.forge.gates.release_hygiene as mod
 
 
 def _gate_payload(*, ok: bool, errors: list[str] | None = None, warnings: list[str] | None = None) -> dict:

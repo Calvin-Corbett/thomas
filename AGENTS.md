@@ -119,7 +119,7 @@ Before writing ANY code, read:
 - Use `python scripts/agent_commit.py --message "<msg>"` instead of raw `git commit`.
 - `agent_commit.py` isolates claimed files in a temporary git index, runs local gates, and leaves unrelated repo dirt untouched.
 - For dirty-worktree fallback: `python scripts/agent_commit.py --include <file> --allow-scope-fallback --fallback-reason "<reason>" --message "<msg>"`
-- For merge readiness: `python scripts/check_merge_readiness.py`
+- For merge readiness: `python scripts/forge/gates/merge_readiness.py`
 - If no commit is created, report the explicit blocker class: `local_gate_failed`, `broken_repo_tool`, `claim_scope_mismatch`, `branch_race`, or `no_claimed_changes`.
 
 ## Before You Delete Code
@@ -152,7 +152,7 @@ If a task mentions website/site/homepage/domain/Spline or the user asks for web 
 When UI files change in `apps/site/src/app/**` or `apps/site/src/components/**`, you must update verification artifacts and run:
 
 - `python scripts/refresh_site_visual_proof.py`
-- `python scripts/check_site_visual_proof.py`
+- `python scripts/forge/gates/site_visual_proof.py`
 
 Enforcement: pre-commit hook `thomas-site-visual-proof-gate`, CI workflow `site-release.yml`.
 

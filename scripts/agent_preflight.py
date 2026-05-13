@@ -19,7 +19,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from scripts.agent_safety_config import load_config
-from scripts.check_repo_hygiene import evaluate_worktree_change_budget
+from scripts.forge.gates.repo_hygiene import evaluate_worktree_change_budget
 
 REPO_MARKERS = (
     "pyproject.toml",

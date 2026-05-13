@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import scripts.check_openclaw_metric_parity_gate as gate
+import scripts.forge.gates.openclaw_metric_parity_gate as gate
 
 
 def _result_fixture(*, top_delta: int = 0, browser_delta: int = 0) -> dict:

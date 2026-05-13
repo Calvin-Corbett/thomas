@@ -130,19 +130,19 @@ repos:
 
       - id: thomas-repo-identity-gate
         name: Thomas Repo Identity Gate
-        entry: python scripts/check_repo_identity.py
+        entry: python scripts/forge/gates/repo_identity.py
         language: system
         pass_filenames: false
 
       - id: thomas-site-visual-proof-gate
         name: Thomas Site Visual Proof Gate
-        entry: python scripts/check_site_visual_proof.py
+        entry: python scripts/forge/gates/site_visual_proof.py
         language: system
         pass_filenames: false
 
       - id: thomas-merge-readiness
         name: Thomas Merge Readiness
-        entry: python scripts/check_merge_readiness.py
+        entry: python scripts/forge/gates/merge_readiness.py
         language: system
         pass_filenames: false
         stages: [pre-push]
