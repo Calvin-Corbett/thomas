@@ -19,10 +19,10 @@ if str(_REPO_ROOT) not in sys.path:
 
 try:
     from scripts import agent_identity
-    from scripts import check_workboard_claims as claims_gate
+    from scripts.forge.gates import workboard_claims as claims_gate
 except (ImportError, ModuleNotFoundError):  # pragma: no cover
     import agent_identity  # type: ignore
-    import check_workboard_claims as claims_gate  # type: ignore
+    from forge.gates import workboard_claims as claims_gate  # type: ignore
 
 
 ROOT = _REPO_ROOT
@@ -37,7 +37,7 @@ PATH_SCOPED_GATES: dict[str, tuple[str, ...]] = {
     ),
 }
 LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
-    ("protected_files", (sys.executable, "scripts/check_protected_files_gate.py")),
+    ("protected_files", (sys.executable, "scripts/forge/gates/protected_files_gate.py")),
     ("agent_safety", (sys.executable, "scripts/validate_agent_changes.py")),
     ("exception_handler", (sys.executable, "scripts/forge/gates/exception_handler_gate.py")),
     ("duplicate_filename", (sys.executable, "scripts/forge/gates/duplicate_filename_gate.py")),
@@ -54,17 +54,17 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "scoped local commit isolates claimed changes from unrelated dirty repo activity",
         ),
     ),
-    ("precommit_skip_policy", (sys.executable, "scripts/check_precommit_skip_policy.py")),
+    ("precommit_skip_policy", (sys.executable, "scripts/forge/gates/precommit_skip_policy.py")),
     ("core_overhead", (sys.executable, "scripts/forge/gates/core_overhead_guard.py")),
-    ("worktree_rules", (sys.executable, "scripts/check_worktree_rules_gate.py")),
-    ("worktree_branch", (sys.executable, "scripts/check_worktree_branch_guard.py")),
-    ("workboard_claims", (sys.executable, "scripts/check_workboard_claims.py", "--require-identity-metadata")),
-    ("workboard_task_problems", (sys.executable, "scripts/check_workboard_task_problems.py")),
+    ("worktree_rules", (sys.executable, "scripts/forge/gates/worktree_rules_gate.py")),
+    ("worktree_branch", (sys.executable, "scripts/forge/gates/worktree_branch_guard.py")),
+    ("workboard_claims", (sys.executable, "scripts/forge/gates/workboard_claims.py", "--require-identity-metadata")),
+    ("workboard_task_problems", (sys.executable, "scripts/forge/gates/workboard_task_problems.py")),
     (
         "workboard_changed_files",
         (
             sys.executable,
-            "scripts/check_workboard_changed_files.py",
+            "scripts/forge/gates/workboard_changed_files.py",
             "--staged",
             "--require-identity-metadata",
             "--ignore",
@@ -75,7 +75,7 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "workboard_agent_claim",
         (
             sys.executable,
-            "scripts/check_workboard_agent_claim.py",
+            "scripts/forge/gates/workboard_agent_claim.py",
             "--enforce-staged-scope",
             "--staged-scope-ignore",
             RELEASE_SCOPE_IGNORE,
@@ -93,8 +93,8 @@ LOCAL_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
         "monolith_filename_guard",
         (sys.executable, "scripts/forge/gates/monolith_filename_guard.py", "--staged-only"),
     ),
-    ("protected_deletion", (sys.executable, "scripts/check_deletions.py", "--staged-only")),
-    ("feature_registry", (sys.executable, "scripts/check_feature_registry.py")),
+    ("protected_deletion", (sys.executable, "scripts/forge/gates/deletions.py", "--staged-only")),
+    ("feature_registry", (sys.executable, "scripts/forge/gates/feature_registry.py")),
     ("repo_identity", (sys.executable, "scripts/check_repo_identity.py")),
     (
         "release_update",

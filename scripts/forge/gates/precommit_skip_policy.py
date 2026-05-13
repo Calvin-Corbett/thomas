@@ -12,6 +12,11 @@ from collections.abc import Sequence
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
     from agent_safety_config import load_config
     from breakglass_auth import authorize_breakglass
@@ -19,7 +24,7 @@ except ImportError:  # pragma: no cover
     from scripts.agent_safety_config import load_config  # type: ignore
     from scripts.breakglass_auth import authorize_breakglass  # type: ignore
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_AUDIT_LOG = ROOT / ".git" / "thomas_skip_audit.jsonl"
 AGENT_ENV_KEYS: tuple[str, ...] = (
     "AGENT_ID",

@@ -13,9 +13,12 @@ import sys
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-
+REPO_ROOT = Path(__file__).resolve().parents[3]
 @dataclass(frozen=True)
 class ScopePolicy:
     disallow_prefixes: tuple[str, ...]
@@ -99,7 +102,7 @@ def run(scope: str, allowlist_path: list[str], verbose: bool = False) -> int:
     for path in violations:
         print(f"  - {path}", file=sys.stderr)
     print("\nIf these are intended web changes, rerun with:", file=sys.stderr)
-    print("  python scripts/check_repl_scope.py --scope repl --allow thomas/server/web", file=sys.stderr)
+    print("  python scripts/forge/gates/repl_scope.py --scope repl --allow thomas/server/web", file=sys.stderr)
     return 1
 
 

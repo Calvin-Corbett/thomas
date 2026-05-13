@@ -10,9 +10,9 @@ from collections.abc import Sequence
 from pathlib import Path
 
 try:
-    from scripts import check_workboard_claims as claims_gate
+    from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
-    import check_workboard_claims as claims_gate  # type: ignore
+    from forge.gates import workboard_claims as claims_gate  # type: ignore
 
 
 ROOT = Path(__file__).resolve().parent.parent

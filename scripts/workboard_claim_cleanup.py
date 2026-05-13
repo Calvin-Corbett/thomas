@@ -10,12 +10,12 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 try:
-    from scripts import check_workboard_claim_freshness as freshness_gate
-    from scripts import check_workboard_claims as claims_gate
+    from scripts.forge.gates import workboard_claim_freshness as freshness_gate
+    from scripts.forge.gates import workboard_claims as claims_gate
     from scripts import workboard_claim, workboard_issue
 except Exception:  # pragma: no cover
-    import check_workboard_claim_freshness as freshness_gate  # type: ignore
-    import check_workboard_claims as claims_gate  # type: ignore
+    from forge.gates import workboard_claim_freshness as freshness_gate  # type: ignore
+    from forge.gates import workboard_claims as claims_gate  # type: ignore
     import workboard_claim  # type: ignore
     import workboard_issue  # type: ignore
 

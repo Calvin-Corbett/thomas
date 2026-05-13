@@ -21,7 +21,7 @@
 - [ ] Active plans are in `plans/` (not scattered in root/docs)
 - [ ] `plans/thomas/WORKBOARD.md` updated if plan status changed
 - [ ] Legacy pointer file added for any moved plan
-- [ ] `python scripts/check_plan_structure_gate.py` passes
+- [ ] `python scripts/forge/gates/plan_structure_gate.py` passes
 
 ## Notes
 

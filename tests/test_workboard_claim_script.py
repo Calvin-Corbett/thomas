@@ -4,7 +4,7 @@ import json
 from contextlib import contextmanager
 from pathlib import Path
 
-import scripts.check_workboard_claims as gate
+import scripts.forge.gates.workboard_claims as gate
 import scripts.workboard_claim as mod
 
 

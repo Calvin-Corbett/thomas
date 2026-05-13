@@ -83,7 +83,7 @@ For agent coordination and planning:
 - `docs/ops/TASK_ECOSYSTEM_PROTOCOL.md` defines the required task-manager, messaging, and session workflow.
 - `plans/thomas/README.md` links current Thomas plans.
 - Active plans should be created in `plans/thomas/` (`tasks/`, `problems/`, and canonical plan files), not randomly in `docs/` or repo root.
-- Enforced checks: `scripts/check_plan_structure_gate.py` and `scripts/check_release_update_gate.py`.
+- Enforced checks: `scripts/forge/gates/plan_structure_gate.py` and `scripts/check_release_update_gate.py`.
 - Local auto-enforcement available via `.pre-commit-config.yaml`.
 
 Required ecosystem commands:

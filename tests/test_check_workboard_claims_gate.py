@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_workboard_claims as mod
+import scripts.forge.gates.workboard_claims as mod
 
 
 def _write_workboard(
@@ -238,7 +238,7 @@ def test_up_for_grabs_p0_requires_explicit_depends_on(tmp_path: Path, capsys) ->
         tmp_path,
         "- none",
         up_for_grabs_block=(
-            "- task_id=p0-lane; scope=scripts/check_workboard_claims.py; "
+            "- task_id=p0-lane; scope=scripts/forge/gates/workboard_claims.py; "
             "summary=[P0][NOW] task without dependency declaration; reported_by=task-manager-agent"
         ),
     )
@@ -253,7 +253,7 @@ def test_up_for_grabs_dependency_must_reference_known_task(tmp_path: Path, capsy
         tmp_path,
         "- none",
         up_for_grabs_block=(
-            "- task_id=lane-a; scope=scripts/check_workboard_claims.py; "
+            "- task_id=lane-a; scope=scripts/forge/gates/workboard_claims.py; "
             "summary=[P1][NEXT] lane a; reported_by=task-manager-agent; depends_on=missing-lane"
         ),
     )
@@ -268,7 +268,7 @@ def test_up_for_grabs_allows_p0_with_depends_on_none(tmp_path: Path, capsys) -> 
         tmp_path,
         "- none",
         up_for_grabs_block=(
-            "- task_id=p0-lane; scope=scripts/check_workboard_claims.py; "
+            "- task_id=p0-lane; scope=scripts/forge/gates/workboard_claims.py; "
             "summary=[P0][NOW] explicit no dependency; reported_by=task-manager-agent; depends_on=none"
         ),
     )

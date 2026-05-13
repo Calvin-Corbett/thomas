@@ -9,11 +9,16 @@ import re
 import subprocess
 from collections.abc import Sequence
 from pathlib import Path
+
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 from typing import Any
 
 from thomas.core.placeholder_policy import placeholder_policy_report
 
-ROOT = Path(__file__).resolve().parents[1]
+ROOT = Path(__file__).resolve().parents[3]
 CHANGELOG_PATH = ROOT / "CHANGELOG.md"
 PATH_REF_RE = re.compile(r"`((?:thomas|apps|scripts|tests|docs|plans|server|cli|extensions)/[^`\s]+)`")
 

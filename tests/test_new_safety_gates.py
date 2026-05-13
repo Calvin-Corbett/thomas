@@ -19,8 +19,8 @@ from forge.gates.duplicate_filename_gate import FORBIDDEN_PREFIXES, FORBIDDEN_SU
 from forge.gates.exception_handler_gate import (
     _find_broad_handlers,
 )
-import check_protected_files_gate as protected_gate
-from check_protected_files_gate import PROTECTED_ENFORCEMENT_SCRIPTS, PROTECTED_FILES
+from forge.gates import protected_files_gate as protected_gate
+from forge.gates.protected_files_gate import PROTECTED_ENFORCEMENT_SCRIPTS, PROTECTED_FILES
 
 # ──────────────────────────────────────────────
 # Exception Handler Gate Tests
@@ -234,7 +234,7 @@ class TestCircularImportsGate:
 
 
 class TestProtectedFilesGate:
-    """Tests for check_protected_files_gate.py."""
+    """Tests for protected_files_gate.py."""
 
     def test_agents_md_is_protected(self):
         """AGENTS.md is a core policy file and must be protected."""
@@ -258,7 +258,7 @@ class TestProtectedFilesGate:
     def test_enforcement_scripts_are_protected(self):
         """Key enforcement scripts should be protected."""
         assert "scripts/validate_agent_changes.py" in PROTECTED_ENFORCEMENT_SCRIPTS
-        assert "scripts/check_precommit_skip_policy.py" in PROTECTED_ENFORCEMENT_SCRIPTS
+        assert "scripts/forge/gates/precommit_skip_policy.py" in PROTECTED_ENFORCEMENT_SCRIPTS
 
     def test_regular_files_are_not_protected(self):
         """Regular code files should NOT be in the protected list."""
@@ -321,7 +321,7 @@ class TestSkipPolicyCoverage:
 
     def test_all_local_hooks_are_skip_protected(self):
         """Every local hook in .pre-commit-config.yaml should be in the protected skip policy."""
-        from check_precommit_skip_policy import _protected_skip_hooks
+        from forge.gates.precommit_skip_policy import _protected_skip_hooks
 
         config_path = Path(__file__).resolve().parent.parent / ".pre-commit-config.yaml"
         if not config_path.exists():

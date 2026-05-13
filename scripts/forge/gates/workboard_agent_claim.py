@@ -12,23 +12,28 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 # Ensure repo root is on sys.path so `from scripts import ...` works
 # regardless of how pre-commit invokes this script.
-_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+_REPO_ROOT = str(Path(__file__).resolve().parents[3])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 
 try:
     from scripts import agent_identity
-    from scripts import check_workboard_claims as claims_gate
+    from scripts.forge.gates import workboard_claims as claims_gate
     from scripts import workboard_claim as workboard_claim_tool
 except ImportError:  # pragma: no cover
     import agent_identity  # type: ignore
-    import check_workboard_claims as claims_gate  # type: ignore
+    from scripts.forge.gates import workboard_claims as claims_gate  # type: ignore
     import workboard_claim as workboard_claim_tool  # type: ignore
 
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_WORKBOARD = ROOT / "plans" / "thomas" / "WORKBOARD.md"
 
 

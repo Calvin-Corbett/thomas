@@ -18,6 +18,11 @@ import shutil
 import subprocess
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 ROOT = Path(__file__).resolve().parents[3]
 FRONTEND_PREFIXES = ("apps/", "web-ui/")
 FRONTEND_EXTENSIONS = {".ts", ".tsx", ".js", ".jsx", ".mjs"}

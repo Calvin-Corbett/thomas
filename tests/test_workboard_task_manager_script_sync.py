@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_workboard_claims as gate
+import scripts.forge.gates.workboard_claims as gate
 import scripts.workboard_task_manager as mod
 import scripts.workboard_task_manager_plans as plan_sync
 

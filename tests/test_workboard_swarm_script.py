@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_workboard_claims as gate
+import scripts.forge.gates.workboard_claims as gate
 import scripts.workboard_message as msg_mod
 import scripts.workboard_swarm as mod
 

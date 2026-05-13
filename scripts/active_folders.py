@@ -37,11 +37,11 @@ except ModuleNotFoundError:
         raise
 
 try:
-    from scripts import check_workboard_claims as workboard_claims_gate
+    from scripts.forge.gates import workboard_claims as workboard_claims_gate
     from scripts import workboard_claim as workboard_claim_tool
 except Exception:  # pragma: no cover
     try:
-        import check_workboard_claims as workboard_claims_gate  # type: ignore
+        from forge.gates import workboard_claims as workboard_claims_gate  # type: ignore
         import workboard_claim as workboard_claim_tool  # type: ignore
     except Exception:
         workboard_claims_gate = None  # type: ignore[assignment]

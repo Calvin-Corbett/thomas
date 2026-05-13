@@ -45,7 +45,7 @@ def test_placeholder_policy_report_flags_missing_fields(tmp_path: Path) -> None:
 def test_placeholder_completion_policy_script_passes_on_repo() -> None:
     repo_root = Path(__file__).resolve().parents[1]
     proc = subprocess.run(
-        [sys.executable, "scripts/check_placeholder_completion_policy.py", "--json"],
+        [sys.executable, "scripts/forge/gates/placeholder_completion_policy.py", "--json"],
         cwd=repo_root,
         capture_output=True,
         text=True,

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_workboard_task_problems as mod
+import scripts.forge.gates.workboard_task_problems as mod
 
 
 def _write_workboard(

@@ -13,7 +13,7 @@ from typing import Sequence
 ROOT = Path(__file__).resolve().parent.parent
 MERGE_GATE_COMMANDS: tuple[tuple[str, tuple[str, ...]], ...] = (
     ("repo_hygiene", (sys.executable, "scripts/check_repo_hygiene.py")),
-    ("plan_structure", (sys.executable, "scripts/check_plan_structure_gate.py")),
+    ("plan_structure", (sys.executable, "scripts/forge/gates/plan_structure_gate.py")),
     ("release_hygiene", (sys.executable, "scripts/check_release_hygiene.py")),
     (
         "architecture",

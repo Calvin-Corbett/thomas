@@ -32,7 +32,7 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 # Hook scripts that get copied to the target repo
 HOOK_SCRIPTS = [
     "agent_safety_config.py",
-    "check_protected_files_gate.py",
+    "forge/gates/protected_files_gate.py",
     "forge/gates/exception_handler_gate.py",
     "forge/gates/duplicate_filename_gate.py",
     "forge/gates/circular_imports_gate.py",
@@ -82,7 +82,7 @@ def _generate_config(*, name: str, source_dir: str, language: str) -> str:
     enforcement_files = ["tests/test_architecture.py"]
     enforcement_scripts = [
         "scripts/validate_agent_changes.py",
-        "scripts/check_protected_files_gate.py",
+        "scripts/forge/gates/protected_files_gate.py",
     ]
 
     [stubs]
@@ -196,7 +196,7 @@ def _generate_precommit_entries() -> str:
       # ── Agent Safety Hooks ────────────────────────────────────────────
       - id: agent-safety-protected-files
         name: Agent Safety - Protected Files
-        entry: python scripts/check_protected_files_gate.py
+        entry: python scripts/forge/gates/protected_files_gate.py
         language: system
         pass_filenames: false
 

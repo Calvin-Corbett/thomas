@@ -27,14 +27,19 @@ import json
 import subprocess
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_PATH = ROOT / ".git" / "thomas_enforcement_hashes.json"
 
 # Self-check: this script's own hash is verified against the manifest too.
 # If an attacker modifies this script to skip checks, the post-commit audit
 # catches the missing breadcrumb, and the manifest mismatch is visible in
 # git diff.
-SELF_PATH = "scripts/check_enforcement_integrity.py"
+SELF_PATH = "scripts/forge/gates/enforcement_integrity.py"
 
 
 def _load_protected_scripts() -> list[str]:
@@ -194,7 +199,7 @@ def verify(argv: list[str] | None = None) -> int:
             print()
             print("IF THIS IS LEGITIMATE:")
             print("  The repo owner (human) should regenerate the manifest:")
-            print("    python scripts/check_enforcement_integrity.py --generate-manifest")
+            print("    python scripts/forge/gates/enforcement_integrity.py --generate-manifest")
             print()
             print("IF THIS IS SUSPICIOUS:")
             print("  Restore the scripts from git:")

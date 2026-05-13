@@ -23,11 +23,16 @@ import json
 import subprocess
 from pathlib import Path, PurePosixPath
 
-ROOT = Path(__file__).resolve().parent.parent
+ROOT = Path(__file__).resolve().parents[3]
 PRECOMMIT_BREADCRUMB = ROOT / ".git" / "thomas_precommit_ran"
 
 # Load protected file lists from config (agent_safety.toml).
 # Falls back to empty lists if config doesn't exist.
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 try:
     from agent_safety_config import config as _cfg
 
@@ -65,8 +70,8 @@ except ImportError:
     )
     PROTECTED_ENFORCEMENT_SCRIPTS = (
         "scripts/validate_agent_changes.py",
-        "scripts/check_protected_files_gate.py",
-        "scripts/check_precommit_skip_policy.py",
+        "scripts/forge/gates/protected_files_gate.py",
+        "scripts/forge/gates/precommit_skip_policy.py",
         "scripts/forge/gates/exception_handler_gate.py",
         "scripts/agent_safety_config.py",
         "scripts/post_commit_audit.py",

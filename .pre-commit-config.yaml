@@ -22,19 +22,19 @@ repos:
 
       - id: thomas-precommit-skip-policy-gate
         name: Thomas Pre-commit Skip Policy Gate
-        entry: python scripts/check_precommit_skip_policy.py
+        entry: python scripts/forge/gates/precommit_skip_policy.py
         language: system
         pass_filenames: false
 
       - id: thomas-protected-files-gate
         name: Thomas Protected Files Gate
-        entry: python scripts/check_protected_files_gate.py
+        entry: python scripts/forge/gates/protected_files_gate.py
         language: system
         pass_filenames: false
 
       - id: thomas-plan-structure-gate
         name: Thomas Plan Structure Gate
-        entry: python scripts/check_plan_structure_gate.py
+        entry: python scripts/forge/gates/plan_structure_gate.py
         language: system
         pass_filenames: false
 
@@ -46,37 +46,37 @@ repos:
 
       - id: thomas-worktree-rules-gate
         name: Thomas Worktree Rules Gate
-        entry: python scripts/check_worktree_rules_gate.py
+        entry: python scripts/forge/gates/worktree_rules_gate.py
         language: system
         pass_filenames: false
 
       - id: thomas-worktree-branch-guard
         name: Thomas Worktree Branch Guard
-        entry: python scripts/check_worktree_branch_guard.py
+        entry: python scripts/forge/gates/worktree_branch_guard.py
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-claims-gate
         name: Thomas Workboard Claims Gate
-        entry: python scripts/check_workboard_claims.py --require-identity-metadata
+        entry: python scripts/forge/gates/workboard_claims.py --require-identity-metadata
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-task-problems-gate
         name: Thomas Workboard Task Problems Gate
-        entry: python scripts/check_workboard_task_problems.py
+        entry: python scripts/forge/gates/workboard_task_problems.py
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-changed-files-gate
         name: Thomas Workboard Changed Files Gate
-        entry: python scripts/check_workboard_changed_files.py --staged --require-identity-metadata
+        entry: python scripts/forge/gates/workboard_changed_files.py --staged --require-identity-metadata
         language: system
         pass_filenames: false
 
       - id: thomas-workboard-agent-claim-gate
         name: Thomas Workboard Agent Claim Gate
-        entry: python scripts/check_workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2
+        entry: python scripts/forge/gates/workboard_agent_claim.py --enforce-staged-scope --enforce-parent-throughput --parent-target-workers 2 --parent-min-ready-suggestions 2
         language: system
         pass_filenames: false
 
@@ -118,13 +118,13 @@ repos:
 
       - id: thomas-protected-deletion-guard
         name: Thomas Protected Deletion Guard
-        entry: python scripts/check_deletions.py --staged-only
+        entry: python scripts/forge/gates/deletions.py --staged-only
         language: system
         pass_filenames: false
 
       - id: thomas-feature-registry-gate
         name: Thomas Feature Registry Gate
-        entry: python scripts/check_feature_registry.py
+        entry: python scripts/forge/gates/feature_registry.py
         language: system
         pass_filenames: false
 

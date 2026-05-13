@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import scripts.check_claim_integrity as mod
+import scripts.forge.gates.claim_integrity as mod
 
 
 def test_extract_path_refs_dedupes_and_filters() -> None:
