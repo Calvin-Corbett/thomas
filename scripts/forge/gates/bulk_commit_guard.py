@@ -27,6 +27,11 @@ import os
 import subprocess
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 ROOT = Path(__file__).resolve().parents[3]
 # Maximum number of files that may be staged in a single commit.
 # 50 is generous — most real feature commits touch 5-15 files.

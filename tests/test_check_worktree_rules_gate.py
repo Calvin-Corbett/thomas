@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import scripts.check_worktree_rules_gate as mod
+import scripts.forge.gates.worktree_rules_gate as mod
 
 
 def test_worktree_rules_gate_passes_with_dirty_worktree_policy(tmp_path: Path, capsys) -> None:

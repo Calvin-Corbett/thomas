@@ -16,10 +16,10 @@ from pathlib import Path
 
 try:
     from scripts import agent_identity, virtual_office_identity
-    from scripts import check_workboard_claims as claims_gate
+    from scripts.forge.gates import workboard_claims as claims_gate
 except Exception:  # pragma: no cover
     import agent_identity  # type: ignore
-    import check_workboard_claims as claims_gate  # type: ignore
+    from forge.gates import workboard_claims as claims_gate  # type: ignore
     import virtual_office_identity  # type: ignore
 
 try:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_workboard_changed_files as mod
+import scripts.forge.gates.workboard_changed_files as mod
 
 
 def _write_workboard(

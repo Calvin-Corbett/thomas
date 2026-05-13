@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import scripts.check_worktree_branch_guard as mod
+import scripts.forge.gates.worktree_branch_guard as mod
 
 
 def test_topic_branch_passes_without_unmerged_topic_ancestor(monkeypatch, capsys, tmp_path: Path) -> None:

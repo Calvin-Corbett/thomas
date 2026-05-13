@@ -9,10 +9,10 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 try:
-    from scripts import check_workboard_claims as claims_gate
+    from scripts.forge.gates import workboard_claims as claims_gate
     from scripts import task_specialists, workboard_issue, workboard_message
 except Exception:  # pragma: no cover
-    import check_workboard_claims as claims_gate  # type: ignore
+    from forge.gates import workboard_claims as claims_gate  # type: ignore
     import task_specialists  # type: ignore
     import workboard_issue  # type: ignore
     import workboard_message  # type: ignore

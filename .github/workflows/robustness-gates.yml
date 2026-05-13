@@ -61,11 +61,11 @@ jobs:
 
       - name: Protected deletion/rename guard
         run: |
-          python scripts/check_deletions.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
+          python scripts/forge/gates/deletions.py --base "${BASE_SHA}" --head "${HEAD_SHA}"
 
       - name: Feature registry contract gate
         run: |
-          python scripts/check_feature_registry.py
+          python scripts/forge/gates/feature_registry.py
 
       - name: Architecture fitness tests
         run: |
@@ -101,7 +101,7 @@ jobs:
 
       - name: Plan structure gate
         run: |
-          python scripts/check_plan_structure_gate.py
+          python scripts/forge/gates/plan_structure_gate.py
 
       - name: Core overhead guard
         run: |
@@ -109,19 +109,19 @@ jobs:
 
       - name: Worktree rules gate
         run: |
-          python scripts/check_worktree_rules_gate.py
+          python scripts/forge/gates/worktree_rules_gate.py
 
       - name: Worktree branch guard
         run: |
-          python scripts/check_worktree_branch_guard.py
+          python scripts/forge/gates/worktree_branch_guard.py
 
       - name: Workboard claims gate
         run: |
-          python scripts/check_workboard_claims.py --require-identity-metadata
+          python scripts/forge/gates/workboard_claims.py --require-identity-metadata
 
       - name: Workboard changed-file ownership gate
         run: |
-          python scripts/check_workboard_changed_files.py --base "${BASE_SHA}" --head "${HEAD_SHA}" --require-identity-metadata
+          python scripts/forge/gates/workboard_changed_files.py --base "${BASE_SHA}" --head "${HEAD_SHA}" --require-identity-metadata
 
       - name: Workboard agent accountability gate
         run: |
@@ -129,7 +129,7 @@ jobs:
           from pathlib import Path
           import subprocess
           import sys
-          from scripts import check_workboard_claims as claims_gate
+          from scripts.forge.gates import workboard_claims as claims_gate
 
           workboard = Path("plans/thomas/WORKBOARD.md")
           violations, claims = claims_gate.evaluate_claims(workboard)
@@ -154,7 +154,7 @@ jobs:
           for agent in agents:
               cmd = [
                   sys.executable,
-                  "scripts/check_workboard_agent_claim.py",
+                  "scripts/forge/gates/workboard_agent_claim.py",
                   "--workboard",
                   str(workboard),
                   "--agent",
@@ -181,7 +181,7 @@ jobs:
 
       - name: Workboard claim freshness gate
         run: |
-          python scripts/check_workboard_claim_freshness.py --max-age-hours 72
+          python scripts/forge/gates/workboard_claim_freshness.py --max-age-hours 72
 
       - name: Workboard issue tooling smoke
         run: |

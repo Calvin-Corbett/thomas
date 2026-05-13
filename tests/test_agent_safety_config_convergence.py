@@ -10,7 +10,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 sys.path.insert(0, str(SCRIPTS_DIR))
 
 from forge.gates import exception_handler_gate as exception_gate
-import check_precommit_skip_policy as skip_gate
+from forge.gates import precommit_skip_policy as skip_gate
 from forge.gates import type_safety_gate as type_gate
 import validate_agent_changes as validate_gate
 from agent_safety_config import clear_config_cache
@@ -80,7 +80,7 @@ def test_skip_policy_reads_limits_and_protected_hooks_from_config(
     monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-9999")
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Scoped breakglass for config propagation test.")
-    monkeypatch.setattr(skip_gate, "_staged_files", lambda: ["scripts/check_precommit_skip_policy.py"])
+    monkeypatch.setattr(skip_gate, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(skip_gate, "_run_git", lambda _args: "mock")
     clear_config_cache()
 

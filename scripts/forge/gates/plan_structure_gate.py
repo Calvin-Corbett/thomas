@@ -9,8 +9,12 @@ import re
 from collections.abc import Sequence
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
+ROOT = Path(__file__).resolve().parents[3]
 REQUIRED_FILES: Sequence[str] = (
     "docs/REPO_STRUCTURE_PROTOCOL.md",
     "plans/README.md",

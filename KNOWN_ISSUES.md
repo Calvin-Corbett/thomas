@@ -202,7 +202,7 @@ This has caused production-breaking issues multiple times. See AGENTS.md.
 
 **Cause:** Source placeholders were checked in without recording why they exist, what behavior still needs to land, who owns completion, or what runtime should do until the implementation is restored.
 
-**Diagnosis:** Run `python scripts/check_placeholder_completion_policy.py`. Any placeholder-backed file missing one of `placeholder-why`, `placeholder-scope_to_finish`, `placeholder-owner`, `placeholder-exit_rule`, or `placeholder-acceptance` is still incomplete.
+**Diagnosis:** Run `python scripts/forge/gates/placeholder_completion_policy.py`. Any placeholder-backed file missing one of `placeholder-why`, `placeholder-scope_to_finish`, `placeholder-owner`, `placeholder-exit_rule`, or `placeholder-acceptance` is still incomplete.
 
 **Fix:** Add the required placeholder note directly in the file and make runtime fail fast or use an explicit fallback until the real source is restored.
 

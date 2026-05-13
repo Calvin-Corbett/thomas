@@ -47,7 +47,7 @@ def test_agent_commit_local_gate_commands_ignore_release_metadata() -> None:
     assert 'scoped local commit isolates claimed changes from unrelated dirty repo activity' in folder_guard
     assert 'plan_structure' not in local_gates
     assert 'auto_checks_quick' not in local_gates
-    assert merge_gates['plan_structure'] == (sys.executable, 'scripts/check_plan_structure_gate.py')
+    assert merge_gates['plan_structure'] == (sys.executable, 'scripts/forge/gates/plan_structure_gate.py')
     assert merge_gates['auto_checks_quick'] == (sys.executable, 'scripts/auto_checks.py', '--quick')
 
 

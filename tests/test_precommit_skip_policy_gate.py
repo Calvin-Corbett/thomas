@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from types import SimpleNamespace
 
-import scripts.check_precommit_skip_policy as mod
+import scripts.forge.gates.precommit_skip_policy as mod
 
 
 def _approve_breakglass(monkeypatch, *, actor: str = "WORKSTATION\\corbe") -> None:
@@ -146,7 +146,7 @@ def test_allows_protected_hook_with_breakglass_and_ticket(tmp_path: Path, capsys
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Breakglass for temporary maintainer-approved unblock.")
     monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-1234")
-    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/check_precommit_skip_policy.py"])
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(mod, "_run_git", lambda _args: "mock")
     _approve_breakglass(monkeypatch)
 
@@ -247,7 +247,7 @@ def test_fails_when_breakglass_cooldown_active(tmp_path: Path, capsys, monkeypat
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Need temporary bypass while investigating baseline.")
     monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2005")
-    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/check_precommit_skip_policy.py"])
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(mod, "_now_utc", lambda: now)
 
     rc = mod.run(["--audit-log", str(audit_log), "--breakglass-cooldown-minutes", "15"])
@@ -280,7 +280,7 @@ def test_fails_when_breakglass_quota_exceeded(tmp_path: Path, capsys, monkeypatc
     monkeypatch.setenv("THOMAS_SKIP_REASON", "Need temporary bypass while investigating baseline.")
     monkeypatch.setenv("THOMAS_SKIP_BREAKGLASS", "1")
     monkeypatch.setenv("THOMAS_SKIP_TICKET", "OPS-2006")
-    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/check_precommit_skip_policy.py"])
+    monkeypatch.setattr(mod, "_staged_files", lambda: ["scripts/forge/gates/precommit_skip_policy.py"])
     monkeypatch.setattr(mod, "_now_utc", lambda: now)
 
     rc = mod.run(

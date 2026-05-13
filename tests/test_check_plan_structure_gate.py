@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_plan_structure_gate as mod
+import scripts.forge.gates.plan_structure_gate as mod
 
 
 def _write(path: Path, text: str = "") -> None:

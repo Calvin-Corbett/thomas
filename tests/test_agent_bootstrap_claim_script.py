@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 import scripts.agent_bootstrap_claim as mod
-import scripts.check_workboard_claims as gate
+import scripts.forge.gates.workboard_claims as gate
 
 
 @pytest.fixture(autouse=True)

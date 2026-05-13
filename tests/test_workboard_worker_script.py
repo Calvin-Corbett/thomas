@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-import scripts.check_workboard_claims as gate
+import scripts.forge.gates.workboard_claims as gate
 import scripts.workboard_worker as mod
 
 
@@ -46,9 +46,9 @@ def _write_workboard(
 def test_worker_executes_assigned_task_and_releases_on_success(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
-        claims_block="- agent=Worker 1; scope=scripts/check_plan_structure_gate.py; task=[WIP] automation lane",
+        claims_block="- agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane",
         active_tasks_block=(
-            "- task_id=task-a; agent=Worker 1; scope=scripts/check_plan_structure_gate.py; "
+            "- task_id=task-a; agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; "
             "summary=[P1][NEXT] run automation lane; status=active"
         ),
     )
@@ -88,7 +88,7 @@ def test_worker_executes_assigned_task_and_releases_on_success(tmp_path: Path, m
     assert rc == 0
     assert payload["ok"] is True
     assert payload["completed_count"] == 1
-    assert "agent=Worker 1; scope=scripts/check_plan_structure_gate.py; task=[WIP] automation lane" not in text
+    assert "agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane" not in text
     assert "task_id=task-a; agent=Worker 1;" not in text
     assert "completed `task-a`" in text
     assert gate.evaluate(workboard) == []
@@ -97,9 +97,9 @@ def test_worker_executes_assigned_task_and_releases_on_success(tmp_path: Path, m
 def test_worker_failure_keeps_claim_by_default(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
-        claims_block="- agent=Worker 1; scope=scripts/check_plan_structure_gate.py; task=[WIP] automation lane",
+        claims_block="- agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane",
         active_tasks_block=(
-            "- task_id=task-a; agent=Worker 1; scope=scripts/check_plan_structure_gate.py; "
+            "- task_id=task-a; agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; "
             "summary=[P1][NEXT] run automation lane; status=active"
         ),
     )
@@ -140,7 +140,7 @@ def test_worker_failure_keeps_claim_by_default(tmp_path: Path, monkeypatch, caps
     assert rc == 1
     assert payload["ok"] is False
     assert payload["failure_count"] >= 1
-    assert "agent=Worker 1; scope=scripts/check_plan_structure_gate.py; task=[WIP] automation lane" in text
+    assert "agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane" in text
     assert "task_id=task-a; agent=Worker 1;" in text
     assert "automation failed for `task-a`" in text
     assert gate.evaluate(workboard) == []
@@ -149,9 +149,9 @@ def test_worker_failure_keeps_claim_by_default(tmp_path: Path, monkeypatch, caps
 def test_worker_release_on_no_command_flag(tmp_path: Path, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
-        claims_block="- agent=Worker 1; scope=scripts/check_plan_structure_gate.py; task=[WIP] automation lane",
+        claims_block="- agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane",
         active_tasks_block=(
-            "- task_id=task-a; agent=Worker 1; scope=scripts/check_plan_structure_gate.py; "
+            "- task_id=task-a; agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; "
             "summary=[P1][NEXT] run automation lane; status=active"
         ),
     )
@@ -182,7 +182,7 @@ def test_worker_release_on_no_command_flag(tmp_path: Path, capsys) -> None:
     assert rc == 0
     assert payload["ok"] is True
     assert payload["no_command_count"] == 1
-    assert "agent=Worker 1; scope=scripts/check_plan_structure_gate.py; task=[WIP] automation lane" not in text
+    assert "agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane" not in text
     assert "task_id=task-a; agent=Worker 1;" not in text
     assert "no automation command configured for `task-a`" in text
     assert gate.evaluate(workboard) == []
@@ -191,13 +191,13 @@ def test_worker_release_on_no_command_flag(tmp_path: Path, capsys) -> None:
 def test_worker_success_triggers_immediate_redispatch(tmp_path: Path, monkeypatch, capsys) -> None:
     workboard = _write_workboard(
         tmp_path,
-        claims_block="- agent=Worker 1; scope=scripts/check_plan_structure_gate.py; task=[WIP] automation lane",
+        claims_block="- agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; task=[WIP] automation lane",
         active_tasks_block=(
-            "- task_id=task-a; agent=Worker 1; scope=scripts/check_plan_structure_gate.py; "
+            "- task_id=task-a; agent=Worker 1; scope=scripts/forge/gates/plan_structure_gate.py; "
             "summary=[P1][NEXT] run automation lane; status=claimed"
         ),
         up_for_grabs_block=(
-            "- task_id=task-b; scope=scripts/check_plan_structure_gate.py; "
+            "- task_id=task-b; scope=scripts/forge/gates/plan_structure_gate.py; "
             "summary=[P1][NEXT] follow-up automation lane; reported_by=task-manager-agent"
         ),
     )
@@ -240,5 +240,5 @@ def test_worker_success_triggers_immediate_redispatch(tmp_path: Path, monkeypatc
     assert payload["dispatch_request_count"] == 1
     assert payload["dispatch_assigned_count"] == 1
     assert "task_id=task-b; agent=Worker 1;" in text
-    assert "task_id=task-b; scope=scripts/check_plan_structure_gate.py;" not in text
+    assert "task_id=task-b; scope=scripts/forge/gates/plan_structure_gate.py;" not in text
     assert gate.evaluate(workboard) == []

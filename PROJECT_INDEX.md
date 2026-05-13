@@ -272,7 +272,7 @@ python -m thomas serve --port 0
 11. **Port bind retries must use a fresh `TCPSite` object each attempt.** Reusing the same site after a bind failure can raise `RuntimeError: Site ... is already registered in runner ...`. In `serve_async()`, create a new site per attempt and call `site.stop()` after failed binds.
 
 12. **Workboard claim completion now enforces cleaner handoff discipline.**
-   - `scripts/check_workboard_agent_claim.py` supports claimed-scope cleanliness checks (`--enforce-clean-claimed-scope`, optional `--enforce-untracked-claimed-scope`) so commit-time gate runs can block partial dirty claim-scope work.
+   - `scripts/forge/gates/workboard_agent_claim.py` supports claimed-scope cleanliness checks (`--enforce-clean-claimed-scope`, optional `--enforce-untracked-claimed-scope`) so commit-time gate runs can block partial dirty claim-scope work.
    - `scripts/workboard_claim.py --release` now blocks release when claimed scopes have dirty files unless `--allow-dirty-release` is provided with `--dirty-release-reason` (audited to `runtime/coordination/workboard_release_override_audit.jsonl`).
    - If release unexpectedly fails, run `git status --porcelain`, then either commit/stash claim-scope files or provide an auditable override reason.
 

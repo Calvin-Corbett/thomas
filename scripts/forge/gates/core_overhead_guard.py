@@ -10,6 +10,11 @@ import subprocess
 from collections.abc import Iterable, Sequence
 from pathlib import Path
 
+import sys
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
 ROOT = Path(__file__).resolve().parents[3]
 MANIFEST_PATH = ROOT / "docs" / "core_overhead_manifest.json"
 UNLOCK_ENV = "THOMAS_CORE_OVERHEAD_UNLOCK"
