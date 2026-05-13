@@ -17,7 +17,7 @@ This lock keeps regular edits easy while requiring intentional OS-native elevati
 - macOS (`sudo`)
 
 2. Edit guard in tooling:
-- `scripts/check_core_overhead_guard.py`
+- `scripts/forge/gates/core_overhead_guard.py`
 - Blocks protected-file edits unless `THOMAS_CORE_OVERHEAD_UNLOCK=1`
 
 ## Windows

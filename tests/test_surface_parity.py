@@ -228,7 +228,7 @@ def test_run_passes_with_minimal_valid_sources(monkeypatch: pytest.MonkeyPatch, 
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
-    monkeypatch.setattr(sys, "argv", ["check_surface_parity.py"])
+    monkeypatch.setattr(sys, "argv", ["surface_parity.py"])
 
     assert mod.run() == 0
 
@@ -262,7 +262,7 @@ def test_run_fails_when_web_missing_required_event(monkeypatch: pytest.MonkeyPat
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
-    monkeypatch.setattr(sys, "argv", ["check_surface_parity.py"])
+    monkeypatch.setattr(sys, "argv", ["surface_parity.py"])
 
     assert mod.run() == 1
 
@@ -297,7 +297,7 @@ def test_run_json_pass_payload(
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
-    monkeypatch.setattr(sys, "argv", ["check_surface_parity.py", "--json"])
+    monkeypatch.setattr(sys, "argv", ["surface_parity.py", "--json"])
 
     rc = mod.run()
     payload = json.loads(capsys.readouterr().out)
@@ -340,7 +340,7 @@ def test_run_json_fail_payload(
     monkeypatch.setattr(mod, "WEB_APP", tmp_path / "missing_app.js")
     monkeypatch.setattr(mod, "WEB_APP_PARTS_DIR", tmp_path / "missing_parts")
     monkeypatch.setattr(mod, "CLI_EVENT_SOURCES", (cli,))
-    monkeypatch.setattr(sys, "argv", ["check_surface_parity.py", "--json"])
+    monkeypatch.setattr(sys, "argv", ["surface_parity.py", "--json"])
 
     rc = mod.run()
     payload = json.loads(capsys.readouterr().out)

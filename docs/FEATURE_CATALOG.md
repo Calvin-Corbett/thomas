@@ -40,7 +40,7 @@ Update rule:
 ## Model Platform
 
 - [model.discovery_handshake] Provider model discovery and handshake health checks. (Paths: `thomas/models/discovery.py`, `thomas/server/app.py`)
-- [model.protocol_validation] Strict model onboarding validation and tool-smoke protocol checks. (Paths: `thomas/models/protocol.py`, `scripts/check_model_onboarding_gate.py`)
+- [model.protocol_validation] Strict model onboarding validation and tool-smoke protocol checks. (Paths: `thomas/models/protocol.py`, `scripts/forge/gates/model_onboarding_gate.py`)
 - [model.capability_registry] Capability map per provider/profile for routing and UI visibility. (Paths: `thomas/models/capabilities.py`, `thomas/server/app.py`)
 - [model.batch_chat_mode] Long-horizon async chat path using provider batch APIs. (Paths: `thomas/models/batching.py`, `thomas/server/app.py`)
 

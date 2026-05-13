@@ -88,8 +88,8 @@ If another coding agent continues this project, they must start from:
 - `docs/COMPANION_BUILDER_RELEASE_GUIDE.md`
 
 Then run:
-- `python scripts/check_plan_structure_gate.py`
-- `python scripts/check_release_hygiene.py`
+- `python scripts/forge/gates/plan_structure_gate.py`
+- `python scripts/forge/gates/release_hygiene.py`
 
 ## 9) Minimum Launch Bar
 

@@ -51,7 +51,7 @@ Any deletion/rename under `thomas/` or `tests/` requires an explicit record in
 Validate locally:
 
 ```bash
-python scripts/check_deletions.py --staged-only
+python scripts/forge/gates/deletions.py --staged-only
 ```
 
 ## Required Local Gates Before PR
@@ -59,8 +59,8 @@ python scripts/check_deletions.py --staged-only
 ```bash
 pytest --collect-only -q
 python scripts/test_stepup_protocol.py
-python scripts/check_monolith_guard.py
-python scripts/check_feature_registry.py
-python scripts/check_release_hygiene.py
-python scripts/check_deletions.py --staged-only
+python scripts/forge/gates/monolith_guard.py
+python scripts/forge/gates/feature_registry.py
+python scripts/forge/gates/release_hygiene.py
+python scripts/forge/gates/deletions.py --staged-only
 ```

@@ -42,7 +42,7 @@ Required per entry:
 - Research notes:
   - `library/entries/research-notes/1771987298-count-files-matching-tests-test_-.py-and-write-runtime-agentic_bench-codex2-live.md`
 - Validation:
-  - Command: `python scripts/check_model_onboarding_gate.py`
+  - Command: `python scripts/forge/gates/model_onboarding_gate.py`
   - Result: pass (after onboarding log update)
 - Notes:
   - Gate requirement satisfied by explicitly recording model-surface updates and research-note linkage.

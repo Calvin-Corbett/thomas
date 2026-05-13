@@ -29,13 +29,13 @@ This file contains rules that ALL AI agents (Claude, Codex, GPT, Gemini, etc.) M
 - This applies to ALL monitored file types (Python, JS, CSS, HTML).
 - If you need to add more than 300 lines, split the work across multiple files or multiple commits with meaningful intermediate states.
 - New files over 300 lines are also blocked — design smaller modules from the start.
-- Enforced by: `scripts/check_commit_growth_guard.py`
+- Enforced by: `scripts/forge/gates/commit_growth_guard.py`
 
 ### Bulk Commit Ban
 - **No commit may stage more than 50 files.**
 - "Snapshot", "checkpoint", or "dump" commits that touch hundreds of files are the #1 vector for smuggling monolith files past guards.
 - If you genuinely need to commit 50+ files (e.g. a real migration), you must get explicit human approval and document the reason.
-- Enforced by: `scripts/check_bulk_commit_guard.py`
+- Enforced by: `scripts/forge/gates/bulk_commit_guard.py`
 
 ### No Split/Part Files — ANY Language
 - **Do not create files matching any of these patterns, in ANY language:**
@@ -45,7 +45,7 @@ This file contains rules that ALL AI agents (Claude, Codex, GPT, Gemini, etc.) M
   - Files inside directories named `*_parts/` or `*-parts/`
 - This ban covers Python, JavaScript, CSS, HTML, TypeScript, and every other language.
 - Chopping a large file into numbered chunks is not decomposition. Real decomposition means splitting by responsibility into modules with descriptive names and proper imports/exports.
-- Enforced by: `scripts/check_monolith_filename_guard.py`
+- Enforced by: `scripts/forge/gates/monolith_filename_guard.py`
 
 ### General Rules
 - If your implementation would exceed soft limits, you MUST split it into multiple files BEFORE writing it.

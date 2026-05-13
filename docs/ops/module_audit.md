@@ -37,7 +37,7 @@ Without a key, SHA-256 signatures are still written (integrity-only, not secret-
 
 ## Gate enforcement
 
-CI enforces `scripts/check_module_audit_gate.py` for major-module changes.
+CI enforces `scripts/forge/gates/module_audit_gate.py` for major-module changes.
 
 When files under `thomas/<major_module>/` change, the gate requires:
 

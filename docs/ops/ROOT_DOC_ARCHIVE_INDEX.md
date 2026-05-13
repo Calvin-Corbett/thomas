@@ -65,4 +65,4 @@ These are the primary operational docs to use first.
 3. For `consolidate` rows, merge useful content into the listed target before archiving source files.
 4. Re-run:
    - `python scripts/repo_orphan_inventory.py --write --json`
-   - `python scripts/check_repo_hygiene.py --no-require-clean-worktree --json`
+   - `python scripts/forge/gates/repo_hygiene.py --no-require-clean-worktree --json`

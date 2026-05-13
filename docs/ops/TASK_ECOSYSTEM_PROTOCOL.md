@@ -8,6 +8,6 @@ Primary entry points:
 - `scripts/workboard_task_manager.py`
 - `scripts/workboard_worker.py`
 - `scripts/workboard_claim.py`
-- `scripts/check_workboard_claim_freshness.py`
+- `scripts/forge/gates/workboard_claim_freshness.py`
 
 Keep this protocol current before enabling long-running coordinator loops.

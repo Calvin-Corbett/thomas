@@ -44,7 +44,7 @@ No one-off handlers for individual features.
 Run:
 
 ```bash
-python scripts/check_chat_control_protocol.py
+python scripts/forge/gates/chat_control_protocol.py
 python -m pytest -q tests/test_chat_controls.py
 python -m pytest -q tests/test_server_chat_controls.py
 python -m pytest -q tests/test_model_switching.py

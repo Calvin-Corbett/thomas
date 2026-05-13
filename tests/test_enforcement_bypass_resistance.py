@@ -10,7 +10,7 @@ SCRIPTS_DIR = Path(__file__).resolve().parent.parent / "scripts"
 if str(SCRIPTS_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPTS_DIR))
 
-changelog_gate = importlib.import_module("check_changelog_gate")
+changelog_gate = importlib.import_module("forge.gates.changelog_gate")
 post_commit_audit = importlib.import_module("post_commit_audit")
 
 

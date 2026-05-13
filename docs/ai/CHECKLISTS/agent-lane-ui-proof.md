@@ -8,7 +8,7 @@
   - `skills/ui-precision-guard/SKILL.md`
 - Required checks:
   - `python scripts/refresh_site_visual_proof.py`
-  - `python scripts/check_site_visual_proof.py`
+  - `python scripts/forge/gates/site_visual_proof.py`
 - Required proof:
   - updated proof JSON
   - updated screenshots, baselines, and diffs

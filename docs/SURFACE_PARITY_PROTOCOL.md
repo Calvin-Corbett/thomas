@@ -16,8 +16,8 @@ Surface-specific UX can differ (for example animations/layout), but core behavio
 Run locally (and in CI):
 
 ```bash
-python scripts/check_surface_parity.py
-python scripts/check_chat_control_protocol.py
+python scripts/forge/gates/surface_parity.py
+python scripts/forge/gates/chat_control_protocol.py
 python -m pytest -q tests/test_llm_openai_tool_compat.py
 python -m pytest -q tests/test_agent_loop_tool_policy.py
 python -m pytest -q tests/test_tool_registry_resolution.py

@@ -51,13 +51,13 @@ Status: Draft — awaiting Calvin's approval before any agent executes
 
 ## Item 2: Monolith Loader — Fix Guard + Eliminate Pattern
 
-**What it is:** 10 Python files use `monolith_source_loader.py` to `exec()` 27 part files (`_part01.py`, `_part02.py`, etc.) into a single namespace at runtime. This pattern was introduced in commit `5425444` by an unattributed agent. The filename guard (`check_monolith_filename_guard.py`) was supposed to prevent this but its regex only catches `.partNN.ext` (dot-separated), not `_partNN.py` (underscore-separated). Every existing violation passes the guard undetected.
+**What it is:** 10 Python files use `monolith_source_loader.py` to `exec()` 27 part files (`_part01.py`, `_part02.py`, etc.) into a single namespace at runtime. This pattern was introduced in commit `5425444` by an unattributed agent. The filename guard (`forge/gates/monolith_filename_guard.py`) was supposed to prevent this but its regex only catches `.partNN.ext` (dot-separated), not `_partNN.py` (underscore-separated). Every existing violation passes the guard undetected.
 
 **Root cause:** The guard regex `r"\.part\d+\.[^.]+$"` does not match the `_partNN` naming convention that the agent used.
 
 **Proposed fix — Phase 1: Close the guard gap (immediate, 15 minutes)**
 
-1. Edit `scripts/check_monolith_filename_guard.py` line 21:
+1. Edit `scripts/forge/gates/monolith_filename_guard.py` line 21:
    ```python
    # BEFORE (only catches .partNN.ext):
    FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (
@@ -71,7 +71,7 @@ Status: Draft — awaiting Calvin's approval before any agent executes
    )
    ```
 
-2. Add the same pattern to `scripts/check_monolith_guard.py` line 33:
+2. Add the same pattern to `scripts/forge/gates/monolith_guard.py` line 33:
    ```python
    _FORBIDDEN_PART_FILE_PATTERNS: tuple[re.Pattern[str], ...] = (
        re.compile(r"\.part\d+\.[^.]+$", re.IGNORECASE),
@@ -129,7 +129,7 @@ Once all 10 Python stubs are merged and all JS/CSS parts are merged, delete:
 
 **Effort:** Phase 1 = 15 minutes. Phase 2 = 10 separate agent tasks, ~30-60 min each. Phase 3 = 5 minutes after Phase 2 is complete.
 
-**Verification:** `python scripts/check_monolith_filename_guard.py` passes with zero violations. `grep -r "monolith_source_loader" thomas/` returns nothing. All tests pass.
+**Verification:** `python scripts/forge/gates/monolith_filename_guard.py` passes with zero violations. `grep -r "monolith_source_loader" thomas/` returns nothing. All tests pass.
 
 ---
 
@@ -172,7 +172,7 @@ Once all 10 Python stubs are merged and all JS/CSS parts are merged, delete:
 
 **Effort:** Adding the config = 5 minutes. Fixing existing violations = 1-2 hours of careful refactoring, needs test verification after each change.
 
-**Verification:** `python scripts/check_circular_imports_gate.py` passes. `python -c "from thomas.core import config"` succeeds without importing server or tools at module level.
+**Verification:** `python scripts/forge/gates/circular_imports_gate.py` passes. `python -c "from thomas.core import config"` succeeds without importing server or tools at module level.
 
 ---
 

@@ -115,7 +115,7 @@ def _is_allowed_split_file(path: Path, rel: str) -> bool:
 def _contains_legacy_monolith_loader(path: Path) -> bool:
     if path.suffix.lower() != ".py":
         return False
-    if path.name == "check_monolith_guard.py":
+    if path.name == "monolith_guard.py":
         return False
     with path.open("r", encoding="utf-8", errors="ignore") as fh:
         sample = fh.read()

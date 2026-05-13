@@ -79,9 +79,9 @@ Against the pinned currently released OpenClaw baseline on the same benchmark su
 
 ## Enforcement
 
-- Competitive scope gate: `scripts/check_competitive_scope_gate.py`
-- OpenClaw metric parity gate: `scripts/check_openclaw_metric_parity_gate.py`
-- Model onboarding gate: `scripts/check_model_onboarding_gate.py`
+- Competitive scope gate: `scripts/forge/gates/competitive_scope_gate.py`
+- OpenClaw metric parity gate: `scripts/forge/gates/openclaw_metric_parity_gate.py`
+- Model onboarding gate: `scripts/forge/gates/model_onboarding_gate.py`
 - API capability onboarding protocol: `docs/API_CAPABILITY_ONBOARDING_PROTOCOL.md`
-- Surface parity gate: `scripts/check_surface_parity.py`
+- Surface parity gate: `scripts/forge/gates/surface_parity.py`
 - Robustness CI workflow: `.github/workflows/robustness-gates.yml`

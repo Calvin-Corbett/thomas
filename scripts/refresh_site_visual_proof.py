@@ -345,7 +345,7 @@ def run(argv: Sequence[str] | None = None) -> int:
         action="store_true",
         help="Seed apps/site/verification/baselines from the current screenshots.",
     )
-    parser.add_argument("--no-post-check", action="store_true", help="Skip running check_site_visual_proof at end.")
+    parser.add_argument("--no-post-check", action="store_true", help="Skip running site_visual_proof gate at end.")
     args = parser.parse_args(argv)
 
     verify_command = _runtime_verify_command(
