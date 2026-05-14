@@ -5,6 +5,7 @@ from contextlib import contextmanager
 from pathlib import Path
 
 import scripts.crew.workboard.claim as mod
+import scripts.crew.workboard.claim_dispatch as dispatch_mod
 import scripts.forge.gates.workboard_claims as gate
 
 
@@ -760,7 +761,7 @@ def test_dispatch_workers_claims_temp_task_creator_when_board_is_empty(tmp_path:
         "- agent=Codex 3; name=Prime; role=parent; parent=none; scope=thomas/agent; task=coord lane",
         active_tasks_block="- task_id=codex-3-task; agent=Codex 3; scope=thomas/agent; summary=coord lane; status=active; name=Prime; role=parent; parent=none",
     )
-    monkeypatch.setattr(mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-1"))
+    monkeypatch.setattr(dispatch_mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-1"))
 
     rc = mod.run(
         [
@@ -803,7 +804,7 @@ def test_dispatch_workers_temp_task_creator_is_single_owner(tmp_path: Path, caps
             ]
         ),
     )
-    monkeypatch.setattr(mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-2"))
+    monkeypatch.setattr(dispatch_mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-2"))
 
     rc_a = mod.run(
         [
@@ -841,13 +842,20 @@ def test_dispatch_workers_temp_task_creator_is_single_owner(tmp_path: Path, caps
     assert len(temp_claims) == 1
 
 
-def test_release_temp_task_creator_requires_task_manager_agent(tmp_path: Path, capsys, monkeypatch) -> None:
+def test_release_temp_task_creator_allows_original_holder(tmp_path: Path, capsys, monkeypatch) -> None:
+    """The agent that holds a temp-task-creator lease may release it themselves.
+
+    Pre-fix behavior required a task-manager role to release ANY lease, which
+    forced manual WORKBOARD.md edits across every rename session (the holder
+    couldn't self-release after their work was done). Now any holder may
+    release THEIR OWN lease; non-holders still need task-manager auth.
+    """
     workboard = _write_workboard(
         tmp_path,
         "- agent=Codex 3; name=Prime; role=parent; parent=none; scope=thomas/agent; task=coord lane",
         active_tasks_block="- task_id=codex-3-task; agent=Codex 3; scope=thomas/agent; summary=coord lane; status=active; name=Prime; role=parent; parent=none",
     )
-    monkeypatch.setattr(mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-3"))
+    monkeypatch.setattr(dispatch_mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-3"))
     rc_claim = mod.run(
         [
             "--workboard",
@@ -873,6 +881,44 @@ def test_release_temp_task_creator_requires_task_manager_agent(tmp_path: Path, c
     )
     payload_release = json.loads(capsys.readouterr().out)
 
+    assert rc_release == 0
+    assert payload_release["ok"] is True
+    assert payload_release["released_count"] == 1
+
+
+def test_release_temp_task_creator_rejects_unrelated_agent(tmp_path: Path, capsys, monkeypatch) -> None:
+    """A non-holder non-task-manager agent must still be rejected."""
+    workboard = _write_workboard(
+        tmp_path,
+        "- agent=Codex 3; name=Prime; role=parent; parent=none; scope=thomas/agent; task=coord lane",
+        active_tasks_block="- task_id=codex-3-task; agent=Codex 3; scope=thomas/agent; summary=coord lane; status=active; name=Prime; role=parent; parent=none",
+    )
+    monkeypatch.setattr(dispatch_mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-3"))
+    rc_claim = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--dispatch-workers",
+            "--agent",
+            "Codex 3",
+            "--json",
+        ]
+    )
+    assert rc_claim == 0
+    _ = capsys.readouterr().out
+
+    rc_release = mod.run(
+        [
+            "--workboard",
+            str(workboard),
+            "--release-temp-task-creator",
+            "--agent",
+            "Some Other Agent",
+            "--json",
+        ]
+    )
+    payload_release = json.loads(capsys.readouterr().out)
+
     assert rc_release == 1
     assert payload_release["ok"] is False
     assert "can release temporary task creator assignment" in payload_release["error"]
@@ -884,7 +930,7 @@ def test_release_temp_task_creator_clears_lease(tmp_path: Path, capsys, monkeypa
         "- agent=Codex 3; name=Prime; role=parent; parent=none; scope=thomas/agent; task=coord lane",
         active_tasks_block="- task_id=codex-3-task; agent=Codex 3; scope=thomas/agent; summary=coord lane; status=active; name=Prime; role=parent; parent=none",
     )
-    monkeypatch.setattr(mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-4"))
+    monkeypatch.setattr(dispatch_mod, "_send_temp_task_creator_notice", lambda *args, **kwargs: (True, "msg-temp-4"))
     rc_claim = mod.run(
         [
             "--workboard",
