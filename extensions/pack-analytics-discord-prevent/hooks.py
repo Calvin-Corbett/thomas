@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-analytics-discord-prevent"
 MODULE_NAME = "extension_analytics_discord_prevent"

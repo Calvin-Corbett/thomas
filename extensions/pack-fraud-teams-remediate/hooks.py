@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-fraud-teams-remediate"
 MODULE_NAME = "extension_fraud_teams_remediate"

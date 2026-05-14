@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-security-pagerduty-prevent"
 MODULE_NAME = "extension_security_pagerduty_prevent"

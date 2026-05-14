@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-fraud-email-escalate"
 MODULE_NAME = "extension_fraud_email_escalate"

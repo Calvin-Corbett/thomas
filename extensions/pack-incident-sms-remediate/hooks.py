@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-incident-sms-remediate"
 MODULE_NAME = "extension_incident_sms_remediate"

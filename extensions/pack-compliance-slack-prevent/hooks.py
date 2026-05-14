@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-compliance-slack-prevent"
 MODULE_NAME = "extension_compliance_slack_prevent"

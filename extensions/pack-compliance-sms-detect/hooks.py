@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-compliance-sms-detect"
 MODULE_NAME = "extension_compliance_sms_detect"

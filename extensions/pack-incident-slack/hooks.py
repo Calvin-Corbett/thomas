@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-incident-slack"
 MODULE_NAME = "extension_incident_slack"

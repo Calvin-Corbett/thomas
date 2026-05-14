@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-incident-pagerduty-remediate"
 MODULE_NAME = "extension_incident_pagerduty_remediate"

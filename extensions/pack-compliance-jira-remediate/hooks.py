@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Dict
+from typing import Any
 
 PACK_ID = "pack-compliance-jira-remediate"
 MODULE_NAME = "extension_compliance_jira_remediate"
