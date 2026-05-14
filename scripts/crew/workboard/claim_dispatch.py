@@ -301,16 +301,45 @@ def release_temp_task_creator(
 ) -> tuple[bool, dict[str, object] | str]:
     actor_clean = _sanitize_field("agent", actor_agent)
     manager_clean = _sanitize_field("task_manager_agent", task_manager_agent or DEFAULT_TASK_MANAGER_AGENT)
-    allowed_actors = _task_manager_agent_keys(manager_clean)
-    if _agent_key(actor_clean) not in allowed_actors:
-        allowed_text = ", ".join(sorted(allowed_actors))
-        return False, f"only {allowed_text} can release temporary task creator assignment"
 
+    # Load the workboard once so we can authorize against actual holders
+    # (the rename arc surfaced that requiring task-manager exclusivity for
+    # release blocks every rename agent that holds their own temp-creator
+    # lease; the original holder should be able to release their own).
     violations, claims, _active_tasks, _up_for_grabs, _issues = claims_gate.evaluate_board(workboard_path)
     if violations:
         return False, "workboard invalid: " + "; ".join(violations)
 
     temp_claims = _find_temp_task_creator_claims(claims)
+    actor_key = _agent_key(actor_clean)
+    allowed_actors = _task_manager_agent_keys(manager_clean)
+    is_task_manager = actor_key in allowed_actors
+
+    # Authorize: either a task-manager role (releases ALL) or the original
+    # holder of at least one temp-task-creator lease (releases their own).
+    holder_keys = {
+        _agent_key(_temp_task_creator_owner(row.task, fallback=row.agent))
+        for row in temp_claims
+    }
+    holder_keys.discard("")
+    actor_is_holder = actor_key in holder_keys
+
+    if not is_task_manager and not actor_is_holder:
+        actors_text = ", ".join(sorted(allowed_actors | holder_keys))
+        return False, (
+            f"only {actors_text} can release temporary task creator assignment"
+            if actors_text
+            else "only task-manager or the original holder can release temporary task creator assignment"
+        )
+
+    # Holders may only release their own lease; task-managers release all
+    if not is_task_manager:
+        temp_claims = [
+            row
+            for row in temp_claims
+            if _agent_key(_temp_task_creator_owner(row.task, fallback=row.agent)) == actor_key
+        ]
+
     if not temp_claims:
         return True, {
             "task_manager_agent": manager_clean,
@@ -333,6 +362,8 @@ def release_temp_task_creator(
             agent=row.agent,
             allow_dirty=True,
             dirty_reason=TEMP_TASK_CREATOR_RELEASE_REASON,
+            allow_presence_override=True,
+            presence_override_reason=TEMP_TASK_CREATOR_RELEASE_REASON,
         )
         if not ok_release:
             release_errors.append(
